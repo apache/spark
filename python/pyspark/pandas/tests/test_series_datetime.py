@@ -46,100 +46,102 @@ class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_timestamp_subtraction(self):
         pdf = self.pdf1
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         # Those fail in certain OSs presumably due to different
         # timezone behaviours inherited from C library.
 
-        actual = (kdf["end_date"] - kdf["start_date"] - 1).to_pandas()
+        actual = (psdf["end_date"] - psdf["start_date"] - 1).to_pandas()
         expected = (pdf["end_date"] - pdf["start_date"]) // np.timedelta64(1, "s") - 1
         # self.assert_eq(actual, expected)
 
-        actual = (kdf["end_date"] - pd.Timestamp("2012-1-1 12:45:31") - 1).to_pandas()
+        actual = (psdf["end_date"] - pd.Timestamp("2012-1-1 12:45:31") - 1).to_pandas()
         expected = (pdf["end_date"] - pd.Timestamp("2012-1-1 12:45:31")) // np.timedelta64(
             1, "s"
         ) - 1
         # self.assert_eq(actual, expected)
 
-        actual = (pd.Timestamp("2013-3-11 21:45:00") - kdf["start_date"] - 1).to_pandas()
+        actual = (pd.Timestamp("2013-3-11 21:45:00") - psdf["start_date"] - 1).to_pandas()
         expected = (pd.Timestamp("2013-3-11 21:45:00") - pdf["start_date"]) // np.timedelta64(
             1, "s"
         ) - 1
         # self.assert_eq(actual, expected)
 
-        kdf = ps.DataFrame(
+        psdf = ps.DataFrame(
             {"a": pd.date_range("2016-12-31", "2017-01-08", freq="D"), "b": pd.Series(range(9))}
         )
         expected_error_message = "datetime subtraction can only be applied to datetime series."
         with self.assertRaisesRegex(TypeError, expected_error_message):
-            kdf["a"] - kdf["b"]
+            psdf["a"] - psdf["b"]
         with self.assertRaisesRegex(TypeError, expected_error_message):
-            kdf["a"] - 1
+            psdf["a"] - 1
         with self.assertRaisesRegex(TypeError, expected_error_message):
-            1 - kdf["a"]
+            1 - psdf["a"]
 
     def test_arithmetic_op_exceptions(self):
-        kser = self.ks_start_date
+        psser = self.ks_start_date
         py_datetime = self.pd_start_date.dt.to_pydatetime()
         datetime_index = ps.Index(self.pd_start_date)
 
-        for other in [1, 0.1, kser, datetime_index, py_datetime]:
-            expected_err_msg = "addition can not be applied to date times."
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: kser + other)
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other + kser)
+        for other in [1, 0.1, psser, datetime_index, py_datetime]:
+            expected_err_msg = "Addition can not be applied to datetimes."
+            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser + other)
+            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other + psser)
 
-            expected_err_msg = "multiplication can not be applied to date times."
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: kser * other)
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other * kser)
+            expected_err_msg = "Multiplication can not be applied to datetimes."
+            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser * other)
+            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other * psser)
 
-            expected_err_msg = "division can not be applied to date times."
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: kser / other)
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other / kser)
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: kser // other)
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other // kser)
+            expected_err_msg = "True division can not be applied to datetimes."
+            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser / other)
+            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other / psser)
 
-            expected_err_msg = "modulo can not be applied to date times."
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: kser % other)
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other % kser)
+            expected_err_msg = "Floor division can not be applied to datetimes."
+            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser // other)
+            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other // psser)
+
+            expected_err_msg = "Modulo can not be applied to datetimes."
+            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser % other)
+            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other % psser)
 
         expected_err_msg = "datetime subtraction can only be applied to datetime series."
 
         for other in [1, 0.1]:
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: kser - other)
-            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other - kser)
+            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser - other)
+            self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other - psser)
 
-        self.assertRaisesRegex(TypeError, expected_err_msg, lambda: kser - other)
-        self.assertRaises(NotImplementedError, lambda: py_datetime - kser)
+        self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psser - other)
+        self.assertRaises(NotImplementedError, lambda: py_datetime - psser)
 
     def test_date_subtraction(self):
         pdf = self.pdf1
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         self.assert_eq(
-            kdf["end_date"].dt.date - kdf["start_date"].dt.date,
+            psdf["end_date"].dt.date - psdf["start_date"].dt.date,
             (pdf["end_date"].dt.date - pdf["start_date"].dt.date).dt.days,
         )
 
         self.assert_eq(
-            kdf["end_date"].dt.date - datetime.date(2012, 1, 1),
+            psdf["end_date"].dt.date - datetime.date(2012, 1, 1),
             (pdf["end_date"].dt.date - datetime.date(2012, 1, 1)).dt.days,
         )
 
         self.assert_eq(
-            datetime.date(2013, 3, 11) - kdf["start_date"].dt.date,
+            datetime.date(2013, 3, 11) - psdf["start_date"].dt.date,
             (datetime.date(2013, 3, 11) - pdf["start_date"].dt.date).dt.days,
         )
 
-        kdf = ps.DataFrame(
+        psdf = ps.DataFrame(
             {"a": pd.date_range("2016-12-31", "2017-01-08", freq="D"), "b": pd.Series(range(9))}
         )
         expected_error_message = "date subtraction can only be applied to date series."
         with self.assertRaisesRegex(TypeError, expected_error_message):
-            kdf["a"].dt.date - kdf["b"]
+            psdf["a"].dt.date - psdf["b"]
         with self.assertRaisesRegex(TypeError, expected_error_message):
-            kdf["a"].dt.date - 1
+            psdf["a"].dt.date - 1
         with self.assertRaisesRegex(TypeError, expected_error_message):
-            1 - kdf["a"].dt.date
+            1 - psdf["a"].dt.date
 
     @unittest.skip(
         "It fails in certain OSs presumably due to different "
@@ -147,11 +149,11 @@ class SeriesDateTimeTest(PandasOnSparkTestCase, SQLTestUtils):
     )
     def test_div(self):
         pdf = self.pdf1
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         for u in "D", "s", "ms":
             duration = np.timedelta64(1, u)
             self.assert_eq(
-                (kdf["end_date"] - kdf["start_date"]) / duration,
+                (psdf["end_date"] - psdf["start_date"]) / duration,
                 (pdf["end_date"] - pdf["start_date"]) / duration,
             )
 
@@ -284,7 +286,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

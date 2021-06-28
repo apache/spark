@@ -32,7 +32,7 @@
 
     <!-- Integration Test Configuration Properties -->
     <!-- Please see README.md in this directory for explanation of these -->
-    <spark.kubernetes.test.sparkTgz></spark.kubernetes.test.sparkTgz>
+    <spark.kubernetes.test.sparkTgz>N/A</spark.kubernetes.test.sparkTgz>
     <spark.kubernetes.test.unpackSparkDir>${project.build.directory}/spark-dist-unpacked</spark.kubernetes.test.unpackSparkDir>
     <spark.kubernetes.test.imageTag>N/A</spark.kubernetes.test.imageTag>
     <spark.kubernetes.test.javaImageTag>8-jre-slim</spark.kubernetes.test.javaImageTag>

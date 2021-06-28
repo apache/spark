@@ -122,6 +122,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     }
 
     override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
+      require(value != null, "Cannot put a null value")
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       val keyCopy = key.copy()
       val valueCopy = value.copy()

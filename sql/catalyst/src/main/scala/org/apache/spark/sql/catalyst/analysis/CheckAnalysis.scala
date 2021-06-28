@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
+import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -122,6 +122,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
+      case u: UnresolvedHint =>
+        u.failAnalysis(s"Hint not found: ${u.name}")
+
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
         u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
@@ -159,7 +162,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       // `ShowTableExtended` should have been converted to the v1 command if the table is v1.
       case _: ShowTableExtended =>
-        throw new AnalysisException("SHOW TABLE EXTENDED is not supported for v2 tables.")
+        throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
@@ -440,6 +443,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
+          case alter: AlterTableCommand if alter.table.resolved =>
+            alter.transformExpressions {
+              case u: UnresolvedFieldName =>
+                val table = alter.table.asInstanceOf[ResolvedTable]
+                alter.failAnalysis(
+                  s"Cannot ${alter.operation} missing field ${u.name.quoted} in ${table.name} " +
+                    s"schema: ${table.schema.treeString}")
+            }
+            checkAlterTableCommand(alter)
+
           case alter: AlterTable if alter.table.resolved =>
             val table = alter.table
             def findField(operation: String, fieldName: Array[String]): StructField = {
@@ -530,7 +543,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                   case u: UserDefinedType[_] =>
                     alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
                       s"update a UserDefinedType[${u.sql}] by updating its fields")
-                  case _: CalendarIntervalType =>
+                  case _: CalendarIntervalType | _: YearMonthIntervalType |
+                       _: DayTimeIntervalType =>
                     alter.failAnalysis(s"Cannot update ${table.name} field $fieldName to " +
                       s"interval type")
                   case _ =>
@@ -566,10 +580,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                   updatePos.position(),
                   parent,
                   colsToAdd.getOrElse(parentName, Nil))
-              case rename: RenameColumn =>
-                findField("rename", rename.fieldNames)
-                checkColumnNotExists(
-                  "rename", rename.fieldNames().init :+ rename.newName(), table.schema)
               case update: UpdateColumnComment =>
                 findField("update", update.fieldNames)
               case delete: DeleteColumn =>
@@ -744,17 +754,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     checkAnalysis(expr.plan)
 
     expr match {
-      case ScalarSubquery(query, conditions, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           failAnalysis(
             s"Scalar subquery must return only one column, but got ${query.output.size}")
         }
 
-        if (conditions.nonEmpty) {
+        if (outerAttrs.nonEmpty) {
           cleanQueryInScalarSubquery(query) match {
-            case a: Aggregate => checkAggregateInScalarSubquery(conditions, query, a)
-            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(conditions, query, a)
+            case a: Aggregate => checkAggregateInScalarSubquery(outerAttrs, query, a)
+            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(outerAttrs, query, a)
             case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
             case fail => failAnalysis(s"Correlated scalar subqueries must be aggregated: $fail")
           }
@@ -777,6 +787,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           }
         }
 
+      case _: LateralSubquery =>
+        assert(plan.isInstanceOf[LateralJoin])
+
       case inSubqueryOrExistsSubquery =>
         plan match {
           case _: Filter | _: SupportsSubquery | _: Join => // Ok
@@ -788,7 +801,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
     // Validate to make sure the correlations appearing in the query are valid and
     // allowed by spark.
-    checkCorrelationsInSubquery(expr.plan)
+    checkCorrelationsInSubquery(expr.plan, isLateral = plan.isInstanceOf[LateralJoin])
   }
 
   /**
@@ -827,15 +840,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates to make sure the outer references appearing inside the subquery
    * are allowed.
    */
-  private def checkCorrelationsInSubquery(sub: LogicalPlan): Unit = {
+  private def checkCorrelationsInSubquery(sub: LogicalPlan, isLateral: Boolean = false): Unit = {
     // Validate that correlated aggregate expression do not contain a mixture
     // of outer and local references.
     def checkMixedReferencesInsideAggregateExpr(expr: Expression): Unit = {
       expr.foreach {
         case a: AggregateExpression if containsOuter(a) =>
-          val outer = a.collect { case OuterReference(e) => e.toAttribute }
-          val local = a.references -- outer
-          if (local.nonEmpty) {
+          if (a.references.nonEmpty) {
             throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
           }
         case _ =>
@@ -849,12 +860,21 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       }
     }
 
+    // Check whether the logical plan node can host outer references.
+    // A `Project` can host outer references if it is inside a lateral subquery.
+    // Otherwise, only Filter can only outer references.
+    def canHostOuter(plan: LogicalPlan): Boolean = plan match {
+      case _: Filter => true
+      case _: Project => isLateral
+      case _ => false
+    }
+
     // Make sure a plan's expressions do not contain :
     // 1. Aggregate expressions that have mixture of outer and local references.
-    // 2. Expressions containing outer references on plan nodes other than Filter.
+    // 2. Expressions containing outer references on plan nodes other than allowed operators.
     def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
       p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
-      if (!p.isInstanceOf[Filter] && p.expressions.exists(containsOuter)) {
+      if (!canHostOuter(p) && p.expressions.exists(containsOuter)) {
         failAnalysis(
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
             s"clauses:\n$p")
@@ -988,6 +1008,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case r: RepartitionByExpression =>
         failOnInvalidOuterReference(r)
 
+      case l: LateralJoin =>
+        failOnInvalidOuterReference(l)
+
       // Category 3:
       // Filter is one of the two operators allowed to host correlated expressions.
       // The other operator is Join. Filter can be anywhere in a correlated subquery.
@@ -1053,22 +1076,20 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }}
   }
 
-  // Make sure that table is able to alter partition.
-  private def checkAlterTablePartition(
-      table: Table, parts: Seq[PartitionSpec]): Unit = {
-    (table, parts) match {
-      case (table, _) if !table.isInstanceOf[SupportsPartitionManagement] =>
-        failAnalysis(s"Table ${table.name()} can not alter partitions.")
+  /**
+   * Validates the options used for alter table commands after table and columns are resolved.
+   */
+  private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
+    def checkColumnNotExists(fieldNames: Seq[String], struct: StructType): Unit = {
+      if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
+        alter.failAnalysis(s"Cannot ${alter.operation} column, because ${fieldNames.quoted} " +
+          s"already exists in ${struct.treeString}")
+      }
+    }
 
-      case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
-        failAnalysis("PartitionSpecs are not resolved")
-
-      // Skip atomic partition tables
-      case (_: SupportsAtomicPartitionManagement, _) =>
-      case (_: SupportsPartitionManagement, parts) if parts.size > 1 =>
-        failAnalysis(
-          s"Nonatomic partition table ${table.name()} can not alter multiple partitions.")
-
+    alter match {
+      case AlterTableRenameColumn(table: ResolvedTable, ResolvedFieldName(name), newName) =>
+        checkColumnNotExists(name.init :+ newName, table.schema)
       case _ =>
     }
   }

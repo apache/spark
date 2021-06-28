@@ -251,10 +251,20 @@ object EnsureRequirements extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     // TODO: remove this after we create a physical operator for `RepartitionByExpression`.
     case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, _) =>
-      child.outputPartitioning match {
-        case lower: HashPartitioning if upper.semanticEquals(lower) => child
-        case _ => operator
+      def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {
+        partitioning match {
+          case lower: HashPartitioning if upper.semanticEquals(lower) => true
+          case lower: PartitioningCollection =>
+            lower.partitionings.exists(hasSemanticEqualPartitioning)
+          case _ => false
+        }
       }
+      if (hasSemanticEqualPartitioning(child.outputPartitioning)) {
+        child
+      } else {
+        operator
+      }
+
     case operator: SparkPlan =>
       ensureDistributionAndOrdering(reorderJoinPredicates(operator))
   }

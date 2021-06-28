@@ -69,6 +69,42 @@ class PCASuite extends MLTest with DefaultReadWriteTest {
     }
   }
 
+  test("dataset with dense vectors and sparse vectors should produce same results") {
+    val data1 = Array(
+      Vectors.sparse(5, Seq((1, 1.0), (3, 7.0))),
+      Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
+      Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
+    )
+    val data2 = Array(
+      Vectors.dense(0.0, 1.0, 0.0, 7.0, 0.0),
+      Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
+      Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
+    )
+    val data3 = data1.map(_.toSparse)
+    val data4 = data1.map(_.toDense)
+
+    val df1 = spark.createDataFrame(data1.map(Tuple1.apply)).toDF("features")
+    val df2 = spark.createDataFrame(data2.map(Tuple1.apply)).toDF("features")
+    val df3 = spark.createDataFrame(data3.map(Tuple1.apply)).toDF("features")
+    val df4 = spark.createDataFrame(data4.map(Tuple1.apply)).toDF("features")
+
+    val pca = new PCA()
+      .setInputCol("features")
+      .setOutputCol("pcaFeatures")
+      .setK(3)
+    val pcaModel1 = pca.fit(df1)
+    val pcaModel2 = pca.fit(df2)
+    val pcaModel3 = pca.fit(df3)
+    val pcaModel4 = pca.fit(df4)
+
+    assert(pcaModel1.explainedVariance == pcaModel2.explainedVariance)
+    assert(pcaModel1.explainedVariance == pcaModel3.explainedVariance)
+    assert(pcaModel1.explainedVariance == pcaModel4.explainedVariance)
+    assert(pcaModel1.pc === pcaModel2.pc)
+    assert(pcaModel1.pc === pcaModel3.pc)
+    assert(pcaModel1.pc === pcaModel4.pc)
+  }
+
   test("PCA read/write") {
     val t = new PCA()
       .setInputCol("myInputCol")

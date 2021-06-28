@@ -44,7 +44,7 @@ class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
         return pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=[0, 1, 3])
 
     @property
-    def kdf(self):
+    def psdf(self):
         return ps.from_pandas(self.pdf)
 
     @staticmethod
@@ -67,7 +67,7 @@ class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
             </table>
             """
         )
-        got = self.strip_all_whitespace(self.kdf.to_html())
+        got = self.strip_all_whitespace(self.psdf.to_html())
         self.assert_eq(got, expected)
 
         # with max_rows set
@@ -84,13 +84,13 @@ class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
             </table>
             """
         )
-        got = self.strip_all_whitespace(self.kdf.to_html(max_rows=2))
+        got = self.strip_all_whitespace(self.psdf.to_html(max_rows=2))
         self.assert_eq(got, expected)
 
     @staticmethod
-    def get_excel_dfs(koalas_location, pandas_location):
+    def get_excel_dfs(pandas_on_spark_location, pandas_location):
         return {
-            "got": pd.read_excel(koalas_location, index_col=0),
+            "got": pd.read_excel(pandas_on_spark_location, index_col=0),
             "expected": pd.read_excel(pandas_location, index_col=0),
         }
 
@@ -98,62 +98,62 @@ class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
     def test_to_excel(self):
         with self.temp_dir() as dirpath:
             pandas_location = dirpath + "/" + "output1.xlsx"
-            koalas_location = dirpath + "/" + "output2.xlsx"
+            pandas_on_spark_location = dirpath + "/" + "output2.xlsx"
 
             pdf = self.pdf
-            kdf = self.kdf
-            kdf.to_excel(koalas_location)
+            psdf = self.psdf
+            psdf.to_excel(pandas_on_spark_location)
             pdf.to_excel(pandas_location)
-            dataframes = self.get_excel_dfs(koalas_location, pandas_location)
+            dataframes = self.get_excel_dfs(pandas_on_spark_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
-            kdf.a.to_excel(koalas_location)
+            psdf.a.to_excel(pandas_on_spark_location)
             pdf.a.to_excel(pandas_location)
-            dataframes = self.get_excel_dfs(koalas_location, pandas_location)
+            dataframes = self.get_excel_dfs(pandas_on_spark_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
             pdf = pd.DataFrame({"a": [1, None, 3], "b": ["one", "two", None]}, index=[0, 1, 3])
 
-            kdf = ps.from_pandas(pdf)
+            psdf = ps.from_pandas(pdf)
 
-            kdf.to_excel(koalas_location, na_rep="null")
+            psdf.to_excel(pandas_on_spark_location, na_rep="null")
             pdf.to_excel(pandas_location, na_rep="null")
-            dataframes = self.get_excel_dfs(koalas_location, pandas_location)
+            dataframes = self.get_excel_dfs(pandas_on_spark_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
             pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]}, index=[0, 1, 3])
 
-            kdf = ps.from_pandas(pdf)
+            psdf = ps.from_pandas(pdf)
 
-            kdf.to_excel(koalas_location, float_format="%.1f")
+            psdf.to_excel(pandas_on_spark_location, float_format="%.1f")
             pdf.to_excel(pandas_location, float_format="%.1f")
-            dataframes = self.get_excel_dfs(koalas_location, pandas_location)
+            dataframes = self.get_excel_dfs(pandas_on_spark_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
-            kdf.to_excel(koalas_location, header=False)
+            psdf.to_excel(pandas_on_spark_location, header=False)
             pdf.to_excel(pandas_location, header=False)
-            dataframes = self.get_excel_dfs(koalas_location, pandas_location)
+            dataframes = self.get_excel_dfs(pandas_on_spark_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
-            kdf.to_excel(koalas_location, index=False)
+            psdf.to_excel(pandas_on_spark_location, index=False)
             pdf.to_excel(pandas_location, index=False)
-            dataframes = self.get_excel_dfs(koalas_location, pandas_location)
+            dataframes = self.get_excel_dfs(pandas_on_spark_location, pandas_location)
             self.assert_eq(dataframes["got"], dataframes["expected"])
 
     def test_to_json(self):
         pdf = self.pdf
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
-        self.assert_eq(kdf.to_json(orient="records"), pdf.to_json(orient="records"))
+        self.assert_eq(psdf.to_json(orient="records"), pdf.to_json(orient="records"))
 
     def test_to_json_negative(self):
-        kdf = ps.from_pandas(self.pdf)
+        psdf = ps.from_pandas(self.pdf)
 
         with self.assertRaises(NotImplementedError):
-            kdf.to_json(orient="table")
+            psdf.to_json(orient="table")
 
         with self.assertRaises(NotImplementedError):
-            kdf.to_json(lines=False)
+            psdf.to_json(lines=False)
 
     def test_read_json_negative(self):
         with self.assertRaises(NotImplementedError):
@@ -161,9 +161,9 @@ class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
 
     def test_to_json_with_path(self):
         pdf = pd.DataFrame({"a": [1], "b": ["a"]})
-        kdf = ps.DataFrame(pdf)
+        psdf = ps.DataFrame(pdf)
 
-        kdf.to_json(self.tmp_dir, num_files=1)
+        psdf.to_json(self.tmp_dir, num_files=1)
         expected = pdf.to_json(orient="records")
 
         output_paths = [path for path in os.listdir(self.tmp_dir) if path.startswith("part-")]
@@ -173,9 +173,9 @@ class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
 
     def test_to_json_with_partition_cols(self):
         pdf = pd.DataFrame({"a": [1, 2, 3], "b": ["a", "b", "c"]})
-        kdf = ps.DataFrame(pdf)
+        psdf = ps.DataFrame(pdf)
 
-        kdf.to_json(self.tmp_dir, partition_cols="b", num_files=1)
+        psdf.to_json(self.tmp_dir, partition_cols="b", num_files=1)
 
         partition_paths = [path for path in os.listdir(self.tmp_dir) if path.startswith("b=")]
         assert len(partition_paths) > 0
@@ -196,40 +196,40 @@ class DataFrameConversionTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
     @unittest.skip("Pyperclip could not find a copy/paste mechanism for Linux.")
     def test_to_clipboard(self):
         pdf = self.pdf
-        kdf = self.kdf
+        psdf = self.psdf
 
-        self.assert_eq(kdf.to_clipboard(), pdf.to_clipboard())
-        self.assert_eq(kdf.to_clipboard(excel=False), pdf.to_clipboard(excel=False))
+        self.assert_eq(psdf.to_clipboard(), pdf.to_clipboard())
+        self.assert_eq(psdf.to_clipboard(excel=False), pdf.to_clipboard(excel=False))
         self.assert_eq(
-            kdf.to_clipboard(sep=";", index=False), pdf.to_clipboard(sep=";", index=False)
+            psdf.to_clipboard(sep=";", index=False), pdf.to_clipboard(sep=";", index=False)
         )
 
     def test_to_latex(self):
         pdf = self.pdf
-        kdf = self.kdf
+        psdf = self.psdf
 
-        self.assert_eq(kdf.to_latex(), pdf.to_latex())
-        self.assert_eq(kdf.to_latex(col_space=2), pdf.to_latex(col_space=2))
-        self.assert_eq(kdf.to_latex(header=True), pdf.to_latex(header=True))
-        self.assert_eq(kdf.to_latex(index=False), pdf.to_latex(index=False))
-        self.assert_eq(kdf.to_latex(na_rep="-"), pdf.to_latex(na_rep="-"))
-        self.assert_eq(kdf.to_latex(float_format="%.1f"), pdf.to_latex(float_format="%.1f"))
-        self.assert_eq(kdf.to_latex(sparsify=False), pdf.to_latex(sparsify=False))
-        self.assert_eq(kdf.to_latex(index_names=False), pdf.to_latex(index_names=False))
-        self.assert_eq(kdf.to_latex(bold_rows=True), pdf.to_latex(bold_rows=True))
-        self.assert_eq(kdf.to_latex(decimal=","), pdf.to_latex(decimal=","))
+        self.assert_eq(psdf.to_latex(), pdf.to_latex())
+        self.assert_eq(psdf.to_latex(col_space=2), pdf.to_latex(col_space=2))
+        self.assert_eq(psdf.to_latex(header=True), pdf.to_latex(header=True))
+        self.assert_eq(psdf.to_latex(index=False), pdf.to_latex(index=False))
+        self.assert_eq(psdf.to_latex(na_rep="-"), pdf.to_latex(na_rep="-"))
+        self.assert_eq(psdf.to_latex(float_format="%.1f"), pdf.to_latex(float_format="%.1f"))
+        self.assert_eq(psdf.to_latex(sparsify=False), pdf.to_latex(sparsify=False))
+        self.assert_eq(psdf.to_latex(index_names=False), pdf.to_latex(index_names=False))
+        self.assert_eq(psdf.to_latex(bold_rows=True), pdf.to_latex(bold_rows=True))
+        self.assert_eq(psdf.to_latex(decimal=","), pdf.to_latex(decimal=","))
         if LooseVersion(pd.__version__) < LooseVersion("1.0.0"):
-            self.assert_eq(kdf.to_latex(encoding="ascii"), pdf.to_latex(encoding="ascii"))
+            self.assert_eq(psdf.to_latex(encoding="ascii"), pdf.to_latex(encoding="ascii"))
 
     def test_to_records(self):
         if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
             pdf = pd.DataFrame({"A": [1, 2], "B": [0.5, 0.75]}, index=["a", "b"])
 
-            kdf = ps.from_pandas(pdf)
+            psdf = ps.from_pandas(pdf)
 
-            self.assert_eq(kdf.to_records(), pdf.to_records())
-            self.assert_eq(kdf.to_records(index=False), pdf.to_records(index=False))
-            self.assert_eq(kdf.to_records(index_dtypes="<S2"), pdf.to_records(index_dtypes="<S2"))
+            self.assert_eq(psdf.to_records(), pdf.to_records())
+            self.assert_eq(psdf.to_records(index=False), pdf.to_records(index=False))
+            self.assert_eq(psdf.to_records(index_dtypes="<S2"), pdf.to_records(index_dtypes="<S2"))
 
     def test_from_records(self):
         # Assert using a dict as input
@@ -269,7 +269,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

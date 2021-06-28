@@ -496,6 +496,28 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSparkSession 
     }
   }
 
+  test("SPARK-35640: read binary as timestamp should throw schema incompatible error") {
+    val data = (1 to 4).map(i => Tuple1(i.toString))
+    val readSchema = StructType(Seq(StructField("_1", DataTypes.TimestampType)))
+
+    withParquetFile(data) { path =>
+      val errMsg = intercept[Exception](spark.read.schema(readSchema).parquet(path).collect())
+          .getMessage
+      assert(errMsg.contains("Parquet column cannot be converted in file"))
+    }
+  }
+
+  test("SPARK-35640: int as long should throw schema incompatible error") {
+    val data = (1 to 4).map(i => Tuple1(i))
+    val readSchema = StructType(Seq(StructField("_1", DataTypes.LongType)))
+
+    withParquetFile(data) { path =>
+      val errMsg = intercept[Exception](spark.read.schema(readSchema).parquet(path).collect())
+          .getMessage
+      assert(errMsg.contains("Parquet column cannot be converted in file"))
+    }
+  }
+
   test("write metadata") {
     val hadoopConf = spark.sessionState.newHadoopConf()
     withTempPath { file =>

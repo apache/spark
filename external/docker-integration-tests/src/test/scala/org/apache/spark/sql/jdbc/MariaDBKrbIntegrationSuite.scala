@@ -27,7 +27,7 @@ import org.apache.spark.tags.DockerTest
 /**
  * To run this test suite for a specific version (e.g., mariadb:10.5.8):
  * {{{
- *   MARIADB_DOCKER_IMAGE_NAME=mariadb:10.5.8
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 MARIADB_DOCKER_IMAGE_NAME=mariadb:10.5.8
  *     ./build/sbt -Pdocker-integration-tests
  *     "testOnly org.apache.spark.sql.jdbc.MariaDBKrbIntegrationSuite"
  * }}}

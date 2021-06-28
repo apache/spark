@@ -30,17 +30,17 @@ class SparkIndexOpsMethodsTest(PandasOnSparkTestCase, SQLTestUtils):
         return pd.Series([1, 2, 3, 4, 5, 6, 7], name="x")
 
     @property
-    def kser(self):
+    def psser(self):
         return ps.from_pandas(self.pser)
 
     def test_series_transform_negative(self):
         with self.assertRaisesRegex(
             ValueError, "The output of the function.* pyspark.sql.Column.*int"
         ):
-            self.kser.spark.transform(lambda scol: 1)
+            self.psser.spark.transform(lambda scol: 1)
 
         with self.assertRaisesRegex(AnalysisException, "cannot resolve.*non-existent.*"):
-            self.kser.spark.transform(lambda scol: F.col("non-existent"))
+            self.psser.spark.transform(lambda scol: F.col("non-existent"))
 
     def test_multiindex_transform_negative(self):
         with self.assertRaisesRegex(
@@ -57,10 +57,10 @@ class SparkIndexOpsMethodsTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(
             ValueError, "The output of the function.* pyspark.sql.Column.*int"
         ):
-            self.kser.spark.apply(lambda scol: 1)
+            self.psser.spark.apply(lambda scol: 1)
 
         with self.assertRaisesRegex(AnalysisException, "cannot resolve.*non-existent.*"):
-            self.kser.spark.transform(lambda scol: F.col("non-existent"))
+            self.psser.spark.transform(lambda scol: F.col("non-existent"))
 
 
 if __name__ == "__main__":
@@ -69,7 +69,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

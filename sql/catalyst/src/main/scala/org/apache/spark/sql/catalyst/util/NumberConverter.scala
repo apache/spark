@@ -113,15 +113,18 @@ object NumberConverter {
 
     // Copy the digits in the right side of the array
     val temp = new Array[Byte](64)
-    var i = 1
-    while (i <= n.length - first) {
-      temp(temp.length - i) = n(n.length - i)
-      i += 1
-    }
-    char2byte(fromBase, temp.length - n.length + first, temp)
+    var v: Long = -1
+    if ((n.length == 65 && negative) || n.length <= 64) {
+      var i = 1
+      while (i <= n.length - first) {
+        temp(temp.length - i) = n(n.length - i)
+        i += 1
+      }
+      char2byte(fromBase, temp.length - n.length + first, temp)
 
-    // Do the conversion by going through a 64 bit integer
-    var v = encode(fromBase, temp.length - n.length + first, temp)
+      // Do the conversion by going through a 64 bit integer
+      v = encode(fromBase, temp.length - n.length + first, temp)
+    }
     if (negative && toBase > 0) {
       if (v < 0) {
         v = -1

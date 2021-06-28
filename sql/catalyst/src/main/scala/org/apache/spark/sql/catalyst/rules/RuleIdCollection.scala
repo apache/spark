@@ -19,6 +19,9 @@ package org.apache.spark.sql.catalyst.rules
 
 import scala.collection.mutable
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.util.Utils
+
 // Represent unique rule ids for rules that are invoked multiple times.
 case class RuleId(id: Int) {
   // Currently, there are more than 128 but less than 192 rules needing an id. However, the
@@ -38,7 +41,7 @@ object RuleIdCollection {
   // invoked multiple times by Analyzer/Optimizer/Planner need a rule id to prune unnecessary
   // tree traversals in the transform function family. Note that those rules should not depend on
   // a changing, external state. Rules here are in alphabetical order.
-  private val rulesNeedingIds: Seq[String] = {
+  private var rulesNeedingIds: Seq[String] = {
       // Catalyst Analyzer rules
       "org.apache.spark.sql.catalyst.analysis.Analyzer$AddMetadataColumns" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ExtractGenerator" ::
@@ -53,6 +56,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGenerate" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveGroupingAnalytics" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveHigherOrderFunctions" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveInsertInto" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveMissingReferences" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveNaturalAndUsingJoin" ::
@@ -85,7 +89,9 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveUnion" ::
       "org.apache.spark.sql.catalyst.analysis.SubstituteUnresolvedOrdinals" ::
       "org.apache.spark.sql.catalyst.analysis.TimeWindowing" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$CombinedTypeCoercionRule" ::
       "org.apache.spark.sql.catalyst.analysis.UpdateOuterReferences" ::
+      "org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::
@@ -143,8 +149,34 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.SimplifyCasts" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyConditionals" ::
       "org.apache.spark.sql.catalyst.optimizer.SimplifyConditionalsInPredicate" ::
+      "org.apache.spark.sql.catalyst.optimizer.SimplifyExtractValueOps" ::
       "org.apache.spark.sql.catalyst.optimizer.TransposeWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison" ::  Nil
+  }
+
+  if(Utils.isTesting) {
+    rulesNeedingIds = rulesNeedingIds ++ {
+      // In the production code path, the following rules are run in CombinedTypeCoercionRule, and
+      // hence we only need to add them for unit testing.
+      "org.apache.spark.sql.catalyst.analysis.AnsiTypeCoercion$PromoteStringLiterals" ::
+      "org.apache.spark.sql.catalyst.analysis.DecimalPrecision" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$BooleanEquality" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$CaseWhenCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ConcatCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$DateTimeOperations" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$Division" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$EltCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$FunctionArgumentConversion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$IfCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$ImplicitTypeCasts" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$InConversion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$IntegralDivision" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$MapZipWithCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercion$PromoteStrings" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$StackCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$StringLiteralCoercion" ::
+      "org.apache.spark.sql.catalyst.analysis.TypeCoercionBase$WindowFrameCoercion" :: Nil
+    }
   }
 
   // Maps rule names to ids. Rule ids are continuous natural numbers starting from 0.
@@ -165,7 +197,7 @@ object RuleIdCollection {
     val ruleIdOpt = ruleToId.get(ruleName)
     // Please add the rule name to `rulesWithIds` if rule id is not found.
     if (!ruleIdOpt.isDefined) {
-      throw new NoSuchElementException(s"Rule id not found for $ruleName")
+      throw QueryExecutionErrors.ruleIdNotFoundForRuleError(ruleName)
     }
     ruleIdOpt.get
   }

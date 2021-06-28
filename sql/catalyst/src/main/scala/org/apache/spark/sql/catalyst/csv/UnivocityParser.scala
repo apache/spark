@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -94,7 +95,6 @@ class UnivocityParser(
     isParsing = true)
   private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
-    options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
@@ -205,7 +205,7 @@ class UnivocityParser(
             // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
             // compatibility.
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
-            DateTimeUtils.stringToDate(str, options.zoneId).getOrElse(throw e)
+            DateTimeUtils.stringToDate(str).getOrElse(throw e)
         }
       }
 
@@ -221,7 +221,7 @@ class UnivocityParser(
       makeConverter(name, udt.sqlType, nullable)
 
     // We don't actually hit this exception though, we keep it for understandability
-    case _ => throw new RuntimeException(s"Unsupported type: ${dataType.typeName}")
+    case _ => throw QueryExecutionErrors.unsupportedTypeError(dataType)
   }
 
   private def nullSafeDatum(
@@ -231,7 +231,7 @@ class UnivocityParser(
        options: CSVOptions)(converter: ValueConverter): Any = {
     if (datum == options.nullValue || datum == null) {
       if (!nullable) {
-        throw new RuntimeException(s"null value found but field $name is not nullable.")
+        throw QueryExecutionErrors.foundNullValueForNotNullableFieldError(name)
       }
       null
     } else {
@@ -266,7 +266,7 @@ class UnivocityParser(
       throw BadRecordException(
         () => getCurrentInput,
         () => None,
-        new RuntimeException("Malformed CSV record"))
+        QueryExecutionErrors.malformedCSVRecordError())
     }
 
     var badRecordException: Option[Throwable] = if (tokens.length != parsedSchema.length) {
@@ -274,7 +274,7 @@ class UnivocityParser(
       // However, we still have chance to parse some of the tokens. It continues to parses the
       // tokens normally and sets null when `ArrayIndexOutOfBoundsException` occurs for missing
       // tokens.
-      Some(new RuntimeException("Malformed CSV record"))
+      Some(QueryExecutionErrors.malformedCSVRecordError())
     } else None
     // When the length of the returned tokens is identical to the length of the parsed schema,
     // we just need to:
@@ -370,7 +370,7 @@ private[sql] object UnivocityParser {
 
     override def next(): T = {
       if (!hasNext) {
-        throw new NoSuchElementException("End of stream")
+        throw QueryExecutionErrors.endOfStreamError()
       }
       val curRecord = convert(nextRecord)
       nextRecord = tokenizer.parseNext()

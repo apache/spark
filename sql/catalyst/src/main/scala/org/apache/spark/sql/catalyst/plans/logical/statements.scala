@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
@@ -118,13 +119,7 @@ object SerdeInfo {
       props1: Map[String, String], props2: Map[String, String]): Unit = {
     val conflictKeys = props1.keySet.intersect(props2.keySet)
     if (conflictKeys.nonEmpty) {
-      throw new UnsupportedOperationException(
-        s"""
-          |Cannot safely merge SERDEPROPERTIES:
-          |${props1.map { case (k, v) => s"$k=$v" }.mkString("{", ",", "}")}
-          |${props2.map { case (k, v) => s"$k=$v" }.mkString("{", ",", "}")}
-          |The conflict keys: ${conflictKeys.mkString(", ")}
-          |""".stripMargin)
+      throw QueryExecutionErrors.cannotSafelyMergeSerdePropertiesError(props1, props2, conflictKeys)
     }
   }
 }
@@ -261,21 +256,6 @@ case class AlterTableAlterColumnStatement(
     nullable: Option[Boolean],
     comment: Option[String],
     position: Option[ColumnPosition]) extends LeafParsedStatement
-
-/**
- * ALTER TABLE ... RENAME COLUMN command, as parsed from SQL.
- */
-case class AlterTableRenameColumnStatement(
-    tableName: Seq[String],
-    column: Seq[String],
-    newName: String) extends LeafParsedStatement
-
-/**
- * ALTER TABLE ... DROP COLUMNS command, as parsed from SQL.
- */
-case class AlterTableDropColumnsStatement(
-    tableName: Seq[String],
-    columnsToDrop: Seq[Seq[String]]) extends LeafParsedStatement
 
 /**
  * An INSERT INTO statement, as parsed from SQL.
