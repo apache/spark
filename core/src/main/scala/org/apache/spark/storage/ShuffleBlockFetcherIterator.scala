@@ -356,7 +356,6 @@ final class ShuffleBlockFetcherIterator(
     val collectedRemoteRequests = new ArrayBuffer[FetchRequest]
     var localBlockBytes = 0L
     var hostLocalBlockBytes = 0L
-    var remoteBlockBytes = 0L
 
     val fallback = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId
     for ((address, blockInfos) <- blocksByAddress) {
@@ -381,11 +380,12 @@ final class ShuffleBlockFetcherIterator(
       } else {
         val (_, timeCost) = Utils.timeTakenMs[Unit] {
           collectFetchRequests(address, blockInfos, collectedRemoteRequests)
-          remoteBlockBytes += collectedRemoteRequests.map(_.size).sum
         }
         logDebug(s"Collected remote fetch requests for $address in $timeCost ms")
       }
     }
+    val remoteBlockBytes = collectedRemoteRequests.map(_.size).sum
+
     val numRemoteBlocks = collectedRemoteRequests.map(_.blocks.size).sum
     val totalBytes = localBlockBytes + remoteBlockBytes + hostLocalBlockBytes
     assert(numBlocksToFetch == localBlocks.size + hostLocalBlocks.size + numRemoteBlocks,
