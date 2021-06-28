@@ -26,9 +26,15 @@ from pandas.api.types import CategoricalDtype
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
-from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+from pyspark.pandas.typedef.typehints import (
+    extension_float_dtypes_available,
+    extension_object_dtypes_available,
+)
 from pyspark.sql.types import BooleanType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
+
+if extension_float_dtypes_available:
+    from pandas import Float32Dtype, Float64Dtype
 
 
 class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
@@ -572,12 +578,28 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_astype(self):
         pser = self.pser
         psser = self.psser
+
+        # [True, False, <NA>] is returned in pandas
         self.assert_eq(["True", "False", "None"], self.psser.astype(str).tolist())
+
         self.assert_eq(pser.astype("category"), psser.astype("category"))
         cat_type = CategoricalDtype(categories=[False, True])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
         for dtype in self.extension_dtypes:
-            self.check_extension(pser.astype(dtype), psser.astype(dtype))
+            if extension_float_dtypes_available:
+                is_extension_float_dtype = dtype in [
+                    "Float32",
+                    "Float64",
+                    Float32Dtype(),
+                    Float64Dtype(),
+                ]
+
+                if is_extension_float_dtype:
+                    self.assert_eq([1.0, 0.0, np.nan], self.psser.astype(dtype).tolist())
+                else:
+                    self.check_extension(pser.astype(dtype), psser.astype(dtype))
+            else:
+                self.check_extension(pser.astype(dtype), psser.astype(dtype))
 
 
 if __name__ == "__main__":

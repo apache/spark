@@ -29,7 +29,6 @@ from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
-    extension_object_dtypes_available,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
