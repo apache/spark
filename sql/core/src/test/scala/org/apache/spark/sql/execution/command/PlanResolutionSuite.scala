@@ -1178,12 +1178,6 @@ class PlanResolutionSuite extends AnalysisTest {
             _: ResolvedTable, _: ResolvedFieldName, Some(dataType), None, Some(comment), None) =>
           assert(comment == "an index")
           assert(dataType == LongType)
-//        case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-//          assert(changes.length == 2, "Should have a comment change and type change")
-//          assert(changes.exists(_.isInstanceOf[UpdateColumnComment]),
-//            s"Expected UpdateColumnComment change but got: ${changes}")
-//          assert(changes.exists(_.isInstanceOf[UpdateColumnType]),
-//            s"Expected UpdateColumnType change but got: ${changes}")
         case _ => fail("expect AlterTableAlterColumn with type and comment changes")
       }
     }
