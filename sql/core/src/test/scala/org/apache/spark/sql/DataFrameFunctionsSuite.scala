@@ -26,7 +26,7 @@ import scala.util.Random
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
-import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, Expression, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, Expression, NamedExpression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
@@ -574,13 +574,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         .elementType.asInstanceOf[StructType].fieldNames
       assert(fieldNames1.toSeq === Seq("val1", "val2"))
 
-      // Fields are AttributeReference
+      // Fields are resolved NamedExpression
       val zippedDF2 = df.select(arrays_zip(df("val1"), df("val2")) as "zipped")
       val maybeAlias2 = zippedDF2.queryExecution.logical.expressions.head
       assert(maybeAlias2.isInstanceOf[Alias])
       val maybeArraysZip2 = maybeAlias2.children.head
       assert(maybeArraysZip2.isInstanceOf[ArraysZip])
-      assert(maybeArraysZip2.children.forall(_.isInstanceOf[AttributeReference]))
+      assert(maybeArraysZip2.children.forall(
+        e => e.isInstanceOf[AttributeReference] && e.resolved))
       val file2 = new File(dir, "arrays_zip2")
       zippedDF2.write.parquet(file2.getAbsolutePath)
       val restoredDF2 = spark.read.parquet(file2.getAbsolutePath)
@@ -588,13 +589,13 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         .elementType.asInstanceOf[StructType].fieldNames
       assert(fieldNames2.toSeq === Seq("val1", "val2"))
 
-      // Fields are Alias
+      // Fields are unresolved NamedExpression
       val zippedDF3 = df.select(arrays_zip($"val1" as "val3", $"val2" as "val4") as "zipped")
       val maybeAlias3 = zippedDF3.queryExecution.logical.expressions.head
       assert(maybeAlias3.isInstanceOf[Alias])
       val maybeArraysZip3 = maybeAlias3.children.head
       assert(maybeArraysZip3.isInstanceOf[ArraysZip])
-      assert(maybeArraysZip3.children.forall(_.isInstanceOf[Alias]))
+      assert(maybeArraysZip3.children.forall(e => e.isInstanceOf[Alias] && !e.resolved))
       val file3 = new File(dir, "arrays_zip3")
       zippedDF3.write.parquet(file3.getAbsolutePath)
       val restoredDF3 = spark.read.parquet(file3.getAbsolutePath)
@@ -602,14 +603,14 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
         .elementType.asInstanceOf[StructType].fieldNames
       assert(fieldNames3.toSeq === Seq("val3", "val4"))
 
-      // Fields are other expressions
+      // Fields are neither UnresolvedAttribute nor NamedExpression
       val zippedDF4 = df.select(arrays_zip(array_sort($"val1"), array_sort($"val2")) as "zipped")
       val maybeAlias4 = zippedDF4.queryExecution.logical.expressions.head
       assert(maybeAlias4.isInstanceOf[Alias])
       val maybeArraysZip4 = maybeAlias4.children.head
       assert(maybeArraysZip4.isInstanceOf[ArraysZip])
       assert(maybeArraysZip4.children.forall {
-        case _: UnresolvedAttribute | _: AttributeReference | _: Alias => false
+        case _: UnresolvedAttribute | _: NamedExpression => false
         case _ => true
       })
       val file4 = new File(dir, "arrays_zip4")
