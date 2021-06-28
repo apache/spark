@@ -285,12 +285,13 @@ private[spark] object Utils extends Logging {
    */
   def createDirectory(dir: File): Boolean = {
     try {
-      // SPARK-35907 Instead of File#mkdirs, Files#createDirectories is expected.
+      // SPARK-35907
+      // This could throw more meaningful exception information if directory creation failed.
       Files.createDirectories(dir.toPath)
       true
     } catch {
       case e: Exception =>
-        logError(s"Failed to create directory $dir", e)
+        logError(s"Failed to create directory " + dir, e)
         false
     }
   }
@@ -306,15 +307,17 @@ private[spark] object Utils extends Logging {
     while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException(s"Failed to create a temp directory (under $root) after " +
-           s"$maxAttempts attempts!")
+        throw new IOException("Failed to create a temp directory (under " + root + ") after " +
+          maxAttempts + " attempts!")
       }
       try {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
-        // SPARK-35907 Instead of File#mkdirs, Files#createDirectories is expected.
+        // SPARK-35907
+        // This could throw more meaningful exception information if directory creation failed.
         Files.createDirectories(dir.toPath)
-      } catch { case e: Exception =>
-        logError(s"Failed to create directory $dir", e)
+      } catch {
+        case e @ (_ : IOException | _ : SecurityException) =>
+          logError(s"Failed to create directory $dir", e)
         dir = null
       }
     }
