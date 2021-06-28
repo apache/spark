@@ -208,7 +208,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
 
   @transient override lazy val dataType: DataType = {
     val fields = arrayElementTypes.zip(names).map {
-      case (elementType, name) =>
+      case (elementType, Literal(name, StringType)) =>
         StructField(name.toString, elementType, nullable = true)
     }
     ArrayType(StructType(fields), containsNull = false)
