@@ -205,6 +205,8 @@ class JDBCOptions(
   val principal = parameters.getOrElse(JDBC_PRINCIPAL, null)
 
   val tableComment = parameters.getOrElse(JDBC_TABLE_COMMENT, "").toString
+
+  val refreshKrb5Config = parameters.getOrElse(JDBC_REFRESH_KRB5_CONFIG, "false").toBoolean
 }
 
 class JdbcOptionsInWrite(
@@ -260,4 +262,5 @@ object JDBCOptions {
   val JDBC_KEYTAB = newOption("keytab")
   val JDBC_PRINCIPAL = newOption("principal")
   val JDBC_TABLE_COMMENT = newOption("tableComment")
+  val JDBC_REFRESH_KRB5_CONFIG = newOption("refreshKrb5Config")
 }

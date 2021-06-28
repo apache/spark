@@ -869,7 +869,7 @@ select extract(DAY from interval '2-1' YEAR TO MONTH)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'DAY' are currently not supported for the year-month interval type.; line 1 pos 7
+Literals of type 'DAY' are currently not supported for the interval year to month type.; line 1 pos 7
 
 
 -- !query
@@ -878,7 +878,7 @@ select date_part('DAY', interval '2-1' YEAR TO MONTH)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'DAY' are currently not supported for the year-month interval type.; line 1 pos 7
+Literals of type 'DAY' are currently not supported for the interval year to month type.; line 1 pos 7
 
 
 -- !query
@@ -887,7 +887,7 @@ select date_part('not_supported', interval '2-1' YEAR TO MONTH)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'not_supported' are currently not supported for the year-month interval type.; line 1 pos 7
+Literals of type 'not_supported' are currently not supported for the interval year to month type.; line 1 pos 7
 
 
 -- !query
@@ -1000,7 +1000,7 @@ select extract(MONTH from interval '123 12:34:56.789123123' DAY TO SECOND)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'MONTH' are currently not supported for the day-time interval type.; line 1 pos 7
+Literals of type 'MONTH' are currently not supported for the interval day to second type.; line 1 pos 7
 
 
 -- !query
@@ -1009,4 +1009,4 @@ select date_part('not_supported', interval '123 12:34:56.789123123' DAY TO SECON
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Literals of type 'not_supported' are currently not supported for the day-time interval type.; line 1 pos 7
+Literals of type 'not_supported' are currently not supported for the interval day to second type.; line 1 pos 7

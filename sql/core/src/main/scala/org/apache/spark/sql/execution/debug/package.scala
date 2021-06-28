@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeFor
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.streaming.{StreamExecution, StreamingQueryWrapper}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamingQuery
@@ -112,6 +113,11 @@ package object debug {
       plan foreach {
         case s: WholeStageCodegenExec =>
           codegenSubtrees += s
+        case p: AdaptiveSparkPlanExec =>
+          // Find subtrees from current executed plan of AQE.
+          findSubtrees(p.executedPlan)
+        case s: QueryStageExec =>
+          findSubtrees(s.plan)
         case s =>
           s.subqueries.foreach(findSubtrees)
       }

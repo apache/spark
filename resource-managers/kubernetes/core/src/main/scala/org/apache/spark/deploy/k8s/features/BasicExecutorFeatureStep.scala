@@ -44,7 +44,10 @@ private[spark] class BasicExecutorFeatureStep(
     .getOrElse(throw new SparkException("Must specify the executor container image"))
   private val blockManagerPort = kubernetesConf
     .sparkConf
-    .getInt("spark.blockmanager.port", DEFAULT_BLOCKMANAGER_PORT)
+    .getInt(BLOCK_MANAGER_PORT.key, DEFAULT_BLOCKMANAGER_PORT)
+
+  require(blockManagerPort == 0 || (1024 <= blockManagerPort && blockManagerPort < 65536),
+    "port number must be 0 or in [1024, 65535]")
 
   private val executorPodNamePrefix = kubernetesConf.resourceNamePrefix
 
@@ -172,14 +175,17 @@ private[spark] class BasicExecutorFeatureStep(
         .replaceAll(ENV_EXECUTOR_ID, kubernetesConf.executorId))
     }
 
-    val requiredPorts = Seq(
-      (BLOCK_MANAGER_PORT_NAME, blockManagerPort))
-      .map { case (name, port) =>
-        new ContainerPortBuilder()
-          .withName(name)
-          .withContainerPort(port)
-          .build()
-      }
+    // 0 is invalid as kubernetes containerPort request, we shall leave it unmounted
+    val requiredPorts = if (blockManagerPort != 0) {
+      Seq(
+        (BLOCK_MANAGER_PORT_NAME, blockManagerPort))
+        .map { case (name, port) =>
+          new ContainerPortBuilder()
+            .withName(name)
+            .withContainerPort(port)
+            .build()
+        }
+    } else Nil
 
     if (!isDefaultProfile) {
       if (pod.container != null && pod.container.getResources() != null) {

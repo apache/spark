@@ -97,6 +97,7 @@ object RemoveRedundantProjects extends Rule[SparkPlan] {
       // If a DataSourceV2ScanExec node does not support columnar, a ProjectExec node is required
       // to convert the rows to UnsafeRow. See DataSourceV2Strategy for more details.
       case d: DataSourceV2ScanExecBase if !d.supportsColumnar => false
+      case FilterExec(_, d: DataSourceV2ScanExecBase) if !d.supportsColumnar => false
       case _ =>
         if (requireOrdering) {
           project.output.map(_.exprId.id) == child.output.map(_.exprId.id) &&

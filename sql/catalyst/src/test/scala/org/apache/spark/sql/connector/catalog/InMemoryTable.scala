@@ -237,29 +237,28 @@ class InMemoryTable(
     private var schema: StructType = tableSchema
 
     override def build: Scan =
-      new InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema)
+      new InMemoryBatchScan(data.map(_.asInstanceOf[InputPartition]), schema, tableSchema)
 
     override def pruneColumns(requiredSchema: StructType): Unit = {
-      // if metadata columns are projected, return the table schema and metadata columns
-      val hasMetadataColumns = requiredSchema.map(_.name).exists(metadataColumnNames.contains)
-      if (hasMetadataColumns) {
-        schema = StructType(tableSchema ++ metadataColumnNames
-            .flatMap(name => metadataColumns.find(_.name == name))
-            .map(col => StructField(col.name, col.dataType, col.isNullable)))
-      }
+      val schemaNames = metadataColumnNames ++ tableSchema.map(_.name)
+      schema = StructType(requiredSchema.filter(f => schemaNames.contains(f.name)))
     }
   }
 
-  class InMemoryBatchScan(data: Array[InputPartition], schema: StructType) extends Scan with Batch {
-    override def readSchema(): StructType = schema
+  class InMemoryBatchScan(
+      data: Array[InputPartition],
+      readSchema: StructType,
+      tableSchema: StructType) extends Scan with Batch {
+    override def readSchema(): StructType = readSchema
 
     override def toBatch: Batch = this
 
     override def planInputPartitions(): Array[InputPartition] = data
 
     override def createReaderFactory(): PartitionReaderFactory = {
-      val metadataColumns = schema.map(_.name).filter(metadataColumnNames.contains)
-      new BufferedRowsReaderFactory(metadataColumns)
+      val metadataColumns = readSchema.map(_.name).filter(metadataColumnNames.contains)
+      val nonMetadataColumns = readSchema.filterNot(f => metadataColumns.contains(f.name))
+      new BufferedRowsReaderFactory(metadataColumns, nonMetadataColumns, tableSchema)
     }
   }
 
@@ -480,17 +479,22 @@ class BufferedRows(
 }
 
 private class BufferedRowsReaderFactory(
-    metadataColumns: Seq[String]) extends PartitionReaderFactory {
+    metadataColumnNames: Seq[String],
+    nonMetaDataColumns: Seq[StructField],
+    tableSchema: StructType) extends PartitionReaderFactory {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
-    new BufferedRowsReader(partition.asInstanceOf[BufferedRows], metadataColumns)
+    new BufferedRowsReader(partition.asInstanceOf[BufferedRows], metadataColumnNames,
+      nonMetaDataColumns, tableSchema)
   }
 }
 
 private class BufferedRowsReader(
     partition: BufferedRows,
-    metadataColumns: Seq[String]) extends PartitionReader[InternalRow] {
+    metadataColumnNames: Seq[String],
+    nonMetadataColumns: Seq[StructField],
+    tableSchema: StructType) extends PartitionReader[InternalRow] {
   private def addMetadata(row: InternalRow): InternalRow = {
-    val metadataRow = new GenericInternalRow(metadataColumns.map {
+    val metadataRow = new GenericInternalRow(metadataColumnNames.map {
       case "index" => index
       case "_partition" => UTF8String.fromString(partition.key)
     }.toArray)
@@ -504,9 +508,39 @@ private class BufferedRowsReader(
     index < partition.rows.length
   }
 
-  override def get(): InternalRow = addMetadata(partition.rows(index))
+  override def get(): InternalRow = {
+    val originalRow = partition.rows(index)
+    val values = new Array[Any](nonMetadataColumns.length)
+    nonMetadataColumns.zipWithIndex.foreach { case (col, idx) =>
+      values(idx) = extractFieldValue(col, tableSchema, originalRow)
+    }
+    addMetadata(new GenericInternalRow(values))
+  }
 
   override def close(): Unit = {}
+
+  private def extractFieldValue(
+      field: StructField,
+      schema: StructType,
+      row: InternalRow): Any = {
+    val index = schema.fieldIndex(field.name)
+    field.dataType match {
+      case StructType(fields) =>
+        if (row.isNullAt(index)) {
+          return null
+        }
+        val childRow = row.toSeq(schema)(index).asInstanceOf[InternalRow]
+        val childSchema = schema(index).dataType.asInstanceOf[StructType]
+        val resultValue = new Array[Any](fields.length)
+        fields.zipWithIndex.foreach { case (childField, idx) =>
+          val childValue = extractFieldValue(childField, childSchema, childRow)
+          resultValue(idx) = childValue
+        }
+        new GenericInternalRow(resultValue)
+      case dt =>
+        row.get(index, dt)
+    }
+  }
 }
 
 private object BufferedRowsWriterFactory extends DataWriterFactory with StreamingDataWriterFactory {

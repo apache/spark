@@ -89,10 +89,10 @@ class WorkerTests(ReusedPySparkTestCase):
 
     def test_after_exception(self):
         def raise_exception(_):
-            raise Exception()
+            raise RuntimeError()
         rdd = self.sc.parallelize(range(100), 1)
         with QuietTest(self.sc):
-            self.assertRaises(Exception, lambda: rdd.foreach(raise_exception))
+            self.assertRaises(Py4JJavaError, lambda: rdd.foreach(raise_exception))
         self.assertEqual(100, rdd.map(str).count())
 
     def test_after_non_exception_error(self):
@@ -161,7 +161,7 @@ class WorkerTests(ReusedPySparkTestCase):
         # SPARK-21045: exceptions with no ascii encoding shall not hanging PySpark.
         try:
             def f():
-                raise Exception("exception with 中 and \xd6\xd0")
+                raise RuntimeError("exception with 中 and \xd6\xd0")
 
             self.sc.parallelize([1]).map(lambda x: f()).count()
         except Py4JJavaError as e:

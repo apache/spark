@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -206,7 +207,8 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     distinctAggs.size > 1 || distinctAggs.exists(_.filter.isDefined)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+    _.containsPattern(AGGREGATE)) {
     case a: Aggregate if mayNeedtoRewrite(a) => rewrite(a)
   }
 

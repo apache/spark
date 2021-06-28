@@ -38,8 +38,8 @@ class SparkFrameMethodsTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
         pdf2 = pd.DataFrame(
             {"rkey": ["foo", "bar", "baz", "foo"], "value": [5, 6, 7, 8]}
         ).set_index("rkey")
-        kdf1 = ps.from_pandas(pdf1)
-        kdf2 = ps.from_pandas(pdf2)
+        psdf1 = ps.from_pandas(pdf1)
+        psdf2 = ps.from_pandas(pdf2)
 
         hints = ["broadcast", "merge", "shuffle_hash", "shuffle_replicate_nl"]
 
@@ -48,7 +48,7 @@ class SparkFrameMethodsTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
                 pdf1.merge(pdf2, left_index=True, right_index=True).sort_values(
                     ["value_x", "value_y"]
                 ),
-                kdf1.merge(kdf2.spark.hint(hint), left_index=True, right_index=True).sort_values(
+                psdf1.merge(psdf2.spark.hint(hint), left_index=True, right_index=True).sort_values(
                     ["value_x", "value_y"]
                 ),
                 almost=True,
@@ -57,88 +57,90 @@ class SparkFrameMethodsTest(PandasOnSparkTestCase, SQLTestUtils, TestUtils):
                 pdf1.merge(pdf2 + 1, left_index=True, right_index=True).sort_values(
                     ["value_x", "value_y"]
                 ),
-                kdf1.merge(
-                    (kdf2 + 1).spark.hint(hint), left_index=True, right_index=True
+                psdf1.merge(
+                    (psdf2 + 1).spark.hint(hint), left_index=True, right_index=True
                 ).sort_values(["value_x", "value_y"]),
                 almost=True,
             )
 
     def test_repartition(self):
-        kdf = ps.DataFrame({"age": [5, 5, 2, 2], "name": ["Bob", "Bob", "Alice", "Alice"]})
-        num_partitions = kdf.to_spark().rdd.getNumPartitions() + 1
+        psdf = ps.DataFrame({"age": [5, 5, 2, 2], "name": ["Bob", "Bob", "Alice", "Alice"]})
+        num_partitions = psdf.to_spark().rdd.getNumPartitions() + 1
 
         num_partitions += 1
-        new_kdf = kdf.spark.repartition(num_partitions)
-        self.assertEqual(new_kdf.to_spark().rdd.getNumPartitions(), num_partitions)
-        self.assert_eq(kdf.sort_index(), new_kdf.sort_index())
+        new_psdf = psdf.spark.repartition(num_partitions)
+        self.assertEqual(new_psdf.to_spark().rdd.getNumPartitions(), num_partitions)
+        self.assert_eq(psdf.sort_index(), new_psdf.sort_index())
 
         # Reserves Index
-        kdf = kdf.set_index("age")
+        psdf = psdf.set_index("age")
         num_partitions += 1
-        new_kdf = kdf.spark.repartition(num_partitions)
-        self.assertEqual(new_kdf.to_spark().rdd.getNumPartitions(), num_partitions)
-        self.assert_eq(kdf.sort_index(), new_kdf.sort_index())
+        new_psdf = psdf.spark.repartition(num_partitions)
+        self.assertEqual(new_psdf.to_spark().rdd.getNumPartitions(), num_partitions)
+        self.assert_eq(psdf.sort_index(), new_psdf.sort_index())
 
         # Reflects internal changes
-        kdf = kdf.reset_index()
-        kdf = kdf.set_index("name")
-        kdf2 = kdf + 1
+        psdf = psdf.reset_index()
+        psdf = psdf.set_index("name")
+        psdf2 = psdf + 1
         num_partitions += 1
-        self.assert_eq(kdf2.sort_index(), (kdf + 1).spark.repartition(num_partitions).sort_index())
+        self.assert_eq(
+            psdf2.sort_index(), (psdf + 1).spark.repartition(num_partitions).sort_index()
+        )
 
         # Reserves MultiIndex
-        kdf = ps.DataFrame({"a": ["a", "b", "c"]}, index=[[1, 2, 3], [4, 5, 6]])
-        num_partitions = kdf.to_spark().rdd.getNumPartitions() + 1
-        new_kdf = kdf.spark.repartition(num_partitions)
-        self.assertEqual(new_kdf.to_spark().rdd.getNumPartitions(), num_partitions)
-        self.assert_eq(kdf.sort_index(), new_kdf.sort_index())
+        psdf = ps.DataFrame({"a": ["a", "b", "c"]}, index=[[1, 2, 3], [4, 5, 6]])
+        num_partitions = psdf.to_spark().rdd.getNumPartitions() + 1
+        new_psdf = psdf.spark.repartition(num_partitions)
+        self.assertEqual(new_psdf.to_spark().rdd.getNumPartitions(), num_partitions)
+        self.assert_eq(psdf.sort_index(), new_psdf.sort_index())
 
     def test_coalesce(self):
         num_partitions = 10
-        kdf = ps.DataFrame({"age": [5, 5, 2, 2], "name": ["Bob", "Bob", "Alice", "Alice"]})
-        kdf = kdf.spark.repartition(num_partitions)
+        psdf = ps.DataFrame({"age": [5, 5, 2, 2], "name": ["Bob", "Bob", "Alice", "Alice"]})
+        psdf = psdf.spark.repartition(num_partitions)
 
         num_partitions -= 1
-        new_kdf = kdf.spark.coalesce(num_partitions)
-        self.assertEqual(new_kdf.to_spark().rdd.getNumPartitions(), num_partitions)
-        self.assert_eq(kdf.sort_index(), new_kdf.sort_index())
+        new_psdf = psdf.spark.coalesce(num_partitions)
+        self.assertEqual(new_psdf.to_spark().rdd.getNumPartitions(), num_partitions)
+        self.assert_eq(psdf.sort_index(), new_psdf.sort_index())
 
         # Reserves Index
-        kdf = kdf.set_index("age")
+        psdf = psdf.set_index("age")
         num_partitions -= 1
-        new_kdf = kdf.spark.coalesce(num_partitions)
-        self.assertEqual(new_kdf.to_spark().rdd.getNumPartitions(), num_partitions)
-        self.assert_eq(kdf.sort_index(), new_kdf.sort_index())
+        new_psdf = psdf.spark.coalesce(num_partitions)
+        self.assertEqual(new_psdf.to_spark().rdd.getNumPartitions(), num_partitions)
+        self.assert_eq(psdf.sort_index(), new_psdf.sort_index())
 
         # Reflects internal changes
-        kdf = kdf.reset_index()
-        kdf = kdf.set_index("name")
-        kdf2 = kdf + 1
+        psdf = psdf.reset_index()
+        psdf = psdf.set_index("name")
+        psdf2 = psdf + 1
         num_partitions -= 1
-        self.assert_eq(kdf2.sort_index(), (kdf + 1).spark.coalesce(num_partitions).sort_index())
+        self.assert_eq(psdf2.sort_index(), (psdf + 1).spark.coalesce(num_partitions).sort_index())
 
         # Reserves MultiIndex
-        kdf = ps.DataFrame({"a": ["a", "b", "c"]}, index=[[1, 2, 3], [4, 5, 6]])
+        psdf = ps.DataFrame({"a": ["a", "b", "c"]}, index=[[1, 2, 3], [4, 5, 6]])
         num_partitions -= 1
-        kdf = kdf.spark.repartition(num_partitions)
+        psdf = psdf.spark.repartition(num_partitions)
 
         num_partitions -= 1
-        new_kdf = kdf.spark.coalesce(num_partitions)
-        self.assertEqual(new_kdf.to_spark().rdd.getNumPartitions(), num_partitions)
-        self.assert_eq(kdf.sort_index(), new_kdf.sort_index())
+        new_psdf = psdf.spark.coalesce(num_partitions)
+        self.assertEqual(new_psdf.to_spark().rdd.getNumPartitions(), num_partitions)
+        self.assert_eq(psdf.sort_index(), new_psdf.sort_index())
 
     def test_checkpoint(self):
         with self.temp_dir() as tmp:
             self.spark.sparkContext.setCheckpointDir(tmp)
-            kdf = ps.DataFrame({"a": ["a", "b", "c"]})
-            new_kdf = kdf.spark.checkpoint()
+            psdf = ps.DataFrame({"a": ["a", "b", "c"]})
+            new_psdf = psdf.spark.checkpoint()
             self.assertIsNotNone(os.listdir(tmp))
-            self.assert_eq(kdf, new_kdf)
+            self.assert_eq(psdf, new_psdf)
 
     def test_local_checkpoint(self):
-        kdf = ps.DataFrame({"a": ["a", "b", "c"]})
-        new_kdf = kdf.spark.local_checkpoint()
-        self.assert_eq(kdf, new_kdf)
+        psdf = ps.DataFrame({"a": ["a", "b", "c"]})
+        new_psdf = psdf.spark.local_checkpoint()
+        self.assert_eq(psdf, new_psdf)
 
 
 if __name__ == "__main__":
@@ -147,7 +149,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

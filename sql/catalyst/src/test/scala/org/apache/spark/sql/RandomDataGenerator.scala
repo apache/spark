@@ -26,10 +26,12 @@ import scala.collection.mutable
 import scala.util.{Random, Try}
 
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.{MICROS_PER_MILLIS, MILLIS_PER_DAY}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType.YEAR
 import org.apache.spark.unsafe.types.CalendarInterval
 /**
  * Random data generators for Spark SQL DataTypes. These generators do not generate uniformly random
@@ -140,6 +142,26 @@ object RandomDataGenerator {
     StructType(fields.toSeq)
   }
 
+  private def uniformMicrosRand(rand: Random): Long = {
+    var milliseconds = rand.nextLong() % 253402329599999L
+    // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
+    // for "0001-01-01 00:00:00.000000". We need to find a
+    // number that is greater or equals to this number as a valid timestamp value.
+    while (milliseconds < -62135740800000L) {
+      // 253402329599999L is the number of milliseconds since
+      // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
+      milliseconds = rand.nextLong() % 253402329599999L
+    }
+    milliseconds * MICROS_PER_MILLIS
+  }
+
+  private val specialTs = Seq(
+    "0001-01-01 00:00:00", // the fist timestamp of Common Era
+    "1582-10-15 23:59:59", // the cutover date from Julian to Gregorian calendar
+    "1970-01-01 00:00:00", // the epoch timestamp
+    "9999-12-31 23:59:59"  // the last supported timestamp according to SQL standard
+  )
+
   /**
    * Returns a function which generates random values for the given `DataType`, or `None` if no
    * random data generator is defined for that data type. The generated values will use an external
@@ -216,24 +238,6 @@ object RandomDataGenerator {
             specialDates.map(java.sql.Date.valueOf))
         }
       case TimestampType =>
-        def uniformMicrosRand(rand: Random): Long = {
-          var milliseconds = rand.nextLong() % 253402329599999L
-          // -62135740800000L is the number of milliseconds before January 1, 1970, 00:00:00 GMT
-          // for "0001-01-01 00:00:00.000000". We need to find a
-          // number that is greater or equals to this number as a valid timestamp value.
-          while (milliseconds < -62135740800000L) {
-            // 253402329599999L is the number of milliseconds since
-            // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
-            milliseconds = rand.nextLong() % 253402329599999L
-          }
-          milliseconds * MICROS_PER_MILLIS
-        }
-        val specialTs = Seq(
-          "0001-01-01 00:00:00", // the fist timestamp of Common Era
-          "1582-10-15 23:59:59", // the cutover date from Julian to Gregorian calendar
-          "1970-01-01 00:00:00", // the epoch timestamp
-          "9999-12-31 23:59:59"  // the last supported timestamp according to SQL standard
-        )
         def getRandomTimestamp(rand: Random): java.sql.Timestamp = {
           // DateTimeUtils.toJavaTimestamp takes microsecond.
           val ts = DateTimeUtils.toJavaTimestamp(uniformMicrosRand(rand))
@@ -267,14 +271,34 @@ object RandomDataGenerator {
             getRandomTimestamp,
             specialTs.map(java.sql.Timestamp.valueOf))
         }
+      case TimestampWithoutTZType =>
+        randomNumeric[LocalDateTime](
+          rand,
+          (rand: Random) => {
+            DateTimeUtils.microsToLocalDateTime(uniformMicrosRand(rand))
+          },
+          specialTs.map { s => LocalDateTime.parse(s.replace(" ", "T")) }
+        )
       case CalendarIntervalType => Some(() => {
         val months = rand.nextInt(1000)
         val days = rand.nextInt(10000)
         val ns = rand.nextLong()
         new CalendarInterval(months, days, ns)
       })
-      case DayTimeIntervalType => Some(() => Duration.of(rand.nextLong(), ChronoUnit.MICROS))
-      case YearMonthIntervalType => Some(() => Period.ofMonths(rand.nextInt()).normalized())
+      case DayTimeIntervalType(_, DAY) =>
+        val mircoSeconds = rand.nextLong()
+        Some(() => Duration.of(mircoSeconds - mircoSeconds % MICROS_PER_DAY, ChronoUnit.MICROS))
+      case DayTimeIntervalType(_, HOUR) =>
+        val mircoSeconds = rand.nextLong()
+        Some(() => Duration.of(mircoSeconds - mircoSeconds % MICROS_PER_HOUR, ChronoUnit.MICROS))
+      case DayTimeIntervalType(_, MINUTE) =>
+        val mircoSeconds = rand.nextLong()
+        Some(() => Duration.of(mircoSeconds - mircoSeconds % MICROS_PER_MINUTE, ChronoUnit.MICROS))
+      case DayTimeIntervalType(_, SECOND) =>
+        Some(() => Duration.of(rand.nextLong(), ChronoUnit.MICROS))
+      case YearMonthIntervalType(_, YEAR) =>
+        Some(() => Period.ofYears(rand.nextInt() / MONTHS_PER_YEAR).normalized())
+      case YearMonthIntervalType(_, _) => Some(() => Period.ofMonths(rand.nextInt()).normalized())
       case DecimalType.Fixed(precision, scale) => Some(
         () => BigDecimal.apply(
           rand.nextLong() % math.pow(10, precision).toLong,

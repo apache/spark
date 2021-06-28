@@ -17,24 +17,27 @@
 """
 Additional Spark functions used in pandas-on-Spark.
 """
+from typing import Union, no_type_check
 
 from pyspark import SparkContext
-from pyspark.sql.column import Column, _to_java_column, _create_column_from_literal
+from pyspark.sql.column import Column, _to_java_column, _create_column_from_literal  # type: ignore
 
 
-def repeat(col, n):
+def repeat(col: Column, n: Union[int, Column]) -> Column:
     """
     Repeats a string column n times, and returns it as a new string column.
     """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext._active_spark_context  # type: ignore
     n = _to_java_column(n) if isinstance(n, Column) else _create_column_from_literal(n)
     return _call_udf(sc, "repeat", _to_java_column(col), n)
 
 
+@no_type_check
 def _call_udf(sc, name, *cols):
     return Column(sc._jvm.functions.callUDF(name, _make_arguments(sc, *cols)))
 
 
+@no_type_check
 def _make_arguments(sc, *cols):
     java_arr = sc._gateway.new_array(sc._jvm.Column, len(cols))
     for i, col in enumerate(cols):

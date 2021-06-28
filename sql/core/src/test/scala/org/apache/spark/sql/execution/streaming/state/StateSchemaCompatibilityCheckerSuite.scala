@@ -47,6 +47,22 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     .add(StructField("value2", StringType, nullable = true))
     .add(StructField("value3", structSchema, nullable = true))
 
+  private val longKeySchema = new StructType()
+    .add(StructField("key" + "1" * 64 * 1024, IntegerType, nullable = true))
+    .add(StructField("key" + "2" * 64 * 1024, StringType, nullable = true))
+    .add(StructField("key" + "3" * 64 * 1024, structSchema, nullable = true))
+
+  private val longValueSchema = new StructType()
+    .add(StructField("value" + "1" * 64 * 1024, IntegerType, nullable = true))
+    .add(StructField("value" + "2" * 64 * 1024, StringType, nullable = true))
+    .add(StructField("value" + "3" * 64 * 1024, structSchema, nullable = true))
+
+  private val keySchema65535Bytes = new StructType()
+    .add(StructField("k" * (65535 - 87), IntegerType, nullable = true))
+
+  private val valueSchema65535Bytes = new StructType()
+    .add(StructField("v" * (65535 - 87), IntegerType, nullable = true))
+
   test("adding field to key should fail") {
     val fieldAddedKeySchema = keySchema.add(StructField("newKey", IntegerType))
     verifyException(keySchema, valueSchema, fieldAddedKeySchema, valueSchema)
@@ -159,6 +175,25 @@ class StateSchemaCompatibilityCheckerSuite extends SharedSparkSession {
     val newNestedFieldsSchema = StructType(structSchema.map(newName))
     val fieldNameChangedValueSchema = applyNewSchemaToNestedFieldInValue(newNestedFieldsSchema)
     verifySuccess(keySchema, valueSchema, keySchema, fieldNameChangedValueSchema)
+  }
+
+  test("SPARK-35602: checking for long length schema") {
+    verifySuccess(longKeySchema, longValueSchema, longKeySchema, longValueSchema)
+    verifySuccess(
+      keySchema65535Bytes, valueSchema65535Bytes, keySchema65535Bytes, valueSchema65535Bytes)
+  }
+
+  test("SPARK-35602: checking for compatibility with schema version 1") {
+    val dir = newDir()
+    val queryId = UUID.randomUUID()
+    val providerId = StateStoreProviderId(
+      StateStoreId(dir, opId, partitionId), queryId)
+    val checker = new StateSchemaCompatibilityChecker(providerId, hadoopConf)
+    checker.createSchemaFile(keySchema, valueSchema,
+      SchemaHelper.SchemaWriter.createSchemaWriter(1))
+    val (resultKeySchema, resultValueSchema) = checker.readSchemaFile()
+
+    assert((resultKeySchema, resultValueSchema) === (keySchema, valueSchema))
   }
 
   private def applyNewSchemaToNestedFieldInKey(newNestedSchema: StructType): StructType = {

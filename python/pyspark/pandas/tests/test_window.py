@@ -30,7 +30,7 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
     def test_missing(self):
-        kdf = ps.DataFrame({"a": [1, 2, 3, 4, 5, 6, 7, 8, 9]})
+        psdf = ps.DataFrame({"a": [1, 2, 3, 4, 5, 6, 7, 8, 9]})
 
         # Expanding functions
         missing_functions = inspect.getmembers(MissingPandasLikeExpanding, inspect.isfunction)
@@ -42,13 +42,13 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
                 PandasNotImplementedError,
                 "method.*Expanding.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.expanding(1), name)()  # Frame
+                getattr(psdf.expanding(1), name)()  # Frame
 
             with self.assertRaisesRegex(
                 PandasNotImplementedError,
                 "method.*Expanding.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.a.expanding(1), name)()  # Series
+                getattr(psdf.a.expanding(1), name)()  # Series
 
         deprecated_functions = [
             name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
@@ -57,12 +57,12 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "method.*Expanding.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.expanding(1), name)()  # Frame
+                getattr(psdf.expanding(1), name)()  # Frame
 
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "method.*Expanding.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.a.expanding(1), name)()  # Series
+                getattr(psdf.a.expanding(1), name)()  # Series
 
         # Rolling functions
         missing_functions = inspect.getmembers(MissingPandasLikeRolling, inspect.isfunction)
@@ -74,12 +74,12 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
                 PandasNotImplementedError,
                 "method.*Rolling.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.rolling(1), name)()  # Frame
+                getattr(psdf.rolling(1), name)()  # Frame
             with self.assertRaisesRegex(
                 PandasNotImplementedError,
                 "method.*Rolling.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.a.rolling(1), name)()  # Series
+                getattr(psdf.a.rolling(1), name)()  # Series
 
         deprecated_functions = [
             name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
@@ -88,11 +88,11 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "method.*Rolling.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.rolling(1), name)()  # Frame
+                getattr(psdf.rolling(1), name)()  # Frame
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "method.*Rolling.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.a.rolling(1), name)()  # Series
+                getattr(psdf.a.rolling(1), name)()  # Series
 
         # Expanding properties
         missing_properties = inspect.getmembers(
@@ -108,12 +108,12 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
                 PandasNotImplementedError,
                 "property.*Expanding.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.expanding(1), name)  # Frame
+                getattr(psdf.expanding(1), name)  # Frame
             with self.assertRaisesRegex(
                 PandasNotImplementedError,
                 "property.*Expanding.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.a.expanding(1), name)  # Series
+                getattr(psdf.a.expanding(1), name)  # Series
 
         deprecated_properties = [
             name
@@ -124,11 +124,11 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "property.*Expanding.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.expanding(1), name)  # Frame
+                getattr(psdf.expanding(1), name)  # Frame
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "property.*Expanding.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.a.expanding(1), name)  # Series
+                getattr(psdf.a.expanding(1), name)  # Series
 
         # Rolling properties
         missing_properties = inspect.getmembers(
@@ -144,12 +144,12 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
                 PandasNotImplementedError,
                 "property.*Rolling.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.rolling(1), name)()  # Frame
+                getattr(psdf.rolling(1), name)()  # Frame
             with self.assertRaisesRegex(
                 PandasNotImplementedError,
                 "property.*Rolling.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.a.rolling(1), name)()  # Series
+                getattr(psdf.a.rolling(1), name)()  # Series
         deprecated_properties = [
             name
             for (name, type_) in missing_properties
@@ -159,14 +159,14 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "property.*Rolling.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.rolling(1), name)()  # Frame
+                getattr(psdf.rolling(1), name)()  # Frame
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "property.*Rolling.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.a.rolling(1), name)()  # Series
+                getattr(psdf.a.rolling(1), name)()  # Series
 
     def test_missing_groupby(self):
-        kdf = ps.DataFrame({"a": [1, 2, 3, 4, 5, 6, 7, 8, 9]})
+        psdf = ps.DataFrame({"a": [1, 2, 3, 4, 5, 6, 7, 8, 9]})
 
         # Expanding functions
         missing_functions = inspect.getmembers(
@@ -180,13 +180,13 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
                 PandasNotImplementedError,
                 "method.*Expanding.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.groupby("a").expanding(1), name)()  # Frame
+                getattr(psdf.groupby("a").expanding(1), name)()  # Frame
 
             with self.assertRaisesRegex(
                 PandasNotImplementedError,
                 "method.*Expanding.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.a.groupby(kdf.a).expanding(1), name)()  # Series
+                getattr(psdf.a.groupby(psdf.a).expanding(1), name)()  # Series
 
         deprecated_functions = [
             name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
@@ -195,12 +195,12 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "method.*Expanding.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.groupby("a").expanding(1), name)()  # Frame
+                getattr(psdf.groupby("a").expanding(1), name)()  # Frame
 
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "method.*Expanding.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.a.groupby(kdf.a).expanding(1), name)()  # Series
+                getattr(psdf.a.groupby(psdf.a).expanding(1), name)()  # Series
 
         # Rolling functions
         missing_functions = inspect.getmembers(MissingPandasLikeRollingGroupby, inspect.isfunction)
@@ -212,12 +212,12 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
                 PandasNotImplementedError,
                 "method.*Rolling.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.groupby("a").rolling(1), name)()  # Frame
+                getattr(psdf.groupby("a").rolling(1), name)()  # Frame
             with self.assertRaisesRegex(
                 PandasNotImplementedError,
                 "method.*Rolling.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.a.groupby(kdf.a).rolling(1), name)()  # Series
+                getattr(psdf.a.groupby(psdf.a).rolling(1), name)()  # Series
 
         deprecated_functions = [
             name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
@@ -226,11 +226,11 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "method.*Rolling.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.rolling(1), name)()  # Frame
+                getattr(psdf.rolling(1), name)()  # Frame
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "method.*Rolling.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.a.rolling(1), name)()  # Series
+                getattr(psdf.a.rolling(1), name)()  # Series
 
         # Expanding properties
         missing_properties = inspect.getmembers(
@@ -246,12 +246,12 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
                 PandasNotImplementedError,
                 "property.*Expanding.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.groupby("a").expanding(1), name)()  # Frame
+                getattr(psdf.groupby("a").expanding(1), name)()  # Frame
             with self.assertRaisesRegex(
                 PandasNotImplementedError,
                 "property.*Expanding.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.a.groupby(kdf.a).expanding(1), name)()  # Series
+                getattr(psdf.a.groupby(psdf.a).expanding(1), name)()  # Series
 
         deprecated_properties = [
             name
@@ -262,11 +262,11 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "property.*Expanding.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.expanding(1), name)  # Frame
+                getattr(psdf.expanding(1), name)  # Frame
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "property.*Expanding.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.a.expanding(1), name)  # Series
+                getattr(psdf.a.expanding(1), name)  # Series
 
         # Rolling properties
         missing_properties = inspect.getmembers(
@@ -282,12 +282,12 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
                 PandasNotImplementedError,
                 "property.*Rolling.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.groupby("a").rolling(1), name)()  # Frame
+                getattr(psdf.groupby("a").rolling(1), name)()  # Frame
             with self.assertRaisesRegex(
                 PandasNotImplementedError,
                 "property.*Rolling.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
-                getattr(kdf.a.groupby(kdf.a).rolling(1), name)()  # Series
+                getattr(psdf.a.groupby(psdf.a).rolling(1), name)()  # Series
         deprecated_properties = [
             name
             for (name, type_) in missing_properties
@@ -297,11 +297,11 @@ class ExpandingRollingTest(PandasOnSparkTestCase, TestUtils):
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "property.*Rolling.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.rolling(1), name)()  # Frame
+                getattr(psdf.rolling(1), name)()  # Frame
             with self.assertRaisesRegex(
                 PandasNotImplementedError, "property.*Rolling.*{}.*is deprecated".format(name)
             ):
-                getattr(kdf.a.rolling(1), name)()  # Series
+                getattr(psdf.a.rolling(1), name)()  # Series
 
 
 if __name__ == "__main__":
@@ -310,7 +310,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

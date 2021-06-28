@@ -83,7 +83,7 @@ class Evaluator(Params, metaclass=ABCMeta):
             else:
                 return self._evaluate(dataset)
         else:
-            raise ValueError("Params must be a param map but got %s." % type(params))
+            raise TypeError("Params must be a param map but got %s." % type(params))
 
     @since("1.5.0")
     def isLargerBetter(self):

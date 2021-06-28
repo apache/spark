@@ -34,7 +34,7 @@ except ImportError as e:
 from pyspark.pandas.version import __version__  # noqa: F401
 
 
-def assert_python_version():
+def assert_python_version() -> None:
     major = 3
     minor = 5
     deprecated_version = (major, minor)
@@ -114,7 +114,7 @@ __all__ = [  # noqa: F405
 ]
 
 
-def _auto_patch_spark():
+def _auto_patch_spark() -> None:
     import os
     import logging
 
@@ -133,21 +133,12 @@ def _auto_patch_spark():
                 )
             )
 
-    # Autopatching is on by default.
-    x = os.getenv("SPARK_KOALAS_AUTOPATCH", "true")
-    if x.lower() in ("true", "1", "enabled"):
-        logger = logging.getLogger("spark")
-        logger.info(
-            "Patching spark automatically. You can disable it by setting "
-            "SPARK_KOALAS_AUTOPATCH=false in your environment"
-        )
 
-        from pyspark.sql import dataframe as df
-
-        df.DataFrame.to_koalas = DataFrame.to_koalas
+_frame_has_class_getitem = False
+_series_has_class_getitem = False
 
 
-def _auto_patch_pandas():
+def _auto_patch_pandas() -> None:
     import pandas as pd
 
     # In order to use it in test cases.

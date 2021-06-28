@@ -58,14 +58,14 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
   }
 
   object LogicalPlanWithDatasetId {
-    def unapply(p: LogicalPlan): Option[(LogicalPlan, Long)] = {
-      p.getTagValue(Dataset.DATASET_ID_TAG).map(id => p -> id)
+    def unapply(p: LogicalPlan): Option[(LogicalPlan, mutable.HashSet[Long])] = {
+      p.getTagValue(Dataset.DATASET_ID_TAG).map(ids => p -> ids)
     }
   }
 
   object AttrWithCast {
     def unapply(expr: Expression): Option[AttributeReference] = expr match {
-      case Cast(child, _, _) => unapply(child)
+      case Cast(child, _, _, _) => unapply(child)
       case a: AttributeReference => Some(a)
       case _ => None
     }
@@ -90,9 +90,9 @@ object DetectAmbiguousSelfJoin extends Rule[LogicalPlan] {
       val inputAttrs = AttributeSet(plan.children.flatMap(_.output))
 
       plan.foreach {
-        case LogicalPlanWithDatasetId(p, id) if dsIdSet.contains(id) =>
+        case LogicalPlanWithDatasetId(p, ids) if dsIdSet.intersect(ids).nonEmpty =>
           colRefs.foreach { ref =>
-            if (id == ref.datasetId) {
+            if (ids.contains(ref.datasetId)) {
               if (ref.colPos < 0 || ref.colPos >= p.output.length) {
                 throw new IllegalStateException("[BUG] Hit an invalid Dataset column reference: " +
                   s"$ref. Please open a JIRA ticket to report it.")

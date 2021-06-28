@@ -45,7 +45,7 @@ from pyspark.serializers import write_with_length, write_int, read_long, read_bo
 from pyspark.sql.pandas.serializers import ArrowStreamPandasUDFSerializer, CogroupUDFSerializer
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.types import StructType
-from pyspark.util import fail_on_stopiteration, try_simplify_traceback
+from pyspark.util import fail_on_stopiteration, try_simplify_traceback  # type: ignore
 from pyspark import shuffle
 
 pickleSer = PickleSerializer()
@@ -471,11 +471,11 @@ def main(infile, outfile):
 
         version = utf8_deserializer.loads(infile)
         if version != "%d.%d" % sys.version_info[:2]:
-            raise Exception(("Python in worker has different version %s than that in " +
-                             "driver %s, PySpark cannot run with different minor versions. " +
-                             "Please check environment variables PYSPARK_PYTHON and " +
-                             "PYSPARK_DRIVER_PYTHON are correctly set.") %
-                            ("%d.%d" % sys.version_info[:2], version))
+            raise RuntimeError(("Python in worker has different version %s than that in " +
+                                "driver %s, PySpark cannot run with different minor versions. " +
+                                "Please check environment variables PYSPARK_PYTHON and " +
+                                "PYSPARK_DRIVER_PYTHON are correctly set.") %
+                               ("%d.%d" % sys.version_info[:2], version))
 
         # read inputs only for a barrier task
         isBarrier = read_bool(infile)

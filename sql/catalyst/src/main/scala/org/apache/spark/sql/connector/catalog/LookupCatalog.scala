@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connector.catalog
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 /**
@@ -154,6 +154,28 @@ private[sql] trait LookupCatalog extends Logging {
     }
   }
 
+  object AsFunctionIdentifier {
+    def unapply(parts: Seq[String]): Option[FunctionIdentifier] = {
+      def namesToFunctionIdentifier(names: Seq[String]): Option[FunctionIdentifier] = names match {
+        case Seq(name) => Some(FunctionIdentifier(name))
+        case Seq(database, name) => Some(FunctionIdentifier(name, Some(database)))
+        case _ => None
+      }
+      parts match {
+        case Seq(name)
+          if catalogManager.v1SessionCatalog.isRegisteredFunction(FunctionIdentifier(name)) =>
+          Some(FunctionIdentifier(name))
+        case CatalogAndMultipartIdentifier(None, names)
+          if CatalogV2Util.isSessionCatalog(currentCatalog) =>
+          namesToFunctionIdentifier(names)
+        case CatalogAndMultipartIdentifier(Some(catalog), names)
+          if CatalogV2Util.isSessionCatalog(catalog) =>
+          namesToFunctionIdentifier(names)
+        case _ => None
+      }
+    }
+  }
+
   def parseSessionCatalogFunctionIdentifier(nameParts: Seq[String]): FunctionIdentifier = {
     if (nameParts.length == 1 && catalogManager.v1SessionCatalog.isTempFunction(nameParts.head)) {
       return FunctionIdentifier(nameParts.head)
@@ -170,11 +192,11 @@ private[sql] trait LookupCatalog extends Logging {
           ident.namespace match {
             case Array(db) => FunctionIdentifier(ident.name, Some(db))
             case _ =>
-              throw new AnalysisException(s"Unsupported function name '$ident'")
+              throw QueryCompilationErrors.unsupportedFunctionNameError(ident.toString)
           }
         }
 
-      case _ => throw new AnalysisException("function is only supported in v1 catalog")
+      case _ => throw QueryCompilationErrors.functionUnsupportedInV2CatalogError()
     }
   }
 }

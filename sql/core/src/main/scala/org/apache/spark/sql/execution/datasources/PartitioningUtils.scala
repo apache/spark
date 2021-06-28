@@ -135,7 +135,7 @@ object PartitioningUtils {
       Map.empty[String, String]
     }
 
-    val dateFormatter = DateFormatter(zoneId)
+    val dateFormatter = DateFormatter()
     val timestampFormatter = TimestampFormatter(
       timestampPartitionPattern,
       zoneId,

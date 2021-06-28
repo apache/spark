@@ -479,6 +479,7 @@ private[joins] object UnsafeHashedRelation {
           throw QueryExecutionErrors.cannotAcquireMemoryToBuildUnsafeHashedRelationError()
         }
       } else if (isNullAware) {
+        binaryMap.free()
         return HashedRelationWithAllNullKeys
       }
     }
@@ -1060,6 +1061,7 @@ private[joins] object LongHashedRelation {
         val key = rowKey.getLong(0)
         map.append(key, unsafeRow)
       } else if (isNullAware) {
+        map.free()
         return HashedRelationWithAllNullKeys
       }
     }
@@ -1134,9 +1136,9 @@ case class HashedRelationBroadcastMode(key: Seq[Expression], isNullAware: Boolea
       sizeHint: Option[Long]): HashedRelation = {
     sizeHint match {
       case Some(numRows) =>
-        HashedRelation(rows, canonicalized.key, numRows.toInt, isNullAware = isNullAware)
+        HashedRelation(rows, key, numRows.toInt, isNullAware = isNullAware)
       case None =>
-        HashedRelation(rows, canonicalized.key, isNullAware = isNullAware)
+        HashedRelation(rows, key, isNullAware = isNullAware)
     }
   }
 

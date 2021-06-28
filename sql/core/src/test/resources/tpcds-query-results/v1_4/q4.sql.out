@@ -3,11 +3,5 @@
 -- !query schema
 struct<customer_id:string,customer_first_name:string,customer_last_name:string,customer_preferred_cust_flag:string,customer_birth_country:string,customer_login:string,customer_email_address:string>
 -- !query output
-AAAAAAAABIJBAAAA	James               	White                         	N	IRAQ	NULL	James.White@DI8oHLVIxJer5MMljj.org                
-AAAAAAAADIIOAAAA	David               	Carroll                       	Y	GIBRALTAR	NULL	David.Carroll@fm.edu                              
-AAAAAAAAIJCIBAAA	Thomas              	Oneal                         	Y	BANGLADESH	NULL	Thomas.Oneal@YhHzOk6o3RiKc1AREv.edu               
-AAAAAAAAKJBLAAAA	Kerry               	Davis                         	Y	AFGHANISTAN	NULL	Kerry.Davis@i.com                                 
-AAAAAAAAMFPFBAAA	Jamie               	Woods                         	Y	TAJIKISTAN	NULL	Jamie.Woods@zjTJlz.edu                            
-AAAAAAAANJAMAAAA	Thaddeus            	Griffin                       	N	LITHUANIA	NULL	NULL
-AAAAAAAANJOLAAAA	Debra               	Underwood                     	Y	BOTSWANA	NULL	Debra.Underwood@f3193uX.org                       
-AAAAAAAAPEHEBAAA	Edith               	Molina                        	Y	GREENLAND	NULL	Edith.Molina@q9CS0P.com
+AAAAAAAAMHOLAAAA	Terri               	Cook                          	N	COSTA RICA	NULL	Terri.Cook@Vz02fJPUlPO.edu                        
+AAAAAAAANBECBAAA	Michael             	Lombardi                      	Y	ZIMBABWE	NULL	Michael.Lombardi@J.com

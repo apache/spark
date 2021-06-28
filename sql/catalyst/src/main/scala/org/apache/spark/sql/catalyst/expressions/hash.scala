@@ -369,11 +369,25 @@ abstract class HashExpression[E] extends Expression {
   protected def genHashBoolean(input: String, result: String): String =
     genHashInt(s"$input ? 1 : 0", result)
 
-  protected def genHashFloat(input: String, result: String): String =
-    genHashInt(s"Float.floatToIntBits($input)", result)
+  protected def genHashFloat(input: String, result: String): String = {
+    s"""
+       |if($input == -0.0f) {
+       |  ${genHashInt("0", result)}
+       |} else {
+       |  ${genHashInt(s"Float.floatToIntBits($input)", result)}
+       |}
+     """.stripMargin
+  }
 
-  protected def genHashDouble(input: String, result: String): String =
-    genHashLong(s"Double.doubleToLongBits($input)", result)
+  protected def genHashDouble(input: String, result: String): String = {
+    s"""
+      |if($input == -0.0d) {
+      |  ${genHashLong("0L", result)}
+      |} else {
+      |  ${genHashLong(s"Double.doubleToLongBits($input)", result)}
+      |}
+     """.stripMargin
+  }
 
   protected def genHashDecimal(
       ctx: CodegenContext,
@@ -481,8 +495,8 @@ abstract class HashExpression[E] extends Expression {
     case DoubleType => genHashDouble(input, result)
     case d: DecimalType => genHashDecimal(ctx, d, input, result)
     case CalendarIntervalType => genHashCalendarInterval(input, result)
-    case DayTimeIntervalType => genHashLong(input, result)
-    case YearMonthIntervalType => genHashInt(input, result)
+    case _: DayTimeIntervalType => genHashLong(input, result)
+    case _: YearMonthIntervalType => genHashInt(input, result)
     case BinaryType => genHashBytes(input, result)
     case StringType => genHashString(input, result)
     case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)
@@ -523,7 +537,9 @@ abstract class InterpretedHashFunction {
       case s: Short => hashInt(s, seed)
       case i: Int => hashInt(i, seed)
       case l: Long => hashLong(l, seed)
+      case f: Float if (f == -0.0f) => hashInt(0, seed)
       case f: Float => hashInt(java.lang.Float.floatToIntBits(f), seed)
+      case d: Double if (d == -0.0d) => hashLong(0L, seed)
       case d: Double => hashLong(java.lang.Double.doubleToLongBits(d), seed)
       case d: Decimal =>
         val precision = dataType.asInstanceOf[DecimalType].precision

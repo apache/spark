@@ -89,11 +89,12 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
             s"""SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)""")
       }
     }
+    val fileManager = CheckpointFileManager.create(new Path(checkpointLocation), s.hadoopConf)
+
     // If offsets have already been created, we trying to resume a query.
     if (!s.recoverFromCheckpointLocation) {
       val checkpointPath = new Path(checkpointLocation, "offsets")
-      val fs = checkpointPath.getFileSystem(s.hadoopConf)
-      if (fs.exists(checkpointPath)) {
+      if (fileManager.exists(checkpointPath)) {
         throw new AnalysisException(
           s"This query does not support recovering from checkpoint location. " +
             s"Delete $checkpointPath to start over.")
@@ -102,7 +103,6 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
 
     val resolvedCheckpointRoot = {
       val checkpointPath = new Path(checkpointLocation)
-      val fs = checkpointPath.getFileSystem(s.hadoopConf)
       if (conf.getConf(SQLConf.STREAMING_CHECKPOINT_ESCAPED_PATH_CHECK_ENABLED)
         && StreamExecution.containsSpecialCharsInPath(checkpointPath)) {
         // In Spark 2.4 and earlier, the checkpoint path is escaped 3 times (3 `Path.toUri.toString`
@@ -112,7 +112,7 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
         new Path(new Path(checkpointPath.toUri.toString).toUri.toString).toUri.toString
         val legacyCheckpointDirExists =
           try {
-            fs.exists(new Path(legacyCheckpointDir))
+            fileManager.exists(new Path(legacyCheckpointDir))
           } catch {
             case NonFatal(e) =>
               // We may not have access to this directory. Don't fail the query if that happens.
@@ -139,8 +139,7 @@ object ResolveWriteToStream extends Rule[LogicalPlan] with SQLConfHelper {
               .stripMargin)
         }
       }
-      val checkpointDir = checkpointPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      fs.mkdirs(checkpointDir)
+      val checkpointDir = fileManager.createCheckpointDirectory()
       checkpointDir.toString
     }
     logInfo(s"Checkpoint root $checkpointLocation resolved to $resolvedCheckpointRoot.")

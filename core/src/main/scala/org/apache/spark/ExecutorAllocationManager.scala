@@ -737,6 +737,7 @@ private[spark] class ExecutorAllocationManager(
         stageAttemptToTaskIndices -= stageAttempt
         stageAttemptToSpeculativeTaskIndices -= stageAttempt
         stageAttemptToExecutorPlacementHints -= stageAttempt
+        removeStageFromResourceProfileIfUnused(stageAttempt)
 
         // Update the executor placement hints
         updateExecutorPlacementHints()
@@ -781,20 +782,7 @@ private[spark] class ExecutorAllocationManager(
           stageAttemptToNumRunningTask(stageAttempt) -= 1
           if (stageAttemptToNumRunningTask(stageAttempt) == 0) {
             stageAttemptToNumRunningTask -= stageAttempt
-            if (!stageAttemptToNumTasks.contains(stageAttempt)) {
-              val rpForStage = resourceProfileIdToStageAttempt.filter { case (k, v) =>
-                v.contains(stageAttempt)
-              }.keys
-              if (rpForStage.size == 1) {
-                // be careful about the removal from here due to late tasks, make sure stage is
-                // really complete and no tasks left
-                resourceProfileIdToStageAttempt(rpForStage.head) -= stageAttempt
-              } else {
-                logWarning(s"Should have exactly one resource profile for stage $stageAttempt," +
-                  s" but have $rpForStage")
-              }
-            }
-
+            removeStageFromResourceProfileIfUnused(stageAttempt)
           }
         }
         if (taskEnd.taskInfo.speculative) {
@@ -859,6 +847,28 @@ private[spark] class ExecutorAllocationManager(
       allocationManager.synchronized {
         // Clear unschedulableTaskSets since atleast one task becomes schedulable now
         unschedulableTaskSets.remove(stageAttempt)
+        removeStageFromResourceProfileIfUnused(stageAttempt)
+      }
+    }
+
+    def removeStageFromResourceProfileIfUnused(stageAttempt: StageAttempt): Unit = {
+      if (!stageAttemptToNumRunningTask.contains(stageAttempt) &&
+          !stageAttemptToNumTasks.contains(stageAttempt) &&
+          !stageAttemptToNumSpeculativeTasks.contains(stageAttempt) &&
+          !stageAttemptToTaskIndices.contains(stageAttempt) &&
+          !stageAttemptToSpeculativeTaskIndices.contains(stageAttempt)
+      ) {
+        val rpForStage = resourceProfileIdToStageAttempt.filter { case (k, v) =>
+          v.contains(stageAttempt)
+        }.keys
+        if (rpForStage.size == 1) {
+          // be careful about the removal from here due to late tasks, make sure stage is
+          // really complete and no tasks left
+          resourceProfileIdToStageAttempt(rpForStage.head) -= stageAttempt
+        } else {
+          logWarning(s"Should have exactly one resource profile for stage $stageAttempt," +
+              s" but have $rpForStage")
+        }
       }
     }
 
@@ -920,7 +930,7 @@ private[spark] class ExecutorAllocationManager(
       val attempts = resourceProfileIdToStageAttempt.getOrElse(rp, Set.empty).toSeq
       // attempts is a Set, change to Seq so we keep all values
       attempts.map { attempt =>
-        stageAttemptToNumRunningTask.getOrElseUpdate(attempt, 0)
+        stageAttemptToNumRunningTask.getOrElse(attempt, 0)
       }.sum
     }
 
