@@ -296,6 +296,12 @@ Data source options of Avro can be set via:
     </td>
     <td>read and function <code>from_avro</code></td>
   </tr>
+  <tr>
+    <td><code>positionalFieldMatching</code></td>
+    <td>false</td>
+    <td>This can be used in tandem with the `avroSchema` option to adjust the behavior for matching the fields in the provided Avro schema with those in the SQL schema. By default, the matching will be performed using field names, ignoring their positions. If this option is set to "true", the matching will be based on the position of the fields.</td>
+    <td>read and write</td>
+  </tr>
 </table>
 
 ## Configuration
