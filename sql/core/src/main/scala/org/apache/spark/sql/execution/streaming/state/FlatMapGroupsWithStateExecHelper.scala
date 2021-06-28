@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.streaming.state
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.ObjectOperator
-import org.apache.spark.sql.execution.streaming.GroupStateImpl
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
 import org.apache.spark.sql.types._
 
@@ -168,7 +167,7 @@ object FlatMapGroupsWithStateExecHelper {
     override val stateSerializerExprs: Seq[Expression] = {
       val encoderSerializer = stateEncoder.namedExpressions
       if (shouldStoreTimestamp) {
-        encoderSerializer :+ Literal(GroupStateImpl.NO_TIMESTAMP)
+        encoderSerializer :+ Literal(NO_TIMESTAMP)
       } else {
         encoderSerializer
       }
@@ -226,7 +225,7 @@ object FlatMapGroupsWithStateExecHelper {
       }
 
       if (shouldStoreTimestamp) {
-        Seq(nullSafeNestedStateSerExpr, Literal(GroupStateImpl.NO_TIMESTAMP))
+        Seq(nullSafeNestedStateSerExpr, Literal(NO_TIMESTAMP))
       } else {
         Seq(nullSafeNestedStateSerExpr)
       }

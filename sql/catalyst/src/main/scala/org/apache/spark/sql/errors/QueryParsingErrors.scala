@@ -206,7 +206,7 @@ object QueryParsingErrors {
   }
 
   def fromToIntervalUnsupportedError(
-      from: String, to: String, ctx: UnitToUnitIntervalContext): Throwable = {
+      from: String, to: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"Intervals FROM $from TO $to are not supported.", ctx)
   }
 

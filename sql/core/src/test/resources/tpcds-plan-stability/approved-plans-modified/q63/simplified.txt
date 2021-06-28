@@ -33,15 +33,15 @@ TakeOrderedAndProject [i_manager_id,avg_monthly_sales,sum_sales]
                                                       InputAdapter
                                                         Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_sales_price,ss_sold_date_sk]
                                                           SubqueryBroadcast [d_date_sk] #1
-                                                            ReusedExchange [d_date_sk,d_moy] #4
+                                                            BroadcastExchange #4
+                                                              WholeStageCodegen (1)
+                                                                Project [d_date_sk,d_moy]
+                                                                  Filter [d_month_seq,d_date_sk]
+                                                                    ColumnarToRow
+                                                                      InputAdapter
+                                                                        Scan parquet default.date_dim [d_date_sk,d_month_seq,d_moy]
                                         InputAdapter
-                                          BroadcastExchange #4
-                                            WholeStageCodegen (2)
-                                              Project [d_date_sk,d_moy]
-                                                Filter [d_month_seq,d_date_sk]
-                                                  ColumnarToRow
-                                                    InputAdapter
-                                                      Scan parquet default.date_dim [d_date_sk,d_month_seq,d_moy]
+                                          ReusedExchange [d_date_sk,d_moy] #4
                                     InputAdapter
                                       BroadcastExchange #5
                                         WholeStageCodegen (3)

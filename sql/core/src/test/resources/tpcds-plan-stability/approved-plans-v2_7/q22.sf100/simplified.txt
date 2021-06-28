@@ -22,15 +22,15 @@ TakeOrderedAndProject [qoh,i_product_name,i_brand,i_class,i_category]
                                           InputAdapter
                                             Scan parquet default.inventory [inv_item_sk,inv_quantity_on_hand,inv_date_sk]
                                               SubqueryBroadcast [d_date_sk] #1
-                                                ReusedExchange [d_date_sk] #3
+                                                BroadcastExchange #3
+                                                  WholeStageCodegen (1)
+                                                    Project [d_date_sk]
+                                                      Filter [d_month_seq,d_date_sk]
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet default.date_dim [d_date_sk,d_month_seq]
                                       InputAdapter
-                                        BroadcastExchange #3
-                                          WholeStageCodegen (1)
-                                            Project [d_date_sk]
-                                              Filter [d_month_seq,d_date_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.date_dim [d_date_sk,d_month_seq]
+                                        ReusedExchange [d_date_sk] #3
                       InputAdapter
                         WholeStageCodegen (5)
                           Sort [i_item_sk]

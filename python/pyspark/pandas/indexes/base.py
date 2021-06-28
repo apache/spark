@@ -2263,8 +2263,8 @@ class Index(IndexOpsMixin):
                         "Union between Index and MultiIndex is not yet supported"
                     )
                 elif isinstance(other, Series):
-                    other = other.to_frame()
-                    other_idx = other.set_index(other.columns[0]).index
+                    other_frame = other.to_frame()
+                    other_idx = other_frame.set_index(other_frame.columns[0]).index
                 elif isinstance(other, DataFrame):
                     raise ValueError("Index data must be 1-dimensional")
                 else:

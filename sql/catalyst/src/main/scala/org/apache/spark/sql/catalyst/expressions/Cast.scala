@@ -82,6 +82,9 @@ object Cast {
     case (StringType, _: DayTimeIntervalType) => true
     case (StringType, _: YearMonthIntervalType) => true
 
+    case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
+    case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
+
     case (StringType, _: NumericType) => true
     case (BooleanType, _: NumericType) => true
     case (DateType, _: NumericType) => true
@@ -170,6 +173,9 @@ object Cast {
           case (f1, f2) =>
             resolvableNullability(f1.nullable, f2.nullable) && canUpCast(f1.dataType, f2.dataType)
         }
+
+    case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
+    case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
     case (from: UserDefinedType[_], to: UserDefinedType[_]) if to.acceptsType(from) => true
 
@@ -573,6 +579,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       it: DayTimeIntervalType): Any => Any = from match {
     case StringType => buildCast[UTF8String](_, s =>
       IntervalUtils.castStringToDTInterval(s, it.startField, it.endField))
+    case _: DayTimeIntervalType => buildCast[Long](_, s =>
+      IntervalUtils.durationToMicros(IntervalUtils.microsToDuration(s), it.endField))
   }
 
   private[this] def castToYearMonthInterval(
@@ -580,6 +588,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       it: YearMonthIntervalType): Any => Any = from match {
     case StringType => buildCast[UTF8String](_, s =>
       IntervalUtils.castStringToYMInterval(s, it.startField, it.endField))
+    case _: YearMonthIntervalType => buildCast[Int](_, s =>
+      IntervalUtils.periodToMonths(IntervalUtils.monthsToPeriod(s), it.endField))
   }
 
   // LongConverter
@@ -1470,6 +1480,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         code"""
           $evPrim = $util.castStringToDTInterval($c, (byte)${it.startField}, (byte)${it.endField});
         """
+    case _: DayTimeIntervalType =>
+      val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, _) =>
+        code"""
+          $evPrim = $util.durationToMicros($util.microsToDuration($c), (byte)${it.endField});
+        """
   }
 
   private[this] def castToYearMonthIntervalCode(
@@ -1480,6 +1496,12 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, _) =>
         code"""
           $evPrim = $util.castStringToYMInterval($c, (byte)${it.startField}, (byte)${it.endField});
+        """
+    case _: YearMonthIntervalType =>
+      val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      (c, evPrim, _) =>
+        code"""
+          $evPrim = $util.periodToMonths($util.monthsToPeriod($c), (byte)${it.endField});
         """
   }
 
@@ -1923,15 +1945,20 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   """,
   since = "1.0.0",
   group = "conversion_funcs")
-case class Cast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
+case class Cast(
+    child: Expression,
+    dataType: DataType,
+    timeZoneId: Option[String] = None,
+    override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
   extends CastBase {
+
+  def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
+    this(child, dataType, timeZoneId, ansiEnabled = SQLConf.get.ansiEnabled)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
   final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CAST)
-
-  override protected val ansiEnabled: Boolean = SQLConf.get.ansiEnabled
 
   override def canCast(from: DataType, to: DataType): Boolean = if (ansiEnabled) {
     AnsiCast.canCast(from, to)
@@ -2050,6 +2077,9 @@ object AnsiCast {
     case (StringType, _: CalendarIntervalType) => true
     case (StringType, _: DayTimeIntervalType) => true
     case (StringType, _: YearMonthIntervalType) => true
+
+    case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
+    case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true

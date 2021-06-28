@@ -554,13 +554,13 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         ("INTERVAL '-0 00:00:00.000001' DAY TO SECOND",
           "INTERVAL '-0 00:00' DAY TO MINUTE",
           "INTERVAL '-0 00' DAY TO HOUR",
-          "INTERVAL '00:00:00.000001' HOUR TO SECOND",
-          "INTERVAL '00:00' HOUR TO MINUTE",
-          "INTERVAL '00:00.000001' MINUTE TO SECOND",
+          "INTERVAL '-00:00:00.000001' HOUR TO SECOND",
+          "INTERVAL '-00:00' HOUR TO MINUTE",
+          "INTERVAL '-00:00.000001' MINUTE TO SECOND",
           "INTERVAL '-0' DAY",
-          "INTERVAL '00' HOUR",
-          "INTERVAL '00' MINUTE",
-          "INTERVAL '00.000001' SECOND"),
+          "INTERVAL '-00' HOUR",
+          "INTERVAL '-00' MINUTE",
+          "INTERVAL '-00.000001' SECOND"),
       10 * MICROS_PER_MILLIS ->
         ("INTERVAL '0 00:00:00.01' DAY TO SECOND",
           "INTERVAL '0 00:00' DAY TO MINUTE",
@@ -576,24 +576,46 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         ("INTERVAL '-123 00:00:03' DAY TO SECOND",
           "INTERVAL '-123 00:00' DAY TO MINUTE",
           "INTERVAL '-123 00' DAY TO HOUR",
-          "INTERVAL '00:00:03' HOUR TO SECOND",
-          "INTERVAL '00:00' HOUR TO MINUTE",
-          "INTERVAL '00:03' MINUTE TO SECOND",
+          "INTERVAL '-2952:00:03' HOUR TO SECOND",
+          "INTERVAL '-2952:00' HOUR TO MINUTE",
+          "INTERVAL '-177120:03' MINUTE TO SECOND",
           "INTERVAL '-123' DAY",
-          "INTERVAL '00' HOUR",
-          "INTERVAL '00' MINUTE",
-          "INTERVAL '03' SECOND"),
+          "INTERVAL '-2952' HOUR",
+          "INTERVAL '-177120' MINUTE",
+          "INTERVAL '-10627203' SECOND"),
       Long.MinValue ->
         ("INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND",
           "INTERVAL '-106751991 04:00' DAY TO MINUTE",
           "INTERVAL '-106751991 04' DAY TO HOUR",
-          "INTERVAL '04:00:54.775808' HOUR TO SECOND",
-          "INTERVAL '04:00' HOUR TO MINUTE",
-          "INTERVAL '00:54.775808' MINUTE TO SECOND",
+          "INTERVAL '-2562047788:00:54.775808' HOUR TO SECOND",
+          "INTERVAL '-2562047788:00' HOUR TO MINUTE",
+          "INTERVAL '-153722867280:54.775808' MINUTE TO SECOND",
           "INTERVAL '-106751991' DAY",
-          "INTERVAL '04' HOUR",
-          "INTERVAL '00' MINUTE",
-          "INTERVAL '54.775808' SECOND")
+          "INTERVAL '-2562047788' HOUR",
+          "INTERVAL '-153722867280' MINUTE",
+          "INTERVAL '-9223372036854.775808' SECOND"),
+      69159782123456L ->
+        ("INTERVAL '800 11:03:02.123456' DAY TO SECOND",
+          "INTERVAL '800 11:03' DAY TO MINUTE",
+          "INTERVAL '800 11' DAY TO HOUR",
+          "INTERVAL '19211:03:02.123456' HOUR TO SECOND",
+          "INTERVAL '19211:03' HOUR TO MINUTE",
+          "INTERVAL '1152663:02.123456' MINUTE TO SECOND",
+          "INTERVAL '800' DAY",
+          "INTERVAL '19211' HOUR",
+          "INTERVAL '1152663' MINUTE",
+          "INTERVAL '69159782.123456' SECOND"),
+      -69159782123456L ->
+        ("INTERVAL '-800 11:03:02.123456' DAY TO SECOND",
+          "INTERVAL '-800 11:03' DAY TO MINUTE",
+          "INTERVAL '-800 11' DAY TO HOUR",
+          "INTERVAL '-19211:03:02.123456' HOUR TO SECOND",
+          "INTERVAL '-19211:03' HOUR TO MINUTE",
+          "INTERVAL '-1152663:02.123456' MINUTE TO SECOND",
+          "INTERVAL '-800' DAY",
+          "INTERVAL '-19211' HOUR",
+          "INTERVAL '-1152663' MINUTE",
+          "INTERVAL '-69159782.123456' SECOND")
     ).foreach {
       case (
         micros, (
@@ -625,20 +647,20 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     Seq(
       0 ->
         ("INTERVAL '0-0' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '0' MONTH"),
-      -11 -> ("INTERVAL '-0-11' YEAR TO MONTH", "INTERVAL '-0' YEAR", "INTERVAL '11' MONTH"),
+      -11 -> ("INTERVAL '-0-11' YEAR TO MONTH", "INTERVAL '-0' YEAR", "INTERVAL '-11' MONTH"),
       11 -> ("INTERVAL '0-11' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '11' MONTH"),
-      -13 -> ("INTERVAL '-1-1' YEAR TO MONTH", "INTERVAL '-1' YEAR", "INTERVAL '1' MONTH"),
-      13 -> ("INTERVAL '1-1' YEAR TO MONTH", "INTERVAL '1' YEAR", "INTERVAL '1' MONTH"),
-      -24 -> ("INTERVAL '-2-0' YEAR TO MONTH", "INTERVAL '-2' YEAR", "INTERVAL '0' MONTH"),
-      24 -> ("INTERVAL '2-0' YEAR TO MONTH", "INTERVAL '2' YEAR", "INTERVAL '0' MONTH"),
+      -13 -> ("INTERVAL '-1-1' YEAR TO MONTH", "INTERVAL '-1' YEAR", "INTERVAL '-13' MONTH"),
+      13 -> ("INTERVAL '1-1' YEAR TO MONTH", "INTERVAL '1' YEAR", "INTERVAL '13' MONTH"),
+      -24 -> ("INTERVAL '-2-0' YEAR TO MONTH", "INTERVAL '-2' YEAR", "INTERVAL '-24' MONTH"),
+      24 -> ("INTERVAL '2-0' YEAR TO MONTH", "INTERVAL '2' YEAR", "INTERVAL '24' MONTH"),
       Int.MinValue ->
         ("INTERVAL '-178956970-8' YEAR TO MONTH",
           "INTERVAL '-178956970' YEAR",
-          "INTERVAL '8' MONTH"),
+          "INTERVAL '-2147483648' MONTH"),
       Int.MaxValue ->
         ("INTERVAL '178956970-7' YEAR TO MONTH",
           "INTERVAL '178956970' YEAR",
-          "INTERVAL '7' MONTH")
+          "INTERVAL '2147483647' MONTH")
     ).foreach { case (months, (yearToMonth, year, month)) =>
       assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, MONTH) === yearToMonth)
       assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, YEAR) === year)

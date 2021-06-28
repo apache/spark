@@ -36,7 +36,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
@@ -44,6 +43,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -217,7 +217,7 @@ object SQLConf {
         if (conf != null) {
           conf
         } else if (Utils.isTesting) {
-          throw new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
+          throw QueryExecutionErrors.cannotGetSQLConfInSchedulerEventLoopThreadError()
         } else {
           confGetter.get()()
         }
@@ -1600,6 +1600,16 @@ object SQLConf {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val FILESTREAM_SINK_METADATA_IGNORED =
+    buildConf("spark.sql.streaming.fileStreamSink.ignoreMetadata")
+      .internal()
+      .doc("If this is enabled, when Spark reads from the results of a streaming query written " +
+        "by `FileStreamSink`, Spark will ignore the metadata log and treat it as normal path to " +
+        "read, e.g. listing files using HDFS APIs.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
 
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
@@ -3423,6 +3433,8 @@ class SQLConf extends Serializable with Logging {
   def statefulOperatorCorrectnessCheckEnabled: Boolean =
     getConf(STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED)
 
+  def fileStreamSinkMetadataIgnored: Boolean = getConf(FILESTREAM_SINK_METADATA_IGNORED)
+
   def streamingFileCommitProtocolClass: String = getConf(STREAMING_FILE_COMMIT_PROTOCOL_CLASS)
 
   def fileSinkLogDeletion: Boolean = getConf(FILE_SINK_LOG_DELETION)
@@ -3987,7 +3999,7 @@ class SQLConf extends Serializable with Logging {
         // Try to use the default value
         Option(getConfigEntry(key)).map { e => e.stringConverter(e.readFrom(reader)) }
       }.
-      getOrElse(throw new NoSuchElementException(key))
+      getOrElse(throw QueryExecutionErrors.noSuchElementExceptionError(key))
   }
 
   /**
@@ -4120,8 +4132,7 @@ class SQLConf extends Serializable with Logging {
     SQLConf.removedSQLConfigs.get(key).foreach {
       case RemovedConfig(configName, version, defaultValue, comment) =>
         if (value != defaultValue) {
-          throw new AnalysisException(
-            s"The SQL config '$configName' was removed in the version $version. $comment")
+          throw QueryCompilationErrors.configRemovedInVersionError(configName, version, comment)
         }
     }
   }

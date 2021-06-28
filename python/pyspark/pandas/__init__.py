@@ -133,22 +133,6 @@ def _auto_patch_spark() -> None:
                 )
             )
 
-    # Autopatching is on by default.
-    x = os.getenv("SPARK_KOALAS_AUTOPATCH", "true")
-    if x.lower() in ("true", "1", "enabled"):
-        logger = logging.getLogger("spark")
-        logger.info(
-            "Patching spark automatically. You can disable it by setting "
-            "SPARK_KOALAS_AUTOPATCH=false in your environment"
-        )
-
-        from pyspark.sql import dataframe as df
-
-        df.DataFrame.to_pandas_on_spark = DataFrame.to_pandas_on_spark  # type: ignore
-
-        # Keep to_koalas for backward compatibility for now.
-        df.DataFrame.to_koalas = DataFrame.to_koalas  # type: ignore
-
 
 _frame_has_class_getitem = False
 _series_has_class_getitem = False

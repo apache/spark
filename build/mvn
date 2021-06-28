@@ -17,6 +17,13 @@
 # limitations under the License.
 #
 
+SELF=$(cd $(dirname $0) && pwd)
+. "$SELF/util.sh"
+
+if [ -z "${JAVA_HOME}" -a "$(command -v javac)" ]; then
+  export JAVA_HOME="$(dirname $(dirname $(realpath $(command -v javac))))"
+fi
+
 # Determine the current working directory
 _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # Preserve the calling directory

@@ -20,16 +20,16 @@ package org.apache.spark.sql.execution.streaming
 import java.sql.Date
 import java.util.concurrent.TimeUnit
 
-import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, ProcessingTimeTimeout}
+import org.apache.spark.api.java.Optional
+import org.apache.spark.sql.catalyst.plans.logical.{EventTimeTimeout, NoTimeout, ProcessingTimeTimeout}
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.GroupStateImpl._
-import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout}
+import org.apache.spark.sql.streaming.{GroupStateTimeout, TestGroupState}
 import org.apache.spark.unsafe.types.UTF8String
 
-
 /**
- * Internal implementation of the [[GroupState]] interface. Methods are not thread-safe.
+ * Internal implementation of the [[TestGroupState]] interface. Methods are not thread-safe.
  *
  * @param optionalValue Optional value of the state
  * @param batchProcessingTimeMs Processing time of current batch, used to calculate timestamp
@@ -45,7 +45,7 @@ private[sql] class GroupStateImpl[S] private(
     eventTimeWatermarkMs: Long,
     timeoutConf: GroupStateTimeout,
     override val hasTimedOut: Boolean,
-    watermarkPresent: Boolean) extends GroupState[S] {
+    watermarkPresent: Boolean) extends TestGroupState[S] {
 
   private var value: S = optionalValue.getOrElse(null.asInstanceOf[S])
   private var defined: Boolean = optionalValue.isDefined
@@ -147,14 +147,17 @@ private[sql] class GroupStateImpl[S] private(
 
   // ========= Internal API =========
 
-  /** Whether the state has been marked for removing */
-  def hasRemoved: Boolean = removed
+  override def isRemoved: Boolean = removed
 
-  /** Whether the state has been updated */
-  def hasUpdated: Boolean = updated
+  override def isUpdated: Boolean = updated
 
-  /** Return timeout timestamp or `TIMEOUT_TIMESTAMP_NOT_SET` if not set */
-  def getTimeoutTimestamp: Long = timeoutTimestamp
+  override def getTimeoutTimestampMs: Optional[Long] = {
+    if (timeoutTimestamp != NO_TIMESTAMP) {
+      Optional.of(timeoutTimestamp)
+    } else {
+      Optional.empty[Long]
+    }
+  }
 
   private def parseDuration(duration: String): Long = {
     val cal = IntervalUtils.stringToInterval(UTF8String.fromString(duration))
@@ -184,6 +187,17 @@ private[sql] object GroupStateImpl {
       timeoutConf: GroupStateTimeout,
       hasTimedOut: Boolean,
       watermarkPresent: Boolean): GroupStateImpl[S] = {
+    if (batchProcessingTimeMs < 0) {
+      throw new IllegalArgumentException("batchProcessingTimeMs must be 0 or positive")
+    }
+    if (watermarkPresent && eventTimeWatermarkMs < 0) {
+      throw new IllegalArgumentException("eventTimeWatermarkMs must be 0 or positive if present")
+    }
+    if (hasTimedOut && timeoutConf == NoTimeout) {
+      throw new UnsupportedOperationException(
+        "hasTimedOut is true however there's no timeout configured")
+    }
+
     new GroupStateImpl[S](
       optionalValue, batchProcessingTimeMs, eventTimeWatermarkMs,
       timeoutConf, hasTimedOut, watermarkPresent)
