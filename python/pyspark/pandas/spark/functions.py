@@ -45,14 +45,18 @@ def lit(literal: Any) -> Column:
     """
     Creates a Column of literal value.
     """
-    if isinstance(literal, np.int64):
-        return F.lit(int(literal)).astype(LongType())
-    elif isinstance(literal, np.int32):
-        return F.lit(int(literal)).astype(IntegerType())
-    elif isinstance(literal, np.int8) or isinstance(literal, np.byte):
-        return F.lit(int(literal)).astype(ByteType())
-    elif isinstance(literal, np.float32):
-        return F.lit(float(literal)).astype(FloatType())
+    if isinstance(literal, np.generic):
+        scol = F.lit(literal.item())
+        if isinstance(literal, np.int64):
+            return scol.astype(LongType())
+        elif isinstance(literal, np.int32):
+            return scol.astype(IntegerType())
+        elif isinstance(literal, np.int8) or isinstance(literal, np.byte):
+            return scol.astype(ByteType())
+        elif isinstance(literal, np.float32):
+            return scol.astype(FloatType())
+        else:  # TODO: Complete mappings between numpy literals and Spark data types
+            return scol
     else:
         return F.lit(literal)
 
