@@ -855,6 +855,22 @@ class DataFrameTests(ReusedSQLTestCase):
         with self.assertRaisesRegex(TypeError, "Parameter 'truncate=foo'"):
             df.show(truncate='foo')
 
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message)  # type: ignore
+    def test_to_pandas_on_spark(self):
+        import pandas as pd
+        from pandas.testing import assert_frame_equal
+
+        sdf = self.spark.createDataFrame([("a", 1), ("b", 2), ("c",  3)], ["Col1", "Col2"])
+        psdf_from_sdf = sdf.to_pandas_on_spark()
+        psdf_from_sdf_with_index = sdf.to_pandas_on_spark(index_col="Col1")
+        pdf = pd.DataFrame({"Col1": ["a", "b", "c"], "Col2": [1, 2, 3]})
+        pdf_with_index = pdf.set_index("Col1")
+
+        assert_frame_equal(pdf, psdf_from_sdf.to_pandas())
+        assert_frame_equal(pdf_with_index, psdf_from_sdf_with_index.to_pandas())
+
 
 class QueryExecutionListenerTests(unittest.TestCase, SQLTestUtils):
     # These tests are separate because it uses 'spark.sql.queryExecutionListeners' which is
