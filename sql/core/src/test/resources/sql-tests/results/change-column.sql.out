@@ -221,7 +221,7 @@ ALTER TABLE temp_view CHANGE a TYPE INT
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid command: 'temp_view' is a view not a table.; line 1 pos 0
+temp_view is a temp view. 'ALTER TABLE ... CHANGE COLUMN' expects a table.; line 1 pos 12
 
 
 -- !query
@@ -238,7 +238,7 @@ ALTER TABLE global_temp.global_temp_view CHANGE a TYPE INT
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Invalid command: 'global_temp.global_temp_view' is a view not a table.; line 1 pos 0
+global_temp.global_temp_view is a temp view. 'ALTER TABLE ... CHANGE COLUMN' expects a table.; line 1 pos 12
 
 
 -- !query

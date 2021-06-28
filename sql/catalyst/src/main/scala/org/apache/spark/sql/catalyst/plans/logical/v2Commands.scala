@@ -1144,7 +1144,7 @@ case class AlterTableRenameColumn(
 }
 
 /**
- * The logical plan of the ALTER TABLE ... CHANGE COLUMN command.
+ * The logical plan of the ALTER TABLE ... ALTER COLUMN command.
  */
 case class AlterTableAlterColumn(
     table: LogicalPlan,
