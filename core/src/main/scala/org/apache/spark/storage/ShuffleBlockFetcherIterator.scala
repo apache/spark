@@ -381,7 +381,7 @@ final class ShuffleBlockFetcherIterator(
       } else {
         val (_, timeCost) = Utils.timeTakenMs[Unit] {
           collectFetchRequests(address, blockInfos, collectedRemoteRequests)
-          remoteBlockBytes = collectedRemoteRequests.map(_.size).sum
+          remoteBlockBytes += collectedRemoteRequests.map(_.size).sum
         }
         logDebug(s"Collected remote fetch requests for $address in $timeCost ms")
       }
