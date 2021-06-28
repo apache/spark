@@ -85,7 +85,15 @@ object ExprCode {
  */
 case class SubExprEliminationState(
   eval: ExprCode,
-  children: Seq[SubExprEliminationState] = Seq.empty)
+  children: Seq[SubExprEliminationState])
+
+object SubExprEliminationState {
+  def apply(
+      eval: ExprCode,
+      children: Seq[SubExprEliminationState] = Seq.empty): SubExprEliminationState = {
+    new SubExprEliminationState(eval, children.reverse)
+  }
+}
 
 /**
  * Codes and common subexpressions mapping used for subexpression elimination.
@@ -1055,7 +1063,7 @@ class CodegenContext extends Logging {
    * expressions and populates the mapping of common subexpressions to the generated code snippets.
    *
    * The generated code snippet for subexpression is wrapped in `SubExprEliminationState`, which
-   * contains a `ExprCode` and the children `SubExprEliminationState` if any. The `ExprCode`
+   * contains an `ExprCode` and the children `SubExprEliminationState` if any. The `ExprCode`
    * includes java source code, result variable name and is-null variable name of the subexpression.
    *
    * Besides, this also returns a sequences of `ExprCode` which are expression codes that need to
@@ -1107,7 +1115,7 @@ class CodegenContext extends Logging {
               childrenSubExprs += subExprEliminationExprs(e)
             case _ =>
           }
-          val state = SubExprEliminationState(eval, childrenSubExprs.toSeq.reverse)
+          val state = SubExprEliminationState(eval, childrenSubExprs.toSeq)
           exprs.foreach(localSubExprEliminationExprsForNonSplit.put(_, state))
           allStates += state
           Seq(eval)
@@ -1176,7 +1184,7 @@ class CodegenContext extends Logging {
           val code = code"${addNewFunction(fnName, fn)}($inputVariables);"
           val state = SubExprEliminationState(
             ExprCode(code, isNull, JavaCode.global(value, expr.dataType)),
-            childrenSubExprs.toSeq.reverse)
+            childrenSubExprs.toSeq)
           exprs.foreach(localSubExprEliminationExprs.put(_, state))
         }
         (localSubExprEliminationExprs, exprCodesNeedEvaluate)

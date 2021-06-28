@@ -391,6 +391,27 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(exprs2.sorted(exprOrdering) ===
       Seq(add2, add1, add2, add1, add2, add1, caseWhenExpr))
   }
+
+  test("SPARK-35829: SubExprEliminationState keeps children sub exprs") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(add1, add1)
+
+    val exprs = Seq(add1, add1, add2, add2)
+    val ctx = new CodegenContext()
+    val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
+
+    val add2State = subExprs.states(add2)
+    val add1State = subExprs.states(add1)
+    assert(add2State.children.contains(add1State))
+
+    subExprs.states.values.foreach { state =>
+      assert(state.eval.code != EmptyBlock)
+    }
+    ctx.evaluateSubExprEliminationState(subExprs.states.values)
+    subExprs.states.values.foreach { state =>
+      assert(state.eval.code == EmptyBlock)
+    }
+  }
 }
 
 case class CodegenFallbackExpression(child: Expression)
