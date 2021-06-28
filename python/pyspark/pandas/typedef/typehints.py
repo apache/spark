@@ -24,14 +24,11 @@ from inspect import getfullargspec, isclass
 from typing import (  # noqa: F401
     Any,
     Callable,
-    Dict,
     Generic,
     List,
     Optional,
     Tuple,
-    TypeVar,
     Union,
-    cast,
 )
 
 import numpy as np
