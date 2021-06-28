@@ -277,7 +277,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
         assert(bmDecomManager.shufflesToMigrate.isEmpty === true)
         assert(bmDecomManager.numMigratedShuffles.get() === 1)
         verify(bm, least(1)).replicateBlock(
-          mc.eq(storedBlockId1), mc.any(), mc.any(), mc.eq(Some(3)))
+          mc.eq(storedBlockId1), mc.any(), mc.any(), mc.eq(Some(3)), mc.eq(true))
         verify(blockTransferService, times(2))
           .uploadBlockSync(mc.eq("host2"), mc.eq(bmPort), mc.eq("exec2"), mc.any(), mc.any(),
             mc.eq(StorageLevel.DISK_ONLY), mc.isNull())
