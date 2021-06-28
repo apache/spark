@@ -18,6 +18,7 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
 /**
  * Utility functions for working with DataTypes in tests.
@@ -52,23 +53,27 @@ object DataTypeTestUtils {
   val numericTypeWithoutDecimal: Set[DataType] = integralType ++ Set(DoubleType, FloatType)
 
   val dayTimeIntervalTypes: Seq[DayTimeIntervalType] = Seq(
-    DayTimeIntervalType(DAY, DAY),
+    DayTimeIntervalType(DAY),
     DayTimeIntervalType(DAY, HOUR),
     DayTimeIntervalType(DAY, MINUTE),
     DayTimeIntervalType(DAY, SECOND),
-    DayTimeIntervalType(HOUR, HOUR),
+    DayTimeIntervalType(HOUR),
     DayTimeIntervalType(HOUR, MINUTE),
     DayTimeIntervalType(HOUR, SECOND),
-    DayTimeIntervalType(MINUTE, MINUTE),
+    DayTimeIntervalType(MINUTE),
     DayTimeIntervalType(MINUTE, SECOND),
-    DayTimeIntervalType(SECOND, SECOND))
+    DayTimeIntervalType(SECOND))
+
+  val yearMonthIntervalTypes: Seq[YearMonthIntervalType] = Seq(
+    YearMonthIntervalType(YEAR, MONTH),
+    YearMonthIntervalType(YEAR),
+    YearMonthIntervalType(MONTH))
 
   /**
    * Instances of all [[NumericType]]s and [[CalendarIntervalType]]
    */
-  val numericAndInterval: Set[DataType] = numericTypeWithoutDecimal ++ Set(
-    CalendarIntervalType,
-    YearMonthIntervalType) ++ dayTimeIntervalTypes
+  val numericAndInterval: Set[DataType] = numericTypeWithoutDecimal ++
+    Set(CalendarIntervalType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
 
   /**
    * All the types that support ordering
@@ -79,8 +84,7 @@ object DataTypeTestUtils {
     TimestampWithoutTZType,
     DateType,
     StringType,
-    BinaryType,
-    YearMonthIntervalType) ++ dayTimeIntervalTypes
+    BinaryType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
 
   /**
    * All the types that we can use in a property check
@@ -96,9 +100,7 @@ object DataTypeTestUtils {
     DateType,
     StringType,
     TimestampType,
-    TimestampWithoutTZType,
-    YearMonthIntervalType
-  ) ++ dayTimeIntervalTypes
+    TimestampWithoutTZType) ++ dayTimeIntervalTypes ++ yearMonthIntervalTypes
 
   /**
    * Instances of [[ArrayType]] for all [[AtomicType]]s. Arrays of these types may contain null.

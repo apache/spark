@@ -496,7 +496,7 @@ abstract class HashExpression[E] extends Expression {
     case d: DecimalType => genHashDecimal(ctx, d, input, result)
     case CalendarIntervalType => genHashCalendarInterval(input, result)
     case _: DayTimeIntervalType => genHashLong(input, result)
-    case YearMonthIntervalType => genHashInt(input, result)
+    case _: YearMonthIntervalType => genHashInt(input, result)
     case BinaryType => genHashBytes(input, result)
     case StringType => genHashString(input, result)
     case ArrayType(et, containsNull) => genHashForArray(ctx, input, result, et, containsNull)

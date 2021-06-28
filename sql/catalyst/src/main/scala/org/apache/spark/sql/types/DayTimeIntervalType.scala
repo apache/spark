@@ -96,9 +96,12 @@ case object DayTimeIntervalType extends AbstractDataType {
     case invalid => throw QueryCompilationErrors.invalidDayTimeField(invalid)
   }
 
+  val stringToField: Map[String, Byte] = dayTimeFields.map(i => fieldToString(i) -> i).toMap
+
   val DEFAULT = DayTimeIntervalType(DAY, SECOND)
 
   def apply(): DayTimeIntervalType = DEFAULT
+  def apply(field: Byte): DayTimeIntervalType = DayTimeIntervalType(field, field)
 
   override private[sql] def defaultConcreteType: DataType = DEFAULT
 

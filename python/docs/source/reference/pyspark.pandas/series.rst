@@ -258,7 +258,7 @@ in Spark. These can be accessed by ``Series.spark.<function/property>``.
 Accessors
 ---------
 
-Pandas APIs on Spark provide dtype-specific methods under various accessors.
+Pandas API on Spark provides dtype-specific methods under various accessors.
 These are separate namespaces within :class:`Series` that only apply
 to specific data types.
 
@@ -444,7 +444,7 @@ Serialization / IO / Conversion
 
 Pandas-on-Spark specific
 ------------------------
-``Series.pandas_on_spark`` provides pandas-on-Spark specific features that exists only in pandas APIs on Spark.
+``Series.pandas_on_spark`` provides pandas-on-Spark specific features that exists only in pandas API on Spark.
 These can be accessed by ``Series.pandas_on_spark.<function/property>``.
 
 .. autosummary::

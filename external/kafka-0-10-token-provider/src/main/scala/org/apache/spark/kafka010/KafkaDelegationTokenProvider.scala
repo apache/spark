@@ -54,8 +54,9 @@ private[spark] class KafkaDelegationTokenProvider
           }
         } catch {
           case NonFatal(e) =>
-            logWarning(s"Failed to get token from service: $serviceName " +
-              s"cluster: ${clusterConf.identifier}", e)
+            logWarning(s"Failed to get token from service: $serviceName due to $e on " +
+              s"cluster: ${clusterConf.identifier}. If $serviceName is not used, " +
+              s"set spark.security.credentials.$serviceName.enabled to false")
         }
       }
     } catch {

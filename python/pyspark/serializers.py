@@ -65,7 +65,7 @@ import pickle
 pickle_protocol = pickle.HIGHEST_PROTOCOL
 
 from pyspark import cloudpickle
-from pyspark.util import print_exec
+from pyspark.util import print_exec  # type: ignore
 
 
 __all__ = ["PickleSerializer", "MarshalSerializer", "UTF8Deserializer"]

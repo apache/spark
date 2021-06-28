@@ -57,11 +57,11 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.hive.HiveExternalCatalog
+import org.apache.spark.sql.hive.{HiveExternalCatalog, HiveUtils}
 import org.apache.spark.sql.hive.HiveExternalCatalog.DATASOURCE_SCHEMA
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.util.{CircularBuffer, ShutdownHookManager, Utils}
+import org.apache.spark.util.{CircularBuffer, Utils, VersionUtils}
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
@@ -155,25 +155,6 @@ private[hive] class HiveClientImpl(
     }
   }
 
-  private def closeState(): Unit = withHiveState {
-    // These temp files are registered in o.a.h.u.ShutdownHookManager too during state start.
-    // The state.close() will delete them if they are not null and try remove them from the
-    // o.a.h.u.ShutdownHookManager which causes undesirable IllegalStateException.
-    // We delete them ahead with a high priority hook here and set them to null to bypass the
-    // deletion in state.close().
-    if (state.getTmpOutputFile != null) {
-      state.getTmpOutputFile.delete()
-      state.setTmpOutputFile(null)
-    }
-    if (state.getTmpErrOutputFile != null) {
-      state.getTmpErrOutputFile.delete()
-      state.setTmpErrOutputFile(null)
-    }
-    state.close()
-  }
-
-  ShutdownHookManager.addShutdownHook(() => closeState())
-
   // Log the default warehouse location.
   logInfo(
     s"Warehouse location for Hive client " +
@@ -217,6 +198,16 @@ private[hive] class HiveClientImpl(
       hiveConf.setBoolean("datanucleus.schema.autoCreateAll", true)
     }
     hiveConf
+  }
+
+  private def getHive(conf: HiveConf): Hive = {
+    VersionUtils.majorMinorPatchVersion(version.fullVersion).map {
+      case (2, 3, v) if v >= 9 => Hive.getWithoutRegisterFns(conf)
+      case _ => Hive.get(conf)
+    }.getOrElse {
+      throw QueryExecutionErrors.unsupportedHiveMetastoreVersionError(
+        version.fullVersion, HiveUtils.HIVE_METASTORE_VERSION.key)
+    }
   }
 
   override val userName = UserGroupInformation.getCurrentUser.getShortUserName
@@ -273,7 +264,7 @@ private[hive] class HiveClientImpl(
     if (clientLoader.cachedHive != null) {
       clientLoader.cachedHive.asInstanceOf[Hive]
     } else {
-      val c = Hive.get(conf)
+      val c = getHive(conf)
       clientLoader.cachedHive = c
       c
     }
@@ -303,7 +294,7 @@ private[hive] class HiveClientImpl(
     // with the side-effect of Hive.get(conf) to avoid using out-of-date HiveConf.
     // See discussion in https://github.com/apache/spark/pull/16826/files#r104606859
     // for more details.
-    Hive.get(conf)
+    getHive(conf)
     // setCurrentSessionState will use the classLoader associated
     // with the HiveConf in `state` to override the context class loader of the current
     // thread.
@@ -875,6 +866,10 @@ private[hive] class HiveClientImpl(
             |======================
           """.stripMargin)
         throw e
+    } finally {
+      if (state != null) {
+        state.close()
+      }
     }
   }
 

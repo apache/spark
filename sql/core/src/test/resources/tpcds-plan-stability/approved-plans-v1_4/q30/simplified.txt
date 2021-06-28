@@ -21,15 +21,15 @@ TakeOrderedAndProject [c_customer_id,c_salutation,c_first_name,c_last_name,c_pre
                                         InputAdapter
                                           Scan parquet default.web_returns [wr_returning_customer_sk,wr_returning_addr_sk,wr_return_amt,wr_returned_date_sk]
                                             SubqueryBroadcast [d_date_sk] #1
-                                              ReusedExchange [d_date_sk] #2
+                                              BroadcastExchange #2
+                                                WholeStageCodegen (1)
+                                                  Project [d_date_sk]
+                                                    Filter [d_year,d_date_sk]
+                                                      ColumnarToRow
+                                                        InputAdapter
+                                                          Scan parquet default.date_dim [d_date_sk,d_year]
                                     InputAdapter
-                                      BroadcastExchange #2
-                                        WholeStageCodegen (1)
-                                          Project [d_date_sk]
-                                            Filter [d_year,d_date_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.date_dim [d_date_sk,d_year]
+                                      ReusedExchange [d_date_sk] #2
                                 InputAdapter
                                   BroadcastExchange #3
                                     WholeStageCodegen (2)

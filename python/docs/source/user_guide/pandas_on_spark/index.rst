@@ -16,9 +16,9 @@
     under the License.
 
 
-====================
-Pandas APIs on Spark
-====================
+===================
+Pandas API on Spark
+===================
 
 .. toctree::
    :maxdepth: 2

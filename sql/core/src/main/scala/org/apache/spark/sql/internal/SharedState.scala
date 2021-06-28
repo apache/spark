@@ -68,7 +68,7 @@ private[sql] class SharedState(
     initialConfigs.foreach {
       // We have resolved the warehouse path and should not set warehouse conf here.
       case (k, _) if k == WAREHOUSE_PATH.key || k == SharedState.HIVE_WAREHOUSE_CONF_NAME =>
-      case (k, v) if SQLConf.staticConfKeys.contains(k) =>
+      case (k, v) if SQLConf.isStaticConfigKey(k) =>
         logDebug(s"Applying static initial session options to SparkConf: $k -> $v")
         confClone.set(k, v)
       case (k, v) =>

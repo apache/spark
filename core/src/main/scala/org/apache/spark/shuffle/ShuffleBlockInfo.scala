@@ -25,4 +25,6 @@ import org.apache.spark.annotation.Experimental
  * type safe way.
  */
 @Experimental
-case class ShuffleBlockInfo(shuffleId: Int, mapId: Long)
+case class ShuffleBlockInfo(shuffleId: Int, mapId: Long) {
+  override def toString: String = s"migrate_shuffle_${shuffleId}_$mapId"
+}

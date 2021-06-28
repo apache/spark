@@ -3,7 +3,7 @@ Options and settings
 ====================
 .. currentmodule:: pyspark.pandas
 
-Pandas APIs on Spark have an options system that lets you customize some aspects of its behaviour,
+Pandas API on Spark has an options system that lets you customize some aspects of its behaviour,
 display-related options being those the user is most likely to adjust.
 
 Options have a full "dotted-style", case-insensitive name (e.g. ``display.max_rows``).
@@ -12,28 +12,28 @@ You can get/set options directly as attributes of the top-level ``options`` attr
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> ks.options.display.max_rows
+   >>> import pyspark.pandas as ps
+   >>> ps.options.display.max_rows
    1000
-   >>> ks.options.display.max_rows = 10
-   >>> ks.options.display.max_rows
+   >>> ps.options.display.max_rows = 10
+   >>> ps.options.display.max_rows
    10
 
-The API is composed of 3 relevant functions, available directly from the ``koalas``
+The API is composed of 3 relevant functions, available directly from the ``pandas_on_spark``
 namespace:
 
 * :func:`get_option` / :func:`set_option` - get/set the value of a single option.
 * :func:`reset_option` - reset one or more options to their default value.
 
-**Note:** Developers can check out `pyspark.pandas/config.py <https://github.com/databricks/koalas/blob/master/databricks/koalas/config.py>`_ for more information.
+**Note:** Developers can check out `pyspark.pandas/config.py <https://github.com/apache/spark/blob/master/python/pyspark/pandas/config.py>`_ for more information.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> ks.get_option("display.max_rows")
+   >>> import pyspark.pandas as ps
+   >>> ps.get_option("display.max_rows")
    1000
-   >>> ks.set_option("display.max_rows", 101)
-   >>> ks.get_option("display.max_rows")
+   >>> ps.set_option("display.max_rows", 101)
+   >>> ps.get_option("display.max_rows")
    101
 
 
@@ -41,35 +41,35 @@ Getting and setting options
 ---------------------------
 
 As described above, :func:`get_option` and :func:`set_option`
-are available from the koalas namespace.  To change an option, call
+are available from the ``pandas_on_spark`` namespace.  To change an option, call
 ``set_option('option name', new_value)``.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> ks.get_option('compute.max_rows')
+   >>> import pyspark.pandas as ps
+   >>> ps.get_option('compute.max_rows')
    1000
-   >>> ks.set_option('compute.max_rows', 2000)
-   >>> ks.get_option('compute.max_rows')
+   >>> ps.set_option('compute.max_rows', 2000)
+   >>> ps.get_option('compute.max_rows')
    2000
 
 All options also have a default value, and you can use ``reset_option`` to do just that:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> ks.reset_option("display.max_rows")
+   >>> import pyspark.pandas as ps
+   >>> ps.reset_option("display.max_rows")
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> ks.get_option("display.max_rows")
+   >>> import pyspark.pandas as ps
+   >>> ps.get_option("display.max_rows")
    1000
-   >>> ks.set_option("display.max_rows", 999)
-   >>> ks.get_option("display.max_rows")
+   >>> ps.set_option("display.max_rows", 999)
+   >>> ps.get_option("display.max_rows")
    999
-   >>> ks.reset_option("display.max_rows")
-   >>> ks.get_option("display.max_rows")
+   >>> ps.reset_option("display.max_rows")
+   >>> ps.get_option("display.max_rows")
    1000
 
 ``option_context`` context manager has been exposed through
@@ -78,13 +78,13 @@ are restored automatically when you exit the `with` block:
 
 .. code-block:: python
 
-   >>> with ks.option_context("display.max_rows", 10, "compute.max_rows", 5):
-   ...    print(ks.get_option("display.max_rows"))
-   ...    print(ks.get_option("compute.max_rows"))
+   >>> with ps.option_context("display.max_rows", 10, "compute.max_rows", 5):
+   ...    print(ps.get_option("display.max_rows"))
+   ...    print(ps.get_option("compute.max_rows"))
    10
    5
-   >>> print(ks.get_option("display.max_rows"))
-   >>> print(ks.get_option("compute.max_rows"))
+   >>> print(ps.get_option("display.max_rows"))
+   >>> print(ps.get_option("compute.max_rows"))
    1000
    1000
 
@@ -92,7 +92,7 @@ are restored automatically when you exit the `with` block:
 Operations on different DataFrames
 ----------------------------------
 
-Pandas APIs on Spark disallow the operations on different DataFrames (or Series) by default to prevent expensive
+Pandas API on Spark disallows the operations on different DataFrames (or Series) by default to prevent expensive
 operations. It internally performs a join operation which can be expensive in general.
 
 This can be enabled by setting `compute.ops_on_diff_frames` to `True` to allow such cases.
@@ -100,42 +100,42 @@ See the examples below.
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
-    >>> ks.set_option('compute.ops_on_diff_frames', True)
-    >>> kdf1 = ks.range(5)
-    >>> kdf2 = ks.DataFrame({'id': [5, 4, 3]})
-    >>> (kdf1 - kdf2).sort_index()
+    >>> import pyspark.pandas as ps
+    >>> ps.set_option('compute.ops_on_diff_frames', True)
+    >>> psdf1 = ps.range(5)
+    >>> psdf2 = ps.DataFrame({'id': [5, 4, 3]})
+    >>> (psdf1 - psdf2).sort_index()
         id
     0 -5.0
     1 -3.0
     2 -1.0
     3  NaN
     4  NaN
-    >>> ks.reset_option('compute.ops_on_diff_frames')
+    >>> ps.reset_option('compute.ops_on_diff_frames')
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
-    >>> ks.set_option('compute.ops_on_diff_frames', True)
-    >>> kdf = ks.range(5)
-    >>> kser_a = ks.Series([1, 2, 3, 4])
-    >>> # 'kser_a' is not from 'kdf' DataFrame. So it is considered as a Series not from 'kdf'.
-    >>> kdf['new_col'] = kser_a
-    >>> kdf
+    >>> import pyspark.pandas as ps
+    >>> ps.set_option('compute.ops_on_diff_frames', True)
+    >>> psdf = ps.range(5)
+    >>> psser_a = ps.Series([1, 2, 3, 4])
+    >>> # 'psser_a' is not from 'psdf' DataFrame. So it is considered as a Series not from 'psdf'.
+    >>> psdf['new_col'] = psser_a
+    >>> psdf
        id  new_col
     0   0      1.0
     1   1      2.0
     3   3      4.0
     2   2      3.0
     4   4      NaN
-    >>> ks.reset_option('compute.ops_on_diff_frames')
+    >>> ps.reset_option('compute.ops_on_diff_frames')
 
 
 Default Index type
 ------------------
 
-In pandas APIs on Spark, the default index is used in several cases, for instance,
-when Spark DataFrame is converted into pandas-on-Spark DataFrame. In this case, internally pandas APIs on Spark attache a
+In pandas API on Spark, the default index is used in several cases, for instance,
+when Spark DataFrame is converted into pandas-on-Spark DataFrame. In this case, internally pandas API on Spark attaches a
 default index into pandas-on-Spark DataFrame.
 
 There are several types of the default index that can be configured by `compute.default_index_type` as below:
@@ -146,11 +146,11 @@ This index type should be avoided when the data is large. This is default. See t
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
-    >>> ks.set_option('compute.default_index_type', 'sequence')
-    >>> kdf = ks.range(3)
-    >>> ks.reset_option('compute.default_index_type')
-    >>> kdf.index
+    >>> import pyspark.pandas as ps
+    >>> ps.set_option('compute.default_index_type', 'sequence')
+    >>> psdf = ps.range(3)
+    >>> ps.reset_option('compute.default_index_type')
+    >>> psdf.index
     Int64Index([0, 1, 2], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
@@ -158,8 +158,8 @@ This is conceptually equivalent to the PySpark example as below:
 .. code-block:: python
 
     >>> from pyspark.sql import functions as F, Window
-    >>> import pyspark.pandas as ks
-    >>> spark_df = ks.range(3).to_spark()
+    >>> import pyspark.pandas as ps
+    >>> spark_df = ps.range(3).to_spark()
     >>> sequential_index = F.row_number().over(
     ...    Window.orderBy(F.monotonically_increasing_id().asc())) - 1
     >>> spark_df.select(sequential_index).rdd.map(lambda r: r[0]).collect()
@@ -174,19 +174,19 @@ then it does not guarantee the sequential index. See the example below:
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
-    >>> ks.set_option('compute.default_index_type', 'distributed-sequence')
-    >>> kdf = ks.range(3)
-    >>> ks.reset_option('compute.default_index_type')
-    >>> kdf.index
+    >>> import pyspark.pandas as ps
+    >>> ps.set_option('compute.default_index_type', 'distributed-sequence')
+    >>> psdf = ps.range(3)
+    >>> ps.reset_option('compute.default_index_type')
+    >>> psdf.index
     Int64Index([0, 1, 2], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
-    >>> spark_df = ks.range(3).to_spark()
+    >>> import pyspark.pandas as ps
+    >>> spark_df = ps.range(3).to_spark()
     >>> spark_df.rdd.zipWithIndex().map(lambda p: p[1]).collect()
     [0, 1, 2]
 
@@ -198,11 +198,11 @@ have any penalty comparing to other index types. See the example below:
 
 .. code-block:: python
 
-    >>> import pyspark.pandas as ks
-    >>> ks.set_option('compute.default_index_type', 'distributed')
-    >>> kdf = ks.range(3)
-    >>> ks.reset_option('compute.default_index_type')
-    >>> kdf.index
+    >>> import pyspark.pandas as ps
+    >>> ps.set_option('compute.default_index_type', 'distributed')
+    >>> psdf = ps.range(3)
+    >>> ps.reset_option('compute.default_index_type')
+    >>> psdf.index
     Int64Index([25769803776, 60129542144, 94489280512], dtype='int64')
 
 This is conceptually equivalent to the PySpark example as below:
@@ -210,8 +210,8 @@ This is conceptually equivalent to the PySpark example as below:
 .. code-block:: python
 
     >>> from pyspark.sql import functions as F
-    >>> import pyspark.pandas as ks
-    >>> spark_df = ks.range(3).to_spark()
+    >>> import pyspark.pandas as ps
+    >>> spark_df = ps.range(3).to_spark()
     >>> spark_df.select(F.monotonically_increasing_id()) \
     ...     .rdd.map(lambda r: r[0]).collect()
     [25769803776, 60129542144, 94489280512]

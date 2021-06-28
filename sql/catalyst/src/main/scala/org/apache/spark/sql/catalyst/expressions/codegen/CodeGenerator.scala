@@ -1816,7 +1816,7 @@ object CodeGenerator extends Logging {
     case BooleanType => JAVA_BOOLEAN
     case ByteType => JAVA_BYTE
     case ShortType => JAVA_SHORT
-    case IntegerType | DateType | YearMonthIntervalType => JAVA_INT
+    case IntegerType | DateType | _: YearMonthIntervalType => JAVA_INT
     case LongType | TimestampType | TimestampWithoutTZType | _: DayTimeIntervalType => JAVA_LONG
     case FloatType => JAVA_FLOAT
     case DoubleType => JAVA_DOUBLE
@@ -1837,7 +1837,7 @@ object CodeGenerator extends Logging {
     case BooleanType => java.lang.Boolean.TYPE
     case ByteType => java.lang.Byte.TYPE
     case ShortType => java.lang.Short.TYPE
-    case IntegerType | DateType | YearMonthIntervalType => java.lang.Integer.TYPE
+    case IntegerType | DateType | _: YearMonthIntervalType => java.lang.Integer.TYPE
     case LongType | TimestampType | TimestampWithoutTZType | _: DayTimeIntervalType =>
       java.lang.Long.TYPE
     case FloatType => java.lang.Float.TYPE

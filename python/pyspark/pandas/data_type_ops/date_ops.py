@@ -17,17 +17,25 @@
 
 import datetime
 import warnings
-from typing import TYPE_CHECKING, Union
+from typing import Any, Union
+
+import pandas as pd
+from pandas.api.types import CategoricalDtype
 
 from pyspark.sql import functions as F
-from pyspark.sql.types import DateType
+from pyspark.sql.types import BooleanType, DateType, StringType
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
-from pyspark.pandas.data_type_ops.base import DataTypeOps
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+from pyspark.pandas.data_type_ops.base import (
+    DataTypeOps,
+    IndexOpsLike,
+    T_IndexOps,
+    _as_bool_type,
+    _as_categorical_type,
+    _as_other_type,
+    _as_string_type,
+)
+from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
 
 
 class DateOps(DataTypeOps):
@@ -39,7 +47,7 @@ class DateOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "dates"
 
-    def sub(self, left, right) -> Union["Series", "Index"]:
+    def sub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (
@@ -56,7 +64,7 @@ class DateOps(DataTypeOps):
         else:
             raise TypeError("date subtraction can only be applied to date series.")
 
-    def rsub(self, left, right) -> Union["Series", "Index"]:
+    def rsub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (
@@ -69,3 +77,15 @@ class DateOps(DataTypeOps):
             return -column_op(F.datediff)(left, F.lit(right)).astype("long")
         else:
             raise TypeError("date subtraction can only be applied to date series.")
+
+    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+        dtype, spark_type = pandas_on_spark_type(dtype)
+
+        if isinstance(dtype, CategoricalDtype):
+            return _as_categorical_type(index_ops, dtype, spark_type)
+        elif isinstance(spark_type, BooleanType):
+            return _as_bool_type(index_ops, dtype)
+        elif isinstance(spark_type, StringType):
+            return _as_string_type(index_ops, dtype, null_str=str(pd.NaT))
+        else:
+            return _as_other_type(index_ops, dtype, spark_type)

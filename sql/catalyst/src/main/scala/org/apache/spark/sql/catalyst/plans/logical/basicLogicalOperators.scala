@@ -589,7 +589,18 @@ object View {
     if (activeConf.useCurrentSQLConfigsForView && !isTempView) return activeConf
 
     val sqlConf = new SQLConf()
-    for ((k, v) <- configs) {
+    // We retain below configs from current session because they are not captured by view
+    // as optimization configs but they are still needed during the view resolution.
+    // TODO: remove this `retainedConfigs` after the `RelationConversions` is moved to
+    // optimization phase.
+    val retainedConfigs = activeConf.getAllConfs.filterKeys(key =>
+      Seq(
+        "spark.sql.hive.convertMetastoreParquet",
+        "spark.sql.hive.convertMetastoreOrc",
+        "spark.sql.hive.convertInsertingPartitionedTable",
+        "spark.sql.hive.convertMetastoreCtas"
+      ).contains(key))
+    for ((k, v) <- configs ++ retainedConfigs) {
       sqlConf.settings.put(k, v)
     }
     sqlConf
@@ -1349,6 +1360,31 @@ object RepartitionByExpression {
       numPartitions: Int): RepartitionByExpression = {
     RepartitionByExpression(partitionExpressions, child, Some(numPartitions))
   }
+}
+
+/**
+ * This operator is used to rebalance the output partitions of the given `child`, so that every
+ * partition is of a reasonable size (not too small and not too big). It also try its best to
+ * partition the child output by `partitionExpressions`. If there are skews, Spark will split the
+ * skewed partitions, to make these partitions not too big. This operator is useful when you need
+ * to write the result of `child` to a table, to avoid too small/big files.
+ *
+ * Note that, this operator only makes sense when AQE is enabled.
+ */
+case class RebalancePartitions(
+    partitionExpressions: Seq[Expression],
+    child: LogicalPlan) extends UnaryNode {
+  override def maxRows: Option[Long] = child.maxRows
+  override def output: Seq[Attribute] = child.output
+
+  def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
+    RoundRobinPartitioning(conf.numShufflePartitions)
+  } else {
+    HashPartitioning(partitionExpressions, conf.numShufflePartitions)
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =
+    copy(child = newChild)
 }
 
 /**

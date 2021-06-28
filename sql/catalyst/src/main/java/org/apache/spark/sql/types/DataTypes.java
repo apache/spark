@@ -100,11 +100,6 @@ public class DataTypes {
   public static final DataType NullType = NullType$.MODULE$;
 
   /**
-   * Gets the YearMonthIntervalType object.
-   */
-  public static final DataType YearMonthIntervalType = YearMonthIntervalType$.MODULE$;
-
-  /**
    * Creates an ArrayType by specifying the data type of elements ({@code elementType}).
    * The field of {@code containsNull} is set to {@code true}.
    */
@@ -152,6 +147,20 @@ public class DataTypes {
    */
   public static DayTimeIntervalType createDayTimeIntervalType() {
     return DayTimeIntervalType$.MODULE$.DEFAULT();
+  }
+
+  /**
+   * Creates a YearMonthIntervalType by specifying the start and end fields.
+   */
+  public static YearMonthIntervalType createYearMonthIntervalType(byte startField, byte endField) {
+    return YearMonthIntervalType$.MODULE$.apply(startField, endField);
+  }
+
+  /**
+   * Creates a YearMonthIntervalType with default start and end fields: interval year to month.
+   */
+  public static YearMonthIntervalType createYearMonthIntervalType() {
+    return YearMonthIntervalType$.MODULE$.DEFAULT();
   }
 
   /**

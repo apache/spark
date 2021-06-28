@@ -84,7 +84,7 @@ object Literal {
     case ld: LocalDate => Literal(ld.toEpochDay.toInt, DateType)
     case d: Date => Literal(DateTimeUtils.fromJavaDate(d), DateType)
     case d: Duration => Literal(durationToMicros(d), DayTimeIntervalType())
-    case p: Period => Literal(periodToMonths(p), YearMonthIntervalType)
+    case p: Period => Literal(periodToMonths(p), YearMonthIntervalType())
     case a: Array[Byte] => Literal(a, BinaryType)
     case a: collection.mutable.WrappedArray[_] => apply(a.array)
     case a: Array[_] =>
@@ -122,7 +122,7 @@ object Literal {
     case _ if clz == classOf[Timestamp] => TimestampType
     case _ if clz == classOf[LocalDateTime] => TimestampWithoutTZType
     case _ if clz == classOf[Duration] => DayTimeIntervalType()
-    case _ if clz == classOf[Period] => YearMonthIntervalType
+    case _ if clz == classOf[Period] => YearMonthIntervalType()
     case _ if clz == classOf[JavaBigDecimal] => DecimalType.SYSTEM_DEFAULT
     case _ if clz == classOf[Array[Byte]] => BinaryType
     case _ if clz == classOf[Array[Char]] => StringType
@@ -153,7 +153,13 @@ object Literal {
   def fromObject(obj: Any): Literal = new Literal(obj, ObjectType(obj.getClass))
 
   def create(v: Any, dataType: DataType): Literal = {
-    Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
+    dataType match {
+      case _: YearMonthIntervalType if v.isInstanceOf[Period] =>
+        Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
+      case _: DayTimeIntervalType if v.isInstanceOf[Duration] =>
+        Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
+      case _ => Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
+    }
   }
 
   def create[T : TypeTag](v: T): Literal = Try {
@@ -181,7 +187,7 @@ object Literal {
     case TimestampType => create(0L, TimestampType)
     case TimestampWithoutTZType => create(0L, TimestampWithoutTZType)
     case it: DayTimeIntervalType => create(0L, it)
-    case YearMonthIntervalType => create(0, YearMonthIntervalType)
+    case it: YearMonthIntervalType => create(0, it)
     case StringType => Literal("")
     case BinaryType => Literal("".getBytes(StandardCharsets.UTF_8))
     case CalendarIntervalType => Literal(new CalendarInterval(0, 0, 0))
@@ -200,7 +206,7 @@ object Literal {
       case BooleanType => v.isInstanceOf[Boolean]
       case ByteType => v.isInstanceOf[Byte]
       case ShortType => v.isInstanceOf[Short]
-      case IntegerType | DateType | YearMonthIntervalType => v.isInstanceOf[Int]
+      case IntegerType | DateType | _: YearMonthIntervalType => v.isInstanceOf[Int]
       case LongType | TimestampType | TimestampWithoutTZType | _: DayTimeIntervalType =>
         v.isInstanceOf[Long]
       case FloatType => v.isInstanceOf[Float]
@@ -348,7 +354,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
         case DayTimeIntervalType(startField, endField) =>
           toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE, startField, endField)
-        case YearMonthIntervalType => toYearMonthIntervalString(value.asInstanceOf[Int], ANSI_STYLE)
+        case YearMonthIntervalType(startField, endField) =>
+          toYearMonthIntervalString(value.asInstanceOf[Int], ANSI_STYLE, startField, endField)
         case _ =>
           other.toString
       }
@@ -401,7 +408,7 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
         ExprCode.forNonNullValue(JavaCode.literal(code, dataType))
       }
       dataType match {
-        case BooleanType | IntegerType | DateType | YearMonthIntervalType =>
+        case BooleanType | IntegerType | DateType | _: YearMonthIntervalType =>
           toExprCode(value.toString)
         case FloatType =>
           value.asInstanceOf[Float] match {
@@ -471,7 +478,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"
     case (i: Long, DayTimeIntervalType(startField, endField)) =>
       toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)
-    case (i: Int, YearMonthIntervalType) => toYearMonthIntervalString(i, ANSI_STYLE)
+    case (i: Int, YearMonthIntervalType(startField, endField)) =>
+      toYearMonthIntervalString(i, ANSI_STYLE, startField, endField)
     case _ => value.toString
   }
 }

@@ -57,14 +57,14 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       DecimalType.bounded(p + 4, s + 4)
-    case _: YearMonthIntervalType => YearMonthIntervalType
+    case _: YearMonthIntervalType => YearMonthIntervalType()
     case _: DayTimeIntervalType => DayTimeIntervalType()
     case _ => DoubleType
   }
 
   private lazy val sumDataType = child.dataType match {
     case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
-    case _: YearMonthIntervalType => YearMonthIntervalType
+    case _: YearMonthIntervalType => YearMonthIntervalType()
     case _: DayTimeIntervalType => DayTimeIntervalType()
     case _ => DoubleType
   }
@@ -92,7 +92,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
         Divide(sum, count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
     case _: YearMonthIntervalType =>
       If(EqualTo(count, Literal(0L)),
-        Literal(null, YearMonthIntervalType), DivideYMInterval(sum, count))
+        Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
     case _: DayTimeIntervalType =>
       If(EqualTo(count, Literal(0L)),
         Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))

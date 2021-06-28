@@ -27,10 +27,3 @@ Development
    debugging
    setting_ide
 
-For pandas APIs on Spark:
-
-.. toctree::
-   :maxdepth: 2
-
-   ps_contributing
-   ps_design

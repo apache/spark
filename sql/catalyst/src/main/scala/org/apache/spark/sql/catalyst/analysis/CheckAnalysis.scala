@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -443,6 +443,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
+          case alter: AlterTableCommand if alter.table.resolved =>
+            alter.transformExpressions {
+              case u: UnresolvedFieldName =>
+                val table = alter.table.asInstanceOf[ResolvedTable]
+                alter.failAnalysis(
+                  s"Cannot ${alter.operation} missing field ${u.name.quoted} in ${table.name} " +
+                    s"schema: ${table.schema.treeString}")
+            }
+            checkAlterTableCommand(alter)
+
           case alter: AlterTable if alter.table.resolved =>
             val table = alter.table
             def findField(operation: String, fieldName: Array[String]): StructField = {
@@ -533,7 +543,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                   case u: UserDefinedType[_] =>
                     alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
                       s"update a UserDefinedType[${u.sql}] by updating its fields")
-                  case _: CalendarIntervalType =>
+                  case _: CalendarIntervalType | _: YearMonthIntervalType |
+                       _: DayTimeIntervalType =>
                     alter.failAnalysis(s"Cannot update ${table.name} field $fieldName to " +
                       s"interval type")
                   case _ =>
@@ -569,10 +580,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                   updatePos.position(),
                   parent,
                   colsToAdd.getOrElse(parentName, Nil))
-              case rename: RenameColumn =>
-                findField("rename", rename.fieldNames)
-                checkColumnNotExists(
-                  "rename", rename.fieldNames().init :+ rename.newName(), table.schema)
               case update: UpdateColumnComment =>
                 findField("update", update.fieldNames)
               case delete: DeleteColumn =>
@@ -839,9 +846,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     def checkMixedReferencesInsideAggregateExpr(expr: Expression): Unit = {
       expr.foreach {
         case a: AggregateExpression if containsOuter(a) =>
-          val outer = a.collect { case OuterReference(e) => e.toAttribute }
-          val local = a.references -- outer
-          if (local.nonEmpty) {
+          if (a.references.nonEmpty) {
             throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
           }
         case _ =>
@@ -1069,5 +1074,23 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case p =>
         failOnOuterReferenceInSubTree(p)
     }}
+  }
+
+  /**
+   * Validates the options used for alter table commands after table and columns are resolved.
+   */
+  private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
+    def checkColumnNotExists(fieldNames: Seq[String], struct: StructType): Unit = {
+      if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
+        alter.failAnalysis(s"Cannot ${alter.operation} column, because ${fieldNames.quoted} " +
+          s"already exists in ${struct.treeString}")
+      }
+    }
+
+    alter match {
+      case AlterTableRenameColumn(table: ResolvedTable, ResolvedFieldName(name), newName) =>
+        checkColumnNotExists(name.init :+ newName, table.schema)
+      case _ =>
+    }
   }
 }

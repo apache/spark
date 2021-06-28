@@ -652,3 +652,15 @@ case object UnresolvedSeed extends LeafExpression with Unevaluable {
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override lazy val resolved = false
 }
+
+/**
+ * An intermediate expression to hold a resolved (nested) column. Some rules may need to undo the
+ * column resolution and use this expression to keep the original column name.
+ */
+case class TempResolvedColumn(child: Expression, nameParts: Seq[String]) extends UnaryExpression
+  with Unevaluable {
+  override lazy val canonicalized = child.canonicalized
+  override def dataType: DataType = child.dataType
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}

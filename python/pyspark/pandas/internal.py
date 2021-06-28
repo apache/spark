@@ -29,7 +29,7 @@ from pandas.api.types import CategoricalDtype  # noqa: F401
 from pyspark import sql as spark
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql import functions as F, Window
-from pyspark.sql.functions import PandasUDFType, pandas_udf
+from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (  # noqa: F401
     BooleanType,
     DataType,
@@ -1008,7 +1008,7 @@ class InternalFrame(object):
         sums = dict(zip(map(lambda count: count[0], sorted_counts), cumulative_counts))
 
         # 3. Attach offset for each partition.
-        @pandas_udf(LongType(), PandasUDFType.SCALAR)
+        @pandas_udf(returnType=LongType())  # type: ignore
         def offset(id: pd.Series) -> pd.Series:
             current_partition_offset = sums[id.iloc[0]]
             return pd.Series(current_partition_offset).repeat(len(id))
@@ -1170,11 +1170,7 @@ class InternalFrame(object):
         """Create arguments for `restore_index`."""
         column_names = []
         fields = self.index_fields.copy()
-        ext_fields = {
-            col: field
-            for col, field in zip(self.index_spark_column_names, self.index_fields)
-            if isinstance(field.dtype, extension_dtypes)
-        }
+
         for spark_column, column_name, field in zip(
             self.data_spark_columns, self.data_spark_column_names, self.data_fields
         ):
@@ -1187,8 +1183,6 @@ class InternalFrame(object):
             else:
                 column_names.append(column_name)
                 fields.append(field)
-                if isinstance(field.dtype, extension_dtypes):
-                    ext_fields[column_name] = field
 
         return dict(
             index_columns=self.index_spark_column_names,
@@ -1197,7 +1191,6 @@ class InternalFrame(object):
             column_labels=self.column_labels,
             column_label_names=self.column_label_names,
             fields=fields,
-            ext_fields=ext_fields,
         )
 
     @staticmethod
@@ -1210,7 +1203,6 @@ class InternalFrame(object):
         column_labels: List[Tuple],
         column_label_names: List[Tuple],
         fields: List[InternalField] = None,
-        ext_fields: Dict[str, InternalField] = None,
     ) -> pd.DataFrame:
         """
         Restore pandas DataFrame indices using the metadata.
@@ -1222,7 +1214,6 @@ class InternalFrame(object):
         :param column_labels: the column labels after restored.
         :param column_label_names: the column label names after restored.
         :param fields: the fields after restored.
-        :param ext_fields: the map from the original column names to extension data fields.
         :return: the restored pandas DataFrame
 
         >>> from numpy import dtype
@@ -1248,7 +1239,6 @@ class InternalFrame(object):
         ...             struct_field=StructField(name='b', dataType=LongType(), nullable=False),
         ...         ),
         ...     ],
-        ...     ext_fields=None,
         ... )  # doctest: +NORMALIZE_WHITESPACE
         lv1  x  y   z
         idx
@@ -1256,9 +1246,6 @@ class InternalFrame(object):
         20   b  k  20
         30   c  j  30
         """
-        if ext_fields is not None and len(ext_fields) > 0:
-            pdf = pdf.astype({col: field.dtype for col, field in ext_fields.items()}, copy=True)
-
         for col, field in zip(pdf.columns, fields):
             pdf[col] = DataTypeOps(field.dtype, field.spark_type).restore(pdf[col])
 
@@ -1445,9 +1432,9 @@ class InternalFrame(object):
             assert isinstance(pred.spark.data_type, BooleanType), pred.spark.data_type
             condition = pred.spark.column
         else:
-            spark_type = self.spark_frame.select(pred).schema[0].dataType
-            assert isinstance(spark_type, BooleanType), spark_type
             condition = pred
+            spark_type = self.spark_frame.select(condition).schema[0].dataType
+            assert isinstance(spark_type, BooleanType), spark_type
 
         return self.with_new_sdf(self.spark_frame.filter(condition).select(self.spark_columns))
 

@@ -59,7 +59,7 @@ case class Sum(child: Expression) extends DeclarativeAggregate with ImplicitCast
     case DecimalType.Fixed(precision, scale) =>
       DecimalType.bounded(precision + 10, scale)
     case _: IntegralType => LongType
-    case _: YearMonthIntervalType => YearMonthIntervalType
+    case it: YearMonthIntervalType => it
     case it: DayTimeIntervalType => it
     case _ => DoubleType
   }

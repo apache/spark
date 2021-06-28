@@ -904,8 +904,9 @@ dataType
     : complex=ARRAY '<' dataType '>'                            #complexDataType
     | complex=MAP '<' dataType ',' dataType '>'                 #complexDataType
     | complex=STRUCT ('<' complexColTypeList? '>' | NEQ)        #complexDataType
-    | INTERVAL YEAR TO MONTH                                    #yearMonthIntervalDataType
-    | INTERVAL DAY TO SECOND                                    #dayTimeIntervalDataType
+    | INTERVAL from=(YEAR | MONTH) (TO to=MONTH)?               #yearMonthIntervalDataType
+    | INTERVAL from=(DAY | HOUR | MINUTE | SECOND)
+      (TO to=(HOUR | MINUTE | SECOND))?                         #dayTimeIntervalDataType
     | identifier ('(' INTEGER_VALUE (',' INTEGER_VALUE)* ')')?  #primitiveDataType
     ;
 
@@ -1110,6 +1111,7 @@ ansiNonReserved
     | FUNCTIONS
     | GLOBAL
     | GROUPING
+    | HOUR
     | IF
     | IGNORE
     | IMPORT
@@ -1137,6 +1139,7 @@ ansiNonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MINUTE
     | MONTH
     | MSCK
     | NAMESPACE
@@ -1358,6 +1361,7 @@ nonReserved
     | GROUP
     | GROUPING
     | HAVING
+    | HOUR
     | IF
     | IGNORE
     | IMPORT
@@ -1389,6 +1393,7 @@ nonReserved
     | MAP
     | MATCHED
     | MERGE
+    | MINUTE
     | MONTH
     | MSCK
     | NAMESPACE
@@ -1612,6 +1617,7 @@ GRANT: 'GRANT';
 GROUP: 'GROUP';
 GROUPING: 'GROUPING';
 HAVING: 'HAVING';
+HOUR: 'HOUR';
 IF: 'IF';
 IGNORE: 'IGNORE';
 IMPORT: 'IMPORT';
@@ -1648,6 +1654,7 @@ MACRO: 'MACRO';
 MAP: 'MAP';
 MATCHED: 'MATCHED';
 MERGE: 'MERGE';
+MINUTE: 'MINUTE';
 MONTH: 'MONTH';
 MSCK: 'MSCK';
 NAMESPACE: 'NAMESPACE';

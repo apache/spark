@@ -139,7 +139,7 @@ private[sql] object ColumnAccessor {
       case BooleanType => new BooleanColumnAccessor(buf)
       case ByteType => new ByteColumnAccessor(buf)
       case ShortType => new ShortColumnAccessor(buf)
-      case IntegerType | DateType | YearMonthIntervalType => new IntColumnAccessor(buf)
+      case IntegerType | DateType | _: YearMonthIntervalType => new IntColumnAccessor(buf)
       case LongType | TimestampType | _: DayTimeIntervalType => new LongColumnAccessor(buf)
       case FloatType => new FloatColumnAccessor(buf)
       case DoubleType => new DoubleColumnAccessor(buf)

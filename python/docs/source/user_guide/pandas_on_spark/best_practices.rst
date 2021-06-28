@@ -5,15 +5,15 @@ Best Practices
 Leverage PySpark APIs
 ---------------------
 
-Pandas APIs on Spark use Spark under the hood; therefore, many features and performance optimization are available
-in pandas APIs on Spark as well. Leverage and combine those cutting-edge features with pandas APIs on Spark.
+Pandas API on Spark uses Spark under the hood; therefore, many features and performance optimization are available
+in pandas API on Spark as well. Leverage and combine those cutting-edge features with pandas API on Spark.
 
-Existing Spark context and Spark sessions are used out of the box in pandas APIs on Spark. If you already have your own
-configured Spark context or sessions running, pandas APIs on Spark use them.
+Existing Spark context and Spark sessions are used out of the box in pandas API on Spark. If you already have your own
+configured Spark context or sessions running, pandas API on Spark uses them.
 
 If there is no Spark context or session running in your environment (e.g., ordinary Python interpreter),
 such configurations can be set to ``SparkContext`` and/or ``SparkSession``.
-Once Spark context and/or session is created, pandas APIs on Spark can use this context and/or session automatically.
+Once Spark context and/or session is created, pandas API on Spark can use this context and/or session automatically.
 For example, if you want to configure the executor memory in Spark, you can do as below:
 
 .. code-block:: python
@@ -21,10 +21,10 @@ For example, if you want to configure the executor memory in Spark, you can do a
    from pyspark import SparkConf, SparkContext
    conf = SparkConf()
    conf.set('spark.executor.memory', '2g')
-   # Pandas APIs on Spark automatically use this Spark context with the configurations set.
+   # Pandas API on Spark automatically uses this Spark context with the configurations set.
    SparkContext(conf=conf)
 
-   import pyspark.pandas as ks
+   import pyspark.pandas as ps
    ...
 
 Another common configuration might be Arrow optimization in PySpark. In case of SQL configuration,
@@ -35,13 +35,13 @@ it can be set into Spark session as below:
    from pyspark.sql import SparkSession
    builder = SparkSession.builder.appName("pandas-on-spark")
    builder = builder.config("spark.sql.execution.arrow.enabled", "true")
-   # Pandas APIs on Spark automatically use this Spark session with the configurations set.
+   # Pandas API on Spark automatically uses this Spark session with the configurations set.
    builder.getOrCreate()
 
-   import pyspark.pandas as ks
+   import pyspark.pandas as ps
    ...
 
-All Spark features such as history server, web UI and deployment modes can be used as are with pandas APIs on Spark.
+All Spark features such as history server, web UI and deployment modes can be used as are with pandas API on Spark.
 If you are interested in performance tuning, please see also `Tuning Spark <https://spark.apache.org/docs/latest/tuning.html>`_.
 
 
@@ -49,14 +49,14 @@ Check execution plans
 ---------------------
 
 Expensive operations can be predicted by leveraging PySpark API `DataFrame.spark.explain()`
-before the actual computation since pandas APIs on Spark are based on lazy execution. For example, see below.
+before the actual computation since pandas API on Spark is based on lazy execution. For example, see below.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'id': range(10)})
-   >>> kdf = kdf[kdf.id > 5]
-   >>> kdf.spark.explain()
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'id': range(10)})
+   >>> psdf = psdf[psdf.id > 5]
+   >>> psdf.spark.explain()
    == Physical Plan ==
    *(1) Filter (id#1L > 5)
    +- *(1) Scan ExistingRDD[__index_level_0__#0L,id#1L]
@@ -65,25 +65,25 @@ before the actual computation since pandas APIs on Spark are based on lazy execu
 Whenever you are not sure about such cases, you can check the actual execution plans and
 foresee the expensive cases.
 
-Even though pandas APIs on Spark try its best to optimize and reduce such shuffle operations by leveraging Spark
+Even though pandas API on Spark tries its best to optimize and reduce such shuffle operations by leveraging Spark
 optimizers, it is best to avoid shuffling in the application side whenever possible.
 
 
 Use checkpoint
 --------------
 
-After a bunch of operations on pandas APIs on Spark objects, the underlying Spark planner can slow down due to the huge and complex plan.
+After a bunch of operations on pandas API on Spark objects, the underlying Spark planner can slow down due to the huge and complex plan.
 If the Spark plan becomes huge or it takes the planning long time, ``DataFrame.spark.checkpoint()``
 or ``DataFrame.spark.local_checkpoint()`` would be helpful.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'id': range(10)})
-   >>> kdf = kdf[kdf.id > 5]
-   >>> kdf['id'] = kdf['id'] + (10 * kdf['id'] + kdf['id'])
-   >>> kdf = kdf.groupby('id').head(2)
-   >>> kdf.spark.explain()
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'id': range(10)})
+   >>> psdf = psdf[psdf.id > 5]
+   >>> psdf['id'] = psdf['id'] + (10 * psdf['id'] + psdf['id'])
+   >>> psdf = psdf.groupby('id').head(2)
+   >>> psdf.spark.explain()
    == Physical Plan ==
    *(3) Project [__index_level_0__#0L, id#31L]
    +- *(3) Filter (isnotnull(__row_number__#44) AND (__row_number__#44 <= 2))
@@ -95,8 +95,8 @@ or ``DataFrame.spark.local_checkpoint()`` would be helpful.
                      +- *(1) Filter (id#1L > 5)
                         +- *(1) Scan ExistingRDD[__index_level_0__#0L,id#1L]
 
-   >>> kdf = kdf.spark.local_checkpoint()  # or kdf.spark.checkpoint()
-   >>> kdf.spark.explain()
+   >>> psdf = psdf.spark.local_checkpoint()  # or psdf.spark.checkpoint()
+   >>> psdf.spark.explain()
    == Physical Plan ==
    *(1) Project [__index_level_0__#0L, id#31L]
    +- *(1) Scan ExistingRDD[__index_level_0__#0L,id#31L,__natural_order__#59L]
@@ -115,9 +115,9 @@ and exchange the data across multiple nodes via networks. See the example below.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'id': range(10)}).sort_values(by="id")
-   >>> kdf.spark.explain()
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'id': range(10)}).sort_values(by="id")
+   >>> psdf.spark.explain()
    == Physical Plan ==
    *(2) Sort [id#9L ASC NULLS LAST], true, 0
    +- Exchange rangepartitioning(id#9L ASC NULLS LAST, 200), true, [id=#18]
@@ -130,16 +130,16 @@ Avoid computation on single partition
 -------------------------------------
 
 Another common case is the computation on a single partition. Currently, some APIs such as
-`DataFrame.rank <https://koalas.readthedocs.io/en/latest/reference/api/pyspark.pandas.DataFrame.rank.html>`_
+`DataFrame.rank <https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.pandas.DataFrame.rank.html>`_
 uses PySpark’s Window without specifying partition specification. This leads to move all data into a single
 partition in single machine and could cause serious performance degradation.
 Such APIs should be avoided very large dataset.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'id': range(10)})
-   >>> kdf.rank().spark.explain()
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'id': range(10)})
+   >>> psdf.rank().spark.explain()
    == Physical Plan ==
    *(4) Project [__index_level_0__#16L, id#24]
    +- Window [avg(cast(_w0#26 as bigint)) windowspecdefinition(id#17L, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS id#24], [id#17L]
@@ -150,37 +150,37 @@ Such APIs should be avoided very large dataset.
                   +- *(1) Scan ExistingRDD[__index_level_0__#16L,id#17L]
 
 Instead, use 
-`GroupBy.rank <https://koalas.readthedocs.io/en/latest/reference/api/pyspark.pandas.groupby.GroupBy.rank.html>`_
+`GroupBy.rank <https://spark.apache.org/docs/latest/api/python/reference/api/pyspark.pandas.groupby.GroupBy.rank.html>`_
 as it is less expensive because data can be distributed and computed for each group.
 
 
 Avoid reserved column names
 ---------------------------
 
-Columns with leading ``__`` and trailing ``__`` are reserved in pandas APIs on Spark. To handle internal behaviors for, such as, index,
-pandas APIs on Spark use some internal columns. Therefore, it is discouraged to use such column names and not guaranteed to work.
+Columns with leading ``__`` and trailing ``__`` are reserved in pandas API on Spark. To handle internal behaviors for, such as, index,
+pandas API on Spark uses some internal columns. Therefore, it is discouraged to use such column names and not guaranteed to work.
 
 
 Do not use duplicated column names
 ----------------------------------
 
-It is disallowed to use duplicated column names because Spark SQL does not allow this in general. Pandas APIs on Spark inherit
+It is disallowed to use duplicated column names because Spark SQL does not allow this in general. Pandas API on Spark inherits
 this behavior. For instance, see below:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'a': [1, 2], 'b':[3, 4]})
-   >>> kdf.columns = ["a", "a"]
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'a': [1, 2], 'b':[3, 4]})
+   >>> psdf.columns = ["a", "a"]
    ...
    Reference 'a' is ambiguous, could be: a, a.;
 
-Additionally, it is strongly discouraged to use case sensitive column names. Pandas APIs on Spark disallow it by default.
+Additionally, it is strongly discouraged to use case sensitive column names. Pandas API on Spark disallows it by default.
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'a': [1, 2], 'A':[3, 4]})
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'a': [1, 2], 'A':[3, 4]})
    ...
    Reference 'a' is ambiguous, could be: a, a.;
 
@@ -193,9 +193,9 @@ However, you can turn on ``spark.sql.caseSensitive`` in Spark configuration to e
    >>> builder = builder.config("spark.sql.caseSensitive", "true")
    >>> builder.getOrCreate()
 
-   >>> import pyspark.pandas as ks
-   >>> kdf = ks.DataFrame({'a': [1, 2], 'A':[3, 4]})
-   >>> kdf
+   >>> import pyspark.pandas as ps
+   >>> psdf = ps.DataFrame({'a': [1, 2], 'A':[3, 4]})
+   >>> psdf
       a  A
    0  1  3
    1  2  4
@@ -204,8 +204,8 @@ However, you can turn on ``spark.sql.caseSensitive`` in Spark configuration to e
 Specify the index column in conversion from Spark DataFrame to pandas-on-Spark DataFrame
 ----------------------------------------------------------------------------------------
 
-When pandas APIs on Spark Dataframe are converted from Spark DataFrame, it loses the index information, which results in using
-the default index in pandas APIs on Spark DataFrame. The default index is inefficient in general comparing to explicitly specifying
+When pandas-on-Spark Dataframe is converted from Spark DataFrame, it loses the index information, which results in using
+the default index in pandas API on Spark DataFrame. The default index is inefficient in general comparing to explicitly specifying
 the index column. Specify the index column whenever possible.
 
 See  `working with PySpark <pandas_pyspark.rst#pyspark>`_
@@ -214,7 +214,7 @@ See  `working with PySpark <pandas_pyspark.rst#pyspark>`_
 Use ``distributed`` or ``distributed-sequence`` default index
 -------------------------------------------------------------
 
-One common issue when pandas-on-Spark users face is the slow performance by default index. Pandas APIs on Spark attache
+One common issue when pandas-on-Spark users face is the slow performance by default index. Pandas API on Spark attaches
 a default index when the index is unknown, for example, Spark DataFrame is directly converted to pandas-on-Spark DataFrame.
 
 This default index is ``sequence`` which requires the computation on single partition which is discouraged. If you plan
@@ -227,19 +227,19 @@ See `Default Index Type <options.rst#default-index-type>`_ for more details abou
 Reduce the operations on different DataFrame/Series
 ---------------------------------------------------
 
-Pandas APIs on Spark disallow the operations on different DataFrames (or Series) by default to prevent expensive operations.
+Pandas API on Spark disallows the operations on different DataFrames (or Series) by default to prevent expensive operations.
 It internally performs a join operation which can be expensive in general, which is discouraged. Whenever possible,
 this operation should be avoided.
 
 See `Operations on different DataFrames <options.rst#operations-on-different-dataframes>`_ for more details.
 
 
-Use pandas APIs on Spark directly whenever possible
+Use pandas API on Spark directly whenever possible
 ---------------------------------------------------
 
-Although pandas APIs on Spark have most of the pandas-equivalent APIs, there are several APIs not implemented yet or explicitly unsupported.
+Although pandas API on Spark has most of the pandas-equivalent APIs, there are several APIs not implemented yet or explicitly unsupported.
 
-As an example, pandas APIs on Spark do not implement ``__iter__()`` to prevent users from collecting all data into the client (driver) side from the whole cluster.
+As an example, pandas API on Spark does not implement ``__iter__()`` to prevent users from collecting all data into the client (driver) side from the whole cluster.
 Unfortunately, many external APIs such as Python built-in functions such as min, max, sum, etc. require the given argument to be iterable.
 In case of pandas, it works properly out of the box as below:
 
@@ -261,12 +261,12 @@ The examples above can be converted as below:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
-   >>> ks.Series([1, 2, 3]).max()
+   >>> import pyspark.pandas as ps
+   >>> ps.Series([1, 2, 3]).max()
    3
-   >>> ks.Series([1, 2, 3]).min()
+   >>> ps.Series([1, 2, 3]).min()
    1
-   >>> ks.Series([1, 2, 3]).sum()
+   >>> ps.Series([1, 2, 3]).sum()
    6
 
 Another common pattern from pandas users might be to rely on list comprehension or generator expression.
@@ -291,22 +291,22 @@ Therefore, it works seamlessly in pandas as below:
    Helsinki    144.0
    dtype: float64
 
-However, for pandas APIs on Spark it do not work as the same reason above.
+However, for pandas API on Spark it does not work as the same reason above.
 The example above can be also changed to directly using pandas-on-Spark APIs as below:
 
 .. code-block:: python
 
-   >>> import pyspark.pandas as ks
+   >>> import pyspark.pandas as ps
    >>> import numpy as np
    >>> countries = ['London', 'New York', 'Helsinki']
-   >>> kser = ks.Series([20., 21., 12.], index=countries)
+   >>> psser = ps.Series([20., 21., 12.], index=countries)
    >>> def square(temperature) -> np.float64:
    ...     assert temperature > 0
    ...     if temperature > 1000:
    ...         temperature = None
    ...     return temperature ** 2
    ...
-   >>> kser.apply(square)
+   >>> psser.apply(square)
    London      400.0
    New York    441.0
    Helsinki    144.0

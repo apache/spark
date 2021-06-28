@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.plans.CodegenInterpretedPlanTest
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
+import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, yearMonthIntervalTypes}
 
 @SQLUserDefinedType(udt = classOf[ExamplePointUDT])
 class ExamplePoint(val x: Double, val y: Double) extends Serializable {
@@ -366,13 +366,15 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
   }
 
   test("SPARK-34615: encoding/decoding YearMonthIntervalType to/from java.time.Period") {
-    val schema = new StructType().add("p", YearMonthIntervalType)
-    val encoder = RowEncoder(schema).resolveAndBind()
-    val period = java.time.Period.ofMonths(1)
-    val row = toRow(encoder, Row(period))
-    assert(row.getInt(0) === IntervalUtils.periodToMonths(period))
-    val readback = fromRow(encoder, row)
-    assert(readback.get(0).equals(period))
+    yearMonthIntervalTypes.foreach { yearMonthIntervalType =>
+      val schema = new StructType().add("p", yearMonthIntervalType)
+      val encoder = RowEncoder(schema).resolveAndBind()
+      val period = java.time.Period.ofMonths(1)
+      val row = toRow(encoder, Row(period))
+      assert(row.getInt(0) === IntervalUtils.periodToMonths(period))
+      val readback = fromRow(encoder, row)
+      assert(readback.get(0).equals(period))
+    }
   }
 
   for {

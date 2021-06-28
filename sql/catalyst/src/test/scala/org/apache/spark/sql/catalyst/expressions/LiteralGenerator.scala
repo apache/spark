@@ -184,7 +184,7 @@ object LiteralGenerator {
 
   lazy val yearMonthIntervalLiteralGen: Gen[Literal] = {
     for { months <- Gen.choose(-1 * maxIntervalInMonths, maxIntervalInMonths) }
-      yield Literal.create(Period.ofMonths(months), YearMonthIntervalType)
+      yield Literal.create(Period.ofMonths(months), YearMonthIntervalType())
   }
 
   def randomGen(dt: DataType): Gen[Literal] = {
@@ -204,7 +204,7 @@ object LiteralGenerator {
       case CalendarIntervalType => calendarIntervalLiterGen
       case DecimalType.Fixed(precision, scale) => decimalLiteralGen(precision, scale)
       case _: DayTimeIntervalType => dayTimeIntervalLiteralGen
-      case YearMonthIntervalType => yearMonthIntervalLiteralGen
+      case _: YearMonthIntervalType => yearMonthIntervalLiteralGen
       case dt => throw new IllegalArgumentException(s"not supported type $dt")
     }
   }

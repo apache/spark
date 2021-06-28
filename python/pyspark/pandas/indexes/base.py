@@ -1992,7 +1992,21 @@ class Index(IndexOpsMixin):
         """
         from pyspark.pandas.indexes.multi import MultiIndex
 
-        if not is_list_like(other):
+        # Check if the `self` and `other` have different index types.
+        # 1. `self` is Index, `other` is MultiIndex
+        # 2. `self` is MultiIndex, `other` is Index
+        is_index_types_different = isinstance(other, Index) and not isinstance(self, type(other))
+        if is_index_types_different:
+            if isinstance(self, MultiIndex):
+                # In case `self` is MultiIndex and `other` is Index,
+                # return MultiIndex without its names.
+                return self.rename([None] * len(self))
+            elif isinstance(self, Index):
+                # In case `self` is Index and `other` is MultiIndex,
+                # return Index without its name.
+                return self.rename(None)
+
+        if not isinstance(other, (Index, Series, tuple, list, set, dict)):
             raise TypeError("Input must be Index or array-like")
         if not isinstance(sort, (type(None), type(True))):
             raise ValueError(
@@ -2000,11 +2014,17 @@ class Index(IndexOpsMixin):
                     sort
                 )
             )
-        # Handling MultiIndex
+        # Handling MultiIndex when `other` is not MultiIndex.
         if isinstance(self, MultiIndex) and not isinstance(other, MultiIndex):
-            if not all([isinstance(item, tuple) for item in other]):
+            is_other_list_of_tuples = isinstance(other, (list, set, dict)) and all(
+                [isinstance(item, tuple) for item in other]
+            )
+            if is_other_list_of_tuples:
+                other = MultiIndex.from_tuples(other)
+            elif isinstance(other, Series):
+                other = Index(other)
+            else:
                 raise TypeError("other must be a MultiIndex or a list of tuples")
-            other = MultiIndex.from_tuples(other)
 
         if not isinstance(other, Index):
             other = Index(other)
@@ -2243,8 +2263,8 @@ class Index(IndexOpsMixin):
                         "Union between Index and MultiIndex is not yet supported"
                     )
                 elif isinstance(other, Series):
-                    other = other.to_frame()
-                    other_idx = other.set_index(other.columns[0]).index
+                    other_frame = other.to_frame()
+                    other_idx = other_frame.set_index(other_frame.columns[0]).index
                 elif isinstance(other, DataFrame):
                     raise ValueError("Index data must be 1-dimensional")
                 else:
