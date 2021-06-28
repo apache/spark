@@ -93,9 +93,9 @@ case class UnresolvedPartitionSpec(
 sealed trait FieldName extends LeafExpression with Unevaluable {
   def name: Seq[String]
   override def dataType: DataType = throw new IllegalStateException(
-    "UnresolvedFieldName.dataType should not be called.")
+    "FieldName.dataType should not be called.")
   override def nullable: Boolean = throw new IllegalStateException(
-    "UnresolvedFieldName.nullable should not be called.")
+    "FieldName.nullable should not be called.")
 }
 
 case class UnresolvedFieldName(name: Seq[String]) extends FieldName {
@@ -105,9 +105,9 @@ case class UnresolvedFieldName(name: Seq[String]) extends FieldName {
 sealed trait FieldPosition extends LeafExpression with Unevaluable {
   def position: ColumnPosition
   override def dataType: DataType = throw new IllegalStateException(
-    "UnresolvedFieldName.dataType should not be called.")
+    "FieldPosition.dataType should not be called.")
   override def nullable: Boolean = throw new IllegalStateException(
-    "UnresolvedFieldName.nullable should not be called.")
+    "FieldPosition.nullable should not be called.")
 }
 
 case class UnresolvedFieldPosition(
