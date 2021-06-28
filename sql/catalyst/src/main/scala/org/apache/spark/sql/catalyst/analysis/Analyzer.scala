@@ -1592,14 +1592,14 @@ class Analyzer(override val catalogManager: CatalogManager)
         } catch {
           case e: AnalysisException =>
             AnalysisContext.get.outerPlan.map {
-              // Only a few unary nodes (Project/Aggregate) can host star expressions.
-              case u: UnaryNode =>
-                Try(s.expand(u.child, resolver)) match {
+              // Only Project and Aggregate can host star expressions.
+              case u @ (_: Project | _: Aggregate) =>
+                Try(s.expand(u.children.head, resolver)) match {
                   case Success(expanded) => expanded.map(wrapOuterReference)
                   case Failure(_) => throw e
                 }
-              // Do not use the outer plan to resolve the star expression if it is not a
-              // unary node since the star usage is invalid.
+              // Do not use the outer plan to resolve the star expression
+              // since the star usage is invalid.
               case _ => throw e
             }.getOrElse { throw e }
         }
