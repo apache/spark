@@ -32,18 +32,14 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 
+import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.github.benmanes.caffeine.guava.CaffeinatedGuava;
+import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
@@ -99,16 +95,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
     this.minChunkSize = conf.minChunkSizeInMergedShuffleFile();
     this.ioExceptionsThresholdDuringMerge = conf.ioExceptionsThresholdDuringMerge();
-    CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
-      new CacheLoader<File, ShuffleIndexInformation>() {
-        public ShuffleIndexInformation load(File file) throws IOException {
-          return new ShuffleIndexInformation(file);
-        }
-      };
+    CacheLoader<File, ShuffleIndexInformation> indexCacheLoader = ShuffleIndexInformation::new;
     Caffeine<File, ShuffleIndexInformation> builder = Caffeine.newBuilder()
       .maximumWeight(conf.mergedIndexCacheSize())
       .weigher((file, indexInfo) -> indexInfo.getSize());
-    indexCache = CaffeinatedGuava.build(builder, indexCacheLoader);
+    indexCache = builder.build(indexCacheLoader);
     this.errorHandler = new ErrorHandler.BlockPushErrorHandler();
   }
 
@@ -204,7 +195,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(chunkId);
       return new FileSegmentManagedBuffer(
         conf, dataFile, shuffleIndexRecord.getOffset(), shuffleIndexRecord.getLength());
-    } catch (ExecutionException e) {
+    } catch (CompletionException e) {
       throw new RuntimeException(String.format(
         "Failed to open merged shuffle index file %s", indexFile.getPath()), e);
     }
