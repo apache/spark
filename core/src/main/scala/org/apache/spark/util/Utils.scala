@@ -2595,10 +2595,14 @@ private[spark] object Utils extends Logging {
    * to run in YARN mode, with external shuffle service enabled
    */
   def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
-    conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
+    val isPushBasedShuffleEnabled = conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
       (conf.get(IS_TESTING).getOrElse(false) ||
         (conf.get(SHUFFLE_SERVICE_ENABLED) &&
           conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn"))
+    if (isPushBasedShuffleEnabled && !conf.get(IS_TESTING).getOrElse(false)) {
+      throw new UnsupportedOperationException("Push-based shuffle is not yet supported.")
+    }
+    isPushBasedShuffleEnabled
   }
 
   /**

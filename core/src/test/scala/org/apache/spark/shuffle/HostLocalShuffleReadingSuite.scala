@@ -22,6 +22,7 @@ import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransportConf}
 import org.apache.spark.network.server.TransportServer
@@ -136,6 +137,7 @@ class HostLocalShuffleReadingSuite extends SparkFunSuite with Matchers with Loca
 
   test("Enable host local shuffle reading when push based shuffle is enabled") {
     val conf = new SparkConf()
+      .set(IS_TESTING, true)
       .set(SHUFFLE_SERVICE_ENABLED, true)
       .set("spark.yarn.maxAttempts", "1")
       .set(PUSH_BASED_SHUFFLE_ENABLED, true)
