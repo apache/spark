@@ -51,10 +51,6 @@ class Observation(name: String) {
 
   @volatile private var row: Option[Row] = None
 
-  // we use a private object for synchronized { } when accessing this.row
-  // so we have full control on who calls notify
-  private val rowSync: Object = new Object()
-
   /**
    * Attaches this observation to the given [[Dataset]] to observe aggregation expressions.
    *
@@ -81,13 +77,14 @@ class Observation(name: String) {
    * @throws InterruptedException interrupted while waiting
    */
   def get: Row = {
-    this.rowSync.synchronized {
-      if (this.row.isEmpty) {
-        this.rowSync.wait()
+    synchronized {
+      // we need to loop as wait might return without us calling notify
+      // https://en.wikipedia.org/w/index.php?title=Spurious_wakeup&oldid=992601610
+      while (this.row.isEmpty) {
+        wait()
       }
     }
 
-    assert(this.row.isDefined, "someone called this.sync.notify but this.row is still empty")
     this.row.get
   }
 
@@ -95,7 +92,6 @@ class Observation(name: String) {
     // makes this class thread-safe:
     // only the first thread entering this block can set sparkSession
     // all other threads will see the exception, as it is only allowed to do this once
-    // do not use this.sync.synchronized here as we are not touching this.row here
     synchronized {
       if (this.sparkSession.isDefined) {
         throw new IllegalStateException("An Observation can be used with a Dataset only once")
@@ -111,11 +107,11 @@ class Observation(name: String) {
   }
 
   private[spark] def onFinish(qe: QueryExecution): Unit = {
-    this.rowSync.synchronized {
+    synchronized {
       if (this.row.isEmpty) {
         this.row = qe.observedMetrics.get(name)
         if (this.row.isDefined) {
-          this.rowSync.notifyAll()
+          notifyAll()
           unregister()
         }
       }
