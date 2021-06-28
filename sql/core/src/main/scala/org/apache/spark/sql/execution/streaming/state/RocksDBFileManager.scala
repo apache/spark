@@ -24,7 +24,6 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import scala.collection.{mutable, Seq}
 import scala.collection.JavaConverters._
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
