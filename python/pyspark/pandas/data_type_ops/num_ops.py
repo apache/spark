@@ -199,9 +199,9 @@ class IntegralOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def truediv(left: Column, right: Any) -> Column:
-            return F.when(SF.lit(right != 0) | SF.lit(right).isNull(), left.__div__(right)).otherwise(
-                SF.lit(np.inf).__div__(left)
-            )
+            return F.when(
+                SF.lit(right != 0) | SF.lit(right).isNull(), left.__div__(right)
+            ).otherwise(SF.lit(np.inf).__div__(left))
 
         return numpy_column_op(truediv)(left, right)
 
@@ -302,7 +302,9 @@ class FractionalOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def truediv(left: Column, right: Any) -> Column:
-            return F.when(SF.lit(right != 0) | SF.lit(right).isNull(), left.__div__(right)).otherwise(
+            return F.when(
+                SF.lit(right != 0) | SF.lit(right).isNull(), left.__div__(right)
+            ).otherwise(
                 F.when(SF.lit(left == np.inf) | SF.lit(left == -np.inf), left).otherwise(
                     SF.lit(np.inf).__div__(left)
                 )
@@ -356,7 +358,9 @@ class FractionalOps(NumericOps):
 
         def rfloordiv(left: Column, right: Any) -> Column:
             return F.when(SF.lit(left == 0), SF.lit(np.inf).__div__(right)).otherwise(
-                F.when(SF.lit(left) == np.nan, np.nan).otherwise(F.floor(SF.lit(right).__div__(left)))
+                F.when(SF.lit(left) == np.nan, np.nan).otherwise(
+                    F.floor(SF.lit(right).__div__(left))
+                )
             )
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
