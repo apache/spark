@@ -40,12 +40,14 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde.serdeConstants
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
-import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, CatalogUtils, FunctionResource, FunctionResourceType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTable, CatalogTablePartition, CatalogUtils, ExternalCatalogUtils, FunctionResource, FunctionResourceType}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.{DateFormatter, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateFormatter, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{AtomicType, DateType, IntegralType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
@@ -82,7 +84,8 @@ private[client] sealed abstract class Shim {
   def getPartitionsByFilter(
       hive: Hive,
       table: Table,
-      predicates: Seq[Expression]): Seq[Partition]
+      predicates: Seq[Expression],
+      catalogTable: CatalogTable): Seq[Partition]
 
   def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor
 
@@ -352,7 +355,8 @@ private[client] class Shim_v0_12 extends Shim with Logging {
   override def getPartitionsByFilter(
       hive: Hive,
       table: Table,
-      predicates: Seq[Expression]): Seq[Partition] = {
+      predicates: Seq[Expression],
+      catalogTable: CatalogTable): Seq[Partition] = {
     // getPartitionsByFilter() doesn't support binary comparison ops in Hive 0.12.
     // See HIVE-4888.
     logDebug("Hive 0.12 doesn't support predicate pushdown to metastore. " +
@@ -864,15 +868,15 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
   override def getPartitionsByFilter(
       hive: Hive,
       table: Table,
-      predicates: Seq[Expression]): Seq[Partition] = {
-
+      predicates: Seq[Expression],
+      catalogTable: CatalogTable): Seq[Partition] = {
     // Hive getPartitionsByFilter() takes a string that represents partition
     // predicates like "str_key=\"value\" and int_key=1 ..."
     val filter = convertFilters(table, predicates)
 
     val partitions =
       if (filter.isEmpty) {
-        getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+        prunePartitionsEvalClientSide(hive, table, catalogTable, predicates)
       } else {
         logDebug(s"Hive metastore filter is '$filter'.")
         val tryDirectSqlConfVar = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL
@@ -886,7 +890,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           // when filtering on a non-string partition column when the hive config key
           // hive.metastore.try.direct.sql is false
           getPartitionsByFilterMethod.invoke(hive, table, filter)
-            .asInstanceOf[JArrayList[Partition]]
+            .asInstanceOf[JArrayList[Partition]].asScala.toSeq
         } catch {
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
               !tryDirectSql =>
@@ -895,14 +899,79 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
               "degrade performance. Modifying your Hive metastore configuration to set " +
               s"${tryDirectSqlConfVar.varname} to true may resolve this problem.", ex)
             // HiveShim clients are expected to handle a superset of the requested partitions
-            getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+            prunePartitionsEvalClientSide(hive, table, catalogTable, predicates)
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
               tryDirectSql =>
             throw QueryExecutionErrors.getPartitionMetadataByFilterError(ex)
         }
       }
 
-    partitions.asScala.toSeq
+    partitions.toSeq
+  }
+
+  def prunePartitionsEvalClientSide(hive: Hive,
+      table: Table,
+      catalogTable: CatalogTable,
+      predicates: Seq[Expression]): Seq[Partition] = {
+
+    val timeZoneId = SQLConf.get.sessionLocalTimeZone
+
+    def hasTimeZoneAwareExpression(e: Expression): Boolean = {
+      e.collectFirst {
+        case t: TimeZoneAwareExpression => t
+      }.isDefined
+    }
+
+    if (!SQLConf.get.metastorePartitionPruningEvalClientSide ||
+      predicates.isEmpty ||
+      predicates.exists(hasTimeZoneAwareExpression)) {
+      getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
+    } else {
+      try {
+        val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
+          catalogTable.partitionSchema)
+        val partitionColumnNames = catalogTable.partitionColumnNames.toSet
+
+        val nonPartitionPruningPredicates = predicates.filterNot {
+          _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+        }
+        if (nonPartitionPruningPredicates.nonEmpty) {
+          throw QueryCompilationErrors.nonPartitionPruningPredicatesNotExpectedError(
+            nonPartitionPruningPredicates)
+        }
+
+        val boundPredicate =
+          Predicate.createInterpreted(predicates.reduce(And).transform {
+            case att: AttributeReference =>
+              val index = partitionSchema.indexWhere(_.name == att.name)
+              BoundReference(index, partitionSchema(index).dataType, nullable = true)
+          })
+
+        def toRow(spec: TablePartitionSpec): InternalRow = {
+          InternalRow.fromSeq(partitionSchema.map { field =>
+            val partValue = if (spec(field.name) == ExternalCatalogUtils.DEFAULT_PARTITION_NAME) {
+              null
+            } else {
+              spec(field.name)
+            }
+            Cast(Literal(partValue), field.dataType, Option(timeZoneId)).eval()
+          })
+        }
+
+        val allPartitionNames = hive.getPartitionNames(
+          table.getDbName, table.getTableName, -1).asScala
+        val partSpec = allPartitionNames.filter { p =>
+          val spec = PartitioningUtils.parsePathFragment(p)
+          boundPredicate.eval(toRow(spec))
+        }
+        hive.getPartitionsByNames(table, partSpec.asJava).asScala.toSeq
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Caught Hive MetaException attempting to get partition metadata by " +
+            "filter from client side. Falling back to fetching all partition metadata", e)
+          getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
+      }
+    }
   }
 
   override def getCommandProcessor(token: String, conf: HiveConf): CommandProcessor =

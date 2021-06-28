@@ -31,11 +31,13 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DateType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.util.Utils
 
 class HivePartitionFilteringSuite(version: String)
-    extends HiveVersionSuite(version) with BeforeAndAfterAll {
+    extends HiveVersionSuite(version) with BeforeAndAfterAll with PlanTest {
 
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
 
@@ -560,6 +562,49 @@ class HivePartitionFilteringSuite(version: String)
       chunkValue,
       dateValue,
       dateStrValue)
+  }
+
+  test("getPartitionsByFilter: substr(chunk,0,1)=a") {
+    Seq("true" -> Seq("aa", "ab"), "false" -> chunkValue).foreach { t =>
+      withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_EVAL_CLIENT_SIDE.key -> t._1) {
+        testMetastorePartitionFiltering(
+          Substring(attr("chunk"), Literal(0), Literal(1)) === "a",
+          dsValue,
+          hValue,
+          t._2,
+          dateValue,
+          dateStrValue)
+      }
+    }
+  }
+
+  test("getPartitionsByFilter: year(d)=2019") {
+    Seq("true" -> Seq("2019-01-01", "2019-01-02", "2019-01-03"),
+      "false" -> dateValue).foreach { t =>
+      withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_EVAL_CLIENT_SIDE.key -> t._1) {
+        testMetastorePartitionFiltering(
+          Year(attr("d")) === 2019,
+          dsValue,
+          hValue,
+          chunkValue,
+          t._2,
+          dateStrValue)
+      }
+    }
+  }
+
+  test("getPartitionsByFilter: datestr=concat(2020-,01-,01)") {
+    Seq("true" -> Seq("2020-01-01"), "false" -> dateStrValue).foreach { t =>
+      withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_EVAL_CLIENT_SIDE.key -> t._1) {
+        testMetastorePartitionFiltering(
+          attr("datestr") === Concat(Seq("2020-", "01-", "01")),
+          dsValue,
+          hValue,
+          chunkValue,
+          dateValue,
+          t._2)
+      }
+    }
   }
 
   private def testMetastorePartitionFiltering(

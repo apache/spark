@@ -956,6 +956,16 @@ object SQLConf {
       .checkValue(_ > 0, "The value of metastorePartitionPruningInSetThreshold must be positive")
       .createWithDefault(1000)
 
+  val HIVE_METASTORE_PARTITION_PRUNING_EVAL_CLIENT_SIDE =
+    buildConf("spark.sql.hive.metastorePartitionPruningEvalClientSide")
+      .doc(s"When true and " +
+        s"we cannot do filtering on the server(${HIVE_METASTORE_PARTITION_PRUNING.key})," +
+        "pruning partition by getting the partition names first " +
+        "and pruning using expression evaluator on client.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val HIVE_MANAGE_FILESOURCE_PARTITIONS =
     buildConf("spark.sql.hive.manageFilesourcePartitions")
       .doc("When true, enable metastore partition management for file source tables as well. " +
@@ -3549,6 +3559,9 @@ class SQLConf extends Serializable with Logging {
 
   def metastorePartitionPruningInSetThreshold: Int =
     getConf(HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD)
+
+  def metastorePartitionPruningEvalClientSide: Boolean =
+    getConf(HIVE_METASTORE_PARTITION_PRUNING_EVAL_CLIENT_SIDE)
 
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
