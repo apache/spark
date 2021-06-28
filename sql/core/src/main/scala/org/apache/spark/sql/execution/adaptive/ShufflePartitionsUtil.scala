@@ -96,7 +96,7 @@ object ShufflePartitionsUtil extends Logging {
 
     val numPartitions = validMetrics.head.bytesByPartitionId.length
     val newPartitionSpecs = coalescePartitions(0, numPartitions, validMetrics, targetSize)
-    assert(newPartitionSpecs.nonEmpty)
+    assert(newPartitionSpecs.length == validMetrics.length)
     if (newPartitionSpecs.head.length < numPartitions) {
       newPartitionSpecs
     } else {
