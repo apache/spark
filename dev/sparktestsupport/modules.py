@@ -51,15 +51,6 @@ def _discover_python_unittests(*paths, discover_slow=False):
     Returns
     -------
     A set of complete test module name discovered under specified paths
-
-    >>> sorted([x for x in _discover_python_unittests('pyspark/tests')])
-    ... # doctest: +NORMALIZE_WHITESPACE
-    ['pyspark.tests.test_appsubmit', 'pyspark.tests.test_broadcast', 'pyspark.tests.test_conf',
-    'pyspark.tests.test_context', 'pyspark.tests.test_daemon', 'pyspark.tests.test_install_spark',
-    'pyspark.tests.test_join', 'pyspark.tests.test_pin_thread', 'pyspark.tests.test_profiler',
-    'pyspark.tests.test_rdd', 'pyspark.tests.test_rddbarrier', 'pyspark.tests.test_readwrite',
-    'pyspark.tests.test_serializers', 'pyspark.tests.test_shuffle',
-    'pyspark.tests.test_taskcontext', 'pyspark.tests.test_util', 'pyspark.tests.test_worker']
     """
 
     def add_test_module(testcases, modules, slow):
