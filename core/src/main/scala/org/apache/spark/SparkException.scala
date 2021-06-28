@@ -69,7 +69,7 @@ private[spark] class SparkUpgradeException(version: String, message: String, cau
 /**
  * Arithmetic exception thrown from Spark with an error class.
  */
-private[spark] class SparkArithmeticException(
+class SparkArithmeticException(
     val errorClass: Option[String],
     val messageParameters: Seq[String])
   extends ArithmeticException(SparkError.getMessage(errorClass.get, messageParameters))
