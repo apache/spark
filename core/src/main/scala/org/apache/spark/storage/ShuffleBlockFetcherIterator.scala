@@ -385,7 +385,6 @@ final class ShuffleBlockFetcherIterator(
       }
     }
     val remoteBlockBytes = collectedRemoteRequests.map(_.size).sum
-
     val numRemoteBlocks = collectedRemoteRequests.map(_.blocks.size).sum
     val totalBytes = localBlockBytes + remoteBlockBytes + hostLocalBlockBytes
     assert(numBlocksToFetch == localBlocks.size + hostLocalBlocks.size + numRemoteBlocks,
