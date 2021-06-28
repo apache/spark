@@ -23,9 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import com.github.benmanes.caffeine.cache.Caffeine
-import com.github.benmanes.caffeine.guava.CaffeinatedGuava
-import com.google.common.cache.CacheLoader
+import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine}
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
@@ -96,7 +94,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
         getPartitionBlockLocations(split)
       }
     }
-    CaffeinatedGuava.build(builder, loader)
+    builder.build[Partition, Seq[String]](loader)
   }
 
   // Returns the block locations of given partition on file system.

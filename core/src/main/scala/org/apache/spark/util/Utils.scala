@@ -44,9 +44,7 @@ import scala.util.control.{ControlThrowable, NonFatal}
 import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
-import com.github.benmanes.caffeine.cache.Caffeine
-import com.github.benmanes.caffeine.guava.CaffeinatedGuava
-import com.google.common.cache.{CacheLoader, LoadingCache}
+import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache}
 import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
@@ -1615,7 +1613,7 @@ private[spark] object Utils extends Logging {
       compressedLogFileLengthCache = {
         val builder = Caffeine.newBuilder()
           .maximumSize(compressedLogFileLengthCacheSize)
-        CaffeinatedGuava.build(builder,
+        builder.build[String, java.lang.Long](
           new CacheLoader[String, java.lang.Long]() {
             override def load(path: String): java.lang.Long = {
               Utils.getCompressedFileLength(new File(path))
