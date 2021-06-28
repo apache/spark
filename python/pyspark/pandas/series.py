@@ -6335,7 +6335,7 @@ def unpack_scalar(sdf: SparkDataFrame) -> Any:
 
 
 @overload
-def first_series(df: DataFrame) -> "Series":
+def first_series(df: DataFrame) -> Series:
     ...
 
 
@@ -6344,7 +6344,7 @@ def first_series(df: pd.DataFrame) -> pd.Series:
     ...
 
 
-def first_series(df: Union[DataFrame, pd.DataFrame]) -> Union["Series", pd.Series]:
+def first_series(df: Union[DataFrame, pd.DataFrame]) -> Union[Series, pd.Series]:
     """
     Takes a DataFrame and returns the first column of the DataFrame as a Series
     """
