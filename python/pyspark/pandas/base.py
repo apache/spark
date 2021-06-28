@@ -26,8 +26,7 @@ from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_C
 import numpy as np
 import pandas as pd  # noqa: F401
 from pandas.api.types import is_list_like, CategoricalDtype
-from pyspark import sql as spark
-from pyspark.sql import functions as F, Window, Column
+from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import (
     DoubleType,
     FloatType,
@@ -291,7 +290,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _with_new_scol(
-        self: IndexOpsLike, scol: spark.Column, *, field: Optional[InternalField] = None
+        self: IndexOpsLike, scol: Column, *, field: Optional[InternalField] = None
     ) -> IndexOpsLike:
         pass
 

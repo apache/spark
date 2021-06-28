@@ -36,8 +36,7 @@ from pandas.io.formats.printing import pprint_thing
 from pandas.api.types import CategoricalDtype, is_hashable
 from pandas._libs import lib
 
-from pyspark import sql as spark
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column
 from pyspark.sql.types import FractionalType, IntegralType, TimestampType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
@@ -218,9 +217,7 @@ class Index(IndexOpsMixin):
     def _column_label(self) -> Optional[Tuple]:
         return self._psdf._internal.index_names[0]
 
-    def _with_new_scol(
-        self, scol: spark.Column, *, field: Optional[InternalField] = None
-    ) -> "Index":
+    def _with_new_scol(self, scol: Column, *, field: Optional[InternalField] = None) -> "Index":
         """
         Copy pandas-on-Spark Index with the new Spark Column.
 
