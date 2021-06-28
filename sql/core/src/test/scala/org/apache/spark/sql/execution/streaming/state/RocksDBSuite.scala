@@ -38,7 +38,7 @@ class RocksDBSuite extends SparkFunSuite {
       val remoteDir = Utils.createTempDir().toString
       new File(remoteDir).delete()  // to make sure that the directory gets created
 
-      val conf = RocksDBConf().copy(compactOnCommit = true)
+      val conf = RocksDBConf().copy(compactOnCommit = compactOnCommit)
       withDB(remoteDir, conf = conf) { db =>
         assert(db.get("a") === null)
         assert(iterator(db).isEmpty)

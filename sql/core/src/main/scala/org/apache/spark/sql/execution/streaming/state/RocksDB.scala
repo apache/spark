@@ -30,7 +30,6 @@ import org.rocksdb.{RocksDB => NativeRocksDB, _}
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.util.RocksDBLoader
 import org.apache.spark.util.{NextIterator, Utils}
 
 /**
@@ -42,13 +41,13 @@ import org.apache.spark.util.{NextIterator, Utils}
  * @see [[RocksDBFileManager]] to see how the files are laid out in local disk and DFS.
  * @param dfsRootDir  Remote directory where checkpoints are going to be written
  * @param conf         Configuration for RocksDB
- * @param localRootDir Root directory in local disk that is used to working and checkpoing dirs
+ * @param localRootDir Root directory in local disk that is used to working and checkpointing dirs
  * @param hadoopConf   Hadoop configuration for talking to the remote file system
  * @param loggingId    Id that will be prepended in logs for isolating concurrent RocksDBs
  */
 class RocksDB(
     dfsRootDir: String,
-    val conf: RocksDBConf = RocksDBConf(),
+    val conf: RocksDBConf,
     localRootDir: File = Utils.createTempDir(),
     hadoopConf: Configuration = new Configuration,
     loggingId: String = "") extends Logging {
@@ -82,7 +81,9 @@ class RocksDB(
 
   @volatile private var db: NativeRocksDB = _
   @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
+  // number of keys in all committed versions before
   @volatile private var numCommittedKeys = 0L
+  // number of keys which will be committed in the next version
   @volatile private var numUncommittedKeys = 0L
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
 
@@ -305,10 +306,6 @@ class RocksDB(
     acquireLock.notifyAll()
   }
 
-  private def getDBProperty(property: String): Long = {
-    db.getProperty(property).toLong
-  }
-
   private def openDB(): Unit = {
     assert(db == null)
     db = NativeRocksDB.open(dbOptions, workingDir.toString)
@@ -437,9 +434,10 @@ object RocksDBConf {
   def apply(): RocksDBConf = apply(new StateStoreConf())
 }
 
-case class AcquiredThreadInfo(
-    threadRef: WeakReference[Thread] = new WeakReference[Thread](Thread.currentThread()),
-    tc: TaskContext = TaskContext.get()) {
+case class AcquiredThreadInfo() {
+  val threadRef: WeakReference[Thread] = new WeakReference[Thread](Thread.currentThread())
+  val tc: TaskContext = TaskContext.get()
+
   override def toString(): String = {
     val taskStr = if (tc != null) {
       val taskDetails =

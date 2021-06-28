@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.util
+package org.apache.spark.sql.execution.streaming.state
 
-import org.rocksdb._
+import org.rocksdb.RocksDB
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.UninterruptibleThread
@@ -58,4 +58,3 @@ object RocksDBLoader extends Logging {
     }
   }
 }
-
