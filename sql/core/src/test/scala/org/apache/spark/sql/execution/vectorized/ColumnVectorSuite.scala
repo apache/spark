@@ -243,7 +243,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(testVector.getArray(3).toIntArray() === Array(3, 4, 5))
   }
 
-  testVectors("array append", 1, arrayType) { testVector =>
+  testVectors("SPARK-35898: array append", 1, arrayType) { testVector =>
     // Populate it with arrays [0], [1, 2], [], [3, 4, 5]
     val data = testVector.arrayData()
     testVector.appendArray(1)
@@ -264,7 +264,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   val mapType: MapType = MapType(IntegerType, StringType)
-  testVectors("map", 5, mapType) { testVector =>
+  testVectors("SPARK-35898: map", 5, mapType) { testVector =>
     val keys = testVector.getChild(0)
     val values = testVector.getChild(1)
     var i = 0
@@ -294,7 +294,7 @@ class ColumnVectorSuite extends SparkFunSuite with BeforeAndAfterEach {
       (3 to 5).map(i => UTF8String.fromString(s"str$i")).toArray)
   }
 
-  testVectors("map append", 1, mapType) { testVector =>
+  testVectors("SPARK-35898: map append", 1, mapType) { testVector =>
     val keys = testVector.getChild(0)
     val values = testVector.getChild(1)
     def appendPair(i: Int): Unit = {

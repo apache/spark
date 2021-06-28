@@ -93,9 +93,9 @@ class RowToColumnConverterSuite extends SparkFunSuite {
     val mapType = MapType(IntegerType, StringType)
     val schema = StructType(Seq(StructField("m", mapType)))
     val rows = (0 until 100).map { i =>
-        InternalRow(new ArrayBasedMapData(
-          new GenericArrayData(0 until i),
-          new GenericArrayData((0 until i).map(j => UTF8String.fromString(s"str$j")))))
+      InternalRow(new ArrayBasedMapData(
+        new GenericArrayData(0 until i),
+        new GenericArrayData((0 until i).map(j => UTF8String.fromString(s"str$j")))))
     }
     val vectors = convertRows(rows, schema)
     rows.zipWithIndex.map { case (row, i) =>
