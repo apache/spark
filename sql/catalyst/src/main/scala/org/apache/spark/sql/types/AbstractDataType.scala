@@ -21,6 +21,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * A non-concrete data type, reserved for internal uses.
@@ -112,7 +113,8 @@ protected[sql] object AnyDataType extends AbstractDataType with Serializable {
 
   // Note that since AnyDataType matches any concrete types, defaultConcreteType should never
   // be invoked.
-  override private[sql] def defaultConcreteType: DataType = throw new UnsupportedOperationException
+  override private[sql] def defaultConcreteType: DataType =
+    throw QueryExecutionErrors.unsupportedOperationExceptionError()
 
   override private[sql] def simpleString: String = "any"
 
