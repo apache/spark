@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, UpdateColumnComment, UpdateColumnPosition}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -444,12 +444,42 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
           case alter: AlterTableCommand if alter.table.resolved =>
+            val table = alter.table.asInstanceOf[ResolvedTable]
+            def findField(fieldName: Seq[String]): StructField = {
+              // Include collections because structs nested in maps and arrays may be altered.
+              val field = table.schema.findNestedField(fieldName, includeCollections = true)
+              if (field.isEmpty) {
+                alter.failAnalysis(s"Cannot ${alter.operation} missing field ${fieldName.quoted} " +
+                  s"in ${table.name} schema: ${table.schema.treeString}")
+              }
+              field.get._2
+            }
+            def findParentStruct(fieldNames: Seq[String]): StructType = {
+              val parent = fieldNames.init
+              val field = if (parent.nonEmpty) {
+                findField(parent).dataType
+              } else {
+                table.schema
+              }
+              field match {
+                case s: StructType => s
+                case o => alter.failAnalysis(s"Cannot ${alter.operation} ${fieldNames.quoted}, " +
+                  s"because its parent is not a StructType. Found $o")
+              }
+            }
             alter.transformExpressions {
-              case u: UnresolvedFieldName =>
-                val table = alter.table.asInstanceOf[ResolvedTable]
-                alter.failAnalysis(
-                  s"Cannot ${alter.operation} missing field ${u.name.quoted} in ${table.name} " +
-                    s"schema: ${table.schema.treeString}")
+              case UnresolvedFieldName(name) =>
+                alter.failAnalysis(s"Cannot ${alter.operation} missing field ${name.quoted} in " +
+                  s"${table.name} schema: ${table.schema.treeString}")
+              case UnresolvedFieldPosition(fieldName, position: After) =>
+                val parent = findParentStruct(fieldName)
+                val allFields = parent match {
+                  case s: StructType => s.fieldNames
+                  case o => alter.failAnalysis(s"Cannot ${alter.operation} ${fieldName.quoted}, " +
+                    s"because its parent is not a StructType. Found $o")
+                }
+                alter.failAnalysis(s"Couldn't resolve positional argument $position amongst " +
+                  s"${allFields.mkString("[", ", ", "]")}")
             }
             checkAlterTableCommand(alter)
 
@@ -522,16 +552,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 positionArgumentExists(add.position(), parent, fieldsAdded)
                 TypeUtils.failWithIntervalType(add.dataType())
                 colsToAdd(parentName) = fieldsAdded :+ add.fieldNames().last
-              case updatePos: UpdateColumnPosition =>
-                findField("update", updatePos.fieldNames)
-                val parent = findParentStruct("update", updatePos.fieldNames())
-                val parentName = updatePos.fieldNames().init
-                positionArgumentExists(
-                  updatePos.position(),
-                  parent,
-                  colsToAdd.getOrElse(parentName, Nil))
-              case update: UpdateColumnComment =>
-                findField("update", update.fieldNames)
               case delete: DeleteColumn =>
                 findField("delete", delete.fieldNames)
                 // REPLACE COLUMNS has deletes followed by adds. Remember the deleted columns
@@ -1037,21 +1057,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       }
     }
 
-    def positionArgumentExists(
-        position: ColumnPosition,
-        struct: StructType,
-        fieldsAdded: Seq[String]): Unit = {
-      position match {
-        case after: After =>
-          val allFields = struct.fieldNames ++ fieldsAdded
-          if (!allFields.contains(after.column())) {
-            alter.failAnalysis(s"Couldn't resolve positional argument $position amongst " +
-              s"${allFields.mkString("[", ", ", "]")}")
-          }
-        case _ =>
-      }
-    }
-
     alter match {
       case AlterTableRenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists(col.path :+ newName, table.schema)
@@ -1096,20 +1101,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         if (a.nullable.isDefined) {
           if (!a.nullable.get && col.field.nullable) {
             alter.failAnalysis(s"Cannot change nullable column to non-nullable: $fieldName")
-          }
-        }
-        if (a.position.isDefined) {
-          a.position.get match {
-            case UnresolvedFieldPosition(position, parent) =>
-              assert(parent.isDefined)
-              val allFields = parent.get match {
-                case s: StructType => s.fieldNames
-                case o => alter.failAnalysis(s"Cannot ${a.operation} $fieldName, " +
-                  s"because its parent is not a StructType. Found $o")
-              }
-              alter.failAnalysis(s"Couldn't resolve positional argument $position amongst " +
-                s"${allFields.mkString("[", ", ", "]")}")
-            case _ =>
           }
         }
       case _ =>

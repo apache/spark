@@ -111,8 +111,8 @@ sealed trait FieldPosition extends LeafExpression with Unevaluable {
 }
 
 case class UnresolvedFieldPosition(
-    position: ColumnPosition,
-    parent: Option[DataType] = None) extends FieldPosition {
+    fieldName: Seq[String],
+    position: ColumnPosition) extends FieldPosition {
   override lazy val resolved = false
 }
 
