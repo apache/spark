@@ -30,8 +30,6 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils.{safeStringToInterval, s
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataTypeTestUtils, DayTimeIntervalType, Decimal, DecimalType, YearMonthIntervalType}
 import org.apache.spark.sql.types.DataTypeTestUtils.{dayTimeIntervalTypes, numericTypes, yearMonthIntervalTypes}
-import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
-import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -534,37 +532,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkImplicitEvaluation(MakeYMInterval(Literal(1.1), Literal(-1L)), 11)
   }
 
-  test("SPARK-35728: Check multiply/divide of day-time intervals of any fields by numeric 1") {
-    // we have guaranteed DayTimeIntervalType(DAY, SECOND) multiply/divide numeric is right
-    Seq(
-      (Duration.ofMinutes(0), 10),
-      (Duration.ofSeconds(10), 0L),
-      (Duration.ofMillis(100), -1.toByte),
-      (Duration.ofDays(12), 0.3d),
-      (Duration.of(-1000, ChronoUnit.MICROS), 0.3f),
-      (Duration.ofDays(9999), 0.0001d),
-      (Duration.ofDays(9999), BigDecimal(0.0001))
-    ).foreach { case (duration, num) =>
-      DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
-        val expectedDuration = dt.endField match {
-          case DAY => Duration.ofDays(duration.toDays)
-          case HOUR => Duration.ofHours(duration.toHours)
-          case MINUTE => Duration.ofMinutes(duration.toMinutes)
-          case SECOND => duration
-        }
-        val actualResult1 = MultiplyDTInterval(Literal.create(duration, dt), Literal(num)).eval()
-        val expectResult1 = MultiplyDTInterval(Literal(expectedDuration), Literal(num)).eval()
-        assert(actualResult1 == expectResult1)
-        if (num != 0) {
-          val actualResult2 = DivideDTInterval(Literal.create(duration, dt), Literal(num)).eval()
-          val expectResult2 = DivideDTInterval(Literal(expectedDuration), Literal(num)).eval()
-          assert(actualResult2 == expectResult2)
-        }
-      }
-    }
-  }
-
-  test("SPARK-35728: Check multiply/divide of day-time intervals of any fields by numeric 2") {
+  test("SPARK-35728: Check multiply/divide of day-time intervals of any fields by numeric") {
     Seq(
       ((Duration.ofMinutes(0), 10),
         Array(Duration.ofDays(0), Duration.ofHours(0), Duration.ofMinutes(0),
@@ -653,38 +621,7 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-35778: Check multiply/divide of year-month intervals of any fields by numeric 1") {
-    // we have guaranteed YearMonthIntervalType(YEAR, MONTH) multiply/divide numeric is right
-    Seq(
-      (Period.ofMonths(0), 10),
-      (Period.ofMonths(13), 1),
-      (Period.ofMonths(-200), 1),
-      (Period.ofYears(100), -1.toByte),
-      (Period.ofYears(1), 2.toShort),
-      (Period.ofYears(-1), -3),
-      (Period.ofMonths(-1000), 0.5f),
-      (Period.ofYears(1000), 100d),
-      (Period.ofMonths(2), BigDecimal(0.1))
-    ).foreach { case ((period, num)) =>
-      DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
-        val expectPeriod = dt.endField match {
-          case YEAR => Period.ofYears(period.normalized().getYears)
-          case MONTH => Period.ofYears(period.getYears).withMonths(period.getMonths)
-          case _ => period
-        }
-        val actualResult1 = MultiplyYMInterval(Literal.create(period, dt), Literal(num)).eval()
-        val expectResult1 = MultiplyYMInterval(Literal(expectPeriod), Literal(num)).eval()
-        assert(actualResult1 == expectResult1)
-        if (num != 0) {
-          val actualResult2 = DivideYMInterval(Literal.create(period, dt), Literal(num)).eval()
-          val expectResult2 = DivideYMInterval(Literal(expectPeriod), Literal(num)).eval()
-          assert(actualResult2 == expectResult2)
-        }
-      }
-    }
-  }
-
-  test("SPARK-35778: Check multiply/divide of year-month intervals of any fields by numeric 2") {
+  test("SPARK-35778: Check multiply/divide of year-month intervals of any fields by numeric") {
     Seq(
       ((Period.ofMonths(0), 10),
         Array(Period.ofMonths(0), Period.ofMonths(0), Period.ofMonths(0)),
