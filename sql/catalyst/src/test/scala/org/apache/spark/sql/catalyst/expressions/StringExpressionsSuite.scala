@@ -1040,8 +1040,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create("abcd", StringType) -> "abcd",
       Literal.create(new CalendarInterval(0, 1, 10), CalendarIntervalType) ->
         "1 days 0.00001 seconds",
-      Literal.create(Period.ofMonths(100), YearMonthIntervalType) -> "8-4",
-      Literal.create(Duration.ofDays(100), DayTimeIntervalType) -> "100 00:00:00.000000000",
+      Literal.create(Period.ofMonths(100), YearMonthIntervalType()) -> "8-4",
+      Literal.create(Duration.ofDays(100), DayTimeIntervalType()) -> "100 00:00:00.000000000",
       Literal.create(Array(1, 2, null), ArrayType(IntegerType)) -> "[1,2,null]",
       Literal.create(Map(1 -> 2, 2 -> 2), MapType(IntegerType, IntegerType)) -> "{1:2,2:2}",
       Literal.create(Row(1, 2.0d, 3.0f),

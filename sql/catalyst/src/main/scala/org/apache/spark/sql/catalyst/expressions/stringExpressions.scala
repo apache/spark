@@ -2663,11 +2663,11 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
   override def dataType: DataType = StringType
 
   private lazy val timeFormatters: TimeFormatters =
-    TimeFormatters(DateFormatter(zoneId), TimestampFormatter.getFractionFormatter(zoneId))
+    TimeFormatters(DateFormatter(), TimestampFormatter.getFractionFormatter(zoneId))
 
   override def leftBracket: String = "{"
   override def rightBracket: String = "}"
-  override def elementSpace: String = ""
+  override def arrayElementSpace: String = ""
   override def keyValueSeparator: String = ":"
   override def structTypeWithSchema: Boolean = true
 
@@ -2741,15 +2741,24 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
         }
       case _: UserDefinedType[_] =>
         (c, evPrim, _) => code"$evPrim = UTF8String.fromString($c.toString());"
-      case i @ (YearMonthIntervalType | DayTimeIntervalType) =>
-        (c, evPrim, _) => {
-          val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-          val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
-          val subType = if (i.isInstanceOf[YearMonthIntervalType]) "YearMonth" else "DayTime"
-          val f = s"to${subType}IntervalString"
-          val style = s"$iss$$.MODULE$$.HIVE_STYLE()"
-          code"$evPrim = UTF8String.fromString($iu.$f($c, $style));"
-        }
+      case i: YearMonthIntervalType =>
+        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
+        val style = s"$iss$$.MODULE$$.HIVE_STYLE()"
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c, $style,
+              (byte)${i.startField}, (byte)${i.endField}));
+          """
+      case i: DayTimeIntervalType =>
+        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
+        val style = s"$iss$$.MODULE$$.HIVE_STYLE()"
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c, $style,
+              (byte)${i.startField}, (byte)${i.endField}));
+          """
       case _ =>
         (c, evPrim, _) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
     }
@@ -2796,10 +2805,10 @@ object ToPrettyString {
       struct.toSeq(s).zip(fields).map { case (v, t) =>
         s""""${t.name}":${toHiveString((v, t.dataType), true, formatters)}"""
       }.mkString("{", ",", "}")
-    case (months: Int, YearMonthIntervalType) =>
-      toYearMonthIntervalString(months, HIVE_STYLE)
-    case (micros: Long, DayTimeIntervalType) =>
-      toDayTimeIntervalString(micros, HIVE_STYLE)
+    case (months: Int, YearMonthIntervalType(startField, endField)) =>
+      toYearMonthIntervalString(months, HIVE_STYLE, startField, endField)
+    case (micros: Long, DayTimeIntervalType(startField, endField)) =>
+      toDayTimeIntervalString(micros, HIVE_STYLE, startField, endField)
     case (other, _: UserDefinedType[_]) => other.toString
   }
 }

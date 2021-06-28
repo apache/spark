@@ -325,7 +325,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // The brackets that are used in casting structs and maps to strings
   protected def leftBracket = if (legacyCastToStr) "[" else "{"
   protected def rightBracket = if (legacyCastToStr) "]" else "}"
-  protected def elementSpace = " "
+  protected def arrayElementSpace = " "
   protected def keyValueSeparator = "->"
   protected def structTypeWithSchema = false
 
@@ -1030,9 +1030,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
        |    $buffer.append(",");
        |    if ($array.isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, s"${elementSpace}null")}
+       |      ${appendIfNotLegacyCastToStr(buffer, s"${arrayElementSpace}null")}
        |    } else {
-       |      $buffer.append("$elementSpace");
+       |      $buffer.append("$arrayElementSpace");
        |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
        |    }
        |  }
@@ -1078,21 +1078,21 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
        |$buffer.append("$leftBracket");
        |if ($map.numElements() > 0) {
        |  $buffer.append($keyToStringFunc($getMapFirstKey));
-       |  $buffer.append("$elementSpace$keyValueSeparator");
+       |  $buffer.append("$arrayElementSpace$keyValueSeparator");
        |  if ($map.valueArray().isNullAt(0)) {
-       |    ${appendIfNotLegacyCastToStr(buffer, s"${elementSpace}null")}
+       |    ${appendIfNotLegacyCastToStr(buffer, s"${arrayElementSpace}null")}
        |  } else {
-       |    $buffer.append("$elementSpace");
+       |    $buffer.append("$arrayElementSpace");
        |    $buffer.append($valueToStringFunc($getMapFirstValue));
        |  }
        |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
-       |    $buffer.append(",${elementSpace}");
+       |    $buffer.append(",${arrayElementSpace}");
        |    $buffer.append($keyToStringFunc($getMapKeyArray));
-       |    $buffer.append("$elementSpace$keyValueSeparator");
+       |    $buffer.append("$arrayElementSpace$keyValueSeparator");
        |    if ($map.valueArray().isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, s"${elementSpace}null")}
+       |      ${appendIfNotLegacyCastToStr(buffer, s"${arrayElementSpace}null")}
        |    } else {
-       |      $buffer.append("${elementSpace}");
+       |      $buffer.append("${arrayElementSpace}");
        |      $buffer.append($valueToStringFunc($getMapValueArray));
        |    }
        |  }
@@ -1116,7 +1116,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
          |if ($row.isNullAt($i)) {
          |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "null" else " null")}
          |} else {
-         |  ${if (i != 0) code"""$buffer.append("$elementSpace");""" else EmptyBlock}
+         |  ${if (i != 0) code"""$buffer.append("$arrayElementSpace");""" else EmptyBlock}
          |
          |
          |  // Append $i field into the string buffer
