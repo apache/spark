@@ -299,7 +299,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),
-    Batch("Normalize Alter Table Field Names", Once, ResolveFieldNames),
+    Batch("Normalize Alter Table Commands", Once, ResolveAlterTableCommands),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints),
@@ -3527,7 +3527,7 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Rule to mostly resolve, normalize and rewrite column names based on case sensitivity
    * for alter table commands.
    */
-  object ResolveFieldNames extends Rule[LogicalPlan] {
+  object ResolveAlterTableCommands extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case a: AlterTableCommand if a.table.resolved =>
         val table = a.table.asInstanceOf[ResolvedTable]
