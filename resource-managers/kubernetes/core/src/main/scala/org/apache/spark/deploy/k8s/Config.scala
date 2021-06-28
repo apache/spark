@@ -259,7 +259,7 @@ private[spark] object Config extends Logging {
   private def isValidExecutorPodNamePrefix(prefix: String): Boolean = {
     // 6 is length of '-exec-'
     val reservedLen = Int.MaxValue.toString.length + 6
-    val validLength = prefix.length + reservedLen <= KUBERNETES_LABEL_MAX_LENGTH
+    val validLength = prefix.length + reservedLen <= KUBERNETES_DNSNAME_MAX_LENGTH
     validLength && podConfValidator.matcher(prefix).matches()
   }
 
@@ -267,8 +267,8 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.executor.podNamePrefix")
       .doc("Prefix to use in front of the executor pod names. It must conform the rules defined " +
         "by the Kubernetes <a href=\"https://kubernetes.io/docs/concepts/overview/" +
-        "working-with-objects/names/#dns-label-names\">DNS Label Names</a>. Besides, the " +
-        "executor pod names will be generated in the form of " +
+        "working-with-objects/names/#dns-label-names\">DNS Label Names</a>. " +
+        "The prefix will be used to generate executor pod names in the form of " +
         "<code>$podNamePrefix-exec-$id</code>, where the `id` is a positive int value, " +
         "so the length of the `podNamePrefix` needs to be <= 47(= 63 - 10 - 6).")
       .version("2.3.0")
@@ -593,5 +593,5 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_DRIVER_ENV_PREFIX = "spark.kubernetes.driverEnv."
 
-  val KUBERNETES_LABEL_MAX_LENGTH = 63
+  val KUBERNETES_DNSNAME_MAX_LENGTH = 63
 }
