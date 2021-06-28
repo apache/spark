@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.rocksdb.RocksDB
+import org.rocksdb.{RocksDB => NativeRocksDB}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.UninterruptibleThread
@@ -36,7 +36,7 @@ object RocksDBLoader extends Logging {
     override def run(): Unit = {
       try {
         runUninterruptibly {
-          RocksDB.loadLibrary()
+          NativeRocksDB.loadLibrary()
           exception = None
         }
       } catch {
