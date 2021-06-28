@@ -25,14 +25,13 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
-import scala.collection.Seq
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
 import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
 import org.apache.commons.io.{FilenameUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{Path, PathFilter}
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
@@ -130,6 +129,9 @@ class RocksDBFileManager(
   private val versionToRocksDBFiles = new ConcurrentHashMap[Long, Seq[RocksDBImmutableFile]]
   private lazy val fm = CheckpointFileManager.create(new Path(dfsRootDir), hadoopConf)
   private val fs = new Path(dfsRootDir).getFileSystem(hadoopConf)
+  private val onlyZipFiles = new PathFilter {
+    override def accept(path: Path): Boolean = path.toString.endsWith(".zip")
+  }
 
   /** Save all the files in given local checkpoint directory as a committed version in DFS */
   def saveCheckpointToDfs(checkpointDir: File, version: Long, numKeys: Long): Unit = {
@@ -151,6 +153,49 @@ class RocksDBFileManager(
     }
     zipToDfsFile(localOtherFiles :+ metadataFile, dfsBatchZipFile(version))
     logInfo(s"Saved checkpoint file for version $version")
+  }
+
+  /**
+   * Load all necessary files for specific checkpoint version from DFS to given local directory.
+   * If version is 0, then it will delete all files in the directory. For other versions, it
+   * ensures that only the exact files generated during checkpointing will be present in the
+   * local directory.
+   */
+  def loadCheckpointFromDfs(version: Long, localDir: File): RocksDBCheckpointMetadata = {
+    logInfo(s"Loading checkpoint files for version $version")
+    val metadata = if (version == 0) {
+      if (localDir.exists) Utils.deleteRecursively(localDir)
+      localDir.mkdirs()
+      RocksDBCheckpointMetadata(Seq.empty, 0)
+    } else {
+      // Delete all non-immutable files in local dir, and unzip new ones from DFS commit file
+      listRocksDBFiles(localDir)._2.foreach(_.delete())
+      Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version), localDir)
+
+      // Copy the necessary immutable files
+      val metadataFile = localMetadataFile(localDir)
+      val metadata = RocksDBCheckpointMetadata.readFromFile(metadataFile)
+      logInfo(s"Read metadata for version $version:\n${metadata.prettyJson}")
+      loadImmutableFilesFromDfs(metadata.immutableFiles, localDir)
+      versionToRocksDBFiles.put(version, metadata.immutableFiles)
+      metadataFile.delete()
+      metadata
+    }
+    logFilesInDir(localDir, s"Loaded checkpoint files for version $version")
+    metadata
+  }
+
+  /** Get the latest version available in the DFS directory. If no data present, it returns 0. */
+  def getLatestVersion(): Long = {
+    val path = new Path(dfsRootDir)
+    if (fm.exists(path)) {
+      fm.list(path, onlyZipFiles)
+        .map(_.getPath.getName.stripSuffix(".zip"))
+        .map(_.toLong)
+        .foldLeft(0L)(math.max)
+    } else {
+      0
+    }
   }
 
   /** Save immutable files to DFS directory */
@@ -198,6 +243,56 @@ class RocksDBFileManager(
     versionToRocksDBFiles.put(version, immutableFiles)
 
     immutableFiles
+  }
+
+  /**
+   * Copy files from DFS directory to a local directory. It will figure out which
+   * existing files are needed, and accordingly, unnecessary SST files are deleted while
+   * necessary and non-existing files are copied from DFS.
+   */
+  private def loadImmutableFilesFromDfs(
+      immutableFiles: Seq[RocksDBImmutableFile], localDir: File): Unit = {
+    val requiredFileNameToFileDetails = immutableFiles.map(f => f.localFileName -> f).toMap
+    // Delete unnecessary local immutable files
+    listRocksDBFiles(localDir)._1
+      .foreach { existingFile =>
+        val isSameFile =
+          requiredFileNameToFileDetails.get(existingFile.getName).exists(_.isSameFile(existingFile))
+        if (!isSameFile) {
+          existingFile.delete()
+          logInfo(s"Deleted local file $existingFile")
+        }
+      }
+
+    var filesCopied = 0L
+    var bytesCopied = 0L
+    var filesReused = 0L
+    immutableFiles.foreach { file =>
+      val localFileName = file.localFileName
+      val localFile = localFilePath(localDir, localFileName)
+      if (!localFile.exists) {
+        val dfsFile = dfsFilePath(file.dfsFileName)
+        // Note: The implementation of copyToLocalFile() closes the output stream when there is
+        // any exception while copying. So this may generate partial files on DFS. But that is
+        // okay because until the main [version].zip file is written, those partial files are
+        // not going to be used at all. Eventually these files should get cleared.
+        fs.copyToLocalFile(dfsFile, new Path(localFile.getAbsoluteFile.toURI))
+        val localFileSize = localFile.length()
+        val expectedSize = file.sizeBytes
+        if (localFileSize != expectedSize) {
+          throw new IllegalStateException(
+            s"Copied $dfsFile to $localFile," +
+              s" expected $expectedSize bytes, found $localFileSize bytes ")
+        }
+        filesCopied += 1
+        bytesCopied += localFileSize
+        logInfo(s"Copied $dfsFile to $localFile - $localFileSize bytes")
+      } else {
+        filesReused += 1
+      }
+    }
+    logInfo(s"Copied $filesCopied files ($bytesCopied bytes) from DFS to local with " +
+      s"$filesReused files reused.")
   }
 
   /**
@@ -259,6 +354,14 @@ class RocksDBFileManager(
       new Path(new Path(dfsRootDir, LOG_FILES_DFS_SUBDIR), fileName)
     } else {
       new Path(dfsRootDir, fileName)
+    }
+  }
+
+  private def localFilePath(localDir: File, fileName: String): File = {
+    if (isLogFile(fileName)) {
+      new File(new File(localDir, LOG_FILES_LOCAL_SUBDIR), fileName)
+    } else {
+      new File(localDir, fileName)
     }
   }
 

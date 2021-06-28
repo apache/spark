@@ -130,7 +130,7 @@ case class AdaptiveSparkPlanExec(
 
   @transient private val costEvaluator = SimpleCostEvaluator
 
-  @transient private val initialPlan = context.session.withActive {
+  @transient val initialPlan = context.session.withActive {
     applyPhysicalRules(
       inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
   }

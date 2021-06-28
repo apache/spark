@@ -111,4 +111,35 @@ class TransposeWindowSuite extends PlanTest {
     comparePlans(optimized, analyzed)
   }
 
+  test("SPARK-34807: transpose two windows with compatible partitions " +
+    "and a Project between them") {
+    val query = testRelation
+      .window(Seq(sum(c).as("_we0")), partitionSpec2, orderSpec2)
+      .select(a, b, c, d, $"_we0" as "sum_a_2")
+      .window(Seq(sum(c).as('sum_a_1)), partitionSpec1, orderSpec1)
+
+    val analyzed = query.analyze
+    val optimized = Optimize.execute(analyzed)
+
+    val correctAnswer = testRelation
+      .window(Seq(sum(c).as('sum_a_1)), partitionSpec1, orderSpec1)
+      .window(Seq(sum(c).as('_we0)), partitionSpec2, orderSpec2)
+      .select('a, 'b, 'c, 'd, $"_we0" as "sum_a_2", 'sum_a_1)
+
+    comparePlans(optimized, correctAnswer.analyze)
+  }
+
+  test("SPARK-34807: don't transpose two windows if project between them " +
+    "generates an input column") {
+    val query = testRelation
+      .window(Seq(sum(c).as('sum_a_2)), partitionSpec2, orderSpec2)
+      .select(a, b, c, d, $"sum_a_2", c + d as "e")
+      .window(Seq(sum($"e").as('sum_a_1)), partitionSpec1, orderSpec1)
+
+    val analyzed = query.analyze
+    val optimized = Optimize.execute(analyzed)
+
+    comparePlans(optimized, analyzed)
+  }
+
 }

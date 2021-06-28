@@ -67,13 +67,13 @@ from pyspark.pandas.utils import (
     validate_axis,
     SPARK_CONF_ARROW_ENABLED,
 )
-from pyspark.pandas.window import Rolling, Expanding
 
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.indexes.base import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.groupby import GroupBy  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.window import Rolling, Expanding  # noqa: F401 (SPARK-34943)
 
 
 T_Frame = TypeVar("T_Frame", bound="Frame")
@@ -96,7 +96,9 @@ class Frame(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _apply_series_op(
-        self: T_Frame, op: Callable[["Series"], "Series"], should_resolve: bool = False
+        self: T_Frame,
+        op: Callable[["Series"], Union["Series", Column]],
+        should_resolve: bool = False,
     ) -> T_Frame:
         pass
 
@@ -2096,11 +2098,13 @@ class Frame(object, metaclass=ABCMeta):
         3  7  40   50
         """
 
-        def abs(psser: "Series") -> "Series":
+        def abs(psser: "Series") -> Union["Series", Column]:
             if isinstance(psser.spark.data_type, BooleanType):
                 return psser
             elif isinstance(psser.spark.data_type, NumericType):
-                return psser.spark.transform(F.abs)
+                return psser._with_new_scol(
+                    F.abs(psser.spark.column), field=psser._internal.data_fields[0]
+                )
             else:
                 raise TypeError(
                     "bad operand type for abs(): {} ({})".format(
@@ -2504,7 +2508,9 @@ class Frame(object, metaclass=ABCMeta):
             return tuple(last_valid_row)
 
     # TODO: 'center', 'win_type', 'on', 'axis' parameter should be implemented.
-    def rolling(self, window: int, min_periods: Optional[int] = None) -> Rolling:
+    def rolling(
+        self: T_Frame, window: int, min_periods: Optional[int] = None
+    ) -> "Rolling[T_Frame]":
         """
         Provide rolling transformations.
 
@@ -2529,13 +2535,13 @@ class Frame(object, metaclass=ABCMeta):
         -------
         a Window sub-classed for the particular operation
         """
-        return Rolling(
-            cast(Union["Series", "DataFrame"], self), window=window, min_periods=min_periods
-        )
+        from pyspark.pandas.window import Rolling
+
+        return Rolling(self, window=window, min_periods=min_periods)
 
     # TODO: 'center' and 'axis' parameter should be implemented.
     #   'axis' implementation, refer https://github.com/pyspark.pandas/pull/607
-    def expanding(self, min_periods: int = 1) -> Expanding:
+    def expanding(self: T_Frame, min_periods: int = 1) -> "Expanding[T_Frame]":
         """
         Provide expanding transformations.
 
@@ -2553,7 +2559,9 @@ class Frame(object, metaclass=ABCMeta):
         -------
         a Window sub-classed for the particular operation
         """
-        return Expanding(cast(Union["Series", "DataFrame"], self), min_periods=min_periods)
+        from pyspark.pandas.window import Expanding
+
+        return Expanding(self, min_periods=min_periods)
 
     def get(self, key: Any, default: Optional[Any] = None) -> Any:
         """

@@ -907,7 +907,8 @@ case class ShowTablePropertiesCommand(
             Seq(Row(p, propValue))
           }
         case None =>
-          catalogTable.properties.map(p => Row(p._1, p._2)).toSeq
+          catalogTable.properties.filterKeys(!_.startsWith(CatalogTable.VIEW_PREFIX))
+            .map(p => Row(p._1, p._2)).toSeq
       }
     }
   }

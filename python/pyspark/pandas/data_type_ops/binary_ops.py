@@ -15,13 +15,14 @@
 # limitations under the License.
 #
 
-from typing import TYPE_CHECKING, Union
+from typing import Any, Union, cast
 
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
+    IndexOpsLike,
     T_IndexOps,
     _as_bool_type,
     _as_categorical_type,
@@ -31,10 +32,6 @@ from pyspark.pandas.data_type_ops.base import (
 from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
 from pyspark.sql import functions as F
 from pyspark.sql.types import BinaryType, BooleanType, StringType
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class BinaryOps(DataTypeOps):
@@ -46,7 +43,7 @@ class BinaryOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "binaries"
 
-    def add(self, left, right) -> Union["Series", "Index"]:
+    def add(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BinaryType):
             return column_op(F.concat)(left, right)
         elif isinstance(right, bytes):
@@ -56,9 +53,11 @@ class BinaryOps(DataTypeOps):
                 "Concatenation can not be applied to %s and the given type." % self.pretty_name
             )
 
-    def radd(self, left, right) -> Union["Series", "Index"]:
+    def radd(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         if isinstance(right, bytes):
-            return left._with_new_scol(F.concat(F.lit(right), left.spark.column))
+            return cast(
+                IndexOpsLike, left._with_new_scol(F.concat(F.lit(right), left.spark.column))
+            )
         else:
             raise TypeError(
                 "Concatenation can not be applied to %s and the given type." % self.pretty_name

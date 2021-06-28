@@ -149,7 +149,7 @@ class MultiIndex(Index):
     def _column_label(self) -> Optional[Tuple]:
         return None
 
-    def __abs__(self) -> Index:
+    def __abs__(self) -> "MultiIndex":
         raise TypeError("TypeError: cannot perform __abs__ with this index type: MultiIndex")
 
     def _with_new_scol(

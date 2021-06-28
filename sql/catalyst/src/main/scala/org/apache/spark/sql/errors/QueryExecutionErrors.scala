@@ -43,6 +43,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, FailFastMode}
+import org.apache.spark.sql.connector.catalog.CatalogNotFoundException
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.Transform
@@ -752,8 +753,8 @@ object QueryExecutionErrors {
     new IllegalArgumentException(s"Could not compare cost with $cost")
   }
 
-  def unsupportedDataTypeError(dt: DataType): Throwable = {
-    new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
+  def unsupportedDataTypeError(dt: String): Throwable = {
+    new UnsupportedOperationException(s"Unsupported data type: ${dt}")
   }
 
   def notSupportTypeError(dataType: DataType): Throwable = {
@@ -1427,5 +1428,112 @@ object QueryExecutionErrors {
 
   def invalidStreamingOutputModeError(outputMode: Option[OutputMode]): Throwable = {
     new UnsupportedOperationException(s"Invalid output mode: $outputMode")
+  }
+
+  def catalogPluginClassNotFoundError(name: String): Throwable = {
+    new CatalogNotFoundException(
+      s"Catalog '$name' plugin class not found: spark.sql.catalog.$name is not defined")
+  }
+
+  def catalogPluginClassNotImplementedError(name: String, pluginClassName: String): Throwable = {
+    new SparkException(
+      s"Plugin class for catalog '$name' does not implement CatalogPlugin: $pluginClassName")
+  }
+
+  def catalogPluginClassNotFoundForCatalogError(
+      name: String,
+      pluginClassName: String): Throwable = {
+    new SparkException(s"Cannot find catalog plugin class for catalog '$name': $pluginClassName")
+  }
+
+  def catalogFailToFindPublicNoArgConstructorError(
+      name: String,
+      pluginClassName: String,
+      e: Exception): Throwable = {
+    new SparkException(
+      s"Failed to find public no-arg constructor for catalog '$name': $pluginClassName)", e)
+  }
+
+  def catalogFailToCallPublicNoArgConstructorError(
+      name: String,
+      pluginClassName: String,
+      e: Exception): Throwable = {
+    new SparkException(
+      s"Failed to call public no-arg constructor for catalog '$name': $pluginClassName)", e)
+  }
+
+  def cannotInstantiateAbstractCatalogPluginClassError(
+      name: String,
+      pluginClassName: String,
+      e: Exception): Throwable = {
+    new SparkException("Cannot instantiate abstract catalog plugin class for " +
+      s"catalog '$name': $pluginClassName", e.getCause)
+  }
+
+  def failedToInstantiateConstructorForCatalogError(
+      name: String,
+      pluginClassName: String,
+      e: Exception): Throwable = {
+    new SparkException("Failed during instantiating constructor for catalog " +
+      s"'$name': $pluginClassName", e.getCause)
+  }
+
+  def noSuchElementExceptionError(): Throwable = {
+    new NoSuchElementException
+  }
+
+  def noSuchElementExceptionError(key: String): Throwable = {
+    new NoSuchElementException(key)
+  }
+
+  def cannotMutateReadOnlySQLConfError(): Throwable = {
+    new UnsupportedOperationException("Cannot mutate ReadOnlySQLConf.")
+  }
+
+  def cannotCloneOrCopyReadOnlySQLConfError(): Throwable = {
+    new UnsupportedOperationException("Cannot clone/copy ReadOnlySQLConf.")
+  }
+
+  def cannotGetSQLConfInSchedulerEventLoopThreadError(): Throwable = {
+    new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
+  }
+
+  def unsupportedOperationExceptionError(): Throwable = {
+    new UnsupportedOperationException
+  }
+
+  def nullLiteralsCannotBeCastedError(name: String): Throwable = {
+    new UnsupportedOperationException(s"null literals can't be casted to $name")
+  }
+
+  def notUserDefinedTypeError(name: String, userClass: String): Throwable = {
+    new SparkException(s"$name is not an UserDefinedType. Please make sure registering " +
+        s"an UserDefinedType for ${userClass}")
+  }
+
+  def cannotLoadUserDefinedTypeError(name: String, userClass: String): Throwable = {
+    new SparkException(s"Can not load in UserDefinedType ${name} for user class ${userClass}.")
+  }
+
+  def timeZoneIdNotSpecifiedForTimestampTypeError(): Throwable = {
+    new UnsupportedOperationException(
+      s"${TimestampType.catalogString} must supply timeZoneId parameter")
+  }
+
+  def notPublicClassError(name: String): Throwable = {
+    new UnsupportedOperationException(
+      s"$name is not a public class. Only public classes are supported.")
+  }
+
+  def primitiveTypesNotSupportedError(): Throwable = {
+    new UnsupportedOperationException("Primitive types are not supported.")
+  }
+
+  def fieldIndexOnRowWithoutSchemaError(): Throwable = {
+    new UnsupportedOperationException("fieldIndex on a Row without schema is undefined.")
+  }
+
+  def valueIsNullError(index: Int): Throwable = {
+    new NullPointerException(s"Value at index $index is null")
   }
 }

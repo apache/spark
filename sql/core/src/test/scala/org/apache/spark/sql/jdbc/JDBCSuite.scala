@@ -899,6 +899,17 @@ class JDBCSuite extends QueryTest
       Option(TimestampType))
   }
 
+  test("MySQLDialect catalyst type mapping") {
+    val mySqlDialect = JdbcDialects.get("jdbc:mysql")
+    val metadata = new MetadataBuilder()
+    assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 2, metadata) ==
+      Some(LongType))
+    assert(metadata.build().contains("binarylong"))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 1, metadata) == None)
+    assert(mySqlDialect.getCatalystType(java.sql.Types.BIT, "TINYINT", 1, metadata) ==
+      Some(BooleanType))
+  }
+
   test("SPARK-35446: MySQLDialect type mapping of float") {
     val mySqlDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     assert(mySqlDialect.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT")

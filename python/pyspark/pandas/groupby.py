@@ -31,6 +31,7 @@ from typing import (
     Callable,
     Dict,
     Generic,
+    Iterator,
     Mapping,
     List,
     Optional,
@@ -40,6 +41,7 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    TYPE_CHECKING,
 )
 
 import pandas as pd
@@ -84,8 +86,11 @@ from pyspark.pandas.utils import (
     verify_temp_column_name,
 )
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
-from pyspark.pandas.window import RollingGroupby, ExpandingGroupby
 from pyspark.pandas.exceptions import DataError
+
+if TYPE_CHECKING:
+    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby  # noqa: F401 (SPARK-34943)
+
 
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
@@ -2319,7 +2324,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
         return self._reduce_for_stat_function(stat_function, only_numeric=False)
 
-    def rolling(self, window: int, min_periods: Optional[int] = None) -> RollingGroupby:
+    def rolling(self, window: int, min_periods: Optional[int] = None) -> "RollingGroupby[T_Frame]":
         """
         Return an rolling grouper, providing rolling
         functionality per group.
@@ -2344,11 +2349,11 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         Series.groupby
         DataFrame.groupby
         """
-        return RollingGroupby(
-            cast(Union[SeriesGroupBy, DataFrameGroupBy], self), window, min_periods=min_periods
-        )
+        from pyspark.pandas.window import RollingGroupby
 
-    def expanding(self, min_periods: int = 1) -> ExpandingGroupby:
+        return RollingGroupby(self, window, min_periods=min_periods)
+
+    def expanding(self, min_periods: int = 1) -> "ExpandingGroupby[T_Frame]":
         """
         Return an expanding grouper, providing expanding
         functionality per group.
@@ -2368,9 +2373,9 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         Series.groupby
         DataFrame.groupby
         """
-        return ExpandingGroupby(
-            cast(Union[SeriesGroupBy, DataFrameGroupBy], self), min_periods=min_periods
-        )
+        from pyspark.pandas.window import ExpandingGroupby
+
+        return ExpandingGroupby(self, min_periods=min_periods)
 
     def get_group(self, name: Union[Any, Tuple, List[Union[Any, Tuple]]]) -> T_Frame:
         """
@@ -2632,7 +2637,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
         def assign_columns(
             psdf: DataFrame, this_column_labels: List[Tuple], that_column_labels: List[Tuple]
-        ) -> Tuple[Series, Tuple]:
+        ) -> Iterator[Tuple[Series, Tuple]]:
             raise NotImplementedError(
                 "Duplicated labels with groupby() and "
                 "'compute.ops_on_diff_frames' option are not supported currently "

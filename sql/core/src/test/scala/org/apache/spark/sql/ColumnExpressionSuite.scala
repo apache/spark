@@ -2881,4 +2881,27 @@ class ColumnExpressionSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-35852: add/subtract a interval day to/from a date") {
+    withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true") {
+      Seq(
+        (LocalDate.of(1, 1, 1), Duration.ofDays(31)),
+        (LocalDate.of(1582, 9, 15), Duration.ofDays(30)),
+        (LocalDate.of(1900, 1, 1), Duration.ofDays(0)),
+        (LocalDate.of(1970, 1, 1), Duration.ofDays(-1)),
+        (LocalDate.of(2021, 3, 14), Duration.ofDays(1)),
+        (LocalDate.of(2020, 12, 31), Duration.ofDays(4 * 30)),
+        (LocalDate.of(2020, 2, 29), Duration.ofDays(365)),
+        (LocalDate.of(10000, 1, 1), Duration.ofDays(-2))
+      ).foreach { case (date, duration) =>
+        val days = duration.toDays
+        val add = date.plusDays(days)
+        val sub = date.minusDays(days)
+        val df = Seq((date, duration)).toDF("start", "diff")
+          .select($"start", $"diff" cast DayTimeIntervalType(DAY) as "diff")
+          .select($"start" + $"diff", $"diff" + $"start", $"start" - $"diff")
+        checkAnswer(df, Row(add, add, sub))
+      }
+    }
+  }
 }
