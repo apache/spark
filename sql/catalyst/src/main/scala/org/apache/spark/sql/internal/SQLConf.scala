@@ -3167,6 +3167,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_CAST_TO_STRING =
+    buildConf("spark.sql.legacy.castToString.enabled")
+      .internal()
+      .doc("When true, df.show() will print string as origin format." +
+        " Otherwise, if this is false, which is default, df.show() will print data " +
+        "as HiveResult's format.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val LEGACY_COMPLEX_TYPES_TO_STRING =
     buildConf("spark.sql.legacy.castComplexTypesToString.enabled")
       .internal()
@@ -3949,6 +3959,8 @@ class SQLConf extends Serializable with Logging {
 
   def optimizeNullAwareAntiJoin: Boolean =
     getConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN)
+
+  def legacyCastToString: Boolean = getConf(LEGACY_CAST_TO_STRING)
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 

@@ -287,7 +287,11 @@ class Dataset[T] private[sql](
       if (col.dataType == BinaryType) {
         Column(col)
       } else {
-        Column(col).cast(StringType)
+        if (sparkSession.sessionState.conf.legacyCastToString) {
+          Column(col).cast(StringType)
+        } else {
+          Column(col).toPrettyString
+        }
       }
     }
     val data = newDf.select(castCols: _*).take(numRows + 1)

@@ -1191,6 +1191,22 @@ class Column(val expr: Expression) extends Logging {
   def cast(to: String): Column = cast(CatalystSqlParser.parseDataType(to))
 
   /**
+   * Casts the column to a pretty string.
+   * {{{
+   *   // Casts colA to pretty string.
+   *   df.select(df("colA").toPrettyString())
+   * }}}
+   *
+   * @group expr_ops
+   * @since 3.2.0
+   */
+  def toPrettyString: Column = withExpr {
+    val cast = ToPrettyString(expr)
+    cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+    cast
+  }
+
+  /**
    * Returns a sort expression based on the descending order of the column.
    * {{{
    *   // Scala
