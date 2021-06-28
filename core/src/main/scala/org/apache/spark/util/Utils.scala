@@ -2598,11 +2598,16 @@ private[spark] object Utils extends Logging {
    * Support push based shuffle with multiple app attempts
    */
   def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
-    conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
+    val isPushBasedShuffleEnabled = conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
       (conf.get(IS_TESTING).getOrElse(false) ||
         (conf.get(SHUFFLE_SERVICE_ENABLED) &&
           conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn" &&
           getYarnMaxAttempts(conf) == 1))
+    if (isPushBasedShuffleEnabled && !conf.get(IS_TESTING).getOrElse(false)) {
+      // TODO: Remove this once push-based shuffle is fully supported.
+      throw new UnsupportedOperationException("Push-based shuffle is not yet supported.")
+    }
+    isPushBasedShuffleEnabled
   }
 
   /**

@@ -220,6 +220,10 @@ public class YarnShuffleService extends AuxiliaryService {
       TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(_conf));
       MergedShuffleFileManager shuffleMergeManager = newMergedShuffleFileManagerInstance(
         transportConf);
+      if (!(shuffleMergeManager instanceof ExternalBlockHandler.NoOpMergedShuffleFileManager)) {
+        // TODO: Remove this once push-based shuffle is fully supported.
+        throw new UnsupportedOperationException("Push-based shuffle is not yet supported.");
+      }
       blockHandler = new ExternalBlockHandler(
         transportConf, registeredExecutorFile, shuffleMergeManager);
 
