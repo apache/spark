@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.net.{URI, URISyntaxException}
-import java.nio.charset.StandardCharsets
 import java.text.{BreakIterator, DecimalFormat, DecimalFormatSymbols}
 import java.util.{HashMap, Locale, Map => JMap}
 import java.util.regex.Pattern
@@ -32,9 +31,8 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateFormatter, GenericArrayData, IntervalStringStyles, IntervalUtils, MapData, TimestampFormatter, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, IntervalStringStyles, IntervalUtils, MapData, TypeUtils}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
-import org.apache.spark.sql.catalyst.util.IntervalUtils.{toDayTimeIntervalString, toYearMonthIntervalString}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -2655,15 +2653,11 @@ case class Sentences(
 
 case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
   extends CastBase {
-  import ToPrettyString._
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
   override def dataType: DataType = StringType
-
-  private lazy val timeFormatters: TimeFormatters =
-    TimeFormatters(DateFormatter(), TimestampFormatter.getFractionFormatter(zoneId))
 
   override def leftBracket: String = "{"
   override def rightBracket: String = "}"
@@ -2671,19 +2665,123 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
   override def keyValueSeparator: String = ":"
   override def structTypeWithSchema: Boolean = true
 
-  override def nullSafeEval(input: Any): Any = {
-    UTF8String.fromString(toHiveString((input, child.dataType), false, timeFormatters))
+  // UDFToString
+  override def castToString(from: DataType): Any => Any = from match {
+    case DecimalType() =>
+      buildCast[Decimal](_, i => UTF8String.fromString(i.toJavaBigDecimal.toPlainString))
+    case CalendarIntervalType =>
+      buildCast[CalendarInterval](_, i => UTF8String.fromString(i.toString))
+    case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
+    case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
+    case TimestampType => buildCast[Long](_,
+      t => UTF8String.fromString(timestampFormatter.format(t)))
+    case ArrayType(et, _) =>
+      buildCast[ArrayData](_, array => {
+        val builder = new UTF8StringBuilder
+        builder.append("[")
+        if (array.numElements > 0) {
+          val toUTF8String = castToString(et)
+          if (array.isNullAt(0)) {
+            builder.append("null")
+          } else {
+            builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < array.numElements) {
+            builder.append(",")
+            if (array.isNullAt(i)) {
+              builder.append("null")
+            } else {
+              builder.append(arrayElementSpace)
+              builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append("]")
+        builder.build()
+      })
+    case MapType(kt, vt, _) =>
+      buildCast[MapData](_, map => {
+        val builder = new UTF8StringBuilder
+        builder.append(leftBracket)
+        if (map.numElements > 0) {
+          val keyArray = map.keyArray()
+          val valueArray = map.valueArray()
+          val keyToUTF8String = castToString(kt)
+          val valueToUTF8String = castToString(vt)
+          builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
+          builder.append(keyValueSeparator)
+          if (valueArray.isNullAt(0)) {
+            builder.append("null")
+          } else {
+            builder.append(arrayElementSpace)
+            builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < map.numElements) {
+            builder.append(",")
+            builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
+            builder.append(keyValueSeparator)
+            if (valueArray.isNullAt(i)) {
+              builder.append("null")
+            } else {
+              builder.append(arrayElementSpace)
+              builder.append(valueToUTF8String(valueArray.get(i, vt))
+                .asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append(rightBracket)
+        builder.build()
+      })
+    case StructType(fields) =>
+      buildCast[InternalRow](_, row => {
+        val builder = new UTF8StringBuilder
+        builder.append(leftBracket)
+        if (row.numFields > 0) {
+          val st = fields.map(_.dataType)
+          val toUTF8StringFuncs = st.map(castToString)
+          if (structTypeWithSchema) {
+            builder.append("\"" + fields(0).name + "\":")
+          }
+          if (row.isNullAt(0)) {
+            builder.append("null")
+          } else {
+            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < row.numFields) {
+            builder.append(",")
+            if (structTypeWithSchema) {
+              builder.append("\"" + fields(i).name + "\":")
+            }
+            if (row.isNullAt(i)) {
+              builder.append("null")
+            } else {
+              builder.append(arrayElementSpace)
+              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append(rightBracket)
+        builder.build()
+      })
+    case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
+    case udt: UserDefinedType[_] =>
+      buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
+    case YearMonthIntervalType(startField, endField) =>
+      buildCast[Int](_, i => UTF8String.fromString(
+        IntervalUtils.toYearMonthIntervalString(i, HIVE_STYLE, startField, endField)))
+    case DayTimeIntervalType(startField, endField) =>
+      buildCast[Long](_, i => UTF8String.fromString(
+        IntervalUtils.toDayTimeIntervalString(i, HIVE_STYLE, startField, endField)))
+    case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
 
-  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val eval = child.genCode(ctx)
-    val nullSafeCast = nullSafeCastString(child.dataType, ctx)
-
-    ev.copy(code = eval.code +
-      castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast))
-  }
-
-  private[this] def nullSafeCastString(from: DataType, ctx: CodegenContext): CastFunction =
+  override def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction =
     from match {
       case BinaryType =>
         (c, evPrim, _) => code"${evPrim} = UTF8String.fromBytes($c);"
@@ -2692,13 +2790,13 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
           code"$evPrim = UTF8String.fromString($c.toJavaBigDecimal().toPlainString());"
       case DateType =>
         val df = JavaCode.global(
-          ctx.addReferenceObj("timeFormatter", timeFormatters.date),
-          timeFormatters.date.getClass)
+          ctx.addReferenceObj("timeFormatter", dateFormatter),
+          dateFormatter.getClass)
         (c, evPrim, _) => code"${evPrim} = UTF8String.fromString(${df}.format($c));"
       case TimestampType =>
         val tf = JavaCode.global(
-          ctx.addReferenceObj("timestampFormatter", timeFormatters.timestamp),
-          timeFormatters.timestamp.getClass)
+          ctx.addReferenceObj("timestampFormatter", timestampFormatter),
+          timestampFormatter.getClass)
         (c, evPrim, _) => code"$evPrim = UTF8String.fromString($tf.format($c));"
       case CalendarIntervalType =>
         (c, evPrim, _) => code"$evPrim = UTF8String.fromString($c.toString());"
@@ -2774,42 +2872,3 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
 
   override protected def ansiEnabled: Boolean = false
 }
-
-object ToPrettyString {
-  case class TimeFormatters(date: DateFormatter, timestamp: TimestampFormatter)
-
-  def toHiveString(
-      a: (Any, DataType),
-      nested: Boolean,
-      formatters: TimeFormatters): String = a match {
-    case (null, _) => if (nested) "null" else "NULL"
-    case (b, BooleanType) => b.toString
-    case (d: Int, DateType) => formatters.date.format(d)
-    case (t: Long, TimestampType) => formatters.timestamp.format(t)
-    case (bin: Array[Byte], BinaryType) => new String(bin, StandardCharsets.UTF_8)
-    case (decimal: Decimal, DecimalType()) => decimal.toJavaBigDecimal.toPlainString
-    case (n, _: NumericType) => n.toString
-    case (s: UTF8String, StringType) => if (nested) "\"" + s.toString + "\"" else s.toString
-    case (interval: CalendarInterval, CalendarIntervalType) => interval.toString
-    case (seq: ArrayData, ArrayType(typ, _)) =>
-      seq.toArray(typ).toSeq.asInstanceOf[scala.collection.Seq[_]].map(v => (v, typ))
-        .map(e => toHiveString(e, true, formatters)).mkString("[", ",", "]")
-    case (m: MapData, MapType(kType, vType, _)) =>
-      m.keyArray().toArray[Any](kType)
-        .zip(m.valueArray().toArray[Any](vType)).toMap
-        .map { case (key, value) =>
-          toHiveString((key, kType), true, formatters) + ":" +
-            toHiveString((value, vType), true, formatters)
-        }.toSeq.sorted.mkString("{", ",", "}")
-    case (struct: InternalRow, s @ StructType(fields: Array[StructField])) =>
-      struct.toSeq(s).zip(fields).map { case (v, t) =>
-        s""""${t.name}":${toHiveString((v, t.dataType), true, formatters)}"""
-      }.mkString("{", ",", "}")
-    case (months: Int, YearMonthIntervalType(startField, endField)) =>
-      toYearMonthIntervalString(months, HIVE_STYLE, startField, endField)
-    case (micros: Long, DayTimeIntervalType(startField, endField)) =>
-      toDayTimeIntervalString(micros, HIVE_STYLE, startField, endField)
-    case (other, _: UserDefinedType[_]) => other.toString
-  }
-}
-

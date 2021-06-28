@@ -316,9 +316,9 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline protected[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
 
-  private lazy val dateFormatter = DateFormatter()
-  private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
-  private lazy val timestampWithoutTZFormatter =
+  protected lazy val dateFormatter = DateFormatter()
+  protected lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
+  protected lazy val timestampWithoutTZFormatter =
     TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
 
   private val legacyCastToStr = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
@@ -333,7 +333,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   protected def dateTimeUtilsCls: String = DateTimeUtils.getClass.getName.stripSuffix("$")
 
   // UDFToString
-  private[this] def castToString(from: DataType): Any => Any = from match {
+  protected[this] def castToString(from: DataType): Any => Any = from match {
     case CalendarIntervalType =>
       buildCast[CalendarInterval](_, i => UTF8String.fromString(i.toString))
     case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
@@ -1144,7 +1144,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
      """.stripMargin
   }
 
-  private[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
+  protected[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case BinaryType =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromBytes($c);"
