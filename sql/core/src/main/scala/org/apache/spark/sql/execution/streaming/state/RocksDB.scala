@@ -75,7 +75,7 @@ class RocksDB(
 
   private val workingDir = createTempDir("workingDir")
   private val fileManager = new RocksDBFileManager(
-    dfsRootDir, createTempDir("manager"), hadoopConf, loggingId = loggingId)
+    dfsRootDir, createTempDir("fileManager"), hadoopConf, loggingId = loggingId)
   private val byteArrayPair = new ByteArrayPair()
   private val commitLatencyMs = new mutable.HashMap[String, Long]()
   private val acquireLock = new Object
@@ -123,7 +123,7 @@ class RocksDB(
   }
 
   /**
-   * Put the given value for the given key.
+   * Put the given value for the given key and return the last written value.
    * @note This update is not committed to disk until commit() is called.
    */
   def put(key: Array[Byte], value: Array[Byte]): Array[Byte] = {
@@ -200,7 +200,7 @@ class RocksDB(
       val flushTimeMs = timeTakenMs { db.flush(flushOptions) }
 
       val compactTimeMs = if (conf.compactOnCommit) {
-        logInfo(s"Compacting")
+        logInfo("Compacting")
         timeTakenMs { db.compactRange() }
       } else 0
       logInfo("Pausing background work")
@@ -215,7 +215,7 @@ class RocksDB(
         cp.createCheckpoint(checkpointDir.toString)
       }
 
-      logInfo(s"Syncing checkpoint for $newVersion in $checkpointDir")
+      logInfo(s"Syncing checkpoint for $newVersion to DFS")
       val fileSyncTimeMs = timeTakenMs {
         fileManager.saveCheckpointToDfs(checkpointDir, newVersion, numUncommittedKeys)
       }
@@ -310,7 +310,7 @@ class RocksDB(
   }
 
   private def openDB(): Unit = {
-    closeDB()
+    assert(db == null)
     db = NativeRocksDB.open(dbOptions, workingDir.toString)
     logInfo(s"Opened DB with conf ${conf}")
   }
