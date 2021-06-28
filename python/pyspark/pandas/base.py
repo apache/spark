@@ -817,7 +817,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ser.rename("a").to_frame().set_index("a").index.astype('int64')
         Int64Index([1, 2], dtype='int64', name='a')
         """
-        return cast(IndexOpsLike, self._dtype_op.astype(cast(SeriesOrIndex, self), dtype))
+        return self._dtype_op.astype(self, dtype)
 
     def isin(self: IndexOpsLike, values: Sequence[Any]) -> IndexOpsLike:
         """

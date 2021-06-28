@@ -32,8 +32,8 @@ if TYPE_CHECKING:
 # TypeVars
 T = TypeVar("T")
 
-IndexOpsLike = TypeVar("IndexOpsLike", bound="IndexOpsMixin")
 FrameLike = TypeVar("FrameLike", bound="Frame")
+IndexOpsLike = TypeVar("IndexOpsLike", bound="IndexOpsMixin")
 
 # Type aliases
 Scalar = Union[
