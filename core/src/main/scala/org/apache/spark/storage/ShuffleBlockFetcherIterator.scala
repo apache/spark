@@ -387,7 +387,6 @@ final class ShuffleBlockFetcherIterator(
           pushMergedLocalBlocks ++= blockInfos.map(_._1)
           pushMergedLocalBlockBytes += blockInfos.map(_._3).sum
         } else {
-          remoteBlockBytes += blockInfos.map(_._2).sum
           collectFetchRequests(address, blockInfos, collectedRemoteRequests)
         }
       } else if (mutable.HashSet(blockManager.blockManagerId.executorId, fallback)
