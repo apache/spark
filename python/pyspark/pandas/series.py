@@ -6216,6 +6216,20 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         result = unpack_scalar(self._internal.spark_frame.select(scol))
         return result if result is not None else np.nan
 
+    # Override the `groupby` to specify the actual return type annotation.
+    def groupby(
+        self,
+        by: Union[Any, Tuple, "Series", List[Union[Any, Tuple, "Series"]]],
+        axis: Union[int, str_type] = 0,
+        as_index: bool = True,
+        dropna: bool = True,
+    ) -> "SeriesGroupBy":
+        return cast(
+            "SeriesGroupBy", super().groupby(by=by, axis=axis, as_index=as_index, dropna=dropna)
+        )
+
+    groupby.__doc__ = Frame.groupby.__doc__
+
     def _build_groupby(
         self, by: List[Union["Series", Tuple]], as_index: bool, dropna: bool
     ) -> "SeriesGroupBy":

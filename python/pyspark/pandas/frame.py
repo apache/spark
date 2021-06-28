@@ -11676,6 +11676,20 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         return DataFrame(pd.DataFrame.from_dict(data, orient=orient, dtype=dtype, columns=columns))
 
+    # Override the `groupby` to specify the actual return type annotation.
+    def groupby(
+        self,
+        by: Union[Any, Tuple, "Series", List[Union[Any, Tuple, "Series"]]],
+        axis: Union[int, str] = 0,
+        as_index: bool = True,
+        dropna: bool = True,
+    ) -> "DataFrameGroupBy":
+        return cast(
+            "DataFrameGroupBy", super().groupby(by=by, axis=axis, as_index=as_index, dropna=dropna)
+        )
+
+    groupby.__doc__ = Frame.groupby.__doc__
+
     def _build_groupby(
         self, by: List[Union["Series", Tuple]], as_index: bool, dropna: bool
     ) -> "DataFrameGroupBy":
