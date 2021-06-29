@@ -27,7 +27,13 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                     InputAdapter
                                                       Scan parquet default.store_sales [ss_store_sk,ss_ext_sales_price,ss_net_profit,ss_sold_date_sk]
                                                         SubqueryBroadcast [d_date_sk] #1
-                                                          ReusedExchange [d_date_sk] #3
+                                                          BroadcastExchange #3
+                                                            WholeStageCodegen (1)
+                                                              Project [d_date_sk]
+                                                                Filter [d_date,d_date_sk]
+                                                                  ColumnarToRow
+                                                                    InputAdapter
+                                                                      Scan parquet default.date_dim [d_date_sk,d_date]
                                             WholeStageCodegen (2)
                                               Project [sr_store_sk,sr_returned_date_sk,sr_return_amt,sr_net_loss]
                                                 Filter [sr_store_sk]
@@ -43,13 +49,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                   InputAdapter
                                                     Scan parquet default.store [s_store_sk,s_store_id]
                                     InputAdapter
-                                      BroadcastExchange #3
-                                        WholeStageCodegen (4)
-                                          Project [d_date_sk]
-                                            Filter [d_date,d_date_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.date_dim [d_date_sk,d_date]
+                                      ReusedExchange [d_date_sk] #3
                     WholeStageCodegen (12)
                       HashAggregate [cp_catalog_page_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),sales,RETURNS,profit,channel,id,sum,sum,sum,sum]
                         InputAdapter

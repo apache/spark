@@ -74,7 +74,7 @@ private[ml] class MultinomialLogisticBlockAggregator(
     new DenseMatrix(numClasses, numFeatures, coefficientsArray)
   }
 
-  private lazy val intercept = if (fitIntercept) {
+  @transient private lazy val intercept = if (fitIntercept) {
     new DenseVector(coefficientsArray.takeRight(numClasses))
   } else {
     null
@@ -83,8 +83,8 @@ private[ml] class MultinomialLogisticBlockAggregator(
   // pre-computed margin of an empty vector.
   // with this variable as an offset, for a sparse vector, we only need to
   // deal with non-zero values in prediction.
-  private val marginOffset = if (fitWithMean) {
-    val offset = intercept.copy
+  @transient private lazy val marginOffset = if (fitWithMean) {
+    val offset = new DenseVector(coefficientsArray.takeRight(numClasses)) // intercept
     BLAS.gemv(-1.0, linear, Vectors.dense(bcScaledMean.value), 1.0, offset)
     offset
   } else {
@@ -115,7 +115,7 @@ private[ml] class MultinomialLogisticBlockAggregator(
       val offset = if (fitWithMean) marginOffset else intercept
       var j = 0
       while (j < numClasses) {
-        java.util.Arrays.fill(arr, j * size, (j + 1) * size, offset(j))
+        if (offset(j) != 0) java.util.Arrays.fill(arr, j * size, (j + 1) * size, offset(j))
         j += 1
       }
     }
@@ -126,28 +126,17 @@ private[ml] class MultinomialLogisticBlockAggregator(
     var localLossSum = 0.0
     var localWeightSum = 0.0
     var i = 0
-    val probs = Array.ofDim[Double](numClasses)
-    val multiplierSum = Array.ofDim[Double](numClasses)
     while (i < size) {
       val weight = block.getWeight(i)
       localWeightSum += weight
       if (weight > 0) {
-        val label = block.getLabel(i)
-        var j = 0
-        while (j < numClasses) { probs(j) = mat(i, j); j += 1 }
-        Utils.softmax(probs)
-
-        j = 0
-        while (j < numClasses) {
-          val multiplier = weight * (probs(j) - (if (label == j) 1.0 else 0.0))
-          mat.update(i, j, multiplier)
-          multiplierSum(j) += multiplier
-          j += 1
-        }
-
-        localLossSum -= weight * math.log(probs(label.toInt))
+        val labelIndex = i + block.getLabel(i).toInt * size
+        Utils.softmax(arr, numClasses, i, size, arr) // prob
+        localLossSum -= weight * math.log(arr(labelIndex))
+        if (weight != 1) BLAS.javaBLAS.dscal(numClasses, weight, arr, i, size)
+        arr(labelIndex) -= weight
       } else {
-        var j = 0; while (j < numClasses) { mat.update(i, j, 0.0); j += 1 }
+        BLAS.javaBLAS.dscal(numClasses, 0, arr, i, size)
       }
       i += 1
     }
@@ -173,16 +162,25 @@ private[ml] class MultinomialLogisticBlockAggregator(
         linearGradSumMat.foreachActive { (i, j, v) => gradientSumArray(i * numClasses + j) += v }
     }
 
-    if (fitWithMean) {
-      // above update of the linear part of gradientSumArray does NOT take the centering
-      // into account, here we need to adjust this part.
-      // following BLAS.dger operation equals to: gradientSumArray[0 : F X C] -= mat.T X _mm_,
-      // where _mm_ is a matrix of size S X F with each row equals to array ScaledMean.
-      BLAS.nativeBLAS.dger(numClasses, numFeatures, -1.0, multiplierSum, 1,
-        bcScaledMean.value, 1, gradientSumArray, numClasses)
-    }
-
     if (fitIntercept) {
+      val multiplierSum = Array.ofDim[Double](numClasses)
+      var j = 0
+      while (j < numClasses) {
+        var i = j * size
+        val end = i + size
+        while (i < end) { multiplierSum(j) += arr(i); i += 1 }
+        j += 1
+      }
+
+      if (fitWithMean) {
+        // above update of the linear part of gradientSumArray does NOT take the centering
+        // into account, here we need to adjust this part.
+        // following BLAS.dger operation equals to: gradientSumArray[0 : F X C] -= mat.T X _mm_,
+        // where _mm_ is a matrix of size S X F with each row equals to array ScaledMean.
+        BLAS.nativeBLAS.dger(numClasses, numFeatures, -1.0, multiplierSum, 1,
+          bcScaledMean.value, 1, gradientSumArray, numClasses)
+      }
+
       BLAS.javaBLAS.daxpy(numClasses, 1.0, multiplierSum, 0, 1,
         gradientSumArray, numClasses * numFeatures, 1)
     }

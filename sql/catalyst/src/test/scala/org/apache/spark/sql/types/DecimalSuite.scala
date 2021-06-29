@@ -286,4 +286,17 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     val e = intercept[NumberFormatException](Decimal.fromStringANSI(UTF8String.fromString("str")))
     assert(e.getMessage.contains("invalid input syntax for type numeric"))
   }
+
+  test("SPARK-35841: Casting string to decimal type doesn't work " +
+    "if the sum of the digits is greater than 38") {
+    val values = Array(
+      "28.9259999999999983799625624669715762138",
+      "28.925999999999998379962562466971576213",
+      "2.9259999999999983799625624669715762138"
+    )
+    for (string <- values) {
+      assert(Decimal.fromString(UTF8String.fromString(string)) === Decimal(string))
+      assert(Decimal.fromStringANSI(UTF8String.fromString(string)) === Decimal(string))
+    }
+  }
 }

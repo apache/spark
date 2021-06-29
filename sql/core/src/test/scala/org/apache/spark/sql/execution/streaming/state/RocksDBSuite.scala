@@ -36,12 +36,21 @@ class RocksDBSuite extends SparkFunSuite {
   test("RocksDBFileManager: upload only new immutable files") {
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
+      val verificationDir = Utils.createTempDir().getAbsolutePath // local dir to load checkpoints
       val fileManager = new RocksDBFileManager(
         dfsRootDir, Utils.createTempDir(), new Configuration)
       val sstDir = s"$dfsRootDir/SSTs"
       def numRemoteSSTFiles: Int = listFiles(sstDir).length
       val logDir = s"$dfsRootDir/logs"
       def numRemoteLogFiles: Int = listFiles(logDir).length
+
+      // Verify behavior before any saved checkpoints
+      assert(fileManager.getLatestVersion() === 0)
+
+      // Try to load incorrect versions
+      intercept[FileNotFoundException] {
+        fileManager.loadCheckpointFromDfs(1, Utils.createTempDir())
+      }
 
       // Save a version of checkpoint files
       val cpFiles1 = Seq(
@@ -53,10 +62,24 @@ class RocksDBSuite extends SparkFunSuite {
         "archive/00002.log" -> 2000
       )
       saveCheckpointFiles(fileManager, cpFiles1, version = 1, numKeys = 101)
+      assert(fileManager.getLatestVersion() === 1)
       assert(numRemoteSSTFiles == 2) // 2 sst files copied
       assert(numRemoteLogFiles == 2) // 2 log files copied
 
-      // Save SAME version again with different checkpoint files and verify
+      // Load back the checkpoint files into another local dir with existing files and verify
+      generateFiles(verificationDir, Seq(
+        "sst-file1.sst" -> 11, // files with same name but different sizes, should get overwritten
+        "other-file1" -> 101,
+        "archive/00001.log" -> 1001,
+        "random-sst-file.sst" -> 100, // unnecessary files, should get deleted
+        "random-other-file" -> 9,
+        "00005.log" -> 101,
+        "archive/00007.log" -> 101
+      ))
+      loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 1, cpFiles1, 101)
+
+      // Save SAME version again with different checkpoint files and load back again to verify
+      // whether files were overwritten.
       val cpFiles1_ = Seq(
         "sst-file1.sst" -> 10, // same SST file as before, should not get copied
         "sst-file2.sst" -> 25, // new SST file with same name as before, but different length
@@ -71,6 +94,7 @@ class RocksDBSuite extends SparkFunSuite {
       saveCheckpointFiles(fileManager, cpFiles1_, version = 1, numKeys = 1001)
       assert(numRemoteSSTFiles === 4, "shouldn't copy same files again") // 2 old + 2 new SST files
       assert(numRemoteLogFiles === 4, "shouldn't copy same files again") // 2 old + 2 new log files
+      loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 1, cpFiles1_, 1001)
 
       // Save another version and verify
       val cpFiles2 = Seq(
@@ -81,6 +105,19 @@ class RocksDBSuite extends SparkFunSuite {
       saveCheckpointFiles(fileManager, cpFiles2, version = 2, numKeys = 1501)
       assert(numRemoteSSTFiles === 5) // 1 new file over earlier 4 files
       assert(numRemoteLogFiles === 5) // 1 new file over earlier 4 files
+      loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 2, cpFiles2, 1501)
+
+      // Loading an older version should work
+      loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 1, cpFiles1_, 1001)
+
+      // Loading incorrect version should fail
+      intercept[FileNotFoundException] {
+        loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 3, Nil, 1001)
+      }
+
+      // Loading 0 should delete all files
+      require(verificationDir.list().length > 0)
+      loadAndVerifyCheckpointFiles(fileManager, verificationDir, version = 0, Nil, 0)
     }
   }
 
@@ -145,6 +182,20 @@ class RocksDBSuite extends SparkFunSuite {
     val checkpointDir = Utils.createTempDir().getAbsolutePath // local dir to create checkpoints
     generateFiles(checkpointDir, fileToLengths)
     fileManager.saveCheckpointToDfs(checkpointDir, version, numKeys)
+  }
+
+  def loadAndVerifyCheckpointFiles(
+      fileManager: RocksDBFileManager,
+      verificationDir: String,
+      version: Int,
+      expectedFiles: Seq[(String, Int)],
+      expectedNumKeys: Int): Unit = {
+    val metadata = fileManager.loadCheckpointFromDfs(version, verificationDir)
+    val filesAndLengths =
+      listFiles(verificationDir).map(f => f.getName -> f.length).toSet ++
+      listFiles(verificationDir + "/archive").map(f => s"archive/${f.getName}" -> f.length()).toSet
+    assert(filesAndLengths === expectedFiles.toSet)
+    assert(metadata.numKeys === expectedNumKeys)
   }
 
   implicit def toFile(path: String): File = new File(path)

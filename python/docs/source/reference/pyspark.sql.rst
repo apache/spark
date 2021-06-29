@@ -218,6 +218,7 @@ DataFrame APIs
     DataFrame.write
     DataFrame.writeStream
     DataFrame.writeTo
+    DataFrame.to_pandas_on_spark
     DataFrameNaFunctions.drop
     DataFrameNaFunctions.fill
     DataFrameNaFunctions.replace

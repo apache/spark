@@ -31,6 +31,7 @@ import com.google.common.collect.Lists;
 
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
@@ -184,6 +185,37 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       logger.error("Exception while sending finalizeShuffleMerge request to {}:{}",
         host, port, e);
       listener.onShuffleMergeFailure(e);
+    }
+  }
+
+  @Override
+  public void getMergedBlockMeta(
+      String host,
+      int port,
+      int shuffleId,
+      int reduceId,
+      MergedBlocksMetaListener listener) {
+    checkInit();
+    logger.debug("Get merged blocks meta from {}:{} for shuffleId {} reduceId {}", host, port,
+      shuffleId, reduceId);
+    try {
+      TransportClient client = clientFactory.createClient(host, port);
+      client.sendMergedBlockMetaReq(appId, shuffleId, reduceId,
+        new MergedBlockMetaResponseCallback() {
+          @Override
+          public void onSuccess(int numChunks, ManagedBuffer buffer) {
+            logger.trace("Successfully got merged block meta for shuffleId {} reduceId {}",
+              shuffleId, reduceId);
+            listener.onSuccess(shuffleId, reduceId, new MergedBlockMeta(numChunks, buffer));
+          }
+
+          @Override
+          public void onFailure(Throwable e) {
+            listener.onFailure(shuffleId, reduceId, e);
+          }
+        });
+    } catch (Exception e) {
+      listener.onFailure(shuffleId, reduceId, e);
     }
   }
 

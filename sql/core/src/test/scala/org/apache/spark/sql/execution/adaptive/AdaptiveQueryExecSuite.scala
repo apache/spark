@@ -1788,17 +1788,20 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-35650: Coalesce number of partitions by AEQ") {
     withSQLConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
-      val query = "SELECT /*+ REPARTITION */ * FROM testData"
-      val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
-      collect(adaptivePlan) {
-        case r: CustomShuffleReaderExec => r
-      } match {
-        case Seq(customShuffleReader) =>
-          assert(customShuffleReader.partitionSpecs.size === 1)
-          assert(!customShuffleReader.isLocalReader)
-        case _ =>
-          fail("There should be a CustomShuffleReaderExec")
-      }
+      Seq("REPARTITION", "REBALANCE(key)")
+        .foreach {repartition =>
+          val query = s"SELECT /*+ $repartition */ * FROM testData"
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          collect(adaptivePlan) {
+            case r: CustomShuffleReaderExec => r
+          } match {
+            case Seq(customShuffleReader) =>
+              assert(customShuffleReader.partitionSpecs.size === 1)
+              assert(!customShuffleReader.isLocalReader)
+            case _ =>
+              fail("There should be a CustomShuffleReaderExec")
+          }
+        }
     }
   }
 

@@ -1268,15 +1268,11 @@ abstract class DynamicPartitionPruningSuiteBase
       val countSubqueryBroadcasts =
         collectWithSubqueries(plan)({ case _: SubqueryBroadcastExec => 1 }).sum
 
-      if (conf.getConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED)) {
-        val countReusedSubqueryBroadcasts =
-          collectWithSubqueries(plan)({ case ReusedSubqueryExec(_: SubqueryBroadcastExec) => 1}).sum
+      val countReusedSubqueryBroadcasts =
+        collectWithSubqueries(plan)({ case ReusedSubqueryExec(_: SubqueryBroadcastExec) => 1}).sum
 
-        assert(countSubqueryBroadcasts == 1)
-        assert(countReusedSubqueryBroadcasts == 1)
-      } else {
-        assert(countSubqueryBroadcasts == 2)
-      }
+      assert(countSubqueryBroadcasts == 1)
+      assert(countReusedSubqueryBroadcasts == 1)
     }
   }
 
@@ -1393,6 +1389,54 @@ abstract class DynamicPartitionPruningSuiteBase
       checkPartitionPruningPredicate(df, false, true)
 
       checkAnswer(df, Nil)
+    }
+  }
+
+  test("Subquery reuse across the whole plan",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      withTable("df1", "df2") {
+        spark.range(100)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df1")
+
+        spark.range(10)
+          .select(col("id"), col("id").as("k"))
+          .write
+          .partitionBy("k")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("df2")
+
+        val df = sql(
+          """
+            |SELECT df1.id, df2.k
+            |FROM df1 JOIN df2 ON df1.k = df2.k
+            |WHERE df2.id < (SELECT max(id) FROM df2 WHERE id <= 2)
+            |""".stripMargin)
+
+        checkPartitionPruningPredicate(df, true, false)
+
+        checkAnswer(df, Row(0, 0) :: Row(1, 1) :: Nil)
+
+        val plan = df.queryExecution.executedPlan
+
+        val subqueryIds = plan.collectWithSubqueries { case s: SubqueryExec => s.id }
+        val reusedSubqueryIds = plan.collectWithSubqueries {
+          case rs: ReusedSubqueryExec => rs.child.id
+        }
+
+        assert(subqueryIds.size == 2, "Whole plan subquery reusing not working correctly")
+        assert(reusedSubqueryIds.size == 1, "Whole plan subquery reusing not working correctly")
+        assert(reusedSubqueryIds.forall(subqueryIds.contains(_)),
+          "ReusedSubqueryExec should reuse an existing subquery")
+      }
     }
   }
 
