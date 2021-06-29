@@ -50,11 +50,6 @@ from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.utils import name_like_string
 
 
-# This is used in run-tests.py to discover the slow test. See more in the doc of
-# _discover_python_unittests of dev/sparktestsupport/modules.py
-is_slow_test = True
-
-
 class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
     @property
     def pdf(self):

@@ -15,70 +15,12 @@
 # limitations under the License.
 #
 
-from collections.abc import Iterable
 from functools import total_ordering
 import itertools
 import os
 import re
-import unittest
-import sys
-
-from sparktestsupport import SPARK_HOME
 
 all_modules = []
-
-
-def _get_module_from_name(name):
-    __import__(name)
-    return sys.modules[name]
-
-
-def _discover_python_unittests(*paths, discover_slow=False):
-    """Discover the python module which contains unittests under paths.
-
-    Such as:
-    ['pyspark/tests'], it will return the set of module name under the path of pyspark/tests, like
-    {'pyspark.tests.test_appsubmit', 'pyspark.tests.test_broadcast', ...}
-
-    Parameters
-    ----------
-    paths : str
-        Paths of modules to be discovered.
-    discover_slow : bool
-        If True, will only discover slow tests
-        If False, will discover all tests except slow tests
-
-    Returns
-    -------
-    A set of complete test module name discovered under specified paths
-    """
-
-    def add_test_module(testcases, modules, slow):
-        """Append the testcases module names to modules set"""
-        if isinstance(testcases, Iterable):
-            for test_case in testcases:
-                add_test_module(test_case, modules, slow)
-        else:
-            name = testcases.__module__
-            module = _get_module_from_name(name)
-            if slow and hasattr(module, 'is_slow_test'):
-                modules.add(name)
-            if not slow and not hasattr(module, 'is_slow_test'):
-                modules.add(name)
-
-    if not paths:
-        return []
-    modules = set()
-    pyspark_path = os.path.join(SPARK_HOME, "python")
-    for path in paths:
-        # Discover the unittest in every path
-        testcases = unittest.defaultTestLoader.discover(
-            os.path.join(pyspark_path, path),
-            top_level_dir=pyspark_path
-        )
-        add_test_module(testcases, modules, discover_slow)
-
-    return sorted(list(modules))
 
 
 @total_ordering
@@ -446,7 +388,24 @@ pyspark_core = Module(
         "pyspark.profiler",
         "pyspark.shuffle",
         "pyspark.util",
-    ] + _discover_python_unittests("pyspark/tests"),
+        # unittests
+        "pyspark.tests.test_appsubmit",
+        "pyspark.tests.test_broadcast",
+        "pyspark.tests.test_conf",
+        "pyspark.tests.test_context",
+        "pyspark.tests.test_daemon",
+        "pyspark.tests.test_install_spark",
+        "pyspark.tests.test_join",
+        "pyspark.tests.test_profiler",
+        "pyspark.tests.test_rdd",
+        "pyspark.tests.test_rddbarrier",
+        "pyspark.tests.test_readwrite",
+        "pyspark.tests.test_serializers",
+        "pyspark.tests.test_shuffle",
+        "pyspark.tests.test_taskcontext",
+        "pyspark.tests.test_util",
+        "pyspark.tests.test_worker",
+    ]
 )
 
 pyspark_sql = Module(
@@ -478,7 +437,32 @@ pyspark_sql = Module(
         "pyspark.sql.pandas.serializers",
         "pyspark.sql.pandas.typehints",
         "pyspark.sql.pandas.utils",
-    ] + _discover_python_unittests("pyspark/sql/tests"),
+        # unittests
+        "pyspark.sql.tests.test_arrow",
+        "pyspark.sql.tests.test_catalog",
+        "pyspark.sql.tests.test_column",
+        "pyspark.sql.tests.test_conf",
+        "pyspark.sql.tests.test_context",
+        "pyspark.sql.tests.test_dataframe",
+        "pyspark.sql.tests.test_datasources",
+        "pyspark.sql.tests.test_functions",
+        "pyspark.sql.tests.test_group",
+        "pyspark.sql.tests.test_pandas_cogrouped_map",
+        "pyspark.sql.tests.test_pandas_grouped_map",
+        "pyspark.sql.tests.test_pandas_map",
+        "pyspark.sql.tests.test_pandas_udf",
+        "pyspark.sql.tests.test_pandas_udf_grouped_agg",
+        "pyspark.sql.tests.test_pandas_udf_scalar",
+        "pyspark.sql.tests.test_pandas_udf_typehints",
+        "pyspark.sql.tests.test_pandas_udf_window",
+        "pyspark.sql.tests.test_readwriter",
+        "pyspark.sql.tests.test_serde",
+        "pyspark.sql.tests.test_session",
+        "pyspark.sql.tests.test_streaming",
+        "pyspark.sql.tests.test_types",
+        "pyspark.sql.tests.test_udf",
+        "pyspark.sql.tests.test_utils",
+    ]
 )
 
 
@@ -490,7 +474,10 @@ pyspark_resource = Module(
     source_file_regexes=[
         "python/pyspark/resource"
     ],
-    python_test_goals=_discover_python_unittests("pyspark/resource/tests"),
+    python_test_goals=[
+        # unittests
+        "pyspark.resource.tests.test_resources",
+    ]
 )
 
 
@@ -507,7 +494,12 @@ pyspark_streaming = Module(
     python_test_goals=[
         # doctests
         "pyspark.streaming.util",
-    ] + _discover_python_unittests("pyspark/streaming/tests"),
+        # unittests
+        "pyspark.streaming.tests.test_context",
+        "pyspark.streaming.tests.test_dstream",
+        "pyspark.streaming.tests.test_kinesis",
+        "pyspark.streaming.tests.test_listener",
+    ]
 )
 
 
@@ -533,10 +525,17 @@ pyspark_mllib = Module(
         "pyspark.mllib.stat.KernelDensity",
         "pyspark.mllib.tree",
         "pyspark.mllib.util",
-    ] + _discover_python_unittests("pyspark/mllib/tests"),
+        # unittests
+        "pyspark.mllib.tests.test_algorithms",
+        "pyspark.mllib.tests.test_feature",
+        "pyspark.mllib.tests.test_linalg",
+        "pyspark.mllib.tests.test_stat",
+        "pyspark.mllib.tests.test_streaming_algorithms",
+        "pyspark.mllib.tests.test_util",
+    ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
-    ],
+    ]
 )
 
 
@@ -560,12 +559,26 @@ pyspark_ml = Module(
         "pyspark.ml.regression",
         "pyspark.ml.stat",
         "pyspark.ml.tuning",
-    ] + _discover_python_unittests("pyspark/ml/tests"),
+        # unittests
+        "pyspark.ml.tests.test_algorithms",
+        "pyspark.ml.tests.test_base",
+        "pyspark.ml.tests.test_evaluation",
+        "pyspark.ml.tests.test_feature",
+        "pyspark.ml.tests.test_image",
+        "pyspark.ml.tests.test_linalg",
+        "pyspark.ml.tests.test_param",
+        "pyspark.ml.tests.test_persistence",
+        "pyspark.ml.tests.test_pipeline",
+        "pyspark.ml.tests.test_stat",
+        "pyspark.ml.tests.test_training_summary",
+        "pyspark.ml.tests.test_tuning",
+        "pyspark.ml.tests.test_util",
+        "pyspark.ml.tests.test_wrapper",
+    ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy and it isn't available there
-    ],
+    ]
 )
-
 
 pyspark_pandas = Module(
     name="pyspark-pandas",
@@ -601,13 +614,58 @@ pyspark_pandas = Module(
         "pyspark.pandas.spark.accessors",
         "pyspark.pandas.spark.utils",
         "pyspark.pandas.typedef.typehints",
-    ] + _discover_python_unittests("pyspark/pandas/tests"),
+        # unittests
+        "pyspark.pandas.tests.data_type_ops.test_base",
+        "pyspark.pandas.tests.data_type_ops.test_binary_ops",
+        "pyspark.pandas.tests.data_type_ops.test_boolean_ops",
+        "pyspark.pandas.tests.data_type_ops.test_categorical_ops",
+        "pyspark.pandas.tests.data_type_ops.test_complex_ops",
+        "pyspark.pandas.tests.data_type_ops.test_date_ops",
+        "pyspark.pandas.tests.data_type_ops.test_datetime_ops",
+        "pyspark.pandas.tests.data_type_ops.test_decimal_ops",
+        "pyspark.pandas.tests.data_type_ops.test_null_ops",
+        "pyspark.pandas.tests.data_type_ops.test_num_ops",
+        "pyspark.pandas.tests.data_type_ops.test_string_ops",
+        "pyspark.pandas.tests.data_type_ops.test_udt_ops",
+        "pyspark.pandas.tests.indexes.test_category",
+        "pyspark.pandas.tests.plot.test_frame_plot",
+        "pyspark.pandas.tests.plot.test_frame_plot_matplotlib",
+        "pyspark.pandas.tests.plot.test_frame_plot_plotly",
+        "pyspark.pandas.tests.plot.test_series_plot",
+        "pyspark.pandas.tests.plot.test_series_plot_matplotlib",
+        "pyspark.pandas.tests.plot.test_series_plot_plotly",
+        "pyspark.pandas.tests.test_categorical",
+        "pyspark.pandas.tests.test_config",
+        "pyspark.pandas.tests.test_csv",
+        "pyspark.pandas.tests.test_dataframe_conversion",
+        "pyspark.pandas.tests.test_dataframe_spark_io",
+        "pyspark.pandas.tests.test_default_index",
+        "pyspark.pandas.tests.test_expanding",
+        "pyspark.pandas.tests.test_extension",
+        "pyspark.pandas.tests.test_frame_spark",
+        "pyspark.pandas.tests.test_indexops_spark",
+        "pyspark.pandas.tests.test_internal",
+        "pyspark.pandas.tests.test_namespace",
+        "pyspark.pandas.tests.test_numpy_compat",
+        "pyspark.pandas.tests.test_ops_on_diff_frames_groupby_expanding",
+        "pyspark.pandas.tests.test_ops_on_diff_frames_groupby_rolling",
+        "pyspark.pandas.tests.test_repr",
+        "pyspark.pandas.tests.test_reshape",
+        "pyspark.pandas.tests.test_rolling",
+        "pyspark.pandas.tests.test_series_conversion",
+        "pyspark.pandas.tests.test_series_datetime",
+        "pyspark.pandas.tests.test_series_string",
+        "pyspark.pandas.tests.test_spark_functions",
+        "pyspark.pandas.tests.test_sql",
+        "pyspark.pandas.tests.test_typedef",
+        "pyspark.pandas.tests.test_utils",
+        "pyspark.pandas.tests.test_window",
+    ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
-        # they aren't available there
-    ],
+                # they aren't available there
+    ]
 )
-
 
 pyspark_pandas_slow = Module(
     name="pyspark-pandas-slow",
@@ -620,7 +678,17 @@ pyspark_pandas_slow = Module(
         "pyspark.pandas.frame",
         "pyspark.pandas.generic",
         "pyspark.pandas.series",
-    ] + _discover_python_unittests("pyspark/pandas/tests", discover_slow=True),
+        # unittests
+        "pyspark.pandas.tests.indexes.test_base",
+        "pyspark.pandas.tests.indexes.test_datetime",
+        "pyspark.pandas.tests.test_dataframe",
+        "pyspark.pandas.tests.test_groupby",
+        "pyspark.pandas.tests.test_indexing",
+        "pyspark.pandas.tests.test_ops_on_diff_frames",
+        "pyspark.pandas.tests.test_ops_on_diff_frames_groupby",
+        "pyspark.pandas.tests.test_series",
+        "pyspark.pandas.tests.test_stats",
+    ],
     excluded_python_implementations=[
         "PyPy"  # Skip these tests under PyPy since they require numpy, pandas, and pyarrow and
         # they aren't available there
