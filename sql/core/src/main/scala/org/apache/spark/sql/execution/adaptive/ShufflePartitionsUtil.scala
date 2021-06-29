@@ -148,7 +148,10 @@ object ShufflePartitionsUtil extends Logging {
         if (i - 1 > start) {
           val partitionSpecs = coalescePartitions(
             partitionIndices(start), repeatValue, validMetrics, targetSize)
-          newPartitionSpecsSeq.zip(partitionSpecs).foreach(spec => spec._1 ++= spec._2)
+          // skip empty partition iff all shuffle are empty after coalesced
+          if (!partitionSpecs.forall(specs => specs.size == 1 && specs.head.dataSize.contains(0))) {
+            newPartitionSpecsSeq.zip(partitionSpecs).foreach(spec => spec._1 ++= spec._2)
+          }
         }
         // find the end of this skew section, skipping partition(i - 1) and partition(i).
         var repeatIndex = i + 1
@@ -173,7 +176,11 @@ object ShufflePartitionsUtil extends Logging {
     if (numPartitions > start) {
       val partitionSpecs = coalescePartitions(
         partitionIndices(start), partitionIndices.last + 1, validMetrics, targetSize)
-      newPartitionSpecsSeq.zip(partitionSpecs).foreach(spec => spec._1 ++= spec._2)
+      assert(numPartitions > 0)
+      // skip empty partition iff all shuffle are empty after coalesced
+      if (!partitionSpecs.forall(specs => specs.size == 1 && specs.head.dataSize.contains(0))) {
+        newPartitionSpecsSeq.zip(partitionSpecs).foreach(spec => spec._1 ++= spec._2)
+      }
     }
     // only return coalesced result if any coalescing has happened.
     if (newPartitionSpecsSeq.head.length < numPartitions) {
