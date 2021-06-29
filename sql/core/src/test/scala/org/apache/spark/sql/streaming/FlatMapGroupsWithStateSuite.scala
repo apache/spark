@@ -21,7 +21,6 @@ import java.io.File
 import java.sql.Date
 
 import org.apache.commons.io.FileUtils
-import org.apache.hadoop.fs.Path
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkException
@@ -39,7 +38,7 @@ import org.apache.spark.sql.execution.streaming.state.{FlatMapGroupsWithStateExe
 import org.apache.spark.sql.functions.timestamp_seconds
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.StreamManualClock
-import org.apache.spark.sql.types.{DataType, IntegerType, StringType}
+import org.apache.spark.sql.types.{DataType, IntegerType}
 import org.apache.spark.util.Utils
 
 /** Class to check custom state types */
@@ -1367,9 +1366,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       val initialState: Dataset[(String, RunningCount)] = Seq(
         ("a", new RunningCount(1))
       ).toDS()
-      initialState.write.format("delta").save(dir.getAbsolutePath)
+      initialState.write.parquet(dir.getAbsolutePath)
 
-      val initStateStream = spark.readStream.format("delta")
+      val initStateStream = spark.readStream.format("parquet")
         .load(dir.getAbsolutePath)
         .as[(String, RunningCount)]
 

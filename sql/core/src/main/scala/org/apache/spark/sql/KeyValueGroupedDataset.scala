@@ -27,7 +27,6 @@ import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupState, GroupStateTimeout, OutputMode}
-import org.apache.spark.sql.types.StructField
 
 /**
  * A [[Dataset]] has been logically grouped by a user specified grouping key.  Users should not

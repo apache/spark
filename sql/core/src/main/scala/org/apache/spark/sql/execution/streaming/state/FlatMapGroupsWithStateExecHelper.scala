@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.ObjectOperator
 import org.apache.spark.sql.execution.streaming.GroupStateImpl.NO_TIMESTAMP
-import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types._
 
 
