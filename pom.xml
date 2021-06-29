@@ -396,19 +396,25 @@
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
         <version>${chill.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.apache.xbean</groupId>
+            <artifactId>xbean-asm7-shaded</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
       </dependency>
-      <!-- This artifact is a shaded version of ASM 7.x. The POM that was used to produce this
-           is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm7-shaded
+      <!-- This artifact is a shaded version of ASM 9.x. The POM that was used to produce this
+           is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm9-shaded
            For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
       <dependency>
         <groupId>org.apache.xbean</groupId>
-        <artifactId>xbean-asm7-shaded</artifactId>
-        <version>4.16</version>
+        <artifactId>xbean-asm9-shaded</artifactId>
+        <version>4.20</version>
       </dependency>
 
       <!-- Shaded deps marked as provided. These are promoted to compile scope
@@ -2858,6 +2864,18 @@
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
           <version>3.2.4</version>
+          <dependencies>
+            <dependency>
+              <groupId>org.ow2.asm</groupId>
+              <artifactId>asm</artifactId>
+              <version>9.1</version>
+            </dependency>
+            <dependency>
+              <groupId>org.ow2.asm</groupId>
+              <artifactId>asm-commons</artifactId>
+              <version>9.1</version>
+            </dependency>
+          </dependencies>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>

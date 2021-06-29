@@ -38,9 +38,9 @@ libraryDependencies += "org.apache.avro" % "avro-compiler" % "1.10.2"
 
 addSbtPlugin("io.spray" % "sbt-revolver" % "0.9.1")
 
-libraryDependencies += "org.ow2.asm"  % "asm" % "7.3.1"
+libraryDependencies += "org.ow2.asm"  % "asm" % "9.1"
 
-libraryDependencies += "org.ow2.asm"  % "asm-commons" % "7.3.1"
+libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.1"
 
 addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.2")
 
