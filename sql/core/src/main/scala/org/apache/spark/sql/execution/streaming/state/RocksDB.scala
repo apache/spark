@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 import java.util.Locale
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
 import scala.ref.WeakReference
@@ -85,6 +86,8 @@ class RocksDB(
   @volatile private var numCommittedKeys = 0L
   // number of keys which will be committed in the next version
   @volatile private var numUncommittedKeys = 0L
+
+  @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
 
   /**
@@ -158,7 +161,7 @@ class RocksDB(
     iter.seekToFirst()
 
     // Attempt to close this iterator if there is a task failure, or a task interruption.
-    // This is a hack because it assumes that the RocksDB inside running in a task.
+    // This is a hack because it assumes that the RocksDB is running inside a task.
     Option(TaskContext.get()).foreach { tc =>
       tc.addTaskCompletionListener[Unit] { _ => iter.close() }
     }
@@ -226,7 +229,7 @@ class RocksDB(
         "writeBatch" -> writeTimeMs,
         "flush" -> flushTimeMs,
         "compact" -> compactTimeMs,
-        "pauseBg" -> pauseTimeMs,
+        "pause" -> pauseTimeMs,
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
@@ -265,7 +268,7 @@ class RocksDB(
       flushOptions.close()
       dbOptions.close()
       dbLogger.close()
-      silentDeleteRecursively(localRootDir, "stopping")
+      silentDeleteRecursively(localRootDir, "closing RocksDB")
     } catch {
       case e: Exception =>
         logWarning("Error closing RocksDB", e)
@@ -332,7 +335,7 @@ class RocksDB(
           case InfoLogLevel.DEBUG_LEVEL => logDebug(_)
           case _ => logTrace(_)
         }
-        loggingFunc(s"[Native-${infoLogLevel.getValue}] $logMsg")
+        loggingFunc(s"[NativeRocksDB-${infoLogLevel.getValue}] $logMsg")
       }
     }
 
@@ -342,7 +345,7 @@ class RocksDB(
     if (log.isDebugEnabled) dbLogLevel = InfoLogLevel.DEBUG_LEVEL
     dbOptions.setLogger(dbLogger)
     dbOptions.setInfoLogLevel(dbLogLevel)
-    logInfo(s"Set DB native logging level to $dbLogLevel")
+    logInfo(s"Set RocksDB native logging level to $dbLogLevel")
     dbLogger
   }
 
