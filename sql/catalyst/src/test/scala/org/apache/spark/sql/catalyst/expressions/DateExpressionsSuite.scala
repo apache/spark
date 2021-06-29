@@ -322,15 +322,22 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (0 to 24 by 6).foreach { h =>
         (0 to 60 by 30).foreach { m =>
           (0 to 60 by 30).foreach { s =>
+            // validate timestamp with local time zone
             c.set(2015, 18, 3, h, m, s)
             checkEvaluation(
               Hour(Literal(new Timestamp(c.getTimeInMillis)), timeZoneId),
               c.get(Calendar.HOUR_OF_DAY))
+
+            // validate timestamp without time zone
+            val localDateTime = LocalDateTime.of(2015, 1, 3, h, m, s)
+            checkEvaluation(Hour(Literal(localDateTime), timeZoneId), h)
           }
         }
       }
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (child: Expression) => Hour(child, timeZoneId), TimestampType)
+      Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (child: Expression) => Hour(child, timeZoneId), dt)
+      }
     }
   }
 
