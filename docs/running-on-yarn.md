@@ -579,6 +579,14 @@ To use a custom metrics.properties for the application master and executors, upd
   </td>
   <td>2.4.0</td>
 </tr>
+<tr>
+  <td><code>spark.yarn.custom.submit.class</code></td>
+  <td>org.apache.spark.deploy.yarn.YarnClusterApplication</td>
+  <td>
+  This config can be used to override default Yarn Application submission class. This is useful when there is a custom variant of Yarn cluster which requires a modified Yarn client. Users should add the relevant dependencies in classpath.
+  </td>
+  <td>3.3.0</td>
+</tr>
 </table>
 
 #### Available patterns for SHS custom executor log URL
