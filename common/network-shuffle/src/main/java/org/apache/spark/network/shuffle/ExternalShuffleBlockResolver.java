@@ -29,9 +29,9 @@ import org.apache.commons.lang3.tuple.Pair;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.Weigher;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
 import org.iq80.leveldb.DB;
@@ -103,14 +103,13 @@ public class ExternalShuffleBlockResolver {
       Executor directoryCleaner) throws IOException {
     this.conf = conf;
     this.rddFetchEnabled =
-      Boolean.valueOf(conf.get(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "false"));
+      Boolean.parseBoolean(conf.get(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "false"));
     this.registeredExecutorFile = registeredExecutorFile;
     String indexCacheSize = conf.get("spark.shuffle.service.index.cache.size", "100m");
-    CacheLoader<File, ShuffleIndexInformation> indexCacheLoader = ShuffleIndexInformation::new;
-    Caffeine<File, ShuffleIndexInformation> builder = Caffeine.newBuilder()
+    shuffleIndexCache = Caffeine.newBuilder()
       .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
-      .weigher((file, indexInfo) -> indexInfo.getSize());
-    shuffleIndexCache = builder.build(indexCacheLoader);
+      .weigher((Weigher<File, ShuffleIndexInformation>)(file, indexInfo) -> indexInfo.getSize())
+      .build(ShuffleIndexInformation::new);
     db = LevelDBProvider.initLevelDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {
       executors = reloadRegisteredExecutors(db);

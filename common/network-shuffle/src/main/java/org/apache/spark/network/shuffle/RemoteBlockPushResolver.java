@@ -37,6 +37,7 @@ import java.util.concurrent.*;
 import com.github.benmanes.caffeine.cache.CacheLoader;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.Weigher;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
@@ -95,11 +96,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
     this.minChunkSize = conf.minChunkSizeInMergedShuffleFile();
     this.ioExceptionsThresholdDuringMerge = conf.ioExceptionsThresholdDuringMerge();
-    CacheLoader<File, ShuffleIndexInformation> indexCacheLoader = ShuffleIndexInformation::new;
-    Caffeine<File, ShuffleIndexInformation> builder = Caffeine.newBuilder()
+    indexCache = Caffeine.newBuilder()
       .maximumWeight(conf.mergedIndexCacheSize())
-      .weigher((file, indexInfo) -> indexInfo.getSize());
-    indexCache = builder.build(indexCacheLoader);
+      .weigher((Weigher<File, ShuffleIndexInformation>)(file, indexInfo) -> indexInfo.getSize())
+      .build(ShuffleIndexInformation::new);
     this.errorHandler = new ErrorHandler.BlockPushErrorHandler();
   }
 
