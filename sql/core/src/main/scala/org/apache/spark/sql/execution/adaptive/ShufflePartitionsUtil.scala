@@ -256,7 +256,8 @@ object ShufflePartitionsUtil extends Logging {
    * so that the size sum of each partition is close to the target size. Each index indicates the
    * start of a partition.
    */
-  def splitSizeListByTargetSize(sizes: Seq[Long], targetSize: Long): Array[Int] = {
+  // Visible for testing
+  private[sql] def splitSizeListByTargetSize(sizes: Seq[Long], targetSize: Long): Array[Int] = {
     val partitionStartIndices = ArrayBuffer[Int]()
     partitionStartIndices += 0
     var i = 0
@@ -298,6 +299,14 @@ object ShufflePartitionsUtil extends Logging {
   }
 
   /**
+   * Get the map size of the specific reduce shuffle Id.
+   */
+  def getMapSizesForReduceId(shuffleId: Int, partitionId: Int): Array[Long] = {
+    val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses.map{_.getSizeForBlock(partitionId)}
+  }
+
+  /**
    * Splits the skewed partition based on the map size and the target partition size
    * after split, and create a list of `PartialMapperPartitionSpec`. Returns None if can't split.
    */
@@ -321,14 +330,6 @@ object ShufflePartitionsUtil extends Logging {
     } else {
       None
     }
-  }
-
-  /**
-   * Get the map size of the specific reduce shuffle Id.
-   */
-  def getMapSizesForReduceId(shuffleId: Int, partitionId: Int): Array[Long] = {
-    val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-    mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses.map{_.getSizeForBlock(partitionId)}
   }
 
   /**

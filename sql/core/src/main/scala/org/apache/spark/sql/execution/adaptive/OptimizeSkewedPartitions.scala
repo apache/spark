@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * A rule to expand the shuffle partitions based on the map output statistics, which can
+ * A rule to optimize the skewed shuffle partitions based on the map output statistics, which can
  * avoid data skew that hurt performance.
  *
- * We use ADVISORY_PARTITION_SIZE_IN_BYTES size to decide if a partition should be expanded.
+ * We use ADVISORY_PARTITION_SIZE_IN_BYTES size to decide if a partition should be optimized.
  * Let's say we have 3 maps with 3 shuffle partitions, and assuming r1 has data skew issue.
  * the map side looks like:
  *   m0:[b0, b1, b2], m1:[b0, b1, b2], m2:[b0, b1, b2]
@@ -42,7 +41,7 @@ object OptimizeSkewedPartitions extends CustomShuffleReaderRule {
   override def supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(REBALANCE_PARTITIONS_BY_NONE, REBALANCE_PARTITIONS_BY_COL)
 
-  private def expandPartitions(shuffle: ShuffleQueryStageExec): SparkPlan = {
+  private def optimizeSkewedPartitions(shuffle: ShuffleQueryStageExec): SparkPlan = {
     val advisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
     val mapStats = shuffle.mapStats
     if (mapStats.isEmpty ||
@@ -56,18 +55,15 @@ object OptimizeSkewedPartitions extends CustomShuffleReaderRule {
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.getConf(SQLConf.ADAPTIVE_EXPAND_PARTITIONS_ENABLED)) {
+    if (!conf.getConf(SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED)) {
       return plan
     }
 
     plan match {
-      case shuffle: ShuffleQueryStageExec if supportCoalesce(shuffle.shuffle) =>
-        expandPartitions(shuffle)
+      case shuffle: ShuffleQueryStageExec
+          if supportedShuffleOrigins.contains(shuffle.shuffle.shuffleOrigin) =>
+        optimizeSkewedPartitions(shuffle)
       case _ => plan
     }
-  }
-
-  private def supportCoalesce(s: ShuffleExchangeLike): Boolean = {
-    s.outputPartitioning != SinglePartition && supportedShuffleOrigins.contains(s.shuffleOrigin)
   }
 }

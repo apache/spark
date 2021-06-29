@@ -1807,7 +1807,7 @@ class AdaptiveQueryExecSuite
 
   test("SPARK-35650: Use local shuffle reader if can not coalesce number of partitions") {
     withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2",
-      SQLConf.ADAPTIVE_EXPAND_PARTITIONS_ENABLED.key -> "false") {
+      SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "false") {
       val query = "SELECT /*+ REPARTITION */ * FROM testData"
       val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
       collect(adaptivePlan) {
@@ -1822,11 +1822,11 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-35725: Support repartition expand partitions in AQE") {
+  test("SPARK-35725: Support optimize skewed partitions in RebalancePartitions") {
     withTempView("v") {
       withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
-        SQLConf.ADAPTIVE_EXPAND_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.SHUFFLE_PARTITIONS.key -> "5",
         SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
@@ -1851,7 +1851,6 @@ class AdaptiveQueryExecSuite
           }
         }
 
-        // test without coalesced
         withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
           // partition size [0,258,72,72,72]
           checkPartitionNumber("SELECT /*+ REBALANCE(c1) */ * FROM v", 3, 7)

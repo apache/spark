@@ -642,11 +642,12 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(0L)
 
-  val ADAPTIVE_EXPAND_PARTITIONS_ENABLED =
-    buildConf("spark.sql.adaptive.expandPartitions.enabled")
-      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark will expand large " +
-        "shuffle partition to some small partitions according to the target size (specified by " +
-        s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'), to avoid data skew.")
+  val ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED =
+    buildConf("spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled")
+      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark will optimize the " +
+        "skewed shuffle partition to some small partitions according to the target size " +
+        s"(specified by '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'), to avoid data skew. " +
+        s"Note that, this optimization is only effective with RebalancePartitions.")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
