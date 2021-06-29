@@ -177,6 +177,9 @@ catalyst = Module(
     sbt_test_goals=[
         "catalyst/test",
     ],
+    environ=None if "GITHUB_ACTIONS" not in os.environ else {
+        "ENABLE_DOCKER_INTEGRATION_TESTS": "1"
+    },
 )
 
 sql = Module(
@@ -188,6 +191,9 @@ sql = Module(
     sbt_test_goals=[
         "sql/test",
     ],
+    environ=None if "GITHUB_ACTIONS" not in os.environ else {
+        "ENABLE_DOCKER_INTEGRATION_TESTS": "1"
+    },
 )
 
 hive = Module(
