@@ -21,14 +21,13 @@ import java.net.URI
 import java.util.Locale
 import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
+import java.util.function.{Function => JFunction}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
-import com.github.benmanes.caffeine.cache.Caffeine
-import com.github.benmanes.caffeine.guava.CaffeinatedGuava
-import com.google.common.cache.Cache
+import com.github.benmanes.caffeine.cache.{Cache, Caffeine}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -169,12 +168,14 @@ class SessionCatalog(
     }
     // Wrapping as CaffeinatedGuava to be compatible with
     // the get(key, valueLoader) API of Guava cache
-    CaffeinatedGuava.build(builder)
+    builder.build()
   }
 
   /** This method provides a way to get a cached plan. */
   def getCachedPlan(t: QualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
-    tableRelationCache.get(t, c)
+    tableRelationCache.get(t, new JFunction[QualifiedTableName, LogicalPlan] {
+      override def apply(t: QualifiedTableName): LogicalPlan = c.call()
+    })
   }
 
   /** This method provides a way to get a cached plan if the key exists. */
