@@ -3018,7 +3018,6 @@
               <include>org.jpmml:*</include>
             </includes>
           </artifactSet>
-
           <relocations>
             <relocation>
               <pattern>org.eclipse.jetty</pattern>
