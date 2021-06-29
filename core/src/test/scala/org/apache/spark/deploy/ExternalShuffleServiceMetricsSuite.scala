@@ -51,9 +51,13 @@ class ExternalShuffleServiceMetricsSuite extends SparkFunSuite {
     val sourceRef = classOf[ExternalShuffleService].getDeclaredField("shuffleServiceSource")
     sourceRef.setAccessible(true)
     val source = sourceRef.get(externalShuffleService).asInstanceOf[ExternalShuffleServiceSource]
-    assert(source.metricRegistry.getMetrics.keySet().asScala ==
-      Set(
+    // Use sorted Seq instead of Set for easier comparison when there is a mismatch
+    assert(source.metricRegistry.getMetrics.keySet().asScala.toSeq.sorted ==
+      Seq(
+        "blockTransferRate",
+        "blockTransferMessageRate",
         "blockTransferRateBytes",
+        "blockTransferAvgSize_1min",
         "numActiveConnections",
         "numCaughtExceptions",
         "numRegisteredConnections",
@@ -63,7 +67,7 @@ class ExternalShuffleServiceMetricsSuite extends SparkFunSuite {
         "shuffle-server.usedDirectMemory",
         "shuffle-server.usedHeapMemory",
         "finalizeShuffleMergeLatencyMillis",
-        "fetchMergedBlocksMetaLatencyMillis")
+        "fetchMergedBlocksMetaLatencyMillis").sorted
     )
   }
 }

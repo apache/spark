@@ -31,6 +31,7 @@ from typing import (
     Callable,
     Dict,
     Generic,
+    Iterator,
     Mapping,
     List,
     Optional,
@@ -40,6 +41,7 @@ from typing import (
     TypeVar,
     Union,
     cast,
+    TYPE_CHECKING,
 )
 
 import pandas as pd
@@ -73,6 +75,7 @@ from pyspark.pandas.missing.groupby import (
     MissingPandasLikeSeriesGroupBy,
 )
 from pyspark.pandas.series import Series, first_series
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -84,8 +87,11 @@ from pyspark.pandas.utils import (
     verify_temp_column_name,
 )
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
-from pyspark.pandas.window import RollingGroupby, ExpandingGroupby
 from pyspark.pandas.exceptions import DataError
+
+if TYPE_CHECKING:
+    from pyspark.pandas.window import RollingGroupby, ExpandingGroupby  # noqa: F401 (SPARK-34943)
+
 
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
@@ -561,7 +567,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         5  False
         """
         return self._reduce_for_stat_function(
-            lambda col: F.min(F.coalesce(col.cast("boolean"), F.lit(True))), only_numeric=False
+            lambda col: F.min(F.coalesce(col.cast("boolean"), SF.lit(True))), only_numeric=False
         )
 
     # TODO: skipna should be implemented.
@@ -603,7 +609,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         5  False
         """
         return self._reduce_for_stat_function(
-            lambda col: F.max(F.coalesce(col.cast("boolean"), F.lit(False))), only_numeric=False
+            lambda col: F.max(F.coalesce(col.cast("boolean"), SF.lit(False))), only_numeric=False
         )
 
     # TODO: groupby multiply columns should be implemented.
@@ -793,7 +799,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         ret = (
             self._groupkeys[0]
             .rename()
-            .spark.transform(lambda _: F.lit(0))
+            .spark.transform(lambda _: SF.lit(0))
             ._cum(F.count, True, part_cols=self._groupkeys_scols, ascending=ascending)
             - 1
         )
@@ -2319,7 +2325,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
         return self._reduce_for_stat_function(stat_function, only_numeric=False)
 
-    def rolling(self, window: int, min_periods: Optional[int] = None) -> RollingGroupby:
+    def rolling(self, window: int, min_periods: Optional[int] = None) -> "RollingGroupby[T_Frame]":
         """
         Return an rolling grouper, providing rolling
         functionality per group.
@@ -2344,11 +2350,11 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         Series.groupby
         DataFrame.groupby
         """
-        return RollingGroupby(
-            cast(Union[SeriesGroupBy, DataFrameGroupBy], self), window, min_periods=min_periods
-        )
+        from pyspark.pandas.window import RollingGroupby
 
-    def expanding(self, min_periods: int = 1) -> ExpandingGroupby:
+        return RollingGroupby(self, window, min_periods=min_periods)
+
+    def expanding(self, min_periods: int = 1) -> "ExpandingGroupby[T_Frame]":
         """
         Return an expanding grouper, providing expanding
         functionality per group.
@@ -2368,9 +2374,9 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         Series.groupby
         DataFrame.groupby
         """
-        return ExpandingGroupby(
-            cast(Union[SeriesGroupBy, DataFrameGroupBy], self), min_periods=min_periods
-        )
+        from pyspark.pandas.window import ExpandingGroupby
+
+        return ExpandingGroupby(self, min_periods=min_periods)
 
     def get_group(self, name: Union[Any, Tuple, List[Union[Any, Tuple]]]) -> T_Frame:
         """
@@ -2422,7 +2428,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
                 )
         if not is_list_like(name):
             name = [name]
-        cond = F.lit(True)
+        cond = SF.lit(True)
         for groupkey, item in zip(groupkeys, name):
             scol = groupkey.spark.column
             cond = cond & (scol == item)
@@ -2543,7 +2549,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
                 # Special handle floating point types because Spark's count treats nan as a valid
                 # value, whereas pandas count doesn't include nan.
                 if isinstance(spark_type, DoubleType) or isinstance(spark_type, FloatType):
-                    stat_exprs.append(sfun(F.nanvl(scol, F.lit(None))).alias(name))
+                    stat_exprs.append(sfun(F.nanvl(scol, SF.lit(None))).alias(name))
                     data_columns.append(name)
                     column_labels.append(label)
                 elif isinstance(spark_type, NumericType) or not only_numeric:
@@ -2632,7 +2638,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
         def assign_columns(
             psdf: DataFrame, this_column_labels: List[Tuple], that_column_labels: List[Tuple]
-        ) -> Tuple[Series, Tuple]:
+        ) -> Iterator[Tuple[Series, Tuple]]:
             raise NotImplementedError(
                 "Duplicated labels with groupby() and "
                 "'compute.ops_on_diff_frames' option are not supported currently "

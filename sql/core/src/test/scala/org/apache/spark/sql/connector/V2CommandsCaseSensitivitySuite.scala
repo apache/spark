@@ -17,9 +17,8 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, TestRelation2}
-import org.apache.spark.sql.catalyst.analysis.CreateTablePartitioningValidationSuite
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, UnresolvedFieldName}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AlterTableAlterColumn, AlterTableCommand, AlterTableDropColumns, AlterTableRenameColumn, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -32,6 +31,12 @@ import org.apache.spark.sql.types.{LongType, StringType}
 class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTest {
   import CreateTablePartitioningValidationSuite._
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+
+  private val table = ResolvedTable(
+    catalog,
+    Identifier.of(Array(), "table_name"),
+    null,
+    schema.toAttributes)
 
   override protected def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = {
     Seq(PreprocessTableCreation(spark))
@@ -186,7 +191,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: drop column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        TableChange.deleteColumn(ref),
+        AlterTableDropColumns(table, Seq(UnresolvedFieldName(ref))),
         Seq("Cannot delete missing field", ref.quoted)
       )
     }
@@ -195,7 +200,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: rename column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        TableChange.renameColumn(ref, "newName"),
+        AlterTableRenameColumn(table, UnresolvedFieldName(ref), "newName"),
         Seq("Cannot rename missing field", ref.quoted)
       )
     }
@@ -204,7 +209,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: drop column nullability resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        TableChange.updateColumnNullability(ref, true),
+        AlterTableAlterColumn(table, UnresolvedFieldName(ref), None, Some(true), None, None),
         Seq("Cannot update missing field", ref.quoted)
       )
     }
@@ -213,7 +218,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: change column type resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        TableChange.updateColumnType(ref, StringType),
+        AlterTableAlterColumn(table, UnresolvedFieldName(ref), Some(StringType), None, None, None),
         Seq("Cannot update missing field", ref.quoted)
       )
     }
@@ -222,7 +227,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: change column comment resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        TableChange.updateColumnComment(ref, "Here's a comment for ya"),
+        AlterTableAlterColumn(table, UnresolvedFieldName(ref), None, None, Some("comment"), None),
         Seq("Cannot update missing field", ref.quoted)
       )
     }
@@ -246,6 +251,18 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           assertAnalysisError(plan, error, caseSensitive)
         } else {
           assertAnalysisSuccess(plan, caseSensitive)
+        }
+      }
+    }
+  }
+
+  private def alterTableTest(alter: AlterTableCommand, error: Seq[String]): Unit = {
+    Seq(true, false).foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
+        if (caseSensitive) {
+          assertAnalysisError(alter, error, caseSensitive)
+        } else {
+          assertAnalysisSuccess(alter, caseSensitive)
         }
       }
     }

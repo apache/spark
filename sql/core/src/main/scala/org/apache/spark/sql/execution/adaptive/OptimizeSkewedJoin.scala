@@ -153,7 +153,10 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
       val isLeftSkew = canSplitLeft && leftSize > leftSkewThreshold
       val rightSize = rightSizes(partitionIndex)
       val isRightSkew = canSplitRight && rightSize > rightSkewThreshold
-      val noSkewPartitionSpec = Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1))
+      val leftNoSkewPartitionSpec =
+        Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1, leftSize))
+      val rightNoSkewPartitionSpec =
+        Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1, rightSize))
 
       val leftParts = if (isLeftSkew) {
         val skewSpecs = ShufflePartitionsUtil.createSkewPartitionSpecs(
@@ -164,9 +167,9 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
             s"split it into ${skewSpecs.get.length} parts.")
           numSkewedLeft += 1
         }
-        skewSpecs.getOrElse(noSkewPartitionSpec)
+        skewSpecs.getOrElse(leftNoSkewPartitionSpec)
       } else {
-        noSkewPartitionSpec
+        leftNoSkewPartitionSpec
       }
 
       val rightParts = if (isRightSkew) {
@@ -178,9 +181,9 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
             s"split it into ${skewSpecs.get.length} parts.")
           numSkewedRight += 1
         }
-        skewSpecs.getOrElse(noSkewPartitionSpec)
+        skewSpecs.getOrElse(rightNoSkewPartitionSpec)
       } else {
-        noSkewPartitionSpec
+        rightNoSkewPartitionSpec
       }
 
       for {

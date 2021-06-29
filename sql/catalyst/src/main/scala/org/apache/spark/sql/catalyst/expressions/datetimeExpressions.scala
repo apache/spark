@@ -59,6 +59,11 @@ trait TimeZoneAwareExpression extends Expression {
   def withTimeZone(timeZoneId: String): TimeZoneAwareExpression
 
   @transient lazy val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId.get)
+
+  def zoneIdForType(dataType: DataType): ZoneId = dataType match {
+    case _: TimestampWithoutTZType => java.time.ZoneOffset.UTC
+    case _ => zoneId
+  }
 }
 
 trait TimestampFormatterHelper extends TimeZoneAwareExpression {
@@ -1446,23 +1451,25 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TimestampType, TypeCollection(CalendarIntervalType, DayTimeIntervalType))
+    Seq(TypeCollection.AllTimestampTypes, TypeCollection(CalendarIntervalType, DayTimeIntervalType))
 
-  override def dataType: DataType = TimestampType
+  override def dataType: DataType = start.dataType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(left.dataType)
+
   override def nullSafeEval(start: Any, interval: Any): Any = right.dataType match {
     case _: DayTimeIntervalType =>
-      timestampAddDayTime(start.asInstanceOf[Long], interval.asInstanceOf[Long], zoneId)
+      timestampAddDayTime(start.asInstanceOf[Long], interval.asInstanceOf[Long], zoneIdInEval)
     case CalendarIntervalType =>
       val i = interval.asInstanceOf[CalendarInterval]
-      timestampAddInterval(start.asInstanceOf[Long], i.months, i.days, i.microseconds, zoneId)
+      timestampAddInterval(start.asInstanceOf[Long], i.months, i.days, i.microseconds, zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     interval.dataType match {
       case _: DayTimeIntervalType =>
@@ -1749,19 +1756,22 @@ case class TimestampAddYMInterval(
 
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, YearMonthIntervalType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection.AllTimestampTypes, YearMonthIntervalType)
 
-  override def dataType: DataType = TimestampType
+  override def dataType: DataType = timestamp.dataType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(left.dataType)
+
   override def nullSafeEval(micros: Any, months: Any): Any = {
-    timestampAddMonths(micros.asInstanceOf[Long], months.asInstanceOf[Int], zoneId)
+    timestampAddMonths(micros.asInstanceOf[Long], months.asInstanceOf[Int], zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (micros, months) => {
       s"""$dtu.timestampAddMonths($micros, $months, $zid)"""

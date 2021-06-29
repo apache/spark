@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -15,32 +17,22 @@
 # limitations under the License.
 #
 
-ARG base_img
+realpath () {
+(
+  TARGET_FILE="$1"
 
-FROM $base_img
-WORKDIR /
+  cd "$(dirname "$TARGET_FILE")"
+  TARGET_FILE="$(basename "$TARGET_FILE")"
 
-# Reset to root to run installation tasks
-USER 0
+  COUNT=0
+  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
+  do
+      TARGET_FILE="$(readlink "$TARGET_FILE")"
+      cd $(dirname "$TARGET_FILE")
+      TARGET_FILE="$(basename $TARGET_FILE)"
+      COUNT=$(($COUNT + 1))
+  done
 
-RUN mkdir ${SPARK_HOME}/R
-
-# Install R 3.6.3 (http://cloud.r-project.org/bin/linux/debian/)
-RUN \
-  apt-get update && \
-  apt install -y gnupg && \
-  echo "deb http://cloud.r-project.org/bin/linux/debian buster-cran35/" >> /etc/apt/sources.list && \
-  apt-key adv --keyserver keyserver.ubuntu.com --recv-key 'E19F5F87128899B192B1A2C2AD5F960A256A04AF' && \
-  apt-get update && \
-  apt install -y -t buster-cran35 r-base r-base-dev && \
-  rm -rf /var/cache/apt/*
-
-COPY R ${SPARK_HOME}/R
-ENV R_HOME /usr/lib/R
-
-WORKDIR /opt/spark/work-dir
-ENTRYPOINT [ "/opt/entrypoint.sh" ]
-
-# Specify the User that the actual main process will run as
-ARG spark_uid=185
-USER ${spark_uid}
+  echo "$(pwd -P)/"$TARGET_FILE""
+)
+}
