@@ -30,7 +30,7 @@ public interface ParquetVectorUpdater {
    * @param values destination values vector
    * @param valuesReader reader to read values from
    */
-  void updateBatch(
+  void readValues(
       int total,
       int offset,
       WritableColumnVector values,
@@ -42,7 +42,7 @@ public interface ParquetVectorUpdater {
    * @param total total number of values to skip
    * @param valuesReader reader to skip values from
    */
-  void skipBatch(int total, VectorizedValuesReader valuesReader);
+  void skipValues(int total, VectorizedValuesReader valuesReader);
 
   /**
    * Read a single value from `valuesReader` into `values`, at `offset`.
@@ -51,7 +51,7 @@ public interface ParquetVectorUpdater {
    * @param values destination value vector
    * @param valuesReader reader to read values from
    */
-  void update(int offset, WritableColumnVector values, VectorizedValuesReader valuesReader);
+  void readValue(int offset, WritableColumnVector values, VectorizedValuesReader valuesReader);
 
   /**
    * Process a batch of `total` values starting from `offset` in `values`, whose null slots

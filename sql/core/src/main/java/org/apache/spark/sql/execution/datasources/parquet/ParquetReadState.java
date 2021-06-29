@@ -26,8 +26,15 @@ import java.util.PrimitiveIterator;
  * Helper class to store intermediate state while reading a Parquet column chunk.
  */
 final class ParquetReadState {
+  /** A special row range used when there is no row indexes (hence all rows must be included) */
   private static final RowRange MAX_ROW_RANGE = new RowRange(Long.MIN_VALUE, Long.MAX_VALUE);
-  private static final RowRange MIN_ROW_RANGE = new RowRange(Long.MAX_VALUE, Long.MIN_VALUE);
+
+  /**
+   * A special row range used when the row indexes are present AND all the row ranges have been
+   * processed. This serves as a sentinel at the end indicating that all rows come after the last
+   * row range should be skipped.
+   */
+  private static final RowRange END_ROW_RANGE = new RowRange(Long.MAX_VALUE, Long.MIN_VALUE);
 
   /** Iterator over all row ranges, only not-null if column index is present */
   private final Iterator<RowRange> rowRanges;
@@ -133,7 +140,7 @@ final class ParquetReadState {
     if (rowRanges == null) {
       currentRange = MAX_ROW_RANGE;
     } else if (!rowRanges.hasNext()) {
-      currentRange = MIN_ROW_RANGE;
+      currentRange = END_ROW_RANGE;
     } else {
       currentRange = rowRanges.next();
     }

@@ -182,8 +182,9 @@ public class VectorizedColumnReader {
         if (column.hasDictionary() || (startRowId == pageFirstRowIndex &&
             isLazyDecodingSupported(typeName))) {
           // Column vector supports lazy decoding of dictionary values so just set the dictionary.
-          // We can't do this if rowId != 0 AND the column doesn't have a dictionary (i.e. some
-          // non-dictionary encoded values have already been added).
+          // We can't do this if startRowId is not the first row index in the page AND the column
+          // doesn't have a dictionary (i.e. some non-dictionary encoded values have already been
+          // added).
           PrimitiveType primitiveType = descriptor.getPrimitiveType();
 
           // We need to make sure that we initialize the right type for the dictionary otherwise
@@ -223,6 +224,8 @@ public class VectorizedColumnReader {
 
   private int readPage() {
     DataPage page = pageReader.readPage();
+    this.pageFirstRowIndex = page.getFirstRowIndex().orElse(0L);
+
     return page.accept(new DataPage.Visitor<Integer>() {
       @Override
       public Integer visit(DataPageV1 dataPageV1) {
@@ -278,9 +281,6 @@ public class VectorizedColumnReader {
   }
 
   private int readPageV1(DataPageV1 page) throws IOException {
-    this.pageFirstRowIndex = page.getFirstRowIndex().orElse(0L);
-
-    // Initialize the decoders.
     if (page.getDlEncoding() != Encoding.RLE && descriptor.getMaxDefinitionLevel() != 0) {
       throw new UnsupportedOperationException("Unsupported encoding: " + page.getDlEncoding());
     }
@@ -307,8 +307,6 @@ public class VectorizedColumnReader {
   }
 
   private int readPageV2(DataPageV2 page) throws IOException {
-    this.pageFirstRowIndex = page.getFirstRowIndex().orElse(0L);
-
     int pageValueCount = page.getValueCount();
     int bitWidth = BytesUtils.getWidthFromMaxInt(descriptor.getMaxDefinitionLevel());
 

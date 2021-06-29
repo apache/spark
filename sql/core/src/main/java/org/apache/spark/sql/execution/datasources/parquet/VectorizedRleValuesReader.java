@@ -181,7 +181,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       long rangeEnd = state.currentRangeEnd();
 
       if (rowId + n < rangeStart) {
-        updater.skipBatch(n, valueReader);
+        updater.skipValues(n, valueReader);
         advance(n);
         rowId += n;
         leftInPage -= n;
@@ -195,7 +195,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
         // skip the part [rowId, start)
         int toSkip = (int) (start - rowId);
         if (toSkip > 0) {
-          updater.skipBatch(toSkip, valueReader);
+          updater.skipValues(toSkip, valueReader);
           advance(toSkip);
           rowId += toSkip;
           leftInPage -= toSkip;
@@ -207,7 +207,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
         switch (mode) {
           case RLE:
             if (currentValue == state.maxDefinitionLevel) {
-              updater.updateBatch(n, offset, values, valueReader);
+              updater.readValues(n, offset, values, valueReader);
             } else {
               values.putNulls(offset, n);
             }
@@ -215,7 +215,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
           case PACKED:
             for (int i = 0; i < n; ++i) {
               if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
-                updater.update(offset + i, values, valueReader);
+                updater.readValue(offset + i, values, valueReader);
               } else {
                 values.putNull(offset + i);
               }
