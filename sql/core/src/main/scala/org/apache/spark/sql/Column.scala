@@ -1200,7 +1200,7 @@ class Column(val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 3.2.0
    */
-  def toPrettyString: Column = withExpr {
+  private[sql] def toPrettyString: Column = withExpr {
     val cast = ToPrettyString(expr)
     cast.setTagValue(Cast.USER_SPECIFIED_CAST, true)
     cast
