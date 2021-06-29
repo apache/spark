@@ -26,15 +26,14 @@ import org.mockito.invocation.InvocationOnMock
 
 import org.apache.spark.sql.{AnalysisException, SaveMode}
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, Analyzer, EmptyFunctionRegistry, NoSuchTableException, ResolvedFieldName, ResolvedTable, ResolveSessionCatalog, UnresolvedAttribute, UnresolvedRelation, UnresolvedSubqueryColumnAliases, UnresolvedTable}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, TableChange, V1Table}
-import org.apache.spark.sql.connector.catalog.TableChange.{UpdateColumnComment, UpdateColumnType}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.datasources.CreateTable
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
@@ -1101,17 +1100,27 @@ class PlanResolutionSuite extends AnalysisTest {
             "ALTER COLUMN with qualified column is only supported with v2 tables"))
         } else {
           parsed1 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(
-                TableChange.updateColumnType(Array("i"), LongType)))
-            case _ => fail("expect AlterTable")
+            case AlterTableAlterColumn(
+                _: ResolvedTable,
+                column: ResolvedFieldName,
+                Some(LongType),
+                None,
+                None,
+                None) =>
+              assert(column.name == Seq("i"))
+            case _ => fail("expect AlterTableAlterColumn")
           }
 
           parsed2 match {
-            case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-              assert(changes == Seq(
-                TableChange.updateColumnComment(Array("i"), "new comment")))
-            case _ => fail("expect AlterTable")
+            case AlterTableAlterColumn(
+                _: ResolvedTable,
+                column: ResolvedFieldName,
+                None,
+                None,
+                Some("new comment"),
+                None) =>
+              assert(column.name == Seq("i"))
+            case _ => fail("expect AlterTableAlterColumn")
           }
         }
     }
@@ -1158,21 +1167,18 @@ class PlanResolutionSuite extends AnalysisTest {
   test("alter table: hive style change column") {
     Seq("v2Table", "testcat.tab").foreach { tblName =>
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i int COMMENT 'an index'") match {
-        case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-          assert(changes.length == 1, "Should only have a comment change")
-          assert(changes.head.isInstanceOf[UpdateColumnComment],
-            s"Expected only a UpdateColumnComment change but got: ${changes.head}")
-        case _ => fail("expect AlterTable")
+        case AlterTableAlterColumn(
+            _: ResolvedTable, _: ResolvedFieldName, None, None, Some(comment), None) =>
+          assert(comment == "an index")
+        case _ => fail("expect AlterTableAlterColumn with comment change only")
       }
 
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i long COMMENT 'an index'") match {
-        case AlterTable(_, _, _: DataSourceV2Relation, changes) =>
-          assert(changes.length == 2, "Should have a comment change and type change")
-          assert(changes.exists(_.isInstanceOf[UpdateColumnComment]),
-            s"Expected UpdateColumnComment change but got: ${changes}")
-          assert(changes.exists(_.isInstanceOf[UpdateColumnType]),
-            s"Expected UpdateColumnType change but got: ${changes}")
-        case _ => fail("expect AlterTable")
+        case AlterTableAlterColumn(
+            _: ResolvedTable, _: ResolvedFieldName, Some(dataType), None, Some(comment), None) =>
+          assert(comment == "an index")
+          assert(dataType == LongType)
+        case _ => fail("expect AlterTableAlterColumn with type and comment changes")
       }
     }
   }
@@ -1201,23 +1207,23 @@ class PlanResolutionSuite extends AnalysisTest {
   DSV2ResolutionTests.foreach { case (sql, isSessionCatalog) =>
     test(s"Data source V2 relation resolution '$sql'") {
       val parsed = parseAndResolve(sql, withDefault = true)
-      val catalogIdent = if (isSessionCatalog) v2SessionCatalog else testCat
+      val catalog = if (isSessionCatalog) v2SessionCatalog else testCat
       val tableIdent = if (isSessionCatalog) "v2Table" else "tab"
       parsed match {
-        case AlterTable(_, _, r: DataSourceV2Relation, _) =>
-          assert(r.catalog.exists(_ == catalogIdent))
-          assert(r.identifier.exists(_.name() == tableIdent))
+        case AlterTableAlterColumn(r: ResolvedTable, _, _, _, _, _) =>
+          assert(r.catalog == catalog)
+          assert(r.identifier.name() == tableIdent)
         case Project(_, AsDataSourceV2Relation(r)) =>
-          assert(r.catalog.exists(_ == catalogIdent))
+          assert(r.catalog.exists(_ == catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
         case AppendData(r: DataSourceV2Relation, _, _, _, _) =>
-          assert(r.catalog.exists(_ == catalogIdent))
+          assert(r.catalog.exists(_ == catalog))
           assert(r.identifier.exists(_.name() == tableIdent))
         case DescribeRelation(r: ResolvedTable, _, _, _) =>
-          assert(r.catalog == catalogIdent)
+          assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case ShowTableProperties(r: ResolvedTable, _, _) =>
-          assert(r.catalog == catalogIdent)
+          assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case ShowTablePropertiesCommand(t: TableIdentifier, _, _) =>
           assert(t.identifier == tableIdent)

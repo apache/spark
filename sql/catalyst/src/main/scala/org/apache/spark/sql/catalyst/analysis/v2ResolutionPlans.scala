@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
+import org.apache.spark.sql.types.{DataType, StructField}
 
 /**
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
@@ -92,12 +93,26 @@ case class UnresolvedPartitionSpec(
 sealed trait FieldName extends LeafExpression with Unevaluable {
   def name: Seq[String]
   override def dataType: DataType = throw new IllegalStateException(
-    "UnresolvedFieldName.dataType should not be called.")
+    "FieldName.dataType should not be called.")
   override def nullable: Boolean = throw new IllegalStateException(
-    "UnresolvedFieldName.nullable should not be called.")
+    "FieldName.nullable should not be called.")
 }
 
 case class UnresolvedFieldName(name: Seq[String]) extends FieldName {
+  override lazy val resolved = false
+}
+
+sealed trait FieldPosition extends LeafExpression with Unevaluable {
+  def position: ColumnPosition
+  override def dataType: DataType = throw new IllegalStateException(
+    "FieldPosition.dataType should not be called.")
+  override def nullable: Boolean = throw new IllegalStateException(
+    "FieldPosition.nullable should not be called.")
+}
+
+case class UnresolvedFieldPosition(
+    fieldName: Seq[String],
+    position: ColumnPosition) extends FieldPosition {
   override lazy val resolved = false
 }
 
@@ -150,7 +165,12 @@ case class ResolvedPartitionSpec(
     ident: InternalRow,
     location: Option[String] = None) extends PartitionSpec
 
-case class ResolvedFieldName(name: Seq[String]) extends FieldName
+case class ResolvedFieldName(path: Seq[String], field: StructField) extends FieldName {
+  def name: Seq[String] = path :+ field.name
+}
+
+case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition
+
 
 /**
  * A plan containing resolved (temp) views.

@@ -94,58 +94,34 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       createAlterTable(nameParts, catalog, tbl, changes)
 
-    case a @ AlterTableAlterColumnStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
-      a.dataType.foreach(failNullType)
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          if (a.column.length > 1) {
-            throw QueryCompilationErrors.alterQualifiedColumnOnlySupportedWithV2TableError
-          }
-          if (a.nullable.isDefined) {
-            throw QueryCompilationErrors.alterColumnWithV1TableCannotSpecifyNotNullError
-          }
-          if (a.position.isDefined) {
-            throw QueryCompilationErrors.alterOnlySupportedWithV2TableError
-          }
-          val builder = new MetadataBuilder
-          // Add comment to metadata
-          a.comment.map(c => builder.putString("comment", c))
-          val colName = a.column(0)
-          val dataType = a.dataType.getOrElse {
-            v1Table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
-              .map(_._2.dataType)
-              .getOrElse {
-                throw QueryCompilationErrors.alterColumnCannotFindColumnInV1TableError(
-                  quoteIfNeeded(colName), v1Table)
-              }
-          }
-          val newColumn = StructField(
-            colName,
-            dataType,
-            nullable = true,
-            builder.build())
-          AlterTableChangeColumnCommand(tbl.asTableIdentifier, colName, newColumn)
-      }.getOrElse {
-        val colName = a.column.toArray
-        val typeChange = a.dataType.map { newDataType =>
-          TableChange.updateColumnType(colName, newDataType)
-        }
-        val nullabilityChange = a.nullable.map { nullable =>
-          TableChange.updateColumnNullability(colName, nullable)
-        }
-        val commentChange = a.comment.map { newComment =>
-          TableChange.updateColumnComment(colName, newComment)
-        }
-        val positionChange = a.position.map { newPosition =>
-          TableChange.updateColumnPosition(colName, newPosition)
-        }
-        createAlterTable(
-          nameParts,
-          catalog,
-          tbl,
-          typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
+    case a @ AlterTableAlterColumn(ResolvedV1TableAndIdentifier(table, ident), _, _, _, _, _) =>
+      if (a.column.name.length > 1) {
+        throw QueryCompilationErrors.alterQualifiedColumnOnlySupportedWithV2TableError
       }
+      if (a.nullable.isDefined) {
+        throw QueryCompilationErrors.alterColumnWithV1TableCannotSpecifyNotNullError
+      }
+      if (a.position.isDefined) {
+        throw QueryCompilationErrors.alterOnlySupportedWithV2TableError
+      }
+      val builder = new MetadataBuilder
+      // Add comment to metadata
+      a.comment.map(c => builder.putString("comment", c))
+      val colName = a.column.name(0)
+      val dataType = a.dataType.getOrElse {
+        table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
+          .map(_._2.dataType)
+          .getOrElse {
+            throw QueryCompilationErrors.alterColumnCannotFindColumnInV1TableError(
+              quoteIfNeeded(colName), table)
+          }
+      }
+      val newColumn = StructField(
+        colName,
+        dataType,
+        nullable = true,
+        builder.build())
+      AlterTableChangeColumnCommand(ident.asTableIdentifier, colName, newColumn)
 
     case AlterTableRenameColumn(ResolvedV1TableIdentifier(_), _, _) =>
       throw QueryCompilationErrors.renameColumnOnlySupportedWithV2TableError
@@ -658,6 +634,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   object ResolvedViewIdentifier {
     def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
       case ResolvedView(ident, _) => Some(ident)
+      case _ => None
+    }
+  }
+
+  object ResolvedV1TableAndIdentifier {
+    def unapply(resolved: LogicalPlan): Option[(V1Table, Identifier)] = resolved match {
+      case ResolvedTable(catalog, ident, table: V1Table, _) if isSessionCatalog(catalog) =>
+        Some(table -> ident)
       case _ => None
     }
   }
