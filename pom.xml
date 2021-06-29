@@ -492,11 +492,6 @@
         <version>2.9.0</version>
       </dependency>
       <dependency>
-        <groupId>com.github.ben-manes.caffeine</groupId>
-        <artifactId>guava</artifactId>
-        <version>2.9.0</version>
-      </dependency>
-      <dependency>
         <groupId>org.jpmml</groupId>
         <artifactId>pmml-model</artifactId>
         <version>1.4.8</version>
@@ -3035,9 +3030,6 @@
             <relocation>
               <pattern>com.google.common</pattern>
               <shadedPattern>${spark.shade.packageName}.guava</shadedPattern>
-              <excludes>
-                <exclude>com.google.common.cache.**</exclude>
-              </excludes>
             </relocation>
             <relocation>
               <pattern>org.dmg.pmml</pattern>
