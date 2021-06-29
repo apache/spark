@@ -74,6 +74,7 @@ from pyspark.pandas.missing.groupby import (
     MissingPandasLikeSeriesGroupBy,
 )
 from pyspark.pandas.series import Series, first_series
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.config import get_option
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -563,7 +564,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         5  False
         """
         return self._reduce_for_stat_function(
-            lambda col: F.min(F.coalesce(col.cast("boolean"), F.lit(True))), only_numeric=False
+            lambda col: F.min(F.coalesce(col.cast("boolean"), SF.lit(True))), only_numeric=False
         )
 
     # TODO: skipna should be implemented.
@@ -605,7 +606,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         5  False
         """
         return self._reduce_for_stat_function(
-            lambda col: F.max(F.coalesce(col.cast("boolean"), F.lit(False))), only_numeric=False
+            lambda col: F.max(F.coalesce(col.cast("boolean"), SF.lit(False))), only_numeric=False
         )
 
     # TODO: groupby multiply columns should be implemented.
@@ -795,7 +796,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         ret = (
             self._groupkeys[0]
             .rename()
-            .spark.transform(lambda _: F.lit(0))
+            .spark.transform(lambda _: SF.lit(0))
             ._cum(F.count, True, part_cols=self._groupkeys_scols, ascending=ascending)
             - 1
         )
@@ -2426,7 +2427,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 )
         if not is_list_like(name):
             name = [name]
-        cond = F.lit(True)
+        cond = SF.lit(True)
         for groupkey, item in zip(groupkeys, name):
             scol = groupkey.spark.column
             cond = cond & (scol == item)
@@ -2547,7 +2548,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 # Special handle floating point types because Spark's count treats nan as a valid
                 # value, whereas pandas count doesn't include nan.
                 if isinstance(spark_type, DoubleType) or isinstance(spark_type, FloatType):
-                    stat_exprs.append(sfun(F.nanvl(scol, F.lit(None))).alias(name))
+                    stat_exprs.append(sfun(F.nanvl(scol, SF.lit(None))).alias(name))
                     data_columns.append(name)
                     column_labels.append(label)
                 elif isinstance(spark_type, NumericType) or not only_numeric:

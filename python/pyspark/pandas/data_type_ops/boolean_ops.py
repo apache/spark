@@ -32,6 +32,7 @@ from pyspark.pandas.data_type_ops.base import (
     _as_other_type,
 )
 from pyspark.pandas.internal import InternalField
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
 from pyspark.pandas.typedef.typehints import as_spark_type
 from pyspark.sql import functions as F
@@ -225,9 +226,9 @@ class BooleanOps(DataTypeOps):
             def and_func(left: Column, right: Any) -> Column:
                 if not isinstance(right, Column):
                     if pd.isna(right):
-                        right = F.lit(None)
+                        right = SF.lit(None)
                     else:
-                        right = F.lit(right)
+                        right = SF.lit(right)
                 scol = left & right
                 return F.when(scol.isNull(), False).otherwise(scol)
 
@@ -240,9 +241,9 @@ class BooleanOps(DataTypeOps):
 
             def or_func(left: Column, right: Any) -> Column:
                 if not isinstance(right, Column) and pd.isna(right):
-                    return F.lit(False)
+                    return SF.lit(False)
                 else:
-                    scol = left | F.lit(right)
+                    scol = left | SF.lit(right)
                     return F.when(left.isNull() | scol.isNull(), False).otherwise(scol)
 
             return column_op(or_func)(left, right)
@@ -282,9 +283,9 @@ class BooleanExtensionOps(BooleanOps):
         def and_func(left: Column, right: Any) -> Column:
             if not isinstance(right, Column):
                 if pd.isna(right):
-                    right = F.lit(None)
+                    right = SF.lit(None)
                 else:
-                    right = F.lit(right)
+                    right = SF.lit(right)
             return left & right
 
         return column_op(and_func)(left, right)
@@ -293,9 +294,9 @@ class BooleanExtensionOps(BooleanOps):
         def or_func(left: Column, right: Any) -> Column:
             if not isinstance(right, Column):
                 if pd.isna(right):
-                    right = F.lit(None)
+                    right = SF.lit(None)
                 else:
-                    right = F.lit(right)
+                    right = SF.lit(right)
             return left | right
 
         return column_op(or_func)(left, right)

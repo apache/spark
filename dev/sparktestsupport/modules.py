@@ -649,6 +649,7 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.test_series_conversion",
         "pyspark.pandas.tests.test_series_datetime",
         "pyspark.pandas.tests.test_series_string",
+        "pyspark.pandas.tests.test_spark_functions",
         "pyspark.pandas.tests.test_sql",
         "pyspark.pandas.tests.test_typedef",
         "pyspark.pandas.tests.test_utils",

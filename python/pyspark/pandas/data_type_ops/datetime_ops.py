@@ -34,6 +34,7 @@ from pyspark.pandas.data_type_ops.base import (
     _as_other_type,
 )
 from pyspark.pandas.internal import InternalField
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import as_spark_type, extension_dtypes, pandas_on_spark_type
 
 
@@ -62,7 +63,7 @@ class DatetimeOps(DataTypeOps):
             return cast(
                 SeriesOrIndex,
                 left.spark.transform(
-                    lambda scol: scol.astype("long") - F.lit(right).cast(as_spark_type("long"))
+                    lambda scol: scol.astype("long") - SF.lit(right).cast(as_spark_type("long"))
                 ),
             )
         else:
@@ -81,7 +82,7 @@ class DatetimeOps(DataTypeOps):
             return cast(
                 SeriesOrIndex,
                 left.spark.transform(
-                    lambda scol: F.lit(right).cast(as_spark_type("long")) - scol.astype("long")
+                    lambda scol: SF.lit(right).cast(as_spark_type("long")) - scol.astype("long")
                 ),
             )
         else:

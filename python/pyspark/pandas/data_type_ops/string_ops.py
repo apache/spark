@@ -50,7 +50,7 @@ class StringOps(DataTypeOps):
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):
             return column_op(F.concat)(left, right)
         elif isinstance(right, str):
-            return column_op(F.concat)(left, F.lit(right))
+            return column_op(F.concat)(left, SF.lit(right))
         else:
             raise TypeError("string addition can only be applied to string series or literals.")
 
@@ -86,7 +86,7 @@ class StringOps(DataTypeOps):
         if isinstance(right, str):
             return cast(
                 SeriesOrIndex,
-                left._with_new_scol(F.concat(F.lit(right), left.spark.column)),  # TODO: dtype?
+                left._with_new_scol(F.concat(SF.lit(right), left.spark.column)),  # TODO: dtype?
             )
         else:
             raise TypeError("string addition can only be applied to string series or literals.")
@@ -122,7 +122,7 @@ class StringOps(DataTypeOps):
             if isinstance(dtype, extension_dtypes):
                 scol = index_ops.spark.column.cast(spark_type)
             else:
-                scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
+                scol = F.when(index_ops.spark.column.isNull(), SF.lit(False)).otherwise(
                     F.length(index_ops.spark.column) > 0
                 )
             return index_ops._with_new_scol(
