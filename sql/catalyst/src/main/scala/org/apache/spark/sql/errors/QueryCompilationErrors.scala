@@ -934,8 +934,8 @@ private[spark] object QueryCompilationErrors {
     notSupportedForV2TablesError("LOAD DATA")
   }
 
-  def showCreateTableNotSupportedForV2TablesError(): Throwable = {
-    notSupportedForV2TablesError("SHOW CREATE TABLE")
+  def showCreateTableAsSerdeNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("SHOW CREATE TABLE AS SERDE")
   }
 
   def showColumnsNotSupportedForV2TablesError(): Throwable = {
