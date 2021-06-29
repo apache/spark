@@ -18,9 +18,9 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -33,10 +33,12 @@ import org.apache.spark.sql.internal.SQLConf
  * then run `EnsureRequirements` to check whether additional shuffle introduced.
  * If introduced, we will revert all the local readers.
  */
-case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
-  import OptimizeLocalShuffleReader._
+object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
 
-  private val ensureRequirements = EnsureRequirements(conf)
+  override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
+    Seq(ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_NONE)
+
+  private val ensureRequirements = EnsureRequirements
 
   // The build side is a broadcast query stage which should have been optimized using local reader
   // already. So we only need to deal with probe side here.
@@ -118,9 +120,6 @@ case class OptimizeLocalShuffleReader(conf: SQLConf) extends Rule[SparkPlan] {
         createProbeSideLocalReader(s)
     }
   }
-}
-
-object OptimizeLocalShuffleReader {
 
   object BroadcastJoinWithShuffleLeft {
     def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
@@ -140,9 +139,21 @@ object OptimizeLocalShuffleReader {
 
   def canUseLocalShuffleReader(plan: SparkPlan): Boolean = plan match {
     case s: ShuffleQueryStageExec =>
-      s.shuffle.canChangeNumPartitions && s.mapStats.isDefined
+      s.mapStats.isDefined && supportLocalReader(s.shuffle)
     case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs) =>
-      s.shuffle.canChangeNumPartitions && s.mapStats.isDefined && partitionSpecs.nonEmpty
+      s.shuffle.shuffleOrigin match {
+        case ENSURE_REQUIREMENTS =>
+          s.mapStats.isDefined && partitionSpecs.nonEmpty && supportLocalReader(s.shuffle)
+        case REBALANCE_PARTITIONS_BY_NONE =>
+          // Use LocalShuffleReader only when we can't CoalesceShufflePartitions
+          s.mapStats.exists(_.bytesByPartitionId.length == partitionSpecs.size) &&
+            partitionSpecs.nonEmpty && supportLocalReader(s.shuffle)
+        case _ => false
+      }
     case _ => false
+  }
+
+  private def supportLocalReader(s: ShuffleExchangeLike): Boolean = {
+    s.outputPartitioning != SinglePartition && supportedShuffleOrigins.contains(s.shuffleOrigin)
   }
 }

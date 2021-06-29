@@ -20,19 +20,21 @@ package org.apache.spark.storage
 import java.io.{InputStream, IOException}
 import java.nio.channels.ClosedByInterruptException
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, LinkedHashMap, Queue}
 import scala.util.{Failure, Success}
 
+import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
-import org.apache.spark.network.util.TransportConf
+import org.apache.spark.network.util.{NettyUtils, TransportConf}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 
@@ -61,6 +63,8 @@ import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
  * @param maxBlocksInFlightPerAddress max number of shuffle blocks being fetched at any given point
  *                                    for a given remote host:port.
  * @param maxReqSizeShuffleToMem max size (in bytes) of a request that can be shuffled to memory.
+ * @param maxAttemptsOnNettyOOM The max number of a block could retry due to Netty OOM before
+ *                              throwing the fetch failure.
  * @param detectCorrupt whether to detect any corruption in fetched blocks.
  * @param shuffleMetrics used to report shuffle metrics.
  * @param doBatchFetch fetch continuous shuffle blocks from same executor in batch if the server
@@ -76,7 +80,8 @@ final class ShuffleBlockFetcherIterator(
     maxBytesInFlight: Long,
     maxReqsInFlight: Int,
     maxBlocksInFlightPerAddress: Int,
-    maxReqSizeShuffleToMem: Long,
+    val maxReqSizeShuffleToMem: Long,
+    maxAttemptsOnNettyOOM: Int,
     detectCorrupt: Boolean,
     detectCorruptUseExtraMemory: Boolean,
     shuffleMetrics: ShuffleReadMetricsReporter,
@@ -147,6 +152,12 @@ final class ShuffleBlockFetcherIterator(
   private[this] val numBlocksInFlightPerAddress = new HashMap[BlockManagerId, Int]()
 
   /**
+   * Count the retry times for the blocks due to Netty OOM. The block will stop retry if
+   * retry times has exceeded the [[maxAttemptsOnNettyOOM]].
+   */
+  private[this] val blockOOMRetryCounts = new HashMap[String, Int]
+
+  /**
    * The blocks that can't be decompressed successfully, it is used to guarantee that we retry
    * at most once for those corrupted blocks.
    */
@@ -210,13 +221,18 @@ final class ShuffleBlockFetcherIterator(
     while (iter.hasNext) {
       val result = iter.next()
       result match {
-        case SuccessFetchResult(_, _, address, _, buf, _) =>
+        case SuccessFetchResult(blockId, mapIndex, address, _, buf, _) =>
           if (address != blockManager.blockManagerId) {
-            shuffleMetrics.incRemoteBytesRead(buf.size)
-            if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
-              shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
+            if (hostLocalBlocks.contains(blockId -> mapIndex)) {
+              shuffleMetrics.incLocalBlocksFetched(1)
+              shuffleMetrics.incLocalBytesRead(buf.size)
+            } else {
+              shuffleMetrics.incRemoteBytesRead(buf.size)
+              if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
+                shuffleMetrics.incRemoteBytesReadToDisk(buf.size)
+              }
+              shuffleMetrics.incRemoteBlocksFetched(1)
             }
-            shuffleMetrics.incRemoteBlocksFetched(1)
           }
           buf.release()
         case _ =>
@@ -240,8 +256,20 @@ final class ShuffleBlockFetcherIterator(
       case FetchBlockInfo(blockId, size, mapIndex) => (blockId.toString, (size, mapIndex))
     }.toMap
     val remainingBlocks = new HashSet[String]() ++= infoMap.keys
+    val deferredBlocks = new ArrayBuffer[String]()
     val blockIds = req.blocks.map(_.blockId.toString)
     val address = req.address
+
+    @inline def enqueueDeferredFetchRequestIfNecessary(): Unit = {
+      if (remainingBlocks.isEmpty && deferredBlocks.nonEmpty) {
+        val blocks = deferredBlocks.map { blockId =>
+          val (size, mapIndex) = infoMap(blockId)
+          FetchBlockInfo(BlockId(blockId), size, mapIndex)
+        }
+        results.put(DeferFetchRequestResult(FetchRequest(address, blocks.toSeq)))
+        deferredBlocks.clear()
+      }
+    }
 
     val blockFetchingListener = new BlockFetchingListener {
       override def onBlockFetchSuccess(blockId: String, buf: ManagedBuffer): Unit = {
@@ -253,17 +281,57 @@ final class ShuffleBlockFetcherIterator(
             // This needs to be released after use.
             buf.retain()
             remainingBlocks -= blockId
+            blockOOMRetryCounts.remove(blockId)
             results.put(new SuccessFetchResult(BlockId(blockId), infoMap(blockId)._2,
               address, infoMap(blockId)._1, buf, remainingBlocks.isEmpty))
             logDebug("remainingBlocks: " + remainingBlocks)
+            enqueueDeferredFetchRequestIfNecessary()
           }
         }
         logTrace(s"Got remote block $blockId after ${Utils.getUsedTimeNs(startTimeNs)}")
       }
 
       override def onBlockFetchFailure(blockId: String, e: Throwable): Unit = {
-        logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
-        results.put(new FailureFetchResult(BlockId(blockId), infoMap(blockId)._2, address, e))
+        ShuffleBlockFetcherIterator.this.synchronized {
+          logError(s"Failed to get block(s) from ${req.address.host}:${req.address.port}", e)
+          e match {
+            // SPARK-27991: Catch the Netty OOM and set the flag `isNettyOOMOnShuffle` (shared among
+            // tasks) to true as early as possible. The pending fetch requests won't be sent
+            // afterwards until the flag is set to false on:
+            // 1) the Netty free memory >= maxReqSizeShuffleToMem
+            //    - we'll check this whenever there's a fetch request succeeds.
+            // 2) the number of in-flight requests becomes 0
+            //    - we'll check this in `fetchUpToMaxBytes` whenever it's invoked.
+            // Although Netty memory is shared across multiple modules, e.g., shuffle, rpc, the flag
+            // only takes effect for the shuffle due to the implementation simplicity concern.
+            // And we'll buffer the consecutive block failures caused by the OOM error until there's
+            // no remaining blocks in the current request. Then, we'll package these blocks into
+            // a same fetch request for the retry later. In this way, instead of creating the fetch
+            // request per block, it would help reduce the concurrent connections and data loads
+            // pressure at remote server.
+            // Note that catching OOM and do something based on it is only a workaround for
+            // handling the Netty OOM issue, which is not the best way towards memory management.
+            // We can get rid of it when we find a way to manage Netty's memory precisely.
+            case _: OutOfDirectMemoryError
+                if blockOOMRetryCounts.getOrElseUpdate(blockId, 0) < maxAttemptsOnNettyOOM =>
+              if (!isZombie) {
+                val failureTimes = blockOOMRetryCounts(blockId)
+                blockOOMRetryCounts(blockId) += 1
+                if (isNettyOOMOnShuffle.compareAndSet(false, true)) {
+                  // The fetcher can fail remaining blocks in batch for the same error. So we only
+                  // log the warning once to avoid flooding the logs.
+                  logInfo(s"Block $blockId has failed $failureTimes times " +
+                    s"due to Netty OOM, will retry")
+                }
+                remainingBlocks -= blockId
+                deferredBlocks += blockId
+                enqueueDeferredFetchRequestIfNecessary()
+              }
+
+            case _ =>
+              results.put(FailureFetchResult(BlockId(blockId), infoMap(blockId)._2, address, e))
+          }
+        }
       }
     }
 
@@ -288,20 +356,18 @@ final class ShuffleBlockFetcherIterator(
     val collectedRemoteRequests = new ArrayBuffer[FetchRequest]
     var localBlockBytes = 0L
     var hostLocalBlockBytes = 0L
-    var remoteBlockBytes = 0L
 
-    val hostLocalDirReadingEnabled =
-      blockManager.hostLocalDirManager != null && blockManager.hostLocalDirManager.isDefined
-
+    val fallback = FallbackStorage.FALLBACK_BLOCK_MANAGER_ID.executorId
     for ((address, blockInfos) <- blocksByAddress) {
-      if (address.executorId == blockManager.blockManagerId.executorId) {
+      if (Seq(blockManager.blockManagerId.executorId, fallback).contains(address.executorId)) {
         checkBlockSizes(blockInfos)
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
         numBlocksToFetch += mergedBlockInfos.size
         localBlocks ++= mergedBlockInfos.map(info => (info.blockId, info.mapIndex))
         localBlockBytes += mergedBlockInfos.map(_.size).sum
-      } else if (hostLocalDirReadingEnabled && address.host == blockManager.blockManagerId.host) {
+      } else if (blockManager.hostLocalDirManager.isDefined &&
+        address.host == blockManager.blockManagerId.host) {
         checkBlockSizes(blockInfos)
         val mergedBlockInfos = mergeContinuousShuffleBlockIdsIfNeeded(
           blockInfos.map(info => FetchBlockInfo(info._1, info._2, info._3)), doBatchFetch)
@@ -312,11 +378,14 @@ final class ShuffleBlockFetcherIterator(
         hostLocalBlocks ++= blocksForAddress.map(info => (info._1, info._3))
         hostLocalBlockBytes += mergedBlockInfos.map(_.size).sum
       } else {
-        remoteBlockBytes += blockInfos.map(_._2).sum
-        collectFetchRequests(address, blockInfos, collectedRemoteRequests)
+        val (_, timeCost) = Utils.timeTakenMs[Unit] {
+          collectFetchRequests(address, blockInfos, collectedRemoteRequests)
+        }
+        logDebug(s"Collected remote fetch requests for $address in $timeCost ms")
       }
     }
-    val numRemoteBlocks = collectedRemoteRequests.map(_.blocks.size).sum
+    val (remoteBlockBytes, numRemoteBlocks) =
+      collectedRemoteRequests.foldLeft((0L, 0))((x, y) => (x._1 + y.size, x._2 + y.blocks.size))
     val totalBytes = localBlockBytes + remoteBlockBytes + hostLocalBlockBytes
     assert(numBlocksToFetch == localBlocks.size + hostLocalBlocks.size + numRemoteBlocks,
       s"The number of non-empty blocks $numBlocksToFetch doesn't equal to the number of local " +
@@ -341,10 +410,10 @@ final class ShuffleBlockFetcherIterator(
       curBlocks: Seq[FetchBlockInfo],
       address: BlockManagerId,
       isLast: Boolean,
-      collectedRemoteRequests: ArrayBuffer[FetchRequest]): Seq[FetchBlockInfo] = {
+      collectedRemoteRequests: ArrayBuffer[FetchRequest]): ArrayBuffer[FetchBlockInfo] = {
     val mergedBlocks = mergeContinuousShuffleBlockIdsIfNeeded(curBlocks, doBatchFetch)
     numBlocksToFetch += mergedBlocks.size
-    var retBlocks = Seq.empty[FetchBlockInfo]
+    val retBlocks = new ArrayBuffer[FetchBlockInfo]
     if (mergedBlocks.length <= maxBlocksInFlightPerAddress) {
       collectedRemoteRequests += createFetchRequest(mergedBlocks, address)
     } else {
@@ -354,7 +423,7 @@ final class ShuffleBlockFetcherIterator(
         } else {
           // The last group does not exceed `maxBlocksInFlightPerAddress`. Put it back
           // to `curBlocks`.
-          retBlocks = blocks
+          retBlocks ++= blocks
           numBlocksToFetch -= blocks.size
         }
       }
@@ -368,26 +437,24 @@ final class ShuffleBlockFetcherIterator(
       collectedRemoteRequests: ArrayBuffer[FetchRequest]): Unit = {
     val iterator = blockInfos.iterator
     var curRequestSize = 0L
-    var curBlocks = Seq.empty[FetchBlockInfo]
+    var curBlocks = new ArrayBuffer[FetchBlockInfo]()
 
     while (iterator.hasNext) {
       val (blockId, size, mapIndex) = iterator.next()
       assertPositiveBlockSize(blockId, size)
-      curBlocks = curBlocks ++ Seq(FetchBlockInfo(blockId, size, mapIndex))
+      curBlocks += FetchBlockInfo(blockId, size, mapIndex)
       curRequestSize += size
       // For batch fetch, the actual block in flight should count for merged block.
       val mayExceedsMaxBlocks = !doBatchFetch && curBlocks.size >= maxBlocksInFlightPerAddress
       if (curRequestSize >= targetRemoteRequestSize || mayExceedsMaxBlocks) {
-        curBlocks = createFetchRequests(curBlocks, address, isLast = false,
+        curBlocks = createFetchRequests(curBlocks.toSeq, address, isLast = false,
           collectedRemoteRequests)
         curRequestSize = curBlocks.map(_.size).sum
       }
     }
     // Add in the final request
     if (curBlocks.nonEmpty) {
-      curBlocks = createFetchRequests(curBlocks, address, isLast = true,
-        collectedRemoteRequests)
-      curRequestSize = curBlocks.map(_.size).sum
+      createFetchRequests(curBlocks.toSeq, address, isLast = true, collectedRemoteRequests)
     }
   }
 
@@ -463,54 +530,72 @@ final class ShuffleBlockFetcherIterator(
    * track in-memory are the ManagedBuffer references themselves.
    */
   private[this] def fetchHostLocalBlocks(hostLocalDirManager: HostLocalDirManager): Unit = {
-    val cachedDirsByExec = hostLocalDirManager.getCachedHostLocalDirs()
-    val (hostLocalBlocksWithCachedDirs, hostLocalBlocksWithMissingDirs) =
-      hostLocalBlocksByExecutor
-        .map { case (hostLocalBmId, bmInfos) =>
-          (hostLocalBmId, bmInfos, cachedDirsByExec.get(hostLocalBmId.executorId))
-        }.partition(_._3.isDefined)
-    val bmId = blockManager.blockManagerId
-    val immutableHostLocalBlocksWithoutDirs =
-      hostLocalBlocksWithMissingDirs.map { case (hostLocalBmId, bmInfos, _) =>
-        hostLocalBmId -> bmInfos
-      }.toMap
-    if (immutableHostLocalBlocksWithoutDirs.nonEmpty) {
-      logDebug(s"Asynchronous fetching host-local blocks without cached executors' dir: " +
-        s"${immutableHostLocalBlocksWithoutDirs.mkString(", ")}")
-      val execIdsWithoutDirs = immutableHostLocalBlocksWithoutDirs.keys.map(_.executorId).toArray
-      hostLocalDirManager.getHostLocalDirs(execIdsWithoutDirs) {
-        case Success(dirs) =>
-          immutableHostLocalBlocksWithoutDirs.foreach { case (hostLocalBmId, blockInfos) =>
-            blockInfos.takeWhile { case (blockId, _, mapIndex) =>
-              fetchHostLocalBlock(
-                blockId,
-                mapIndex,
-                dirs.get(hostLocalBmId.executorId),
-                hostLocalBmId)
-            }
-          }
-          logDebug(s"Got host-local blocks (without cached executors' dir) in " +
-            s"${Utils.getUsedTimeNs(startTimeNs)}")
+    val cachedDirsByExec = hostLocalDirManager.getCachedHostLocalDirs
+    val (hostLocalBlocksWithCachedDirs, hostLocalBlocksWithMissingDirs) = {
+      val (hasCache, noCache) = hostLocalBlocksByExecutor.partition { case (hostLocalBmId, _) =>
+        cachedDirsByExec.contains(hostLocalBmId.executorId)
+      }
+      (hasCache.toMap, noCache.toMap)
+    }
 
-        case Failure(throwable) =>
-          logError(s"Error occurred while fetching host local blocks", throwable)
-          val (hostLocalBmId, blockInfoSeq) = immutableHostLocalBlocksWithoutDirs.head
-          val (blockId, _, mapIndex) = blockInfoSeq.head
-          results.put(FailureFetchResult(blockId, mapIndex, hostLocalBmId, throwable))
+    if (hostLocalBlocksWithMissingDirs.nonEmpty) {
+      logDebug(s"Asynchronous fetching host-local blocks without cached executors' dir: " +
+        s"${hostLocalBlocksWithMissingDirs.mkString(", ")}")
+
+      // If the external shuffle service is enabled, we'll fetch the local directories for
+      // multiple executors from the external shuffle service, which located at the same host
+      // with the executors, in once. Otherwise, we'll fetch the local directories from those
+      // executors directly one by one. The fetch requests won't be too much since one host is
+      // almost impossible to have many executors at the same time practically.
+      val dirFetchRequests = if (blockManager.externalShuffleServiceEnabled) {
+        val host = blockManager.blockManagerId.host
+        val port = blockManager.externalShuffleServicePort
+        Seq((host, port, hostLocalBlocksWithMissingDirs.keys.toArray))
+      } else {
+        hostLocalBlocksWithMissingDirs.keys.map(bmId => (bmId.host, bmId.port, Array(bmId))).toSeq
+      }
+
+      dirFetchRequests.foreach { case (host, port, bmIds) =>
+        hostLocalDirManager.getHostLocalDirs(host, port, bmIds.map(_.executorId)) {
+          case Success(dirsByExecId) =>
+            fetchMultipleHostLocalBlocks(
+              hostLocalBlocksWithMissingDirs.filterKeys(bmIds.contains).toMap,
+              dirsByExecId,
+              cached = false)
+
+          case Failure(throwable) =>
+            logError("Error occurred while fetching host local blocks", throwable)
+            val bmId = bmIds.head
+            val blockInfoSeq = hostLocalBlocksWithMissingDirs(bmId)
+            val (blockId, _, mapIndex) = blockInfoSeq.head
+            results.put(FailureFetchResult(blockId, mapIndex, bmId, throwable))
+        }
       }
     }
+
     if (hostLocalBlocksWithCachedDirs.nonEmpty) {
       logDebug(s"Synchronous fetching host-local blocks with cached executors' dir: " +
           s"${hostLocalBlocksWithCachedDirs.mkString(", ")}")
-      hostLocalBlocksWithCachedDirs.foreach { case (_, blockInfos, localDirs) =>
-        blockInfos.foreach { case (blockId, _, mapIndex) =>
-          if (!fetchHostLocalBlock(blockId, mapIndex, localDirs.get, bmId)) {
-            return
-          }
-        }
+      fetchMultipleHostLocalBlocks(hostLocalBlocksWithCachedDirs, cachedDirsByExec, cached = true)
+    }
+  }
+
+  private def fetchMultipleHostLocalBlocks(
+      bmIdToBlocks: Map[BlockManagerId, Seq[(BlockId, Long, Int)]],
+      localDirsByExecId: Map[String, Array[String]],
+      cached: Boolean): Unit = {
+    // We use `forall` because once there's a failed block fetch, `fetchHostLocalBlock` will put
+    // a `FailureFetchResult` immediately to the `results`. So there's no reason to fetch the
+    // remaining blocks.
+    val allFetchSucceeded = bmIdToBlocks.forall { case (bmId, blockInfos) =>
+      blockInfos.forall { case (blockId, _, mapIndex) =>
+        fetchHostLocalBlock(blockId, mapIndex, localDirsByExecId(bmId.executorId), bmId)
       }
-      logDebug(s"Got host-local blocks (with cached executors' dir) in " +
-        s"${Utils.getUsedTimeNs(startTimeNs)}")
+    }
+    if (allFetchSucceeded) {
+      logDebug(s"Got host-local blocks from ${bmIdToBlocks.keys.mkString(", ")} " +
+        s"(${if (cached) "with" else "without"} cached executors' dir) " +
+        s"in ${Utils.getUsedTimeNs(startTimeNs)}")
     }
   }
 
@@ -529,8 +614,10 @@ final class ShuffleBlockFetcherIterator(
     // Send out initial requests for blocks, up to our maxBytesInFlight
     fetchUpToMaxBytes()
 
-    val numFetches = remoteRequests.size - fetchRequests.size
-    logInfo(s"Started $numFetches remote fetches in ${Utils.getUsedTimeNs(startTimeNs)}")
+    val numDeferredRequest = deferredFetchRequests.values.map(_.size).sum
+    val numFetches = remoteRequests.size - fetchRequests.size - numDeferredRequest
+    logInfo(s"Started $numFetches remote fetches in ${Utils.getUsedTimeNs(startTimeNs)}" +
+      (if (numDeferredRequest > 0 ) s", deferred $numDeferredRequest requests" else ""))
 
     // Get Local Blocks
     fetchLocalBlocks()
@@ -589,6 +676,7 @@ final class ShuffleBlockFetcherIterator(
           }
           if (isNetworkReqDone) {
             reqsInFlight -= 1
+            resetNettyOOMFlagIfPossible(maxReqSizeShuffleToMem)
             logDebug("Number of requests in flight " + reqsInFlight)
           }
 
@@ -660,7 +748,25 @@ final class ShuffleBlockFetcherIterator(
           }
 
         case FailureFetchResult(blockId, mapIndex, address, e) =>
-          throwFetchFailedException(blockId, mapIndex, address, e)
+          var errorMsg: String = null
+          if (e.isInstanceOf[OutOfDirectMemoryError]) {
+            errorMsg = s"Block $blockId fetch failed after $maxAttemptsOnNettyOOM " +
+              s"retries due to Netty OOM"
+            logError(errorMsg)
+          }
+          throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
+
+        case DeferFetchRequestResult(request) =>
+          val address = request.address
+          numBlocksInFlightPerAddress(address) =
+            numBlocksInFlightPerAddress(address) - request.blocks.size
+          bytesInFlight -= request.size
+          reqsInFlight -= 1
+          logDebug("Number of requests in flight " + reqsInFlight)
+          val defReqQueue =
+            deferredFetchRequests.getOrElseUpdate(address, new Queue[FetchRequest]())
+          defReqQueue.enqueue(request)
+          result = null
       }
 
       // Send fetch requests up to maxBytesInFlight
@@ -675,7 +781,8 @@ final class ShuffleBlockFetcherIterator(
         currentResult.blockId,
         currentResult.mapIndex,
         currentResult.address,
-        detectCorrupt && streamCompressedOrEncrypted))
+        detectCorrupt && streamCompressedOrEncrypted,
+        currentResult.isNetworkReqDone))
   }
 
   def toCompletionIterator: Iterator[(BlockId, InputStream)] = {
@@ -684,6 +791,15 @@ final class ShuffleBlockFetcherIterator(
   }
 
   private def fetchUpToMaxBytes(): Unit = {
+    if (isNettyOOMOnShuffle.get()) {
+      if (reqsInFlight > 0) {
+        // Return immediately if Netty is still OOMed and there're ongoing fetch requests
+        return
+      } else {
+        resetNettyOOMFlagIfPossible(0)
+      }
+    }
+
     // Send fetch requests up to maxBytesInFlight. If you cannot fetch from a remote host
     // immediately, defer the request until the next time it can be processed.
 
@@ -742,12 +858,14 @@ final class ShuffleBlockFetcherIterator(
       blockId: BlockId,
       mapIndex: Int,
       address: BlockManagerId,
-      e: Throwable) = {
+      e: Throwable,
+      message: Option[String] = None) = {
+    val msg = message.getOrElse(e.getMessage)
     blockId match {
       case ShuffleBlockId(shufId, mapId, reduceId) =>
-        throw new FetchFailedException(address, shufId, mapId, mapIndex, reduceId, e)
+        throw new FetchFailedException(address, shufId, mapId, mapIndex, reduceId, msg, e)
       case ShuffleBlockBatchId(shuffleId, mapId, startReduceId, _) =>
-        throw new FetchFailedException(address, shuffleId, mapId, mapIndex, startReduceId, e)
+        throw new FetchFailedException(address, shuffleId, mapId, mapIndex, startReduceId, msg, e)
       case _ =>
         throw new SparkException(
           "Failed to get block " + blockId + ", which is not a shuffle block", e)
@@ -766,25 +884,26 @@ private class BufferReleasingInputStream(
     private val blockId: BlockId,
     private val mapIndex: Int,
     private val address: BlockManagerId,
-    private val detectCorruption: Boolean)
+    private val detectCorruption: Boolean,
+    private val isNetworkReqDone: Boolean)
   extends InputStream {
   private[this] var closed = false
 
-  override def read(): Int = {
-    try {
-      delegate.read()
-    } catch {
-      case e: IOException if detectCorruption =>
-        IOUtils.closeQuietly(this)
-        iterator.throwFetchFailedException(blockId, mapIndex, address, e)
-    }
-  }
+  override def read(): Int =
+    tryOrFetchFailedException(delegate.read())
 
   override def close(): Unit = {
     if (!closed) {
-      delegate.close()
-      iterator.releaseCurrentResultBuffer()
-      closed = true
+      try {
+        delegate.close()
+        iterator.releaseCurrentResultBuffer()
+      } finally {
+        // Unset the flag when a remote request finished and free memory is fairly enough.
+        if (isNetworkReqDone) {
+          ShuffleBlockFetcherIterator.resetNettyOOMFlagIfPossible(iterator.maxReqSizeShuffleToMem)
+        }
+        closed = true
+      }
     }
   }
 
@@ -792,39 +911,33 @@ private class BufferReleasingInputStream(
 
   override def mark(readlimit: Int): Unit = delegate.mark(readlimit)
 
-  override def skip(n: Long): Long = {
-    try {
-      delegate.skip(n)
-    } catch {
-      case e: IOException if detectCorruption =>
-        IOUtils.closeQuietly(this)
-        iterator.throwFetchFailedException(blockId, mapIndex, address, e)
-    }
-  }
+  override def skip(n: Long): Long =
+    tryOrFetchFailedException(delegate.skip(n))
 
   override def markSupported(): Boolean = delegate.markSupported()
 
-  override def read(b: Array[Byte]): Int = {
-    try {
-      delegate.read(b)
-    } catch {
-      case e: IOException if detectCorruption =>
-        IOUtils.closeQuietly(this)
-        iterator.throwFetchFailedException(blockId, mapIndex, address, e)
-    }
-  }
+  override def read(b: Array[Byte]): Int =
+    tryOrFetchFailedException(delegate.read(b))
 
-  override def read(b: Array[Byte], off: Int, len: Int): Int = {
-    try {
-      delegate.read(b, off, len)
-    } catch {
-      case e: IOException if detectCorruption =>
-        IOUtils.closeQuietly(this)
-        iterator.throwFetchFailedException(blockId, mapIndex, address, e)
-    }
-  }
+  override def read(b: Array[Byte], off: Int, len: Int): Int =
+    tryOrFetchFailedException(delegate.read(b, off, len))
 
   override def reset(): Unit = delegate.reset()
+
+  /**
+   * Execute a block of code that returns a value, close this stream quietly and re-throwing
+   * IOException as FetchFailedException when detectCorruption is true. This method is only
+   * used by the `read` and `skip` methods inside `BufferReleasingInputStream` currently.
+   */
+  private def tryOrFetchFailedException[T](block: => T): T = {
+    try {
+      block
+    } catch {
+      case e: IOException if detectCorruption =>
+        IOUtils.closeQuietly(this)
+        iterator.throwFetchFailedException(blockId, mapIndex, address, e)
+    }
+  }
 }
 
 /**
@@ -852,6 +965,20 @@ private[storage]
 object ShuffleBlockFetcherIterator {
 
   /**
+   * A flag which indicates whether the Netty OOM error has raised during shuffle.
+   * If true, unless there's no in-flight fetch requests, all the pending shuffle
+   * fetch requests will be deferred until the flag is unset (whenever there's a
+   * complete fetch request).
+   */
+  val isNettyOOMOnShuffle = new AtomicBoolean(false)
+
+  def resetNettyOOMFlagIfPossible(freeMemoryLowerBound: Long): Unit = {
+    if (isNettyOOMOnShuffle.get() && NettyUtils.freeDirectMemory() >= freeMemoryLowerBound) {
+      isNettyOOMOnShuffle.compareAndSet(true, false)
+    }
+  }
+
+  /**
    * This function is used to merged blocks when doBatchFetch is true. Blocks which have the
    * same `mapId` can be merged into one block batch. The block batch is specified by a range
    * of reduceId, which implies the continuous shuffle blocks that we can fetch in a batch.
@@ -867,7 +994,7 @@ object ShuffleBlockFetcherIterator {
       blocks: Seq[FetchBlockInfo],
       doBatchFetch: Boolean): Seq[FetchBlockInfo] = {
     val result = if (doBatchFetch) {
-      var curBlocks = new ArrayBuffer[FetchBlockInfo]
+      val curBlocks = new ArrayBuffer[FetchBlockInfo]
       val mergedBlockInfo = new ArrayBuffer[FetchBlockInfo]
 
       def mergeFetchBlockInfo(toBeMerged: ArrayBuffer[FetchBlockInfo]): FetchBlockInfo = {
@@ -955,10 +1082,7 @@ object ShuffleBlockFetcherIterator {
   /**
    * Result of a fetch from a remote block.
    */
-  private[storage] sealed trait FetchResult {
-    val blockId: BlockId
-    val address: BlockManagerId
-  }
+  private[storage] sealed trait FetchResult
 
   /**
    * Result of a fetch from a remote block successfully.
@@ -994,4 +1118,10 @@ object ShuffleBlockFetcherIterator {
       address: BlockManagerId,
       e: Throwable)
     extends FetchResult
+
+  /**
+   * Result of a fetch request that should be deferred for some reasons, e.g., Netty OOM
+   */
+  private[storage]
+  case class DeferFetchRequestResult(fetchRequest: FetchRequest) extends FetchResult
 }

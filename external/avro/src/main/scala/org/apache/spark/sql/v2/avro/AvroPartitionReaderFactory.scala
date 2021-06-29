@@ -20,7 +20,6 @@ import java.net.URI
 
 import scala.util.control.NonFatal
 
-import org.apache.avro.Schema
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
@@ -57,10 +56,11 @@ case class AvroPartitionReaderFactory(
     partitionSchema: StructType,
     parsedOptions: AvroOptions,
     filters: Seq[Filter]) extends FilePartitionReaderFactory with Logging {
+  private val datetimeRebaseModeInRead = parsedOptions.datetimeRebaseModeInRead
 
   override def buildReader(partitionedFile: PartitionedFile): PartitionReader[InternalRow] = {
     val conf = broadcastedConf.value.value
-    val userProvidedSchema = parsedOptions.schema.map(new Schema.Parser().parse)
+    val userProvidedSchema = parsedOptions.schema
 
     if (parsedOptions.ignoreExtension || partitionedFile.filePath.endsWith(".avro")) {
       val reader = {
@@ -91,7 +91,7 @@ case class AvroPartitionReaderFactory(
 
       val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
         reader.asInstanceOf[DataFileReader[_]].getMetaString,
-        SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
+        datetimeRebaseModeInRead)
 
       val avroFilters = if (SQLConf.get.avroFilterPushDown) {
         new OrderedFilters(filters, readDataSchema)

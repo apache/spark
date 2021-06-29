@@ -590,25 +590,28 @@ struct<make_date(-44, 3, 15):date>
 -- !query
 select make_date(2013, 2, 30)
 -- !query schema
-struct<make_date(2013, 2, 30):date>
+struct<>
 -- !query output
-NULL
+java.time.DateTimeException
+Invalid date 'FEBRUARY 30'
 
 
 -- !query
 select make_date(2013, 13, 1)
 -- !query schema
-struct<make_date(2013, 13, 1):date>
+struct<>
 -- !query output
-NULL
+java.time.DateTimeException
+Invalid value for MonthOfYear (valid values 1 - 12): 13
 
 
 -- !query
 select make_date(2013, 11, -1)
 -- !query schema
-struct<make_date(2013, 11, -1):date>
+struct<>
 -- !query output
-NULL
+java.time.DateTimeException
+Invalid value for DayOfMonth (valid values 1 - 28/31): -1
 
 
 -- !query

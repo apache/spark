@@ -18,11 +18,9 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.DatabaseMetaData
-import java.util.UUID
 
 import scala.collection.JavaConverters.seqAsJavaListConverter
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.{HiveOperationType, HivePrivilegeObjectUtils}
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.GetFunctionsOperation
@@ -31,7 +29,6 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
  * Spark's own GetFunctionsOperation
@@ -91,7 +88,7 @@ private[hive] class SparkGetFunctionsOperation(
               DEFAULT_HIVE_CATALOG, // FUNCTION_CAT
               db, // FUNCTION_SCHEM
               funcIdentifier.funcName, // FUNCTION_NAME
-              info.getUsage, // REMARKS
+              s"Usage: ${info.getUsage}\nExtended Usage:${info.getExtended}", // REMARKS
               DatabaseMetaData.functionResultUnknown.asInstanceOf[AnyRef], // FUNCTION_TYPE
               info.getClassName) // SPECIFIC_NAME
             rowSet.addRow(rowData);

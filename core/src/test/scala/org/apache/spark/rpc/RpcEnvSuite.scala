@@ -33,7 +33,7 @@ import org.mockito.Mockito.{mock, never, verify, when}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkEnv, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.config._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -901,7 +901,15 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
           }
         }
 
-        val sm = new SecurityManager(conf)
+        // Try registering directories that have different
+        // absolute path but have same canonical path
+        intercept[IllegalArgumentException] {
+          env.fileServer.addDirectory("/dir1/././", dir1)
+        }
+        intercept[IllegalArgumentException] {
+          env.fileServer.addDirectory("/dir2/../dir2/", dir2)
+        }
+
         val hc = SparkHadoopUtil.get.conf
 
         val files = Seq(
@@ -913,7 +921,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
           (subFile2, dir2Uri + "/file2"))
         files.foreach { case (f, uri) =>
           val destFile = new File(destDir, f.getName())
-          Utils.fetchFile(uri, destDir, conf, sm, hc, 0L, false)
+          Utils.fetchFile(uri, destDir, conf, hc, 0L, false)
           assert(Files.equal(f, destFile))
         }
 
@@ -921,7 +929,7 @@ abstract class RpcEnvSuite extends SparkFunSuite with BeforeAndAfterAll {
         Seq("files", "jars", "dir1").foreach { root =>
           intercept[Exception] {
             val uri = env.address.toSparkURL + s"/$root/doesNotExist"
-            Utils.fetchFile(uri, destDir, conf, sm, hc, 0L, false)
+            Utils.fetchFile(uri, destDir, conf, hc, 0L, false)
           }
         }
       }

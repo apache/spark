@@ -32,7 +32,7 @@ import org.scalatestplus.selenium.WebBrowser
 import org.apache.spark.ui.SparkUICssErrorHandler
 
 class UISeleniumSuite
-  extends HiveThriftJdbcTest
+  extends HiveThriftServer2TestBase
   with WebBrowser with Matchers with BeforeAndAfterAll {
 
   implicit var webDriver: WebDriver = _
@@ -57,7 +57,7 @@ class UISeleniumSuite
     }
   }
 
-  override protected def serverStartCommand(port: Int) = {
+  override protected def serverStartCommand(): Seq[String] = {
     val portConf = if (mode == ServerMode.binary) {
       ConfVars.HIVE_SERVER2_THRIFT_PORT
     } else {
@@ -71,7 +71,7 @@ class UISeleniumSuite
         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
         |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
-        |  --hiveconf $portConf=$port
+        |  --hiveconf $portConf=0
         |  --driver-class-path ${sys.props("java.class.path")}
         |  --conf spark.ui.enabled=true
         |  --conf spark.ui.port=$uiPort

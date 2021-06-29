@@ -363,7 +363,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
         Map.empty[Any, Double]
       } else {
         frequentItems.rdd.flatMap {
-            case Row(items: Seq[_], count: Long) if items.length == 1 =>
+            case Row(items: scala.collection.Seq[_], count: Long) if items.length == 1 =>
               Some(items.head -> count.toDouble / numTrainingRecords)
             case _ => None
           }.collectAsMap()

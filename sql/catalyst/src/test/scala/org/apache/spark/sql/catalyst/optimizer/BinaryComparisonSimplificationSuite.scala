@@ -119,9 +119,7 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
 
     // GetStructField with different names are semantically equal; thus, `EqualTo(fieldA1, fieldA2)`
     // will be optimized to `TrueLiteral` by `SimplifyBinaryComparison`.
-    val originalQuery = nonNullableRelation
-        .where(EqualTo(fieldA1, fieldA2))
-        .analyze
+    val originalQuery = nonNullableRelation.where(EqualTo(fieldA1, fieldA2))
 
     val optimized = Optimize.execute(originalQuery)
     val correctAnswer = nonNullableRelation.analyze

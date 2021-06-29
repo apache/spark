@@ -104,12 +104,14 @@ class FileStreamSource(
   // Visible for testing and debugging in production.
   val seenFiles = new SeenFilesMap(maxFileAgeMs, fileNameOnly)
 
-  metadataLog.allFiles().foreach { entry =>
+  metadataLog.restore().foreach { entry =>
     seenFiles.add(entry.path, entry.timestamp)
   }
   seenFiles.purge()
 
   logInfo(s"maxFilesPerBatch = $maxFilesPerBatch, maxFileAgeMs = $maxFileAgeMs")
+
+  private var unreadFiles: Seq[(String, Long)] = _
 
   /**
    * Returns the maximum offset that can be retrieved from the source.
@@ -118,15 +120,45 @@ class FileStreamSource(
    * there is no race here, so the cost of `synchronized` should be rare.
    */
   private def fetchMaxOffset(limit: ReadLimit): FileStreamSourceOffset = synchronized {
-    // All the new files found - ignore aged files and files that we have seen.
-    val newFiles = fetchAllFiles().filter {
-      case (path, timestamp) => seenFiles.isNewFile(path, timestamp)
+    val newFiles = if (unreadFiles != null) {
+      logDebug(s"Reading from unread files - ${unreadFiles.size} files are available.")
+      unreadFiles
+    } else {
+      // All the new files found - ignore aged files and files that we have seen.
+      fetchAllFiles().filter {
+        case (path, timestamp) => seenFiles.isNewFile(path, timestamp)
+      }
     }
 
     // Obey user's setting to limit the number of files in this batch trigger.
-    val batchFiles = limit match {
-      case files: ReadMaxFiles => newFiles.take(files.maxFiles())
-      case _: ReadAllAvailable => newFiles
+    val (batchFiles, unselectedFiles) = limit match {
+      case files: ReadMaxFiles if !sourceOptions.latestFirst =>
+        // we can cache and reuse remaining fetched list of files in further batches
+        val (bFiles, usFiles) = newFiles.splitAt(files.maxFiles())
+        if (usFiles.size < files.maxFiles() * DISCARD_UNSEEN_FILES_RATIO) {
+          // Discard unselected files if the number of files are smaller than threshold.
+          // This is to avoid the case when the next batch would have too few files to read
+          // whereas there're new files available.
+          logTrace(s"Discarding ${usFiles.length} unread files as it's smaller than threshold.")
+          (bFiles, null)
+        } else {
+          (bFiles, usFiles)
+        }
+
+      case files: ReadMaxFiles =>
+        // implies "sourceOptions.latestFirst = true" which we want to refresh the list per batch
+        (newFiles.take(files.maxFiles()), null)
+
+      case _: ReadAllAvailable => (newFiles, null)
+    }
+
+    if (unselectedFiles != null && unselectedFiles.nonEmpty) {
+      logTrace(s"Taking first $MAX_CACHED_UNSEEN_FILES unread files.")
+      unreadFiles = unselectedFiles.take(MAX_CACHED_UNSEEN_FILES)
+      logTrace(s"${unreadFiles.size} unread files are available for further batches.")
+    } else {
+      unreadFiles = null
+      logTrace(s"No unread file is available for further batches.")
     }
 
     batchFiles.foreach { file =>
@@ -139,16 +171,23 @@ class FileStreamSource(
       s"""
          |Number of new files = ${newFiles.size}
          |Number of files selected for batch = ${batchFiles.size}
+         |Number of unread files = ${Option(unreadFiles).map(_.size).getOrElse(0)}
          |Number of seen files = ${seenFiles.size}
          |Number of files purged from tracking map = $numPurged
        """.stripMargin)
 
     if (batchFiles.nonEmpty) {
       metadataLogCurrentOffset += 1
-      metadataLog.add(metadataLogCurrentOffset, batchFiles.map { case (p, timestamp) =>
+
+      val fileEntries = batchFiles.map { case (p, timestamp) =>
         FileEntry(path = p, timestamp = timestamp, batchId = metadataLogCurrentOffset)
-      }.toArray)
-      logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
+      }.toArray
+      if (metadataLog.add(metadataLogCurrentOffset, fileEntries)) {
+        logInfo(s"Log offset set to $metadataLogCurrentOffset with ${batchFiles.size} new files")
+      } else {
+        throw new IllegalStateException("Concurrent update to the log. Multiple streaming jobs " +
+          s"detected for $metadataLogCurrentOffset")
+      }
     }
 
     FileStreamSourceOffset(metadataLogCurrentOffset)
@@ -310,6 +349,9 @@ class FileStreamSource(
 object FileStreamSource {
   /** Timestamp for file modification time, in ms since January 1, 1970 UTC. */
   type Timestamp = Long
+
+  val DISCARD_UNSEEN_FILES_RATIO = 0.2
+  val MAX_CACHED_UNSEEN_FILES = 10000
 
   case class FileEntry(path: String, timestamp: Timestamp, batchId: Long) extends Serializable
 

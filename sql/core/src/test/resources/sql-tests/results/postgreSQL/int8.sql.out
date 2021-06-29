@@ -569,25 +569,28 @@ struct<max(q1):bigint,max(q2):bigint>
 -- !query
 select bigint('9223372036854775800') / bigint('0')
 -- !query schema
-struct<(CAST(CAST(9223372036854775800 AS BIGINT) AS DOUBLE) / CAST(CAST(0 AS BIGINT) AS DOUBLE)):double>
+struct<>
 -- !query output
-NULL
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query
 select bigint('-9223372036854775808') / smallint('0')
 -- !query schema
-struct<(CAST(CAST(-9223372036854775808 AS BIGINT) AS DOUBLE) / CAST(CAST(0 AS SMALLINT) AS DOUBLE)):double>
+struct<>
 -- !query output
-NULL
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query
 select smallint('100') / bigint('0')
 -- !query schema
-struct<(CAST(CAST(100 AS SMALLINT) AS DOUBLE) / CAST(CAST(0 AS BIGINT) AS DOUBLE)):double>
+struct<>
 -- !query output
-NULL
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query
@@ -621,13 +624,13 @@ SELECT CAST(q1 AS smallint) FROM int8_tbl WHERE q2 <> 456
 struct<>
 -- !query output
 java.lang.ArithmeticException
-Casting 4567890123456789 to short causes overflow
+Casting 4567890123456789 to smallint causes overflow
 
 
 -- !query
 SELECT CAST(smallint('42') AS bigint), CAST(smallint('-37') AS bigint)
 -- !query schema
-struct<CAST(CAST(42 AS SMALLINT) AS BIGINT):bigint,CAST(CAST(-37 AS SMALLINT) AS BIGINT):bigint>
+struct<CAST(42 AS BIGINT):bigint,CAST(-37 AS BIGINT):bigint>
 -- !query output
 42	-37
 
@@ -647,7 +650,7 @@ struct<q1:float,q2:double>
 -- !query
 SELECT CAST(float('36854775807.0') AS bigint)
 -- !query schema
-struct<CAST(CAST(36854775807.0 AS FLOAT) AS BIGINT):bigint>
+struct<CAST(36854775807.0 AS BIGINT):bigint>
 -- !query output
 36854775808
 
@@ -695,8 +698,13 @@ SELECT * FROM range(bigint('+4567890123456789'), bigint('+4567890123456799'), 0)
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-requirement failed: step (0) cannot be 0
+org.apache.spark.sql.AnalysisException
+Table-valued function range with alternatives: 
+    range(start: long, end: long, step: long, numSlices: integer)
+    range(start: long, end: long, step: long)
+    range(start: long, end: long)
+    range(end: long)
+cannot be applied to (long, long, integer): requirement failed: step (0) cannot be 0; line 1 pos 14
 
 
 -- !query
@@ -714,7 +722,7 @@ struct<id:bigint>
 -- !query
 SELECT string(shiftleft(bigint(-1), 63))
 -- !query schema
-struct<CAST(shiftleft(CAST(-1 AS BIGINT), 63) AS STRING):string>
+struct<shiftleft(-1, 63):string>
 -- !query output
 -9223372036854775808
 
@@ -740,7 +748,7 @@ long overflow
 -- !query
 SELECT bigint((-9223372036854775808)) / bigint((-1))
 -- !query schema
-struct<(CAST(CAST(-9223372036854775808 AS BIGINT) AS DOUBLE) / CAST(CAST(-1 AS BIGINT) AS DOUBLE)):double>
+struct<(-9223372036854775808 / -1):double>
 -- !query output
 9.223372036854776E18
 
@@ -748,7 +756,7 @@ struct<(CAST(CAST(-9223372036854775808 AS BIGINT) AS DOUBLE) / CAST(CAST(-1 AS B
 -- !query
 SELECT bigint((-9223372036854775808)) % bigint((-1))
 -- !query schema
-struct<(CAST(-9223372036854775808 AS BIGINT) % CAST(-1 AS BIGINT)):bigint>
+struct<(-9223372036854775808 % -1):bigint>
 -- !query output
 0
 
@@ -765,7 +773,7 @@ long overflow
 -- !query
 SELECT bigint((-9223372036854775808)) / int((-1))
 -- !query schema
-struct<(CAST(CAST(-9223372036854775808 AS BIGINT) AS DOUBLE) / CAST(CAST(-1 AS INT) AS DOUBLE)):double>
+struct<(-9223372036854775808 / -1):double>
 -- !query output
 9.223372036854776E18
 
@@ -773,7 +781,7 @@ struct<(CAST(CAST(-9223372036854775808 AS BIGINT) AS DOUBLE) / CAST(CAST(-1 AS I
 -- !query
 SELECT bigint((-9223372036854775808)) % int((-1))
 -- !query schema
-struct<(CAST(-9223372036854775808 AS BIGINT) % CAST(CAST(-1 AS INT) AS BIGINT)):bigint>
+struct<(-9223372036854775808 % -1):bigint>
 -- !query output
 0
 
@@ -790,7 +798,7 @@ long overflow
 -- !query
 SELECT bigint((-9223372036854775808)) / smallint((-1))
 -- !query schema
-struct<(CAST(CAST(-9223372036854775808 AS BIGINT) AS DOUBLE) / CAST(CAST(-1 AS SMALLINT) AS DOUBLE)):double>
+struct<(-9223372036854775808 / -1):double>
 -- !query output
 9.223372036854776E18
 
@@ -798,7 +806,7 @@ struct<(CAST(CAST(-9223372036854775808 AS BIGINT) AS DOUBLE) / CAST(CAST(-1 AS S
 -- !query
 SELECT bigint((-9223372036854775808)) % smallint((-1))
 -- !query schema
-struct<(CAST(-9223372036854775808 AS BIGINT) % CAST(CAST(-1 AS SMALLINT) AS BIGINT)):bigint>
+struct<(-9223372036854775808 % -1):bigint>
 -- !query output
 0
 

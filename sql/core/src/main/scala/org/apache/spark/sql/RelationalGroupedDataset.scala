@@ -20,12 +20,11 @@ package org.apache.spark.sql
 import java.util.Locale
 
 import scala.collection.JavaConverters._
-import scala.language.implicitConversions
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -54,7 +53,11 @@ class RelationalGroupedDataset protected[sql](
 
   private[this] def toDF(aggExprs: Seq[Expression]): DataFrame = {
     val aggregates = if (df.sparkSession.sessionState.conf.dataFrameRetainGroupColumns) {
-      groupingExprs ++ aggExprs
+      groupingExprs match {
+        // call `toList` because `Stream` can't serialize in scala 2.13
+        case s: Stream[Expression] => s.toList ++ aggExprs
+        case other => other ++ aggExprs
+      }
     } else {
       aggExprs
     }
@@ -66,10 +69,12 @@ class RelationalGroupedDataset protected[sql](
         Dataset.ofRows(df.sparkSession, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.RollupType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
+          df.sparkSession, Aggregate(Seq(Rollup(groupingExprs.map(Seq(_)))),
+            aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.CubeType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
+          df.sparkSession, Aggregate(Seq(Cube(groupingExprs.map(Seq(_)))),
+            aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
         Dataset.ofRows(
@@ -77,11 +82,7 @@ class RelationalGroupedDataset protected[sql](
     }
   }
 
-  // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
-  // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
-  // make it a NamedExpression.
   private[this] def alias(expr: Expression): NamedExpression = expr match {
-    case u: UnresolvedAttribute => UnresolvedAlias(u)
     case expr: NamedExpression => expr
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
@@ -592,11 +593,10 @@ class RelationalGroupedDataset protected[sql](
     val right = r.df.sparkSession.sessionState.executePlan(
       Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)).analyzed
 
-    val leftAttributes = left.output.take(leftGroupingNamedExpressions.length)
-    val rightAttributes = right.output.take(rightGroupingNamedExpressions.length)
-
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
-    val plan = FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, expr, output, left, right)
+    val plan = FlatMapCoGroupsInPandas(
+      leftGroupingNamedExpressions.length, rightGroupingNamedExpressions.length,
+      expr, output, left, right)
     Dataset.ofRows(df.sparkSession, plan)
   }
 

@@ -17,7 +17,6 @@
 
 import datetime
 import unittest
-import sys
 
 from collections import OrderedDict
 from decimal import Decimal
@@ -25,22 +24,24 @@ from decimal import Decimal
 from pyspark.sql import Row
 from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf, PandasUDFType, \
     window
-from pyspark.sql.types import *
+from pyspark.sql.types import IntegerType, DoubleType, ArrayType, BinaryType, ByteType, \
+    LongType, DecimalType, ShortType, FloatType, StringType, BooleanType, StructType, \
+    StructField, NullType, TimestampType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 from pyspark.testing.utils import QuietTest
 
 if have_pandas:
     import pandas as pd
-    from pandas.util.testing import assert_frame_equal
+    from pandas.testing import assert_frame_equal
 
 if have_pyarrow:
-    import pyarrow as pa
+    import pyarrow as pa  # noqa: F401
 
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class GroupedMapInPandasTests(ReusedSQLTestCase):
 
     @property
@@ -56,14 +57,15 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
             4, 5, 1.1,
             2.2, Decimal(1.123),
             [1, 2, 2], True, 'hello',
-            bytearray([0x01, 0x02])
+            bytearray([0x01, 0x02]),
+            None
         ]
         output_fields = [
             ('id', IntegerType()), ('byte', ByteType()), ('short', ShortType()),
             ('int', IntegerType()), ('long', LongType()), ('float', FloatType()),
             ('double', DoubleType()), ('decim', DecimalType(10, 3)),
             ('array', ArrayType(IntegerType())), ('bool', BooleanType()), ('str', StringType()),
-            ('bin', BinaryType())
+            ('bin', BinaryType()), ('null', NullType())
         ]
 
         output_schema = StructType([StructField(*x) for x in output_fields])
@@ -82,7 +84,8 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
                 array=pdf.array,
-                bin=pdf.bin
+                bin=pdf.bin,
+                null=pdf.null
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -100,7 +103,8 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
                 array=pdf.array,
-                bin=pdf.bin
+                bin=pdf.bin,
+                null=pdf.null
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -119,7 +123,8 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                 bool=False if pdf.bool else True,
                 str=pdf.str + 'there',
                 array=pdf.array,
-                bin=pdf.bin
+                bin=pdf.bin,
+                null=pdf.null
             ),
             output_schema,
             PandasUDFType.GROUPED_MAP
@@ -159,7 +164,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
     def test_register_grouped_map_udf(self):
         foo_udf = pandas_udf(lambda x: x, "id long", PandasUDFType.GROUPED_MAP)
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     ValueError,
                     'f.*SQL_BATCHED_UDF.*SQL_SCALAR_PANDAS_UDF.*SQL_GROUPED_AGG_PANDAS_UDF.*'):
                 self.spark.catalog.registerFunction("foo_udf", foo_udf)
@@ -243,48 +248,46 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
 
     def test_wrong_return_type(self):
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     NotImplementedError,
-                    'Invalid return type.*grouped map Pandas UDF.*MapType'):
+                    'Invalid return type.*grouped map Pandas UDF.*ArrayType.*TimestampType'):
                 pandas_udf(
                     lambda pdf: pdf,
-                    'id long, v map<int, int>',
+                    'id long, v array<timestamp>',
                     PandasUDFType.GROUPED_MAP)
 
     def test_wrong_args(self):
         df = self.data
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+            with self.assertRaisesRegex(ValueError, 'Invalid udf'):
                 df.groupby('id').apply(lambda x: x)
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+            with self.assertRaisesRegex(ValueError, 'Invalid udf'):
                 df.groupby('id').apply(udf(lambda x: x, DoubleType()))
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+            with self.assertRaisesRegex(ValueError, 'Invalid udf'):
                 df.groupby('id').apply(sum(df.v))
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+            with self.assertRaisesRegex(ValueError, 'Invalid udf'):
                 df.groupby('id').apply(df.v + 1)
-            with self.assertRaisesRegexp(ValueError, 'Invalid function'):
+            with self.assertRaisesRegex(ValueError, 'Invalid function'):
                 df.groupby('id').apply(
                     pandas_udf(lambda: 1, StructType([StructField("d", DoubleType())])))
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf'):
+            with self.assertRaisesRegex(ValueError, 'Invalid udf'):
                 df.groupby('id').apply(pandas_udf(lambda x, y: x, DoubleType()))
-            with self.assertRaisesRegexp(ValueError, 'Invalid udf.*GROUPED_MAP'):
+            with self.assertRaisesRegex(ValueError, 'Invalid udf.*GROUPED_MAP'):
                 df.groupby('id').apply(
                     pandas_udf(lambda x, y: x, DoubleType(), PandasUDFType.SCALAR))
 
     def test_unsupported_types(self):
         common_err_msg = 'Invalid return type.*grouped map Pandas UDF.*'
         unsupported_types = [
-            StructField('map', MapType(StringType(), IntegerType())),
             StructField('arr_ts', ArrayType(TimestampType())),
-            StructField('null', NullType()),
             StructField('struct', StructType([StructField('l', LongType())])),
         ]
 
         for unsupported_type in unsupported_types:
             schema = StructType([StructField('id', LongType(), True), unsupported_type])
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(NotImplementedError, common_err_msg):
+                with self.assertRaisesRegex(NotImplementedError, common_err_msg):
                     pandas_udf(lambda x: x, schema, PandasUDFType.GROUPED_MAP)
 
     # Regression test for SPARK-23314
@@ -445,15 +448,16 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         def column_name_typo(pdf):
             return pd.DataFrame({'iid': pdf.id, 'v': pdf.v})
 
-        @pandas_udf('id long, v int', PandasUDFType.GROUPED_MAP)
+        @pandas_udf('id long, v decimal', PandasUDFType.GROUPED_MAP)
         def invalid_positional_types(pdf):
-            return pd.DataFrame([(u'a', 1.2)])
+            return pd.DataFrame([(1, datetime.date(2020, 10, 5))])
 
-        with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, "KeyError: 'id'"):
-                grouped_df.apply(column_name_typo).collect()
-            with self.assertRaisesRegexp(Exception, "an integer is required"):
-                grouped_df.apply(invalid_positional_types).collect()
+        with self.sql_conf({"spark.sql.execution.pandas.convertToArrowArraySafely": False}):
+            with QuietTest(self.sc):
+                with self.assertRaisesRegex(Exception, "KeyError: 'id'"):
+                    grouped_df.apply(column_name_typo).collect()
+                with self.assertRaisesRegex(Exception, "[D|d]ecimal.*got.*date"):
+                    grouped_df.apply(invalid_positional_types).collect()
 
     def test_positional_assignment_conf(self):
         with self.sql_conf({
@@ -481,9 +485,9 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         # this was throwing an AnalysisException before SPARK-24208
         res = df_with_pandas.alias('temp0').join(df_with_pandas.alias('temp1'),
                                                  col('temp0.key') == col('temp1.key'))
-        self.assertEquals(res.count(), 5)
+        self.assertEqual(res.count(), 5)
 
-    def test_mixed_scalar_udfs_followed_by_grouby_apply(self):
+    def test_mixed_scalar_udfs_followed_by_groupby_apply(self):
         df = self.spark.range(0, 10).toDF('v1')
         df = df.withColumn('v2', udf(lambda x: x + 1, 'int')(df['v1'])) \
             .withColumn('v3', pandas_udf(lambda x: x + 2, 'int')(df['v1']))
@@ -493,7 +497,7 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
                               'sum int',
                               PandasUDFType.GROUPED_MAP))
 
-        self.assertEquals(result.collect()[0]['sum'], 165)
+        self.assertEqual(result.collect()[0]['sum'], 165)
 
     def test_grouped_with_empty_partition(self):
         data = [Row(id=1, x=2), Row(id=1, x=3), Row(id=2, x=4)]
@@ -603,14 +607,14 @@ class GroupedMapInPandasTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame([[1, 1]], ["column", "score"])
         row = df.groupby('COLUMN').applyInPandas(
             my_pandas_udf, schema="column integer, score float").first()
-        self.assertEquals(row.asDict(), Row(column=1, score=0.5).asDict())
+        self.assertEqual(row.asDict(), Row(column=1, score=0.5).asDict())
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_grouped_map import *
+    from pyspark.sql.tests.test_pandas_grouped_map import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

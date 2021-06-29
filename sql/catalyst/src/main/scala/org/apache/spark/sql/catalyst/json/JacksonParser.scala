@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -66,7 +67,6 @@ class JacksonParser(
     isParsing = true)
   private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
-    options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
@@ -93,7 +93,7 @@ class JacksonParser(
       new NoopFilters
     }
     (parser: JsonParser) => parseJsonToken[Iterable[InternalRow]](parser, st) {
-      case START_OBJECT => convertObject(parser, st, fieldConverters, jsonFilters)
+      case START_OBJECT => convertObject(parser, st, fieldConverters, jsonFilters, isRoot = true)
         // SPARK-3308: support reading top level JSON arrays and take every element
         // in such an array as a row
         //
@@ -117,7 +117,7 @@ class JacksonParser(
           array.toArray[InternalRow](schema)
         }
       case START_ARRAY =>
-        throw new RuntimeException("Parsing JSON arrays as structs is forbidden.")
+        throw QueryExecutionErrors.cannotParseJsonArraysAsStructsError()
     }
   }
 
@@ -201,8 +201,8 @@ class JacksonParser(
             case "NaN" => Float.NaN
             case "Infinity" => Float.PositiveInfinity
             case "-Infinity" => Float.NegativeInfinity
-            case other => throw new RuntimeException(
-              s"Cannot parse $other as ${FloatType.catalogString}.")
+            case other => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
+              other, FloatType)
           }
       }
 
@@ -218,7 +218,7 @@ class JacksonParser(
             case "Infinity" => Double.PositiveInfinity
             case "-Infinity" => Double.NegativeInfinity
             case other =>
-              throw new RuntimeException(s"Cannot parse $other as ${DoubleType.catalogString}.")
+              throw QueryExecutionErrors.cannotParseStringAsDataTypeError(other, DoubleType)
           }
       }
 
@@ -263,7 +263,7 @@ class JacksonParser(
               // If fails to parse, then tries the way used in 2.0 and 1.x for backwards
               // compatibility.
               val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(parser.getText))
-              DateTimeUtils.stringToDate(str, options.zoneId).getOrElse {
+              DateTimeUtils.stringToDate(str).getOrElse {
                 // In Spark 1.5.0, we store the data as number of days since epoch in string.
                 // So, we just convert it to Int.
                 try {
@@ -359,20 +359,17 @@ class JacksonParser(
     case VALUE_STRING if parser.getTextLength < 1 && allowEmptyString =>
       dataType match {
         case FloatType | DoubleType | TimestampType | DateType =>
-          throw new RuntimeException(
-            s"Failed to parse an empty string for data type ${dataType.catalogString}")
+          throw QueryExecutionErrors.failToParseEmptyStringForDataTypeError(dataType)
         case _ => null
       }
 
     case VALUE_STRING if parser.getTextLength < 1 =>
-      throw new RuntimeException(
-        s"Failed to parse an empty string for data type ${dataType.catalogString}")
+      throw QueryExecutionErrors.failToParseEmptyStringForDataTypeError(dataType)
 
     case token =>
       // We cannot parse this token based on the given data type. So, we throw a
       // RuntimeException and this exception will be caught by `parse` method.
-      throw new RuntimeException(
-        s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
+      throw QueryExecutionErrors.failToParseValueForDataTypeError(dataType, token)
   }
 
   /**
@@ -383,7 +380,8 @@ class JacksonParser(
       parser: JsonParser,
       schema: StructType,
       fieldConverters: Array[ValueConverter],
-      structFilters: StructFilters = new NoopFilters()): Option[InternalRow] = {
+      structFilters: StructFilters = new NoopFilters(),
+      isRoot: Boolean = false): Option[InternalRow] = {
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
     var skipRow = false
@@ -397,7 +395,7 @@ class JacksonParser(
             skipRow = structFilters.skipRow(row, index)
           } catch {
             case e: SparkUpgradeException => throw e
-            case NonFatal(e) =>
+            case NonFatal(e) if isRoot =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
           }
@@ -464,8 +462,8 @@ class JacksonParser(
         parser.nextToken() match {
           case null => None
           case _ => rootConverter.apply(parser) match {
-            case null => throw new RuntimeException("Root converter returned null")
-            case rows => rows
+            case null => throw QueryExecutionErrors.rootConverterReturnNullError()
+            case rows => rows.toSeq
           }
         }
       }

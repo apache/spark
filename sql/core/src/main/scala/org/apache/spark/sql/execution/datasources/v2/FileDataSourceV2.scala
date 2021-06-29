@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.catalog.{Table, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.types.StructType
@@ -56,6 +57,13 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
     paths ++ Option(map.get("path")).toSeq
   }
 
+  protected def getOptionsWithoutPaths(map: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val withoutPath = map.asCaseSensitiveMap().asScala.filterKeys { k =>
+      !k.equalsIgnoreCase("path") && !k.equalsIgnoreCase("paths")
+    }
+    new CaseInsensitiveStringMap(withoutPath.toMap.asJava)
+  }
+
   protected def getTableName(map: CaseInsensitiveStringMap, paths: Seq[String]): String = {
     val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(
       map.asCaseSensitiveMap().asScala.toMap)
@@ -74,7 +82,7 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
   //       implementation and directly implement the TableProvider APIs.
   protected def getTable(options: CaseInsensitiveStringMap): Table
   protected def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table = {
-    throw new UnsupportedOperationException("user-specified schema")
+    throw QueryExecutionErrors.unsupportedUserSpecifiedSchemaError()
   }
 
   override def supportsExternalMetadata(): Boolean = true

@@ -1,5 +1,5 @@
 # This is a mapping of names to be translated through translate-contributors.py
-# The format expected on each line should be: <Github ID> - <full name>
+# The format expected on each line should be: <GitHub ID> - <full name>
 012huang - Weiyi Huang
 07ARB - Ankit Raj Boudh
 10110346 - Xian Liu
@@ -25,6 +25,7 @@ GenTang - Gen TANG
 GraceH - Jie Huang
 Gschiavon - German Schiavon Matteo
 GuoPhilipse - Philipse Guo
+HeartSaVioR - Jungtaek Lim
 Hellsen83 - Erik Christiansen
 HyukjinKwon - Hyukjin Kwon
 Icysandwich - Icysandwich
@@ -66,6 +67,7 @@ SaintBacchus - Huang Zhaowei
 Sephiroth-Lin - Sephiroth Lin
 Shiti - Shiti Saxena
 SongYadong - Yadong Song
+TJX2014 - Jinxin Tang
 TigerYang414 - David Yang
 TomokoKomiyama - Tomoko Komiyama
 TopGunViper - TopGunViper
@@ -89,6 +91,7 @@ ajithme - Ajith S
 akonopko - Alexander Konopko
 alexdebrie - Alex DeBrie
 alicegugu - Gu Huiqin Alice
+allisonwang-db - Allison Wang
 alokito - Alok Saldanha
 alyaxey - Alex Slusarenko
 amanomer - Aman Omer
@@ -96,6 +99,7 @@ ameyc - Amey Chaugule
 anabranch - Bill Chambers
 anantasty - Anant Asthana
 ancasarb - Anca Sarb
+anchovYu - Xinyi Yu
 andrewor14 - Andrew Or
 aniketbhatnagar - Aniket Bhatnagar
 animeshbaranawal - Animesh Baranawal
@@ -204,6 +208,7 @@ igorcalabria - Igor Calabria
 imback82 - Terry Kim
 industrial-sloth - Jascha Swisher
 invkrh - Hao Ren
+itholic - Haejoon Lee
 ivoson - Tengfei Huang
 jackylk - Jacky Li
 jagadeesanas2 - Jagadeesan A S
@@ -234,6 +239,7 @@ laskfla - Keith Sun
 lazyman500 - Dong Xu
 lcqzte10192193 - Chaoqun Li
 leahmcguire - Leah McGuire
+leanken - Leanken Lin
 lee19 - Lee
 leoluan2009 - Xuedong Luan
 liangxs - Xuesen Liang
@@ -357,6 +363,7 @@ surq - Surong Quan
 suxingfate - Xinglong Wang
 suyanNone - Su Yan
 szheng79 - Shuai Zheng
+tanelk - Tanel Kiis
 tedyu - Ted Yu
 teeyog - Yong Tian
 texasmichelle - Michelle Casbon
@@ -383,6 +390,7 @@ watermen - Yadong Qi
 weixiuli - XiuLi Wei
 wenfang6 - wenfang6
 wenxuanguan - wenxuanguan
+williamhyun - William Hyun
 windpiger - Song Jun
 witgo - Guoqiang Li
 woudygao - Woudy Gao

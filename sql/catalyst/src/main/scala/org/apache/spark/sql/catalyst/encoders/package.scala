@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 package object encoders {
   /**
@@ -30,6 +31,6 @@ package object encoders {
     case e: ExpressionEncoder[A] =>
       e.assertUnresolved()
       e
-    case _ => sys.error(s"Only expression encoders are supported today")
+    case _ => throw QueryExecutionErrors.unsupportedEncoderError()
   }
 }

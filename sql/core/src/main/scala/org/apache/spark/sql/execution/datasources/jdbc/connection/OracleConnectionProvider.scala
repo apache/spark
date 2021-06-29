@@ -25,22 +25,27 @@ import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 
-private[sql] class OracleConnectionProvider(driver: Driver, options: JDBCOptions)
-  extends SecureConnectionProvider(driver, options) {
-  override val appEntry: String = "kprb5module"
+private[sql] class OracleConnectionProvider extends SecureConnectionProvider {
+  override val driverClass = "oracle.jdbc.OracleDriver"
 
-  override def getConnection(): Connection = {
-    setAuthenticationConfigIfNeeded()
-    UserGroupInformation.loginUserFromKeytabAndReturnUGI(options.principal, options.keytab).doAs(
-      new PrivilegedExceptionAction[Connection]() {
-        override def run(): Connection = {
-          OracleConnectionProvider.super.getConnection()
+  override val name: String = "oracle"
+
+  override def appEntry(driver: Driver, options: JDBCOptions): String = "kprb5module"
+
+  override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
+    val jdbcOptions = new JDBCOptions(options)
+    setAuthenticationConfig(driver, jdbcOptions)
+    UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
+      .doAs(
+        new PrivilegedExceptionAction[Connection]() {
+          override def run(): Connection = {
+            OracleConnectionProvider.super.getConnection(driver, options)
+          }
         }
-      }
-    )
+      )
   }
 
-  override def getAdditionalProperties(): Properties = {
+  override def getAdditionalProperties(options: JDBCOptions): Properties = {
     val result = new Properties()
     // This prop is needed to turn on kerberos authentication in the JDBC driver.
     // The possible values can be found in AnoServices public interface
@@ -48,15 +53,4 @@ private[sql] class OracleConnectionProvider(driver: Driver, options: JDBCOptions
     result.put("oracle.net.authentication_services", "(KERBEROS5)");
     result
   }
-
-  override def setAuthenticationConfigIfNeeded(): Unit = SecurityConfigurationLock.synchronized {
-    val (parent, configEntry) = getConfigWithAppEntry()
-    if (configEntry == null || configEntry.isEmpty) {
-      setAuthenticationConfig(parent)
-    }
-  }
-}
-
-private[sql] object OracleConnectionProvider {
-  val driverClass = "oracle.jdbc.OracleDriver"
 }

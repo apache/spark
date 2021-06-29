@@ -16,7 +16,6 @@
 #
 import os
 import time
-import random
 import threading
 import unittest
 
@@ -167,10 +166,10 @@ class PinThreadTests(unittest.TestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.tests.test_pin_thread import *
+    from pyspark.tests.test_pin_thread import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

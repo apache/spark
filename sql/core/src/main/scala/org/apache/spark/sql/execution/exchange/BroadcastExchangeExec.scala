@@ -32,9 +32,10 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
-import org.apache.spark.sql.execution.joins.HashedRelation
+import org.apache.spark.sql.execution.joins.{HashedRelation, HashedRelationBroadcastMode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.types.LongType
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.{SparkFatalException, ThreadUtils}
 
@@ -78,6 +79,7 @@ case class BroadcastExchangeExec(
 
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size"),
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "collectTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to collect"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build"),
     "broadcastTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to broadcast"))
@@ -90,7 +92,8 @@ case class BroadcastExchangeExec(
 
   override def runtimeStatistics: Statistics = {
     val dataSize = metrics("dataSize").value
-    Statistics(dataSize)
+    val rowCount = metrics("numOutputRows").value
+    Statistics(dataSize, Some(rowCount))
   }
 
   @transient
@@ -101,12 +104,25 @@ case class BroadcastExchangeExec(
     promise.future
 
   @transient
-  private val timeout: Long = SQLConf.get.broadcastTimeout
+  private val timeout: Long = conf.broadcastTimeout
+
+  @transient
+  private lazy val maxBroadcastRows = mode match {
+    case HashedRelationBroadcastMode(key, _)
+      // NOTE: LongHashedRelation is used for single key with LongType. This should be kept
+      // consistent with HashedRelation.apply.
+      if !(key.length == 1 && key.head.dataType == LongType) =>
+      // Since the maximum number of keys that BytesToBytesMap supports is 1 << 29,
+      // and only 70% of the slots can be used before growing in UnsafeHashedRelation,
+      // here the limitation should not be over 341 million.
+      (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
+    case _ => 512000000
+  }
 
   @transient
   override lazy val relationFuture: Future[broadcast.Broadcast[Any]] = {
     SQLExecution.withThreadLocalCaptured[broadcast.Broadcast[Any]](
-      sqlContext.sparkSession, BroadcastExchangeExec.executionContext) {
+      session, BroadcastExchangeExec.executionContext) {
           try {
             // Setup a job group here so later it may get cancelled by groupId if necessary.
             sparkContext.setJobGroup(runId.toString, s"broadcast exchange (runId $runId)",
@@ -114,9 +130,10 @@ case class BroadcastExchangeExec(
             val beforeCollect = System.nanoTime()
             // Use executeCollect/executeCollectIterator to avoid conversion to Scala types
             val (numRows, input) = child.executeCollectIterator()
-            if (numRows >= MAX_BROADCAST_TABLE_ROWS) {
+            longMetric("numOutputRows") += numRows
+            if (numRows >= maxBroadcastRows) {
               throw new SparkException(
-                s"Cannot broadcast the table over $MAX_BROADCAST_TABLE_ROWS rows: $numRows rows")
+                s"Cannot broadcast the table over $maxBroadcastRows rows: $numRows rows")
             }
 
             val beforeBuild = System.nanoTime()
@@ -138,7 +155,8 @@ case class BroadcastExchangeExec(
             longMetric("dataSize") += dataSize
             if (dataSize >= MAX_BROADCAST_TABLE_BYTES) {
               throw new SparkException(
-                s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
+                s"Cannot broadcast the table that is larger than" +
+                  s" ${MAX_BROADCAST_TABLE_BYTES >> 30}GB: ${dataSize >> 30} GB")
             }
 
             val beforeBroadcast = System.nanoTime()
@@ -202,14 +220,12 @@ case class BroadcastExchangeExec(
           ex)
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): BroadcastExchangeExec =
+    copy(child = newChild)
 }
 
 object BroadcastExchangeExec {
-  // Since the maximum number of keys that BytesToBytesMap supports is 1 << 29,
-  // and only 70% of the slots can be used before growing in HashedRelation,
-  // here the limitation should not be over 341 million.
-  val MAX_BROADCAST_TABLE_ROWS = (BytesToBytesMap.MAX_CAPACITY / 1.5).toLong
-
   val MAX_BROADCAST_TABLE_BYTES = 8L << 30
 
   private[execution] val executionContext = ExecutionContext.fromExecutorService(

@@ -28,7 +28,7 @@ clause, this clause guarantees a total order in the output.
 ### Syntax
 
 ```sql
-ORDER BY { expression [ sort_direction | nulls_sort_oder ] [ , ... ] }
+ORDER BY { expression [ sort_direction | nulls_sort_order ] [ , ... ] }
 ```
 
 ### Parameters

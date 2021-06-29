@@ -168,7 +168,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
           (weight, new MultivariateGaussian(mu, sigma))
       }.unzip
 
-      new GaussianMixtureModel(weights.toArray, gaussians.toArray)
+      new GaussianMixtureModel(weights, gaussians)
     }
   }
 

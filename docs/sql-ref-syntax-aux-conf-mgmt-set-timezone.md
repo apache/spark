@@ -43,7 +43,7 @@ SET TIME ZONE INTERVAL interval_literal
 
 * **interval_literal**
 
-    The [interval literal](sql-ref-literals.html#interval-literal) represents the difference between the session time zone to the 'UTC'. It must be in the range of [-18, 18] hours and max to second precision, e.g. `INTERVAL 2 HOURS 30 MINITUES` or `INTERVAL '15:40:32' HOUR TO SECOND`.
+    The [interval literal](sql-ref-literals.html#interval-literal) represents the difference between the session time zone to the 'UTC'. It must be in the range of [-18, 18] hours and max to second precision, e.g. `INTERVAL 2 HOURS 30 MINUTES` or `INTERVAL '15:40:32' HOUR TO SECOND`.
 
 ### Examples
 

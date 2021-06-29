@@ -17,10 +17,15 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.catalog.CatalogFunction
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, SupportsNamespaces, Table, TableCatalog}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.types.DataType
 
 /**
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
@@ -36,7 +41,24 @@ case class UnresolvedNamespace(multipartIdentifier: Seq[String]) extends LeafNod
  * Holds the name of a table that has yet to be looked up in a catalog. It will be resolved to
  * [[ResolvedTable]] during analysis.
  */
-case class UnresolvedTable(multipartIdentifier: Seq[String]) extends LeafNode {
+case class UnresolvedTable(
+    multipartIdentifier: Seq[String],
+    commandName: String,
+    relationTypeMismatchHint: Option[String]) extends LeafNode {
+  override lazy val resolved: Boolean = false
+
+  override def output: Seq[Attribute] = Nil
+}
+
+/**
+ * Holds the name of a view that has yet to be looked up in a catalog. It will be resolved to
+ * [[ResolvedView]] during analysis.
+ */
+case class UnresolvedView(
+    multipartIdentifier: Seq[String],
+    commandName: String,
+    allowTemp: Boolean,
+    relationTypeMismatchHint: Option[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
 
   override def output: Seq[Attribute] = Nil
@@ -46,9 +68,37 @@ case class UnresolvedTable(multipartIdentifier: Seq[String]) extends LeafNode {
  * Holds the name of a table or view that has yet to be looked up in a catalog. It will
  * be resolved to [[ResolvedTable]] or [[ResolvedView]] during analysis.
  */
-case class UnresolvedTableOrView(multipartIdentifier: Seq[String]) extends LeafNode {
+case class UnresolvedTableOrView(
+    multipartIdentifier: Seq[String],
+    commandName: String,
+    allowTempView: Boolean) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
+}
+
+sealed trait PartitionSpec extends LeafExpression with Unevaluable {
+  override def dataType: DataType = throw new IllegalStateException(
+    "PartitionSpec.dataType should not be called.")
+  override def nullable: Boolean = throw new IllegalStateException(
+    "PartitionSpec.nullable should not be called.")
+}
+
+case class UnresolvedPartitionSpec(
+    spec: TablePartitionSpec,
+    location: Option[String] = None) extends PartitionSpec {
+  override lazy val resolved = false
+}
+
+sealed trait FieldName extends LeafExpression with Unevaluable {
+  def name: Seq[String]
+  override def dataType: DataType = throw new IllegalStateException(
+    "UnresolvedFieldName.dataType should not be called.")
+  override def nullable: Boolean = throw new IllegalStateException(
+    "UnresolvedFieldName.nullable should not be called.")
+}
+
+case class UnresolvedFieldName(name: Seq[String]) extends FieldName {
+  override lazy val resolved = false
 }
 
 /**
@@ -58,6 +108,7 @@ case class UnresolvedTableOrView(multipartIdentifier: Seq[String]) extends LeafN
 case class UnresolvedFunc(multipartIdentifier: Seq[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_FUNC)
 }
 
 /**
@@ -71,17 +122,42 @@ case class ResolvedNamespace(catalog: CatalogPlugin, namespace: Seq[String])
 /**
  * A plan containing resolved table.
  */
-case class ResolvedTable(catalog: TableCatalog, identifier: Identifier, table: Table)
+case class ResolvedTable(
+    catalog: TableCatalog,
+    identifier: Identifier,
+    table: Table,
+    outputAttributes: Seq[Attribute])
   extends LeafNode {
-  override def output: Seq[Attribute] = Nil
+  override def output: Seq[Attribute] = {
+    val qualifier = catalog.name +: identifier.namespace :+ identifier.name
+    outputAttributes.map(_.withQualifier(qualifier))
+  }
+  def name: String = (catalog.name +: identifier.namespace() :+ identifier.name()).quoted
 }
+
+object ResolvedTable {
+  def create(
+      catalog: TableCatalog,
+      identifier: Identifier,
+      table: Table): ResolvedTable = {
+    val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(table.schema)
+    ResolvedTable(catalog, identifier, table, schema.toAttributes)
+  }
+}
+
+case class ResolvedPartitionSpec(
+    names: Seq[String],
+    ident: InternalRow,
+    location: Option[String] = None) extends PartitionSpec
+
+case class ResolvedFieldName(name: Seq[String]) extends FieldName
 
 /**
  * A plan containing resolved (temp) views.
  */
 // TODO: create a generic representation for temp view, v1 view and v2 view, after we add view
 //       support to v2 catalog. For now we only need the identifier to fallback to v1 command.
-case class ResolvedView(identifier: Identifier) extends LeafNode {
+case class ResolvedView(identifier: Identifier, isTemp: Boolean) extends LeafNode {
   override def output: Seq[Attribute] = Nil
 }
 

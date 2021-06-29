@@ -24,7 +24,6 @@ import org.apache.spark.annotation.Private;
 
 /**
  * :: Private ::
- *
  * A thin wrapper around a {@link WritableByteChannel}.
  * <p>
  * This is primarily provided for the local disk shuffle implementation to provide a

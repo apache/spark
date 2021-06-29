@@ -20,7 +20,9 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, TreePattern}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /** The mode of an [[AggregateFunction]]. */
@@ -61,10 +63,9 @@ case object Complete extends AggregateMode
  * A place holder expressions used in code-gen, it does not change the corresponding value
  * in the row.
  */
-case object NoOp extends Expression with Unevaluable {
+case object NoOp extends LeafExpression with Unevaluable {
   override def nullable: Boolean = true
   override def dataType: DataType = NullType
-  override def children: Seq[Expression] = Nil
 }
 
 object AggregateExpression {
@@ -79,6 +80,14 @@ object AggregateExpression {
       isDistinct,
       filter,
       NamedExpression.newExprId)
+  }
+
+  def containsAggregate(expr: Expression): Boolean = {
+    expr.find(isAggregate).isDefined
+  }
+
+  def isAggregate(expr: Expression): Boolean = {
+    expr.isInstanceOf[AggregateExpression] || PythonUDF.isGroupedAggPandasUDF(expr)
   }
 }
 
@@ -95,6 +104,8 @@ case class AggregateExpression(
     resultId: ExprId)
   extends Expression
   with Unevaluable {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(AGGREGATE_EXPRESSION)
 
   @transient
   lazy val resultAttribute: Attribute = if (aggregateFunction.resolved) {
@@ -133,7 +144,6 @@ case class AggregateExpression(
   override def children: Seq[Expression] = aggregateFunction +: filter.toSeq
 
   override def dataType: DataType = aggregateFunction.dataType
-  override def foldable: Boolean = false
   override def nullable: Boolean = aggregateFunction.nullable
 
   @transient
@@ -165,6 +175,16 @@ case class AggregateExpression(
       case _ => aggFuncStr
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): AggregateExpression =
+    if (filter.isDefined) {
+      copy(
+        aggregateFunction = newChildren(0).asInstanceOf[AggregateFunction],
+        filter = Some(newChildren(1)))
+    } else {
+      copy(aggregateFunction = newChildren(0).asInstanceOf[AggregateFunction])
+    }
 }
 
 /**
@@ -203,8 +223,7 @@ abstract class AggregateFunction extends Expression {
   def inputAggBufferAttributes: Seq[AttributeReference]
 
   /**
-   * Result of the aggregate function when the input is empty. This is currently only used for the
-   * proper rewriting of distinct aggregate functions.
+   * Result of the aggregate function when the input is empty.
    */
   def defaultResult: Option[Literal] = None
 
@@ -223,8 +242,14 @@ abstract class AggregateFunction extends Expression {
    * An [[AggregateFunction]] should not be used without being wrapped in
    * an [[AggregateExpression]].
    */
-  def toAggregateExpression(isDistinct: Boolean): AggregateExpression = {
-    AggregateExpression(aggregateFunction = this, mode = Complete, isDistinct = isDistinct)
+  def toAggregateExpression(
+      isDistinct: Boolean,
+      filter: Option[Expression] = None): AggregateExpression = {
+    AggregateExpression(
+      aggregateFunction = this,
+      mode = Complete,
+      isDistinct = isDistinct,
+      filter = filter)
   }
 
   def sql(isDistinct: Boolean): String = {
@@ -368,8 +393,7 @@ abstract class ImperativeAggregate extends AggregateFunction with CodegenFallbac
  */
 abstract class DeclarativeAggregate
   extends AggregateFunction
-  with Serializable
-  with Unevaluable {
+  with Serializable {
 
   /**
    * Expressions for initializing empty aggregation buffers.
@@ -415,6 +439,12 @@ abstract class DeclarativeAggregate
     /** Represents this attribute at the input buffer side (the data value is read-only). */
     def right: AttributeReference = inputAggBufferAttributes(aggBufferAttributes.indexOf(a))
   }
+
+  final override def eval(input: InternalRow = null): Any =
+    throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+
+  final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
 

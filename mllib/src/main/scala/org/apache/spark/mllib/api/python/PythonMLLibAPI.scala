@@ -1313,8 +1313,10 @@ private[spark] abstract class SerDeBase {
   def dumps(obj: AnyRef): Array[Byte] = {
     obj match {
       // Pickler in Python side cannot deserialize Scala Array normally. See SPARK-12834.
-      case array: Array[_] => new Pickler().dumps(array.toSeq.asJava)
-      case _ => new Pickler().dumps(obj)
+      case array: Array[_] => new Pickler(/* useMemo = */ true,
+        /* valueCompare = */ false).dumps(array.toSeq.asJava)
+      case _ => new Pickler(/* useMemo = */ true,
+        /* valueCompare = */ false).dumps(obj)
     }
   }
 

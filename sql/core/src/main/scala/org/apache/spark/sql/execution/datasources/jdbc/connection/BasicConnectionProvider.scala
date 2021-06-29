@@ -18,18 +18,34 @@
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import java.sql.{Connection, Driver}
+import java.util.Properties
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.jdbc.JdbcConnectionProvider
 
-private[jdbc] class BasicConnectionProvider(driver: Driver, options: JDBCOptions)
-  extends ConnectionProvider {
-  def getConnection(): Connection = {
-    val properties = getAdditionalProperties()
-    options.asConnectionProperties.entrySet().asScala.foreach { e =>
-      properties.put(e.getKey(), e.getValue())
+private[jdbc] class BasicConnectionProvider extends JdbcConnectionProvider with Logging {
+  /**
+   * Additional properties for data connection (Data source property takes precedence).
+   */
+  def getAdditionalProperties(options: JDBCOptions): Properties = new Properties()
+
+  override val name: String = "basic"
+
+  override def canHandle(driver: Driver, options: Map[String, String]): Boolean = {
+    val jdbcOptions = new JDBCOptions(options)
+    jdbcOptions.keytab == null || jdbcOptions.principal == null
+  }
+
+  override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
+    val jdbcOptions = new JDBCOptions(options)
+    val properties = getAdditionalProperties(jdbcOptions)
+    jdbcOptions.asProperties.asScala.foreach { case(k, v) =>
+      properties.put(k, v)
     }
-    driver.connect(options.url, properties)
+    logDebug(s"JDBC connection initiated with URL: ${jdbcOptions.url} and properties: $properties")
+    driver.connect(jdbcOptions.url, properties)
   }
 }

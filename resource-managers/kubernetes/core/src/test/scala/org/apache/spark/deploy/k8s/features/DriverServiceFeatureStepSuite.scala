@@ -25,7 +25,6 @@ import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesTestConf, SparkPod}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.submit.JavaMainAppResource
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
 import org.apache.spark.util.ManualClock
@@ -64,6 +63,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       8080,
       4080,
       s"${kconf.resourceNamePrefix}${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}",
+      kconf.appId,
       driverService)
   }
 
@@ -96,6 +96,7 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       DEFAULT_BLOCKMANAGER_PORT,
       UI_PORT.defaultValue.get,
       s"${kconf.resourceNamePrefix}${DriverServiceFeatureStep.DRIVER_SVC_POSTFIX}",
+      kconf.appId,
       resolvedService)
     val additionalProps = configurationStep.getAdditionalPodSystemProperties()
     assert(additionalProps(DRIVER_PORT.key) === DEFAULT_DRIVER_PORT.toString)
@@ -164,8 +165,11 @@ class DriverServiceFeatureStepSuite extends SparkFunSuite {
       blockManagerPort: Int,
       drierUIPort: Int,
       expectedServiceName: String,
+      appId: String,
       service: Service): Unit = {
     assert(service.getMetadata.getName === expectedServiceName)
+    assert(service.getMetadata.getLabels.containsKey(SPARK_APP_ID_LABEL) &&
+      service.getMetadata.getLabels.get(SPARK_APP_ID_LABEL).equals(appId))
     assert(service.getSpec.getClusterIP === "None")
     DRIVER_LABELS.foreach { case (k, v) =>
       assert(service.getSpec.getSelector.get(k) === v)

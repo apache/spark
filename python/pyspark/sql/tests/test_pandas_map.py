@@ -15,11 +15,9 @@
 # limitations under the License.
 #
 import os
-import sys
 import time
 import unittest
 
-from pyspark.sql.functions import pandas_udf, PandasUDFType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
 
@@ -29,7 +27,7 @@ if have_pandas:
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class MapInPandasTests(ReusedSQLTestCase):
 
     @classmethod
@@ -63,7 +61,7 @@ class MapInPandasTests(ReusedSQLTestCase):
         df = self.spark.range(10)
         actual = df.mapInPandas(func, 'id long').collect()
         expected = df.collect()
-        self.assertEquals(actual, expected)
+        self.assertEqual(actual, expected)
 
     def test_multiple_columns(self):
         data = [(1, "foo"), (2, None), (3, "bar"), (4, "bar")]
@@ -77,7 +75,7 @@ class MapInPandasTests(ReusedSQLTestCase):
 
         actual = df.mapInPandas(func, df.schema).collect()
         expected = df.collect()
-        self.assertEquals(actual, expected)
+        self.assertEqual(actual, expected)
 
     def test_different_output_length(self):
         def func(iterator):
@@ -86,7 +84,7 @@ class MapInPandasTests(ReusedSQLTestCase):
 
         df = self.spark.range(10)
         actual = df.repartition(1).mapInPandas(func, 'a long').collect()
-        self.assertEquals(set((r.a for r in actual)), set(range(100)))
+        self.assertEqual(set((r.a for r in actual)), set(range(100)))
 
     def test_empty_iterator(self):
         def empty_iter(_):
@@ -112,14 +110,22 @@ class MapInPandasTests(ReusedSQLTestCase):
         df = self.spark.range(10)
         actual = df.mapInPandas(func, 'id long').mapInPandas(func, 'id long').collect()
         expected = df.collect()
-        self.assertEquals(actual, expected)
+        self.assertEqual(actual, expected)
+
+    def test_self_join(self):
+        # SPARK-34319: self-join with MapInPandas
+        df1 = self.spark.range(10)
+        df2 = df1.mapInPandas(lambda iter: iter, 'id long')
+        actual = df2.join(df2).collect()
+        expected = df1.join(df1).collect()
+        self.assertEqual(sorted(actual), sorted(expected))
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_map import *
+    from pyspark.sql.tests.test_pandas_map import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

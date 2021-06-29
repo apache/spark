@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -30,16 +31,22 @@ import org.apache.spark.sql.types.DataType
  * so we need to resolve higher order function when all children are either resolved or a lambda
  * function.
  */
-case class ResolveHigherOrderFunctions(catalog: SessionCatalog) extends Rule[LogicalPlan] {
+case class ResolveHigherOrderFunctions(catalogManager: CatalogManager)
+  extends Rule[LogicalPlan] with LookupCatalog {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressions {
-    case u @ UnresolvedFunction(fn, children, false, filter)
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
+    _.containsPattern(LAMBDA_FUNCTION), ruleId) {
+    case u @ UnresolvedFunction(AsFunctionIdentifier(ident), children, false, filter, ignoreNulls)
         if hasLambdaAndResolvedArguments(children) =>
       withPosition(u) {
-        catalog.lookupFunction(fn, children) match {
+        catalogManager.v1SessionCatalog.lookupFunction(ident, children) match {
           case func: HigherOrderFunction =>
             filter.foreach(_.failAnalysis("FILTER predicate specified, " +
               s"but ${func.prettyName} is not an aggregate function"))
+            if (ignoreNulls) {
+              throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
+                func.prettyName, "IGNORE NULLS")
+            }
             func
           case other => other.failAnalysis(
             "A lambda function should only be used in a higher order function. However, " +
@@ -70,11 +77,11 @@ case class ResolveHigherOrderFunctions(catalog: SessionCatalog) extends Rule[Log
  *      be a lambda function defined in an outer scope, or a attribute in produced by the plan's
  *      child. If names are duplicate, the name defined in the most inner scope is used.
  */
-case class ResolveLambdaVariables(conf: SQLConf) extends Rule[LogicalPlan] {
+object ResolveLambdaVariables extends Rule[LogicalPlan] {
 
   type LambdaVariableMap = Map[String, NamedExpression]
 
-  private val canonicalizer = {
+  private def canonicalizer = {
     if (!conf.caseSensitiveAnalysis) {
       // scalastyle:off caselocale
       s: String => s.toLowerCase
@@ -85,7 +92,8 @@ case class ResolveLambdaVariables(conf: SQLConf) extends Rule[LogicalPlan] {
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.resolveOperators {
+    plan.resolveOperatorsWithPruning(
+      _.containsAnyPattern(HIGH_ORDER_FUNCTION, LAMBDA_FUNCTION, LAMBDA_VARIABLE), ruleId) {
       case q: LogicalPlan =>
         q.mapExpressions(resolve(_, Map.empty))
     }

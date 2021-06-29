@@ -64,7 +64,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
         case _ => scan
       }
 
-      val scanRelation = DataSourceV2ScanRelation(relation.table, wrappedScan, output)
+      val scanRelation = DataSourceV2ScanRelation(relation, wrappedScan, output)
 
       val projectionOverSchema = ProjectionOverSchema(output.toStructType)
       val projectionFunc = (expr: Expression) => expr transformDown {

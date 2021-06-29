@@ -28,6 +28,7 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
   import testImplicits._
 
   val batchedPythonUDF = new MyDummyPythonUDF
+  val batchedNondeterministicPythonUDF = new MyDummyNondeterministicPythonUDF
   val scalarPandasUDF = new MyDummyScalarPandasUDF
 
   private def collectBatchExec(plan: SparkPlan): Seq[BatchEvalPythonExec] = plan.collect {
@@ -166,5 +167,31 @@ class ExtractPythonUDFsSuite extends SparkPlanTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-33303: Deterministic UDF calls are deduplicated") {
+    val df = Seq("Hello").toDF("a")
+
+    val df2 = df.withColumn("c", batchedPythonUDF(col("a"))).withColumn("d", col("c"))
+    val pythonEvalNodes2 = collectBatchExec(df2.queryExecution.executedPlan)
+    assert(pythonEvalNodes2.size == 1)
+    assert(pythonEvalNodes2.head.udfs.size == 1)
+
+    val df3 = df.withColumns(Seq("c", "d"),
+      Seq(batchedPythonUDF(col("a")), batchedPythonUDF(col("a"))))
+    val pythonEvalNodes3 = collectBatchExec(df3.queryExecution.executedPlan)
+    assert(pythonEvalNodes3.size == 1)
+    assert(pythonEvalNodes3.head.udfs.size == 1)
+
+    val df4 = df.withColumn("c", batchedNondeterministicPythonUDF(col("a")))
+      .withColumn("d", col("c"))
+    val pythonEvalNodes4 = collectBatchExec(df4.queryExecution.executedPlan)
+    assert(pythonEvalNodes4.size == 1)
+    assert(pythonEvalNodes4.head.udfs.size == 1)
+
+    val df5 = df.withColumns(Seq("c", "d"),
+      Seq(batchedNondeterministicPythonUDF(col("a")), batchedNondeterministicPythonUDF(col("a"))))
+    val pythonEvalNodes5 = collectBatchExec(df5.queryExecution.executedPlan)
+    assert(pythonEvalNodes5.size == 1)
+    assert(pythonEvalNodes5.head.udfs.size == 2)
+  }
 }
 

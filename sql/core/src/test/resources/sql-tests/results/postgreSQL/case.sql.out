@@ -176,28 +176,28 @@ struct<None:string,NULL on no matches:int>
 -- !query
 SELECT CASE WHEN 1=0 THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END
 -- !query schema
-struct<CASE WHEN (1 = 0) THEN (CAST(1 AS DOUBLE) / CAST(0 AS DOUBLE)) WHEN (1 = 1) THEN CAST(1 AS DOUBLE) ELSE (CAST(2 AS DOUBLE) / CAST(0 AS DOUBLE)) END:double>
+struct<>
 -- !query output
-1.0
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query
 SELECT CASE 1 WHEN 0 THEN 1/0 WHEN 1 THEN 1 ELSE 2/0 END
 -- !query schema
-struct<CASE WHEN (1 = 0) THEN (CAST(1 AS DOUBLE) / CAST(0 AS DOUBLE)) WHEN (1 = 1) THEN CAST(1 AS DOUBLE) ELSE (CAST(2 AS DOUBLE) / CAST(0 AS DOUBLE)) END:double>
+struct<>
 -- !query output
-1.0
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query
 SELECT CASE WHEN i > 100 THEN 1/0 ELSE 0 END FROM case_tbl
 -- !query schema
-struct<CASE WHEN (i > 100) THEN (CAST(1 AS DOUBLE) / CAST(0 AS DOUBLE)) ELSE CAST(0 AS DOUBLE) END:double>
+struct<>
 -- !query output
-0.0
-0.0
-0.0
-0.0
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query
@@ -294,7 +294,7 @@ struct<i:int,f:double>
 SELECT COALESCE(a.f, b.i, b.j)
   FROM CASE_TBL a, CASE2_TBL b
 -- !query schema
-struct<coalesce(f, CAST(i AS DOUBLE), CAST(j AS DOUBLE)):double>
+struct<coalesce(f, i, j):double>
 -- !query output
 -30.3
 -30.3
@@ -388,7 +388,7 @@ SELECT CASE
   WHEN 'it was bar!' THEN 'bar recognized'
   ELSE 'unrecognized' END
 -- !query schema
-struct<CASE WHEN (CASE WHEN (vol(bar) = foo) THEN it was foo! WHEN (vol(bar) = vol(null)) THEN null input WHEN (vol(bar) = bar) THEN it was bar! END = it was foo!) THEN foo recognized WHEN (CASE WHEN (vol(bar) = foo) THEN it was foo! WHEN (vol(bar) = vol(null)) THEN null input WHEN (vol(bar) = bar) THEN it was bar! END = it was bar!) THEN bar recognized ELSE unrecognized END:string>
+struct<CASE WHEN (CASE WHEN (vol(bar) = foo) THEN it was foo! WHEN (vol(bar) = vol(NULL)) THEN null input WHEN (vol(bar) = bar) THEN it was bar! END = it was foo!) THEN foo recognized WHEN (CASE WHEN (vol(bar) = foo) THEN it was foo! WHEN (vol(bar) = vol(NULL)) THEN null input WHEN (vol(bar) = bar) THEN it was bar! END = it was bar!) THEN bar recognized ELSE unrecognized END:string>
 -- !query output
 bar recognized
 

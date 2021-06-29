@@ -45,7 +45,7 @@ import org.apache.spark.sql.internal.SQLConf
 case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!SQLConf.get.optimizerMetadataOnly) {
+    if (!conf.optimizerMetadataOnly) {
       return plan
     }
 
@@ -132,7 +132,7 @@ case class OptimizeMetadataOnlyQuery(catalog: SessionCatalog) extends Rule[Logic
             val caseInsensitiveProperties =
               CaseInsensitiveMap(relation.tableMeta.storage.properties)
             val timeZoneId = caseInsensitiveProperties.get(DateTimeUtils.TIMEZONE_OPTION)
-              .getOrElse(SQLConf.get.sessionLocalTimeZone)
+              .getOrElse(conf.sessionLocalTimeZone)
             val partitions = relation.prunedPartitions match {
               // for the case where partitions have already been pruned by PruneHiveTablePartitions
               case Some(parts) => parts

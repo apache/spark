@@ -100,8 +100,8 @@ class WindowSpec private[sql](
    *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b"))
    *     .toDF("id", "category")
    *   val byCategoryOrderedById =
-   *     Window.partitionBy('category).orderBy('id).rowsBetween(Window.currentRow, 1)
-   *   df.withColumn("sum", sum('id) over byCategoryOrderedById).show()
+   *     Window.partitionBy($"category").orderBy($"id").rowsBetween(Window.currentRow, 1)
+   *   df.withColumn("sum", sum($"id") over byCategoryOrderedById).show()
    *
    *   +---+--------+---+
    *   | id|category|sum|
@@ -168,8 +168,8 @@ class WindowSpec private[sql](
    *   val df = Seq((1, "a"), (1, "a"), (2, "a"), (1, "b"), (2, "b"), (3, "b"))
    *     .toDF("id", "category")
    *   val byCategoryOrderedById =
-   *     Window.partitionBy('category).orderBy('id).rangeBetween(Window.currentRow, 1)
-   *   df.withColumn("sum", sum('id) over byCategoryOrderedById).show()
+   *     Window.partitionBy($"category").orderBy($"id").rangeBetween(Window.currentRow, 1)
+   *   df.withColumn("sum", sum($"id") over byCategoryOrderedById).show()
    *
    *   +---+--------+---+
    *   | id|category|sum|

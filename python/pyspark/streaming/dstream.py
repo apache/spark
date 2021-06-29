@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-import sys
 import operator
 import time
 from itertools import chain
@@ -162,7 +161,10 @@ class DStream(object):
         """
         Print the first num elements of each RDD generated in this DStream.
 
-        :param num: the number of elements from the first will be printed.
+        Parameters
+        ----------
+        num : int, optional
+            the number of elements from the first will be printed.
         """
         def takeAndPrint(time, rdd):
             taken = rdd.take(num + 1)
@@ -224,8 +226,11 @@ class DStream(object):
         """
         Enable periodic checkpointing of RDDs of this DStream
 
-        :param interval: time in seconds, after each period of that, generated
-                         RDD will be checkpointed
+        Parameters
+        ----------
+        interval : int
+            time in seconds, after each period of that, generated
+            RDD will be checkpointed
         """
         self.is_checkpointed = True
         self._jdstream.checkpoint(self._ssc._jduration(interval))
@@ -328,8 +333,11 @@ class DStream(object):
         """
         Return a new DStream by unifying data of another DStream with this DStream.
 
-        :param other: Another DStream having the same interval (i.e., slideDuration)
-                     as this DStream.
+        Parameters
+        ----------
+        other : :class:`DStream`
+            Another DStream having the same interval (i.e., slideDuration)
+            as this DStream.
         """
         if self._slideDuration != other._slideDuration:
             raise ValueError("the two DStream should have same slide duration")
@@ -413,10 +421,12 @@ class DStream(object):
     def _validate_window_param(self, window, slide):
         duration = self._jdstream.dstream().slideDuration().milliseconds()
         if int(window * 1000) % duration != 0:
-            raise ValueError("windowDuration must be multiple of the slide duration (%d ms)"
+            raise ValueError("windowDuration must be multiple of the parent "
+                             "dstream's slide (batch) duration (%d ms)"
                              % duration)
         if slide and int(slide * 1000) % duration != 0:
-            raise ValueError("slideDuration must be multiple of the slide duration (%d ms)"
+            raise ValueError("slideDuration must be multiple of the parent "
+                             "dstream's slide (batch) duration (%d ms)"
                              % duration)
 
     def window(self, windowDuration, slideDuration=None):
@@ -424,11 +434,15 @@ class DStream(object):
         Return a new DStream in which each RDD contains all the elements in seen in a
         sliding window of time over this DStream.
 
-        :param windowDuration: width of the window; must be a multiple of this DStream's
-                              batching interval
-        :param slideDuration:  sliding interval of the window (i.e., the interval after which
-                              the new DStream will generate RDDs); must be a multiple of this
-                              DStream's batching interval
+        Parameters
+        ----------
+        windowDuration : int
+            width of the window; must be a multiple of this DStream's
+            batching interval
+        slideDuration : int, optional
+            sliding interval of the window (i.e., the interval after which
+            the new DStream will generate RDDs); must be a multiple of this
+            DStream's batching interval
         """
         self._validate_window_param(windowDuration, slideDuration)
         d = self._ssc._jduration(windowDuration)
@@ -450,15 +464,21 @@ class DStream(object):
         2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
         This is more efficient than `invReduceFunc` is None.
 
-        :param reduceFunc:     associative and commutative reduce function
-        :param invReduceFunc:  inverse reduce function of `reduceFunc`; such that for all y,
-                               and invertible x:
-                               `invReduceFunc(reduceFunc(x, y), x) = y`
-        :param windowDuration: width of the window; must be a multiple of this DStream's
-                               batching interval
-        :param slideDuration:  sliding interval of the window (i.e., the interval after which
-                               the new DStream will generate RDDs); must be a multiple of this
-                               DStream's batching interval
+        Parameters
+        ----------
+        reduceFunc : function
+            associative and commutative reduce function
+        invReduceFunc : function
+            inverse reduce function of `reduceFunc`; such that for all y,
+            and invertible x:
+            `invReduceFunc(reduceFunc(x, y), x) = y`
+        windowDuration : int
+            width of the window; must be a multiple of this DStream's
+            batching interval
+        slideDuration : int
+            sliding interval of the window (i.e., the interval after which
+            the new DStream will generate RDDs); must be a multiple of this
+            DStream's batching interval
         """
         keyed = self.map(lambda x: (1, x))
         reduced = keyed.reduceByKeyAndWindow(reduceFunc, invReduceFunc,
@@ -482,12 +502,17 @@ class DStream(object):
         Return a new DStream in which each RDD contains the count of distinct elements in
         RDDs in a sliding window over this DStream.
 
-        :param windowDuration: width of the window; must be a multiple of this DStream's
-                              batching interval
-        :param slideDuration:  sliding interval of the window (i.e., the interval after which
-                              the new DStream will generate RDDs); must be a multiple of this
-                              DStream's batching interval
-        :param numPartitions:  number of partitions of each RDD in the new DStream.
+        Parameters
+        ----------
+        windowDuration : int
+            width of the window; must be a multiple of this DStream's
+            batching interval
+        slideDuration : int
+            sliding interval of the window (i.e., the interval after which
+            the new DStream will generate RDDs); must be a multiple of this
+            DStream's batching interval
+        numPartitions : int, optional
+            number of partitions of each RDD in the new DStream.
         """
         keyed = self.map(lambda x: (x, 1))
         counted = keyed.reduceByKeyAndWindow(operator.add, operator.sub,
@@ -499,12 +524,17 @@ class DStream(object):
         Return a new DStream by applying `groupByKey` over a sliding window.
         Similar to `DStream.groupByKey()`, but applies it over a sliding window.
 
-        :param windowDuration: width of the window; must be a multiple of this DStream's
-                              batching interval
-        :param slideDuration:  sliding interval of the window (i.e., the interval after which
-                              the new DStream will generate RDDs); must be a multiple of this
-                              DStream's batching interval
-        :param numPartitions:  Number of partitions of each RDD in the new DStream.
+        Parameters
+        ----------
+        windowDuration : int
+            width of the window; must be a multiple of this DStream's
+            batching interval
+        slideDuration : int
+            sliding interval of the window (i.e., the interval after which
+            the new DStream will generate RDDs); must be a multiple of this
+            DStream's batching interval
+        numPartitions : int, optional
+            Number of partitions of each RDD in the new DStream.
         """
         ls = self.mapValues(lambda x: [x])
         grouped = ls.reduceByKeyAndWindow(lambda a, b: a.extend(b) or a, lambda a, b: a[len(b):],
@@ -523,17 +553,25 @@ class DStream(object):
         `invFunc` can be None, then it will reduce all the RDDs in window, could be slower
         than having `invFunc`.
 
-        :param func:           associative and commutative reduce function
-        :param invFunc:        inverse function of `reduceFunc`
-        :param windowDuration: width of the window; must be a multiple of this DStream's
-                              batching interval
-        :param slideDuration:  sliding interval of the window (i.e., the interval after which
-                              the new DStream will generate RDDs); must be a multiple of this
-                              DStream's batching interval
-        :param numPartitions:  number of partitions of each RDD in the new DStream.
-        :param filterFunc:     function to filter expired key-value pairs;
-                              only pairs that satisfy the function are retained
-                              set this to null if you do not want to filter
+        Parameters
+        ----------
+        func : function
+            associative and commutative reduce function
+        invFunc : function
+            inverse function of `reduceFunc`
+        windowDuration : int
+            width of the window; must be a multiple of this DStream's
+            batching interval
+        slideDuration : int, optional
+            sliding interval of the window (i.e., the interval after which
+            the new DStream will generate RDDs); must be a multiple of this
+            DStream's batching interval
+        numPartitions : int, optional
+            number of partitions of each RDD in the new DStream.
+        filterFunc : function, optional
+            function to filter expired key-value pairs;
+            only pairs that satisfy the function are retained
+            set this to null if you do not want to filter
         """
         self._validate_window_param(windowDuration, slideDuration)
         if numPartitions is None:
@@ -573,8 +611,11 @@ class DStream(object):
         Return a new "state" DStream where the state for each key is updated by applying
         the given function on the previous state of the key and the new values of the key.
 
-        :param updateFunc: State update function. If this function returns None, then
-                           corresponding state key-value pair will be eliminated.
+        Parameters
+        ----------
+        updateFunc : function
+            State update function. If this function returns None, then
+            corresponding state key-value pair will be eliminated.
         """
         if numPartitions is None:
             numPartitions = self._sc.defaultParallelism

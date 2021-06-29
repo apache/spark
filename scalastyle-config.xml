@@ -264,6 +264,20 @@ This file is divided into 3 sections:
     of Commons Lang 2 (package org.apache.commons.lang.*)</customMessage>
   </check>
 
+  <check customId="FileSystemGet" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">FileSystem.get\([a-zA-Z_$][a-zA-Z_$0-9]*\)</parameter></parameters>
+    <customMessage><![CDATA[
+      Are you sure that you want to use "FileSystem.get(Configuration conf)"? If the input
+      configuration is not set properly, a default FileSystem instance will be returned. It can
+      lead to errors when you deal with multiple file systems. Please consider using
+      "FileSystem.get(URI uri, Configuration conf)" or "Path.getFileSystem(Configuration conf)" instead.
+      If you must use the method "FileSystem.get(Configuration conf)", wrap the code block with
+      // scalastyle:off FileSystemGet
+      FileSystem.get(...)
+      // scalastyle:on FileSystemGet
+    ]]></customMessage>
+  </check>
+
   <check customId="extractopt" level="error" class="org.scalastyle.scalariform.TokenChecker" enabled="true">
     <parameters><parameter name="regex">extractOpt</parameter></parameters>
     <customMessage>Use jsonOption(x).map(.extract[T]) instead of .extractOpt[T], as the latter
@@ -308,6 +322,18 @@ This file is divided into 3 sections:
   <check level="error" class="org.scalastyle.scalariform.OverrideJavaChecker" enabled="true"></check>
 
   <check level="error" class="org.scalastyle.scalariform.DeprecatedJavaChecker" enabled="true"></check>
+
+  <check level="error" class="org.scalastyle.scalariform.IllegalImportsChecker" enabled="true">
+    <parameters><parameter name="illegalImports"><![CDATA[scala.collection.Seq,scala.collection.IndexedSeq]]></parameter></parameters>
+    <customMessage><![CDATA[
+      Don't import scala.collection.Seq and scala.collection.IndexedSeq as it may bring some problems with cross-build between Scala 2.12 and 2.13.
+
+      Please refer below page to see the details of changes around Seq / IndexedSeq.
+      https://docs.scala-lang.org/overviews/core/collections-migration-213.html
+
+      If you really need to use scala.collection.Seq or scala.collection.IndexedSeq, please use the fully-qualified name instead.
+    ]]></customMessage>
+  </check>
 
   <!-- ================================================================================ -->
   <!--       rules we'd like to enforce, but haven't cleaned up the codebase yet        -->
@@ -383,4 +409,8 @@ This file is divided into 3 sections:
     <parameters><parameter name="ignore">-1,0,1,2,3</parameter></parameters>
   </check>
 
+  <check customId="GuavaToStringHelper" level="error" class="org.scalastyle.file.RegexChecker" enabled="true">
+    <parameters><parameter name="regex">Objects.toStringHelper</parameter></parameters>
+    <customMessage>Avoid using Object.toStringHelper. Use ToStringBuilder instead.</customMessage>
+  </check>
 </scalastyle>

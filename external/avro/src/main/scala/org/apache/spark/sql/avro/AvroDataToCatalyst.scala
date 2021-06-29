@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGe
 import org.apache.spark.sql.catalyst.util.{FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.types._
 
-case class AvroDataToCatalyst(
+private[avro] case class AvroDataToCatalyst(
     child: Expression,
     jsonFormatSchema: String,
     options: Map[String, String])
@@ -55,13 +55,12 @@ case class AvroDataToCatalyst(
 
   @transient private lazy val actualSchema = new Schema.Parser().parse(jsonFormatSchema)
 
-  @transient private lazy val expectedSchema = avroOptions.schema
-    .map(expectedSchema => new Schema.Parser().parse(expectedSchema))
-    .getOrElse(actualSchema)
+  @transient private lazy val expectedSchema = avroOptions.schema.getOrElse(actualSchema)
 
   @transient private lazy val reader = new GenericDatumReader[Any](actualSchema, expectedSchema)
 
-  @transient private lazy val deserializer = new AvroDeserializer(expectedSchema, dataType)
+  @transient private lazy val deserializer =
+    new AvroDeserializer(expectedSchema, dataType, avroOptions.datetimeRebaseModeInRead)
 
   @transient private var decoder: BinaryDecoder = _
 
@@ -135,4 +134,7 @@ case class AvroDataToCatalyst(
       """
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): AvroDataToCatalyst =
+    copy(child = newChild)
 }

@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
+import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -29,7 +29,17 @@ import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, RowIterator
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{BooleanType, IntegralType, LongType}
 
-trait HashJoin extends BaseJoinExec with CodegenSupport {
+/**
+ * @param relationTerm variable name for HashedRelation
+ * @param keyIsUnique  indicate whether keys of HashedRelation known to be unique in code-gen time
+ * @param isEmpty indicate whether it known to be EmptyHashedRelation in code-gen time
+ */
+private[joins] case class HashedRelationInfo(
+    relationTerm: String,
+    keyIsUnique: Boolean,
+    isEmpty: Boolean)
+
+trait HashJoin extends JoinCodegenSupport {
   def buildSide: BuildSide
 
   override def simpleStringWithNodeId(): String = {
@@ -96,15 +106,18 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   }
 
   protected lazy val (buildKeys, streamedKeys) = {
-    require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType),
-      "Join keys from two sides should have same types")
+    require(leftKeys.length == rightKeys.length &&
+      leftKeys.map(_.dataType)
+        .zip(rightKeys.map(_.dataType))
+        .forall(types => types._1.sameType(types._2)),
+      "Join keys from two sides should have same length and types")
     buildSide match {
       case BuildLeft => (leftKeys, rightKeys)
       case BuildRight => (rightKeys, leftKeys)
     }
   }
 
-  @transient private lazy val (buildOutput, streamedOutput) = {
+  @transient protected lazy val (buildOutput, streamedOutput) = {
     buildSide match {
       case BuildLeft => (left.output, right.output)
       case BuildRight => (right.output, left.output)
@@ -123,8 +136,14 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   protected def streamSideKeyGenerator(): UnsafeProjection =
     UnsafeProjection.create(streamedBoundKeys)
 
-  @transient private[this] lazy val boundCondition = if (condition.isDefined) {
-    Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval _
+  @transient protected[this] lazy val boundCondition = if (condition.isDefined) {
+    if (joinType == FullOuter && buildSide == BuildLeft) {
+      // Put join left side before right side. This is to be consistent with
+      // `ShuffledHashJoinExec.fullOuterJoin`.
+      Predicate.create(condition.get, buildPlan.output ++ streamedPlan.output).eval _
+    } else {
+      Predicate.create(condition.get, streamedPlan.output ++ buildPlan.output).eval _
+    }
   } else {
     (r: InternalRow) => true
   }
@@ -145,7 +164,9 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val joinRow = new JoinedRow
     val joinKeys = streamSideKeyGenerator()
 
-    if (hashedRelation.keyIsUnique) {
+    if (hashedRelation == EmptyHashedRelation) {
+      Iterator.empty
+    } else if (hashedRelation.keyIsUnique) {
       streamIter.flatMap { srow =>
         joinRow.withLeft(srow)
         val matched = hashedRelation.getValue(joinKeys(srow))
@@ -220,7 +241,9 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     val joinKeys = streamSideKeyGenerator()
     val joinedRow = new JoinedRow
 
-    if (hashedRelation.keyIsUnique) {
+    if (hashedRelation == EmptyHashedRelation) {
+      Iterator.empty
+    } else if (hashedRelation.keyIsUnique) {
       streamIter.filter { current =>
         val key = joinKeys(current)
         lazy val matched = hashedRelation.getValue(key)
@@ -270,6 +293,11 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   private def antiJoin(
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    // If the right side is empty, AntiJoin simply returns the left side.
+    if (hashedRelation == EmptyHashedRelation) {
+      return streamIter
+    }
+
     val joinKeys = streamSideKeyGenerator()
     val joinedRow = new JoinedRow
 
@@ -356,70 +384,12 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
   }
 
   /**
-   * Generates the code for variable of build side.
-   */
-  private def genBuildSideVars(ctx: CodegenContext, matched: String): Seq[ExprCode] = {
-    ctx.currentVars = null
-    ctx.INPUT_ROW = matched
-    buildPlan.output.zipWithIndex.map { case (a, i) =>
-      val ev = BoundReference(i, a.dataType, a.nullable).genCode(ctx)
-      if (joinType.isInstanceOf[InnerLike]) {
-        ev
-      } else {
-        // the variables are needed even there is no matched rows
-        val isNull = ctx.freshName("isNull")
-        val value = ctx.freshName("value")
-        val javaType = CodeGenerator.javaType(a.dataType)
-        val code = code"""
-          |boolean $isNull = true;
-          |$javaType $value = ${CodeGenerator.defaultValue(a.dataType)};
-          |if ($matched != null) {
-          |  ${ev.code}
-          |  $isNull = ${ev.isNull};
-          |  $value = ${ev.value};
-          |}
-         """.stripMargin
-        ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.variable(value, a.dataType))
-      }
-    }
-  }
-
-  /**
-   * Generate the (non-equi) condition used to filter joined rows. This is used in Inner, Left Semi
-   * and Left Anti joins.
-   */
-  protected def getJoinCondition(
-      ctx: CodegenContext,
-      input: Seq[ExprCode]): (String, String, Seq[ExprCode]) = {
-    val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched)
-    val checkCondition = if (condition.isDefined) {
-      val expr = condition.get
-      // evaluate the variables from build side that used by condition
-      val eval = evaluateRequiredVariables(buildPlan.output, buildVars, expr.references)
-      // filter the output via condition
-      ctx.currentVars = input ++ buildVars
-      val ev =
-        BindReferences.bindReference(expr, streamedPlan.output ++ buildPlan.output).genCode(ctx)
-      val skipRow = s"${ev.isNull} || !${ev.value}"
-      s"""
-         |$eval
-         |${ev.code}
-         |if (!($skipRow))
-       """.stripMargin
-    } else {
-      ""
-    }
-    (matched, checkCondition, buildVars)
-  }
-
-  /**
    * Generates the code for Inner join.
    */
   protected def codegenInner(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val (relationTerm, keyIsUnique) = prepareRelation(ctx)
+    val HashedRelationInfo(relationTerm, keyIsUnique, isEmptyHashedRelation) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, buildVars) = getJoinCondition(ctx, input)
+    val (matched, checkCondition, buildVars) = getJoinCondition(ctx, input, streamedPlan, buildPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     val resultVars = buildSide match {
@@ -427,7 +397,11 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
       case BuildRight => input ++ buildVars
     }
 
-    if (keyIsUnique) {
+    if (isEmptyHashedRelation) {
+      """
+        |// If HashedRelation is empty, hash inner join simply returns nothing.
+      """.stripMargin
+    } else if (keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -467,10 +441,10 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
    * Generates the code for left or right outer join.
    */
   protected def codegenOuter(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val (relationTerm, keyIsUnique) = prepareRelation(ctx)
+    val HashedRelationInfo(relationTerm, keyIsUnique, _) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched)
+    val buildVars = genBuildSideVars(ctx, matched, buildPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     // filter the output via condition
@@ -544,12 +518,16 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
    * Generates the code for left semi join.
    */
   protected def codegenSemi(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val (relationTerm, keyIsUnique) = prepareRelation(ctx)
+    val HashedRelationInfo(relationTerm, keyIsUnique, isEmptyHashedRelation) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, _) = getJoinCondition(ctx, input)
+    val (matched, checkCondition, _) = getJoinCondition(ctx, input, streamedPlan, buildPlan)
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    if (keyIsUnique) {
+    if (isEmptyHashedRelation) {
+      """
+        |// If HashedRelation is empty, hash semi join simply returns nothing.
+      """.stripMargin
+    } else if (keyIsUnique) {
       s"""
          |// generate join key for stream side
          |${keyEv.code}
@@ -593,10 +571,18 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
    * Generates the code for anti join.
    */
   protected def codegenAnti(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val (relationTerm, keyIsUnique) = prepareRelation(ctx)
-    val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, _) = getJoinCondition(ctx, input)
+    val HashedRelationInfo(relationTerm, keyIsUnique, isEmptyHashedRelation) = prepareRelation(ctx)
     val numOutput = metricTerm(ctx, "numOutputRows")
+    if (isEmptyHashedRelation) {
+      return s"""
+                |// If HashedRelation is empty, hash anti join simply returns the stream side.
+                |$numOutput.add(1);
+                |${consume(ctx, input)}
+              """.stripMargin
+    }
+
+    val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
+    val (matched, checkCondition, _) = getJoinCondition(ctx, input, streamedPlan, buildPlan)
 
     if (keyIsUnique) {
       val found = ctx.freshName("found")
@@ -654,13 +640,13 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
    * Generates the code for existence join.
    */
   protected def codegenExistence(ctx: CodegenContext, input: Seq[ExprCode]): String = {
-    val (relationTerm, keyIsUnique) = prepareRelation(ctx)
+    val HashedRelationInfo(relationTerm, keyIsUnique, _) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
     val numOutput = metricTerm(ctx, "numOutputRows")
     val existsVar = ctx.freshName("exists")
 
     val matched = ctx.freshName("matched")
-    val buildVars = genBuildSideVars(ctx, matched)
+    val buildVars = genBuildSideVars(ctx, matched, buildPlan)
     val checkCondition = if (condition.isDefined) {
       val expr = condition.get
       // evaluate the variables from build side that used by condition
@@ -715,15 +701,10 @@ trait HashJoin extends BaseJoinExec with CodegenSupport {
     }
   }
 
-  /**
-   * Returns a tuple of variable name for HashedRelation,
-   * and a boolean to indicate whether keys of HashedRelation
-   * known to be unique in code-gen time.
-   */
-  protected def prepareRelation(ctx: CodegenContext): (String, Boolean)
+  protected def prepareRelation(ctx: CodegenContext): HashedRelationInfo
 }
 
-object HashJoin {
+object HashJoin extends CastSupport with SQLConfHelper {
   /**
    * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
    *
@@ -738,14 +719,14 @@ object HashJoin {
     }
 
     var keyExpr: Expression = if (keys.head.dataType != LongType) {
-      Cast(keys.head, LongType)
+      cast(keys.head, LongType)
     } else {
       keys.head
     }
     keys.tail.foreach { e =>
       val bits = e.dataType.defaultSize * 8
       keyExpr = BitwiseOr(ShiftLeft(keyExpr, Literal(bits)),
-        BitwiseAnd(Cast(e, LongType), Literal((1L << bits) - 1)))
+        BitwiseAnd(cast(e, LongType), Literal((1L << bits) - 1)))
     }
     keyExpr :: Nil
   }
@@ -758,13 +739,13 @@ object HashJoin {
     // jump over keys that have a higher index value than the required key
     if (keys.size == 1) {
       assert(index == 0)
-      Cast(BoundReference(0, LongType, nullable = false), keys(index).dataType)
+      cast(BoundReference(0, LongType, nullable = false), keys(index).dataType)
     } else {
       val shiftedBits =
         keys.slice(index + 1, keys.size).map(_.dataType.defaultSize * 8).sum
       val mask = (1L << (keys(index).dataType.defaultSize * 8)) - 1
       // build the schema for unpacking the required key
-      Cast(BitwiseAnd(
+      cast(BitwiseAnd(
         ShiftRightUnsigned(BoundReference(0, LongType, nullable = false), Literal(shiftedBits)),
         Literal(mask)), keys(index).dataType)
     }

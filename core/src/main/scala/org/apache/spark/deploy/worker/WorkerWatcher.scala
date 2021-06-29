@@ -17,8 +17,13 @@
 
 package org.apache.spark.deploy.worker
 
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.Future
+import scala.concurrent.duration._
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
+import org.apache.spark.util.ThreadUtils
 
 /**
  * Endpoint which connects to a worker process and terminates the JVM if the
@@ -45,7 +50,14 @@ private[spark] class WorkerWatcher(
   private val expectedAddress = RpcAddress.fromURIString(workerUrl)
   private def isWorker(address: RpcAddress) = expectedAddress == address
 
-  private def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
+  private def exitNonZero() =
+    if (isTesting) {
+      isShutDown = true
+    } else {
+      ThreadUtils.awaitResult(Future {
+        System.exit(-1)
+      }, 5.seconds)
+    }
 
   override def receive: PartialFunction[Any, Unit] = {
     case e => logWarning(s"Received unexpected message: $e")

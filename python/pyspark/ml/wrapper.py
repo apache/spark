@@ -75,19 +75,25 @@ class JavaWrapper(object):
         enough for all elements. The empty slots in the inner Java arrays will
         be filled with null to make the non-jagged 2D array.
 
-        :param pylist:
-          Python list to convert to a Java Array.
-        :param java_class:
-          Java class to specify the type of Array. Should be in the
-          form of sc._gateway.jvm.* (sc is a valid Spark Context).
-        :return:
-          Java Array of converted pylist.
+        Parameters
+        ----------
+        pylist : list
+            Python list to convert to a Java Array.
+        java_class : :py:class:`py4j.java_gateway.JavaClass`
+            Java class to specify the type of Array. Should be in the
+            form of sc._gateway.jvm.* (sc is a valid Spark Context).
 
-        Example primitive Java classes:
-          - basestring -> sc._gateway.jvm.java.lang.String
-          - int -> sc._gateway.jvm.java.lang.Integer
-          - float -> sc._gateway.jvm.java.lang.Double
-          - bool -> sc._gateway.jvm.java.lang.Boolean
+            Example primitive Java classes:
+
+            - basestring -> sc._gateway.jvm.java.lang.String
+            - int -> sc._gateway.jvm.java.lang.Integer
+            - float -> sc._gateway.jvm.java.lang.Double
+            - bool -> sc._gateway.jvm.java.lang.Boolean
+
+        Returns
+        -------
+        :py:class:`py4j.java_collections.JavaArray`
+          Java Array of converted pylist.
         """
         sc = SparkContext._active_spark_context
         java_array = None
@@ -109,15 +115,13 @@ class JavaWrapper(object):
 
 
 @inherit_doc
-class JavaParams(JavaWrapper, Params):
+class JavaParams(JavaWrapper, Params, metaclass=ABCMeta):
     """
     Utility class to help create wrapper classes from Java/Scala
     implementations of pipeline components.
     """
     #: The param values in the Java object should be
     #: synced with the Python wrapper in fit/transform/evaluate/copy.
-
-    __metaclass__ = ABCMeta
 
     def _make_java_param_pair(self, param, value):
         """
@@ -214,7 +218,10 @@ class JavaParams(JavaWrapper, Params):
 
         Meta-algorithms such as Pipeline should override this method.
 
-        :return: Java object equivalent to this instance.
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
         self._transfer_params_to_java()
         return self._java_obj
@@ -266,8 +273,15 @@ class JavaParams(JavaWrapper, Params):
         extra params. So both the Python wrapper and the Java pipeline
         component get copied.
 
-        :param extra: Extra parameters to copy to the new instance
-        :return: Copy of this instance
+        Parameters
+        ----------
+        extra : dict, optional
+            Extra parameters to copy to the new instance
+
+        Returns
+        -------
+        :py:class:`JavaParams`
+            Copy of this instance
         """
         if extra is None:
             extra = dict()
@@ -287,13 +301,11 @@ class JavaParams(JavaWrapper, Params):
 
 
 @inherit_doc
-class JavaEstimator(JavaParams, Estimator):
+class JavaEstimator(JavaParams, Estimator, metaclass=ABCMeta):
     """
     Base class for :py:class:`Estimator`s that wrap Java/Scala
     implementations.
     """
-
-    __metaclass__ = ABCMeta
 
     @abstractmethod
     def _create_model(self, java_model):
@@ -306,10 +318,15 @@ class JavaEstimator(JavaParams, Estimator):
         """
         Fits a Java model to the input dataset.
 
-        :param dataset: input dataset, which is an instance of
-                        :py:class:`pyspark.sql.DataFrame`
-        :param params: additional params (overwriting embedded values)
-        :return: fitted Java model
+        Examples
+        --------
+        dataset : :py:class:`pyspark.sql.DataFrame`
+            input dataset
+
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            fitted Java model
         """
         self._transfer_params_to_java()
         return self._java_obj.fit(dataset._jdf)
@@ -321,14 +338,12 @@ class JavaEstimator(JavaParams, Estimator):
 
 
 @inherit_doc
-class JavaTransformer(JavaParams, Transformer):
+class JavaTransformer(JavaParams, Transformer, metaclass=ABCMeta):
     """
     Base class for :py:class:`Transformer`s that wrap Java/Scala
     implementations. Subclasses should ensure they have the transformer Java object
     available as _java_obj.
     """
-
-    __metaclass__ = ABCMeta
 
     def _transform(self, dataset):
         self._transfer_params_to_java()
@@ -336,14 +351,12 @@ class JavaTransformer(JavaParams, Transformer):
 
 
 @inherit_doc
-class JavaModel(JavaTransformer, Model):
+class JavaModel(JavaTransformer, Model, metaclass=ABCMeta):
     """
     Base class for :py:class:`Model`s that wrap Java/Scala
     implementations. Subclasses should inherit this class before
     param mix-ins, because this sets the UID from the Java model.
     """
-
-    __metaclass__ = ABCMeta
 
     def __init__(self, java_model=None):
         """
@@ -374,12 +387,11 @@ class JavaModel(JavaTransformer, Model):
 
 
 @inherit_doc
-class JavaPredictor(Predictor, JavaEstimator, _PredictorParams):
+class JavaPredictor(Predictor, JavaEstimator, _PredictorParams, metaclass=ABCMeta):
     """
     (Private) Java Estimator for prediction tasks (regression and classification).
     """
-
-    __metaclass__ = ABCMeta
+    pass
 
 
 @inherit_doc

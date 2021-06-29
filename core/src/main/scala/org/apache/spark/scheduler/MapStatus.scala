@@ -29,11 +29,17 @@ import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
 /**
+ * A common trait between [[MapStatus]] and [[MergeStatus]]. This allows us to reuse existing
+ * code to handle MergeStatus inside MapOutputTracker.
+ */
+private[spark] trait ShuffleOutputStatus
+
+/**
  * Result returned by a ShuffleMapTask to a scheduler. Includes the block manager address that the
  * task has shuffle files stored on as well as the sizes of outputs for each reducer, for passing
  * on to the reduce tasks.
  */
-private[spark] sealed trait MapStatus {
+private[spark] sealed trait MapStatus extends ShuffleOutputStatus {
   /** Location where this task output is. */
   def location: BlockManagerId
 
@@ -123,7 +129,7 @@ private[spark] class CompressedMapStatus(
   // For deserialization only
   protected def this() = this(null, null.asInstanceOf[Array[Byte]], -1)
 
-  def this(loc: BlockManagerId, uncompressedSizes: Array[Long], mapTaskId: Long) {
+  def this(loc: BlockManagerId, uncompressedSizes: Array[Long], mapTaskId: Long) = {
     this(loc, uncompressedSizes.map(MapStatus.compressSize), mapTaskId)
   }
 

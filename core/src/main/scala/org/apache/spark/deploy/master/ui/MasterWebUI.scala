@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.master.ui
 
 import java.net.{InetAddress, NetworkInterface, SocketException}
-import java.util.Locale
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, MasterStateResponse, RequestMasterState}

@@ -46,7 +46,7 @@ case class BroadcastHashJoinExec(
     left: SparkPlan,
     right: SparkPlan,
     isNullAwareAntiJoin: Boolean = false)
-  extends HashJoin with CodegenSupport {
+  extends HashJoin {
 
   if (isNullAwareAntiJoin) {
     require(leftKeys.length == 1, "leftKeys length should be 1")
@@ -71,7 +71,7 @@ case class BroadcastHashJoinExec(
 
   override lazy val outputPartitioning: Partitioning = {
     joinType match {
-      case _: InnerLike if sqlContext.conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
+      case _: InnerLike if conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
         streamedPlan.outputPartitioning match {
           case h: HashPartitioning => expandOutputPartitioning(h)
           case c: PartitioningCollection => expandOutputPartitioning(c)
@@ -112,7 +112,7 @@ case class BroadcastHashJoinExec(
   // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
   // The expanded expressions are returned as PartitioningCollection.
   private def expandOutputPartitioning(partitioning: HashPartitioning): PartitioningCollection = {
-    val maxNumCombinations = sqlContext.conf.broadcastHashJoinOutputPartitioningExpandLimit
+    val maxNumCombinations = conf.broadcastHashJoinOutputPartitioningExpandLimit
     var currentNumCombinations = 0
 
     def generateExprCombinations(
@@ -146,7 +146,7 @@ case class BroadcastHashJoinExec(
         TaskContext.get().taskMetrics().incPeakExecutionMemory(hashed.estimatedSize)
         if (hashed == EmptyHashedRelation) {
           streamedIter
-        } else if (hashed == EmptyHashedRelationWithAllNullKeys) {
+        } else if (hashed == HashedRelationWithAllNullKeys) {
           Iterator.empty
         } else {
           val keyGenerator = UnsafeProjection.create(
@@ -213,9 +213,11 @@ case class BroadcastHashJoinExec(
     (broadcastRelation, relationTerm)
   }
 
-  protected override def prepareRelation(ctx: CodegenContext): (String, Boolean) = {
+  protected override def prepareRelation(ctx: CodegenContext): HashedRelationInfo = {
     val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
-    (relationTerm, broadcastRelation.value.keyIsUnique)
+    HashedRelationInfo(relationTerm,
+      broadcastRelation.value.keyIsUnique,
+      broadcastRelation.value == EmptyHashedRelation)
   }
 
   /**
@@ -226,7 +228,6 @@ case class BroadcastHashJoinExec(
     if (isNullAwareAntiJoin) {
       val (broadcastRelation, relationTerm) = prepareBroadcast(ctx)
       val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-      val (matched, _, _) = getJoinCondition(ctx, input)
       val numOutput = metricTerm(ctx, "numOutputRows")
 
       if (broadcastRelation.value == EmptyHashedRelation) {
@@ -235,26 +236,15 @@ case class BroadcastHashJoinExec(
            |$numOutput.add(1);
            |${consume(ctx, input)}
          """.stripMargin
-      } else if (broadcastRelation.value == EmptyHashedRelationWithAllNullKeys) {
+      } else if (broadcastRelation.value == HashedRelationWithAllNullKeys) {
         s"""
            |// If the right side contains any all-null key, NAAJ simply returns Nothing.
          """.stripMargin
       } else {
-        val found = ctx.freshName("found")
         s"""
-           |boolean $found = false;
            |// generate join key for stream side
            |${keyEv.code}
-           |if ($anyNull) {
-           |  $found = true;
-           |} else {
-           |  UnsafeRow $matched = (UnsafeRow)$relationTerm.getValue(${keyEv.value});
-           |  if ($matched != null) {
-           |    $found = true;
-           |  }
-           |}
-           |
-           |if (!$found) {
+           |if (!$anyNull && $relationTerm.getValue(${keyEv.value}) == null) {
            |  $numOutput.add(1);
            |  ${consume(ctx, input)}
            |}
@@ -264,4 +254,8 @@ case class BroadcastHashJoinExec(
       super.codegenAnti(ctx, input)
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): BroadcastHashJoinExec =
+    copy(left = newLeft, right = newRight)
 }

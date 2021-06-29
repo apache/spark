@@ -35,7 +35,7 @@ import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.ExternalRDD
-import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, NoopCache}
+import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -49,8 +49,15 @@ class TestFileFilter extends PathFilter {
   override def accept(path: Path): Boolean = path.getParent.getName != "p=2"
 }
 
-abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJsonData {
+abstract class JsonSuite
+  extends QueryTest
+  with SharedSparkSession
+  with TestJsonData
+  with CommonFileDataSourceSuite {
+
   import testImplicits._
+
+  override protected def dataSourceFormat = "json"
 
   test("Type promotion") {
     def checkTypePromotion(expected: Any, actual: Any): Unit = {
@@ -1558,6 +1565,15 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
         "mapreduce.input.pathFilter.class" -> classOf[TestFileFilter].getName
       )
       assert(spark.read.options(extraOptions).json(path).count() === 2)
+
+      withClue("SPARK-32621: 'path' option can cause issues while inferring schema") {
+        // During infer, "path" option is used again on top of the paths that have already been
+        // listed. When a partition is removed by TestFileFilter, this will cause a conflict while
+        // inferring partitions because the original path in the "path" option will list the
+        // partition directory that has been removed.
+        assert(
+          spark.read.options(extraOptions).format("json").option("path", path).load.count() === 2)
+      }
     }
   }
 
@@ -2143,9 +2159,18 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
     )(withTempPath { path =>
       val ds = sampledTestData.coalesce(1)
       ds.write.text(path.getAbsolutePath)
-      val readback = spark.read.option("samplingRatio", 0.1).json(path.getCanonicalPath)
+      val readback1 = spark.read.option("samplingRatio", 0.1).json(path.getCanonicalPath)
+      assert(readback1.schema == new StructType().add("f1", LongType))
 
-      assert(readback.schema == new StructType().add("f1", LongType))
+      withClue("SPARK-32621: 'path' option can cause issues while inferring schema") {
+        // During infer, "path" option gets added again to the paths that have already been listed.
+        // This results in reading more data than necessary and causes different schema to be
+        // inferred when sampling ratio is involved.
+        val readback2 = spark.read
+          .option("samplingRatio", 0.1).option("path", path.getCanonicalPath)
+          .format("json").load
+        assert(readback2.schema == new StructType().add("f1", LongType))
+      }
     })
   }
 
@@ -2794,7 +2819,7 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
             val errorMsg = intercept[AnalysisException] {
               readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
             }.getMessage
-            assert(errorMsg.contains("cannot resolve '`AAA`'"))
+            assert(errorMsg.contains("cannot resolve 'AAA'"))
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
             checkAnswer(
@@ -2803,6 +2828,99 @@ abstract class JsonSuite extends QueryTest with SharedSparkSession with TestJson
             checkAnswer(readback2.filter($"aaa" === 2).select($"AAA", $"bbb"), Seq())
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-32810: JSON data source should be able to read files with " +
+    "escaped glob metacharacter in the paths") {
+    withTempDir { dir =>
+      val basePath = dir.getCanonicalPath
+      // test JSON writer / reader without specifying schema
+      val jsonTableName = "{def}"
+      spark.range(3).coalesce(1).write.json(s"$basePath/$jsonTableName")
+      val readback = spark.read
+        .json(s"$basePath/${"""(\[|\]|\{|\})""".r.replaceAllIn(jsonTableName, """\\$1""")}")
+      assert(readback.collect sameElements Array(Row(0), Row(1), Row(2)))
+    }
+  }
+
+  test("SPARK-35047: Write Non-ASCII character as codepoint") {
+    // scalastyle:off nonascii
+    withTempPaths(2) { paths =>
+      paths.foreach(_.delete())
+      val seq = Seq("a", "\n", "\u3042")
+      val df = seq.toDF
+
+      val basePath1 = paths(0).getCanonicalPath
+      df.write.option("writeNonAsciiCharacterAsCodePoint", "true")
+        .option("pretty", "false").json(basePath1)
+      val actualText1 = spark.read.option("wholetext", "true").text(basePath1)
+        .sort("value").map(_.getString(0)).collect().mkString
+      val expectedText1 =
+        s"""{"value":"\\n"}
+           |{"value":"\\u3042"}
+           |{"value":"a"}
+           |""".stripMargin
+      assert(actualText1 === expectedText1)
+
+      val actualJson1 = spark.read.json(basePath1)
+        .sort("value").map(_.getString(0)).collect().mkString
+      val expectedJson1 = "\na\u3042"
+      assert(actualJson1 === expectedJson1)
+
+      // Test for pretty printed JSON.
+      // If multiLine option is set to true, the format should be should be
+      // one JSON record per file. So LEAF_NODE_DEFAULT_PARALLELISM is set here.
+      withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> s"${seq.length}") {
+        val basePath2 = paths(1).getCanonicalPath
+        df.write.option("writeNonAsciiCharacterAsCodePoint", "true")
+          .option("pretty", "true").json(basePath2)
+        val actualText2 = spark.read.option("wholetext", "true").text(basePath2)
+          .sort("value").map(_.getString(0)).collect().mkString
+        val expectedText2 =
+          s"""{
+             |  "value" : "\\n"
+             |}
+             |{
+             |  "value" : "\\u3042"
+             |}
+             |{
+             |  "value" : "a"
+             |}
+             |""".stripMargin
+        assert(actualText2 === expectedText2)
+
+        val actualJson2 = spark.read.option("multiLine", "true").json(basePath2)
+          .sort("value").map(_.getString(0)).collect().mkString
+        val expectedJson2 = "\na\u3042"
+        assert(actualJson2 === expectedJson2)
+      }
+    }
+    // scalastyle:on nonascii
+  }
+
+  test("SPARK-35104: Fix wrong indentation for multiple JSON even if `pretty` option is true") {
+    withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+      withTempPath { path =>
+        val basePath = path.getCanonicalPath
+        val df = Seq("a", "b", "c").toDF
+        df.write.option("pretty", "true").json(basePath)
+
+        val expectedText =
+          s"""{
+             |  "value" : "a"
+             |}
+             |{
+             |  "value" : "b"
+             |}
+             |{
+             |  "value" : "c"
+             |}
+             |""".stripMargin
+        val actualText = spark.read.option("wholetext", "true")
+          .text(basePath).map(_.getString(0)).collect().mkString
+        assert(actualText === expectedText)
       }
     }
   }

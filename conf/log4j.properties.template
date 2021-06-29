@@ -22,10 +22,12 @@ log4j.appender.console.target=System.err
 log4j.appender.console.layout=org.apache.log4j.PatternLayout
 log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
 
-# Set the default spark-shell log level to WARN. When running the spark-shell, the
-# log level for this class is used to overwrite the root logger's log level, so that
-# the user can have different defaults for the shell and regular Spark apps.
+# Set the default spark-shell/spark-sql log level to WARN. When running the
+# spark-shell/spark-sql, the log level for these classes is used to overwrite
+# the root logger's log level, so that the user can have different defaults
+# for the shell and regular Spark apps.
 log4j.logger.org.apache.spark.repl.Main=WARN
+log4j.logger.org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver=WARN
 
 # Settings to quiet third party logs that are too verbose
 log4j.logger.org.sparkproject.jetty=WARN
@@ -38,3 +40,9 @@ log4j.logger.parquet=ERROR
 # SPARK-9183: Settings to avoid annoying messages when looking up nonexistent UDFs in SparkSQL with Hive support
 log4j.logger.org.apache.hadoop.hive.metastore.RetryingHMSHandler=FATAL
 log4j.logger.org.apache.hadoop.hive.ql.exec.FunctionRegistry=ERROR
+
+# For deploying Spark ThriftServer
+# SPARK-34128：Suppress undesirable TTransportException warnings involved in THRIFT-4805
+log4j.appender.console.filter.1=org.apache.log4j.varia.StringMatchFilter
+log4j.appender.console.filter.1.StringToMatch=Thrift error occurred during processing of message
+log4j.appender.console.filter.1.AcceptOnMatch=false

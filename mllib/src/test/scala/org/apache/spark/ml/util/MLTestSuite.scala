@@ -47,7 +47,7 @@ class MLTestSuite extends MLTest {
     }
     intercept[Exception] {
       testTransformerOnStreamData[(Int, String)](data, indexerModel, "id", "indexed") {
-        rows: Seq[Row] =>
+        rows: scala.collection.Seq[Row] =>
           assert(rows.map(_.getDouble(1)).max === 1.0)
       }
     }

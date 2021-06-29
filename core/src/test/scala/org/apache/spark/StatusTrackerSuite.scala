@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import scala.concurrent.duration._
-import scala.language.implicitConversions
 
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.matchers.must.Matchers

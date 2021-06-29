@@ -53,7 +53,7 @@ setClass("DecisionTreeRegressionModel", representation(jobj = "jobj"))
 #' @note DecisionTreeClassificationModel since 2.3.0
 setClass("DecisionTreeClassificationModel", representation(jobj = "jobj"))
 
-# Create the summary of a tree ensemble model (eg. Random Forest, GBT)
+# Create the summary of a tree ensemble model (e.g. Random Forest, GBT)
 summary.treeEnsemble <- function(model) {
   jobj <- model@jobj
   formula <- callJMethod(jobj, "formula")
@@ -73,7 +73,7 @@ summary.treeEnsemble <- function(model) {
        jobj = jobj)
 }
 
-# Prints the summary of tree ensemble models (eg. Random Forest, GBT)
+# Prints the summary of tree ensemble models (e.g. Random Forest, GBT)
 print.summary.treeEnsemble <- function(x) {
   jobj <- x$jobj
   cat("Formula: ", x$formula)
@@ -127,9 +127,9 @@ print.summary.decisionTree <- function(x) {
 #' \code{write.ml}/\code{read.ml} to save/load fitted models.
 #' For more details, see
 # nolint start
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-regression}{
+#' \href{https://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-regression}{
 #' GBT Regression} and
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-classifier}{
+#' \href{https://spark.apache.org/docs/latest/ml-classification-regression.html#gradient-boosted-tree-classifier}{
 #' GBT Classification}
 # nolint end
 #'
@@ -343,9 +343,9 @@ setMethod("write.ml", signature(object = "GBTClassificationModel", path = "chara
 #' save/load fitted models.
 #' For more details, see
 # nolint start
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-regression}{
+#' \href{https://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-regression}{
 #' Random Forest Regression} and
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-classifier}{
+#' \href{https://spark.apache.org/docs/latest/ml-classification-regression.html#random-forest-classifier}{
 #' Random Forest Classification}
 # nolint end
 #'
@@ -568,9 +568,9 @@ setMethod("write.ml", signature(object = "RandomForestClassificationModel", path
 #' save/load fitted models.
 #' For more details, see
 # nolint start
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-regression}{
+#' \href{https://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-regression}{
 #' Decision Tree Regression} and
-#' \href{http://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-classifier}{
+#' \href{https://spark.apache.org/docs/latest/ml-classification-regression.html#decision-tree-classifier}{
 #' Decision Tree Classification}
 # nolint end
 #'

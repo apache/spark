@@ -25,12 +25,13 @@ import org.apache.commons.io.FilenameUtils
 import org.apache.spark.SparkFiles
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * Options for the JDBC data source.
  */
 class JDBCOptions(
-    @transient val parameters: CaseInsensitiveMap[String])
+    val parameters: CaseInsensitiveMap[String])
   extends Serializable with Logging {
 
   import JDBCOptions._
@@ -73,22 +74,20 @@ class JDBCOptions(
   // table name or a table subquery.
   val tableOrQuery = (parameters.get(JDBC_TABLE_NAME), parameters.get(JDBC_QUERY_STRING)) match {
     case (Some(name), Some(subquery)) =>
-      throw new IllegalArgumentException(
-        s"Both '$JDBC_TABLE_NAME' and '$JDBC_QUERY_STRING' can not be specified at the same time."
-      )
+      throw QueryExecutionErrors.cannotSpecifyBothJdbcTableNameAndQueryError(
+        JDBC_TABLE_NAME, JDBC_QUERY_STRING)
     case (None, None) =>
-      throw new IllegalArgumentException(
-        s"Option '$JDBC_TABLE_NAME' or '$JDBC_QUERY_STRING' is required."
-      )
+      throw QueryExecutionErrors.missingJdbcTableNameAndQueryError(
+        JDBC_TABLE_NAME, JDBC_QUERY_STRING)
     case (Some(name), None) =>
       if (name.isEmpty) {
-        throw new IllegalArgumentException(s"Option '$JDBC_TABLE_NAME' can not be empty.")
+        throw QueryExecutionErrors.emptyOptionError(JDBC_TABLE_NAME)
       } else {
         name.trim
       }
     case (None, Some(subquery)) =>
       if (subquery.isEmpty) {
-        throw new IllegalArgumentException(s"Option `$JDBC_QUERY_STRING` can not be empty.")
+        throw QueryExecutionErrors.emptyOptionError(JDBC_QUERY_STRING)
       } else {
         s"(${subquery}) SPARK_GEN_SUBQ_${curId.getAndIncrement()}"
       }
@@ -180,10 +179,8 @@ class JDBCOptions(
       case "READ_COMMITTED" => Connection.TRANSACTION_READ_COMMITTED
       case "REPEATABLE_READ" => Connection.TRANSACTION_REPEATABLE_READ
       case "SERIALIZABLE" => Connection.TRANSACTION_SERIALIZABLE
-      case other => throw new IllegalArgumentException(
-        s"Invalid value `$other` for parameter `$JDBC_TXN_ISOLATION_LEVEL`. This can be " +
-          "`NONE`, `READ_UNCOMMITTED`, `READ_COMMITTED`, `REPEATABLE_READ` or `SERIALIZABLE`."
-      )
+      case other => throw QueryExecutionErrors.invalidJdbcTxnIsolationLevelError(
+        JDBC_TXN_ISOLATION_LEVEL, other)
     }
   // An option to execute custom SQL before fetching data from the remote DB
   val sessionInitStatement = parameters.get(JDBC_SESSION_INIT_STATEMENT)
@@ -206,10 +203,14 @@ class JDBCOptions(
   }
   // The principal name of user's keytab file
   val principal = parameters.getOrElse(JDBC_PRINCIPAL, null)
+
+  val tableComment = parameters.getOrElse(JDBC_TABLE_COMMENT, "").toString
+
+  val refreshKrb5Config = parameters.getOrElse(JDBC_REFRESH_KRB5_CONFIG, "false").toBoolean
 }
 
 class JdbcOptionsInWrite(
-    @transient override val parameters: CaseInsensitiveMap[String])
+    override val parameters: CaseInsensitiveMap[String])
   extends JDBCOptions(parameters) {
 
   import JDBCOptions._
@@ -260,4 +261,6 @@ object JDBCOptions {
   val JDBC_PUSHDOWN_PREDICATE = newOption("pushDownPredicate")
   val JDBC_KEYTAB = newOption("keytab")
   val JDBC_PRINCIPAL = newOption("principal")
+  val JDBC_TABLE_COMMENT = newOption("tableComment")
+  val JDBC_REFRESH_KRB5_CONFIG = newOption("refreshKrb5Config")
 }

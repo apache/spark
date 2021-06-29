@@ -18,7 +18,6 @@ from datetime import datetime, timedelta
 import hashlib
 import os
 import random
-import sys
 import tempfile
 import time
 from glob import glob
@@ -26,7 +25,7 @@ from glob import glob
 from py4j.protocol import Py4JJavaError
 
 from pyspark import shuffle, RDD
-from pyspark.resource import ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder,\
+from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder,\
     TaskResourceRequests
 from pyspark.serializers import CloudPickleSerializer, BatchedSerializer, PickleSerializer,\
     MarshalSerializer, UTF8Deserializer, NoOpSerializer
@@ -355,10 +354,10 @@ class RDDTests(ReusedPySparkTestCase):
         bdata.destroy(blocking=True)
         try:
             self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
-        except Exception as e:
+        except Exception:
             pass
         else:
-            raise Exception("job should fail after destroy the broadcast")
+            raise AssertionError("job should fail after destroy the broadcast")
 
     def test_multiple_broadcasts(self):
         N = 1 << 21
@@ -734,25 +733,25 @@ class RDDTests(ReusedPySparkTestCase):
         keyed_rdd = self.sc.parallelize((x % 2, x) for x in range(10))
         msg = "Caught StopIteration thrown from user's code; failing the task"
 
-        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.map(stopit).collect)
-        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.filter(stopit).collect)
-        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.foreach, stopit)
-        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.reduce, stopit)
-        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.fold, 0, stopit)
-        self.assertRaisesRegexp(Py4JJavaError, msg, seq_rdd.foreach, stopit)
-        self.assertRaisesRegexp(Py4JJavaError, msg,
-                                seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
+        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.map(stopit).collect)
+        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.filter(stopit).collect)
+        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.foreach, stopit)
+        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.reduce, stopit)
+        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.fold, 0, stopit)
+        self.assertRaisesRegex(Py4JJavaError, msg, seq_rdd.foreach, stopit)
+        self.assertRaisesRegex(Py4JJavaError, msg,
+                               seq_rdd.cartesian(seq_rdd).flatMap(stopit).collect)
 
         # these methods call the user function both in the driver and in the executor
         # the exception raised is different according to where the StopIteration happens
         # RuntimeError is raised if in the driver
         # Py4JJavaError is raised if in the executor (wraps the RuntimeError raised in the worker)
-        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
-                                keyed_rdd.reduceByKeyLocally, stopit)
-        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
-                                seq_rdd.aggregate, 0, stopit, lambda *x: 1)
-        self.assertRaisesRegexp((Py4JJavaError, RuntimeError), msg,
-                                seq_rdd.aggregate, 0, lambda *x: 1, stopit)
+        self.assertRaisesRegex((Py4JJavaError, RuntimeError), msg,
+                               keyed_rdd.reduceByKeyLocally, stopit)
+        self.assertRaisesRegex((Py4JJavaError, RuntimeError), msg,
+                               seq_rdd.aggregate, 0, stopit, lambda *x: 1)
+        self.assertRaisesRegex((Py4JJavaError, RuntimeError), msg,
+                               seq_rdd.aggregate, 0, lambda *x: 1, stopit)
 
     def test_overwritten_global_func(self):
         # Regression test for SPARK-27000
@@ -769,7 +768,7 @@ class RDDTests(ReusedPySparkTestCase):
 
         rdd = self.sc.range(10).map(fail)
 
-        with self.assertRaisesRegexp(Exception, "local iterator error"):
+        with self.assertRaisesRegex(Exception, "local iterator error"):
             for _ in rdd.toLocalIterator():
                 pass
 
@@ -882,10 +881,10 @@ class RDDTests(ReusedPySparkTestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.tests.test_rdd import *
+    from pyspark.tests.test_rdd import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

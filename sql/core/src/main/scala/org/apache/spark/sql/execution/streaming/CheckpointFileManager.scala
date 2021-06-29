@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.streaming
 
-import java.io.{FileNotFoundException, IOException, OutputStream}
+import java.io.{FileNotFoundException, OutputStream}
 import java.util.{EnumSet, UUID}
 
 import scala.util.control.NonFatal
@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.local.{LocalFs, RawLocalFs}
 import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.RenameHelperMethods
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
@@ -83,6 +84,12 @@ trait CheckpointFileManager {
 
   /** Is the default file system this implementation is operating on the local file system. */
   def isLocal: Boolean
+
+  /**
+   * Creates the checkpoint path if it does not exist, and returns the qualified
+   * checkpoint path.
+   */
+  def createCheckpointDirectory(): Path
 }
 
 object CheckpointFileManager extends Logging {
@@ -160,11 +167,17 @@ object CheckpointFileManager extends Logging {
     override def cancel(): Unit = synchronized {
       try {
         if (terminated) return
-        underlyingStream.close()
+        try {
+          underlyingStream.close()
+        } catch {
+          case NonFatal(e) =>
+            logWarning(s"Error cancelling write to $finalPath, " +
+              s"continuing to delete temp path $tempPath", e)
+        }
         fm.delete(tempPath)
       } catch {
         case NonFatal(e) =>
-          logWarning(s"Error cancelling write to $finalPath", e)
+          logWarning(s"Error deleting temp file $tempPath", e)
       } finally {
         terminated = true
       }
@@ -245,8 +258,7 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
 
   override def renameTempFile(srcPath: Path, dstPath: Path, overwriteIfPossible: Boolean): Unit = {
     if (!overwriteIfPossible && fs.exists(dstPath)) {
-      throw new FileAlreadyExistsException(
-        s"Failed to rename $srcPath to $dstPath as destination already exists")
+      throw QueryExecutionErrors.renamePathAsExistsPathError(srcPath, dstPath)
     }
 
     if (!fs.rename(srcPath, dstPath)) {
@@ -254,14 +266,14 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
       // This tries to make a best effort attempt to return the most appropriate exception.
       if (fs.exists(dstPath)) {
         if (!overwriteIfPossible) {
-          throw new FileAlreadyExistsException(s"Failed to rename as $dstPath already exists")
+          throw QueryExecutionErrors.renameAsExistsPathError(dstPath)
         }
       } else if (!fs.exists(srcPath)) {
-        throw new FileNotFoundException(s"Failed to rename as $srcPath was not found")
+        throw QueryExecutionErrors.renameSrcPathNotFoundError(srcPath)
       } else {
-        val msg = s"Failed to rename temp file $srcPath to $dstPath as rename returned false"
-        logWarning(msg)
-        throw new IOException(msg)
+        val e = QueryExecutionErrors.failedRenameTempFileError(srcPath, dstPath)
+        logWarning(e.getMessage)
+        throw e
       }
     }
   }
@@ -271,7 +283,6 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
       fs.delete(path, true)
     } catch {
       case e: FileNotFoundException =>
-        logInfo(s"Failed to delete $path as it does not exist")
         // ignore if file has already been deleted
     }
   }
@@ -279,6 +290,12 @@ class FileSystemBasedCheckpointFileManager(path: Path, hadoopConf: Configuration
   override def isLocal: Boolean = fs match {
     case _: LocalFileSystem | _: RawLocalFileSystem => true
     case _ => false
+  }
+
+  override def createCheckpointDirectory(): Path = {
+    val qualifiedPath = fs.makeQualified(path)
+    fs.mkdirs(qualifiedPath, FsPermission.getDirDefault)
+    qualifiedPath
   }
 }
 
@@ -344,6 +361,12 @@ class FileContextBasedCheckpointFileManager(path: Path, hadoopConf: Configuratio
   override def isLocal: Boolean = fc.getDefaultFileSystem match {
     case _: LocalFs | _: RawLocalFs => true // LocalFs = RawLocalFs + ChecksumFs
     case _ => false
+  }
+
+  override def createCheckpointDirectory(): Path = {
+    val qualifiedPath = fc.makeQualified(path)
+    fc.mkdir(qualifiedPath, FsPermission.getDirDefault, true)
+    qualifiedPath
   }
 
   private def mayRemoveCrcFile(path: Path): Unit = {

@@ -29,7 +29,6 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
@@ -57,9 +56,9 @@ trait ShuffleExchangeLike extends Exchange {
   def numPartitions: Int
 
   /**
-   * Returns whether the shuffle partition number can be changed.
+   * The origin of this shuffle operator.
    */
-  def canChangeNumPartitions: Boolean
+  def shuffleOrigin: ShuffleOrigin
 
   /**
    * The asynchronous job that materializes the shuffle.
@@ -77,18 +76,42 @@ trait ShuffleExchangeLike extends Exchange {
   def runtimeStatistics: Statistics
 }
 
+// Describes where the shuffle operator comes from.
+sealed trait ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the internal `EnsureRequirements` rule. It
+// means that the shuffle operator is used to ensure internal data partitioning requirements and
+// Spark is free to optimize it as long as the requirements are still ensured.
+case object ENSURE_REQUIREMENTS extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
+// can still optimize it via changing shuffle partition number, as data partitioning won't change.
+case object REPARTITION_BY_COL extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified repartition operator with
+// a certain partition number. Spark can't optimize it.
+case object REPARTITION_BY_NUM extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified rebalance operator.
+// Spark will try to rebalance partitions that make per-partition size not too small and not
+// too big. Local shuffle reader will be used if possible to reduce network traffic.
+case object REBALANCE_PARTITIONS_BY_NONE extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified rebalance operator with
+// columns. Spark will try to rebalance partitions that make per-partition size not too small and
+// not too big.
+// Different from `REBALANCE_PARTITIONS_BY_NONE`, local shuffle reader cannot be used for it as
+// the output needs to be partitioned by the given columns.
+case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
+
 /**
  * Performs a shuffle that will result in the desired partitioning.
  */
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    noUserSpecifiedNumPartition: Boolean = true) extends ShuffleExchangeLike {
-
-  // If users specify the num partitions via APIs like `repartition`, we shouldn't change it.
-  // For `SinglePartition`, it requires exactly one partition and we can't change it either.
-  override def canChangeNumPartitions: Boolean =
-    noUserSpecifiedNumPartition && outputPartitioning != SinglePartition
+    shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS)
+  extends ShuffleExchangeLike {
 
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
@@ -148,13 +171,16 @@ case class ShuffleExchangeExec(
    */
   private var cachedShuffleRDD: ShuffledRowRDD = null
 
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+  protected override def doExecute(): RDD[InternalRow] = {
     // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
     if (cachedShuffleRDD == null) {
       cachedShuffleRDD = new ShuffledRowRDD(shuffleDependency, readMetrics)
     }
     cachedShuffleRDD
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ShuffleExchangeExec =
+    copy(child = newChild)
 }
 
 object ShuffleExchangeExec {

@@ -392,11 +392,16 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, floatData,
+        Platform.FLOAT_ARRAY_OFFSET + rowId * 4L, count * 4L);
+  }
+
+  @Override
+  public void putFloatsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
-      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, floatData,
-          Platform.DOUBLE_ARRAY_OFFSET + rowId * 4L, count * 4L);
+      putFloats(rowId, count, src, srcIndex);
     } else {
-      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.BIG_ENDIAN);
+      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       for (int i = 0; i < count; ++i) {
         floatData[i + rowId] = bb.getFloat(srcIndex + (4 * i));
       }
@@ -441,11 +446,16 @@ public final class OnHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
+    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, doubleData,
+        Platform.DOUBLE_ARRAY_OFFSET + rowId * 8L, count * 8L);
+  }
+
+  @Override
+  public void putDoublesLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
-      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, doubleData,
-          Platform.DOUBLE_ARRAY_OFFSET + rowId * 8L, count * 8L);
+      putDoubles(rowId, count, src, srcIndex);
     } else {
-      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.BIG_ENDIAN);
+      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
       for (int i = 0; i < count; ++i) {
         doubleData[i + rowId] = bb.getDouble(srcIndex + (8 * i));
       }
@@ -531,14 +541,14 @@ public final class OnHeapColumnVector extends WritableColumnVector {
         shortData = newData;
       }
     } else if (type instanceof IntegerType || type instanceof DateType ||
-      DecimalType.is32BitDecimalType(type)) {
+      DecimalType.is32BitDecimalType(type) || type instanceof YearMonthIntervalType) {
       if (intData == null || intData.length < newCapacity) {
         int[] newData = new int[newCapacity];
         if (intData != null) System.arraycopy(intData, 0, newData, 0, capacity);
         intData = newData;
       }
     } else if (type instanceof LongType || type instanceof TimestampType ||
-        DecimalType.is64BitDecimalType(type)) {
+        DecimalType.is64BitDecimalType(type) || type instanceof DayTimeIntervalType) {
       if (longData == null || longData.length < newCapacity) {
         long[] newData = new long[newCapacity];
         if (longData != null) System.arraycopy(longData, 0, newData, 0, capacity);

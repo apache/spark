@@ -474,6 +474,7 @@ private[spark] class CachedQuantile(
     val taskCount: Long,
 
     // The following fields are an exploded view of a single entry for TaskMetricDistributions.
+    val duration: Double,
     val executorDeserializeTime: Double,
     val executorDeserializeCpuTime: Double,
     val executorRunTime: Double,
@@ -511,5 +512,18 @@ private[spark] class CachedQuantile(
 
   @KVIndex("stage") @JsonIgnore
   def stage: Array[Int] = Array(stageId, stageAttemptId)
+
+}
+
+private[spark] class ProcessSummaryWrapper(val info: ProcessSummary) {
+
+  @JsonIgnore @KVIndex
+  private def id: String = info.id
+
+  @JsonIgnore @KVIndex("active")
+  private def active: Boolean = info.isActive
+
+  @JsonIgnore @KVIndex("host")
+  val host: String = Utils.parseHostPort(info.hostPort)._1
 
 }

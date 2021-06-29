@@ -16,8 +16,8 @@
     under the License.
 
 
-MLlib
-=====
+MLlib (RDD-based)
+=================
 
 Classification
 --------------
@@ -25,7 +25,7 @@ Classification
 .. currentmodule:: pyspark.mllib.classification
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     LogisticRegressionModel
@@ -44,7 +44,7 @@ Clustering
 .. currentmodule:: pyspark.mllib.clustering
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
 
@@ -68,7 +68,7 @@ Evaluation
 .. currentmodule:: pyspark.mllib.evaluation
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     BinaryClassificationMetrics
@@ -83,7 +83,7 @@ Feature
 .. currentmodule:: pyspark.mllib.feature
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     Normalizer
@@ -105,7 +105,7 @@ Frequency Pattern Mining
 .. currentmodule:: pyspark.mllib.fpm
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     FPGrowth
@@ -120,7 +120,7 @@ Vector and Matrix
 .. currentmodule:: pyspark.mllib.linalg
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     Vector
@@ -140,7 +140,7 @@ Distributed Representation
 .. currentmodule:: pyspark.mllib.linalg.distributed
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     BlockMatrix
@@ -159,7 +159,7 @@ Random
 .. currentmodule:: pyspark.mllib.random
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     RandomRDDs
@@ -171,7 +171,7 @@ Recommendation
 .. currentmodule:: pyspark.mllib.recommendation
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     MatrixFactorizationModel
@@ -185,7 +185,7 @@ Regression
 .. currentmodule:: pyspark.mllib.regression
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     LabeledPoint
@@ -208,7 +208,7 @@ Statistics
 .. currentmodule:: pyspark.mllib.stat
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     Statistics
@@ -216,6 +216,8 @@ Statistics
     ChiSqTestResult
     MultivariateGaussian
     KernelDensity
+    ChiSqTestResult
+    KolmogorovSmirnovTestResult
 
 
 Tree
@@ -224,7 +226,7 @@ Tree
 .. currentmodule:: pyspark.mllib.tree
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     DecisionTreeModel
@@ -241,7 +243,7 @@ Utilities
 .. currentmodule:: pyspark.mllib.util
 
 .. autosummary::
-    :template: class_with_docs.rst
+    :template: autosummary/class_with_docs.rst
     :toctree: api/
 
     JavaLoader
@@ -250,4 +252,3 @@ Utilities
     Loader
     MLUtils
     Saveable
-

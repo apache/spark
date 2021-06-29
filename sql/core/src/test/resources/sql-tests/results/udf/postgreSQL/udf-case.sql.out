@@ -176,34 +176,34 @@ struct<None:string,NULL on no matches:int>
 -- !query
 SELECT CASE WHEN udf(1=0) THEN 1/0 WHEN 1=1 THEN 1 ELSE 2/0 END
 -- !query schema
-struct<CASE WHEN CAST(udf(ansi_cast((1 = 0) as string)) AS BOOLEAN) THEN (CAST(1 AS DOUBLE) / CAST(0 AS DOUBLE)) WHEN (1 = 1) THEN CAST(1 AS DOUBLE) ELSE (CAST(2 AS DOUBLE) / CAST(0 AS DOUBLE)) END:double>
+struct<>
 -- !query output
-1.0
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query
 SELECT CASE 1 WHEN 0 THEN 1/udf(0) WHEN 1 THEN 1 ELSE 2/0 END
 -- !query schema
-struct<CASE WHEN (1 = 0) THEN (CAST(1 AS DOUBLE) / CAST(CAST(udf(ansi_cast(0 as string)) AS INT) AS DOUBLE)) WHEN (1 = 1) THEN CAST(1 AS DOUBLE) ELSE (CAST(2 AS DOUBLE) / CAST(0 AS DOUBLE)) END:double>
+struct<>
 -- !query output
-1.0
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query
 SELECT CASE WHEN i > 100 THEN udf(1/0) ELSE udf(0) END FROM case_tbl
 -- !query schema
-struct<CASE WHEN (i > 100) THEN CAST(udf(ansi_cast((ansi_cast(1 as double) / ansi_cast(0 as double)) as string)) AS DOUBLE) ELSE CAST(CAST(udf(ansi_cast(0 as string)) AS INT) AS DOUBLE) END:double>
+struct<>
 -- !query output
-0.0
-0.0
-0.0
-0.0
+java.lang.ArithmeticException
+divide by zero
 
 
 -- !query
 SELECT CASE 'a' WHEN 'a' THEN udf(1) ELSE udf(2) END
 -- !query schema
-struct<CASE WHEN (a = a) THEN CAST(udf(ansi_cast(1 as string)) AS INT) ELSE CAST(udf(ansi_cast(2 as string)) AS INT) END:int>
+struct<CASE WHEN (a = a) THEN udf(1) ELSE udf(2) END:int>
 -- !query output
 1
 
@@ -294,7 +294,7 @@ struct<i:int,f:double>
 SELECT udf(COALESCE(a.f, b.i, b.j))
   FROM CASE_TBL a, CASE2_TBL b
 -- !query schema
-struct<CAST(udf(ansi_cast(coalesce(f, ansi_cast(i as double), ansi_cast(j as double)) as string)) AS DOUBLE):double>
+struct<udf(coalesce(f, i, j)):double>
 -- !query output
 -30.3
 -30.3

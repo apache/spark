@@ -26,6 +26,7 @@ import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
+import org.apache.spark.resource.ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
 import org.apache.spark.util.Utils
 
 /**
@@ -56,7 +57,7 @@ private[spark] abstract class KubernetesConf(val sparkConf: SparkConf) {
   }
 
   def workerDecommissioning: Boolean =
-    sparkConf.get(org.apache.spark.internal.config.Worker.WORKER_DECOMMISSION_ENABLED)
+    sparkConf.get(org.apache.spark.internal.config.DECOMMISSION_ENABLED)
 
   def nodeSelector: Map[String, String] =
     KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_NODE_SELECTOR_PREFIX)
@@ -132,7 +133,8 @@ private[spark] class KubernetesExecutorConf(
     sparkConf: SparkConf,
     val appId: String,
     val executorId: String,
-    val driverPod: Option[Pod])
+    val driverPod: Option[Pod],
+    val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID)
   extends KubernetesConf(sparkConf) with Logging {
 
   override val resourceNamePrefix: String = {
@@ -144,7 +146,8 @@ private[spark] class KubernetesExecutorConf(
     val presetLabels = Map(
       SPARK_EXECUTOR_ID_LABEL -> executorId,
       SPARK_APP_ID_LABEL -> appId,
-      SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE)
+      SPARK_ROLE_LABEL -> SPARK_POD_EXECUTOR_ROLE,
+      SPARK_RESOURCE_PROFILE_ID_LABEL -> resourceProfileId.toString)
 
     val executorCustomLabels = KubernetesUtils.parsePrefixedKeyValuePairs(
       sparkConf, KUBERNETES_EXECUTOR_LABEL_PREFIX)
@@ -217,8 +220,9 @@ private[spark] object KubernetesConf {
       sparkConf: SparkConf,
       executorId: String,
       appId: String,
-      driverPod: Option[Pod]): KubernetesExecutorConf = {
-    new KubernetesExecutorConf(sparkConf.clone(), appId, executorId, driverPod)
+      driverPod: Option[Pod],
+      resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID): KubernetesExecutorConf = {
+    new KubernetesExecutorConf(sparkConf.clone(), appId, executorId, driverPod, resourceProfileId)
   }
 
   def getResourceNamePrefix(appName: String): String = {

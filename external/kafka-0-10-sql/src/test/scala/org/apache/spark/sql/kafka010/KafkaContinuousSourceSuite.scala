@@ -33,7 +33,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
     withTable(table) {
       val topic = newTopic()
       testUtils.createTopic(topic)
-      testUtils.withTranscationalProducer { producer =>
+      testUtils.withTransactionalProducer { producer =>
         val df = spark
           .readStream
           .format("kafka")
@@ -99,7 +99,7 @@ class KafkaContinuousSourceSuite extends KafkaSourceSuiteBase with KafkaContinuo
     withTable(table) {
       val topic = newTopic()
       testUtils.createTopic(topic)
-      testUtils.withTranscationalProducer { producer =>
+      testUtils.withTransactionalProducer { producer =>
         val df = spark
           .readStream
           .format("kafka")
@@ -194,6 +194,7 @@ class KafkaContinuousSourceTopicDeletionSuite extends KafkaContinuousTest {
       .option("kafka.bootstrap.servers", testUtils.brokerAddress)
       .option("kafka.metadata.max.age.ms", "1")
       .option("kafka.request.timeout.ms", "3000")
+      .option("kafka.default.api.timeout.ms", "3000")
       .option("subscribePattern", s"$topicPrefix-.*")
       .option("failOnDataLoss", "false")
 

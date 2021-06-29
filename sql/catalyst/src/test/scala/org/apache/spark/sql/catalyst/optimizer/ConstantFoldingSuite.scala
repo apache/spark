@@ -263,4 +263,40 @@ class ConstantFoldingSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("SPARK-33544: Constant folding test with side effects") {
+    val originalQuery =
+      testRelation
+        .select('a)
+        .where(Size(CreateArray(Seq(AssertTrue(false)))) > 0)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+    comparePlans(optimized, originalQuery.analyze)
+  }
+
+  object OptimizeForCreate extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("AnalysisNodes", Once,
+        EliminateSubqueryAliases) ::
+      Batch("ConstantFolding", FixedPoint(4),
+        OptimizeIn,
+        ConstantFolding,
+        PruneFilters) :: Nil
+  }
+
+  test("SPARK-33544: Constant folding test CreateArray") {
+    val originalQuery =
+      testRelation
+        .select('a)
+        .where(Size(CreateArray(Seq('a))) > 0)
+
+    val optimized = OptimizeForCreate.execute(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select('a)
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
 }

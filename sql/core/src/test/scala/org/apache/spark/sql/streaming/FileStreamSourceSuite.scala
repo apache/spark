@@ -19,6 +19,9 @@ package org.apache.spark.sql.streaming
 
 import java.io.File
 import java.net.URI
+import java.time.{LocalDateTime, ZoneOffset}
+import java.time.format.DateTimeFormatter
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable
 import scala.util.Random
@@ -32,14 +35,13 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.connector.read.streaming.ReadLimit
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.FileStreamSource.{FileEntry, SeenFilesMap, SourceFileArchiver}
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.streaming.ExistsThrowsExceptionFileSystem._
 import org.apache.spark.sql.streaming.util.StreamManualClock
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.{StructType, _}
 import org.apache.spark.util.Utils
 
@@ -411,7 +413,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
           createFileStreamSourceAndGetSchema(
             format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
         }
-        assert("Unable to infer schema for JSON. It must be specified manually.;" === e.getMessage)
+        assert("Unable to infer schema for JSON. It must be specified manually." === e.getMessage)
       }
     }
   }
@@ -970,6 +972,75 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("SPARK-35565: read data from outputs of another streaming query but ignore its metadata") {
+    withSQLConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key -> "3",
+        SQLConf.FILESTREAM_SINK_METADATA_IGNORED.key -> "true") {
+      withTempDirs { case (outputDir, checkpointDir1) =>
+        // q0 is a streaming query that reads from memory and writes to text files
+        val q0Source = MemoryStream[String]
+        val q0 =
+          q0Source
+            .toDF()
+            .writeStream
+            .option("checkpointLocation", checkpointDir1.getCanonicalPath)
+            .format("text")
+            .start(outputDir.getCanonicalPath)
+
+        q0Source.addData("keep0")
+        q0.processAllAvailable()
+        q0.stop()
+        Utils.deleteRecursively(new File(outputDir.getCanonicalPath + "/" +
+          FileStreamSink.metadataDir))
+
+        withTempDir { checkpointDir2 =>
+          // q1 is a streaming query that reads from memory and writes to text files too
+          val q1Source = MemoryStream[String]
+          val q1 =
+            q1Source
+              .toDF()
+              .writeStream
+              .option("checkpointLocation", checkpointDir2.getCanonicalPath)
+              .format("text")
+              .start(outputDir.getCanonicalPath)
+
+          // q2 is a streaming query that reads both q0 and q1's text outputs
+          val q2 =
+            createFileStream("text", outputDir.getCanonicalPath).filter($"value" contains "keep")
+
+          def q1AddData(data: String*): StreamAction =
+            Execute { _ =>
+              q1Source.addData(data)
+              q1.processAllAvailable()
+            }
+
+          def q2ProcessAllAvailable(): StreamAction = Execute { q2 => q2.processAllAvailable() }
+
+          testStream(q2)(
+            // batch 0
+            q1AddData("drop1", "keep2"),
+            q2ProcessAllAvailable(),
+            CheckAnswer("keep0", "keep2"),
+
+            q1AddData("keep3"),
+            q2ProcessAllAvailable(),
+            CheckAnswer("keep0", "keep2", "keep3"),
+
+            // batch 2: check that things work well when the sink log gets compacted
+            q1AddData("keep4"),
+            Assert {
+              // compact interval is 3, so file "2.compact" should exist
+              new File(outputDir, s"${FileStreamSink.metadataDir}/2.compact").exists()
+            },
+            q2ProcessAllAvailable(),
+            CheckAnswer("keep0", "keep2", "keep3", "keep4"),
+
+            Execute { _ => q1.stop() }
+          )
+        }
+      }
+    }
+  }
+
   test("start before another streaming query, and read its output") {
     withTempDirs { case (outputDir, checkpointDir) =>
       // q1 is a streaming query that reads from memory and writes to text files
@@ -1009,15 +1080,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   test("when schema inference is turned on, should read partition data") {
-    def createFile(content: String, src: File, tmp: File): Unit = {
-      val tempFile = Utils.tempFileWith(new File(tmp, "text"))
-      val finalFile = new File(src, tempFile.getName)
-      require(!src.exists(), s"$src exists, dir: ${src.isDirectory}, file: ${src.isFile}")
-      require(src.mkdirs(), s"Cannot create $src")
-      require(src.isDirectory(), s"$src is not a directory")
-      require(stringToFile(tempFile, content).renameTo(finalFile))
-    }
-
     withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
       withTempDirs { case (dir, tmp) =>
         val partitionFooSubDir = new File(dir, "partition=foo")
@@ -1383,6 +1445,70 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+  test("restore from file stream source log") {
+    def createEntries(batchId: Long, count: Int): Array[FileEntry] = {
+      (1 to count).map { idx =>
+        FileEntry(s"path_${batchId}_$idx", 10000 * batchId + count, batchId)
+      }.toArray
+    }
+
+    withSQLConf(SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "5") {
+      def verifyBatchAvailabilityInCache(
+          fileEntryCache: java.util.LinkedHashMap[Long, Array[FileEntry]],
+          expectNotAvailable: Seq[Int],
+          expectAvailable: Seq[Int]): Unit = {
+        expectNotAvailable.foreach { batchId =>
+          assert(!fileEntryCache.containsKey(batchId.toLong))
+        }
+        expectAvailable.foreach { batchId =>
+          assert(fileEntryCache.containsKey(batchId.toLong))
+        }
+      }
+      withTempDir { chk =>
+        val _fileEntryCache = PrivateMethod[java.util.LinkedHashMap[Long, Array[FileEntry]]](
+          Symbol("fileEntryCache"))
+
+        val metadata = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark,
+          chk.getCanonicalPath)
+        val fileEntryCache = metadata invokePrivate _fileEntryCache()
+
+        (0 to 4).foreach { batchId =>
+          metadata.add(batchId, createEntries(batchId, 100))
+        }
+        val allFiles = metadata.allFiles()
+
+        // batch 4 is a compact batch which logs would be cached in fileEntryCache
+        verifyBatchAvailabilityInCache(fileEntryCache, Seq(0, 1, 2, 3), Seq(4))
+
+        val metadata2 = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark,
+          chk.getCanonicalPath)
+        val fileEntryCache2 = metadata2 invokePrivate _fileEntryCache()
+
+        // allFiles() doesn't restore the logs for the latest compact batch into file entry cache
+        assert(metadata2.allFiles() === allFiles)
+        verifyBatchAvailabilityInCache(fileEntryCache2, Seq(0, 1, 2, 3, 4), Seq.empty)
+
+        // restore() will restore the logs for the latest compact batch into file entry cache
+        assert(metadata2.restore() === allFiles)
+        verifyBatchAvailabilityInCache(fileEntryCache2, Seq(0, 1, 2, 3), Seq(4))
+
+        (5 to 5 + FileStreamSourceLog.PREV_NUM_BATCHES_TO_READ_IN_RESTORE).foreach { batchId =>
+          metadata2.add(batchId, createEntries(batchId, 100))
+        }
+
+        val metadata3 = new FileStreamSourceLog(FileStreamSourceLog.VERSION, spark,
+          chk.getCanonicalPath)
+        val fileEntryCache3 = metadata3 invokePrivate _fileEntryCache()
+
+        // restore() will not restore the logs for the latest compact batch into file entry cache
+        // if the latest batch is too far from latest compact batch, because it's unlikely Spark
+        // will request the batch for the start point.
+        assert(metadata3.restore() === metadata2.allFiles())
+        verifyBatchAvailabilityInCache(fileEntryCache3, Seq(0, 1, 2, 3, 4), Seq.empty)
+      }
+    }
+  }
+
   test("get arbitrary batch from FileStreamSource") {
     withTempDirs { case (src, tmp) =>
       withSQLConf(
@@ -1475,8 +1601,10 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
 
   private def readOffsetFromResource(file: String): SerializedOffset = {
     import scala.io.Source
-    val str = Source.fromFile(getClass.getResource(s"/structured-streaming/$file").toURI).mkString
-    SerializedOffset(str.trim)
+    Utils.tryWithResource(
+      Source.fromFile(getClass.getResource(s"/structured-streaming/$file").toURI)) { source =>
+      SerializedOffset(source.mkString.trim)
+    }
   }
 
   private def runTwoBatchesAndVerifyResults(
@@ -1614,6 +1742,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   }
 
   test("do not recheck that files exist during getBatch") {
+    val scheme = ExistsThrowsExceptionFileSystem.scheme
     withTempDir { temp =>
       spark.conf.set(
         s"fs.$scheme.impl",
@@ -1888,9 +2017,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
   test("SourceFileArchiver - fail when base archive path matches source pattern") {
     val fakeFileSystem = new FakeFileSystem("fake")
 
-    def assertThrowIllegalArgumentException(sourcePatttern: Path, baseArchivePath: Path): Unit = {
+    def assertThrowIllegalArgumentException(sourcePattern: Path, baseArchivePath: Path): Unit = {
       intercept[IllegalArgumentException] {
-        new SourceFileArchiver(fakeFileSystem, sourcePatttern, fakeFileSystem, baseArchivePath)
+        new SourceFileArchiver(fakeFileSystem, sourcePattern, fakeFileSystem, baseArchivePath)
       }
     }
 
@@ -1947,6 +2076,170 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     assert(expectedDir.exists())
     assert(expectedDir.list().exists(_.startsWith(filePrefix)))
   }
+
+  private def withCountListingLocalFileSystemAsLocalFileSystem(body: => Unit): Unit = {
+    val optionKey = s"fs.${CountListingLocalFileSystem.scheme}.impl"
+    val originClassForLocalFileSystem = spark.conf.getOption(optionKey)
+    try {
+      spark.conf.set(optionKey, classOf[CountListingLocalFileSystem].getName)
+      body
+    } finally {
+      originClassForLocalFileSystem match {
+        case Some(fsClazz) => spark.conf.set(optionKey, fsClazz)
+        case _ => spark.conf.unset(optionKey)
+      }
+    }
+  }
+
+  test("Caches and leverages unread files") {
+    withCountListingLocalFileSystemAsLocalFileSystem {
+      withThreeTempDirs { case (src, meta, tmp) =>
+        val options = Map("latestFirst" -> "false", "maxFilesPerTrigger" -> "10")
+        val scheme = CountListingLocalFileSystem.scheme
+        val source = new FileStreamSource(spark, s"$scheme:///${src.getCanonicalPath}/*/*", "text",
+          StructType(Nil), Seq.empty, meta.getCanonicalPath, options)
+        val _metadataLog = PrivateMethod[FileStreamSourceLog](Symbol("metadataLog"))
+        val metadataLog = source invokePrivate _metadataLog()
+
+        def verifyBatch(
+            offset: FileStreamSourceOffset,
+            expectedBatchId: Long,
+            inputFiles: Seq[File],
+            expectedListingCount: Int): Unit = {
+          val batchId = offset.logOffset
+          assert(batchId === expectedBatchId)
+
+          val files = metadataLog.get(batchId).getOrElse(Array.empty[FileEntry])
+          assert(files.forall(_.batchId == batchId))
+
+          val actualInputFiles = files.map { p => new Path(p.path).toUri.getPath }
+          val expectedInputFiles = inputFiles.slice(batchId.toInt * 10, batchId.toInt * 10 + 10)
+            .map(_.getCanonicalPath)
+          assert(actualInputFiles === expectedInputFiles)
+
+          assert(expectedListingCount === CountListingLocalFileSystem.pathToNumListStatusCalled
+            .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+        }
+
+        CountListingLocalFileSystem.resetCount()
+
+        // provide 41 files in src, with sequential "last modified" to guarantee ordering
+        val inputFiles = (0 to 40).map { idx =>
+          val f = createFile(idx.toString, new File(src, idx.toString), tmp)
+          f.setLastModified(idx * 10000)
+          f
+        }
+
+        // 4 batches will be available for 40 input files
+        (0 to 3).foreach { batchId =>
+          val offsetBatch = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+            .asInstanceOf[FileStreamSourceOffset]
+          verifyBatch(offsetBatch, expectedBatchId = batchId, inputFiles, expectedListingCount = 1)
+        }
+
+        // batch 5 will trigger list operation though the batch 4 should have 1 unseen file:
+        // 1 is smaller than the threshold (refer FileStreamSource.DISCARD_UNSEEN_FILES_RATIO),
+        // hence unseen files for batch 4 will be discarded.
+        val offsetBatch = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+          .asInstanceOf[FileStreamSourceOffset]
+        assert(4 === offsetBatch.logOffset)
+        assert(2 === CountListingLocalFileSystem.pathToNumListStatusCalled
+          .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+
+        val offsetBatch2 = source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(10))
+          .asInstanceOf[FileStreamSourceOffset]
+        // latestOffset returns the offset for previous batch which means no new batch is presented
+        assert(4 === offsetBatch2.logOffset)
+        // listing should be performed after the list of unread files are exhausted
+        assert(3 === CountListingLocalFileSystem.pathToNumListStatusCalled
+          .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+      }
+    }
+  }
+
+  test("Don't cache unread files when latestFirst is true") {
+    withCountListingLocalFileSystemAsLocalFileSystem {
+      withThreeTempDirs { case (src, meta, tmp) =>
+        val options = Map("latestFirst" -> "true", "maxFilesPerTrigger" -> "5")
+        val scheme = CountListingLocalFileSystem.scheme
+        val source = new FileStreamSource(spark, s"$scheme:///${src.getCanonicalPath}/*/*", "text",
+          StructType(Nil), Seq.empty, meta.getCanonicalPath, options)
+
+        CountListingLocalFileSystem.resetCount()
+
+        // provide 20 files in src, with sequential "last modified" to guarantee ordering
+        (0 to 19).map { idx =>
+          val f = createFile(idx.toString, new File(src, idx.toString), tmp)
+          f.setLastModified(idx * 10000)
+          f
+        }
+
+        source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(5))
+          .asInstanceOf[FileStreamSourceOffset]
+        assert(1 === CountListingLocalFileSystem.pathToNumListStatusCalled
+          .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+
+        // Even though the first batch doesn't read all available files, since latestFirst is true,
+        // file stream source will not leverage unread files - next batch will also trigger
+        // listing files
+        source.latestOffset(FileStreamSourceOffset(-1L), ReadLimit.maxFiles(5))
+          .asInstanceOf[FileStreamSourceOffset]
+        assert(2 === CountListingLocalFileSystem.pathToNumListStatusCalled
+          .get(src.getCanonicalPath).map(_.get()).getOrElse(0))
+      }
+    }
+  }
+
+  test("SPARK-31962: file stream source shouldn't allow modifiedBefore/modifiedAfter") {
+    def formatTime(time: LocalDateTime): String = {
+      time.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss"))
+    }
+
+    def assertOptionIsNotSupported(options: Map[String, String], path: String): Unit = {
+      val schema = StructType(Seq(StructField("a", StringType)))
+      var dsReader = spark.readStream
+        .format("csv")
+        .option("timeZone", "UTC")
+        .schema(schema)
+
+      options.foreach { case (k, v) => dsReader = dsReader.option(k, v) }
+
+      val df = dsReader.load(path)
+
+      testStream(df)(
+        ExpectFailure[IllegalArgumentException](
+          t => assert(t.getMessage.contains("is not allowed in file stream source")),
+          isFatalError = false)
+      )
+    }
+
+    withTempDir { dir =>
+      // "modifiedBefore"
+      val futureTime = LocalDateTime.now(ZoneOffset.UTC).plusYears(1)
+      val formattedFutureTime = formatTime(futureTime)
+      assertOptionIsNotSupported(Map("modifiedBefore" -> formattedFutureTime), dir.getCanonicalPath)
+
+      // "modifiedAfter"
+      val prevTime = LocalDateTime.now(ZoneOffset.UTC).minusYears(1)
+      val formattedPrevTime = formatTime(prevTime)
+      assertOptionIsNotSupported(Map("modifiedAfter" -> formattedPrevTime), dir.getCanonicalPath)
+
+      // both
+      assertOptionIsNotSupported(
+        Map("modifiedBefore" -> formattedFutureTime, "modifiedAfter" -> formattedPrevTime),
+        dir.getCanonicalPath)
+    }
+  }
+
+  private def createFile(content: String, src: File, tmp: File): File = {
+    val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+    val finalFile = new File(src, tempFile.getName)
+    require(!src.exists(), s"$src exists, dir: ${src.isDirectory}, file: ${src.isFile}")
+    require(src.mkdirs(), s"Cannot create $src")
+    require(src.isDirectory(), s"$src is not a directory")
+    require(stringToFile(tempFile, content).renameTo(finalFile))
+    finalFile
+  }
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
@@ -1973,6 +2266,8 @@ class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
  * `DataSource.resolveRelation`.
  */
 class ExistsThrowsExceptionFileSystem extends RawLocalFileSystem {
+  import ExistsThrowsExceptionFileSystem._
+
   override def getUri: URI = {
     URI.create(s"$scheme:///")
   }
@@ -1991,4 +2286,25 @@ class ExistsThrowsExceptionFileSystem extends RawLocalFileSystem {
 
 object ExistsThrowsExceptionFileSystem {
   val scheme = s"FileStreamSourceSuite${math.abs(Random.nextInt)}fs"
+}
+
+class CountListingLocalFileSystem extends RawLocalFileSystem {
+  import CountListingLocalFileSystem._
+
+  override def getUri: URI = {
+    URI.create(s"$scheme:///")
+  }
+
+  override def listStatus(f: Path): Array[FileStatus] = {
+    val curVal = pathToNumListStatusCalled.getOrElseUpdate(f.toUri.getPath, new AtomicLong(0))
+    curVal.incrementAndGet()
+    super.listStatus(f)
+  }
+}
+
+object CountListingLocalFileSystem {
+  val scheme = s"CountListingLocalFileSystem${math.abs(Random.nextInt)}fs"
+  val pathToNumListStatusCalled = new mutable.HashMap[String, AtomicLong]
+
+  def resetCount(): Unit = pathToNumListStatusCalled.clear()
 }

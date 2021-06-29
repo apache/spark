@@ -26,19 +26,21 @@ import org.apache.spark.sql.connector.write.WriterCommitMessage;
  * An interface that defines how to write the data to data source in streaming queries.
  *
  * The writing procedure is:
- *   1. Create a writer factory by {@link #createStreamingWriterFactory(PhysicalWriteInfo)},
- *      serialize and send it to all the partitions of the input data(RDD).
- *   2. For each epoch in each partition, create the data writer, and write the data of the epoch in
- *      the partition with this writer. If all the data are written successfully, call
- *      {@link DataWriter#commit()}. If exception happens during the writing, call
- *      {@link DataWriter#abort()}.
- *   3. If writers in all partitions of one epoch are successfully committed, call
- *      {@link #commit(long, WriterCommitMessage[])}. If some writers are aborted, or the job failed
- *      with an unknown reason, call {@link #abort(long, WriterCommitMessage[])}.
- *
+ * <ol>
+ *   <li>Create a writer factory by {@link #createStreamingWriterFactory(PhysicalWriteInfo)},
+ *   serialize and send it to all the partitions of the input data(RDD).</li>
+ *   <li>For each epoch in each partition, create the data writer, and write the data of the
+ *   epoch in the partition with this writer. If all the data are written successfully, call
+ *   {@link DataWriter#commit()}. If exception happens during the writing, call
+ *   {@link DataWriter#abort()}.</li>
+ *   <li>If writers in all partitions of one epoch are successfully committed, call
+ *   {@link #commit(long, WriterCommitMessage[])}. If some writers are aborted, or the job failed
+ *   with an unknown reason, call {@link #abort(long, WriterCommitMessage[])}.</li>
+ * </ol>
+ * <p>
  * While Spark will retry failed writing tasks, Spark won't retry failed writing jobs. Users should
  * do it manually in their Spark applications if they want to retry.
- *
+ * <p>
  * Please refer to the documentation of commit/abort methods for detailed specifications.
  *
  * @since 3.0.0
@@ -48,7 +50,7 @@ public interface StreamingWrite {
 
   /**
    * Creates a writer factory which will be serialized and sent to executors.
-   *
+   * <p>
    * If this method fails (by throwing an exception), the action will fail and no Spark job will be
    * submitted.
    *
@@ -60,14 +62,14 @@ public interface StreamingWrite {
    * Commits this writing job for the specified epoch with a list of commit messages. The commit
    * messages are collected from successful data writers and are produced by
    * {@link DataWriter#commit()}.
-   *
+   * <p>
    * If this method fails (by throwing an exception), this writing job is considered to have been
    * failed, and the execution engine will attempt to call
    * {@link #abort(long, WriterCommitMessage[])}.
-   *
-   * The execution engine may call `commit` multiple times for the same epoch in some circumstances.
-   * To support exactly-once data semantics, implementations must ensure that multiple commits for
-   * the same epoch are idempotent.
+   * <p>
+   * The execution engine may call {@code commit} multiple times for the same epoch in some
+   * circumstances. To support exactly-once data semantics, implementations must ensure that
+   * multiple commits for the same epoch are idempotent.
    */
   void commit(long epochId, WriterCommitMessage[] messages);
 
@@ -75,10 +77,10 @@ public interface StreamingWrite {
    * Aborts this writing job because some data writers are failed and keep failing when retried, or
    * the Spark job fails with some unknown reasons, or {@link #commit(long, WriterCommitMessage[])}
    * fails.
-   *
+   * <p>
    * If this method fails (by throwing an exception), the underlying data source may require manual
    * cleanup.
-   *
+   * <p>
    * Unless the abort is triggered by the failure of commit, the given messages will have some
    * null slots, as there may be only a few data writers that were committed before the abort
    * happens, or some data writers were committed but their commit messages haven't reached the

@@ -69,5 +69,5 @@ class PrometheusServletSuite extends SparkFunSuite with PrivateMethodTester {
   }
 
   private def createPrometheusServlet(): PrometheusServlet =
-    new PrometheusServlet(new Properties, new MetricRegistry, securityMgr = null)
+    new PrometheusServlet(new Properties, new MetricRegistry)
 }

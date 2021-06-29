@@ -36,6 +36,8 @@ object SQLDataSourceExample {
     runBasicParquetExample(spark)
     runParquetSchemaMergingExample(spark)
     runJsonDatasetExample(spark)
+    runCsvDatasetExample(spark)
+    runTextDatasetExample(spark)
     runJdbcDatasetExample(spark)
 
     spark.stop()
@@ -81,6 +83,27 @@ object SQLDataSourceExample {
     // |file1.parquet|
     // +-------------+
     // $example off:load_with_path_glob_filter$
+    // $example on:load_with_modified_time_filter$
+    val beforeFilterDF = spark.read.format("parquet")
+      // Files modified before 07/01/2020 at 05:30 are allowed
+      .option("modifiedBefore", "2020-07-01T05:30:00")
+      .load("examples/src/main/resources/dir1");
+    beforeFilterDF.show();
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // |file1.parquet|
+    // +-------------+
+    val afterFilterDF = spark.read.format("parquet")
+       // Files modified after 06/01/2020 at 05:30 are allowed
+      .option("modifiedAfter", "2020-06-01T05:30:00")
+      .load("examples/src/main/resources/dir1");
+    afterFilterDF.show();
+    // +-------------+
+    // |         file|
+    // +-------------+
+    // +-------------+
+    // $example off:load_with_modified_time_filter$
   }
 
   private def runBasicDataSourceExample(spark: SparkSession): Unit = {
@@ -106,6 +129,14 @@ object SQLDataSourceExample {
       .option("orc.column.encoding.direct", "name")
       .save("users_with_options.orc")
     // $example off:manual_save_options_orc$
+    // $example on:manual_save_options_parquet$
+    usersDF.write.format("parquet")
+      .option("parquet.bloom.filter.enabled#favorite_color", "true")
+      .option("parquet.bloom.filter.expected.ndv#favorite_color", "1000000")
+      .option("parquet.enable.dictionary", "true")
+      .option("parquet.page.write-checksum.enabled", "false")
+      .save("users_with_options.parquet")
+    // $example off:manual_save_options_parquet$
 
     // $example on:direct_sql$
     val sqlDF = spark.sql("SELECT * FROM parquet.`examples/src/main/resources/users.parquet`")
@@ -224,6 +255,114 @@ object SQLDataSourceExample {
     // |[Columbus,Ohio]| Yin|
     // +---------------+----+
     // $example off:json_dataset$
+  }
+
+  private def runCsvDatasetExample(spark: SparkSession): Unit = {
+    // $example on:csv_dataset$
+    // A CSV dataset is pointed to by path.
+    // The path can be either a single CSV file or a directory of CSV files
+    val path = "examples/src/main/resources/people.csv"
+
+    val df = spark.read.csv(path)
+    df.show()
+    // +------------------+
+    // |               _c0|
+    // +------------------+
+    // |      name;age;job|
+    // |Jorge;30;Developer|
+    // |  Bob;32;Developer|
+    // +------------------+
+
+    // Read a csv with delimiter, the default delimiter is ","
+    val df2 = spark.read.option("delimiter", ";").csv(path)
+    df2.show()
+    // +-----+---+---------+
+    // |  _c0|_c1|      _c2|
+    // +-----+---+---------+
+    // | name|age|      job|
+    // |Jorge| 30|Developer|
+    // |  Bob| 32|Developer|
+    // +-----+---+---------+
+
+    // Read a csv with delimiter and a header
+    val df3 = spark.read.option("delimiter", ";").option("header", "true").csv(path)
+    df3.show()
+    // +-----+---+---------+
+    // | name|age|      job|
+    // +-----+---+---------+
+    // |Jorge| 30|Developer|
+    // |  Bob| 32|Developer|
+    // +-----+---+---------+
+
+    // You can also use options() to use multiple options
+    val df4 = spark.read.options(Map("delimiter"->";", "header"->"true")).csv(path)
+
+    // "output" is a folder which contains multiple csv files and a _SUCCESS file.
+    df3.write.csv("output")
+
+    // Read all files in a folder, please make sure only CSV files should present in the folder.
+    val folderPath = "examples/src/main/resources";
+    val df5 = spark.read.csv(folderPath);
+    df5.show();
+    // Wrong schema because non-CSV files are read
+    // +-----------+
+    // |        _c0|
+    // +-----------+
+    // |238val_238|
+    // |  86val_86|
+    // |311val_311|
+    // |  27val_27|
+    // |165val_165|
+    // +-----------+
+
+    // $example off:csv_dataset$
+  }
+
+  private def runTextDatasetExample(spark: SparkSession): Unit = {
+    // $example on:text_dataset$
+    // A text dataset is pointed to by path.
+    // The path can be either a single text file or a directory of text files
+    val path = "examples/src/main/resources/people.txt"
+
+    val df1 = spark.read.text(path)
+    df1.show()
+    // +-----------+
+    // |      value|
+    // +-----------+
+    // |Michael, 29|
+    // |   Andy, 30|
+    // | Justin, 19|
+    // +-----------+
+
+    // You can use 'lineSep' option to define the line separator.
+    // The line separator handles all `\r`, `\r\n` and `\n` by default.
+    val df2 = spark.read.option("lineSep", ",").text(path)
+    df2.show()
+    // +-----------+
+    // |      value|
+    // +-----------+
+    // |    Michael|
+    // |   29\nAndy|
+    // | 30\nJustin|
+    // |       19\n|
+    // +-----------+
+
+    // You can also use 'wholetext' option to read each input file as a single row.
+    val df3 = spark.read.option("wholetext", true).text(path)
+    df3.show()
+    //  +--------------------+
+    //  |               value|
+    //  +--------------------+
+    //  |Michael, 29\nAndy...|
+    //  +--------------------+
+
+    // "output" is a folder which contains multiple text files and a _SUCCESS file.
+    df1.write.text("output")
+
+    // You can specify the compression format using the 'compression' option.
+    df1.write.option("compression", "gzip").text("output_compressed")
+
+    // $example off:text_dataset$
   }
 
   private def runJdbcDatasetExample(spark: SparkSession): Unit = {

@@ -18,7 +18,16 @@ package org.apache.spark.deploy.k8s
 
 import io.fabric8.kubernetes.api.model.{Container, ContainerBuilder, Pod, PodBuilder}
 
-private[spark] case class SparkPod(pod: Pod, container: Container) {
+import org.apache.spark.annotation.{DeveloperApi, Unstable}
+
+/**
+ * :: DeveloperApi ::
+ *
+ * Represents a SparkPod consisting of pod and the container within the pod.
+ */
+@Unstable
+@DeveloperApi
+case class SparkPod(pod: Pod, container: Container) {
 
   /**
    * Convenience method to apply a series of chained transformations to a pod.

@@ -24,7 +24,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.quoteIfNeeded
+import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, Transform}
 import org.apache.spark.sql.types.StructType
 
@@ -79,4 +79,12 @@ private[sql] case class V1Table(v1Table: CatalogTable) extends Table {
   override def capabilities: util.Set[TableCapability] = new util.HashSet[TableCapability]()
 
   override def toString: String = s"V1Table($name)"
+}
+
+/**
+ * A V2 table with V1 fallback support. This is used to fallback to V1 table when the V2 one
+ * doesn't implement specific capabilities but V1 already has.
+ */
+private[sql] trait V2TableWithV1Fallback extends Table {
+  def v1Table: CatalogTable
 }

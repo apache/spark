@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.parquet;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
@@ -83,6 +84,15 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
   }
 
+  @Override
+  public final void readUnsignedIntegers(int total, WritableColumnVector c, int rowId) {
+    int requiredBytes = total * 4;
+    ByteBuffer buffer = getBuffer(requiredBytes);
+    for (int i = 0; i < total; i += 1) {
+      c.putLong(rowId + i, Integer.toUnsignedLong(buffer.getInt()));
+    }
+  }
+
   // A fork of `readIntegers` to rebase the date values. For performance reasons, this method
   // iterates the values twice: check if we need to rebase first, then go to the optimized branch
   // if rebase is not needed.
@@ -130,6 +140,16 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
   }
 
+  @Override
+  public final void readUnsignedLongs(int total, WritableColumnVector c, int rowId) {
+    int requiredBytes = total * 8;
+    ByteBuffer buffer = getBuffer(requiredBytes);
+    for (int i = 0; i < total; i += 1) {
+      c.putByteArray(
+        rowId + i, new BigInteger(Long.toUnsignedString(buffer.getLong())).toByteArray());
+    }
+  }
+
   // A fork of `readLongs` to rebase the timestamp values. For performance reasons, this method
   // iterates the values twice: check if we need to rebase first, then go to the optimized branch
   // if rebase is not needed.
@@ -169,7 +189,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
     if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
-      c.putFloats(rowId, total, buffer.array(), offset);
+      c.putFloatsLittleEndian(rowId, total, buffer.array(), offset);
     } else {
       for (int i = 0; i < total; i += 1) {
         c.putFloat(rowId + i, buffer.getFloat());
@@ -184,7 +204,7 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
 
     if (buffer.hasArray()) {
       int offset = buffer.arrayOffset() + buffer.position();
-      c.putDoubles(rowId, total, buffer.array(), offset);
+      c.putDoublesLittleEndian(rowId, total, buffer.array(), offset);
     } else {
       for (int i = 0; i < total; i += 1) {
         c.putDouble(rowId + i, buffer.getDouble());
@@ -203,6 +223,16 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
       c.putByte(rowId + i, buffer.get());
       // skip the next 3 bytes
       buffer.position(buffer.position() + 3);
+    }
+  }
+
+  @Override
+  public final void readShorts(int total, WritableColumnVector c, int rowId) {
+    int requiredBytes = total * 4;
+    ByteBuffer buffer = getBuffer(requiredBytes);
+
+    for (int i = 0; i < total; i += 1) {
+      c.putShort(rowId + i, (short) buffer.getInt());
     }
   }
 
@@ -238,6 +268,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   @Override
   public final byte readByte() {
     return (byte) readInteger();
+  }
+
+  @Override
+  public short readShort() {
+    return (short) readInteger();
   }
 
   @Override

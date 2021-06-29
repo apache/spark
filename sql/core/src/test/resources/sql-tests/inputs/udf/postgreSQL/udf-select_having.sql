@@ -51,6 +51,7 @@ SELECT 1 AS one FROM test_having HAVING udf(a) > 1;
 SELECT 1 AS one FROM test_having HAVING udf(udf(1) > udf(2));
 SELECT 1 AS one FROM test_having HAVING udf(udf(1) < udf(2));
 
+-- [SPARK-33008] Spark SQL throws an exception
 -- and just to prove that we aren't scanning the table:
 SELECT 1 AS one FROM test_having WHERE 1/udf(a) = 1 HAVING 1 < 2;
 

@@ -55,8 +55,6 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
   /** @group getParam */
   def getNumFolds: Int = $(numFolds)
 
-  setDefault(numFolds -> 3)
-
   /**
    * Param for the column name of user specified fold number. Once this is specified,
    * `CrossValidator` won't do random k-fold split. Note that this column should be
@@ -68,7 +66,7 @@ private[ml] trait CrossValidatorParams extends ValidatorParams {
 
   def getFoldCol: String = $(foldCol)
 
-  setDefault(foldCol, "")
+  setDefault(foldCol -> "", numFolds -> 3)
 }
 
 /**

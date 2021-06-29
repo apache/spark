@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.types
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
+
 object ObjectType extends AbstractDataType {
   override private[sql] def defaultConcreteType: DataType =
-    throw new UnsupportedOperationException(
-      s"null literals can't be casted to ${ObjectType.simpleString}")
+    throw QueryExecutionErrors.nullLiteralsCannotBeCastedError(ObjectType.simpleString)
 
   override private[sql] def acceptsType(other: DataType): Boolean = other match {
     case ObjectType(_) => true

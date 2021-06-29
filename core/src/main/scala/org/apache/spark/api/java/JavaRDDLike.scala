@@ -78,7 +78,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Internal method to this RDD; will read from cache if applicable, or otherwise compute it.
-   * This should ''not'' be called by users directly, but is available for implementors of custom
+   * This should ''not'' be called by users directly, but is available for implementers of custom
    * subclasses of RDD.
    */
   def iterator(split: Partition, taskContext: TaskContext): JIterator[T] =

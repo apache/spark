@@ -181,7 +181,7 @@ function build {
     error "Failed to build Spark JVM Docker image, please refer to Docker build output for details."
   fi
   if [ "${CROSS_BUILD}" != "false" ]; then
-  (cd $(img_ctx_dir base) && docker buildx build $ARCHS $NOCACHEARG "${BUILD_ARGS[@]}" \
+  (cd $(img_ctx_dir base) && docker buildx build $ARCHS $NOCACHEARG "${BUILD_ARGS[@]}" --push \
     -t $(image_ref spark) \
     -f "$BASEDOCKERFILE" .)
   fi
@@ -194,7 +194,7 @@ function build {
         error "Failed to build PySpark Docker image, please refer to Docker build output for details."
       fi
       if [ "${CROSS_BUILD}" != "false" ]; then
-        (cd $(img_ctx_dir pyspark) && docker buildx build $ARCHS $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+        (cd $(img_ctx_dir pyspark) && docker buildx build $ARCHS $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" --push \
           -t $(image_ref spark-py) \
           -f "$PYDOCKERFILE" .)
       fi
@@ -208,7 +208,7 @@ function build {
       error "Failed to build SparkR Docker image, please refer to Docker build output for details."
     fi
     if [ "${CROSS_BUILD}" != "false" ]; then
-      (cd $(img_ctx_dir sparkr) && docker buildx build $ARCHS $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" \
+      (cd $(img_ctx_dir sparkr) && docker buildx build $ARCHS $NOCACHEARG "${BINDING_BUILD_ARGS[@]}" --push \
         -t $(image_ref spark-r) \
         -f "$RDOCKERFILE" .)
     fi
@@ -274,7 +274,7 @@ Examples:
   - Build and push JDK11-based image for multiple archs to docker.io/myrepo
     $0 -r docker.io/myrepo -t v3.0.0 -X -b java_image_tag=11-jre-slim build
     # Note: buildx, which does cross building, needs to do the push during build
-    # So there is no seperate push step with -X
+    # So there is no separate push step with -X
 
 EOF
 }

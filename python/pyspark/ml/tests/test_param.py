@@ -17,7 +17,6 @@
 #
 
 import inspect
-import sys
 import array as pyarray
 import unittest
 
@@ -31,6 +30,7 @@ from pyspark.ml.feature import Binarizer, Bucketizer, ElementwiseProduct, IndexT
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasMaxIter, HasSeed
+from pyspark.ml.regression import LinearRegressionModel, GeneralizedLinearRegressionModel
 from pyspark.ml.wrapper import JavaParams
 from pyspark.testing.mlutils import check_params, PySparkTestCase, SparkSessionTestCase
 
@@ -198,6 +198,10 @@ class ParamTests(SparkSessionTestCase):
         self.assertEqual(testParams._resolveParam(u"maxIter"), testParams.maxIter)
         self.assertRaises(AttributeError, lambda: testParams._resolveParam(u"아"))
 
+        # Invalid type
+        invalid_type = 1
+        self.assertRaises(TypeError, testParams._resolveParam, invalid_type)
+
     def test_params(self):
         testParams = TestParams()
         maxIter = testParams.maxIter
@@ -309,7 +313,7 @@ class ParamTests(SparkSessionTestCase):
             LogisticRegression
         )
 
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             ValueError,
             "Logistic Regression getThreshold found inconsistent.*$",
             LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
@@ -332,6 +336,16 @@ class ParamTests(SparkSessionTestCase):
         result = binarizer.transform(dataset).select("my_default").collect()
         self.assertFalse(binarizer.isSet(binarizer.outputCol))
         self.assertEqual(result[0][0], 1.0)
+
+    def test_lr_evaluate_invaild_type(self):
+        lr = LinearRegressionModel()
+        invalid_type = ""
+        self.assertRaises(TypeError, lr.evaluate, invalid_type)
+
+    def test_glr_evaluate_invaild_type(self):
+        glr = GeneralizedLinearRegressionModel()
+        invalid_type = ""
+        self.assertRaises(TypeError, glr.evaluate, invalid_type)
 
 
 class DefaultValuesTests(PySparkTestCase):
@@ -359,23 +373,21 @@ class DefaultValuesTests(PySparkTestCase):
                         and issubclass(cls, JavaParams) and not inspect.isabstract(cls) \
                         and not re.match("_?Java", name) and name != '_LSH' \
                         and name != '_Selector':
-                    # NOTE: disable check_params_exist until there is parity with Scala API
-
-                    check_params(self, cls(), check_params_exist=False)
+                    check_params(self, cls(), check_params_exist=True)
 
         # Additional classes that need explicit construction
         from pyspark.ml.feature import CountVectorizerModel, StringIndexerModel
         check_params(self, CountVectorizerModel.from_vocabulary(['a'], 'input'),
-                     check_params_exist=False)
+                     check_params_exist=True)
         check_params(self, StringIndexerModel.from_labels(['a', 'b'], 'input'),
-                     check_params_exist=False)
+                     check_params_exist=True)
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_param import *
+    from pyspark.ml.tests.test_param import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

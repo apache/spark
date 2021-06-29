@@ -32,6 +32,7 @@ Public Classes
     RDD
     Broadcast
     Accumulator
+    AccumulatorParam
     SparkConf
     SparkFiles
     StorageLevel
@@ -39,7 +40,8 @@ Public Classes
     RDDBarrier
     BarrierTaskContext
     BarrierTaskInfo
-
+    InheritableThread
+    util.VersionUtils
 
 Spark Context APIs
 ------------------
@@ -63,6 +65,7 @@ Spark Context APIs
     SparkContext.defaultParallelism
     SparkContext.dump_profiles
     SparkContext.emptyRDD
+    SparkContext.getCheckpointDir
     SparkContext.getConf
     SparkContext.getLocalProperty
     SparkContext.getOrCreate
@@ -224,6 +227,8 @@ Broadcast and Accumulator
     Broadcast.value
     Accumulator.add
     Accumulator.value
+    AccumulatorParam.addInPlace
+    AccumulatorParam.zero
 
 
 Management
@@ -234,6 +239,7 @@ Management
 .. autosummary::
     :toctree: api/
 
+    inheritable_thread_target
     SparkConf.contains
     SparkConf.get
     SparkConf.getAll
@@ -249,6 +255,7 @@ Management
     SparkFiles.getRootDirectory
     StorageLevel.DISK_ONLY
     StorageLevel.DISK_ONLY_2
+    StorageLevel.DISK_ONLY_3
     StorageLevel.MEMORY_AND_DISK
     StorageLevel.MEMORY_AND_DISK_2
     StorageLevel.MEMORY_ONLY
@@ -273,3 +280,5 @@ Management
     BarrierTaskContext.resources
     BarrierTaskContext.stageId
     BarrierTaskContext.taskAttemptId
+    util.VersionUtils.majorMinorVersion
+

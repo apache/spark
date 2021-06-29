@@ -39,15 +39,8 @@ import org.apache.spark.sql.types._
  *      Results will be written to "benchmarks/JSONBenchmark-results.txt".
  * }}}
  */
-
 object JsonBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
-
-  private def prepareDataInfo(benchmark: Benchmark): Unit = {
-    // scalastyle:off println
-    benchmark.out.println("Preparing data for benchmarking ...")
-    // scalastyle:on println
-  }
 
   def schemaInferring(rowsNum: Int, numIters: Int): Unit = {
     val benchmark = new Benchmark("JSON schema inferring", rowsNum, output = output)
@@ -128,18 +121,6 @@ object JsonBenchmark extends SqlBasedBenchmark {
       .add("z", StringType)
   }
 
-  def writeWideRow(path: String, rowsNum: Int): StructType = {
-    val colsNum = 1000
-    val fields = Seq.tabulate(colsNum)(i => StructField(s"col$i", IntegerType))
-    val schema = StructType(fields)
-
-    spark.range(rowsNum)
-      .select(Seq.tabulate(colsNum)(i => lit(i).as(s"col$i")): _*)
-      .write.json(path)
-
-    schema
-  }
-
   def countWideColumn(rowsNum: Int, numIters: Int): Unit = {
     val benchmark = new Benchmark("count a wide column", rowsNum, output = output)
 
@@ -171,7 +152,7 @@ object JsonBenchmark extends SqlBasedBenchmark {
 
     withTempPath { path =>
       prepareDataInfo(benchmark)
-      val schema = writeWideRow(path.getAbsolutePath, rowsNum)
+      val schema = writeWideRow(path.getAbsolutePath, rowsNum, 1000)
 
       benchmark.addCase("No encoding", numIters) { _ =>
         spark.read
@@ -538,16 +519,16 @@ object JsonBenchmark extends SqlBasedBenchmark {
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     val numIters = 3
     runBenchmark("Benchmark for performance of JSON parsing") {
-      schemaInferring(100 * 1000 * 1000, numIters)
-      countShortColumn(100 * 1000 * 1000, numIters)
-      countWideColumn(10 * 1000 * 1000, numIters)
-      countWideRow(500 * 1000, numIters)
-      selectSubsetOfColumns(10 * 1000 * 1000, numIters)
-      jsonParserCreation(10 * 1000 * 1000, numIters)
-      jsonFunctions(10 * 1000 * 1000, numIters)
-      jsonInDS(50 * 1000 * 1000, numIters)
-      jsonInFile(50 * 1000 * 1000, numIters)
-      datetimeBenchmark(rowsNum = 10 * 1000 * 1000, numIters)
+      schemaInferring(5 * 1000 * 1000, numIters)
+      countShortColumn(5 * 1000 * 1000, numIters)
+      countWideColumn(1000 * 1000, numIters)
+      countWideRow(50 * 1000, numIters)
+      selectSubsetOfColumns(1000 * 1000, numIters)
+      jsonParserCreation(1000 * 1000, numIters)
+      jsonFunctions(1000 * 1000, numIters)
+      jsonInDS(5 * 1000 * 1000, numIters)
+      jsonInFile(5 * 1000 * 1000, numIters)
+      datetimeBenchmark(rowsNum = 1000 * 1000, numIters)
       // Benchmark pushdown filters that refer to top-level columns.
       // TODO (SPARK-32325): Add benchmarks for filters with nested column attributes.
       filtersPushdownBenchmark(rowsNum = 100 * 1000, numIters)

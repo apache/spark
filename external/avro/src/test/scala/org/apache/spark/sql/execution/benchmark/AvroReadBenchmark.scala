@@ -32,7 +32,7 @@ import org.apache.spark.sql.types._
  * {{{
  *   To run this benchmark:
  *   1. without sbt: bin/spark-submit --class <this class>
- *        --jars <catalyst test jar>,<core test jar>,<spark-avro jar> <avro test jar>
+ *        --jars <catalyst test jar>,<core test jar>,<sql test jar>,<spark-avro jar> <avro test jar>
  *   2. build/sbt "avro/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "avro/test:runMain <this class>"
  *      Results will be written to "benchmarks/AvroReadBenchmark-results.txt".
@@ -191,6 +191,32 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  private def wideColumnsBenchmark(values: Int, width: Int, files: Int): Unit = {
+    val benchmark =
+      new Benchmark(s"Wide Column Scan from $width columns", values, output = output)
+
+    withTempPath { dir =>
+      withTempTable("t1", "avroTable") {
+        import spark.implicits._
+        val middle = width / 2
+        val selectExpr = (1 to width).map(i => s"value as c$i")
+        spark.range(values).map(_ => Random.nextLong).toDF()
+          .selectExpr(selectExpr: _*)
+          .repartition(files) // ensure at least `files` number of splits (but maybe more)
+          .createOrReplaceTempView("t1")
+
+        prepareTable(dir, spark.sql("SELECT * FROM t1"))
+
+        benchmark.addCase("Select of all columns") { _ =>
+          spark.sql(s"SELECT * FROM avroTable").noop()
+        }
+
+        benchmark.run()
+      }
+    }
+
+  }
+
   private def filtersPushdownBenchmark(rowsNum: Int, numIters: Int): Unit = {
     val benchmark = new Benchmark("Filters pushdown", rowsNum, output = output)
     val colsNum = 100
@@ -204,7 +230,7 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
     }
     withTempPath { path =>
       // Write and read timestamp in the LEGACY mode to make timestamp conversions more expensive
-      withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> "LEGACY") {
+      withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> "LEGACY") {
         spark.range(rowsNum).select(columns(): _*)
           .write
           .format("avro")
@@ -218,21 +244,21 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
       }
 
       benchmark.addCase("w/o filters", numIters) { _ =>
-        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> "LEGACY") {
+        withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_READ.key -> "LEGACY") {
           readback.noop()
         }
       }
 
       def withFilter(configEnabled: Boolean): Unit = {
         withSQLConf(
-          SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> "LEGACY",
+          SQLConf.AVRO_REBASE_MODE_IN_READ.key -> "LEGACY",
           SQLConf.AVRO_FILTER_PUSHDOWN_ENABLED.key -> configEnabled.toString()) {
           readback.filter($"key" === 0).noop()
         }
       }
 
       benchmark.addCase("pushdown disabled", numIters) { _ =>
-        withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> "LEGACY") {
+        withSQLConf(SQLConf.AVRO_REBASE_MODE_IN_READ.key -> "LEGACY") {
           withFilter(configEnabled = false)
         }
       }
@@ -265,6 +291,11 @@ object AvroReadBenchmark extends SqlBasedBenchmark {
         stringWithNullsScanBenchmark(1024 * 1024 * 10, fractionOfNulls)
       }
     }
+
+    runBenchmark("Select All From Wide Columns") {
+      wideColumnsBenchmark(500000, 1000, 20)
+    }
+
     runBenchmark("Single Column Scan From Wide Columns") {
       columnsBenchmark(1024 * 1024 * 1, 100)
       columnsBenchmark(1024 * 1024 * 1, 200)

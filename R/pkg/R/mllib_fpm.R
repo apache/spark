@@ -125,7 +125,7 @@ setMethod("spark.freqItemsets", signature(object = "FPGrowthModel"),
 #'         The \code{SparkDataFrame} contains five columns:
 #'         \code{antecedent} (an array of the same type as the input column),
 #'         \code{consequent} (an array of the same type as the input column),
-#'         \code{condfidence} (confidence for the rule)
+#'         \code{confidence} (confidence for the rule)
 #'         \code{lift} (lift for the rule)
 #'         and \code{support} (support for the rule)
 #' @rdname spark.fpGrowth

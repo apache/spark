@@ -67,11 +67,19 @@ private[spark] object KubernetesVolumeUtils {
     volumeType match {
       case KUBERNETES_VOLUMES_HOSTPATH_TYPE =>
         val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
+        verifyOptionKey(options, pathKey, KUBERNETES_VOLUMES_HOSTPATH_TYPE)
         KubernetesHostPathVolumeConf(options(pathKey))
 
       case KUBERNETES_VOLUMES_PVC_TYPE =>
         val claimNameKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_NAME_KEY"
-        KubernetesPVCVolumeConf(options(claimNameKey))
+        val storageClassKey =
+          s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_CLAIM_STORAGE_CLASS_KEY"
+        val sizeLimitKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SIZE_LIMIT_KEY"
+        verifyOptionKey(options, claimNameKey, KUBERNETES_VOLUMES_PVC_TYPE)
+        KubernetesPVCVolumeConf(
+          options(claimNameKey),
+          options.get(storageClassKey),
+          options.get(sizeLimitKey))
 
       case KUBERNETES_VOLUMES_EMPTYDIR_TYPE =>
         val mediumKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_MEDIUM_KEY"
@@ -81,12 +89,20 @@ private[spark] object KubernetesVolumeUtils {
       case KUBERNETES_VOLUMES_NFS_TYPE =>
         val pathKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_PATH_KEY"
         val serverKey = s"$volumeType.$volumeName.$KUBERNETES_VOLUMES_OPTIONS_SERVER_KEY"
+        verifyOptionKey(options, pathKey, KUBERNETES_VOLUMES_NFS_TYPE)
+        verifyOptionKey(options, serverKey, KUBERNETES_VOLUMES_NFS_TYPE)
         KubernetesNFSVolumeConf(
           options(pathKey),
           options(serverKey))
 
       case _ =>
         throw new IllegalArgumentException(s"Kubernetes Volume type `$volumeType` is not supported")
+    }
+  }
+
+  private def verifyOptionKey(options: Map[String, String], key: String, msg: String): Unit = {
+    if (!options.isDefinedAt(key)) {
+      throw new NoSuchElementException(key + s" is required for $msg")
     }
   }
 }

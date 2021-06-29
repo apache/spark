@@ -21,6 +21,7 @@ DRY_RUN=${DRY_RUN:-0}
 GPG="gpg --no-tty --batch"
 ASF_REPO="https://github.com/apache/spark"
 ASF_REPO_WEBUI="https://raw.githubusercontent.com/apache/spark"
+ASF_SPARK_REPO="gitbox.apache.org/repos/asf/spark.git"
 
 function error {
   echo "$*"
@@ -228,7 +229,7 @@ function init_maven_sbt {
   if [[ $JAVA_VERSION < "1.8." ]]; then
     # Needed for maven central when using Java 7.
     SBT_OPTS="-Dhttps.protocols=TLSv1.1,TLSv1.2"
-    MVN_EXTRA_OPTS="-Dhttps.protocols=TLSv1.1,TLSv1.2"
+    MVN_EXTRA_OPTS="-Xmx2g -XX:ReservedCodeCacheSize=1g -Dhttps.protocols=TLSv1.1,TLSv1.2"
     MVN="$MVN $MVN_EXTRA_OPTS"
   fi
   export MVN MVN_EXTRA_OPTS SBT_OPTS

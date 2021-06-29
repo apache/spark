@@ -1518,7 +1518,7 @@ public class JavaAPISuite implements Serializable {
     JavaFutureAction<Long> future = rdd.map(new BuggyMapFunction<>()).countAsync();
     try {
       future.get(2, TimeUnit.SECONDS);
-      fail("Expected future.get() for failed job to throw ExcecutionException");
+      fail("Expected future.get() for failed job to throw ExecutionException");
     } catch (ExecutionException ee) {
       assertTrue(Throwables.getStackTraceAsString(ee).contains("Custom exception!"));
     }

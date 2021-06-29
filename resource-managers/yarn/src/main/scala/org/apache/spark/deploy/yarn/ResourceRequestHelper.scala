@@ -43,6 +43,8 @@ private object ResourceRequestHelper extends Logging {
   private val RESOURCE_NOT_FOUND = "org.apache.hadoop.yarn.exceptions.ResourceNotFoundException"
   val YARN_GPU_RESOURCE_CONFIG = "yarn.io/gpu"
   val YARN_FPGA_RESOURCE_CONFIG = "yarn.io/fpga"
+  private[yarn] val resourceNameMapping =
+    Map(GPU -> YARN_GPU_RESOURCE_CONFIG, FPGA -> YARN_FPGA_RESOURCE_CONFIG)
   @volatile private var numResourceErrors: Int = 0
 
   private[yarn] def getYarnResourcesAndAmounts(
@@ -76,7 +78,7 @@ private object ResourceRequestHelper extends Logging {
       confPrefix: String,
       sparkConf: SparkConf
   ): Map[String, String] = {
-    Map(GPU -> YARN_GPU_RESOURCE_CONFIG, FPGA -> YARN_FPGA_RESOURCE_CONFIG).map {
+    resourceNameMapping.map {
       case (rName, yarnName) =>
         (yarnName -> sparkConf.get(new ResourceID(confPrefix, rName).amountConf, "0"))
     }.filter { case (_, count) => count.toLong > 0 }

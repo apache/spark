@@ -27,11 +27,11 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.fileToString
 
-trait SQLKeywordUtils extends SQLHelper {
+trait SQLKeywordUtils extends SparkFunSuite with SQLHelper {
 
   val sqlSyntaxDefs = {
     val sqlBasePath = {
-      java.nio.file.Paths.get(sparkHome, "sql", "catalyst", "src", "main", "antlr4", "org",
+      getWorkspaceFilePath("sql", "catalyst", "src", "main", "antlr4", "org",
         "apache", "spark", "sql", "catalyst", "parser", "SqlBase.g4").toFile
     }
     fileToString(sqlBasePath).split("\n")
@@ -41,7 +41,7 @@ trait SQLKeywordUtils extends SQLHelper {
   // Spark default mode, and the SQL standard.
   val keywordsInDoc: Array[Array[String]] = {
     val docPath = {
-      java.nio.file.Paths.get(sparkHome, "docs", "sql-ref-ansi-compliance.md").toFile
+      getWorkspaceFilePath("docs", "sql-ref-ansi-compliance.md").toFile
     }
     fileToString(docPath).split("\n")
       .dropWhile(!_.startsWith("|Keyword|")).drop(2).takeWhile(_.startsWith("|"))
@@ -150,7 +150,7 @@ trait SQLKeywordUtils extends SQLHelper {
   }
 }
 
-class SQLKeywordSuite extends SparkFunSuite with SQLKeywordUtils {
+class SQLKeywordSuite extends SQLKeywordUtils {
   test("all keywords are documented") {
     val documentedKeywords = keywordsInDoc.map(_.head).toSet
     if (allCandidateKeywords != documentedKeywords) {

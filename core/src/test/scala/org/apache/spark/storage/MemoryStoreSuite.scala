@@ -26,11 +26,14 @@ import org.scalatest._
 
 import org.apache.spark._
 import org.apache.spark.internal.config._
+import org.apache.spark.internal.config.Tests.TEST_USE_COMPRESSED_OOPS_KEY
 import org.apache.spark.memory.{MemoryMode, UnifiedMemoryManager}
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
 import org.apache.spark.storage.memory.{BlockEvictionHandler, MemoryStore, PartiallySerializedBlock, PartiallyUnrolledIterator}
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
+
+case class OffHeapValue(override val estimatedSize: Long) extends KnownSizeEstimation
 
 class MemoryStoreSuite
   extends SparkFunSuite
@@ -38,8 +41,11 @@ class MemoryStoreSuite
   with BeforeAndAfterEach
   with ResetSystemProperties {
 
-  var conf: SparkConf = new SparkConf(false)
+  val conf: SparkConf = new SparkConf(false)
     .set(STORAGE_UNROLL_MEMORY_THRESHOLD, 512L)
+    .set(MEMORY_OFFHEAP_ENABLED, true)
+    .set(MEMORY_OFFHEAP_SIZE, 12000L)
+    .set(MEMORY_STORAGE_FRACTION, 0.5)
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   val serializer = new KryoSerializer(
@@ -51,12 +57,34 @@ class MemoryStoreSuite
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
   def rdd(rddId: Int, splitId: Int): RDDBlockId = RDDBlockId(rddId, splitId)
 
+  // Save modified system properties so that we can restore them after tests.
+  val originalArch = System.getProperty("os.arch")
+  val originalCompressedOops = System.getProperty(TEST_USE_COMPRESSED_OOPS_KEY)
+
+  def reinitializeSizeEstimator(arch: String, useCompressedOops: String): Unit = {
+    def set(k: String, v: String): Unit = {
+      if (v == null) {
+        System.clearProperty(k)
+      } else {
+        System.setProperty(k, v)
+      }
+    }
+    set("os.arch", arch)
+    set(TEST_USE_COMPRESSED_OOPS_KEY, useCompressedOops)
+    val initialize = PrivateMethod[Unit](Symbol("initialize"))
+    SizeEstimator invokePrivate initialize()
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
-    System.setProperty("os.arch", "amd64")
-    val initialize = PrivateMethod[Unit](Symbol("initialize"))
-    SizeEstimator invokePrivate initialize()
+    reinitializeSizeEstimator("amd64", "true")
+  }
+
+  override def afterEach(): Unit = {
+    super.afterEach()
+    // Restore system properties and SizeEstimator to their original states.
+    reinitializeSizeEstimator(originalArch, originalCompressedOops)
   }
 
   def makeMemoryStore(maxMem: Long): (MemoryStore, BlockInfoManager) = {
@@ -133,7 +161,7 @@ class MemoryStoreSuite
       assert(blockInfoManager.lockNewBlockForWriting(
         blockId,
         new BlockInfo(StorageLevel.MEMORY_ONLY, classTag, tellMaster = false)))
-      val res = memoryStore.putIteratorAsValues(blockId, iter, classTag)
+      val res = memoryStore.putIteratorAsValues(blockId, iter, MemoryMode.ON_HEAP, classTag)
       blockInfoManager.unlock(blockId)
       res
     }
@@ -173,10 +201,13 @@ class MemoryStoreSuite
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
   }
 
-  test("safely unroll blocks through putIteratorAsValues") {
+  def testPutIteratorAsValues[T](
+      smallListValue: () => T,
+      bigListValue: () => T,
+      storageLevel: StorageLevel): Unit = {
     val (memoryStore, blockInfoManager) = makeMemoryStore(12000)
-    val smallList = List.fill(40)(new Array[Byte](100))
-    val bigList = List.fill(40)(new Array[Byte](1000))
+    val smallList = List.fill(40)(smallListValue())
+    val bigList = List.fill(40)(bigListValue())
     def smallIterator: Iterator[Any] = smallList.iterator.asInstanceOf[Iterator[Any]]
     def bigIterator: Iterator[Any] = bigList.iterator.asInstanceOf[Iterator[Any]]
     assert(memoryStore.currentUnrollMemoryForThisTask === 0)
@@ -187,8 +218,8 @@ class MemoryStoreSuite
         classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
       assert(blockInfoManager.lockNewBlockForWriting(
         blockId,
-        new BlockInfo(StorageLevel.MEMORY_ONLY, classTag, tellMaster = false)))
-      val res = memoryStore.putIteratorAsValues(blockId, iter, classTag)
+        new BlockInfo(storageLevel, classTag, tellMaster = false)))
+      val res = memoryStore.putIteratorAsValues(blockId, iter, storageLevel.memoryMode, classTag)
       blockInfoManager.unlock(blockId)
       res
     }
@@ -235,6 +266,18 @@ class MemoryStoreSuite
     assert(memoryStore.currentUnrollMemoryForThisTask > 0) // we returned an iterator
     result4.left.get.close()
     assert(memoryStore.currentUnrollMemoryForThisTask === 0) // close released the unroll memory
+  }
+
+  test("safely unroll blocks through putIteratorAsValues") {
+    testPutIteratorAsValues(() => new Array[Byte](100), () => new Array[Byte](1000),
+      StorageLevel.MEMORY_ONLY)
+  }
+
+  test("safely unroll blocks through putIteratorAsValues off-heap") {
+    // Size the values so the sequence of block drops matches the one in the on-heap test. The
+    // values are different since the sizes here are exact, vs. being estimated for on-heap.
+    testPutIteratorAsValues(() => OffHeapValue(110), () => OffHeapValue(1500),
+      StorageLevel(false, true, useOffHeap = true, deserialized = true, 1))
   }
 
   test("safely unroll blocks through putIteratorAsBytes") {
@@ -353,7 +396,7 @@ class MemoryStoreSuite
     def putIteratorAsValues(
         blockId: BlockId,
         iter: Iterator[Any]): Either[PartiallyUnrolledIterator[Any], Long] = {
-       memoryStore.putIteratorAsValues(blockId, iter, ClassTag.Any)
+       memoryStore.putIteratorAsValues(blockId, iter, MemoryMode.ON_HEAP, ClassTag.Any)
     }
 
     // All unroll memory used is released because putIterator did not return an iterator
@@ -522,5 +565,79 @@ class MemoryStoreSuite
         testFailureOnNthDrop(failAfterDropping, readLockAfterDropping)
       }
     }
+  }
+
+  test("put user-defined objects to MemoryStore and remove") {
+    val (memoryStore, _) = makeMemoryStore(12000)
+    val allocator = DummyAllocator()
+    val nativeObjList = List.fill(40)(NativeObject(allocator, 100))
+    def nativeObjIterator: Iterator[Any] = nativeObjList.iterator.asInstanceOf[Iterator[Any]]
+    def putIteratorAsValues[T](
+        blockId: BlockId,
+        iter: Iterator[T],
+        classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
+      memoryStore.putIteratorAsValues(blockId, iter, MemoryMode.ON_HEAP, classTag)
+    }
+
+    // Unroll with plenty of space. This should succeed and cache both blocks.
+    assert(putIteratorAsValues("b1", nativeObjIterator, ClassTag.Any).isRight)
+    assert(putIteratorAsValues("b2", nativeObjIterator, ClassTag.Any).isRight)
+
+    memoryStore.remove("b1")
+    memoryStore.remove("b2")
+
+    // Check if allocator was cleared.
+    while (allocator.getAllocatedMemory > 0) {
+      Thread.sleep(500)
+    }
+    assert(allocator.getAllocatedMemory == 0)
+  }
+
+  test("put user-defined objects to MemoryStore and clear") {
+    val (memoryStore, _) = makeMemoryStore(12000)
+    val allocator = DummyAllocator()
+    val nativeObjList = List.fill(40)(NativeObject(allocator, 100))
+    def nativeObjIterator: Iterator[Any] = nativeObjList.iterator.asInstanceOf[Iterator[Any]]
+    def putIteratorAsValues[T](
+        blockId: BlockId,
+        iter: Iterator[T],
+        classTag: ClassTag[T]): Either[PartiallyUnrolledIterator[T], Long] = {
+      memoryStore.putIteratorAsValues(blockId, iter, MemoryMode.ON_HEAP, classTag)
+    }
+
+    // Unroll with plenty of space. This should succeed and cache both blocks.
+    assert(putIteratorAsValues("b1", nativeObjIterator, ClassTag.Any).isRight)
+    assert(putIteratorAsValues("b2", nativeObjIterator, ClassTag.Any).isRight)
+
+    memoryStore.clear
+    // Check if allocator was cleared.
+    while (allocator.getAllocatedMemory > 0) {
+      Thread.sleep(500)
+    }
+    assert(allocator.getAllocatedMemory == 0)
+  }
+}
+
+private case class DummyAllocator() {
+  private var allocated: Int = 0
+  def alloc(size: Int): Unit = synchronized {
+    allocated += size
+  }
+  def release(size: Int): Unit = synchronized {
+    allocated -= size
+  }
+  def getAllocatedMemory: Int = synchronized {
+    allocated
+  }
+}
+
+private case class NativeObject(alloc: DummyAllocator, size: Int) extends KnownSizeEstimation
+  with AutoCloseable {
+  alloc.alloc(size)
+  var allocated_size: Int = size
+  override def estimatedSize: Long = allocated_size
+  override def close(): Unit = synchronized {
+    alloc.release(allocated_size)
+    allocated_size = 0
   }
 }

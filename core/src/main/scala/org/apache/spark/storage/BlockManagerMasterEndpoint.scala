@@ -33,7 +33,7 @@ import org.apache.spark.{MapOutputTrackerMaster, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.shuffle.ExternalBlockStoreClient
-import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEndpointAddress, RpcEndpointRef, RpcEnv}
+import org.apache.spark.rpc.{IsolatedRpcEndpoint, RpcCallContext, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
 import org.apache.spark.storage.BlockManagerMessages._
@@ -63,7 +63,7 @@ class BlockManagerMasterEndpoint(
 
   // Mapping from external shuffle service block manager id to the block statuses.
   private val blockStatusByShuffleService =
-    new mutable.HashMap[BlockManagerId, JHashMap[BlockId, BlockStatus]]
+    new mutable.HashMap[BlockManagerId, BlockStatusPerBlockId]
 
   // Mapping from executor ID to block manager ID.
   private val blockManagerIdByExecutor = new mutable.HashMap[String, BlockManagerId]
@@ -73,6 +73,14 @@ class BlockManagerMasterEndpoint(
 
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
+
+  // Mapping from host name to shuffle (mergers) services where the current app
+  // registered an executor in the past. Older hosts are removed when the
+  // maxRetainedMergerLocations size is reached in favor of newer locations.
+  private val shuffleMergerLocations = new mutable.LinkedHashMap[String, BlockManagerId]()
+
+  // Maximum number of merger locations to cache
+  private val maxRetainedMergerLocations = conf.get(config.SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS)
 
   private val askThreadPool =
     ThreadUtils.newDaemonCachedThreadPool("block-manager-ask-thread-pool", 100)
@@ -88,9 +96,20 @@ class BlockManagerMasterEndpoint(
     mapper
   }
 
+  private val executorTimeoutMs = Utils.executorTimeoutMs(conf)
+  private val blockManagerInfoCleaner = {
+    val cleaningDelay = Math.floorDiv(executorTimeoutMs, 2L)
+    val executor = ThreadUtils.newDaemonSingleThreadScheduledExecutor("blockManagerInfo-cleaner")
+    executor.scheduleWithFixedDelay(() => cleanBlockManagerInfo(), cleaningDelay, cleaningDelay,
+      TimeUnit.MILLISECONDS)
+    executor
+  }
+
   val proactivelyReplicate = conf.get(config.STORAGE_REPLICATION_PROACTIVE)
 
   val defaultRpcTimeout = RpcUtils.askRpcTimeout(conf)
+
+  private val pushBasedShuffleEnabled = Utils.isPushBasedShuffleEnabled(conf)
 
   logInfo("BlockManagerMasterEndpoint up")
   // same as `conf.get(config.SHUFFLE_SERVICE_ENABLED)
@@ -139,6 +158,12 @@ class BlockManagerMasterEndpoint(
     case GetBlockStatus(blockId, askStorageEndpoints) =>
       context.reply(blockStatus(blockId, askStorageEndpoints))
 
+    case GetShufflePushMergerLocations(numMergersNeeded, hostsToFilter) =>
+      context.reply(getShufflePushMergerLocations(numMergersNeeded, hostsToFilter))
+
+    case RemoveShufflePushMergerLocation(host) =>
+      context.reply(removeShufflePushMergerLocation(host))
+
     case IsExecutorAlive(executorId) =>
       context.reply(blockManagerIdByExecutor.contains(executorId))
 
@@ -163,8 +188,14 @@ class BlockManagerMasterEndpoint(
       context.reply(true)
 
     case DecommissionBlockManagers(executorIds) =>
-      val bmIds = executorIds.flatMap(blockManagerIdByExecutor.get)
-      decommissionBlockManagers(bmIds)
+      // Mark corresponding BlockManagers as being decommissioning by adding them to
+      // decommissioningBlockManagerSet, so they won't be used to replicate or migrate blocks.
+      // Note that BlockManagerStorageEndpoint will be notified about decommissioning when the
+      // executor is notified(see BlockManager.decommissionSelf), so we don't need to send the
+      // notification here.
+      val bms = executorIds.flatMap(blockManagerIdByExecutor.get)
+      logInfo(s"Mark BlockManagers (${bms.mkString(", ")}) as being decommissioning.")
+      decommissioningBlockManagerSet ++= bms
       context.reply(true)
 
     case GetReplicateInfoForRDDBlocks(blockManagerId) =>
@@ -245,18 +276,18 @@ class BlockManagerMasterEndpoint(
           val blockIdsToDel = blocksToDeleteByShuffleService.getOrElseUpdate(bmIdForShuffleService,
             new mutable.HashSet[RDDBlockId]())
           blockIdsToDel += blockId
-          blockStatusByShuffleService.get(bmIdForShuffleService).foreach { blockStatus =>
-            blockStatus.remove(blockId)
+          blockStatusByShuffleService.get(bmIdForShuffleService).foreach { blockStatusForId =>
+            blockStatusForId.remove(blockId)
           }
         }
       }
       bmIdsExecutor.foreach { bmId =>
-        blockManagerInfo.get(bmId).foreach { bmInfo =>
+        aliveBlockManagerInfo(bmId).foreach { bmInfo =>
           bmInfo.removeBlock(blockId)
         }
       }
     }
-    val removeRddFromExecutorsFutures = blockManagerInfo.values.map { bmInfo =>
+    val removeRddFromExecutorsFutures = allAliveBlockManagerInfos.map { bmInfo =>
       bmInfo.storageEndpoint.ask[Int](removeMsg).recover {
         // use 0 as default value means no blocks were removed
         handleBlockRemovalFailure("RDD", rddId.toString, bmInfo.blockManagerId, 0)
@@ -278,11 +309,12 @@ class BlockManagerMasterEndpoint(
 
     Future.sequence(removeRddFromExecutorsFutures ++ removeRddBlockViaExtShuffleServiceFutures)
   }
+
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
     // Nothing to do in the BlockManagerMasterEndpoint data structures
     val removeMsg = RemoveShuffle(shuffleId)
     Future.sequence(
-      blockManagerInfo.values.map { bm =>
+      allAliveBlockManagerInfos.map { bm =>
         bm.storageEndpoint.ask[Boolean](removeMsg).recover {
           // use false as default value means no shuffle data were removed
           handleBlockRemovalFailure("shuffle", shuffleId.toString, bm.blockManagerId, false)
@@ -298,7 +330,7 @@ class BlockManagerMasterEndpoint(
    */
   private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean): Future[Seq[Int]] = {
     val removeMsg = RemoveBroadcast(broadcastId, removeFromDriver)
-    val requiredBlockManagers = blockManagerInfo.values.filter { info =>
+    val requiredBlockManagers = allAliveBlockManagerInfos.filter { info =>
       removeFromDriver || !info.blockManagerId.isDriver
     }
     val futures = requiredBlockManagers.map { bm =>
@@ -314,13 +346,24 @@ class BlockManagerMasterEndpoint(
   private def removeBlockManager(blockManagerId: BlockManagerId): Unit = {
     val info = blockManagerInfo(blockManagerId)
 
+    // SPARK-35011: Not removing info from the blockManagerInfo map, but only setting the removal
+    // timestamp of the executor in BlockManagerInfo. This info will be removed from
+    // blockManagerInfo map by the blockManagerInfoCleaner once
+    // now() - info.executorRemovalTs > executorTimeoutMs.
+    //
+    // We are delaying the removal of BlockManagerInfo to avoid a BlockManager reregistration
+    // while a executor is shutting. This unwanted reregistration causes inconsistent bookkeeping
+    // of executors in Spark.
+    // Delaying this removal until blockManagerInfoCleaner decides to remove it ensures
+    // BlockManagerMasterHeartbeatEndpoint does not ask the BlockManager on a recently removed
+    // executor to reregister on BlockManagerHeartbeat message.
+    info.setExecutorRemovalTs()
+
     // Remove the block manager from blockManagerIdByExecutor.
     blockManagerIdByExecutor -= blockManagerId.executorId
     decommissioningBlockManagerSet.remove(blockManagerId)
 
-    // Remove it from blockManagerInfo and remove all the blocks.
-    blockManagerInfo.remove(blockManagerId)
-
+    // remove all the blocks.
     val iterator = info.blocks.keySet.iterator
     while (iterator.hasNext) {
       val blockId = iterator.next
@@ -335,13 +378,13 @@ class BlockManagerMasterEndpoint(
         blockLocations.remove(blockId)
         logWarning(s"No more replicas available for $blockId !")
       } else if (proactivelyReplicate && (blockId.isRDD || blockId.isInstanceOf[TestBlockId])) {
-        // As a heursitic, assume single executor failure to find out the number of replicas that
+        // As a heuristic, assume single executor failure to find out the number of replicas that
         // existed before failure
         val maxReplicas = locations.size + 1
         val i = (new Random(blockId.hashCode)).nextInt(locations.size)
         val blockLocations = locations.toSeq
         val candidateBMId = blockLocations(i)
-        blockManagerInfo.get(candidateBMId).foreach { bm =>
+        aliveBlockManagerInfo(candidateBMId).foreach { bm =>
           val remainingLocations = locations.toSeq.filter(bm => bm != candidateBMId)
           val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
           bm.storageEndpoint.ask[Boolean](replicateMsg)
@@ -354,24 +397,20 @@ class BlockManagerMasterEndpoint(
 
   }
 
+  private def addMergerLocation(blockManagerId: BlockManagerId): Unit = {
+    if (!blockManagerId.isDriver && !shuffleMergerLocations.contains(blockManagerId.host)) {
+      val shuffleServerId = BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER,
+        blockManagerId.host, externalShuffleServicePort)
+      if (shuffleMergerLocations.size >= maxRetainedMergerLocations) {
+        shuffleMergerLocations -= shuffleMergerLocations.head._1
+      }
+      shuffleMergerLocations(shuffleServerId.host) = shuffleServerId
+    }
+  }
+
   private def removeExecutor(execId: String): Unit = {
     logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
-  }
-
-  /**
-   * Decommission the given Seq of blockmanagers
-   *    - Adds these block managers to decommissioningBlockManagerSet Set
-   *    - Sends the DecommissionBlockManager message to each of the [[BlockManagerReplicaEndpoint]]
-   */
-  def decommissionBlockManagers(blockManagerIds: Seq[BlockManagerId]): Future[Seq[Unit]] = {
-    val newBlockManagersToDecommission = blockManagerIds.toSet.diff(decommissioningBlockManagerSet)
-    val futures = newBlockManagersToDecommission.map { blockManagerId =>
-      decommissioningBlockManagerSet.add(blockManagerId)
-      val info = blockManagerInfo(blockManagerId)
-      info.storageEndpoint.ask[Unit](DecommissionBlockManager)
-    }
-    Future.sequence{ futures.toSeq }
   }
 
   /**
@@ -380,16 +419,22 @@ class BlockManagerMasterEndpoint(
    * @return Seq of ReplicateBlock
    */
   private def getReplicateInfoForRDDBlocks(blockManagerId: BlockManagerId): Seq[ReplicateBlock] = {
-    val info = blockManagerInfo(blockManagerId)
-
-    val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)
-    rddBlocks.map { blockId =>
-      val currentBlockLocations = blockLocations.get(blockId)
-      val maxReplicas = currentBlockLocations.size + 1
-      val remainingLocations = currentBlockLocations.toSeq.filter(bm => bm != blockManagerId)
-      val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
-      replicateMsg
-    }.toSeq
+    try {
+      aliveBlockManagerInfo(blockManagerId).map { info =>
+        val rddBlocks = info.blocks.keySet().asScala.filter(_.isRDD)
+        rddBlocks.map { blockId =>
+          val currentBlockLocations = blockLocations.get(blockId)
+          val maxReplicas = currentBlockLocations.size + 1
+          val remainingLocations = currentBlockLocations.toSeq.filter(bm => bm != blockManagerId)
+          val replicateMsg = ReplicateBlock(blockId, remainingLocations, maxReplicas)
+          replicateMsg
+        }.toSeq
+      }.getOrElse(Seq.empty[ReplicateBlock])
+    } catch {
+      // If the block manager has already exited, nothing to replicate.
+      case e: java.util.NoSuchElementException =>
+        Seq.empty[ReplicateBlock]
+    }
   }
 
   // Remove a block from the workers that have it. This can only be used to remove
@@ -398,8 +443,7 @@ class BlockManagerMasterEndpoint(
     val locations = blockLocations.get(blockId)
     if (locations != null) {
       locations.foreach { blockManagerId: BlockManagerId =>
-        val blockManager = blockManagerInfo.get(blockManagerId)
-        blockManager.foreach { bm =>
+        aliveBlockManagerInfo(blockManagerId).foreach { bm =>
           // Remove the block from the BlockManager.
           // Doesn't actually wait for a confirmation and the message might get lost.
           // If message loss becomes frequent, we should add retry logic here.
@@ -414,14 +458,14 @@ class BlockManagerMasterEndpoint(
 
   // Return a map from the block manager id to max memory and remaining memory.
   private def memoryStatus: Map[BlockManagerId, (Long, Long)] = {
-    blockManagerInfo.map { case(blockManagerId, info) =>
-      (blockManagerId, (info.maxMem, info.remainingMem))
+    allAliveBlockManagerInfos.map { info =>
+      (info.blockManagerId, (info.maxMem, info.remainingMem))
     }.toMap
   }
 
   private def storageStatus: Array[StorageStatus] = {
-    blockManagerInfo.map { case (blockManagerId, info) =>
-      new StorageStatus(blockManagerId, info.maxMem, Some(info.maxOnHeapMem),
+    allAliveBlockManagerInfos.map { info =>
+      new StorageStatus(info.blockManagerId, info.maxMem, Some(info.maxOnHeapMem),
         Some(info.maxOffHeapMem), info.blocks.asScala)
     }.toArray
   }
@@ -443,7 +487,7 @@ class BlockManagerMasterEndpoint(
      * Futures to avoid potential deadlocks. This can arise if there exists a block manager
      * that is also waiting for this master endpoint's response to a previous message.
      */
-    blockManagerInfo.values.map { info =>
+    allAliveBlockManagerInfos.map { info =>
       val blockStatusFuture =
         if (askStorageEndpoints) {
           info.storageEndpoint.ask[Option[BlockStatus]](getBlockStatus)
@@ -467,7 +511,7 @@ class BlockManagerMasterEndpoint(
       askStorageEndpoints: Boolean): Future[Seq[BlockId]] = {
     val getMatchingBlockIds = GetMatchingBlockIds(filter)
     Future.sequence(
-      blockManagerInfo.values.map { info =>
+      allAliveBlockManagerInfos.map { info =>
         val future =
           if (askStorageEndpoints) {
             info.storageEndpoint.ask[Seq[BlockId]](getMatchingBlockIds)
@@ -520,8 +564,12 @@ class BlockManagerMasterEndpoint(
 
       val externalShuffleServiceBlockStatus =
         if (externalShuffleServiceRddFetchEnabled) {
+          // The blockStatusByShuffleService entries are never removed as they belong to the
+          // external shuffle service instances running on the cluster nodes. To decrease its
+          // memory footprint when all the disk persisted blocks are removed for a shuffle service
+          // BlockStatusPerBlockId releases the backing HashMap.
           val externalShuffleServiceBlocks = blockStatusByShuffleService
-            .getOrElseUpdate(externalShuffleServiceIdOnHost(id), new JHashMap[BlockId, BlockStatus])
+            .getOrElseUpdate(externalShuffleServiceIdOnHost(id), new BlockStatusPerBlockId)
           Some(externalShuffleServiceBlocks)
         } else {
           None
@@ -529,9 +577,14 @@ class BlockManagerMasterEndpoint(
 
       blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(),
         maxOnHeapMemSize, maxOffHeapMemSize, storageEndpoint, externalShuffleServiceBlockStatus)
+
+      if (pushBasedShuffleEnabled) {
+        addMergerLocation(id)
+      }
+
+      listenerBus.post(SparkListenerBlockManagerAdded(time, id,
+        maxOnHeapMemSize + maxOffHeapMemSize, Some(maxOnHeapMemSize), Some(maxOffHeapMemSize)))
     }
-    listenerBus.post(SparkListenerBlockManagerAdded(time, id, maxOnHeapMemSize + maxOffHeapMemSize,
-        Some(maxOnHeapMemSize), Some(maxOffHeapMemSize)))
     id
   }
 
@@ -546,12 +599,12 @@ class BlockManagerMasterEndpoint(
     if (blockId.isShuffle) {
       blockId match {
         case ShuffleIndexBlockId(shuffleId, mapId, _) =>
-          // Don't update the map output on just the index block
-          logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, ignoring.")
+          // We need to update this at index file because there exists the index-only block
+          logDebug(s"Received shuffle index block update for ${shuffleId} ${mapId}, updating.")
+          mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
           return true
         case ShuffleDataBlockId(shuffleId: Int, mapId: Long, reduceId: Int) =>
-          logDebug(s"Received shuffle data block update for ${shuffleId} ${mapId}, updating.")
-          mapOutputTracker.updateMapOutput(shuffleId, mapId, blockManagerId)
+          logDebug(s"Received shuffle data block update for ${shuffleId} ${mapId}, ignore.")
           return true
         case _ =>
           logDebug(s"Unexpected shuffle block type ${blockId}" +
@@ -617,9 +670,9 @@ class BlockManagerMasterEndpoint(
     val locations = Option(blockLocations.get(blockId)).map(_.toSeq).getOrElse(Seq.empty)
     val status = locations.headOption.flatMap { bmId =>
       if (externalShuffleServiceRddFetchEnabled && bmId.port == externalShuffleServicePort) {
-        Option(blockStatusByShuffleService(bmId).get(blockId))
+        blockStatusByShuffleService.get(bmId).flatMap(m => m.get(blockId))
       } else {
-        blockManagerInfo.get(bmId).flatMap(_.getStatus(blockId))
+        aliveBlockManagerInfo(bmId).flatMap(_.getStatus(blockId))
       }
     }
 
@@ -630,8 +683,7 @@ class BlockManagerMasterEndpoint(
         // can be used to access this block even when the original executor is already stopped.
         loc.host == requesterHost &&
           (loc.port == externalShuffleServicePort ||
-            blockManagerInfo
-              .get(loc)
+            aliveBlockManagerInfo(loc)
               .flatMap(_.getStatus(blockId).map(_.storageLevel.useDisk))
               .getOrElse(false))
       }.flatMap { bmId => Option(executorIdToLocalDirs.getIfPresent(bmId.executorId)) }
@@ -648,7 +700,7 @@ class BlockManagerMasterEndpoint(
 
   /** Get the list of the peers of the given block manager */
   private def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
-    val blockManagerIds = blockManagerInfo.keySet
+    val blockManagerIds = allAliveBlockManagerInfos.map(_.blockManagerId).toSet
     if (blockManagerIds.contains(blockManagerId)) {
       blockManagerIds
         .filterNot { _.isDriver }
@@ -660,13 +712,47 @@ class BlockManagerMasterEndpoint(
     }
   }
 
+  private def getShufflePushMergerLocations(
+      numMergersNeeded: Int,
+      hostsToFilter: Set[String]): Seq[BlockManagerId] = {
+    val blockManagerHosts = blockManagerIdByExecutor.values.map(_.host).toSet
+    val filteredBlockManagerHosts = blockManagerHosts.filterNot(hostsToFilter.contains(_))
+    val filteredMergersWithExecutors = filteredBlockManagerHosts.map(
+      BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, _, externalShuffleServicePort))
+    // Enough mergers are available as part of active executors list
+    if (filteredMergersWithExecutors.size >= numMergersNeeded) {
+      filteredMergersWithExecutors.toSeq
+    } else {
+      // Delta mergers added from inactive mergers list to the active mergers list
+      val filteredMergersWithExecutorsHosts = filteredMergersWithExecutors.map(_.host)
+      val filteredMergersWithoutExecutors = shuffleMergerLocations.values
+        .filterNot(x => hostsToFilter.contains(x.host))
+        .filterNot(x => filteredMergersWithExecutorsHosts.contains(x.host))
+      val randomFilteredMergersLocations =
+        if (filteredMergersWithoutExecutors.size >
+          numMergersNeeded - filteredMergersWithExecutors.size) {
+          Utils.randomize(filteredMergersWithoutExecutors)
+            .take(numMergersNeeded - filteredMergersWithExecutors.size)
+        } else {
+          filteredMergersWithoutExecutors
+        }
+      filteredMergersWithExecutors.toSeq ++ randomFilteredMergersLocations
+    }
+  }
+
+  private def removeShufflePushMergerLocation(host: String): Unit = {
+    if (shuffleMergerLocations.contains(host)) {
+      shuffleMergerLocations.remove(host)
+    }
+  }
+
   /**
    * Returns an [[RpcEndpointRef]] of the [[BlockManagerReplicaEndpoint]] for sending RPC messages.
    */
   private def getExecutorEndpointRef(executorId: String): Option[RpcEndpointRef] = {
     for (
       blockManagerId <- blockManagerIdByExecutor.get(executorId);
-      info <- blockManagerInfo.get(blockManagerId)
+      info <- aliveBlockManagerInfo(blockManagerId)
     ) yield {
       info.storageEndpoint
     }
@@ -674,7 +760,27 @@ class BlockManagerMasterEndpoint(
 
   override def onStop(): Unit = {
     askThreadPool.shutdownNow()
+    blockManagerInfoCleaner.shutdownNow()
   }
+
+  private def cleanBlockManagerInfo(): Unit = {
+    logDebug("Cleaning blockManagerInfo")
+    val now = System.currentTimeMillis()
+    val expiredBmIds = blockManagerInfo.filter { case (_, bmInfo) =>
+      // bmInfo.executorRemovalTs.get cannot be None when BM is not alive
+      !bmInfo.isAlive && (now - bmInfo.executorRemovalTs.get) > executorTimeoutMs
+    }.keys
+    expiredBmIds.foreach { bmId =>
+      logInfo(s"Cleaning expired $bmId from blockManagerInfo")
+      blockManagerInfo.remove(bmId)
+    }
+  }
+
+  @inline private def aliveBlockManagerInfo(bmId: BlockManagerId): Option[BlockManagerInfo] =
+    blockManagerInfo.get(bmId).filter(_.isAlive)
+
+  @inline private def allAliveBlockManagerInfos: Iterable[BlockManagerInfo] =
+    blockManagerInfo.values.filter(_.isAlive)
 }
 
 @DeveloperApi
@@ -687,21 +793,47 @@ object BlockStatus {
   def empty: BlockStatus = BlockStatus(StorageLevel.NONE, memSize = 0L, diskSize = 0L)
 }
 
+/**
+ * Stores block statuses for block IDs but removes the reference to the Map which used for storing
+ * the data when all the blocks are removed to avoid keeping the memory when not needed.
+ */
+private[spark] class BlockStatusPerBlockId {
+
+  private var blocks: JHashMap[BlockId, BlockStatus] = _
+
+  def get(blockId: BlockId): Option[BlockStatus] =
+    if (blocks == null) None else Option(blocks.get(blockId))
+
+  def put(blockId: BlockId, blockStatus: BlockStatus): Unit = {
+    if (blocks == null) {
+      blocks = new JHashMap[BlockId, BlockStatus]
+    }
+    blocks.put(blockId, blockStatus)
+  }
+
+  def remove(blockId: BlockId): Unit = {
+    blocks.remove(blockId)
+    if (blocks.isEmpty) {
+      blocks = null
+    }
+  }
+
+}
+
 private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
     timeMs: Long,
     val maxOnHeapMem: Long,
     val maxOffHeapMem: Long,
     val storageEndpoint: RpcEndpointRef,
-    val externalShuffleServiceBlockStatus: Option[JHashMap[BlockId, BlockStatus]])
+    val externalShuffleServiceBlockStatus: Option[BlockStatusPerBlockId])
   extends Logging {
 
   val maxMem = maxOnHeapMem + maxOffHeapMem
 
-  val externalShuffleServiceEnabled = externalShuffleServiceBlockStatus.isDefined
-
   private var _lastSeenMs: Long = timeMs
   private var _remainingMem: Long = maxMem
+  private var _executorRemovalTs: Option[Long] = None
 
   // Mapping from block id to its status.
   private val _blocks = new JHashMap[BlockId, BlockStatus]
@@ -740,7 +872,6 @@ private[spark] class BlockManagerInfo(
     if (storageLevel.isValid) {
       /* isValid means it is either stored in-memory or on-disk.
        * The memSize here indicates the data size in or dropped from memory,
-       * externalBlockStoreSize here indicates the data size in or dropped from externalBlockStore,
        * and the diskSize here indicates the data size in or dropped to disk.
        * They can be both larger than 0, when a block is dropped from memory to disk.
        * Therefore, a safe way to set BlockStatus is to set its info in accurate modes. */
@@ -816,5 +947,17 @@ private[spark] class BlockManagerInfo(
 
   def clear(): Unit = {
     _blocks.clear()
+  }
+
+  def executorRemovalTs: Option[Long] = _executorRemovalTs
+
+  def isAlive: Boolean = _executorRemovalTs.isEmpty
+
+  def setExecutorRemovalTs(): Unit = {
+    if (!isAlive) {
+      logWarning(s"executorRemovalTs is already set to ${_executorRemovalTs.get}")
+    } else {
+      _executorRemovalTs = Some(System.currentTimeMillis())
+    }
   }
 }

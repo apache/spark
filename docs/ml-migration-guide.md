@@ -281,7 +281,7 @@ Several deprecated methods were removed in the `spark.mllib` and `spark.ml` pack
 * `weights` in `LinearRegression` and `LogisticRegression` in `spark.ml`
 * `setMaxNumIterations` in `mllib.optimization.LBFGS` (marked as `DeveloperApi`)
 * `treeReduce` and `treeAggregate` in `mllib.rdd.RDDFunctions` (these functions are available on `RDD`s directly, and were marked as `DeveloperApi`)
-* `defaultStategy` in `mllib.tree.configuration.Strategy`
+* `defaultStrategy` in `mllib.tree.configuration.Strategy`
 * `build` in `mllib.tree.Node`
 * libsvm loaders for multiclass and load/save labeledData methods in `mllib.util.MLUtils`
 

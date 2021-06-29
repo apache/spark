@@ -37,13 +37,13 @@ private[spark] class MedianHeap(implicit val ord: Ordering[Double]) {
    * Stores all the numbers less than the current median in a smallerHalf,
    * i.e median is the maximum, at the root.
    */
-  private[this] var smallerHalf = PriorityQueue.empty[Double](ord)
+  private[this] val smallerHalf = PriorityQueue.empty[Double](ord)
 
   /**
    * Stores all the numbers greater than the current median in a largerHalf,
    * i.e median is the minimum, at the root.
    */
-  private[this] var largerHalf = PriorityQueue.empty[Double](ord.reverse)
+  private[this] val largerHalf = PriorityQueue.empty[Double](ord.reverse)
 
   def isEmpty(): Boolean = {
     smallerHalf.isEmpty && largerHalf.isEmpty

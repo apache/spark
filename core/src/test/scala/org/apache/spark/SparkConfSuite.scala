@@ -461,7 +461,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val conf = new SparkConf()
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(TASK_FPGA_ID.amountConf, "0")
-    var taskResourceRequirement =
+    val taskResourceRequirement =
       parseResourceRequirements(conf, SPARK_TASK_PREFIX)
         .map(req => (req.resourceName, req.amount)).toMap
 

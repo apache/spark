@@ -19,19 +19,20 @@ package org.apache.spark.scheduler
 
 import java.io.File
 
+import scala.collection.mutable
 import scala.util.Random
 
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.internal.config
+import org.apache.spark.internal.config.LEGACY_LOCALITY_WAIT_RESET
 import org.apache.spark.internal.config.Tests.TEST_NO_STAGE_RETRY
 
 class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with Eventually {
 
-  def initLocalClusterSparkContext(numWorker: Int = 4): Unit = {
-    val conf = new SparkConf()
+  def initLocalClusterSparkContext(numWorker: Int = 4, conf: SparkConf = new SparkConf()): Unit = {
+    conf
       // Init local cluster here so each barrier task runs in a separated process, thus `barrier()`
       // call is actually useful.
       .setMaster(s"local-cluster[$numWorker, 1, 1024]")
@@ -189,7 +190,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
 
   test("throw exception if the number of barrier() calls are not the same on every task") {
     initLocalClusterSparkContext()
-    sc.conf.set("spark.barrier.sync.timeout", "1")
+    sc.conf.set("spark.barrier.sync.timeout", "5")
     val rdd = sc.makeRDD(1 to 10, 4)
     val rdd2 = rdd.barrier().mapPartitions { it =>
       val context = BarrierTaskContext.get()
@@ -212,7 +213,7 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
       rdd2.collect()
     }.getMessage
     assert(error.contains("The coordinator didn't get all barrier sync requests"))
-    assert(error.contains("within 1 second(s)"))
+    assert(error.contains("within 5 second(s)"))
   }
 
   def testBarrierTaskKilled(interruptOnKill: Boolean): Unit = {
@@ -274,20 +275,96 @@ class BarrierTaskContextSuite extends SparkFunSuite with LocalSparkContext with 
     testBarrierTaskKilled(interruptOnKill = true)
   }
 
-  test("SPARK-31485: barrier stage should fail if only partial tasks are launched") {
-    initLocalClusterSparkContext(2)
-    val id = sc.getExecutorIds().head
-    val rdd0 = sc.parallelize(Seq(0, 1, 2, 3), 2)
-    val dep = new OneToOneDependency[Int](rdd0)
-    // set up a barrier stage with 2 tasks and both tasks prefer the same executor (only 1 core) for
-    // scheduling. So, one of tasks won't be scheduled in one round of resource offer.
-    val rdd = new MyRDD(sc, 2, List(dep), Seq(Seq(s"executor_h_$id"), Seq(s"executor_h_$id")))
-    val errorMsg = intercept[SparkException] {
+  test("SPARK-24818: disable legacy delay scheduling for barrier stage") {
+    val conf = new SparkConf().set(LEGACY_LOCALITY_WAIT_RESET, true)
+    initLocalClusterSparkContext(2, conf)
+    val taskLocality = new mutable.ArrayBuffer[TaskLocality.TaskLocality]()
+    val listener = new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        taskLocality += taskStart.taskInfo.taskLocality
+      }
+    }
+
+    try {
+      sc.addSparkListener(listener)
+      val id = sc.getExecutorIds().head
+      val rdd0 = sc.parallelize(Seq(0, 1, 2, 3), 2)
+      val dep = new OneToOneDependency[Int](rdd0)
+      // set up a stage with 2 tasks and both tasks prefer the same executor (only 1 core)
+      // for scheduling. So, the first task can always get the best locality (PROCESS_LOCAL),
+      // but the second task may not get the best locality depends whether it's a barrier stage
+      // or not.
+      val rdd = new MyRDD(sc, 2, List(dep), Seq(Seq(s"executor_h_$id"), Seq(s"executor_h_$id"))) {
+        override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] = {
+          Iterator.single((split.index, split.index + 1))
+        }
+      }
+
+      // run a barrier stage
       rdd.barrier().mapPartitions { iter =>
         BarrierTaskContext.get().barrier()
         iter
       }.collect()
-    }.getMessage
-    assert(errorMsg.contains("Fail resource offers for barrier stage"))
+
+      // The delay scheduling for barrier TaskSetManager has been disabled. So, the second task
+      // would not wait for any time but just launch at ANY locality level.
+      assert(taskLocality.sorted === Seq(TaskLocality.PROCESS_LOCAL, TaskLocality.ANY))
+      taskLocality.clear()
+
+      // run a common stage
+      rdd.mapPartitions { iter =>
+        iter
+      }.collect()
+      // The delay scheduling works for the common stage. So, the second task would be delayed
+      // in order to get the better locality.
+      assert(taskLocality.sorted === Seq(TaskLocality.PROCESS_LOCAL, TaskLocality.PROCESS_LOCAL))
+
+    } finally {
+      taskLocality.clear()
+      sc.removeSparkListener(listener)
+    }
+  }
+
+  test("SPARK-34069: Kill barrier tasks should respect SPARK_JOB_INTERRUPT_ON_CANCEL") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local[2]"))
+    var index = 0
+    var checkDone = false
+    var startTime = 0L
+    val listener = new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
+        if (startTime == 0) {
+          startTime = taskStart.taskInfo.launchTime
+        }
+      }
+
+      override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+        if (index == 0) {
+          assert(taskEnd.reason.isInstanceOf[ExceptionFailure])
+          assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime < 1000)
+          index = 1
+        } else if (index == 1) {
+          assert(taskEnd.reason.isInstanceOf[TaskKilled])
+          assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime < 1000)
+          index = 2
+          checkDone = true
+        }
+      }
+    }
+    sc.addSparkListener(listener)
+    sc.setJobGroup("test", "", true)
+    sc.parallelize(Seq(1, 2), 2).barrier().mapPartitions { it =>
+      if (TaskContext.get().stageAttemptNumber() == 0) {
+        if (it.hasNext && it.next() == 1) {
+          throw new RuntimeException("failed")
+        } else {
+          Thread.sleep(5000)
+        }
+      }
+      it
+    }.groupBy(x => x).collect()
+    sc.listenerBus.waitUntilEmpty()
+    assert(checkDone)
+    // double check we kill task success
+    assert(System.currentTimeMillis() - startTime < 5000)
   }
 }

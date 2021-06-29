@@ -32,11 +32,6 @@ you can download a package for any version of Hadoop.
 
 Note that, before Spark 2.0, the main programming interface of Spark was the Resilient Distributed Dataset (RDD). After Spark 2.0, RDDs are replaced by Dataset, which is strongly-typed like an RDD, but with richer optimizations under the hood. The RDD interface is still supported, and you can get a more detailed reference at the [RDD programming guide](rdd-programming-guide.html). However, we highly recommend you to switch to use Dataset, which has better performance than RDD. See the [SQL programming guide](sql-programming-guide.html) to get more information about Dataset.
 
-# Security
-
-Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
-Please see [Spark Security](security.html) before running Spark.
-
 # Interactive Analysis with the Spark Shell
 
 ## Basics
@@ -399,7 +394,7 @@ If you are building a packaged PySpark application or library you can add it to 
 
 {% highlight python %}
     install_requires=[
-        'pyspark=={site.SPARK_VERSION}'
+        'pyspark=={{site.SPARK_VERSION}}'
     ]
 {% endhighlight %}
 

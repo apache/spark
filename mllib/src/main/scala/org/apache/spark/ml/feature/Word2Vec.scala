@@ -27,7 +27,6 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -47,7 +46,6 @@ private[feature] trait Word2VecBase extends Params
   final val vectorSize = new IntParam(
     this, "vectorSize", "the dimension of codes after transforming from words (> 0)",
     ParamValidators.gt(0))
-  setDefault(vectorSize -> 100)
 
   /** @group getParam */
   def getVectorSize: Int = $(vectorSize)
@@ -60,7 +58,6 @@ private[feature] trait Word2VecBase extends Params
   final val windowSize = new IntParam(
     this, "windowSize", "the window size (context words from [-window, window]) (> 0)",
     ParamValidators.gt(0))
-  setDefault(windowSize -> 5)
 
   /** @group expertGetParam */
   def getWindowSize: Int = $(windowSize)
@@ -73,7 +70,6 @@ private[feature] trait Word2VecBase extends Params
   final val numPartitions = new IntParam(
     this, "numPartitions", "number of partitions for sentences of words (> 0)",
     ParamValidators.gt(0))
-  setDefault(numPartitions -> 1)
 
   /** @group getParam */
   def getNumPartitions: Int = $(numPartitions)
@@ -86,7 +82,6 @@ private[feature] trait Word2VecBase extends Params
    */
   final val minCount = new IntParam(this, "minCount", "the minimum number of times a token must " +
     "appear to be included in the word2vec model's vocabulary (>= 0)", ParamValidators.gtEq(0))
-  setDefault(minCount -> 5)
 
   /** @group getParam */
   def getMinCount: Int = $(minCount)
@@ -101,13 +96,12 @@ private[feature] trait Word2VecBase extends Params
   final val maxSentenceLength = new IntParam(this, "maxSentenceLength", "Maximum length " +
     "(in words) of each sentence in the input data. Any sentence longer than this threshold will " +
     "be divided into chunks up to the size (> 0)", ParamValidators.gt(0))
-  setDefault(maxSentenceLength -> 1000)
 
   /** @group getParam */
   def getMaxSentenceLength: Int = $(maxSentenceLength)
 
-  setDefault(stepSize -> 0.025)
-  setDefault(maxIter -> 1)
+  setDefault(vectorSize -> 100, windowSize -> 5, numPartitions -> 1, minCount -> 5,
+    maxSentenceLength -> 1000, stepSize -> 0.025, maxIter -> 1)
 
   /**
    * Validate and transform the input schema.
@@ -174,7 +168,8 @@ final class Word2Vec @Since("1.4.0") (
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): Word2VecModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
+    val input =
+      dataset.select($(inputCol)).rdd.map(_.getSeq[String](0))
     val wordVectors = new feature.Word2Vec()
       .setLearningRate($(stepSize))
       .setMinCount($(minCount))
@@ -260,7 +255,7 @@ class Word2VecModel private[ml] (
    */
   @Since("2.2.0")
   def findSynonymsArray(vec: Vector, num: Int): Array[(String, Double)] = {
-    wordVectors.findSynonyms(vec, num)
+    wordVectors.findSynonyms(vec.toArray, num, None)
   }
 
   /**
@@ -289,27 +284,33 @@ class Word2VecModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
-    val vectors = wordVectors.getVectors
-      .mapValues(vv => Vectors.dense(vv.map(_.toDouble)))
-      .map(identity).toMap // mapValues doesn't return a serializable map (SI-7005)
-    val bVectors = dataset.sparkSession.sparkContext.broadcast(vectors)
-    val d = $(vectorSize)
-    val emptyVec = Vectors.sparse(d, Array.emptyIntArray, Array.emptyDoubleArray)
-    val word2Vec = udf { sentence: Seq[String] =>
+
+    val bcModel = dataset.sparkSession.sparkContext.broadcast(this.wordVectors)
+    val size = $(vectorSize)
+    val emptyVec = Vectors.sparse(size, Array.emptyIntArray, Array.emptyDoubleArray)
+    val transformer = udf { sentence: Seq[String] =>
       if (sentence.isEmpty) {
         emptyVec
       } else {
-        val sum = Vectors.zeros(d)
+        val wordIndices = bcModel.value.wordIndex
+        val wordVectors = bcModel.value.wordVectors
+        val array = Array.ofDim[Double](size)
+        var count = 0
         sentence.foreach { word =>
-          bVectors.value.get(word).foreach { v =>
-            BLAS.axpy(1.0, v, sum)
+          wordIndices.get(word).foreach { index =>
+            val offset = index * size
+            var i = 0
+            while (i < size) { array(i) += wordVectors(offset + i); i += 1 }
           }
+          count += 1
         }
-        BLAS.scal(1.0 / sentence.size, sum)
-        sum
+        val vec = Vectors.dense(array)
+        BLAS.scal(1.0 / count, vec)
+        vec
       }
     }
-    dataset.withColumn($(outputCol), word2Vec(col($(inputCol))),
+
+    dataset.withColumn($(outputCol), transformer(col($(inputCol))),
       outputSchema($(outputCol)).metadata)
   }
 
@@ -342,7 +343,7 @@ class Word2VecModel private[ml] (
 @Since("1.6.0")
 object Word2VecModel extends MLReadable[Word2VecModel] {
 
-  private case class Data(word: String, vector: Array[Float])
+  private[Word2VecModel] case class Data(word: String, vector: Array[Float])
 
   private[Word2VecModel]
   class Word2VecModelWriter(instance: Word2VecModel) extends MLWriter {
