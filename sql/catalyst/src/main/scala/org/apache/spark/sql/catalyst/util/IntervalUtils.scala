@@ -343,8 +343,8 @@ object IntervalUtils {
           (startField, endField) match {
             case (DT.DAY, DT.DAY) if suffix == null && value.length <= 9 =>
               sign * value.toLong * MICROS_PER_DAY
-            case (DT.HOUR, DT.HOUR) if suffix == null && value.length <= 10
-            => sign * value.toLong * MICROS_PER_HOUR
+            case (DT.HOUR, DT.HOUR) if suffix == null && value.length <= 10 =>
+              sign * value.toLong * MICROS_PER_HOUR
             case (DT.MINUTE, DT.MINUTE) if suffix == null && value.length <= 12 =>
               sign * value.toLong * MICROS_PER_MINUTE
             case (DT.SECOND, DT.SECOND) if value.length <= 13 =>
@@ -413,10 +413,10 @@ object IntervalUtils {
   }
 
   def toDTInterval(
-    hourStr: String,
-    minuteStr: String,
-    secondStr: String,
-    sign: Int): Long = {
+      hourStr: String,
+      minuteStr: String,
+      secondStr: String,
+      sign: Int): Long = {
     var micros = 0L
     val hours = toLongWithRange(HOUR, hourStr, 0, 2562047788L)
     micros = Math.addExact(micros, sign * hours * MICROS_PER_HOUR)
@@ -427,20 +427,12 @@ object IntervalUtils {
   }
 
   def toDTInterval(
-    minuteStr: String,
-    secondStr: String,
-    sign: Int): Long = {
+      minuteStr: String,
+      secondStr: String,
+      sign: Int): Long = {
     var micros = 0L
     val minutes = toLongWithRange(MINUTE, minuteStr, 0, 153722867280L)
     micros = Math.addExact(micros, sign * minutes * MICROS_PER_MINUTE)
-    micros = Math.addExact(micros, sign * parseSecondNano(secondStr))
-    micros
-  }
-
-  def toDTInterval(
-    secondStr: String,
-    sign: Int): Long = {
-    var micros = 0L
     micros = Math.addExact(micros, sign * parseSecondNano(secondStr))
     micros
   }
