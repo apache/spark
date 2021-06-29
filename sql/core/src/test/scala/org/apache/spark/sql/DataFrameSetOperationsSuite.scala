@@ -934,34 +934,38 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(unionDF, expected)
 
     // nested struct, inner struct having different col name
-    df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
-    df2 = Seq((1, 2, UnionClass1e(1, 2, Struct4(1)))).toDF("a", "b", "c")
-    val errMsg = intercept[AnalysisException] {
+    df1 = Seq((0, UnionClass1a(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
+    df2 = Seq((1, UnionClass1b(1, 2L, UnionClass3(2, 3L)))).toDF("id", "a")
+    var errMsg = intercept[AnalysisException] {
       df1.unionByName(df2)
     }.getMessage
-    assert(errMsg.contains(
-      "Union can only be performed on tables with the compatible column types." +
-        " struct<c1:int,c2:int,c3:struct<c4:int>> <> struct<c1:int,c2:int,c3:struct<c3:int>>" +
-        " at the third column of the second table"))
+    assert(errMsg.contains("No such struct field c in a, b"))
+
+    // If right side of the nested struct has extra col.
+    df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
+    df2 = Seq((1, 2, UnionClass1e(1, 2, Struct4(1, 5)))).toDF("a", "b", "c")
+    errMsg = intercept[AnalysisException] {
+      df1.unionByName(df2)
+    }.getMessage
+    assert(errMsg.contains("Union can only be performed on tables with" +
+      " the compatible column types." +
+      " struct<c1:int,c2:int,c3:struct<c3:int,c5:int>> <> struct<c1:int,c2:int,c3:struct<c3:int>>" +
+      " at the third column of the second table"))
 
     // diff Case sensitive attributes names and diff sequence scenario for unionByName
     df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
     df2 = Seq((1, 2, UnionClass1f(1, 2, Struct3a(1)))).toDF("a", "b", "c")
     expected =
-      Row(1, 2, Row(1, 2, Row(1, 5))) :: Row(1, 2, Row(2, 1, Row(1, 5))) :: Nil
+      Row(1, 2, Row(1, 2, Row(1))) :: Row(1, 2, Row(2, 1, Row(1))) :: Nil
 
     unionDF = df1.unionByName(df2)
     checkAnswer(unionDF, expected)
 
-    // sorting of sequence based on the lower case
     df1 = Seq((1, Struct1(1, 2))).toDF("a", "b")
     df2 = Seq((1, Struct2a(1, 2))).toDF("a", "b")
-    expected = Row(1, Row(1, 2, 5)) :: Row(1, Row(2, 1, 5)) :: Nil
+    expected = Row(1, Row(1, 2)) :: Row(1, Row(2, 1)) :: Nil
 
     unionDF = df1.unionByName(df2)
-    checkAnswer(unionDF, expected)
-
-    unionDF = df1.unionByName(df2, true)
     checkAnswer(unionDF, expected)
   }
 }
@@ -981,4 +985,4 @@ case class Struct2(c2: Int, c1: Int)
 case class Struct2a(C2: Int, c1: Int)
 case class Struct3(c3: Int)
 case class Struct3a(C3: Int)
-case class Struct4(c4: Int)
+case class Struct4(c3: Int, c5: Int)

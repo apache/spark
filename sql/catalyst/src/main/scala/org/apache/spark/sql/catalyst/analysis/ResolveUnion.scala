@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.Locale
-
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
@@ -60,19 +58,22 @@ object ResolveUnion extends Rule[LogicalPlan] {
           addFields(extractedValue, expectedType, allowMissing)
         case (Some(cf), _) =>
           ExtractValue(col, Literal(cf.name), resolver)
+        // for allowMissingCol allow the null values
         case (None, expectedType) if allowMissing =>
           Literal(null, expectedType)
+        // for allowMissingCol as false throw exception for missing col
+        case (_, _) if !allowMissing =>
+          throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(
+            expectedField.name, colType.fields)
       }
       newStructFields ++= Literal(expectedField.name) :: newExpression :: Nil
     }
 
-    if (allowMissing) {
-      colType.fields
-        .filter(f => targetType.fields.find(tf => resolver(f.name, tf.name)).isEmpty)
-        .foreach { f =>
-          newStructFields ++= Literal(f.name) :: ExtractValue(col, Literal(f.name), resolver) :: Nil
-        }
-    }
+    colType.fields
+      .filter(f => targetType.fields.find(tf => resolver(f.name, tf.name)).isEmpty)
+      .foreach { f =>
+        newStructFields ++= Literal(f.name) :: ExtractValue(col, Literal(f.name), resolver) :: Nil
+      }
 
     val newStruct = CreateNamedStruct(newStructFields.toSeq)
     if (col.nullable) {
