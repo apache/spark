@@ -88,9 +88,13 @@ case class SubExprEliminationState(
   children: Seq[SubExprEliminationState])
 
 object SubExprEliminationState {
+  def apply(eval: ExprCode): SubExprEliminationState = {
+    new SubExprEliminationState(eval, Seq.empty)
+  }
+
   def apply(
       eval: ExprCode,
-      children: Seq[SubExprEliminationState] = Seq.empty): SubExprEliminationState = {
+      children: Seq[SubExprEliminationState]): SubExprEliminationState = {
     new SubExprEliminationState(eval, children.reverse)
   }
 }
