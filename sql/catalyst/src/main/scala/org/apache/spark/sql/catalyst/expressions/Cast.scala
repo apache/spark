@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
-import org.apache.spark.sql.catalyst.util.IntervalStringStyles.ANSI_STYLE
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -273,7 +273,412 @@ object Cast {
   }
 }
 
-abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression with NullIntolerant {
+abstract class CastToStringBase  extends UnaryExpression
+  with TimeZoneAwareExpression with NullIntolerant {
+
+  // The function arguments are: `input`, `result` and `resultIsNull`. We don't need `inputIsNull`
+  // in parameter list, because the returned code will be put in null safe evaluation region.
+  protected[this] type CastFunction = (ExprValue, ExprValue, ExprValue) => Block
+
+  protected lazy val dateFormatter = DateFormatter()
+  protected lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
+  private lazy val timestampWithoutTZFormatter =
+    TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
+
+  protected def legacyCasToStr = true
+  private val legacyCastComplexTypeToStr =
+    SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
+  // The brackets that are used in casting structs and maps to strings
+  protected def leftBracket = if (legacyCastComplexTypeToStr) "[" else "{"
+  protected def rightBracket = if (legacyCastComplexTypeToStr) "]" else "}"
+  protected def arrayElementSpace = " "
+  protected def keyValueSeparator = "->"
+  protected def structTypeWithSchema = false
+
+  // [[func]] assumes the input is no longer null because eval already does the null check.
+  @inline protected[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
+
+  // UDFToString
+  protected[this] def castToString(from: DataType): Any => Any = from match {
+    case DecimalType() if !legacyCasToStr =>
+      buildCast[Decimal](_, i => UTF8String.fromString(i.toJavaBigDecimal.toPlainString))
+    case CalendarIntervalType =>
+      buildCast[CalendarInterval](_, i => UTF8String.fromString(i.toString))
+    case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
+    case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
+    case TimestampType => buildCast[Long](_,
+      t => UTF8String.fromString(timestampFormatter.format(t)))
+    case TimestampWithoutTZType => buildCast[Long](_,
+      t => UTF8String.fromString(timestampWithoutTZFormatter.format(t)))
+    case ArrayType(et, _) =>
+      buildCast[ArrayData](_, array => {
+        val builder = new UTF8StringBuilder
+        builder.append("[")
+        if (array.numElements > 0) {
+          val toUTF8String = castToString(et)
+          if (array.isNullAt(0)) {
+            if (!legacyCasToStr || !legacyCastComplexTypeToStr) {
+              builder.append("null")
+            }
+          } else {
+            builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < array.numElements) {
+            builder.append(",")
+            if (array.isNullAt(i)) {
+              if (!legacyCasToStr || !legacyCastComplexTypeToStr) {
+                builder.append(s"${arrayElementSpace}null")
+              }
+            } else {
+              builder.append(arrayElementSpace)
+              builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append("]")
+        builder.build()
+      })
+    case MapType(kt, vt, _) =>
+      buildCast[MapData](_, map => {
+        val builder = new UTF8StringBuilder
+        builder.append(leftBracket)
+        if (map.numElements > 0) {
+          val keyArray = map.keyArray()
+          val valueArray = map.valueArray()
+          val keyToUTF8String = castToString(kt)
+          val valueToUTF8String = castToString(vt)
+          builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
+          builder.append(s"$arrayElementSpace$keyValueSeparator")
+          if (valueArray.isNullAt(0)) {
+            if (!legacyCasToStr || !legacyCastComplexTypeToStr) {
+              builder.append("null")
+            }
+          } else {
+            builder.append(arrayElementSpace)
+            builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < map.numElements) {
+            builder.append(s",$arrayElementSpace")
+            builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
+            builder.append(s"$arrayElementSpace$keyValueSeparator")
+            if (valueArray.isNullAt(i)) {
+              if (!legacyCasToStr || !legacyCastComplexTypeToStr) {
+                builder.append(s"${arrayElementSpace}null")
+              }
+            } else {
+              builder.append(arrayElementSpace)
+              builder.append(valueToUTF8String(valueArray.get(i, vt))
+                .asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append(rightBracket)
+        builder.build()
+      })
+    case StructType(fields) =>
+      buildCast[InternalRow](_, row => {
+        val builder = new UTF8StringBuilder
+        builder.append(leftBracket)
+        if (row.numFields > 0) {
+          val st = fields.map(_.dataType)
+          val toUTF8StringFuncs = st.map(castToString)
+          if (structTypeWithSchema) {
+            builder.append("\"" + fields(0).name + "\":")
+          }
+          if (row.isNullAt(0)) {
+            if (!legacyCasToStr || !legacyCastComplexTypeToStr) {
+              builder.append("null")
+            }
+          } else {
+            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
+          }
+          var i = 1
+          while (i < row.numFields) {
+            builder.append(",")
+            if (structTypeWithSchema) {
+              builder.append("\"" + fields(i).name + "\":")
+            }
+            if (row.isNullAt(i)) {
+              if (!legacyCasToStr || !legacyCastComplexTypeToStr) {
+                builder.append(s"${arrayElementSpace}null")
+              }
+            } else {
+              builder.append(arrayElementSpace)
+              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
+            }
+            i += 1
+          }
+        }
+        builder.append(rightBracket)
+        builder.build()
+      })
+    case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
+    case udt: UserDefinedType[_] =>
+      buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
+    case YearMonthIntervalType(startField, endField) =>
+      buildCast[Int](_, i => UTF8String.fromString(
+        IntervalUtils.toYearMonthIntervalString(i, if (legacyCasToStr) ANSI_STYLE else HIVE_STYLE,
+          startField, endField)))
+    case DayTimeIntervalType(startField, endField) =>
+      buildCast[Long](_, i => UTF8String.fromString(
+        IntervalUtils.toDayTimeIntervalString(i, if (legacyCasToStr) ANSI_STYLE else HIVE_STYLE,
+          startField, endField)))
+    case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
+  }
+
+
+  protected[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
+    from match {
+      case BinaryType =>
+        (c, evPrim, evNull) => code"$evPrim = UTF8String.fromBytes($c);"
+      case _: DecimalType if !legacyCasToStr =>
+        (c, evPrim, _) =>
+          code"$evPrim = UTF8String.fromString($c.toJavaBigDecimal().toPlainString());"
+      case DateType =>
+        val df = JavaCode.global(
+          ctx.addReferenceObj("dateFormatter", dateFormatter),
+          dateFormatter.getClass)
+        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(${df}.format($c));"""
+      case TimestampType =>
+        val tf = JavaCode.global(
+          ctx.addReferenceObj("timestampFormatter", timestampFormatter),
+          timestampFormatter.getClass)
+        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
+      case TimestampWithoutTZType =>
+        val tf = JavaCode.global(
+          ctx.addReferenceObj("timestampWithoutTZFormatter", timestampWithoutTZFormatter),
+          timestampWithoutTZFormatter.getClass)
+        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
+      case CalendarIntervalType =>
+        (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($c.toString());"""
+      case ArrayType(et, _) =>
+        (c, evPrim, evNull) => {
+          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
+          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
+          val writeArrayElemCode = writeArrayToStringBuilder(et, c, buffer, ctx)
+          code"""
+                |$bufferClass $buffer = new $bufferClass();
+                |$writeArrayElemCode;
+                |$evPrim = $buffer.build();
+           """.stripMargin
+        }
+      case MapType(kt, vt, _) =>
+        (c, evPrim, evNull) => {
+          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
+          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
+          val writeMapElemCode = writeMapToStringBuilder(kt, vt, c, buffer, ctx)
+          code"""
+                |$bufferClass $buffer = new $bufferClass();
+                |$writeMapElemCode;
+                |$evPrim = $buffer.build();
+           """.stripMargin
+        }
+      case StructType(fields) =>
+        (c, evPrim, evNull) => {
+          val row = ctx.freshVariable("row", classOf[InternalRow])
+          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
+          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
+          val writeStructCode = writeStructToStringBuilder(fields, row, buffer, ctx)
+          code"""
+                |InternalRow $row = $c;
+                |$bufferClass $buffer = new $bufferClass();
+                |$writeStructCode
+                |$evPrim = $buffer.build();
+           """.stripMargin
+        }
+      case pudt: PythonUserDefinedType => castToStringCode(pudt.sqlType, ctx)
+      case udt: UserDefinedType[_] =>
+        val udtRef = JavaCode.global(ctx.addReferenceObj("udt", udt), udt.sqlType)
+        (c, evPrim, evNull) => {
+          code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
+        }
+      case i: YearMonthIntervalType =>
+        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
+        val style = if (legacyCasToStr) {
+          s"$iss$$.MODULE$$.ANSI_STYLE()"
+        } else {
+          s"$iss$$.MODULE$$.HIVE_STYLE()"
+        }
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c, $style,
+              (byte)${i.startField}, (byte)${i.endField}));
+          """
+      case i: DayTimeIntervalType =>
+        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
+        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
+        val style = if (legacyCasToStr) {
+          s"$iss$$.MODULE$$.ANSI_STYLE()"
+        } else {
+          s"$iss$$.MODULE$$.HIVE_STYLE()"
+        }
+        (c, evPrim, _) =>
+          code"""
+            $evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c, $style,
+              (byte)${i.startField}, (byte)${i.endField}));
+          """
+      case _ =>
+        (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
+    }
+  }
+
+  protected def appendIfNotLegacyCastToStr(buffer: ExprValue, s: String): Block = {
+    if (!legacyCastComplexTypeToStr) code"""$buffer.append("$s");""" else EmptyBlock
+  }
+
+  protected def writeArrayToStringBuilder(
+      et: DataType,
+      array: ExprValue,
+      buffer: ExprValue,
+      ctx: CodegenContext): Block = {
+    val elementToStringCode = castToStringCode(et, ctx)
+    val funcName = ctx.freshName("elementToString")
+    val element = JavaCode.variable("element", et)
+    val elementStr = JavaCode.variable("elementStr", StringType)
+    val elementToStringFunc = inline"${
+      ctx.addNewFunction(funcName,
+        s"""
+           |private UTF8String $funcName(${CodeGenerator.javaType(et)} $element) {
+           |  UTF8String $elementStr = null;
+           |  ${elementToStringCode(element, elementStr, null /* resultIsNull won't be used */)}
+           |  return elementStr;
+           |}
+       """.stripMargin)
+    }"
+
+    val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
+    code"""
+       |$buffer.append("[");
+       |if ($array.numElements() > 0) {
+       |  if ($array.isNullAt(0)) {
+       |    ${appendIfNotLegacyCastToStr(buffer, "null")}
+       |  } else {
+       |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
+       |  }
+       |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
+       |    $buffer.append(",");
+       |    if ($array.isNullAt($loopIndex)) {
+       |      ${appendIfNotLegacyCastToStr(buffer, s"${arrayElementSpace}null")}
+       |    } else {
+       |      $buffer.append("$arrayElementSpace");
+       |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
+       |    }
+       |  }
+       |}
+       |$buffer.append("]");
+     """.stripMargin
+  }
+
+  protected def writeMapToStringBuilder(
+      kt: DataType,
+      vt: DataType,
+      map: ExprValue,
+      buffer: ExprValue,
+      ctx: CodegenContext): Block = {
+
+    def dataToStringFunc(func: String, dataType: DataType) = {
+      val funcName = ctx.freshName(func)
+      val dataToStringCode = castToStringCode(dataType, ctx)
+      val data = JavaCode.variable("data", dataType)
+      val dataStr = JavaCode.variable("dataStr", StringType)
+      val functionCall = ctx.addNewFunction(funcName,
+        s"""
+           |private UTF8String $funcName(${CodeGenerator.javaType(dataType)} $data) {
+           |  UTF8String $dataStr = null;
+           |  ${dataToStringCode(data, dataStr, null /* resultIsNull won't be used */)}
+           |  return dataStr;
+           |}
+         """.stripMargin)
+      inline"$functionCall"
+    }
+
+    val keyToStringFunc = dataToStringFunc("keyToString", kt)
+    val valueToStringFunc = dataToStringFunc("valueToString", vt)
+    val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
+    val mapKeyArray = JavaCode.expression(s"$map.keyArray()", classOf[ArrayData])
+    val mapValueArray = JavaCode.expression(s"$map.valueArray()", classOf[ArrayData])
+    val getMapFirstKey = CodeGenerator.getValue(mapKeyArray, kt, JavaCode.literal("0", IntegerType))
+    val getMapFirstValue = CodeGenerator.getValue(mapValueArray, vt,
+      JavaCode.literal("0", IntegerType))
+    val getMapKeyArray = CodeGenerator.getValue(mapKeyArray, kt, loopIndex)
+    val getMapValueArray = CodeGenerator.getValue(mapValueArray, vt, loopIndex)
+    code"""
+          |$buffer.append("$leftBracket");
+          |if ($map.numElements() > 0) {
+          |  $buffer.append($keyToStringFunc($getMapFirstKey));
+          |  $buffer.append("$arrayElementSpace$keyValueSeparator");
+          |  if ($map.valueArray().isNullAt(0)) {
+          |    ${appendIfNotLegacyCastToStr(buffer, s"${arrayElementSpace}null")}
+          |  } else {
+          |    $buffer.append("$arrayElementSpace");
+          |    $buffer.append($valueToStringFunc($getMapFirstValue));
+          |  }
+          |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
+          |    $buffer.append(",${arrayElementSpace}");
+          |    $buffer.append($keyToStringFunc($getMapKeyArray));
+          |    $buffer.append("$arrayElementSpace$keyValueSeparator");
+          |    if ($map.valueArray().isNullAt($loopIndex)) {
+          |      ${appendIfNotLegacyCastToStr(buffer, s"${arrayElementSpace}null")}
+          |    } else {
+          |      $buffer.append("${arrayElementSpace}");
+          |      $buffer.append($valueToStringFunc($getMapValueArray));
+          |    }
+          |  }
+          |}
+          |$buffer.append("$rightBracket");
+     """.stripMargin
+  }
+
+  protected def writeStructToStringBuilder(
+    st: Seq[StructField],
+    row: ExprValue,
+    buffer: ExprValue,
+    ctx: CodegenContext): Block = {
+    val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
+      val fieldToStringCode = castToStringCode(ft.dataType, ctx)
+      val field = ctx.freshVariable("field", ft.dataType)
+      val fieldStr = ctx.freshVariable("fieldStr", StringType)
+      val javaType = JavaCode.javaType(ft.dataType)
+      code"""
+            |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
+            |if ($row.isNullAt($i)) {
+            |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "null" else " null")}
+            |} else {
+            |  ${if (i != 0) code"""$buffer.append("$arrayElementSpace");""" else EmptyBlock}
+            |
+            |
+            |  // Append $i field into the string buffer
+            |  $javaType $field = ${CodeGenerator.getValue(row, ft.dataType, s"$i")};
+            |  UTF8String $fieldStr = null;
+            |  ${fieldToStringCode(field, fieldStr, null /* resultIsNull won't be used */)}
+            |  if ($structTypeWithSchema) {
+            |     $buffer.append("\\"${ft.name}\\":");
+            |  }
+            |  $buffer.append($fieldStr);
+            |}
+       """.stripMargin
+    }
+
+    val writeStructCode = ctx.splitExpressions(
+      expressions = structToStringCode.map(_.code),
+      funcName = "fieldToString",
+      arguments = ("InternalRow", row.code) ::
+        (classOf[UTF8StringBuilder].getName, buffer.code) :: Nil)
+
+    code"""
+          |$buffer.append("$leftBracket");
+          |$writeStructCode
+          |$buffer.append("$rightBracket");
+     """.stripMargin
+  }
+}
+
+abstract class CastBase extends CastToStringBase {
 
   def child: Expression
 
@@ -313,134 +718,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   def needsTimeZone: Boolean = Cast.needsTimeZone(child.dataType, dataType)
 
-  // [[func]] assumes the input is no longer null because eval already does the null check.
-  @inline protected[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
-
-  protected lazy val dateFormatter = DateFormatter()
-  protected lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
-  private lazy val timestampWithoutTZFormatter =
-    TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
-
-  private val legacyCastToStr = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
-  // The brackets that are used in casting structs and maps to strings
-  protected def leftBracket = if (legacyCastToStr) "[" else "{"
-  protected def rightBracket = if (legacyCastToStr) "]" else "}"
-  protected def arrayElementSpace = " "
-  protected def keyValueSeparator = "->"
-  protected def structTypeWithSchema = false
-
   // The class name of `DateTimeUtils`
   protected def dateTimeUtilsCls: String = DateTimeUtils.getClass.getName.stripSuffix("$")
-
-  // UDFToString
-  protected[this] def castToString(from: DataType): Any => Any = from match {
-    case CalendarIntervalType =>
-      buildCast[CalendarInterval](_, i => UTF8String.fromString(i.toString))
-    case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
-    case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
-    case TimestampType => buildCast[Long](_,
-      t => UTF8String.fromString(timestampFormatter.format(t)))
-    case TimestampWithoutTZType => buildCast[Long](_,
-      t => UTF8String.fromString(timestampWithoutTZFormatter.format(t)))
-    case ArrayType(et, _) =>
-      buildCast[ArrayData](_, array => {
-        val builder = new UTF8StringBuilder
-        builder.append("[")
-        if (array.numElements > 0) {
-          val toUTF8String = castToString(et)
-          if (array.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append("null")
-          } else {
-            builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
-          }
-          var i = 1
-          while (i < array.numElements) {
-            builder.append(",")
-            if (array.isNullAt(i)) {
-              if (!legacyCastToStr) builder.append(" null")
-            } else {
-              builder.append(" ")
-              builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
-            }
-            i += 1
-          }
-        }
-        builder.append("]")
-        builder.build()
-      })
-    case MapType(kt, vt, _) =>
-      buildCast[MapData](_, map => {
-        val builder = new UTF8StringBuilder
-        builder.append(leftBracket)
-        if (map.numElements > 0) {
-          val keyArray = map.keyArray()
-          val valueArray = map.valueArray()
-          val keyToUTF8String = castToString(kt)
-          val valueToUTF8String = castToString(vt)
-          builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
-          builder.append(" ->")
-          if (valueArray.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append(" null")
-          } else {
-            builder.append(" ")
-            builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
-          }
-          var i = 1
-          while (i < map.numElements) {
-            builder.append(", ")
-            builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
-            builder.append(" ->")
-            if (valueArray.isNullAt(i)) {
-              if (!legacyCastToStr) builder.append(" null")
-            } else {
-              builder.append(" ")
-              builder.append(valueToUTF8String(valueArray.get(i, vt))
-                .asInstanceOf[UTF8String])
-            }
-            i += 1
-          }
-        }
-        builder.append(rightBracket)
-        builder.build()
-      })
-    case StructType(fields) =>
-      buildCast[InternalRow](_, row => {
-        val builder = new UTF8StringBuilder
-        builder.append(leftBracket)
-        if (row.numFields > 0) {
-          val st = fields.map(_.dataType)
-          val toUTF8StringFuncs = st.map(castToString)
-          if (row.isNullAt(0)) {
-            if (!legacyCastToStr) builder.append("null")
-          } else {
-            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
-          }
-          var i = 1
-          while (i < row.numFields) {
-            builder.append(",")
-            if (row.isNullAt(i)) {
-              if (!legacyCastToStr) builder.append(" null")
-            } else {
-              builder.append(" ")
-              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
-            }
-            i += 1
-          }
-        }
-        builder.append(rightBracket)
-        builder.build()
-      })
-    case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
-    case udt: UserDefinedType[_] =>
-      buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
-    case YearMonthIntervalType(startField, endField) =>
-      buildCast[Int](_, i => UTF8String.fromString(
-        IntervalUtils.toYearMonthIntervalString(i, ANSI_STYLE, startField, endField)))
-    case DayTimeIntervalType(startField, endField) =>
-      buildCast[Long](_, i => UTF8String.fromString(
-        IntervalUtils.toDayTimeIntervalString(i, ANSI_STYLE, startField, endField)))
-    case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
-  }
 
   // BinaryConverter
   private[this] def castToBinary(from: DataType): Any => Any = from match {
@@ -944,10 +1223,6 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast))
   }
 
-  // The function arguments are: `input`, `result` and `resultIsNull`. We don't need `inputIsNull`
-  // in parameter list, because the returned code will be put in null safe evaluation region.
-  protected[this] type CastFunction = (ExprValue, ExprValue, ExprValue) => Block
-
   private[this] def nullSafeCastFunction(
       from: DataType,
       to: DataType,
@@ -994,239 +1269,6 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         ${cast(input, result, resultIsNull)}
       }
     """
-  }
-
-  protected def appendIfNotLegacyCastToStr(buffer: ExprValue, s: String): Block = {
-    if (!legacyCastToStr) code"""$buffer.append("$s");""" else EmptyBlock
-  }
-
-  protected def writeArrayToStringBuilder(
-      et: DataType,
-      array: ExprValue,
-      buffer: ExprValue,
-      ctx: CodegenContext): Block = {
-    val elementToStringCode = castToStringCode(et, ctx)
-    val funcName = ctx.freshName("elementToString")
-    val element = JavaCode.variable("element", et)
-    val elementStr = JavaCode.variable("elementStr", StringType)
-    val elementToStringFunc = inline"${ctx.addNewFunction(funcName,
-      s"""
-         |private UTF8String $funcName(${CodeGenerator.javaType(et)} $element) {
-         |  UTF8String $elementStr = null;
-         |  ${elementToStringCode(element, elementStr, null /* resultIsNull won't be used */)}
-         |  return elementStr;
-         |}
-       """.stripMargin)}"
-
-    val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
-    code"""
-       |$buffer.append("[");
-       |if ($array.numElements() > 0) {
-       |  if ($array.isNullAt(0)) {
-       |    ${appendIfNotLegacyCastToStr(buffer, "null")}
-       |  } else {
-       |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
-       |  }
-       |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
-       |    $buffer.append(",");
-       |    if ($array.isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, s"${arrayElementSpace}null")}
-       |    } else {
-       |      $buffer.append("$arrayElementSpace");
-       |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
-       |    }
-       |  }
-       |}
-       |$buffer.append("]");
-     """.stripMargin
-  }
-
-  protected def writeMapToStringBuilder(
-      kt: DataType,
-      vt: DataType,
-      map: ExprValue,
-      buffer: ExprValue,
-      ctx: CodegenContext): Block = {
-
-    def dataToStringFunc(func: String, dataType: DataType) = {
-      val funcName = ctx.freshName(func)
-      val dataToStringCode = castToStringCode(dataType, ctx)
-      val data = JavaCode.variable("data", dataType)
-      val dataStr = JavaCode.variable("dataStr", StringType)
-      val functionCall = ctx.addNewFunction(funcName,
-        s"""
-           |private UTF8String $funcName(${CodeGenerator.javaType(dataType)} $data) {
-           |  UTF8String $dataStr = null;
-           |  ${dataToStringCode(data, dataStr, null /* resultIsNull won't be used */)}
-           |  return dataStr;
-           |}
-         """.stripMargin)
-      inline"$functionCall"
-    }
-
-    val keyToStringFunc = dataToStringFunc("keyToString", kt)
-    val valueToStringFunc = dataToStringFunc("valueToString", vt)
-    val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
-    val mapKeyArray = JavaCode.expression(s"$map.keyArray()", classOf[ArrayData])
-    val mapValueArray = JavaCode.expression(s"$map.valueArray()", classOf[ArrayData])
-    val getMapFirstKey = CodeGenerator.getValue(mapKeyArray, kt, JavaCode.literal("0", IntegerType))
-    val getMapFirstValue = CodeGenerator.getValue(mapValueArray, vt,
-      JavaCode.literal("0", IntegerType))
-    val getMapKeyArray = CodeGenerator.getValue(mapKeyArray, kt, loopIndex)
-    val getMapValueArray = CodeGenerator.getValue(mapValueArray, vt, loopIndex)
-    code"""
-       |$buffer.append("$leftBracket");
-       |if ($map.numElements() > 0) {
-       |  $buffer.append($keyToStringFunc($getMapFirstKey));
-       |  $buffer.append("$arrayElementSpace$keyValueSeparator");
-       |  if ($map.valueArray().isNullAt(0)) {
-       |    ${appendIfNotLegacyCastToStr(buffer, s"${arrayElementSpace}null")}
-       |  } else {
-       |    $buffer.append("$arrayElementSpace");
-       |    $buffer.append($valueToStringFunc($getMapFirstValue));
-       |  }
-       |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
-       |    $buffer.append(",${arrayElementSpace}");
-       |    $buffer.append($keyToStringFunc($getMapKeyArray));
-       |    $buffer.append("$arrayElementSpace$keyValueSeparator");
-       |    if ($map.valueArray().isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, s"${arrayElementSpace}null")}
-       |    } else {
-       |      $buffer.append("${arrayElementSpace}");
-       |      $buffer.append($valueToStringFunc($getMapValueArray));
-       |    }
-       |  }
-       |}
-       |$buffer.append("$rightBracket");
-     """.stripMargin
-  }
-
-  protected def writeStructToStringBuilder(
-      st: Seq[StructField],
-      row: ExprValue,
-      buffer: ExprValue,
-      ctx: CodegenContext): Block = {
-    val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
-      val fieldToStringCode = castToStringCode(ft.dataType, ctx)
-      val field = ctx.freshVariable("field", ft.dataType)
-      val fieldStr = ctx.freshVariable("fieldStr", StringType)
-      val javaType = JavaCode.javaType(ft.dataType)
-      code"""
-         |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
-         |if ($row.isNullAt($i)) {
-         |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "null" else " null")}
-         |} else {
-         |  ${if (i != 0) code"""$buffer.append("$arrayElementSpace");""" else EmptyBlock}
-         |
-         |
-         |  // Append $i field into the string buffer
-         |  $javaType $field = ${CodeGenerator.getValue(row, ft.dataType, s"$i")};
-         |  UTF8String $fieldStr = null;
-         |  ${fieldToStringCode(field, fieldStr, null /* resultIsNull won't be used */)}
-         |  if ($structTypeWithSchema) {
-         |     $buffer.append("\\"${ft.name}\\":");
-         |  }
-         |  $buffer.append($fieldStr);
-         |}
-       """.stripMargin
-    }
-
-    val writeStructCode = ctx.splitExpressions(
-      expressions = structToStringCode.map(_.code),
-      funcName = "fieldToString",
-      arguments = ("InternalRow", row.code) ::
-        (classOf[UTF8StringBuilder].getName, buffer.code) :: Nil)
-
-    code"""
-       |$buffer.append("$leftBracket");
-       |$writeStructCode
-       |$buffer.append("$rightBracket");
-     """.stripMargin
-  }
-
-  protected[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
-    from match {
-      case BinaryType =>
-        (c, evPrim, evNull) => code"$evPrim = UTF8String.fromBytes($c);"
-      case DateType =>
-        val df = JavaCode.global(
-          ctx.addReferenceObj("dateFormatter", dateFormatter),
-          dateFormatter.getClass)
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(${df}.format($c));"""
-      case TimestampType =>
-        val tf = JavaCode.global(
-          ctx.addReferenceObj("timestampFormatter", timestampFormatter),
-          timestampFormatter.getClass)
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
-      case TimestampWithoutTZType =>
-        val tf = JavaCode.global(
-          ctx.addReferenceObj("timestampWithoutTZFormatter", timestampWithoutTZFormatter),
-          timestampWithoutTZFormatter.getClass)
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
-      case CalendarIntervalType =>
-        (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($c.toString());"""
-      case ArrayType(et, _) =>
-        (c, evPrim, evNull) => {
-          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeArrayElemCode = writeArrayToStringBuilder(et, c, buffer, ctx)
-          code"""
-             |$bufferClass $buffer = new $bufferClass();
-             |$writeArrayElemCode;
-             |$evPrim = $buffer.build();
-           """.stripMargin
-        }
-      case MapType(kt, vt, _) =>
-        (c, evPrim, evNull) => {
-          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeMapElemCode = writeMapToStringBuilder(kt, vt, c, buffer, ctx)
-          code"""
-             |$bufferClass $buffer = new $bufferClass();
-             |$writeMapElemCode;
-             |$evPrim = $buffer.build();
-           """.stripMargin
-        }
-      case StructType(fields) =>
-        (c, evPrim, evNull) => {
-          val row = ctx.freshVariable("row", classOf[InternalRow])
-          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeStructCode = writeStructToStringBuilder(fields, row, buffer, ctx)
-          code"""
-             |InternalRow $row = $c;
-             |$bufferClass $buffer = new $bufferClass();
-             |$writeStructCode
-             |$evPrim = $buffer.build();
-           """.stripMargin
-        }
-      case pudt: PythonUserDefinedType => castToStringCode(pudt.sqlType, ctx)
-      case udt: UserDefinedType[_] =>
-        val udtRef = JavaCode.global(ctx.addReferenceObj("udt", udt), udt.sqlType)
-        (c, evPrim, evNull) => {
-          code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
-        }
-      case i: YearMonthIntervalType =>
-        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
-        val style = s"$iss$$.MODULE$$.ANSI_STYLE()"
-        (c, evPrim, _) =>
-          code"""
-            $evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c, $style,
-              (byte)${i.startField}, (byte)${i.endField}));
-          """
-      case i: DayTimeIntervalType =>
-        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
-        val style = s"$iss$$.MODULE$$.ANSI_STYLE()"
-        (c, evPrim, _) =>
-          code"""
-            $evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c, $style,
-              (byte)${i.startField}, (byte)${i.endField}));
-          """
-      case _ =>
-        (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
-    }
   }
 
   private[this] def castToBinaryCode(from: DataType): CastFunction = from match {

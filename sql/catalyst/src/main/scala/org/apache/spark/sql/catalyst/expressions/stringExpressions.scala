@@ -31,13 +31,12 @@ import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UPPER_OR_LOWER}
-import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, IntervalStringStyles, IntervalUtils, MapData, TypeUtils}
-import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.UTF8StringBuilder
-import org.apache.spark.unsafe.types.{ByteArray, CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{ByteArray, UTF8String}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines expressions for string operations.
@@ -2659,207 +2658,12 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
 
   override def dataType: DataType = StringType
 
+  override def legacyCasToStr: Boolean = false
   override def leftBracket: String = "{"
   override def rightBracket: String = "}"
   override def arrayElementSpace: String = ""
   override def keyValueSeparator: String = ":"
   override def structTypeWithSchema: Boolean = true
-
-  // UDFToString
-  override def castToString(from: DataType): Any => Any = from match {
-    case DecimalType() =>
-      buildCast[Decimal](_, i => UTF8String.fromString(i.toJavaBigDecimal.toPlainString))
-    case CalendarIntervalType =>
-      buildCast[CalendarInterval](_, i => UTF8String.fromString(i.toString))
-    case BinaryType => buildCast[Array[Byte]](_, UTF8String.fromBytes)
-    case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
-    case TimestampType => buildCast[Long](_,
-      t => UTF8String.fromString(timestampFormatter.format(t)))
-    case ArrayType(et, _) =>
-      buildCast[ArrayData](_, array => {
-        val builder = new UTF8StringBuilder
-        builder.append("[")
-        if (array.numElements > 0) {
-          val toUTF8String = castToString(et)
-          if (array.isNullAt(0)) {
-            builder.append("null")
-          } else {
-            builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
-          }
-          var i = 1
-          while (i < array.numElements) {
-            builder.append(",")
-            if (array.isNullAt(i)) {
-              builder.append("null")
-            } else {
-              builder.append(arrayElementSpace)
-              builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
-            }
-            i += 1
-          }
-        }
-        builder.append("]")
-        builder.build()
-      })
-    case MapType(kt, vt, _) =>
-      buildCast[MapData](_, map => {
-        val builder = new UTF8StringBuilder
-        builder.append(leftBracket)
-        if (map.numElements > 0) {
-          val keyArray = map.keyArray()
-          val valueArray = map.valueArray()
-          val keyToUTF8String = castToString(kt)
-          val valueToUTF8String = castToString(vt)
-          builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
-          builder.append(keyValueSeparator)
-          if (valueArray.isNullAt(0)) {
-            builder.append("null")
-          } else {
-            builder.append(arrayElementSpace)
-            builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
-          }
-          var i = 1
-          while (i < map.numElements) {
-            builder.append(",")
-            builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
-            builder.append(keyValueSeparator)
-            if (valueArray.isNullAt(i)) {
-              builder.append("null")
-            } else {
-              builder.append(arrayElementSpace)
-              builder.append(valueToUTF8String(valueArray.get(i, vt))
-                .asInstanceOf[UTF8String])
-            }
-            i += 1
-          }
-        }
-        builder.append(rightBracket)
-        builder.build()
-      })
-    case StructType(fields) =>
-      buildCast[InternalRow](_, row => {
-        val builder = new UTF8StringBuilder
-        builder.append(leftBracket)
-        if (row.numFields > 0) {
-          val st = fields.map(_.dataType)
-          val toUTF8StringFuncs = st.map(castToString)
-          if (structTypeWithSchema) {
-            builder.append("\"" + fields(0).name + "\":")
-          }
-          if (row.isNullAt(0)) {
-            builder.append("null")
-          } else {
-            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
-          }
-          var i = 1
-          while (i < row.numFields) {
-            builder.append(",")
-            if (structTypeWithSchema) {
-              builder.append("\"" + fields(i).name + "\":")
-            }
-            if (row.isNullAt(i)) {
-              builder.append("null")
-            } else {
-              builder.append(arrayElementSpace)
-              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
-            }
-            i += 1
-          }
-        }
-        builder.append(rightBracket)
-        builder.build()
-      })
-    case pudt: PythonUserDefinedType => castToString(pudt.sqlType)
-    case udt: UserDefinedType[_] =>
-      buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
-    case YearMonthIntervalType(startField, endField) =>
-      buildCast[Int](_, i => UTF8String.fromString(
-        IntervalUtils.toYearMonthIntervalString(i, HIVE_STYLE, startField, endField)))
-    case DayTimeIntervalType(startField, endField) =>
-      buildCast[Long](_, i => UTF8String.fromString(
-        IntervalUtils.toDayTimeIntervalString(i, HIVE_STYLE, startField, endField)))
-    case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
-  }
-
-  override def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction =
-    from match {
-      case BinaryType =>
-        (c, evPrim, _) => code"${evPrim} = UTF8String.fromBytes($c);"
-      case _: DecimalType =>
-        (c, evPrim, _) =>
-          code"$evPrim = UTF8String.fromString($c.toJavaBigDecimal().toPlainString());"
-      case DateType =>
-        val df = JavaCode.global(
-          ctx.addReferenceObj("timeFormatter", dateFormatter),
-          dateFormatter.getClass)
-        (c, evPrim, _) => code"${evPrim} = UTF8String.fromString(${df}.format($c));"
-      case TimestampType =>
-        val tf = JavaCode.global(
-          ctx.addReferenceObj("timestampFormatter", timestampFormatter),
-          timestampFormatter.getClass)
-        (c, evPrim, _) => code"$evPrim = UTF8String.fromString($tf.format($c));"
-      case CalendarIntervalType =>
-        (c, evPrim, _) => code"$evPrim = UTF8String.fromString($c.toString());"
-      case ArrayType(et, _) =>
-        (c, evPrim, _) => {
-          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeArrayElemCode = writeArrayToStringBuilder(et, c, buffer, ctx)
-          code"""
-                |$bufferClass $buffer = new $bufferClass();
-                |$writeArrayElemCode;
-                |${evPrim} = $buffer.build();
-                 """.stripMargin
-        }
-      case MapType(kt, vt, _) =>
-        (c, evPrim, _) => {
-          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeMapElemCode = writeMapToStringBuilder(kt, vt, c, buffer, ctx)
-          code"""
-                |$bufferClass $buffer = new $bufferClass();
-                |$writeMapElemCode;
-                |$evPrim = $buffer.build();
-                 """.stripMargin
-        }
-      case StructType(fields) =>
-        (c, evPrim, _) => {
-          val row = ctx.freshVariable("row", classOf[InternalRow])
-          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeStructCode =
-            writeStructToStringBuilder(fields, row, buffer, ctx)
-          code"""
-                |InternalRow $row = $c;
-                |$bufferClass $buffer = new $bufferClass();
-                |$writeStructCode
-                |$evPrim = $buffer.build();
-                 """.
-            stripMargin
-        }
-      case _: UserDefinedType[_] =>
-        (c, evPrim, _) => code"$evPrim = UTF8String.fromString($c.toString());"
-      case i: YearMonthIntervalType =>
-        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
-        val style = s"$iss$$.MODULE$$.HIVE_STYLE()"
-        (c, evPrim, _) =>
-          code"""
-            $evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c, $style,
-              (byte)${i.startField}, (byte)${i.endField}));
-          """
-      case i: DayTimeIntervalType =>
-        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
-        val style = s"$iss$$.MODULE$$.HIVE_STYLE()"
-        (c, evPrim, _) =>
-          code"""
-            $evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c, $style,
-              (byte)${i.startField}, (byte)${i.endField}));
-          """
-      case _ =>
-        (c, evPrim, _) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
-    }
 
   override def prettyName: String = "to_pretty_string"
 
