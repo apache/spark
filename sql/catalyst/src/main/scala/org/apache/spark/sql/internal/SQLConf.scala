@@ -3170,7 +3170,7 @@ object SQLConf {
   val LEGACY_CAST_TO_STRING =
     buildConf("spark.sql.legacy.castToString.enabled")
       .internal()
-      .doc("When true, df.show() will print string as origin format." +
+      .doc("When true, df.show() prints the output in the legacy format." +
         " Otherwise, if this is false, df.show() prints the output " +
         "as HiveResult's format.")
       .version("3.2.0")
