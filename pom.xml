@@ -138,10 +138,10 @@
     <derby.version>10.14.2.0</derby.version>
     <parquet.version>1.12.0</parquet.version>
     <orc.version>1.6.8</orc.version>
-    <jetty.version>9.4.40.v20210413</jetty.version>
+    <jetty.version>9.4.42.v20210604</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
     <chill.version>0.9.5</chill.version>
-    <ivy.version>2.4.0</ivy.version>
+    <ivy.version>2.5.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
     If you changes codahale.metrics.version, you also need to change
@@ -2560,7 +2560,7 @@
         <plugin>
           <groupId>net.alchim31.maven</groupId>
           <artifactId>scala-maven-plugin</artifactId>
-          <version>4.3.0</version>
+          <version>4.5.3</version>
           <executions>
             <execution>
               <id>eclipse-add-source</id>
@@ -2604,9 +2604,9 @@
               <arg>-P:silencer:globalFilters=.*deprecated.*</arg>
             </args>
             <jvmArgs>
-              <jvmArg>-Xss64m</jvmArg>
-              <jvmArg>-Xms1024m</jvmArg>
-              <jvmArg>-Xmx1024m</jvmArg>
+              <jvmArg>-Xss128m</jvmArg>
+              <jvmArg>-Xms2048m</jvmArg>
+              <jvmArg>-Xmx2048m</jvmArg>
               <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
             </jvmArgs>
             <javacArgs>

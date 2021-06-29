@@ -153,7 +153,13 @@ object Literal {
   def fromObject(obj: Any): Literal = new Literal(obj, ObjectType(obj.getClass))
 
   def create(v: Any, dataType: DataType): Literal = {
-    Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
+    dataType match {
+      case _: YearMonthIntervalType if v.isInstanceOf[Period] =>
+        Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
+      case _: DayTimeIntervalType if v.isInstanceOf[Duration] =>
+        Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
+      case _ => Literal(CatalystTypeConverters.convertToCatalyst(v), dataType)
+    }
   }
 
   def create[T : TypeTag](v: T): Literal = Try {

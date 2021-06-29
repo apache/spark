@@ -15,15 +15,15 @@
 # limitations under the License.
 #
 from collections import OrderedDict
-from typing import Any, Callable, TYPE_CHECKING, no_type_check
+from typing import Any, Callable, no_type_check
 
 import numpy as np
 from pyspark.sql import functions as F, Column
 from pyspark.sql.pandas.functions import pandas_udf
 from pyspark.sql.types import DoubleType, LongType, BooleanType
 
-if TYPE_CHECKING:
-    from pyspark.pandas.base import IndexOpsMixin
+from pyspark.pandas.base import IndexOpsMixin
+from pyspark.pandas.spark import functions as SF
 
 
 unary_np_spark_mappings = OrderedDict(
@@ -130,8 +130,8 @@ binary_np_spark_mappings = OrderedDict(
 # Copied from pandas.
 # See also https://docs.scipy.org/doc/numpy/reference/arrays.classes.html#standard-array-subclasses
 def maybe_dispatch_ufunc_to_dunder_op(
-    ser_or_index: "IndexOpsMixin", ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-) -> "IndexOpsMixin":
+    ser_or_index: IndexOpsMixin, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
+) -> IndexOpsMixin:
     special = {
         "add",
         "sub",
@@ -196,8 +196,8 @@ def maybe_dispatch_ufunc_to_dunder_op(
 
 # See also https://docs.scipy.org/doc/numpy/reference/arrays.classes.html#standard-array-subclasses
 def maybe_dispatch_ufunc_to_spark_func(
-    ser_or_index: "IndexOpsMixin", ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-) -> "IndexOpsMixin":
+    ser_or_index: IndexOpsMixin, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
+) -> IndexOpsMixin:
     from pyspark.pandas.base import column_op
 
     op_name = ufunc.__name__
@@ -215,7 +215,7 @@ def maybe_dispatch_ufunc_to_spark_func(
         @no_type_check
         def convert_arguments(*args):
             args = [  # type: ignore
-                F.lit(inp) if not isinstance(inp, Column) else inp for inp in args
+                SF.lit(inp) if not isinstance(inp, Column) else inp for inp in args
             ]  # type: ignore
             return np_spark_map_func(*args)
 
