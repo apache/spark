@@ -288,11 +288,11 @@ abstract class CastToStringBase extends UnaryExpression
   protected def toHiveString = false
   private val legacyCastToStr = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
   // The brackets that are used in casting structs and maps to strings
-  protected def leftBracket = if (legacyCastToStr) "[" else "{"
-  protected def rightBracket = if (legacyCastToStr) "]" else "}"
-  protected def arrayElementSpace = " "
-  protected def keyValueSeparator = "->"
-  protected def structTypeWithSchema = false
+  protected def leftBracket = if (toHiveString || !legacyCastToStr) "{" else "["
+  protected def rightBracket = if (toHiveString || !legacyCastToStr) "}" else "]"
+  protected def arrayElementSpace = if (toHiveString) "" else " "
+  protected def keyValueSeparator = if (toHiveString) ":" else "->"
+  protected def structTypeWithSchema = if (toHiveString) true else false
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline protected[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])

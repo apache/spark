@@ -2659,11 +2659,6 @@ case class ToHiveString(child: Expression, timeZoneId: Option[String] = None)
   override def dataType: DataType = StringType
 
   override def toHiveString: Boolean = true
-  override def leftBracket: String = "{"
-  override def rightBracket: String = "}"
-  override def arrayElementSpace: String = ""
-  override def keyValueSeparator: String = ":"
-  override def structTypeWithSchema: Boolean = true
 
   override def prettyName: String = "to_hive_string"
 
