@@ -556,6 +556,14 @@ package object config {
       .intConf
       .createWithDefault(5)
 
+  private[spark] val YARN_CLUSTER_CUSTOM_SUBMIT_CLASS =
+    ConfigBuilder("spark.yarn.custom.submit.class")
+      .doc("This config can be used to override default Yarn Application submission class. " +
+        "This is useful when there is a custom variant of Yarn cluster which requires a " +
+        "modified Yarn client. Users should add the relevant dependencies in classpath.")
+      .stringConf
+      .createWithDefault("org.apache.spark.deploy.yarn.YarnClusterApplication")
+
   private[spark] val IS_PYTHON_APP =
     ConfigBuilder("spark.yarn.isPython")
       .internal()

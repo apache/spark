@@ -227,6 +227,9 @@ private[spark] class SparkSubmit extends Logging {
     val sparkConf = args.toSparkConf()
     var childMainClass = ""
 
+    // update spark config from args
+    args.toSparkConf(Option(sparkConf))
+
     // Set the cluster manager
     val clusterManager: Int = args.master match {
       case "yarn" => YARN
@@ -250,7 +253,8 @@ private[spark] class SparkSubmit extends Logging {
 
     if (clusterManager == YARN) {
       // Make sure YARN is included in our build if we're trying to use it
-      if (!Utils.classIsLoadable(YARN_CLUSTER_SUBMIT_CLASS) && !Utils.isTesting) {
+      if (!Utils.classIsLoadable(sparkConf.get(YARN_CLUSTER_CUSTOM_SUBMIT_CLASS))
+        && !Utils.isTesting) {
         error(
           "Could not load YARN classes. " +
           "This copy of Spark may not have been compiled with YARN support.")
@@ -338,8 +342,6 @@ private[spark] class SparkSubmit extends Logging {
       }
     }
 
-    // update spark config from args
-    args.toSparkConf(Option(sparkConf))
     val hadoopConf = conf.getOrElse(SparkHadoopUtil.newConfiguration(sparkConf))
     val targetDir = Utils.createTempDir()
 
@@ -746,7 +748,7 @@ private[spark] class SparkSubmit extends Logging {
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (isYarnCluster) {
-      childMainClass = YARN_CLUSTER_SUBMIT_CLASS
+      childMainClass = sparkConf.get(YARN_CLUSTER_CUSTOM_SUBMIT_CLASS)
       if (args.isPython) {
         childArgs += ("--primary-py-file", args.primaryResource)
         childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")

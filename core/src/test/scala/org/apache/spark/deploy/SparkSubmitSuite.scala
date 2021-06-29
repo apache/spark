@@ -296,6 +296,50 @@ class SparkSubmitSuite
     sys.props("SPARK_SUBMIT") should be ("true")
   }
 
+  test("handles YARN cluster mode with custom submit class") {
+    val clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--master", "yarn",
+      "--executor-memory", "5g",
+      "--executor-cores", "5",
+      "--class", "org.SomeClass",
+      "--jars", "one.jar,two.jar,three.jar",
+      "--driver-memory", "4g",
+      "--queue", "thequeue",
+      "--files", "file1.txt,file2.txt",
+      "--archives", "archive1.txt,archive2.txt",
+      "--num-executors", "6",
+      "--name", "beauty",
+      "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.yarn.custom.submit.class=org.CustomYarnClusterApplication",
+      "thejar.jar",
+      "arg1", "arg2")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (childArgs, classpath, conf, mainClass) = submit.prepareSubmitEnvironment(appArgs)
+    val childArgsStr = childArgs.mkString(" ")
+    childArgsStr should include ("--class org.SomeClass")
+    childArgsStr should include ("--arg arg1 --arg arg2")
+    childArgsStr should include regex ("--jar .*thejar.jar")
+    mainClass should be ("org.CustomYarnClusterApplication")
+
+    // In yarn cluster mode, also adding jars to classpath
+    classpath(0) should endWith ("thejar.jar")
+    classpath(1) should endWith ("one.jar")
+    classpath(2) should endWith ("two.jar")
+    classpath(3) should endWith ("three.jar")
+
+    conf.get("spark.executor.memory") should be ("5g")
+    conf.get("spark.driver.memory") should be ("4g")
+    conf.get("spark.executor.cores") should be ("5")
+    conf.get("spark.yarn.queue") should be ("thequeue")
+    conf.get("spark.yarn.dist.jars") should include regex (".*one.jar,.*two.jar,.*three.jar")
+    conf.get("spark.yarn.dist.files") should include regex (".*file1.txt,.*file2.txt")
+    conf.get("spark.yarn.dist.archives") should include regex (".*archive1.txt,.*archive2.txt")
+    conf.get("spark.app.name") should be ("beauty")
+    conf.get(UI_ENABLED) should be (false)
+    sys.props("SPARK_SUBMIT") should be ("true")
+  }
+
   test("handles YARN client mode") {
     val clArgs = Seq(
       "--deploy-mode", "client",
