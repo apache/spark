@@ -232,6 +232,10 @@ object UnsupportedOperationChecker extends Logging {
           // Check compatibility with output modes and aggregations in query
           val aggsInQuery = collectStreamingAggregates(plan)
 
+          if (m.initialState.isStreaming) {
+            // initial state has to be a batch relation
+            throwError("Initial state cannot be a streaming relation.")
+          }
           if (m.isMapGroupsWithState) {                       // check mapGroupsWithState
             // allowed only in update query output mode and without aggregation
             if (aggsInQuery.nonEmpty) {

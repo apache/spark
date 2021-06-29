@@ -19,15 +19,18 @@ package org.apache.spark.sql.execution.streaming
 import java.util.concurrent.TimeUnit.NANOSECONDS
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
+import org.apache.spark.sql.catalyst.{InternalRow}
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, BaseOrdering, BoundReference, CaseWhen, Expression, GetStructField, IsNull, Literal, SortOrder, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClusteredDistribution}
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
-import org.apache.spark.util.CompletionIterator
+import org.apache.spark.sql.streaming.GroupStateTimeout.NoTimeout
+import org.apache.spark.util.{CompletionIterator, NextIterator, SerializableConfiguration}
 
 /**
  * Physical operator for executing `FlatMapGroupsWithState`
@@ -39,45 +42,63 @@ import org.apache.spark.util.CompletionIterator
  * @param dataAttributes used to read the data
  * @param outputObjAttr Defines the output object
  * @param stateEncoder used to serialize/deserialize state before calling `func`
+ * @param initStateEncoder encoder for the initial state used to deserialize init state.
  * @param outputMode the output mode of `func`
  * @param timeoutConf used to timeout groups that have not received data in a while
  * @param batchTimestampMs processing timestamp of the current batch.
+ * @param eventTimeWatermark event time watermark for the current batch
+ * @param initialState the user specified initial state
+ * @param hasInitialState indicates whether the initial state is provided or not
+ * @param child the physical plan for the underlying data
  */
 case class FlatMapGroupsWithStateExec(
     func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
+    initStateGroupAttrs: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     stateEncoder: ExpressionEncoder[Any],
+    initStateEncoder: ExpressionEncoder[Any],
     stateFormatVersion: Int,
     outputMode: OutputMode,
     timeoutConf: GroupStateTimeout,
     batchTimestampMs: Option[Long],
     eventTimeWatermark: Option[Long],
+    initialState: SparkPlan,
+    hasInitialState: Boolean,
     child: SparkPlan
-  ) extends UnaryExecNode with ObjectProducerExec with StateStoreWriter with WatermarkSupport {
+  ) extends BinaryExecNode with ObjectProducerExec with StateStoreWriter with WatermarkSupport {
 
   import FlatMapGroupsWithStateExecHelper._
   import GroupStateImpl._
+
+  override def left: SparkPlan = child
+
+  override def right: SparkPlan = initialState
 
   private val isTimeoutEnabled = timeoutConf != NoTimeout
   private val watermarkPresent = child.output.exists {
     case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => true
     case _ => false
   }
+
   private[sql] val stateManager =
     createStateManager(stateEncoder, isTimeoutEnabled, stateFormatVersion)
 
   /** Distribute by grouping attributes */
-  override def requiredChildDistribution: Seq[Distribution] =
-    ClusteredDistribution(groupingAttributes, stateInfo.map(_.numPartitions)) :: Nil
+  override def requiredChildDistribution: Seq[Distribution] = {
+    HashClusteredDistribution(groupingAttributes, stateInfo.map(_.numPartitions)) ::
+    HashClusteredDistribution(initStateGroupAttrs, stateInfo.map(_.numPartitions)) ::
+      Nil
+  }
 
   /** Ordering needed for using GroupingIterator */
-  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
-    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
+      groupingAttributes.map(SortOrder(_, Ascending)),
+      initStateGroupAttrs.map(SortOrder(_, Ascending)))
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
 
@@ -93,6 +114,56 @@ case class FlatMapGroupsWithStateExec(
     }
   }
 
+  /**
+   * Process data by applying the user defined function on a per partition basis.
+   *
+   * @param iter - Iterator of the data rows
+   * @param store - associated state store for this partition
+   * @param processor - handle to the input processor object.
+   * @param initStateIterOption - optional initial state iterator
+   */
+  def processDataWithPartition(
+      iter: Iterator[InternalRow],
+      store: StateStore,
+      processor: InputProcessor,
+      initStateIterOption: Option[Iterator[InternalRow]] = None
+    ): CompletionIterator[InternalRow, Iterator[InternalRow]] = {
+    val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
+    val commitTimeMs = longMetric("commitTimeMs")
+    val updatesStartTimeNs = System.nanoTime
+    // If timeout is based on event time, then filter late data based on watermark
+    val filteredIter = watermarkPredicateForData match {
+      case Some(predicate) if timeoutConf == EventTimeTimeout =>
+        applyRemovingRowsOlderThanWatermark(iter, predicate)
+      case _ =>
+        iter
+    }
+
+    val processedOutputIterator = initStateIterOption match {
+      case Some(initStateIter) if initStateIter.hasNext =>
+        processor.processNewDataWithInitState(filteredIter, initStateIter)
+      case _ => processor.processNewData(filteredIter)
+    }
+
+    // Generate a iterator that returns the rows grouped by the grouping function
+    // Note that this code ensures that the filtering for timeout occurs only after
+    // all the data has been processed. This is to ensure that the timeout information of all
+    // the keys with data is updated before they are processed for timeouts.
+    val outputIterator = processedOutputIterator ++ processor.processTimedOutState()
+
+    // Return an iterator of all the rows generated by all the keys, such that when fully
+    // consumed, all the state updates will be committed by the state store
+    CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator, {
+      // Note: Due to the iterator lazy execution, this metric also captures the time taken
+      // by the upstream (consumer) operators in addition to the processing in this operator.
+      allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
+      commitTimeMs += timeTakenMs {
+        store.commit()
+      }
+      setStoreMetrics(store)
+    })
+  }
+
   override protected def doExecute(): RDD[InternalRow] = {
     metrics // force lazy init at driver
 
@@ -101,51 +172,48 @@ case class FlatMapGroupsWithStateExec(
       case ProcessingTimeTimeout =>
         require(batchTimestampMs.nonEmpty)
       case EventTimeTimeout =>
-        require(eventTimeWatermark.nonEmpty)  // watermark value has been populated
+        require(eventTimeWatermark.nonEmpty) // watermark value has been populated
         require(watermarkExpression.nonEmpty) // input schema has watermark attribute
       case _ =>
     }
 
-    child.execute().mapPartitionsWithStateStore[InternalRow](
-      getStateInfo,
-      groupingAttributes.toStructType,
-      stateManager.stateSchema,
-      indexOrdinal = None,
-      session.sessionState,
-      Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
-        val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
-        val commitTimeMs = longMetric("commitTimeMs")
-        val updatesStartTimeNs = System.nanoTime
+    if (hasInitialState) {
+      // If the user provided initial state we need to have the initial state and the
+      // data in the same partition so that we can still have just one commit at the end.
 
+      val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
+      val hadoopConfBroadcast = sparkContext.broadcast(
+        new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
+      child.execute().stateStoreAwareZipPartitions(
+        initialState.execute(),
+        getStateInfo,
+        storeNames = Seq(),
+        session.sqlContext.streams.stateStoreCoordinator) {
+        case (partitionId, childDataIterator, initStateIterator) =>
+          val stateStoreId = StateStoreId(
+            stateInfo.get.checkpointLocation, stateInfo.get.operatorId, partitionId)
+          val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
+          val store = StateStore.get(
+            storeProviderId,
+            groupingAttributes.toStructType,
+            stateManager.stateSchema,
+            indexOrdinal = None,
+            stateInfo.get.storeVersion, storeConf, hadoopConfBroadcast.value.value)
+          val processor = new InputProcessor(store)
+          processDataWithPartition(childDataIterator, store, processor, Some(initStateIterator))
+      }
+    } else {
+      child.execute().mapPartitionsWithStateStore[InternalRow](
+        getStateInfo,
+        groupingAttributes.toStructType,
+        stateManager.stateSchema,
+        indexOrdinal = None,
+        session.sqlContext.sessionState,
+        Some(session.sqlContext.streams.stateStoreCoordinator)
+      ) { case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
         val processor = new InputProcessor(store)
-
-        // If timeout is based on event time, then filter late data based on watermark
-        val filteredIter = watermarkPredicateForData match {
-          case Some(predicate) if timeoutConf == EventTimeTimeout =>
-            applyRemovingRowsOlderThanWatermark(iter, predicate)
-          case _ =>
-            iter
-        }
-
-        // Generate a iterator that returns the rows grouped by the grouping function
-        // Note that this code ensures that the filtering for timeout occurs only after
-        // all the data has been processed. This is to ensure that the timeout information of all
-        // the keys with data is updated before they are processed for timeouts.
-        val outputIterator = processor.processNewData(filteredIter) ++
-          processor.processTimedOutState()
-
-        // Return an iterator of all the rows generated by all the keys, such that when fully
-        // consumed, all the state updates will be committed by the state store
-        CompletionIterator[InternalRow, Iterator[InternalRow]](outputIterator, {
-            // Note: Due to the iterator lazy execution, this metric also captures the time taken
-            // by the upstream (consumer) operators in addition to the processing in this operator.
-            allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
-            commitTimeMs += timeTakenMs {
-              store.commit()
-            }
-            setStoreMetrics(store)
-          }
-        )
+        processDataWithPartition(singleIterator, store, processor)
+      }
     }
   }
 
@@ -159,6 +227,17 @@ case class FlatMapGroupsWithStateExec(
       ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
     private val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
 
+    private val stateDeserializerExpr: Expression = {
+      val boundRefToNestedState =
+        BoundReference(0, stateEncoder.schema, nullable = true)
+      stateEncoder.resolveAndBind().deserializer.transformUp {
+        case BoundReference(ordinal, _, _) => GetStructField(boundRefToNestedState, ordinal)
+      }
+    }
+
+    private val stateDeserializerFunc = ObjectOperator
+      .deserializeRowToObject(stateDeserializerExpr, stateEncoder.schema.toAttributes)
+
     // Metrics
     private val numUpdatedStateRows = longMetric("numUpdatedStateRows")
     private val numOutputRows = longMetric("numOutputRows")
@@ -171,6 +250,47 @@ case class FlatMapGroupsWithStateExec(
       val groupedIter = GroupedIterator(dataIter, groupingAttributes, child.output)
       groupedIter.flatMap { case (keyRow, valueRowIter) =>
         val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
+        callFunctionAndUpdateState(
+          stateManager.getState(store, keyUnsafeRow),
+          valueRowIter,
+          hasTimedOut = false)
+      }
+    }
+
+    /**
+     * Process the new data iterator along with the initial state. The initial state is applied
+     * before processing the new data for every key. The user defined function is called only
+     * once on the data.
+     */
+    def processNewDataWithInitState(
+        childDataIter: Iterator[InternalRow],
+        initStateIter: Iterator[InternalRow]
+      ): Iterator[InternalRow] = {
+
+      if (!childDataIter.hasNext && !initStateIter.hasNext) return Iterator.empty
+
+      val groupedChildDataIter = GroupedIterator(childDataIter, groupingAttributes, child.output)
+      val groupedInitStateIter =
+        GroupedIterator(initStateIter, initStateGroupAttrs, initialState.output)
+
+      val keyOrderingComparator = GenerateOrdering.generate(
+        groupingAttributes.map(SortOrder(_, Ascending)), groupingAttributes)
+
+      FlatMapGroupsWithStateExec.mergeGroupedIters(
+          groupedChildDataIter,
+          groupedInitStateIter,
+          keyOrderingComparator).flatMap { case (keyRow, valueRowIter, initStateRowOption) =>
+        val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
+        var foundInitStateForKey = false
+        initStateRowOption.foreach { initStateRow =>
+          if (foundInitStateForKey) {
+            throw new IllegalArgumentException("The initial state provided contained duplicates")
+          }
+          foundInitStateForKey = true
+          val fields = initStateRow.toSeq(initStateEncoder.schema)
+          val initStateObj = stateDeserializerFunc(InternalRow(fields(1)))
+          stateManager.putState(store, keyUnsafeRow, initStateObj, NO_TIMESTAMP)
+        }
         callFunctionAndUpdateState(
           stateManager.getState(store, keyUnsafeRow),
           valueRowIter,
@@ -250,6 +370,63 @@ case class FlatMapGroupsWithStateExec(
     }
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): FlatMapGroupsWithStateExec =
-    copy(child = newChild)
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): FlatMapGroupsWithStateExec =
+    copy(child = newLeft, initialState = newRight)
+}
+
+object FlatMapGroupsWithStateExec {
+
+  /**
+   * This method merges two grouped iterators such that we have a combined iterator
+   * Iterator (K, Iterator(v), Iterator(s))
+   * @param leftGrpItr - Iterator (K, Iterator(V))
+   * @param rightGrpItr - Iterator (K, Iterator(S))
+   * @param comparator - BaseOrdering that can compare the items from both the iterators.
+   */
+  def mergeGroupedIters(
+      leftGrpItr: Iterator[(InternalRow, Iterator[InternalRow])],
+      rightGrpItr: Iterator[(InternalRow, Iterator[InternalRow])],
+      comparator: BaseOrdering
+    ): Iterator[(InternalRow, Iterator[InternalRow], Iterator[InternalRow])] = {
+    new NextIterator[(InternalRow, Iterator[InternalRow], Iterator[InternalRow])] {
+
+      var leftRow: (InternalRow, Iterator[InternalRow]) = null
+      var rightRow: (InternalRow, Iterator[InternalRow]) = null
+
+      override def getNext(): (InternalRow, Iterator[InternalRow], Iterator[InternalRow]) = {
+        if (leftRow == null && leftGrpItr.hasNext) {
+          leftRow = leftGrpItr.next()
+        }
+        if (rightRow == null && rightGrpItr.hasNext) {
+          rightRow = rightGrpItr.next()
+        }
+        if (leftRow == null && rightRow == null) {
+          finished = true
+          return null
+        }
+        val comparison =
+          if (leftRow != null && rightRow != null) comparator.compare(leftRow._1, rightRow._1)
+          else if (leftRow != null) -1
+          else 1
+
+        if (comparison == 0) {
+          val ret = (leftRow._1, leftRow._2, rightRow._2)
+          leftRow = null
+          rightRow = null
+          ret
+        } else if (comparison < 0) {
+          val ret = (leftRow._1, leftRow._2, Iterator.empty)
+          leftRow = null
+          ret
+        } else {
+          val ret = (rightRow._1, Iterator.empty, rightRow._2)
+          rightRow = null
+          ret
+        }
+      }
+
+      override protected def close(): Unit = { }
+    }
+  }
 }

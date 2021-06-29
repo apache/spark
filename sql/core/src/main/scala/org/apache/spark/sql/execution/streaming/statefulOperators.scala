@@ -148,7 +148,9 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
 }
 
 /** An operator that supports watermark. */
-trait WatermarkSupport extends UnaryExecNode {
+trait WatermarkSupport {
+
+  def child: SparkPlan
 
   /** The keys that may have a watermark attribute. */
   def keyExpressions: Seq[Attribute]
