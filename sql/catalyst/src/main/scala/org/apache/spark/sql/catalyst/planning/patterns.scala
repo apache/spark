@@ -325,11 +325,11 @@ object PhysicalAggregation {
           case ae: AggregateExpression =>
             // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
             // so replace each aggregate expression by its corresponding attribute in the set:
-            equivalentAggregateExpressions.getEquivalentExprs(ae).headOption
+            equivalentAggregateExpressions.getExprState(ae).map(_.expr)
               .getOrElse(ae).asInstanceOf[AggregateExpression].resultAttribute
             // Similar to AggregateExpression
           case ue: PythonUDF if PythonUDF.isGroupedAggPandasUDF(ue) =>
-            equivalentAggregateExpressions.getEquivalentExprs(ue).headOption
+            equivalentAggregateExpressions.getExprState(ue).map(_.expr)
               .getOrElse(ue).asInstanceOf[PythonUDF].resultAttribute
           case expression if !expression.foldable =>
             // Since we're using `namedGroupingAttributes` to extract the grouping key

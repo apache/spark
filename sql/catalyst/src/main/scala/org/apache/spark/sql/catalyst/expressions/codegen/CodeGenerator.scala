@@ -83,9 +83,7 @@ object ExprCode {
  *                 particular subexpressions, instead of all at once. In the case, we need
  *                 to make sure we evaluate all children subexpressions too.
  */
-case class SubExprEliminationState(
-  eval: ExprCode,
-  children: Seq[SubExprEliminationState])
+case class SubExprEliminationState(eval: ExprCode, children: Seq[SubExprEliminationState])
 
 object SubExprEliminationState {
   def apply(eval: ExprCode): SubExprEliminationState = {
@@ -108,8 +106,8 @@ object SubExprEliminationState {
  *                              calling common subexpressions.
  */
 case class SubExprCodes(
-  states: Map[Expression, SubExprEliminationState],
-  exprCodesNeedEvaluate: Seq[ExprCode])
+    states: Map[ExpressionEquals, SubExprEliminationState],
+    exprCodesNeedEvaluate: Seq[ExprCode])
 
 /**
  * The main information about a new added function.
@@ -426,7 +424,8 @@ class CodegenContext extends Logging {
 
   // Foreach expression that is participating in subexpression elimination, the state to use.
   // Visible for testing.
-  private[expressions] var subExprEliminationExprs = Map.empty[Expression, SubExprEliminationState]
+  private[expressions] var subExprEliminationExprs =
+    Map.empty[ExpressionEquals, SubExprEliminationState]
 
   // The collection of sub-expression result resetting methods that need to be called on each row.
   private val subexprFunctions = mutable.ArrayBuffer.empty[String]
@@ -1031,7 +1030,7 @@ class CodegenContext extends Logging {
    * expressions and common expressions, instead of using the mapping in current context.
    */
   def withSubExprEliminationExprs(
-      newSubExprEliminationExprs: Map[Expression, SubExprEliminationState])(
+      newSubExprEliminationExprs: Map[ExpressionEquals, SubExprEliminationState])(
       f: => Seq[ExprCode]): Seq[ExprCode] = {
     val oldsubExprEliminationExprs = subExprEliminationExprs
     subExprEliminationExprs = newSubExprEliminationExprs
@@ -1098,29 +1097,30 @@ class CodegenContext extends Logging {
     // Create a clear EquivalentExpressions and SubExprEliminationState mapping
     val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
     val localSubExprEliminationExprsForNonSplit =
-      mutable.HashMap.empty[Expression, SubExprEliminationState]
+      mutable.HashMap.empty[ExpressionEquals, SubExprEliminationState]
 
     // Add each expression tree and compute the common subexpressions.
     expressions.foreach(equivalentExpressions.addExprTree(_))
 
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
-    val commonExprs = equivalentExpressions.getAllEquivalentExprs(1)
+    val commonExprs = equivalentExpressions.getCommonSubexpressions
 
     val nonSplitCode = {
       val allStates = mutable.ArrayBuffer.empty[SubExprEliminationState]
-      commonExprs.map { exprs =>
+      commonExprs.map { expr =>
         withSubExprEliminationExprs(localSubExprEliminationExprsForNonSplit.toMap) {
-          val eval = exprs.head.genCode(this)
+          val eval = expr.genCode(this)
           // Collects other subexpressions from the children.
           val childrenSubExprs = mutable.ArrayBuffer.empty[SubExprEliminationState]
-          exprs.head.foreach {
-            case e if subExprEliminationExprs.contains(e) =>
-              childrenSubExprs += subExprEliminationExprs(e)
-            case _ =>
+          expr.foreach { e =>
+            subExprEliminationExprs.get(ExpressionEquals(e)) match {
+              case Some(state) => childrenSubExprs += state
+              case _ =>
+            }
           }
           val state = SubExprEliminationState(eval, childrenSubExprs.toSeq)
-          exprs.foreach(localSubExprEliminationExprsForNonSplit.put(_, state))
+          localSubExprEliminationExprsForNonSplit.put(ExpressionEquals(expr), state)
           allStates += state
           Seq(eval)
         }
@@ -1133,7 +1133,7 @@ class CodegenContext extends Logging {
     // evaluate the outputs used more than twice. So we need to extract these variables used by
     // subexpressions and evaluate them before subexpressions.
     val (inputVarsForAllFuncs, exprCodesNeedEvaluate) = commonExprs.map { expr =>
-      val (inputVars, exprCodes) = getLocalInputVariableValues(this, expr.head)
+      val (inputVars, exprCodes) = getLocalInputVariableValues(this, expr)
       (inputVars.toSeq, exprCodes.toSeq)
     }.unzip
 
@@ -1141,10 +1141,9 @@ class CodegenContext extends Logging {
     val (subExprsMap, exprCodes) = if (needSplit) {
       if (inputVarsForAllFuncs.map(calculateParamLengthFromExprValues).forall(isValidParamLength)) {
         val localSubExprEliminationExprs =
-          mutable.HashMap.empty[Expression, SubExprEliminationState]
+          mutable.HashMap.empty[ExpressionEquals, SubExprEliminationState]
 
-        commonExprs.zipWithIndex.foreach { case (exprs, i) =>
-          val expr = exprs.head
+        commonExprs.zipWithIndex.foreach { case (expr, i) =>
           val eval = withSubExprEliminationExprs(localSubExprEliminationExprs.toMap) {
             Seq(expr.genCode(this))
           }.head
@@ -1178,10 +1177,11 @@ class CodegenContext extends Logging {
 
           // Collects other subexpressions from the children.
           val childrenSubExprs = mutable.ArrayBuffer.empty[SubExprEliminationState]
-          exprs.head.foreach {
-            case e if localSubExprEliminationExprs.contains(e) =>
-              childrenSubExprs += localSubExprEliminationExprs(e)
-            case _ =>
+          expr.foreach { e =>
+            localSubExprEliminationExprs.get(ExpressionEquals(e)) match {
+              case Some(state) => childrenSubExprs += state
+              case _ =>
+            }
           }
 
           val inputVariables = inputVars.map(_.variableName).mkString(", ")
@@ -1189,7 +1189,7 @@ class CodegenContext extends Logging {
           val state = SubExprEliminationState(
             ExprCode(code, isNull, JavaCode.global(value, expr.dataType)),
             childrenSubExprs.toSeq)
-          exprs.foreach(localSubExprEliminationExprs.put(_, state))
+          localSubExprEliminationExprs.put(ExpressionEquals(expr), state)
         }
         (localSubExprEliminationExprs, exprCodesNeedEvaluate)
       } else {
@@ -1217,9 +1217,8 @@ class CodegenContext extends Logging {
 
     // Get all the expressions that appear at least twice and set up the state for subexpression
     // elimination.
-    val commonExprs = equivalentExpressions.getAllEquivalentExprs(1)
-    commonExprs.foreach { e =>
-      val expr = e.head
+    val commonExprs = equivalentExpressions.getCommonSubexpressions
+    commonExprs.foreach { expr =>
       val fnName = freshName("subExpr")
       val isNull = addMutableState(JAVA_BOOLEAN, "subExprIsNull")
       val value = addMutableState(javaType(expr.dataType), "subExprValue")
@@ -1255,7 +1254,7 @@ class CodegenContext extends Logging {
         ExprCode(code"$subExprCode",
           JavaCode.isNullGlobal(isNull),
           JavaCode.global(value, expr.dataType)))
-      subExprEliminationExprs ++= e.map(_ -> state).toMap
+      subExprEliminationExprs += ExpressionEquals(expr) -> state
     }
   }
 
@@ -1834,7 +1833,7 @@ object CodeGenerator extends Logging {
   def getLocalInputVariableValues(
       ctx: CodegenContext,
       expr: Expression,
-      subExprs: Map[Expression, SubExprEliminationState] = Map.empty)
+      subExprs: Map[ExpressionEquals, SubExprEliminationState] = Map.empty)
       : (Set[VariableValue], Set[ExprCode]) = {
     val argSet = mutable.Set[VariableValue]()
     val exprCodesNeedEvaluate = mutable.Set[ExprCode]()
@@ -1852,10 +1851,6 @@ object CodeGenerator extends Logging {
     val stack = mutable.Stack[Expression](expr)
     while (stack.nonEmpty) {
       stack.pop() match {
-        case e if subExprs.contains(e) =>
-          collectLocalVariable(subExprs(e).eval.value)
-          collectLocalVariable(subExprs(e).eval.isNull)
-
         case ref: BoundReference if ctx.currentVars != null &&
             ctx.currentVars(ref.ordinal) != null =>
           val exprCode = ctx.currentVars(ref.ordinal)
@@ -1868,7 +1863,13 @@ object CodeGenerator extends Logging {
           collectLocalVariable(exprCode.isNull)
 
         case e =>
-          stack.pushAll(e.children)
+          subExprs.get(ExpressionEquals(e)) match {
+            case Some(state) =>
+              collectLocalVariable(state.eval.value)
+              collectLocalVariable(state.eval.isNull)
+            case None =>
+              stack.pushAll(e.children)
+          }
       }
     }
 
