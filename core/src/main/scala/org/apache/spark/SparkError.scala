@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
  * @param message C-style message format compatible with printf.
  *                The error message is constructed by concatenating the lines with newlines.
  */
-case class ErrorInfo(sqlState: Option[String], message: Seq[String]) {
+private[spark] class ErrorInfo(sqlState: Option[String], message: Seq[String]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
   val messageFormat: String = message.mkString("\n")
@@ -45,7 +45,7 @@ case class ErrorInfo(sqlState: Option[String], message: Seq[String]) {
  * Companion object used by instances of [[SparkError]] to access error class information and
  * construct error messages.
  */
-object SparkError {
+private[spark] object SparkError {
   val errorClassesUrl: URL =
     Utils.getSparkClassLoader.getResource("error/error-classes.json")
   val errorClassToInfoMap: SortedMap[String, ErrorInfo] = {
@@ -76,7 +76,8 @@ trait SparkError extends Throwable {
   val messageParameters: Seq[String]
 
   // Derived from error class
-  val errorInfo: Option[ErrorInfo] = errorClass.flatMap(SparkError.errorClassToInfoMap.get)
+  private val errorInfo: Option[ErrorInfo] =
+    errorClass.flatMap(SparkError.errorClassToInfoMap.get)
   // None if the error class or SQLSTATE are not set
   val sqlState: Option[String] = errorInfo.flatMap(_.sqlState)
   // None if the error class is not set

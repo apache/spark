@@ -27,8 +27,8 @@ Throw exception:
 `error-class.json`
 
     "PROBLEM_BECAUSE": {
-      "sqlState": "XXXXX", 
-      "message": ["Problem %s because %s"]
+      "message": ["Problem %s because %s"],
+      "sqlState": "XXXXX"
     }
 
 `SparkException.scala`
@@ -69,21 +69,21 @@ Invariants:
 - Consistent across releases
 - Sorted alphabetically
 
+### Message
+
+Error messages provide a descriptive, human-readable representation of the error.
+The message format accepts string parameters via the C-style printf syntax.
+
+Invariants:
+
+- Unique
+
 ### SQLSTATE
 
-SQLSTATE is a portable error identifier across SQL engines.
+SQLSTATE is an optional portable error identifier across SQL engines.
 For consistency, Spark only sets SQLSTATE as defined in the ANSI/ISO standard.
 Spark does not define its own classes or subclasses.
 
 Invariants:
 
 - Consistent across releases
-
-### Message
-
-Error messages provide a descriptive, human-readable representation of the error.
-The message format is written to accept string parameters via the C-style printf syntax.
-
-Invariants:
-
-- Unique
