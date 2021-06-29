@@ -290,7 +290,9 @@ class Dataset[T] private[sql](
         if (sparkSession.sessionState.conf.legacyCastToString) {
           Column(col).cast(StringType)
         } else {
-          Column(col).toPrettyString
+          val expr = ToHiveString(col)
+          expr.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+          new Column(expr)
         }
       }
     }

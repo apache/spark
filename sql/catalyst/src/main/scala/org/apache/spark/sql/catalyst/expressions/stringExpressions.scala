@@ -2650,7 +2650,7 @@ case class Sentences(
 
 }
 
-case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
+case class ToHiveString(child: Expression, timeZoneId: Option[String] = None)
   extends CastBase {
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -2658,16 +2658,16 @@ case class ToPrettyString(child: Expression, timeZoneId: Option[String] = None)
 
   override def dataType: DataType = StringType
 
-  override def legacyCasToStr: Boolean = false
+  override def toHiveStr: Boolean = true
   override def leftBracket: String = "{"
   override def rightBracket: String = "}"
   override def arrayElementSpace: String = ""
   override def keyValueSeparator: String = ":"
   override def structTypeWithSchema: Boolean = true
 
-  override def prettyName: String = "to_pretty_string"
+  override def prettyName: String = "to_hive_string"
 
-  override protected def withNewChildInternal(newChild: Expression): ToPrettyString =
+  override protected def withNewChildInternal(newChild: Expression): ToHiveString =
     copy(child = newChild)
 
   override def canCast(from: DataType, to: DataType): Boolean = true
