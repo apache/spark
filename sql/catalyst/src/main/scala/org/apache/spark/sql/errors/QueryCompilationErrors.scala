@@ -1738,14 +1738,6 @@ private[spark] object QueryCompilationErrors {
       s"Text data source supports only a single column, and you have ${schema.size} columns.")
   }
 
-  def cannotResolveFieldReferenceError(ref: FieldReference, query: LogicalPlan): Throwable = {
-    new AnalysisException(s"Cannot resolve '$ref' using ${query.output}")
-  }
-
-  def v2ExpressionUnsupportedError(expr: V2Expression): Throwable = {
-    new AnalysisException(s"$expr is not currently supported")
-  }
-
   def cannotFindPartitionColumnInPartitionSchemaError(
       readField: StructField, partitionSchema: StructType): Throwable = {
     new AnalysisException(s"Can't find required partition column ${readField.name} " +
