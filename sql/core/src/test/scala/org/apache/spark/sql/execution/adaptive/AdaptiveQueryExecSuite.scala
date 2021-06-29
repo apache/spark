@@ -1854,21 +1854,9 @@ class AdaptiveQueryExecSuite
         // test without coalesced
         withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
           // partition size [0,258,72,72,72]
-          checkPartitionNumber("SELECT /*+ REBALANCE(c1) */ * FROM v", 3, 6)
+          checkPartitionNumber("SELECT /*+ REBALANCE(c1) */ * FROM v", 3, 7)
           // partition size [72,216,216,144,72]
           checkPartitionNumber("SELECT /*+ REBALANCE */ * FROM v", 8, 10)
-
-          // extra shuffle
-          checkPartitionNumber(
-            "SELECT c1, count(*) FROM (SELECT /*+ REBALANCE(c1) */ * FROM v) GROUP BY c1",
-            0,
-            4)
-        }
-
-        // test with coalesced
-        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "200") {
-          // partition size [0,258,72,72,72]
-          checkPartitionNumber("SELECT /*+ REBALANCE(c1) */ * FROM v", 2, 4)
         }
 
         // no partition should be expanded

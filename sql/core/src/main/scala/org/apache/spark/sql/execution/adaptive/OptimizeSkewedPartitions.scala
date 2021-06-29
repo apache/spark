@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -34,38 +34,25 @@ import org.apache.spark.sql.internal.SQLConf
  *                          (without this rule) r1[m0-b1, m1-b1, m2-b1]
  *                              /                              \
  *   r0:[m0-b0, m1-b0, m2-b0], r1:[m0-b1], r2:[m1-b1], r3:[m2-b1], r4[m0-b2, m1-b2, m2-b2]
+ *
+ * Note that, this rule is only applied with the SparkPlan whose top-level node is
+ * ShuffleQueryStageExec.
  */
 object OptimizeSkewedPartitions extends CustomShuffleReaderRule {
   override def supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(REBALANCE_PARTITIONS_BY_NONE, REBALANCE_PARTITIONS_BY_COL)
 
-  private def expandPartitions(plan: SparkPlan): SparkPlan = {
-    def collectShuffleStageInfos(plan: SparkPlan): Seq[ShuffleStageInfo] = plan match {
-      case ShuffleStageInfo(stage, specs) => Seq(new ShuffleStageInfo(stage, specs))
-      case _ => plan.children.flatMap(collectShuffleStageInfos)
-    }
-    val shuffleStageInfos = collectShuffleStageInfos(plan)
-    assert(shuffleStageInfos.size == 1)
-    val shuffleStageInfo = shuffleStageInfos.head
-    if (!supportCoalesce(shuffleStageInfo.shuffleStage.shuffle)) {
-      return plan
-    }
-
+  private def expandPartitions(shuffle: ShuffleQueryStageExec): SparkPlan = {
     val advisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
-    val mapStats = shuffleStageInfo.shuffleStage.mapStats
+    val mapStats = shuffle.mapStats
     if (mapStats.isEmpty ||
       mapStats.get.bytesByPartitionId.forall(_ <= advisorySize)) {
-      return plan
+      return shuffle
     }
 
-    val newPartitionsSpec = ShufflePartitionsUtil.expandPartitions(
-      mapStats.get, shuffleStageInfo.partitionSpecs, advisorySize)
-    def updateShuffleReaders(p: SparkPlan): SparkPlan = p match {
-      case ShuffleStageInfo(stage, _) =>
-        CustomShuffleReaderExec(stage, newPartitionsSpec)
-      case _ => p.mapChildren(updateShuffleReaders)
-    }
-    updateShuffleReaders(plan)
+    val newPartitionsSpec = ShufflePartitionsUtil.optimizeSkewedPartitions(
+      mapStats.get.shuffleId, mapStats.get.bytesByPartitionId, advisorySize)
+    CustomShuffleReaderExec(shuffle, newPartitionsSpec)
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
@@ -73,22 +60,10 @@ object OptimizeSkewedPartitions extends CustomShuffleReaderRule {
       return plan
     }
 
-    val leaves = plan.collectLeaves()
-    // We only handle the shuffle which is introduced by REBALANCE
-    if (leaves.size != 1 || !leaves.head.isInstanceOf[ShuffleQueryStageExec]) {
-      return plan
-    }
-
-    val newPlan = expandPartitions(plan)
-    val extraShuffle = EnsureRequirements.apply(newPlan).find {
-      case _: ShuffleExchangeLike => true
-      case _ => false
-    }
-    // For safe, we don't expand partition if introduce extra shuffle.
-    if (extraShuffle.isDefined) {
-      plan
-    } else {
-      newPlan
+    plan match {
+      case shuffle: ShuffleQueryStageExec if supportCoalesce(shuffle.shuffle) =>
+        expandPartitions(shuffle)
+      case _ => plan
     }
   }
 
