@@ -2857,19 +2857,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>3.2.1</version>
-          <dependencies>
-            <dependency>
-              <groupId>org.ow2.asm</groupId>
-              <artifactId>asm</artifactId>
-              <version>7.3.1</version>
-            </dependency>
-            <dependency>
-              <groupId>org.ow2.asm</groupId>
-              <artifactId>asm-commons</artifactId>
-              <version>7.3.1</version>
-            </dependency>
-          </dependencies>
+          <version>3.2.4</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
