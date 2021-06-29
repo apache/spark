@@ -1263,7 +1263,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     assert(!iterator.hasNext)
   }
 
-  test("SPARK-32922: failure to fetch local push-merged meta should fallback to fetch " +
+  test("SPARK-32922: failure to fetch push-merged-local meta should fallback to fetch " +
     "original shuffle blocks") {
     val blockManager = mock(classOf[BlockManager])
     val localDirs = Array("testPath1", "testPath2")
@@ -1276,7 +1276,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     verifyLocalBlocksFromFallback(iterator)
   }
 
-  test("SPARK-32922: failure to reading chunkBitmaps of local push-merged meta should " +
+  test("SPARK-32922: failure to reading chunkBitmaps of push-merged-local meta should " +
     "fallback to original shuffle blocks") {
     val blockManager = mock(classOf[BlockManager])
     val localDirs = Array("local-dir")
@@ -1288,7 +1288,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     verifyLocalBlocksFromFallback(iterator)
   }
 
-  test("SPARK-32922: failure to fetch local push-merged data should fallback to fetch " +
+  test("SPARK-32922: failure to fetch push-merged-local data should fallback to fetch " +
     "original shuffle blocks") {
     val blockManager = mock(classOf[BlockManager])
     val localDirs = Array("testPath1", "testPath2")
@@ -1301,8 +1301,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     verifyLocalBlocksFromFallback(iterator)
   }
 
-  test("SPARK-32922: failure to fetch local push-merged meta of a single merged block " +
-    "should not drop the fetch of other local push-merged blocks") {
+  test("SPARK-32922: failure to fetch push-merged-local meta of a single merged block " +
+    "should not drop the fetch of other push-merged-local blocks") {
     val blockManager = mock(classOf[BlockManager])
     val localDirs = Array("testPath1", "testPath2")
     prepareForFallbackToLocalBlocks(
@@ -1375,7 +1375,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     intercept[FetchFailedException] { iterator.next() }
   }
 
-  test("SPARK-32922: failure to fetch local push-merged block should fallback to fetch " +
+  test("SPARK-32922: failure to fetch push-merged-local block should fallback to fetch " +
     "original shuffle blocks which contain host-local blocks") {
     val blockManager = mock(classOf[BlockManager])
     // BlockManagerId from another executor on the same host

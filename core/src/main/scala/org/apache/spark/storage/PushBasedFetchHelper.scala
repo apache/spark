@@ -71,7 +71,7 @@ private class PushBasedFetchHelper(
   }
 
   /**
-   * Returns true if the address is of a local push-merged block. false otherwise.
+   * Returns true if the address is of a push-merged-local block. false otherwise.
    */
   def isLocalPushMergedBlockAddress(address: BlockManagerId): Boolean = {
     isPushMergedShuffleBlockAddress(address) && address.host == blockManager.blockManagerId.host
@@ -190,14 +190,14 @@ private class PushBasedFetchHelper(
     val cachedPushedMergedDirs = hostLocalDirManager.getCachedHostLocalDirsFor(
       SHUFFLE_MERGER_IDENTIFIER)
     if (cachedPushedMergedDirs.isDefined) {
-      logDebug(s"Fetch the local push-merged blocks with cached merged dirs: " +
+      logDebug(s"Fetch the push-merged-local blocks with cached merged dirs: " +
         s"${cachedPushedMergedDirs.get.mkString(", ")}")
       pushMergedLocalBlocks.foreach { blockId =>
         fetchPushMergedLocalBlock(blockId, cachedPushedMergedDirs.get,
           localShuffleMergerBlockMgrId)
       }
     } else {
-      logDebug(s"Asynchronous fetch the local push-merged blocks without cached merged dirs")
+      logDebug(s"Asynchronous fetch the push-merged-local blocks without cached merged dirs")
       hostLocalDirManager.getHostLocalDirs(localShuffleMergerBlockMgrId.host,
         localShuffleMergerBlockMgrId.port, Array(SHUFFLE_MERGER_IDENTIFIER)) {
         case Success(dirs) =>
@@ -211,9 +211,9 @@ private class PushBasedFetchHelper(
                 localShuffleMergerBlockMgrId)
           }
         case Failure(throwable) =>
-          // If we see an exception with getting the local dirs for local push-merged blocks,
+          // If we see an exception with getting the local dirs for push-merged-local blocks,
           // we fallback to fetch the original blocks. We do not report block fetch failure.
-          logWarning(s"Error while fetching the merged dirs for local push-merged " +
+          logWarning(s"Error while fetching the merged dirs for push-merged-local " +
             s"blocks: ${pushMergedLocalBlocks.mkString(", ")}. Fetch the original blocks instead",
             throwable)
           pushMergedLocalBlocks.foreach {
@@ -226,7 +226,7 @@ private class PushBasedFetchHelper(
   }
 
   /**
-   * Fetch a single local push-merged block generated. This can also be executed by the task thread
+   * Fetch a single push-merged-local block generated. This can also be executed by the task thread
    * as well as the netty thread.
    * @param blockId ShuffleBlockId to be fetched
    * @param localDirs Local directories where the push-merged shuffle files are stored
@@ -244,10 +244,10 @@ private class PushBasedFetchHelper(
         localDirs))
     } catch {
       case e: Exception =>
-        // If we see an exception with reading a local push-merged meta, we fallback to
+        // If we see an exception with reading a push-merged-local meta, we fallback to
         // fetch the original blocks. We do not report block fetch failure
         // and will continue with the remaining local block read.
-        logWarning(s"Error occurred while fetching local push-merged meta, " +
+        logWarning(s"Error occurred while fetching push-merged-local meta, " +
           s"prepare to fetch the original blocks", e)
         iterator.addToResultsQueue(
           FallbackOnPushMergedFailureResult(blockId, blockManagerId, 0, isNetworkReqDone = false))
@@ -270,7 +270,7 @@ private class PushBasedFetchHelper(
    * finds more push-merged requests to remote and again updates it with additional requests for
    * original blocks.
    * The fallback happens when:
-   * 1. There is an exception while creating shuffle chunks from local push-merged shuffle block.
+   * 1. There is an exception while creating shuffle chunks from push-merged-local shuffle block.
    *    See fetchLocalBlock.
    * 2. There is a failure when fetching remote shuffle chunks.
    * 3. There is a failure when processing SuccessFetchResult which is for a shuffle chunk
@@ -286,7 +286,7 @@ private class PushBasedFetchHelper(
     val fallbackBlocksByAddr: Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] =
       blockId match {
         case shuffleBlockId: ShuffleBlockId =>
-          iterator.incrementNumBlocksToFetch(-1)
+          iterator.decreaseNumBlocksToFetch(1)
           mapOutputTracker.getMapSizesForMergeResult(
             shuffleBlockId.shuffleId, shuffleBlockId.reduceId)
         case _ =>
@@ -311,7 +311,7 @@ private class PushBasedFetchHelper(
             // These blocks were added to numBlocksToFetch so we increment numBlocksProcessed
             blocksProcessed += pendingShuffleChunks.size
           }
-          iterator.incrementNumBlocksToFetch(-blocksProcessed)
+          iterator.decreaseNumBlocksToFetch(blocksProcessed)
           mapOutputTracker.getMapSizesForMergeResult(
             shuffleChunkId.shuffleId, shuffleChunkId.reduceId, chunkBitmap)
       }
