@@ -819,12 +819,12 @@ object YARN {
       val isHadoopProvided = SbtPomKeys.effectivePom.value.getProperties.get(hadoopProvidedProp)
       IO.write(file, s"$hadoopProvidedProp = $isHadoopProvided")
     },
-    (Compile / copyResources) := (Def.taskDyn {
+    Compile / copyResources := (Def.taskDyn {
       val c = (Compile / copyResources).value
-        Def.task {
-          (Compile / genConfigProperties).value
-          c
-        }
+      Def.task {
+        (Compile / genConfigProperties).value
+        c
+      }
     }).value
   )
 }
