@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, UnresolvedFieldName}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AlterTableCommand, AlterTableDropColumns, AlterTableRenameColumn, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, AlterTableAlterColumn, AlterTableCommand, AlterTableDropColumns, AlterTableRenameColumn, CreateTableAsSelect, LogicalPlan, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -209,7 +209,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: drop column nullability resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        TableChange.updateColumnNullability(ref, true),
+        AlterTableAlterColumn(table, UnresolvedFieldName(ref), None, Some(true), None, None),
         Seq("Cannot update missing field", ref.quoted)
       )
     }
@@ -218,7 +218,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: change column type resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        TableChange.updateColumnType(ref, StringType),
+        AlterTableAlterColumn(table, UnresolvedFieldName(ref), Some(StringType), None, None, None),
         Seq("Cannot update missing field", ref.quoted)
       )
     }
@@ -227,7 +227,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: change column comment resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        TableChange.updateColumnComment(ref, "Here's a comment for ya"),
+        AlterTableAlterColumn(table, UnresolvedFieldName(ref), None, None, Some("comment"), None),
         Seq("Cannot update missing field", ref.quoted)
       )
     }

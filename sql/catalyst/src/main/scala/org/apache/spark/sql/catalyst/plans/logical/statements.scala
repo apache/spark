@@ -247,17 +247,6 @@ case class AlterTableReplaceColumnsStatement(
     columnsToAdd: Seq[QualifiedColType]) extends LeafParsedStatement
 
 /**
- * ALTER TABLE ... CHANGE COLUMN command, as parsed from SQL.
- */
-case class AlterTableAlterColumnStatement(
-    tableName: Seq[String],
-    column: Seq[String],
-    dataType: Option[DataType],
-    nullable: Option[Boolean],
-    comment: Option[String],
-    position: Option[ColumnPosition]) extends LeafParsedStatement
-
-/**
  * An INSERT INTO statement, as parsed from SQL.
  *
  * @param table                the logical plan representing the table.

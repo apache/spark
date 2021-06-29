@@ -377,8 +377,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case LoadData(_: ResolvedTable, _, _, _, _) =>
       throw QueryCompilationErrors.loadDataNotSupportedForV2TablesError()
 
-    case ShowCreateTable(_: ResolvedTable, _, _) =>
-      throw QueryCompilationErrors.showCreateTableNotSupportedForV2TablesError()
+    case ShowCreateTable(rt: ResolvedTable, asSerde, output) =>
+      if (asSerde) {
+        throw QueryCompilationErrors.showCreateTableAsSerdeNotSupportedForV2TablesError()
+      }
+      ShowCreateTableExec(output, rt.table) :: Nil
 
     case TruncateTable(r: ResolvedTable) =>
       TruncateTableExec(
