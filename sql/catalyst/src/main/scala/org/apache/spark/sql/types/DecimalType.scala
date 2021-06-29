@@ -22,8 +22,8 @@ import java.util.Locale
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -45,13 +45,12 @@ case class DecimalType(precision: Int, scale: Int) extends FractionalType {
   DecimalType.checkNegativeScale(scale)
 
   if (scale > precision) {
-    throw new AnalysisException(
-      s"Decimal scale ($scale) cannot be greater than precision ($precision).")
+    throw QueryCompilationErrors.decimalCannotGreaterThanPrecisionError(scale, precision)
   }
 
   if (precision > DecimalType.MAX_PRECISION) {
-    throw new AnalysisException(
-      s"${DecimalType.simpleString} can only support precision up to ${DecimalType.MAX_PRECISION}")
+    throw QueryCompilationErrors.decimalOnlySupportPrecisionUptoError(
+      DecimalType.simpleString, DecimalType.MAX_PRECISION)
   }
 
   // default constructor for Java
@@ -158,9 +157,7 @@ object DecimalType extends AbstractDataType {
 
   private[sql] def checkNegativeScale(scale: Int): Unit = {
     if (scale < 0 && !SQLConf.get.allowNegativeScaleOfDecimalEnabled) {
-      throw new AnalysisException(s"Negative scale is not allowed: $scale. " +
-        s"You can use spark.sql.legacy.allowNegativeScaleOfDecimal=true " +
-        s"to enable legacy mode to allow it.")
+      throw QueryCompilationErrors.negativeScaleNotAllowedError(scale)
     }
   }
 

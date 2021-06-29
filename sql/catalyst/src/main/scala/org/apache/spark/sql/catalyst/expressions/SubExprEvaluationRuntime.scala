@@ -91,7 +91,7 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
 
     val proxyMap = new IdentityHashMap[Expression, ExpressionProxy]
 
-    val commonExprs = equivalentExpressions.getAllEquivalentExprs.filter(_.size > 1)
+    val commonExprs = equivalentExpressions.getAllEquivalentExprs(1)
     commonExprs.foreach { e =>
       val expr = e.head
       val proxy = ExpressionProxy(expr, proxyExpressionCurrentId, this)

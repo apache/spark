@@ -276,9 +276,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if self._schema is None:
             try:
                 self._schema = _parse_datatype_json_string(self._jdf.schema().json())
-            except AttributeError as e:
-                raise Exception(
-                    "Unable to parse datatype from schema. %s" % e)
+            except Exception as e:
+                raise ValueError(
+                    "Unable to parse datatype from schema. %s" % e) from e
         return self._schema
 
     def printSchema(self):
@@ -350,7 +350,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
 
         if extended is not None and mode is not None:
-            raise Exception("extended and mode should not be set together.")
+            raise ValueError("extended and mode should not be set together.")
 
         # For the no argument case: df.explain()
         is_no_argument = extended is None and mode is None
@@ -448,7 +448,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         n : int, optional
             Number of rows to show.
-        truncate : bool, optional
+        truncate : bool or int, optional
             If set to ``True``, truncate strings longer than 20 chars by default.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
@@ -482,10 +482,23 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          age  | 5
          name | Bob
         """
+
+        if not isinstance(n, int) or isinstance(n, bool):
+            raise TypeError("Parameter 'n' (number of rows) must be an int")
+
+        if not isinstance(vertical, bool):
+            raise TypeError("Parameter 'vertical' must be a bool")
+
         if isinstance(truncate, bool) and truncate:
             print(self._jdf.showString(n, 20, vertical))
         else:
-            print(self._jdf.showString(n, int(truncate), vertical))
+            try:
+                int_truncate = int(truncate)
+            except ValueError:
+                raise TypeError(
+                    "Parameter 'truncate={}' should be either bool or int.".format(truncate))
+
+            print(self._jdf.showString(n, int_truncate, vertical))
 
     def __repr__(self):
         if not self._support_repr_html and self.sql_ctx._conf.isReplEagerEvalEnabled():
@@ -2681,6 +2694,69 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ... ).partitionedBy("col").createOrReplace()
         """
         return DataFrameWriterV2(self, table)
+
+    def to_pandas_on_spark(self, index_col=None):
+        """
+        Converts the existing DataFrame into a pandas-on-Spark DataFrame.
+
+        If a pandas-on-Spark DataFrame is converted to a Spark DataFrame and then back
+        to pandas-on-Spark, it will lose the index information and the original index
+        will be turned into a normal column.
+
+        This is only available if Pandas is installed and available.
+
+        Parameters
+        ----------
+        index_col: str or list of str, optional, default: None
+            Index column of table in Spark.
+
+        See Also
+        --------
+        pyspark.pandas.frame.DataFrame.to_spark
+
+        Examples
+        --------
+        >>> df.show()  # doctest: +SKIP
+        +----+----+
+        |Col1|Col2|
+        +----+----+
+        |   a|   1|
+        |   b|   2|
+        |   c|   3|
+        +----+----+
+
+        >>> df.to_pandas_on_spark()  # doctest: +SKIP
+          Col1  Col2
+        0    a     1
+        1    b     2
+        2    c     3
+
+        We can specify the index columns.
+
+        >>> df.to_pandas_on_spark(index_col="Col1"): # doctest: +SKIP
+              Col2
+        Col1
+        a        1
+        b        2
+        c        3
+        """
+        from pyspark.pandas.namespace import _get_index_map
+        from pyspark.pandas.frame import DataFrame
+        from pyspark.pandas.internal import InternalFrame
+
+        index_spark_columns, index_names = _get_index_map(self, index_col)
+        internal = InternalFrame(
+            spark_frame=self, index_spark_columns=index_spark_columns, index_names=index_names
+        )
+        return DataFrame(internal)
+
+    # Keep to_koalas for backward compatibility for now.
+    def to_koalas(self, index_col=None):
+        warnings.warn(
+            "DataFrame.to_koalas is deprecated. Use DataFrame.to_pandas_on_spark instead.",
+            FutureWarning,
+        )
+        return self.to_pandas_on_spark(index_col)
 
 
 def _to_scala_map(sc, jm):

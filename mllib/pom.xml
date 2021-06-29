@@ -156,15 +156,14 @@
     </dependency>
 
   </dependencies>
+
   <profiles>
     <profile>
-      <id>netlib-lgpl</id>
+      <id>scala-2.13</id>
       <dependencies>
         <dependency>
-          <groupId>com.github.fommil.netlib</groupId>
-          <artifactId>all</artifactId>
-          <version>${netlib.java.version}</version>
-          <type>pom</type>
+          <groupId>org.scala-lang.modules</groupId>
+          <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
         </dependency>
       </dependencies>
     </profile>

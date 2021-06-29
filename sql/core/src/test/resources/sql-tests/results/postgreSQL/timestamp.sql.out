@@ -11,7 +11,7 @@ struct<>
 
 
 -- !query
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('now'))
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'now')
 -- !query schema
 struct<>
 -- !query output
@@ -19,7 +19,7 @@ struct<>
 
 
 -- !query
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('now'))
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'now')
 -- !query schema
 struct<>
 -- !query output
@@ -27,7 +27,7 @@ struct<>
 
 
 -- !query
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('today'))
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'today')
 -- !query schema
 struct<>
 -- !query output
@@ -35,7 +35,7 @@ struct<>
 
 
 -- !query
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('yesterday'))
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'yesterday')
 -- !query schema
 struct<>
 -- !query output
@@ -43,7 +43,7 @@ struct<>
 
 
 -- !query
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('tomorrow'))
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'tomorrow')
 -- !query schema
 struct<>
 -- !query output
@@ -51,7 +51,7 @@ struct<>
 
 
 -- !query
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('tomorrow EST'))
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'tomorrow EST')
 -- !query schema
 struct<>
 -- !query output
@@ -59,7 +59,7 @@ struct<>
 
 
 -- !query
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('tomorrow Zulu'))
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'tomorrow Zulu')
 -- !query schema
 struct<>
 -- !query output
@@ -99,7 +99,7 @@ struct<>
 
 
 -- !query
-INSERT INTO TIMESTAMP_TBL VALUES (timestamp('epoch'))
+INSERT INTO TIMESTAMP_TBL VALUES (timestamp'epoch')
 -- !query schema
 struct<>
 -- !query output

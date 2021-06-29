@@ -188,13 +188,18 @@ class HadoopMapReduceCommitProtocol(
 
       val filesToMove = allAbsPathFiles.foldLeft(Map[String, String]())(_ ++ _)
       logDebug(s"Committing files staged for absolute locations $filesToMove")
+      val absParentPaths = filesToMove.values.map(new Path(_).getParent).toSet
       if (dynamicPartitionOverwrite) {
-        val absPartitionPaths = filesToMove.values.map(new Path(_).getParent).toSet
-        logDebug(s"Clean up absolute partition directories for overwriting: $absPartitionPaths")
-        absPartitionPaths.foreach(fs.delete(_, true))
+        logDebug(s"Clean up absolute partition directories for overwriting: $absParentPaths")
+        absParentPaths.foreach(fs.delete(_, true))
       }
+      logDebug(s"Create absolute parent directories: $absParentPaths")
+      absParentPaths.foreach(fs.mkdirs)
       for ((src, dst) <- filesToMove) {
-        fs.rename(new Path(src), new Path(dst))
+        if (!fs.rename(new Path(src), new Path(dst))) {
+          throw new IOException(s"Failed to rename $src to $dst when committing files staged for " +
+            s"absolute locations")
+        }
       }
 
       if (dynamicPartitionOverwrite) {
@@ -213,7 +218,11 @@ class HadoopMapReduceCommitProtocol(
             // a parent that exists, otherwise we may get unexpected result on the rename.
             fs.mkdirs(finalPartPath.getParent)
           }
-          fs.rename(new Path(stagingDir, part), finalPartPath)
+          val stagingPartPath = new Path(stagingDir, part)
+          if (!fs.rename(stagingPartPath, finalPartPath)) {
+            throw new IOException(s"Failed to rename $stagingPartPath to $finalPartPath when " +
+              s"committing files staged for overwriting dynamic partitions")
+          }
         }
       }
 

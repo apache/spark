@@ -120,5 +120,24 @@ public class JavaStrLen implements UnboundFunction {
 
   public static class JavaStrLenNoImpl extends JavaStrLenBase {
   }
+
+  // a null-safe version which returns 0 for null arguments
+  public static class JavaStrLenMagicNullSafe extends JavaStrLenBase {
+    public int invoke(UTF8String str) {
+      if (str == null) {
+        return 0;
+      }
+      return str.toString().length();
+    }
+  }
+
+  public static class JavaStrLenStaticMagicNullSafe extends JavaStrLenBase {
+    public static int invoke(UTF8String str) {
+      if (str == null) {
+        return 0;
+      }
+      return str.toString().length();
+    }
+  }
 }
 

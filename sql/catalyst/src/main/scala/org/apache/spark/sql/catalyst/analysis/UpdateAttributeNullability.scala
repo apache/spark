@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 
 /**
  * Updates nullability of Attributes in a resolved LogicalPlan by using the nullability of
@@ -32,7 +33,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
  */
 object UpdateAttributeNullability extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
+    AlwaysProcess.fn, ruleId) {
     // Skip unresolved nodes.
     case p if !p.resolved => p
     // Skip leaf node, as it has no child and no need to update nullability.

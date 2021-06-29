@@ -114,6 +114,7 @@ case class ReferenceValueClass(wrapped: ReferenceValueClass.Container) extends A
 object ReferenceValueClass {
   case class Container(data: Int)
 }
+case class IntAndString(i: Int, s: String)
 
 class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest {
   OuterScopes.addOuterScope(this)
@@ -174,6 +175,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Map(1 -> "a", 2 -> "b"), "map")
   encodeDecodeTest(Map(1 -> "a", 2 -> null), "map with null")
   encodeDecodeTest(Map(1 -> Map("a" -> 1), 2 -> Map("b" -> 2)), "map of map")
+  encodeDecodeTest(Map(1 -> IntAndString(1, "a")), "map with case class as value")
+  encodeDecodeTest(Map(IntAndString(1, "a") -> 1), "map with case class as key")
+  encodeDecodeTest(Map(IntAndString(1, "a") -> IntAndString(2, "b")),
+    "map with case class as key and value")
 
   encodeDecodeTest(Tuple1[Seq[Int]](null), "null seq in tuple")
   encodeDecodeTest(Tuple1[Map[String, String]](null), "null map in tuple")

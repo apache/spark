@@ -79,14 +79,8 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
 
   protected val baseResourcePath = {
     // use the same way as `SQLQueryTestSuite` to get the resource path
-    java.nio.file.Paths.get("src", "test", "resources", "tpcds-query-results")
+    getWorkspaceFilePath("sql", "core", "src", "test", "resources", "tpcds-query-results")
       .toFile.getAbsolutePath
-  }
-
-  override val tpcdsQueries = {
-    // SPARK-35327: Filters out the TPC-DS queries that can cause flaky test results
-    val excludedQueries = Set("q6", "q75")
-    super.tpcdsQueries.filterNot(excludedQueries.contains)
   }
 
   override def createTable(

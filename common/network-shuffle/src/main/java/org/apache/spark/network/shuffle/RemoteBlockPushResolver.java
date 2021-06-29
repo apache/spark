@@ -47,6 +47,8 @@ import com.google.common.cache.Weigher;
 import com.google.common.collect.Maps;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
+import org.apache.commons.lang3.builder.ToStringBuilder;
+import org.apache.commons.lang3.builder.ToStringStyle;
 import org.roaringbitmap.RoaringBitmap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,6 +75,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private static final Logger logger = LoggerFactory.getLogger(RemoteBlockPushResolver.class);
   @VisibleForTesting
   static final String MERGE_MANAGER_DIR = "merge_manager";
+  public static final String MERGED_SHUFFLE_FILE_NAME_PREFIX = "shuffleMerged";
 
   private final ConcurrentMap<String, AppPathsInfo> appsPathInfo;
   private final ConcurrentMap<AppShuffleId, Map<Integer, AppShufflePartitionInfo>> partitions;
@@ -209,7 +212,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   /**
    * The logic here is consistent with
-   * org.apache.spark.storage.DiskBlockManager#getMergedShuffleFile
+   * @see [[org.apache.spark.storage.DiskBlockManager#getMergedShuffleFile(
+   *      org.apache.spark.storage.BlockId, scala.Option)]]
    */
   private File getFile(String appId, String filename) {
     // TODO: [SPARK-33236] Change the message when this service is able to handle NM restart
@@ -429,8 +433,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       executorInfo.subDirsPerLocalDir));
   }
   private static String generateFileName(AppShuffleId appShuffleId, int reduceId) {
-    return String.format("mergedShuffle_%s_%d_%d", appShuffleId.appId, appShuffleId.shuffleId,
-      reduceId);
+    return String.format("%s_%s_%d_%d", MERGED_SHUFFLE_FILE_NAME_PREFIX, appShuffleId.appId,
+      appShuffleId.shuffleId, reduceId);
   }
 
   /**
@@ -770,9 +774,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     @Override
     public String toString() {
-      return Objects.toStringHelper(this)
-        .add("appId", appId)
-        .add("shuffleId", shuffleId)
+      return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
+        .append("appId", appId)
+        .append("shuffleId", shuffleId)
         .toString();
     }
   }

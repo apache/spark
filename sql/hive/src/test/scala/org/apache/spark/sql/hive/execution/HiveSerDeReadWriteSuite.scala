@@ -185,4 +185,35 @@ class HiveSerDeReadWriteSuite extends QueryTest with SQLTestUtils with TestHiveS
       checkComplexTypes(fileFormat)
     }
   }
+
+  test("SPARK-34512: Disable validate default values when parsing Avro schemas") {
+    withTable("t1") {
+      hiveClient.runSqlHive(
+        """
+          |CREATE TABLE t1
+          |  ROW FORMAT SERDE
+          |    'org.apache.hadoop.hive.serde2.avro.AvroSerDe'
+          |  STORED AS INPUTFORMAT
+          |    'org.apache.hadoop.hive.ql.io.avro.AvroContainerInputFormat'
+          |  OUTPUTFORMAT
+          |    'org.apache.hadoop.hive.ql.io.avro.AvroContainerOutputFormat'
+          |  TBLPROPERTIES (
+          |    'avro.schema.literal'='{
+          |      "namespace": "org.apache.spark.sql.hive.test",
+          |      "name": "schema_with_default_value",
+          |      "type": "record",
+          |      "fields": [
+          |         {
+          |           "name": "ARRAY_WITH_DEFAULT",
+          |           "type": {"type": "array", "items": "string"},
+          |           "default": null
+          |         }
+          |       ]
+          |    }')
+          |""".stripMargin)
+
+      hiveClient.runSqlHive("INSERT INTO t1 SELECT array('SPARK-34512', 'HIVE-24797')")
+      checkAnswer(spark.table("t1"), Seq(Row(Array("SPARK-34512", "HIVE-24797"))))
+    }
+  }
 }

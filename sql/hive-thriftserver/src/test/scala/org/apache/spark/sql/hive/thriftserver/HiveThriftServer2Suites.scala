@@ -637,12 +637,11 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
       val user = System.getProperty("user.name")
       val sessionHandle = client.openSession(user, "")
       val sessionID = sessionHandle.getSessionId
-
-      assert(pipeoutFileList(sessionID).length == 2)
+      assert(pipeoutFileList(sessionID) === null)
 
       client.closeSession(sessionHandle)
 
-      assert(pipeoutFileList(sessionID).length == 0)
+      assert(pipeoutFileList(sessionID) === null)
     }
   }
 

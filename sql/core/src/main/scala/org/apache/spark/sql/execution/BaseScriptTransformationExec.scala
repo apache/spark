@@ -62,7 +62,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
 
   override def doExecute(): RDD[InternalRow] = {
     val broadcastedHadoopConf =
-      new SerializableConfiguration(sqlContext.sessionState.newHadoopConf())
+      new SerializableConfiguration(session.sessionState.newHadoopConf())
 
     child.execute().mapPartitions { iter =>
       if (iter.hasNext) {
@@ -206,14 +206,11 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case DoubleType => wrapperConvertException(data => data.toDouble, converter)
       case _: DecimalType => wrapperConvertException(data => BigDecimal(data), converter)
       case DateType if conf.datetimeJava8ApiEnabled =>
-        wrapperConvertException(data => DateTimeUtils.stringToDate(
-          UTF8String.fromString(data),
-          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+        wrapperConvertException(data => DateTimeUtils.stringToDate(UTF8String.fromString(data))
           .map(DateTimeUtils.daysToLocalDate).orNull, converter)
-      case DateType => wrapperConvertException(data => DateTimeUtils.stringToDate(
-        UTF8String.fromString(data),
-        DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-        .map(DateTimeUtils.toJavaDate).orNull, converter)
+      case DateType =>
+        wrapperConvertException(data => DateTimeUtils.stringToDate(UTF8String.fromString(data))
+          .map(DateTimeUtils.toJavaDate).orNull, converter)
       case TimestampType if conf.datetimeJava8ApiEnabled =>
         wrapperConvertException(data => DateTimeUtils.stringToTimestamp(
           UTF8String.fromString(data),

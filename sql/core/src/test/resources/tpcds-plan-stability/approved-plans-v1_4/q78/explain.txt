@@ -12,7 +12,7 @@ TakeOrderedAndProject (73)
       :     :              +- * BroadcastHashJoin Inner BuildRight (19)
       :     :                 :- * Project (14)
       :     :                 :  +- * Filter (13)
-      :     :                 :     +- SortMergeJoin LeftOuter (12)
+      :     :                 :     +- * SortMergeJoin LeftOuter (12)
       :     :                 :        :- * Sort (5)
       :     :                 :        :  +- Exchange (4)
       :     :                 :        :     +- * Filter (3)
@@ -37,7 +37,7 @@ TakeOrderedAndProject (73)
       :                       +- * BroadcastHashJoin Inner BuildRight (40)
       :                          :- * Project (38)
       :                          :  +- * Filter (37)
-      :                          :     +- SortMergeJoin LeftOuter (36)
+      :                          :     +- * SortMergeJoin LeftOuter (36)
       :                          :        :- * Sort (29)
       :                          :        :  +- Exchange (28)
       :                          :        :     +- * Filter (27)
@@ -59,7 +59,7 @@ TakeOrderedAndProject (73)
                         +- * BroadcastHashJoin Inner BuildRight (64)
                            :- * Project (62)
                            :  +- * Filter (61)
-                           :     +- SortMergeJoin LeftOuter (60)
+                           :     +- * SortMergeJoin LeftOuter (60)
                            :        :- * Sort (53)
                            :        :  +- Exchange (52)
                            :        :     +- * Filter (51)
@@ -123,7 +123,7 @@ Arguments: hashpartitioning(sr_ticket_number#11, sr_item_sk#10, 5), ENSURE_REQUI
 Input [2]: [sr_item_sk#10, sr_ticket_number#11]
 Arguments: [sr_ticket_number#11 ASC NULLS FIRST, sr_item_sk#10 ASC NULLS FIRST], false, 0
 
-(12) SortMergeJoin
+(12) SortMergeJoin [codegen id : 6]
 Left keys [2]: [ss_ticket_number#3, ss_item_sk#1]
 Right keys [2]: [sr_ticket_number#11, sr_item_sk#10]
 Join condition: None
@@ -234,7 +234,7 @@ Arguments: hashpartitioning(wr_order_number#40, wr_item_sk#39, 5), ENSURE_REQUIR
 Input [2]: [wr_item_sk#39, wr_order_number#40]
 Arguments: [wr_order_number#40 ASC NULLS FIRST, wr_item_sk#39 ASC NULLS FIRST], false, 0
 
-(36) SortMergeJoin
+(36) SortMergeJoin [codegen id : 13]
 Left keys [2]: [ws_order_number#33, ws_item_sk#31]
 Right keys [2]: [wr_order_number#40, wr_item_sk#39]
 Join condition: None
@@ -343,7 +343,7 @@ Arguments: hashpartitioning(cr_order_number#69, cr_item_sk#68, 5), ENSURE_REQUIR
 Input [2]: [cr_item_sk#68, cr_order_number#69]
 Arguments: [cr_order_number#69 ASC NULLS FIRST, cr_item_sk#68 ASC NULLS FIRST], false, 0
 
-(60) SortMergeJoin
+(60) SortMergeJoin [codegen id : 21]
 Left keys [2]: [cs_order_number#62, cs_item_sk#61]
 Right keys [2]: [cr_order_number#69, cr_item_sk#68]
 Join condition: None

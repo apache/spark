@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.parquet.schema._
-import org.apache.parquet.schema.OriginalType._
+import org.apache.parquet.schema.LogicalTypeAnnotation._
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 import org.apache.parquet.schema.Type.Repetition._
 
@@ -93,10 +93,10 @@ class ParquetToSparkSchemaConverter(
 
   private def convertPrimitiveField(field: PrimitiveType): DataType = {
     val typeName = field.getPrimitiveTypeName
-    val originalType = field.getOriginalType
+    val typeAnnotation = field.getLogicalTypeAnnotation
 
     def typeString =
-      if (originalType == null) s"$typeName" else s"$typeName ($originalType)"
+      if (typeAnnotation == null) s"$typeName" else s"$typeName ($typeAnnotation)"
 
     def typeNotImplemented() =
       throw QueryCompilationErrors.parquetTypeUnsupportedYetError(typeString)
@@ -108,8 +108,10 @@ class ParquetToSparkSchemaConverter(
     // specified in field.getDecimalMetadata.  This is useful when interpreting decimal types stored
     // as binaries with variable lengths.
     def makeDecimalType(maxPrecision: Int = -1): DecimalType = {
-      val precision = field.getDecimalMetadata.getPrecision
-      val scale = field.getDecimalMetadata.getScale
+      val decimalLogicalTypeAnnotation = field.getLogicalTypeAnnotation
+        .asInstanceOf[DecimalLogicalTypeAnnotation]
+      val precision = decimalLogicalTypeAnnotation.getPrecision
+      val scale = decimalLogicalTypeAnnotation.getScale
 
       ParquetSchemaConverter.checkConversionRequirement(
         maxPrecision == -1 || 1 <= precision && precision <= maxPrecision,
@@ -126,26 +128,49 @@ class ParquetToSparkSchemaConverter(
       case DOUBLE => DoubleType
 
       case INT32 =>
-        originalType match {
-          case INT_8 => ByteType
-          case INT_16 | UINT_8 => ShortType
-          case INT_32 | UINT_16 | null => IntegerType
-          case DATE => DateType
-          case DECIMAL => makeDecimalType(Decimal.MAX_INT_DIGITS)
-          case UINT_32 => LongType
-          case TIME_MILLIS => typeNotImplemented()
+        typeAnnotation match {
+          case intTypeAnnotation: IntLogicalTypeAnnotation if intTypeAnnotation.isSigned =>
+            intTypeAnnotation.getBitWidth match {
+              case 8 => ByteType
+              case 16 => ShortType
+              case 32 => IntegerType
+              case _ => illegalType()
+            }
+          case null => IntegerType
+          case _: DateLogicalTypeAnnotation => DateType
+          case _: DecimalLogicalTypeAnnotation => makeDecimalType(Decimal.MAX_INT_DIGITS)
+          case intTypeAnnotation: IntLogicalTypeAnnotation if !intTypeAnnotation.isSigned =>
+            intTypeAnnotation.getBitWidth match {
+              case 8 => ShortType
+              case 16 => IntegerType
+              case 32 => LongType
+              case _ => illegalType()
+            }
+          case t: TimestampLogicalTypeAnnotation if t.getUnit == TimeUnit.MILLIS =>
+            typeNotImplemented()
           case _ => illegalType()
         }
 
       case INT64 =>
-        originalType match {
-          case INT_64 | null => LongType
-          case DECIMAL => makeDecimalType(Decimal.MAX_LONG_DIGITS)
-          // The precision to hold the largest unsigned long is:
-          // `java.lang.Long.toUnsignedString(-1).length` = 20
-          case UINT_64 => DecimalType(20, 0)
-          case TIMESTAMP_MICROS => TimestampType
-          case TIMESTAMP_MILLIS => TimestampType
+        typeAnnotation match {
+          case intTypeAnnotation: IntLogicalTypeAnnotation if intTypeAnnotation.isSigned =>
+            intTypeAnnotation.getBitWidth match {
+              case 64 => LongType
+              case _ => illegalType()
+            }
+          case null => LongType
+          case _: DecimalLogicalTypeAnnotation => makeDecimalType(Decimal.MAX_LONG_DIGITS)
+          case intTypeAnnotation: IntLogicalTypeAnnotation if !intTypeAnnotation.isSigned =>
+            intTypeAnnotation.getBitWidth match {
+              // The precision to hold the largest unsigned long is:
+              // `java.lang.Long.toUnsignedString(-1).length` = 20
+              case 64 => DecimalType(20, 0)
+              case _ => illegalType()
+            }
+          case timestamp: TimestampLogicalTypeAnnotation if timestamp.getUnit == TimeUnit.MICROS =>
+            TimestampType
+          case timestamp: TimestampLogicalTypeAnnotation if timestamp.getUnit == TimeUnit.MILLIS =>
+            TimestampType
           case _ => illegalType()
         }
 
@@ -157,19 +182,21 @@ class ParquetToSparkSchemaConverter(
         TimestampType
 
       case BINARY =>
-        originalType match {
-          case UTF8 | ENUM | JSON => StringType
+        typeAnnotation match {
+          case _: StringLogicalTypeAnnotation | _: EnumLogicalTypeAnnotation |
+               _: JsonLogicalTypeAnnotation => StringType
           case null if assumeBinaryIsString => StringType
           case null => BinaryType
-          case BSON => BinaryType
-          case DECIMAL => makeDecimalType()
+          case _: BsonLogicalTypeAnnotation => BinaryType
+          case _: DecimalLogicalTypeAnnotation => makeDecimalType()
           case _ => illegalType()
         }
 
       case FIXED_LEN_BYTE_ARRAY =>
-        originalType match {
-          case DECIMAL => makeDecimalType(Decimal.maxPrecisionForBytes(field.getTypeLength))
-          case INTERVAL => typeNotImplemented()
+        typeAnnotation match {
+          case _: DecimalLogicalTypeAnnotation =>
+            makeDecimalType(Decimal.maxPrecisionForBytes(field.getTypeLength))
+          case _: IntervalLogicalTypeAnnotation => typeNotImplemented()
           case _ => illegalType()
         }
 
@@ -178,7 +205,7 @@ class ParquetToSparkSchemaConverter(
   }
 
   private def convertGroupField(field: GroupType): DataType = {
-    Option(field.getOriginalType).fold(convert(field): DataType) {
+    Option(field.getLogicalTypeAnnotation).fold(convert(field): DataType) {
       // A Parquet list is represented as a 3-level structure:
       //
       //   <list-repetition> group <name> (LIST) {
@@ -192,7 +219,7 @@ class ParquetToSparkSchemaConverter(
       // we need to check whether the 2nd level or the 3rd level refers to list element type.
       //
       // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#lists
-      case LIST =>
+      case _: ListLogicalTypeAnnotation =>
         ParquetSchemaConverter.checkConversionRequirement(
           field.getFieldCount == 1, s"Invalid list type $field")
 
@@ -212,7 +239,7 @@ class ParquetToSparkSchemaConverter(
       // `MAP_KEY_VALUE` is for backwards-compatibility
       // See: https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#backward-compatibility-rules-1
       // scalastyle:on
-      case MAP | MAP_KEY_VALUE =>
+      case _: MapLogicalTypeAnnotation | _: MapKeyValueTypeAnnotation =>
         ParquetSchemaConverter.checkConversionRequirement(
           field.getFieldCount == 1 && !field.getType(0).isPrimitive,
           s"Invalid map type: $field")
@@ -340,10 +367,12 @@ class SparkToParquetSchemaConverter(
         Types.primitive(BOOLEAN, repetition).named(field.name)
 
       case ByteType =>
-        Types.primitive(INT32, repetition).as(INT_8).named(field.name)
+        Types.primitive(INT32, repetition)
+          .as(LogicalTypeAnnotation.intType(8, true)).named(field.name)
 
       case ShortType =>
-        Types.primitive(INT32, repetition).as(INT_16).named(field.name)
+        Types.primitive(INT32, repetition)
+          .as(LogicalTypeAnnotation.intType(16, true)).named(field.name)
 
       case IntegerType =>
         Types.primitive(INT32, repetition).named(field.name)
@@ -358,10 +387,12 @@ class SparkToParquetSchemaConverter(
         Types.primitive(DOUBLE, repetition).named(field.name)
 
       case StringType =>
-        Types.primitive(BINARY, repetition).as(UTF8).named(field.name)
+        Types.primitive(BINARY, repetition)
+          .as(LogicalTypeAnnotation.stringType()).named(field.name)
 
       case DateType =>
-        Types.primitive(INT32, repetition).as(DATE).named(field.name)
+        Types.primitive(INT32, repetition)
+          .as(LogicalTypeAnnotation.dateType()).named(field.name)
 
       // NOTE: Spark SQL can write timestamp values to Parquet using INT96, TIMESTAMP_MICROS or
       // TIMESTAMP_MILLIS. TIMESTAMP_MICROS is recommended but INT96 is the default to keep the
@@ -382,9 +413,11 @@ class SparkToParquetSchemaConverter(
           case SQLConf.ParquetOutputTimestampType.INT96 =>
             Types.primitive(INT96, repetition).named(field.name)
           case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MICROS =>
-            Types.primitive(INT64, repetition).as(TIMESTAMP_MICROS).named(field.name)
+            Types.primitive(INT64, repetition)
+              .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MICROS)).named(field.name)
           case SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS =>
-            Types.primitive(INT64, repetition).as(TIMESTAMP_MILLIS).named(field.name)
+            Types.primitive(INT64, repetition)
+              .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS)).named(field.name)
         }
 
       case BinaryType =>
@@ -401,9 +434,7 @@ class SparkToParquetSchemaConverter(
       case DecimalType.Fixed(precision, scale) if writeLegacyParquetFormat =>
         Types
           .primitive(FIXED_LEN_BYTE_ARRAY, repetition)
-          .as(DECIMAL)
-          .precision(precision)
-          .scale(scale)
+          .as(LogicalTypeAnnotation.decimalType(scale, precision))
           .length(Decimal.minBytesForPrecision(precision))
           .named(field.name)
 
@@ -416,9 +447,7 @@ class SparkToParquetSchemaConverter(
           if precision <= Decimal.MAX_INT_DIGITS && !writeLegacyParquetFormat =>
         Types
           .primitive(INT32, repetition)
-          .as(DECIMAL)
-          .precision(precision)
-          .scale(scale)
+          .as(LogicalTypeAnnotation.decimalType(scale, precision))
           .named(field.name)
 
       // Uses INT64 for 1 <= precision <= 18
@@ -426,18 +455,14 @@ class SparkToParquetSchemaConverter(
           if precision <= Decimal.MAX_LONG_DIGITS && !writeLegacyParquetFormat =>
         Types
           .primitive(INT64, repetition)
-          .as(DECIMAL)
-          .precision(precision)
-          .scale(scale)
+          .as(LogicalTypeAnnotation.decimalType(scale, precision))
           .named(field.name)
 
       // Uses FIXED_LEN_BYTE_ARRAY for all other precisions
       case DecimalType.Fixed(precision, scale) if !writeLegacyParquetFormat =>
         Types
           .primitive(FIXED_LEN_BYTE_ARRAY, repetition)
-          .as(DECIMAL)
-          .precision(precision)
-          .scale(scale)
+          .as(LogicalTypeAnnotation.decimalType(scale, precision))
           .length(Decimal.minBytesForPrecision(precision))
           .named(field.name)
 
@@ -462,7 +487,7 @@ class SparkToParquetSchemaConverter(
         // `array` as its element name as below. Therefore, we build manually
         // the correct group type here via the builder. (See SPARK-16777)
         Types
-          .buildGroup(repetition).as(LIST)
+          .buildGroup(repetition).as(LogicalTypeAnnotation.listType())
           .addField(Types
             .buildGroup(REPEATED)
             // "array" is the name chosen by parquet-hive (1.7.0 and prior version)
@@ -480,7 +505,7 @@ class SparkToParquetSchemaConverter(
 
         // Here too, we should not use `listOfElements`. (See SPARK-16777)
         Types
-          .buildGroup(repetition).as(LIST)
+          .buildGroup(repetition).as(LogicalTypeAnnotation.listType())
           // "array" is the name chosen by parquet-avro (1.7.0 and prior version)
           .addField(convertField(StructField("array", elementType, nullable), REPEATED))
           .named(field.name)
@@ -511,7 +536,7 @@ class SparkToParquetSchemaConverter(
         //   }
         // }
         Types
-          .buildGroup(repetition).as(LIST)
+          .buildGroup(repetition).as(LogicalTypeAnnotation.listType())
           .addField(
             Types.repeatedGroup()
               .addField(convertField(StructField("element", elementType, containsNull)))
@@ -526,7 +551,7 @@ class SparkToParquetSchemaConverter(
         //   }
         // }
         Types
-          .buildGroup(repetition).as(MAP)
+          .buildGroup(repetition).as(LogicalTypeAnnotation.mapType())
           .addField(
             Types
               .repeatedGroup()

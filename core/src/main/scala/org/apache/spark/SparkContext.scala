@@ -396,6 +396,8 @@ class SparkContext(config: SparkConf) extends Logging {
     if (!_conf.contains("spark.app.name")) {
       throw new SparkException("An application name must be set in your configuration")
     }
+    // This should be set as early as possible.
+    SparkContext.fillMissingMagicCommitterConfsIfNeeded(_conf)
 
     _driverLogger = DriverLogger(_conf)
 
@@ -2984,6 +2986,30 @@ object SparkContext extends Logging {
         s"Multiple external cluster managers registered for the url $url: $serviceLoaders")
     }
     serviceLoaders.headOption
+  }
+
+  /**
+   * This is a helper function to complete the missing S3A magic committer configurations
+   * based on a single conf: `spark.hadoop.fs.s3a.bucket.<bucket>.committer.magic.enabled`
+   */
+  private def fillMissingMagicCommitterConfsIfNeeded(conf: SparkConf): Unit = {
+    val magicCommitterConfs = conf
+      .getAllWithPrefix("spark.hadoop.fs.s3a.bucket.")
+      .filter(_._1.endsWith(".committer.magic.enabled"))
+      .filter(_._2.equalsIgnoreCase("true"))
+    if (magicCommitterConfs.nonEmpty) {
+      // Try to enable S3 magic committer if missing
+      conf.setIfMissing("spark.hadoop.fs.s3a.committer.magic.enabled", "true")
+      if (conf.get("spark.hadoop.fs.s3a.committer.magic.enabled").equals("true")) {
+        conf.setIfMissing("spark.hadoop.fs.s3a.committer.name", "magic")
+        conf.setIfMissing("spark.hadoop.mapreduce.outputcommitter.factory.scheme.s3a",
+          "org.apache.hadoop.fs.s3a.commit.S3ACommitterFactory")
+        conf.setIfMissing("spark.sql.parquet.output.committer.class",
+          "org.apache.spark.internal.io.cloud.BindingParquetOutputCommitter")
+        conf.setIfMissing("spark.sql.sources.commitProtocolClass",
+          "org.apache.spark.internal.io.cloud.PathOutputCommitProtocol")
+      }
+    }
   }
 }
 

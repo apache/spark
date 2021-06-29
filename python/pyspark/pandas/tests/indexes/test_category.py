@@ -27,20 +27,20 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
     def test_categorical_index(self):
         pidx = pd.CategoricalIndex([1, 2, 3])
-        kidx = ps.CategoricalIndex([1, 2, 3])
+        psidx = ps.CategoricalIndex([1, 2, 3])
 
-        self.assert_eq(kidx, pidx)
-        self.assert_eq(kidx.categories, pidx.categories)
-        self.assert_eq(kidx.codes, pd.Index(pidx.codes))
-        self.assert_eq(kidx.ordered, pidx.ordered)
+        self.assert_eq(psidx, pidx)
+        self.assert_eq(psidx.categories, pidx.categories)
+        self.assert_eq(psidx.codes, pd.Index(pidx.codes))
+        self.assert_eq(psidx.ordered, pidx.ordered)
 
         pidx = pd.Index([1, 2, 3], dtype="category")
-        kidx = ps.Index([1, 2, 3], dtype="category")
+        psidx = ps.Index([1, 2, 3], dtype="category")
 
-        self.assert_eq(kidx, pidx)
-        self.assert_eq(kidx.categories, pidx.categories)
-        self.assert_eq(kidx.codes, pd.Index(pidx.codes))
-        self.assert_eq(kidx.ordered, pidx.ordered)
+        self.assert_eq(psidx, pidx)
+        self.assert_eq(psidx.categories, pidx.categories)
+        self.assert_eq(psidx.codes, pd.Index(pidx.codes))
+        self.assert_eq(psidx.ordered, pidx.ordered)
 
         pdf = pd.DataFrame(
             {
@@ -49,36 +49,36 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
             },
             index=pd.Categorical([10, 20, 30, 20, 30, 10], categories=[30, 10, 20], ordered=True),
         )
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
 
         pidx = pdf.set_index("b").index
-        kidx = kdf.set_index("b").index
+        psidx = psdf.set_index("b").index
 
-        self.assert_eq(kidx, pidx)
-        self.assert_eq(kidx.categories, pidx.categories)
-        self.assert_eq(kidx.codes, pd.Index(pidx.codes))
-        self.assert_eq(kidx.ordered, pidx.ordered)
+        self.assert_eq(psidx, pidx)
+        self.assert_eq(psidx.categories, pidx.categories)
+        self.assert_eq(psidx.codes, pd.Index(pidx.codes))
+        self.assert_eq(psidx.ordered, pidx.ordered)
 
         pidx = pdf.set_index(["a", "b"]).index.get_level_values(0)
-        kidx = kdf.set_index(["a", "b"]).index.get_level_values(0)
+        psidx = psdf.set_index(["a", "b"]).index.get_level_values(0)
 
-        self.assert_eq(kidx, pidx)
-        self.assert_eq(kidx.categories, pidx.categories)
-        self.assert_eq(kidx.codes, pd.Index(pidx.codes))
-        self.assert_eq(kidx.ordered, pidx.ordered)
+        self.assert_eq(psidx, pidx)
+        self.assert_eq(psidx.categories, pidx.categories)
+        self.assert_eq(psidx.codes, pd.Index(pidx.codes))
+        self.assert_eq(psidx.ordered, pidx.ordered)
 
     def test_astype(self):
         pidx = pd.Index(["a", "b", "c"])
-        kidx = ps.from_pandas(pidx)
+        psidx = ps.from_pandas(pidx)
 
-        self.assert_eq(kidx.astype("category"), pidx.astype("category"))
+        self.assert_eq(psidx.astype("category"), pidx.astype("category"))
         self.assert_eq(
-            kidx.astype(CategoricalDtype(["c", "a", "b"])),
+            psidx.astype(CategoricalDtype(["c", "a", "b"])),
             pidx.astype(CategoricalDtype(["c", "a", "b"])),
         )
 
         pcidx = pidx.astype(CategoricalDtype(["c", "a", "b"]))
-        kcidx = kidx.astype(CategoricalDtype(["c", "a", "b"]))
+        kcidx = psidx.astype(CategoricalDtype(["c", "a", "b"]))
 
         self.assert_eq(kcidx.astype("category"), pcidx.astype("category"))
 
@@ -97,16 +97,16 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
 
     def test_factorize(self):
         pidx = pd.CategoricalIndex([1, 2, 3, None])
-        kidx = ps.from_pandas(pidx)
+        psidx = ps.from_pandas(pidx)
 
         pcodes, puniques = pidx.factorize()
-        kcodes, kuniques = kidx.factorize()
+        kcodes, kuniques = psidx.factorize()
 
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)
 
         pcodes, puniques = pidx.factorize(na_sentinel=-2)
-        kcodes, kuniques = kidx.factorize(na_sentinel=-2)
+        kcodes, kuniques = psidx.factorize(na_sentinel=-2)
 
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)
@@ -118,7 +118,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

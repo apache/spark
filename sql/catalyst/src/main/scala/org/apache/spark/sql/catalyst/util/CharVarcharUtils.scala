@@ -20,10 +20,10 @@ package org.apache.spark.sql.catalyst.util
 import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -61,9 +61,7 @@ object CharVarcharUtils extends Logging {
    */
   def failIfHasCharVarchar(dt: DataType): DataType = {
     if (!SQLConf.get.charVarcharAsString && hasCharVarchar(dt)) {
-      throw new AnalysisException("char/varchar type can only be used in the table schema. " +
-        s"You can set ${SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key} to true, so that Spark" +
-        s" treat them as string type as same as Spark 3.0 and earlier")
+      throw QueryCompilationErrors.charOrVarcharTypeAsStringUnsupportedError()
     } else {
       replaceCharVarcharWithString(dt)
     }

@@ -135,6 +135,6 @@ SELECT t1a,
     (SELECT count_if(t2d > 0) FROM t2 WHERE t2a = t1a) count_if_t2,
     (SELECT approx_count_distinct(t2d) FROM t2 WHERE t2a = t1a) approx_count_distinct_t2,
     (SELECT collect_list(t2d) FROM t2 WHERE t2a = t1a) collect_list_t2,
-    (SELECT collect_set(t2d) FROM t2 WHERE t2a = t1a) collect_set_t2,
+    (SELECT sort_array(collect_set(t2d)) FROM t2 WHERE t2a = t1a) collect_set_t2,
     (SELECT hex(count_min_sketch(t2d, 0.5d, 0.5d, 1)) FROM t2 WHERE t2a = t1a) collect_set_t2
 FROM t1;

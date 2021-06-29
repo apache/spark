@@ -25,6 +25,7 @@ import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, Unescape
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
@@ -65,7 +66,7 @@ class CSVOptions(
       case Some(null) => default
       case Some(value) if value.length == 0 => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
-      case _ => throw new RuntimeException(s"$paramName cannot be more than one character")
+      case _ => throw QueryExecutionErrors.paramExceedOneCharError(paramName)
     }
   }
 
@@ -78,7 +79,7 @@ class CSVOptions(
         value.toInt
       } catch {
         case e: NumberFormatException =>
-          throw new RuntimeException(s"$paramName should be an integer. Found $value")
+          throw QueryExecutionErrors.paramIsNotIntegerError(paramName, value)
       }
     }
   }
@@ -92,7 +93,7 @@ class CSVOptions(
     } else if (param.toLowerCase(Locale.ROOT) == "false") {
       false
     } else {
-      throw new Exception(s"$paramName flag can be true or false")
+      throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName)
     }
   }
 
@@ -110,8 +111,7 @@ class CSVOptions(
     case Some(null) => None
     case Some(value) if value.length == 0 => None
     case Some(value) if value.length == 1 => Some(value.charAt(0))
-    case _ =>
-      throw new RuntimeException("charToEscapeQuoteEscaping cannot be more than one character")
+    case _ => throw QueryExecutionErrors.paramExceedOneCharError("charToEscapeQuoteEscaping")
   }
   val comment = getChar("comment", '\u0000')
 

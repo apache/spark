@@ -580,7 +580,7 @@ class SparkSession(SparkConversionMixin):
         Parameters
         ----------
         data : :class:`RDD` or iterable
-            an RDD of any kind of SQL data representation(e.g. :class:`Row`,
+            an RDD of any kind of SQL data representation (:class:`Row`,
             :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`, or
             :class:`pandas.DataFrame`.
         schema : :class:`pyspark.sql.types.DataType`, str or list, optional

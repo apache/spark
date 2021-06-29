@@ -103,10 +103,10 @@ case class CustomShuffleReaderExec private(
 
   @transient private lazy val partitionDataSizes: Option[Seq[Long]] = {
     if (partitionSpecs.nonEmpty && !isLocalReader && shuffleStage.get.mapStats.isDefined) {
-      val bytesByPartitionId = shuffleStage.get.mapStats.get.bytesByPartitionId
       Some(partitionSpecs.map {
-        case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
-          startReducerIndex.until(endReducerIndex).map(bytesByPartitionId).sum
+        case p: CoalescedPartitionSpec =>
+          assert(p.dataSize.isDefined)
+          p.dataSize.get
         case p: PartialReducerPartitionSpec => p.dataSize
         case p => throw new IllegalStateException(s"unexpected $p")
       })

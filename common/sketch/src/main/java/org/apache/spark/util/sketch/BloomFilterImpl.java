@@ -193,6 +193,22 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
 
   @Override
   public BloomFilter mergeInPlace(BloomFilter other) throws IncompatibleMergeException {
+    BloomFilterImpl otherImplInstance = checkCompatibilityForMerge(other);
+
+    this.bits.putAll(otherImplInstance.bits);
+    return this;
+  }
+
+  @Override
+  public BloomFilter intersectInPlace(BloomFilter other) throws IncompatibleMergeException {
+    BloomFilterImpl otherImplInstance = checkCompatibilityForMerge(other);
+
+    this.bits.and(otherImplInstance.bits);
+    return this;
+  }
+
+  private BloomFilterImpl checkCompatibilityForMerge(BloomFilter other)
+          throws IncompatibleMergeException {
     // Duplicates the logic of `isCompatible` here to provide better error message.
     if (other == null) {
       throw new IncompatibleMergeException("Cannot merge null bloom filter");
@@ -215,9 +231,7 @@ class BloomFilterImpl extends BloomFilter implements Serializable {
         "Cannot merge bloom filters with different number of hash functions"
       );
     }
-
-    this.bits.putAll(that.bits);
-    return this;
+    return that;
   }
 
   @Override

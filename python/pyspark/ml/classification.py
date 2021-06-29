@@ -23,7 +23,7 @@ import warnings
 from abc import ABCMeta, abstractmethod, abstractproperty
 from multiprocessing.pool import ThreadPool
 
-from pyspark import keyword_only, since, SparkContext
+from pyspark import keyword_only, since, SparkContext, inheritable_thread_target
 from pyspark.ml import Estimator, Predictor, PredictionModel, Model
 from pyspark.ml.param.shared import HasRawPredictionCol, HasProbabilityCol, HasThresholds, \
     HasRegParam, HasMaxIter, HasFitIntercept, HasTol, HasStandardization, HasWeightCol, \
@@ -738,7 +738,7 @@ class LinearSVCModel(_JavaClassificationModel, _LinearSVCParams, JavaMLWritable,
     @since("3.1.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -1237,7 +1237,7 @@ class LogisticRegressionModel(_JavaProbabilisticClassificationModel, _LogisticRe
     @since("2.0.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -1843,7 +1843,7 @@ class RandomForestClassificationModel(_TreeEnsembleModel, _JavaProbabilisticClas
     @since("3.1.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -2700,7 +2700,7 @@ class MultilayerPerceptronClassificationModel(_JavaProbabilisticClassificationMo
     @since("3.1.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
@@ -2921,7 +2921,7 @@ class OneVsRest(Estimator, _OneVsRestParams, HasParallelism, MLReadable, MLWrita
 
         pool = ThreadPool(processes=min(self.getParallelism(), numClasses))
 
-        models = pool.map(trainSingleClass, range(numClasses))
+        models = pool.map(inheritable_thread_target(trainSingleClass), range(numClasses))
 
         if handlePersistence:
             multiclassLabeled.unpersist()
@@ -3500,7 +3500,7 @@ class FMClassificationModel(_JavaProbabilisticClassificationModel, _Factorizatio
     @since("3.1.0")
     def summary(self):
         """
-        Gets summary (e.g. accuracy/precision/recall, objective history, total iterations) of model
+        Gets summary (accuracy/precision/recall, objective history, total iterations) of model
         trained on the training set. An exception is thrown if `trainingSummary is None`.
         """
         if self.hasSummary:
