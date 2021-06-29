@@ -82,10 +82,8 @@ class RocksDB(
 
   @volatile private var db: NativeRocksDB = _
   @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
-  // number of keys in all committed versions before
-  @volatile private var numCommittedKeys = 0L
-  // number of keys which will be committed in the next version
-  @volatile private var numUncommittedKeys = 0L
+  @volatile private var numKeysOnLoadedVersion = 0L
+  @volatile private var numKeysOnWritingVersion = 0L
 
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
@@ -104,8 +102,8 @@ class RocksDB(
         closeDB()
         val metadata = fileManager.loadCheckpointFromDfs(version, workingDir)
         openDB()
-        numUncommittedKeys = metadata.numKeys
-        numCommittedKeys = metadata.numKeys
+        numKeysOnWritingVersion = metadata.numKeys
+        numKeysOnLoadedVersion = metadata.numKeys
         loadedVersion = version
       }
       writeBatch.clear()
@@ -134,7 +132,7 @@ class RocksDB(
     val oldValue = writeBatch.getFromBatchAndDB(db, readOptions, key)
     writeBatch.put(key, value)
     if (oldValue == null) {
-      numUncommittedKeys += 1
+      numKeysOnWritingVersion += 1
     }
     oldValue
   }
@@ -147,7 +145,7 @@ class RocksDB(
     val value = writeBatch.getFromBatchAndDB(db, readOptions, key)
     if (value != null) {
       writeBatch.remove(key)
-      numUncommittedKeys -= 1
+      numKeysOnWritingVersion -= 1
     }
     value
   }
@@ -221,9 +219,9 @@ class RocksDB(
 
       logInfo(s"Syncing checkpoint for $newVersion to DFS")
       val fileSyncTimeMs = timeTakenMs {
-        fileManager.saveCheckpointToDfs(checkpointDir, newVersion, numUncommittedKeys)
+        fileManager.saveCheckpointToDfs(checkpointDir, newVersion, numKeysOnWritingVersion)
       }
-      numCommittedKeys = numUncommittedKeys
+      numKeysOnLoadedVersion = numKeysOnWritingVersion
       loadedVersion = newVersion
       commitLatencyMs ++= Map(
         "writeBatch" -> writeTimeMs,
@@ -250,7 +248,7 @@ class RocksDB(
    */
   def rollback(): Unit = {
     writeBatch.clear()
-    numUncommittedKeys = numCommittedKeys
+    numKeysOnWritingVersion = numKeysOnLoadedVersion
     release()
     logInfo(s"Rolled back to $loadedVersion")
   }
