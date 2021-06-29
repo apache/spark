@@ -4048,6 +4048,78 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(1, 2, 1, 2) :: Nil)
     }
   }
+
+  test("SPARK-34079") {
+    withTable("t") {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        Seq((1, 2)).toDF("a", "b").write.saveAsTable("t")
+
+        withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "error") {
+          val df = sql(
+            """
+              |SELECT
+              |  (SELECT avg(a) FROM t GROUP BY b),
+              |  (SELECT sum(b) FROM t GROUP BY b)
+              |
+              |""".stripMargin)
+
+//          df.collect()
+          df.explain(true)
+          //          df.show()
+        }
+      }
+    }
+  }
+
+  test("SPARK-34079-2") {
+    withTable("t") {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        Seq((1, 2)).toDF("a", "b").write.saveAsTable("t")
+
+        withSQLConf(SQLConf.PLAN_CHANGE_LOG_LEVEL.key -> "error") {
+          val df = sql(
+            """
+              |SELECT
+              |  (SELECT
+              |    (SELECT avg(a) FROM t GROUP BY b) +
+              |    (SELECT sum(b) FROM t GROUP BY b)
+              |  ),
+              |  (SELECT
+              |    (SELECT min(a) FROM t GROUP BY b) +
+              |    (SELECT max(b) FROM t GROUP BY b)
+              |  )
+              |""".stripMargin)
+
+          //          df.collect()
+          df.explain(true)
+          //          df.show()
+        }
+      }
+    }
+  }
+
+
+  test("SPARK-34079-3") {
+    withTable("tbl") {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        Seq((1, 2)).toDF("a", "b").write.saveAsTable("t")
+        // sql("CREATE TABLE tbl(a INT, b INT) USING parquet")
+
+        val df = sql(
+          """
+            |SELECT
+            |  (SELECT max(a) as max_a FROM t GROUP BY b HAVING max(a) >= 1),
+            |  (SELECT min(a) as max_a FROM t GROUP BY b HAVING max(a) >= 1)
+            |
+            |""".stripMargin)
+
+        df.explain(true)
+        df.show()
+      }
+    }
+  }
+
+
 }
 
 case class Foo(bar: Option[String])
