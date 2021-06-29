@@ -2658,7 +2658,7 @@ case class ToHiveString(child: Expression, timeZoneId: Option[String] = None)
 
   override def dataType: DataType = StringType
 
-  override def toHiveStr: Boolean = true
+  override def toHiveString: Boolean = true
   override def leftBracket: String = "{"
   override def rightBracket: String = "}"
   override def arrayElementSpace: String = ""

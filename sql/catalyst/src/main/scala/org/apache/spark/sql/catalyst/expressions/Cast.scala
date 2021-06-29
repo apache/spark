@@ -285,7 +285,7 @@ abstract class CastToStringBase extends UnaryExpression
   private lazy val timestampWithoutTZFormatter =
     TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
 
-  protected def toHiveStr = false
+  protected def toHiveString = false
   private val legacyCastToStr = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
   // The brackets that are used in casting structs and maps to strings
   protected def leftBracket = if (legacyCastToStr) "[" else "{"
@@ -299,7 +299,7 @@ abstract class CastToStringBase extends UnaryExpression
 
   // UDFToString
   protected[this] def castToString(from: DataType): Any => Any = from match {
-    case DecimalType() if toHiveStr =>
+    case DecimalType() if toHiveString =>
       buildCast[Decimal](_, i => UTF8String.fromString(i.toJavaBigDecimal.toPlainString))
     case CalendarIntervalType =>
       buildCast[CalendarInterval](_, i => UTF8String.fromString(i.toString))
@@ -316,7 +316,7 @@ abstract class CastToStringBase extends UnaryExpression
         if (array.numElements > 0) {
           val toUTF8String = castToString(et)
           if (array.isNullAt(0)) {
-            if (toHiveStr || !legacyCastToStr) builder.append("null")
+            if (toHiveString || !legacyCastToStr) builder.append("null")
           } else {
             builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
           }
@@ -324,8 +324,7 @@ abstract class CastToStringBase extends UnaryExpression
           while (i < array.numElements) {
             builder.append(",")
             if (array.isNullAt(i)) {
-              if (toHiveStr || !legacyCastToStr) builder.append(s"${arrayElementSpace}null")
-
+              if (toHiveString || !legacyCastToStr) builder.append(s"${arrayElementSpace}null")
             } else {
               builder.append(arrayElementSpace)
               builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
@@ -348,7 +347,7 @@ abstract class CastToStringBase extends UnaryExpression
           builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
           builder.append(s"$arrayElementSpace$keyValueSeparator")
           if (valueArray.isNullAt(0)) {
-            if (toHiveStr || !legacyCastToStr) builder.append("null")
+            if (toHiveString || !legacyCastToStr) builder.append("null")
           } else {
             builder.append(arrayElementSpace)
             builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
@@ -359,11 +358,10 @@ abstract class CastToStringBase extends UnaryExpression
             builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
             builder.append(s"$arrayElementSpace$keyValueSeparator")
             if (valueArray.isNullAt(i)) {
-              if (toHiveStr || !legacyCastToStr) builder.append(s"${arrayElementSpace}null")
+              if (toHiveString || !legacyCastToStr) builder.append(s"${arrayElementSpace}null")
             } else {
               builder.append(arrayElementSpace)
-              builder.append(valueToUTF8String(valueArray.get(i, vt))
-                .asInstanceOf[UTF8String])
+              builder.append(valueToUTF8String(valueArray.get(i, vt)).asInstanceOf[UTF8String])
             }
             i += 1
           }
@@ -382,7 +380,7 @@ abstract class CastToStringBase extends UnaryExpression
             builder.append("\"" + fields(0).name + "\":")
           }
           if (row.isNullAt(0)) {
-            if (toHiveStr || !legacyCastToStr) builder.append("null")
+            if (toHiveString || !legacyCastToStr) builder.append("null")
           } else {
             builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
           }
@@ -393,7 +391,7 @@ abstract class CastToStringBase extends UnaryExpression
               builder.append("\"" + fields(i).name + "\":")
             }
             if (row.isNullAt(i)) {
-              if (toHiveStr || !legacyCastToStr) builder.append(s"${arrayElementSpace}null")
+              if (toHiveString || !legacyCastToStr) builder.append(s"${arrayElementSpace}null")
             } else {
               builder.append(arrayElementSpace)
               builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
@@ -409,21 +407,20 @@ abstract class CastToStringBase extends UnaryExpression
       buildCast[Any](_, o => UTF8String.fromString(udt.deserialize(o).toString))
     case YearMonthIntervalType(startField, endField) =>
       buildCast[Int](_, i => UTF8String.fromString(
-        IntervalUtils.toYearMonthIntervalString(i, if (toHiveStr) HIVE_STYLE else ANSI_STYLE,
+        IntervalUtils.toYearMonthIntervalString(i, if (toHiveString) HIVE_STYLE else ANSI_STYLE,
           startField, endField)))
     case DayTimeIntervalType(startField, endField) =>
       buildCast[Long](_, i => UTF8String.fromString(
-        IntervalUtils.toDayTimeIntervalString(i, if (toHiveStr) HIVE_STYLE else ANSI_STYLE,
+        IntervalUtils.toDayTimeIntervalString(i, if (toHiveString) HIVE_STYLE else ANSI_STYLE,
           startField, endField)))
     case _ => buildCast[Any](_, o => UTF8String.fromString(o.toString))
   }
-
 
   protected[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
     from match {
       case BinaryType =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromBytes($c);"
-      case _: DecimalType if toHiveStr =>
+      case _: DecimalType if toHiveString =>
         (c, evPrim, _) =>
           code"$evPrim = UTF8String.fromString($c.toJavaBigDecimal().toPlainString());"
       case DateType =>
@@ -487,7 +484,7 @@ abstract class CastToStringBase extends UnaryExpression
       case i: YearMonthIntervalType =>
         val iu = IntervalUtils.getClass.getName.stripSuffix("$")
         val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
-        val style = if (toHiveStr) {
+        val style = if (toHiveString) {
           s"$iss$$.MODULE$$.HIVE_STYLE()"
         } else {
           s"$iss$$.MODULE$$.ANSI_STYLE()"
@@ -500,7 +497,7 @@ abstract class CastToStringBase extends UnaryExpression
       case i: DayTimeIntervalType =>
         val iu = IntervalUtils.getClass.getName.stripSuffix("$")
         val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
-        val style = if (toHiveStr) {
+        val style = if (toHiveString) {
           s"$iss$$.MODULE$$.HIVE_STYLE()"
         } else {
           s"$iss$$.MODULE$$.ANSI_STYLE()"
