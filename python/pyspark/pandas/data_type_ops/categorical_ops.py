@@ -16,18 +16,15 @@
 #
 
 from itertools import chain
-from typing import TYPE_CHECKING, Union
+from typing import Union
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas.data_type_ops.base import DataTypeOps, T_IndexOps
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
 from pyspark.sql import functions as F
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class CategoricalOps(DataTypeOps):
@@ -57,10 +54,10 @@ class CategoricalOps(DataTypeOps):
 
         categories = index_ops.dtype.categories
         if len(categories) == 0:
-            scol = F.lit(None)
+            scol = SF.lit(None)
         else:
             kvs = chain(
-                *[(F.lit(code), F.lit(category)) for code, category in enumerate(categories)]
+                *[(SF.lit(code), SF.lit(category)) for code, category in enumerate(categories)]
             )
             map_scol = F.create_map(*kvs)
             scol = map_scol.getItem(index_ops.spark.column)

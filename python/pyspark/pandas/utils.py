@@ -22,10 +22,11 @@ import functools
 from collections import OrderedDict
 from contextlib import contextmanager
 import os
-from typing import (
+from typing import (  # noqa: F401 (SPARK-34943)
     Any,
     Callable,
     Dict,
+    Iterable,
     Iterator,
     List,
     Optional,
@@ -46,6 +47,7 @@ from pandas.api.types import is_list_like
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import as_spark_type
 
 if TYPE_CHECKING:
@@ -306,7 +308,9 @@ def combine_frames(
 
 
 def align_diff_frames(
-    resolve_func: Callable[["DataFrame", List[Tuple], List[Tuple]], Tuple["Series", Tuple]],
+    resolve_func: Callable[
+        ["DataFrame", List[Tuple], List[Tuple]], Iterator[Tuple["Series", Tuple]]
+    ],
     this: "DataFrame",
     that: "DataFrame",
     fillna: bool = True,
@@ -381,11 +385,11 @@ def align_diff_frames(
     # 2. Apply the given function to transform the columns in a batch and keep the new columns.
     combined_column_labels = combined._internal.column_labels
 
-    that_columns_to_apply = []
-    this_columns_to_apply = []
-    additional_that_columns = []
-    columns_to_keep = []
-    column_labels_to_keep = []
+    that_columns_to_apply = []  # type: List[Tuple]
+    this_columns_to_apply = []  # type: List[Tuple]
+    additional_that_columns = []  # type: List[Tuple]
+    columns_to_keep = []  # type: List[Union[Series, spark.Column]]
+    column_labels_to_keep = []  # type: List[Tuple]
 
     for combined_label in combined_column_labels:
         for common_label in common_column_labels:
@@ -405,7 +409,7 @@ def align_diff_frames(
                 # is intentional so that `this_columns` and `that_columns` can be paired.
                 additional_that_columns.append(combined_label)
             elif fillna:
-                columns_to_keep.append(F.lit(None).cast(DoubleType()).alias(str(combined_label)))
+                columns_to_keep.append(SF.lit(None).cast(DoubleType()).alias(str(combined_label)))
                 column_labels_to_keep.append(combined_label)
             else:
                 columns_to_keep.append(combined._psser_for(combined_label))
@@ -419,8 +423,8 @@ def align_diff_frames(
         psser_set, column_labels_set = zip(
             *resolve_func(combined, this_columns_to_apply, that_columns_to_apply)
         )
-        columns_applied = list(psser_set)
-        column_labels_applied = list(column_labels_set)
+        columns_applied = list(psser_set)  # type: List[Union[Series, spark.Column]]
+        column_labels_applied = list(column_labels_set)  # type: List[Tuple]
     else:
         columns_applied = []
         column_labels_applied = []
@@ -877,11 +881,11 @@ def spark_column_equals(left: spark.Column, right: spark.Column) -> bool:
     """
     Check both `left` and `right` have the same expressions.
 
-    >>> spark_column_equals(F.lit(0), F.lit(0))
+    >>> spark_column_equals(SF.lit(0), SF.lit(0))
     True
-    >>> spark_column_equals(F.lit(0) + 1, F.lit(0) + 1)
+    >>> spark_column_equals(SF.lit(0) + 1, SF.lit(0) + 1)
     True
-    >>> spark_column_equals(F.lit(0) + 1, F.lit(0) + 2)
+    >>> spark_column_equals(SF.lit(0) + 1, SF.lit(0) + 2)
     False
     >>> sdf1 = ps.DataFrame({"x": ['a', 'b', 'c']}).to_spark()
     >>> spark_column_equals(sdf1["x"] + 1, sdf1["x"] + 1)

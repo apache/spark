@@ -20,8 +20,10 @@ package org.apache.spark.network.shuffle;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
+import java.util.Map;
 
 import com.codahale.metrics.Meter;
+import com.codahale.metrics.Metric;
 import com.codahale.metrics.Timer;
 import org.junit.Before;
 import org.junit.Test;
@@ -103,7 +105,7 @@ public class ExternalBlockHandlerSuite {
 
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
-    verifyOpenBlockLatencyMetrics();
+    verifyOpenBlockLatencyMetrics(2, 2);
   }
 
   @Test
@@ -117,7 +119,7 @@ public class ExternalBlockHandlerSuite {
 
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
-    verifyOpenBlockLatencyMetrics();
+    verifyOpenBlockLatencyMetrics(2, 2);
   }
 
   @Test
@@ -126,14 +128,14 @@ public class ExternalBlockHandlerSuite {
       new NioManagedBuffer(ByteBuffer.wrap(new byte[10]))
     };
     when(blockResolver.getContinuousBlocksData(
-      "app0", "exec1", 0, 0, 0, 1)).thenReturn(batchBlockMarkers[0]);
+      "app0", "exec1", 0, 0, 0, 3)).thenReturn(batchBlockMarkers[0]);
 
     FetchShuffleBlocks fetchShuffleBlocks = new FetchShuffleBlocks(
-      "app0", "exec1", 0, new long[] { 0 }, new int[][] {{ 0, 1 }}, true);
+      "app0", "exec1", 0, new long[] { 0 }, new int[][] {{ 0, 3 }}, true);
     checkOpenBlocksReceive(fetchShuffleBlocks, batchBlockMarkers);
 
-    verify(blockResolver, times(1)).getContinuousBlocksData("app0", "exec1", 0, 0, 0, 1);
-    verifyOpenBlockLatencyMetrics();
+    verify(blockResolver, times(1)).getContinuousBlocksData("app0", "exec1", 0, 0, 0, 3);
+    verifyOpenBlockLatencyMetrics(3, 1);
   }
 
   @Test
@@ -147,7 +149,7 @@ public class ExternalBlockHandlerSuite {
 
     verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 0);
     verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 1);
-    verifyOpenBlockLatencyMetrics();
+    verifyOpenBlockLatencyMetrics(2, 2);
   }
 
   @Test
@@ -195,17 +197,20 @@ public class ExternalBlockHandlerSuite {
     assertFalse(buffers.hasNext());
   }
 
-  private void verifyOpenBlockLatencyMetrics() {
-    Timer openBlockRequestLatencyMillis = (Timer) ((ExternalBlockHandler) handler)
+  private void verifyOpenBlockLatencyMetrics(
+      int blockTransferCount,
+      int blockTransferMessageCount) {
+    Map<String, Metric> metricMap = ((ExternalBlockHandler) handler)
         .getAllMetrics()
-        .getMetrics()
-        .get("openBlockRequestLatencyMillis");
+        .getMetrics();
+    Timer openBlockRequestLatencyMillis = (Timer) metricMap.get("openBlockRequestLatencyMillis");
     assertEquals(1, openBlockRequestLatencyMillis.getCount());
     // Verify block transfer metrics
-    Meter blockTransferRateBytes = (Meter) ((ExternalBlockHandler) handler)
-        .getAllMetrics()
-        .getMetrics()
-        .get("blockTransferRateBytes");
+    Meter blockTransferRate = (Meter) metricMap.get("blockTransferRate");
+    assertEquals(blockTransferCount, blockTransferRate.getCount());
+    Meter blockTransferMessageRate = (Meter) metricMap.get("blockTransferMessageRate");
+    assertEquals(blockTransferMessageCount, blockTransferMessageRate.getCount());
+    Meter blockTransferRateBytes = (Meter) metricMap.get("blockTransferRateBytes");
     assertEquals(10, blockTransferRateBytes.getCount());
   }
 
