@@ -312,7 +312,7 @@ object ShufflePartitionsUtil extends Logging {
   /**
    * Get the map size of the specific reduce shuffle Id.
    */
-  def getMapSizesForReduceId(shuffleId: Int, partitionId: Int): Array[Long] = {
+  private def getMapSizesForReduceId(shuffleId: Int, partitionId: Int): Array[Long] = {
     val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses.map{_.getSizeForBlock(partitionId)}
   }
