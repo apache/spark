@@ -658,4 +658,46 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
     assert(ShufflePartitionsUtil.splitSizeListByTargetSize(sizeList4, targetSize).toSeq ==
       Seq(0, 2, 3))
   }
+
+  test("SPARK-35923: Coalesce empty partition with mixed CoalescedPartitionSpec and" +
+    "PartialReducerPartitionSpec") {
+    val targetSize = 100
+    val bytesByPartitionId1 = Array[Long](0, 200, 0, 10, 0, 0, 400, 0, 0)
+    val bytesByPartitionId2 = Array[Long](0, 30, 10, 300, 0, 0, 5, 0, 0)
+    val specs1 =
+      Seq(CoalescedPartitionSpec(0, 1, 0)) ++ // 0 - empty
+        Seq.tabulate(2)(i => PartialReducerPartitionSpec(1, i, i + 1, 100)) ++ // 1 - skew
+        Seq(CoalescedPartitionSpec(2, 3, 0)) ++ // 2
+        Seq.fill(3)(CoalescedPartitionSpec(3, 4, 10)) ++ // 3 - other side skew
+        Seq.tabulate(2)(i => CoalescedPartitionSpec(4 + i, 5 + i, 0)) ++ // 4, 5 - empty
+        Seq.tabulate(4)(i => PartialReducerPartitionSpec(6, i, i + 1, 100)) ++ // 6 - skew
+        Seq.tabulate(2)(i => CoalescedPartitionSpec(7 + i, 8 + i, 0)) // 7, 8 - empty
+    val specs2 =
+      Seq(CoalescedPartitionSpec(0, 1, 0)) ++ // 0 - empty
+        Seq.fill(2)(CoalescedPartitionSpec(1, 2, 30)) ++ // 1 - other side skew
+        Seq(CoalescedPartitionSpec(2, 3, 10)) ++ // 2
+        Seq.tabulate(3)(i => PartialReducerPartitionSpec(3, i, i + 1, 100)) ++ // 3 - skew
+        Seq.tabulate(2)(i => CoalescedPartitionSpec(4 + i, 5 + i, 0)) ++ // 4, 5 - empty
+        Seq.fill(4)(CoalescedPartitionSpec(6, 7, 5)) ++ // 6 - other side skew
+        Seq.tabulate(2)(i => CoalescedPartitionSpec(7 + i, 8 + i, 0)) // 7, 8 - empty
+    val expected1 =
+      Seq.tabulate(2)(i => PartialReducerPartitionSpec(1, i, i + 1, 100)) ++ // 1 - skew
+        Seq(CoalescedPartitionSpec(2, 3, 0)) ++ // 2 not coalesce since other shuffle is not empty
+        Seq.fill(3)(CoalescedPartitionSpec(3, 4, 10)) ++ // 3 - other side skew
+        Seq.tabulate(4)(i => PartialReducerPartitionSpec(6, i, i + 1, 100)) // 6 - skew
+    val expected2 =
+      Seq.fill(2)(CoalescedPartitionSpec(1, 2, 30)) ++ // 1 - other side skew
+        Seq(CoalescedPartitionSpec(2, 3, 10)) ++ // 2
+        Seq.tabulate(3)(i => PartialReducerPartitionSpec(3, i, i + 1, 100)) ++ // 3 - skew
+        Seq.fill(4)(CoalescedPartitionSpec(6, 7, 5)) // 6 - other side skew
+    val coalesced = ShufflePartitionsUtil.coalescePartitions(
+      Array(
+        Some(new MapOutputStatistics(0, bytesByPartitionId1)),
+        Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+      Seq(
+        Some(specs1),
+        Some(specs2)),
+      targetSize, 1)
+    assert(coalesced == Seq(expected1, expected2))
+  }
 }
