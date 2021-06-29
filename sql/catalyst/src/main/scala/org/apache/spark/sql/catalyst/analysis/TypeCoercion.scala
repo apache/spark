@@ -633,10 +633,15 @@ abstract class TypeCoercionBase {
       case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
-      case s @ SubtractTimestamps(DateType(), _, _, _) =>
-        s.copy(left = Cast(s.left, TimestampType))
-      case s @ SubtractTimestamps(_, DateType(), _, _) =>
-        s.copy(right = Cast(s.right, TimestampType))
+      case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
+        s.copy(left = Cast(s.left, s.right.dataType))
+      case s @ SubtractTimestamps(AnyTimestampType(), DateType(), _, _) =>
+        s.copy(right = Cast(s.right, s.left.dataType))
+      case s @ SubtractTimestamps(AnyTimestampType(), AnyTimestampType(), _, _)
+        if s.left.dataType != s.right.dataType =>
+        val newLeft = castIfNotSameType(s.left, AnyTimestampType.defaultConcreteType)
+        val newRight = castIfNotSameType(s.right, AnyTimestampType.defaultConcreteType)
+        s.copy(left = newLeft, right = newRight)
 
       case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
     }

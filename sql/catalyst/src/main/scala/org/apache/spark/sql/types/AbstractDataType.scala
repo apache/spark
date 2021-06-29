@@ -219,3 +219,14 @@ private[sql] abstract class FractionalType extends NumericType {
   private[sql] val fractional: Fractional[InternalType]
   private[sql] val asIntegral: Integral[InternalType]
 }
+
+private[sql] object AnyTimestampType extends AbstractDataType with Serializable {
+  override private[sql] def defaultConcreteType: DataType = TimestampWithoutTZType
+
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[TimestampType] || other.isInstanceOf[TimestampWithoutTZType]
+
+  override private[sql] def simpleString = "(timestamp or timestamp without time zone)"
+
+  def unapply(e: Expression): Boolean = acceptsType(e.dataType)
+}
