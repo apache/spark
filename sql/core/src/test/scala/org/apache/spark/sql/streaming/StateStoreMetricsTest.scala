@@ -59,7 +59,6 @@ trait StateStoreMetricsTest extends StreamTest {
 
         val numRowsDroppedByWatermark = arraySum(allNumRowsDroppedByWatermarkSinceLastCheck,
           numStateOperators)
-
         assert(numRowsDroppedByWatermark === droppedByWatermark,
           s"incorrect dropped rows by watermark, $debugString")
 

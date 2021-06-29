@@ -144,7 +144,7 @@ case class FlatMapGroupsWithStateExec(
           CompletionIterator[InternalRow, Iterator[InternalRow]](processor.processTimedOutState(), {
             // Note: `timeoutLatencyMs` also includes the time the parent operator took for
             // processing output returned through iterator.
-            timeoutLatencyMs += (System.nanoTime - timeoutProcessingStartTimeNs)
+            timeoutLatencyMs += NANOSECONDS.toMillis(System.nanoTime - timeoutProcessingStartTimeNs)
           })
 
         // Generate a iterator that returns the rows grouped by the grouping function
