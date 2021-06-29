@@ -23,8 +23,7 @@ import scala.concurrent.duration.Duration
 import scala.util.Random
 
 import com.github.benmanes.caffeine.cache.{CacheLoader => CaffeineCacheLoader, Caffeine}
-import com.github.benmanes.caffeine.guava.CaffeinatedGuava
-import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import com.google.common.cache.{CacheBuilder, CacheLoader}
 
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.util.ThreadUtils
@@ -79,28 +78,6 @@ object LocalCacheBenchmark extends BenchmarkBase {
 
       benchmark.addCase("Caffeine") { _ =>
         val cache = Caffeine.newBuilder().build[TestData, TestData](caffeineCacheLoader)
-        dataset.map(dataList => executor.submit(new Callable[Unit] {
-          override def call(): Unit = {
-            dataList.foreach(key => cache.get(key))
-          }
-        })).foreach(future => ThreadUtils.awaitResult(future, Duration.Inf))
-        cache.cleanUp()
-      }
-
-      benchmark.addCase("CaffeinatedGuava with Guava CacheLoader") { _ =>
-        val cache: LoadingCache[TestData, TestData] =
-          CaffeinatedGuava.build(Caffeine.newBuilder(), guavaCacheLoader)
-        dataset.map(dataList => executor.submit(new Callable[Unit] {
-          override def call(): Unit = {
-            dataList.foreach(key => cache.get(key))
-          }
-        })).foreach(future => ThreadUtils.awaitResult(future, Duration.Inf))
-        cache.cleanUp()
-      }
-
-      benchmark.addCase("CaffeinatedGuava with Caffeine CacheLoader") { _ =>
-        val cache: LoadingCache[TestData, TestData] =
-          CaffeinatedGuava.build(Caffeine.newBuilder(), caffeineCacheLoader)
         dataset.map(dataList => executor.submit(new Callable[Unit] {
           override def call(): Unit = {
             dataList.foreach(key => cache.get(key))

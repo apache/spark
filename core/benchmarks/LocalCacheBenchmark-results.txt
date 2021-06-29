@@ -8,7 +8,5 @@ Loading Cache:                              Best Time(ms)   Avg Time(ms)   Stdev
 --------------------------------------------------------------------------------------------------------------------------
 Guava Cache                                             5              5           0         16.7          60.0       1.0X
 Caffeine                                                2              2           1         44.3          22.6       2.7X
-CaffeinatedGuava with Guava CacheLoader                 2              2           1         43.7          22.9       2.6X
-CaffeinatedGuava with Caffeine CacheLoader              2              2           0         44.2          22.6       2.7X
 
 
