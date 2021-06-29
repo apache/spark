@@ -3172,7 +3172,7 @@ object SQLConf {
       .internal()
       .doc("When true, df.show() prints the output in the legacy format." +
         " Otherwise, if this is false, df.show() prints the output " +
-        "as HiveResult's format.")
+        "in the Hive compatible format.")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
