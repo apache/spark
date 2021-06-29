@@ -353,17 +353,18 @@ object ShufflePartitionsUtil extends Logging {
       bytesByPartitionId: Array[Long],
       targetSize: Long): Seq[ShufflePartitionSpec] = {
     bytesByPartitionId.indices.flatMap { reduceIndex =>
-      if (bytesByPartitionId(reduceIndex) > targetSize) {
+      val bytes = bytesByPartitionId(reduceIndex)
+      if (bytes > targetSize) {
         val newPartitionSpec = createSkewPartitionSpecs(shuffleId, reduceIndex, targetSize)
         if (newPartitionSpec.isEmpty) {
-          CoalescedPartitionSpec(reduceIndex, reduceIndex + 1) :: Nil
+          CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
         } else {
           logDebug(s"For shuffle $shuffleId, partition $reduceIndex is skew, " +
             s"split it into ${newPartitionSpec.get.size} parts.")
           newPartitionSpec.get
         }
       } else {
-        CoalescedPartitionSpec(reduceIndex, reduceIndex + 1) :: Nil
+        CoalescedPartitionSpec(reduceIndex, reduceIndex + 1, bytes) :: Nil
       }
     }
   }
