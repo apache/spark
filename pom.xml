@@ -140,7 +140,7 @@
     <orc.version>1.6.8</orc.version>
     <jetty.version>9.4.42.v20210604</jetty.version>
     <jakartaservlet.version>4.0.3</jakartaservlet.version>
-    <chill.version>0.9.5</chill.version>
+    <chill.version>0.10.0</chill.version>
     <ivy.version>2.5.0</ivy.version>
     <oro.version>2.0.8</oro.version>
     <!--
@@ -2857,19 +2857,7 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-shade-plugin</artifactId>
-          <version>3.2.1</version>
-          <dependencies>
-            <dependency>
-              <groupId>org.ow2.asm</groupId>
-              <artifactId>asm</artifactId>
-              <version>7.3.1</version>
-            </dependency>
-            <dependency>
-              <groupId>org.ow2.asm</groupId>
-              <artifactId>asm-commons</artifactId>
-              <version>7.3.1</version>
-            </dependency>
-          </dependencies>
+          <version>3.2.4</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
