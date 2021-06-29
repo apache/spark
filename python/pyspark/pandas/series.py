@@ -101,6 +101,7 @@ from pyspark.pandas.utils import (
     SPARK_CONF_ARROW_ENABLED,
 )
 from pyspark.pandas.datetimes import DatetimeMethods
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkSeriesMethods
 from pyspark.pandas.strings import StringMethods
 from pyspark.pandas.typedef import (
@@ -1018,21 +1019,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if isinstance(arg, dict):
             is_start = True
             # In case dictionary is empty.
-            current = F.when(F.lit(False), F.lit(None).cast(self.spark.data_type))
+            current = F.when(SF.lit(False), SF.lit(None).cast(self.spark.data_type))
 
             for to_replace, value in arg.items():
                 if is_start:
-                    current = F.when(self.spark.column == F.lit(to_replace), value)
+                    current = F.when(self.spark.column == SF.lit(to_replace), value)
                     is_start = False
                 else:
-                    current = current.when(self.spark.column == F.lit(to_replace), value)
+                    current = current.when(self.spark.column == SF.lit(to_replace), value)
 
             if hasattr(arg, "__missing__"):
                 tmp_val = arg[np._NoValue]
                 del arg[np._NoValue]  # Remove in case it's set in defaultdict.
-                current = current.otherwise(F.lit(tmp_val))
+                current = current.otherwise(SF.lit(tmp_val))
             else:
-                current = current.otherwise(F.lit(None).cast(self.spark.data_type))
+                current = current.otherwise(SF.lit(None).cast(self.spark.data_type))
             return self._with_new_scol(current)
         else:
             return self.apply(arg)
@@ -2738,7 +2739,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         internal = self._internal.resolved_copy
         sdf = internal.spark_frame.select(
             [
-                F.concat(F.lit(prefix), index_spark_column).alias(index_spark_column_name)
+                F.concat(SF.lit(prefix), index_spark_column).alias(index_spark_column_name)
                 for index_spark_column, index_spark_column_name in zip(
                     internal.index_spark_columns, internal.index_spark_column_names
                 )
@@ -2793,7 +2794,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         internal = self._internal.resolved_copy
         sdf = internal.spark_frame.select(
             [
-                F.concat(index_spark_column, F.lit(suffix)).alias(index_spark_column_name)
+                F.concat(index_spark_column, SF.lit(suffix)).alias(index_spark_column_name)
                 for index_spark_column, index_spark_column_name in zip(
                     internal.index_spark_columns, internal.index_spark_column_names
                 )
@@ -4061,7 +4062,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 return pdf[internal.data_spark_column_names[0]].iloc[0]
 
             item_string = name_like_string(item)
-            sdf = sdf.withColumn(SPARK_DEFAULT_INDEX_NAME, F.lit(str(item_string)))
+            sdf = sdf.withColumn(SPARK_DEFAULT_INDEX_NAME, SF.lit(str(item_string)))
             internal = InternalFrame(
                 spark_frame=sdf,
                 index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
@@ -4406,7 +4407,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     cond = (
                         (F.isnan(self.spark.column) | self.spark.column.isNull())
                         if pd.isna(to_replace_)
-                        else (self.spark.column == F.lit(to_replace_))
+                        else (self.spark.column == SF.lit(to_replace_))
                     )
                     if is_start:
                         current = F.when(cond, value)
@@ -5070,7 +5071,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             psdf = self._psdf[[self.name]]
             if repeats == 0:
-                return first_series(DataFrame(psdf._internal.with_filter(F.lit(False))))
+                return first_series(DataFrame(psdf._internal.with_filter(SF.lit(False))))
             else:
                 return first_series(ps.concat([psdf] * repeats))
 
@@ -5148,7 +5149,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         index_scol = self._internal.index_spark_columns[0]
         index_type = self._internal.spark_type_for(index_scol)
         cond = [
-            F.max(F.when(index_scol <= F.lit(index).cast(index_type), self.spark.column))
+            F.max(F.when(index_scol <= SF.lit(index).cast(index_type), self.spark.column))
             for index in where
         ]
         sdf = self._internal.spark_frame.select(cond)
@@ -5585,7 +5586,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         psser = first_series(DataFrame(internal))
 
         return cast(
-            Series, ps.concat([psser, self.loc[self.isnull()].spark.transform(lambda _: F.lit(-1))])
+            Series,
+            ps.concat([psser, self.loc[self.isnull()].spark.transform(lambda _: SF.lit(-1))]),
         )
 
     def argmax(self) -> int:
@@ -6064,7 +6066,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             scol = F.when(
                 # Manually sets nulls given the column defined above.
                 self.spark.column.isNull(),
-                F.lit(None),
+                SF.lit(None),
             ).otherwise(func(self.spark.column).over(window))
         else:
             # Here, we use two Windows.
@@ -6100,7 +6102,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 # By going through with max, it sets True after the first time it meets null.
                 F.max(self.spark.column.isNull()).over(window),
                 # Manually sets nulls given the column defined above.
-                F.lit(None),
+                SF.lit(None),
             ).otherwise(func(self.spark.column).over(window))
 
         return self._with_new_scol(scol)
@@ -6121,7 +6123,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def _cumprod(self, skipna: bool, part_cols: Sequence[Union[str, Column]] = ()) -> "Series":
         if isinstance(self.spark.data_type, BooleanType):
             scol = self._cum(
-                lambda scol: F.min(F.coalesce(scol, F.lit(True))), skipna, part_cols
+                lambda scol: F.min(F.coalesce(scol, SF.lit(True))), skipna, part_cols
             ).spark.column.cast(LongType())
         elif isinstance(self.spark.data_type, NumericType):
             num_zeros = self._cum(

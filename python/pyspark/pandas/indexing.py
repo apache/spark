@@ -39,6 +39,7 @@ from pyspark.pandas.internal import (
     SPARK_DEFAULT_SERIES_NAME,
 )
 from pyspark.pandas.exceptions import SparkPandasIndexingError, SparkPandasNotImplementedError
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import Scalar
 from pyspark.pandas.utils import (
     is_name_like_tuple,
@@ -626,10 +627,11 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
 
             cond, limit, remaining_index = self._select_rows(key)
             if cond is None:
-                cond = F.lit(True)
+                cond = SF.lit(True)
             if limit is not None:
                 cond = cond & (
-                    self._internal.spark_frame[cast(iLocIndexer, self)._sequence_col] < F.lit(limit)
+                    self._internal.spark_frame[cast(iLocIndexer, self)._sequence_col]
+                    < SF.lit(limit)
                 )
 
             if isinstance(value, (Series, spark.Column)):
@@ -640,7 +642,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 if isinstance(value, Series):
                     value = value.spark.column
             else:
-                value = F.lit(value)
+                value = SF.lit(value)
             scol = (
                 F.when(cond, value)
                 .otherwise(self._internal.spark_column_for(self._psdf_or_psser._column_label))
@@ -711,10 +713,11 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
             _, data_spark_columns, _, _, _ = self._select_cols(cols_sel, missing_keys=missing_keys)
 
             if cond is None:
-                cond = F.lit(True)
+                cond = SF.lit(True)
             if limit is not None:
                 cond = cond & (
-                    self._internal.spark_frame[cast(iLocIndexer, self)._sequence_col] < F.lit(limit)
+                    self._internal.spark_frame[cast(iLocIndexer, self)._sequence_col]
+                    < SF.lit(limit)
                 )
 
             if isinstance(value, (Series, spark.Column)):
@@ -725,7 +728,7 @@ class LocIndexerLike(IndexerLike, metaclass=ABCMeta):
                 if isinstance(value, Series):
                     value = value.spark.column
             else:
-                value = F.lit(value)
+                value = SF.lit(value)
 
             new_data_spark_columns = []
             new_fields = []
@@ -1016,8 +1019,8 @@ class LocIndexer(LocIndexerLike):
             start_and_stop = (
                 sdf.select(index_column.spark.column, NATURAL_ORDER_COLUMN_NAME)
                 .where(
-                    (index_column.spark.column == F.lit(start).cast(index_data_type))
-                    | (index_column.spark.column == F.lit(stop).cast(index_data_type))
+                    (index_column.spark.column == SF.lit(start).cast(index_data_type))
+                    | (index_column.spark.column == SF.lit(stop).cast(index_data_type))
                 )
                 .collect()
             )
@@ -1030,9 +1033,9 @@ class LocIndexer(LocIndexerLike):
 
             conds = []  # type: List[spark.Column]
             if start is not None:
-                conds.append(F.col(NATURAL_ORDER_COLUMN_NAME) >= F.lit(start).cast(LongType()))
+                conds.append(F.col(NATURAL_ORDER_COLUMN_NAME) >= SF.lit(start).cast(LongType()))
             if stop is not None:
-                conds.append(F.col(NATURAL_ORDER_COLUMN_NAME) <= F.lit(stop).cast(LongType()))
+                conds.append(F.col(NATURAL_ORDER_COLUMN_NAME) <= SF.lit(stop).cast(LongType()))
 
             # if index order is not monotonic increasing or decreasing
             # and specified values don't exist in index, raise KeyError
@@ -1048,20 +1051,24 @@ class LocIndexer(LocIndexerLike):
                     start = rows_sel.start
                     if inc is not False:
                         conds.append(
-                            index_column.spark.column >= F.lit(start).cast(index_data_type)
+                            index_column.spark.column >= SF.lit(start).cast(index_data_type)
                         )
                     elif dec is not False:
                         conds.append(
-                            index_column.spark.column <= F.lit(start).cast(index_data_type)
+                            index_column.spark.column <= SF.lit(start).cast(index_data_type)
                         )
                     else:
                         raise KeyError(rows_sel.start)
                 if stop is None and rows_sel.stop is not None:
                     stop = rows_sel.stop
                     if inc is not False:
-                        conds.append(index_column.spark.column <= F.lit(stop).cast(index_data_type))
+                        conds.append(
+                            index_column.spark.column <= SF.lit(stop).cast(index_data_type)
+                        )
                     elif dec is not False:
-                        conds.append(index_column.spark.column >= F.lit(stop).cast(index_data_type))
+                        conds.append(
+                            index_column.spark.column >= SF.lit(stop).cast(index_data_type)
+                        )
                     else:
                         raise KeyError(rows_sel.stop)
 
@@ -1098,23 +1105,23 @@ class LocIndexer(LocIndexerLike):
 
             conds = []
             if start is not None:
-                cond = F.lit(True)
+                cond = SF.lit(True)
                 for scol, value, dt in list(
                     zip(self._internal.index_spark_columns, start, index_data_type)
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
-                    cond = F.when(scol.eqNullSafe(F.lit(value).cast(dt)), cond).otherwise(
-                        compare(scol, F.lit(value).cast(dt), spark.Column.__gt__)
+                    cond = F.when(scol.eqNullSafe(SF.lit(value).cast(dt)), cond).otherwise(
+                        compare(scol, SF.lit(value).cast(dt), spark.Column.__gt__)
                     )
                 conds.append(cond)
             if stop is not None:
-                cond = F.lit(True)
+                cond = SF.lit(True)
                 for scol, value, dt in list(
                     zip(self._internal.index_spark_columns, stop, index_data_type)
                 )[::-1]:
                     compare = MultiIndex._comparator_for_monotonic_increasing(dt)
-                    cond = F.when(scol.eqNullSafe(F.lit(value).cast(dt)), cond).otherwise(
-                        compare(scol, F.lit(value).cast(dt), spark.Column.__lt__)
+                    cond = F.when(scol.eqNullSafe(SF.lit(value).cast(dt)), cond).otherwise(
+                        compare(scol, SF.lit(value).cast(dt), spark.Column.__lt__)
                     )
                 conds.append(cond)
 
@@ -1125,20 +1132,20 @@ class LocIndexer(LocIndexerLike):
     ) -> Tuple[Optional[spark.Column], Optional[int], Optional[int]]:
         rows_sel = list(rows_sel)
         if len(rows_sel) == 0:
-            return F.lit(False), None, None
+            return SF.lit(False), None, None
         elif self._internal.index_level == 1:
             index_column = self._psdf_or_psser.index.to_series()
             index_data_type = index_column.spark.data_type
             if len(rows_sel) == 1:
                 return (
-                    index_column.spark.column == F.lit(rows_sel[0]).cast(index_data_type),
+                    index_column.spark.column == SF.lit(rows_sel[0]).cast(index_data_type),
                     None,
                     None,
                 )
             else:
                 return (
                     index_column.spark.column.isin(
-                        [F.lit(r).cast(index_data_type) for r in rows_sel]
+                        [SF.lit(r).cast(index_data_type) for r in rows_sel]
                     ),
                     None,
                     None,
@@ -1618,22 +1625,22 @@ class iLocIndexer(LocIndexerLike):
             if start < 0:
                 start = start + cnt
             if step >= 0:
-                cond.append(sequence_scol >= F.lit(start).cast(LongType()))
+                cond.append(sequence_scol >= SF.lit(start).cast(LongType()))
             else:
-                cond.append(sequence_scol <= F.lit(start).cast(LongType()))
+                cond.append(sequence_scol <= SF.lit(start).cast(LongType()))
         if stop is not None:
             if stop < 0:
                 stop = stop + cnt
             if step >= 0:
-                cond.append(sequence_scol < F.lit(stop).cast(LongType()))
+                cond.append(sequence_scol < SF.lit(stop).cast(LongType()))
             else:
-                cond.append(sequence_scol > F.lit(stop).cast(LongType()))
+                cond.append(sequence_scol > SF.lit(stop).cast(LongType()))
         if step != 1:
             if step > 0:
                 start = start or 0
             else:
                 start = start or (cnt - 1)
-            cond.append(((sequence_scol - start) % F.lit(step).cast(LongType())) == F.lit(0))
+            cond.append(((sequence_scol - start) % SF.lit(step).cast(LongType())) == SF.lit(0))
 
         return reduce(lambda x, y: x & y, cond), None, None
 
@@ -1668,10 +1675,10 @@ class iLocIndexer(LocIndexerLike):
         sequence_scol = sdf[self._sequence_col]
         cond = []
         for key in new_rows_sel:
-            cond.append(sequence_scol == F.lit(int(key)).cast(LongType()))
+            cond.append(sequence_scol == SF.lit(int(key)).cast(LongType()))
 
         if len(cond) == 0:
-            cond = [F.lit(False)]
+            cond = [SF.lit(False)]
         return reduce(lambda x, y: x | y, cond), None, None
 
     def _select_rows_else(

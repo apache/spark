@@ -38,6 +38,7 @@ from pyspark.pandas.missing.window import (
 from pyspark import pandas as ps  # noqa: F401
 
 from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, SPARK_INDEX_NAME_FORMAT
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.utils import scol_for
 from pyspark.sql.column import Column
 from pyspark.sql.window import WindowSpec
@@ -76,7 +77,7 @@ class RollingAndExpanding(Generic[T_Frame], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.sum(scol).over(self._window),
-            ).otherwise(F.lit(None))
+            ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(sum)
 
@@ -85,7 +86,7 @@ class RollingAndExpanding(Generic[T_Frame], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.min(scol).over(self._window),
-            ).otherwise(F.lit(None))
+            ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(min)
 
@@ -94,7 +95,7 @@ class RollingAndExpanding(Generic[T_Frame], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.max(scol).over(self._window),
-            ).otherwise(F.lit(None))
+            ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(max)
 
@@ -103,7 +104,7 @@ class RollingAndExpanding(Generic[T_Frame], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.mean(scol).over(self._window),
-            ).otherwise(F.lit(None))
+            ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(mean)
 
@@ -112,7 +113,7 @@ class RollingAndExpanding(Generic[T_Frame], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.stddev(scol).over(self._window),
-            ).otherwise(F.lit(None))
+            ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(std)
 
@@ -121,7 +122,7 @@ class RollingAndExpanding(Generic[T_Frame], metaclass=ABCMeta):
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.variance(scol).over(self._window),
-            ).otherwise(F.lit(None))
+            ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(var)
 

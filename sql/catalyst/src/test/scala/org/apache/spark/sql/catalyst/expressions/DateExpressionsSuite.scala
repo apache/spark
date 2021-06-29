@@ -1258,6 +1258,71 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-35916: timestamps without time zone difference") {
+    val end = LocalDateTime.parse("2019-10-04T11:04:01.123456")
+    val epoch = LocalDateTime.ofEpochSecond(0, 0, java.time.ZoneOffset.UTC)
+
+    outstandingTimezonesIds.foreach { tz =>
+      def sub(left: LocalDateTime, right: LocalDateTime): Expression = {
+        SubtractTimestamps(
+          Literal(left),
+          Literal(right),
+          legacyInterval = true,
+          timeZoneId = Some(tz))
+      }
+      checkEvaluation(sub(end, end), new CalendarInterval(0, 0, 0))
+      checkEvaluation(sub(end, epoch),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "436163 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds")))
+      checkEvaluation(sub(epoch, end),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "-436163 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds")))
+      checkEvaluation(
+        sub(
+          LocalDateTime.parse("9999-12-31T23:59:59.999999"),
+          LocalDateTime.parse("0001-01-01T00:00:00")),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds")))
+    }
+
+    outstandingTimezonesIds.foreach { tz =>
+      def check(left: LocalDateTime, right: LocalDateTime): Unit = {
+        checkEvaluation(
+          SubtractTimestamps(
+            Literal(left),
+            Literal(right),
+            legacyInterval = false,
+            timeZoneId = Some(tz)),
+          Duration.between(
+            right.atZone(getZoneId(tz)).toLocalDateTime,
+            left.atZone(getZoneId(tz)).toLocalDateTime))
+      }
+
+      check(end, end)
+      check(end, epoch)
+      check(epoch, end)
+      check(LocalDateTime.parse("9999-12-31T23:59:59.999999"),
+        LocalDateTime.parse("0001-01-01T00:00:00"))
+
+      val errMsg = intercept[ArithmeticException] {
+        checkEvaluation(
+          SubtractTimestamps(
+            Literal(LocalDateTime.MIN),
+            Literal(LocalDateTime.MAX),
+            legacyInterval = false,
+            timeZoneId = Some(tz)),
+          Duration.ZERO)
+      }.getMessage
+      assert(errMsg.contains("overflow"))
+
+      Seq(false, true).foreach { legacy =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (end: Expression, start: Expression) => SubtractTimestamps(end, start, legacy, Some(tz)),
+          TimestampWithoutTZType, TimestampWithoutTZType)
+      }
+    }
+  }
+
   test("SPARK-34896: subtract dates") {
     val end = LocalDate.of(2019, 10, 5)
     val epochDate = Literal(LocalDate.ofEpochDay(0))

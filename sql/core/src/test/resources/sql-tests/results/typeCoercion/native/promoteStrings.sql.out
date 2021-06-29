@@ -198,7 +198,7 @@ SELECT '1' - cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '('1' - CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: argument 1 requires timestamp type, however, ''1'' is of string type.; line 1 pos 7
+cannot resolve '('1' - CAST('2017-12-11 09:30:00.0' AS TIMESTAMP))' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, ''1'' is of string type.; line 1 pos 7
 
 
 -- !query
@@ -781,7 +781,7 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) - '1' FROM t
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) - '1')' due to data type mismatch: argument 2 requires timestamp type, however, ''1'' is of string type.; line 1 pos 7
+cannot resolve '(CAST('2017-12-11 09:30:00.0' AS TIMESTAMP) - '1')' due to data type mismatch: argument 2 requires (timestamp or timestamp without time zone) type, however, ''1'' is of string type.; line 1 pos 7
 
 
 -- !query
