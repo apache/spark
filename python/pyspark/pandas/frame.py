@@ -43,7 +43,6 @@ from typing import (
     Sequence,
     Tuple,
     Type,
-    TypeVar,
     Union,
     cast,
     no_type_check,
@@ -84,6 +83,7 @@ from pyspark.sql.types import (  # noqa: F401 (SPARK-34943)
 from pyspark.sql.window import Window
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import DataFrameOrSeries, Dtype, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkFrameMethods
 from pyspark.pandas.config import option_context, get_option
 from pyspark.pandas.spark import functions as SF
@@ -122,9 +122,7 @@ from pyspark.pandas.typedef import (
     infer_return_type,
     spark_type_to_pandas_dtype,
     DataFrameType,
-    Dtype,
     SeriesType,
-    Scalar,
     ScalarType,
 )
 from pyspark.pandas.plot import PandasOnSparkPlotAccessor
@@ -341,8 +339,6 @@ circle        1.0  2.348543e+108
 triangle      8.0   1.532496e+54
 rectangle    16.0  2.348543e+108
 """
-
-T = TypeVar("T")
 
 
 def _create_tuple_for_frame_type(params: Any) -> object:
@@ -2887,7 +2883,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     # TODO: add axis parameter can work when '1' or 'columns'
     def xs(
         self, key: Union[Any, Tuple], axis: Union[int, str] = 0, level: Optional[int] = None
-    ) -> Union["DataFrame", "Series"]:
+    ) -> DataFrameOrSeries:
         """
         Return cross-section from the DataFrame.
 
@@ -3200,7 +3196,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
     def where(
-        self, cond: Union["DataFrame", "Series"], other: Union["DataFrame", "Series", Any] = np.nan
+        self, cond: DataFrameOrSeries, other: Union[DataFrameOrSeries, Any] = np.nan
     ) -> "DataFrame":
         """
         Replace values where the condition is False.
@@ -3393,7 +3389,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
     def mask(
-        self, cond: Union["DataFrame", "Series"], other: Union["DataFrame", "Series", Any] = np.nan
+        self, cond: DataFrameOrSeries, other: Union[DataFrameOrSeries, Any] = np.nan
     ) -> "DataFrame":
         """
         Replace values where the condition is True.
@@ -9220,7 +9216,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             )
         )
 
-    def stack(self) -> Union["DataFrame", "Series"]:
+    def stack(self) -> DataFrameOrSeries:
         """
         Stack the prescribed level(s) from columns to index.
 
@@ -9403,7 +9399,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return psdf
 
-    def unstack(self) -> Union["DataFrame", "Series"]:
+    def unstack(self) -> DataFrameOrSeries:
         """
         Pivot the (necessarily hierarchical) index labels.
 
@@ -10734,7 +10730,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         axis: Union[int, str] = 0,
         numeric_only: bool = True,
         accuracy: int = 10000,
-    ) -> Union["DataFrame", "Series"]:
+    ) -> DataFrameOrSeries:
         """
         Return value at the given quantile.
 
@@ -11071,7 +11067,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return cast(DataFrame, self.iloc[:, indices])
 
-    def eval(self, expr: str, inplace: bool = False) -> Optional[Union["DataFrame", "Series"]]:
+    def eval(self, expr: str, inplace: bool = False) -> Optional[DataFrameOrSeries]:
         """
         Evaluate a string describing operations on DataFrame columns.
 
@@ -11434,11 +11430,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def align(
         self,
-        other: Union["DataFrame", "Series"],
+        other: DataFrameOrSeries,
         join: str = "outer",
         axis: Optional[Union[int, str]] = None,
         copy: bool = True,
-    ) -> Tuple["DataFrame", Union["DataFrame", "Series"]]:
+    ) -> Tuple["DataFrame", DataFrameOrSeries]:
         """
         Align two objects on their axes with the specified join method.
 
@@ -11852,9 +11848,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return [tuple(list(label) + ([""] * (level - len(label)))) for label in labels]
 
     @staticmethod
-    def _index_normalized_frame(
-        level: int, psser_or_psdf: Union["DataFrame", "Series"]
-    ) -> "DataFrame":
+    def _index_normalized_frame(level: int, psser_or_psdf: DataFrameOrSeries) -> "DataFrame":
         """
         Returns a frame that is normalized against the current column index level.
         For example, the name in `pd.Series([...], name="abc")` can be can be

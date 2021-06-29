@@ -20,9 +20,9 @@ import pandas as pd
 from pandas.api.types import is_hashable
 
 from pyspark import pandas as ps
+from pyspark.pandas._typing import Dtype
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.series import Series
-from pyspark.pandas.typedef.typehints import Dtype
 
 
 class NumericIndex(Index):
