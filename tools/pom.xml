@@ -45,16 +45,6 @@
       <groupId>org.clapper</groupId>
       <artifactId>classutil_${scala.binary.version}</artifactId>
       <version>1.5.1</version>
-      <exclusions>
-        <exclusion>
-          <groupId>org.ow2.asm</groupId>
-          <artifactId>asm</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.xbean</groupId>
-      <artifactId>xbean-asm9-shaded</artifactId>
     </dependency>
   </dependencies>
 
