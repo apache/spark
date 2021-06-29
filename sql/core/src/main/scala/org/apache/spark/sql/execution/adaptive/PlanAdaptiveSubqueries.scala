@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, DynamicPruningExpression, GetStructField, ListQuery, Literal, ScalarSubquery}
 import org.apache.spark.sql.catalyst.optimizer.ScalarSubqueryReference
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DYNAMIC_PRUNING_SUBQUERY, IN_SUBQUERY, SCALAR_SUBQUERY, SCALAR_SUBQUERY_REFERENCE}
 import org.apache.spark.sql.execution
 import org.apache.spark.sql.execution.{BaseSubqueryExec, CommonScalarSubqueriesExec, InSubqueryExec, SparkPlan}
 
@@ -36,7 +36,8 @@ case class PlanAdaptiveSubqueries(
     }
 
     child.transformAllExpressionsWithPruning(
-      _.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
+      _.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY,
+        SCALAR_SUBQUERY_REFERENCE)) {
       case expressions.ScalarSubquery(_, _, exprId, _) =>
         execution.ScalarSubquery(subqueryMap(exprId.id), exprId)
       case ssr: ScalarSubqueryReference =>

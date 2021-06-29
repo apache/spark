@@ -172,14 +172,15 @@ case class PlanSubqueries(sparkSession: SparkSession) extends Rule[SparkPlan] {
   def apply(plan: SparkPlan): SparkPlan = {
     val (plannedCommonScalarSubqueries, child) = plan match {
       case css: CommonScalarSubqueriesExec =>
-        css.scalarSubqueries.asInstanceOf[Seq[expressions.ScalarSubquery]].map { sub =>
+        css.scalarSubqueries.map { sub =>
           val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, sub.plan)
           SubqueryExec.createForScalarSubquery(s"scalar-subquery#${sub.exprId.id}", executedPlan)
         } -> css.child
       case _ => Seq.empty -> plan
     }
 
-    child.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY)) {
+    child.transformAllExpressionsWithPruning(_.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY,
+      SCALAR_SUBQUERY_REFERENCE)) {
       case subquery: expressions.ScalarSubquery =>
         val executedPlan = QueryExecution.prepareExecutedPlan(sparkSession, subquery.plan)
         ScalarSubquery(

@@ -740,8 +740,8 @@ case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
    *
    * [[ExprId]] is required in the cache to correctly identify all subquery reuses as the
    * [[PlanAdaptiveSubqueries]] rule inserts the same instance of planned physical subqueries from
-   * [[CommonScalarSubqueriesExec]] nodes into the plan multiple times, only the [[ExprId]] of the
-   * wrapper [[ScalarSubquery]] is different in those cases.
+   * [[CommonScalarSubqueriesExec]] nodes into the plan multiple times, only the [[ExprId]]s of the
+   * wrapper [[ScalarSubquery]] expressions are different in those cases.
    */
   val subqueryCache: TrieMap[SparkPlan, (BaseSubqueryExec, ExprId)] =
     new TrieMap[SparkPlan, (BaseSubqueryExec, ExprId)]()

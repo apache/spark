@@ -42,8 +42,8 @@ case object ReuseExchangeAndSubquery extends Rule[SparkPlan] {
 
       // [[ExprId]] is required in the cache to correctly identify all subquery reuses as the
       // [[PlanSubqueries]] rule inserts the same instance of planned physical subqueries from
-      // [[CommonScalarSubqueriesExec]] nodes into the plan multiple times, only the [[ExprId]] of
-      // the wrapper [[ScalarSubquery]] is different in those cases.
+      // [[CommonScalarSubqueriesExec]] nodes into the plan multiple times, only the [[ExprId]]s of
+      // the wrapper [[ScalarSubquery]] expressions are different in those cases.
       val subqueries = mutable.Map.empty[SparkPlan, (BaseSubqueryExec, ExprId)]
 
       def reuse(plan: SparkPlan): SparkPlan = {

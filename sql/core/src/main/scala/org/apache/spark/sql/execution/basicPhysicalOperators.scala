@@ -27,6 +27,7 @@ import scala.concurrent.duration.Duration
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.rdd.{EmptyRDD, PartitionwiseSampledRDD, RDD}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -119,7 +120,9 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
  * [[PlanAdaptiveSubqueries]] and [[ScalarSubqueryReference]]s are replaced to [[ScalarSubquery]]s
  * containing planned physical plans.
  */
-case class CommonScalarSubqueriesExec(scalarSubqueries: Seq[Expression], child: SparkPlan)
+case class CommonScalarSubqueriesExec(
+    scalarSubqueries: Seq[expressions.ScalarSubquery],
+    child: SparkPlan)
   extends UnaryExecNode {
   override def output: Seq[Attribute] = child.output
 
