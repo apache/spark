@@ -147,7 +147,7 @@ object ShufflePartitionsUtil extends Logging {
         // coalesce any partitions before partition(i - 1) and after the end of latest skew section.
         if (i - 1 > start) {
           val partitionSpecs = coalescePartitions(
-            partitionIndices(start), repeatValue, validMetrics, targetSize)
+            partitionIndices(start), repeatValue, validMetrics, targetSize, true)
           newPartitionSpecsSeq.zip(partitionSpecs).foreach(spec => spec._1 ++= spec._2)
         }
         // find the end of this skew section, skipping partition(i - 1) and partition(i).
@@ -172,7 +172,7 @@ object ShufflePartitionsUtil extends Logging {
     // coalesce any partitions after the end of last skew section.
     if (numPartitions > start) {
       val partitionSpecs = coalescePartitions(
-        partitionIndices(start), partitionIndices.last + 1, validMetrics, targetSize)
+        partitionIndices(start), partitionIndices.last + 1, validMetrics, targetSize, true)
       newPartitionSpecsSeq.zip(partitionSpecs).foreach(spec => spec._1 ++= spec._2)
     }
     // only return coalesced result if any coalescing has happened.
@@ -215,7 +215,8 @@ object ShufflePartitionsUtil extends Logging {
       start: Int,
       end: Int,
       mapOutputStatistics: Seq[MapOutputStatistics],
-      targetSize: Long): Seq[Seq[CoalescedPartitionSpec]] = {
+      targetSize: Long,
+      allowReturnEmpty: Boolean = false): Seq[Seq[CoalescedPartitionSpec]] = {
     val partitionSpecs = ArrayBuffer.empty[CoalescedPartitionSpec]
     var coalescedSize = 0L
     var i = start
@@ -249,8 +250,8 @@ object ShufflePartitionsUtil extends Logging {
       }
       i += 1
     }
-    // Create at least one partition if all partitions are empty.
-    createPartitionSpec(partitionSpecs.isEmpty)
+    // If do not allowReturnEmpty, create at least one partition if all partitions are empty.
+    createPartitionSpec(!allowReturnEmpty && partitionSpecs.isEmpty)
 
     // add data size for each partitionSpecs
     mapOutputStatistics.map { mapStats =>
