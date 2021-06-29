@@ -968,6 +968,7 @@ object TypeCoercion extends TypeCoercionBase {
       case (StringType, target: NumericType) => target
       case (StringType, DateType) => DateType
       case (StringType, TimestampType) => TimestampType
+      case (StringType, AnyTimestampType) => TimestampType
       case (StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
       case (any: AtomicType, StringType) if any != StringType => StringType
