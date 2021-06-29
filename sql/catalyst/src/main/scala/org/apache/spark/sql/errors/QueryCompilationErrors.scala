@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode,
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
-import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED, LEGACY_CTE_PRECEDENCE_POLICY}
 import org.apache.spark.sql.sources.Filter
