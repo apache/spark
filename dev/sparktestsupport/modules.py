@@ -769,7 +769,7 @@ spark_ganglia_lgpl = Module(
 
 docker_integration_tests = Module(
     name="docker-integration-tests",
-    dependencies=[],
+    dependencies=[sql],
     build_profile_flags=["-Pdocker-integration-tests"],
     source_file_regexes=["external/docker-integration-tests"],
     sbt_test_goals=["docker-integration-tests/test"],
