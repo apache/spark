@@ -33,7 +33,7 @@
   <properties>
     <sbt.project.name>core</sbt.project.name>
   </properties>
-  
+
   <dependencies>
     <dependency>
       <groupId>org.apache.avro</groupId>

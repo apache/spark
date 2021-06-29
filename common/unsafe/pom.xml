@@ -56,6 +56,11 @@
       <artifactId>chill_${scala.binary.version}</artifactId>
     </dependency>
 
+    <dependency>
+      <groupId>com.esotericsoftware</groupId>
+      <artifactId>kryo-shaded</artifactId>
+    </dependency>
+
     <!-- Core dependencies -->
     <dependency>
       <groupId>com.google.code.findbugs</groupId>

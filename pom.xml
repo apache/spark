@@ -402,6 +402,11 @@
         <artifactId>chill-java</artifactId>
         <version>${chill.version}</version>
       </dependency>
+      <dependency>
+        <groupId>com.esotericsoftware</groupId>
+        <artifactId>kryo-shaded</artifactId>
+        <version>4.0.2</version>
+      </dependency>
       <!-- This artifact is a shaded version of ASM 7.x. The POM that was used to produce this
            is at https://github.com/apache/geronimo-xbean/tree/trunk/xbean-asm7-shaded
            For context on why we shade ASM, see SPARK-782 and SPARK-6152. -->
@@ -3317,9 +3322,9 @@
     <profile>
       <id>scala-2.12</id>
       <properties>
-        <!-- 
+        <!--
          SPARK-34774 Add this property to ensure change-scala-version.sh can replace the public `scala.version`
-         property correctly. 
+         property correctly.
         -->
         <scala.version>2.12.14</scala.version>
       </properties>
