@@ -46,6 +46,7 @@ from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.missing.indexes import MissingPandasLikeIndex
 from pyspark.pandas.series import Series, first_series
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkIndexMethods
 from pyspark.pandas.utils import (
     is_name_like_tuple,
@@ -2145,7 +2146,7 @@ class Index(IndexOpsMixin):
 
         psdf = DataFrame(self._internal.resolved_copy)  # type: DataFrame
         if repeats == 0:
-            return DataFrame(psdf._internal.with_filter(F.lit(False))).index
+            return DataFrame(psdf._internal.with_filter(SF.lit(False))).index
         else:
             return ps.concat([psdf] * repeats).index
 
@@ -2193,11 +2194,11 @@ class Index(IndexOpsMixin):
         """
         sdf = self._internal.spark_frame
         if self.is_monotonic_increasing:
-            sdf = sdf.where(self.spark.column <= F.lit(label).cast(self.spark.data_type)).select(
+            sdf = sdf.where(self.spark.column <= SF.lit(label).cast(self.spark.data_type)).select(
                 F.max(self.spark.column)
             )
         elif self.is_monotonic_decreasing:
-            sdf = sdf.where(self.spark.column >= F.lit(label).cast(self.spark.data_type)).select(
+            sdf = sdf.where(self.spark.column >= SF.lit(label).cast(self.spark.data_type)).select(
                 F.min(self.spark.column)
             )
         else:
