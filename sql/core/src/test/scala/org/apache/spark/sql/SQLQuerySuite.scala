@@ -4025,6 +4025,14 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     assert(minuteToSecDF.schema.head.dataType === DayTimeIntervalType(2, 3))
   }
 
+  test("SPARK-35937: Extract date field from timestamp should work in ANSI mode") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkAnswer(sql("select extract(year from to_timestamp('2021-01-02 03:04:05'))"), Row(2021))
+      checkAnswer(sql("select extract(month from to_timestamp('2021-01-02 03:04:05'))"), Row(1))
+      checkAnswer(sql("select extract(day from to_timestamp('2021-01-02 03:04:05'))"), Row(2))
+    }
+  }
+
   test("SPARK-35545: split SubqueryExpression's children field into outer attributes and " +
     "join conditions") {
     withView("t") {
