@@ -273,7 +273,7 @@ object Cast {
   }
 }
 
-abstract class CastToStringBase  extends UnaryExpression
+abstract class CastToStringBase extends UnaryExpression
   with TimeZoneAwareExpression with NullIntolerant {
 
   // The function arguments are: `input`, `result` and `resultIsNull`. We don't need `inputIsNull`
@@ -316,9 +316,7 @@ abstract class CastToStringBase  extends UnaryExpression
         if (array.numElements > 0) {
           val toUTF8String = castToString(et)
           if (array.isNullAt(0)) {
-            if (toHiveStr || !legacyCastToStr) {
-              builder.append("null")
-            }
+            if (toHiveStr || !legacyCastToStr) builder.append("null")
           } else {
             builder.append(toUTF8String(array.get(0, et)).asInstanceOf[UTF8String])
           }
@@ -326,9 +324,8 @@ abstract class CastToStringBase  extends UnaryExpression
           while (i < array.numElements) {
             builder.append(",")
             if (array.isNullAt(i)) {
-              if (toHiveStr || !legacyCastToStr) {
-                builder.append(s"${arrayElementSpace}null")
-              }
+              if (toHiveStr || !legacyCastToStr) builder.append(s"${arrayElementSpace}null")
+
             } else {
               builder.append(arrayElementSpace)
               builder.append(toUTF8String(array.get(i, et)).asInstanceOf[UTF8String])
@@ -351,9 +348,7 @@ abstract class CastToStringBase  extends UnaryExpression
           builder.append(keyToUTF8String(keyArray.get(0, kt)).asInstanceOf[UTF8String])
           builder.append(s"$arrayElementSpace$keyValueSeparator")
           if (valueArray.isNullAt(0)) {
-            if (toHiveStr || !legacyCastToStr) {
-              builder.append("null")
-            }
+            if (toHiveStr || !legacyCastToStr) builder.append("null")
           } else {
             builder.append(arrayElementSpace)
             builder.append(valueToUTF8String(valueArray.get(0, vt)).asInstanceOf[UTF8String])
@@ -364,9 +359,7 @@ abstract class CastToStringBase  extends UnaryExpression
             builder.append(keyToUTF8String(keyArray.get(i, kt)).asInstanceOf[UTF8String])
             builder.append(s"$arrayElementSpace$keyValueSeparator")
             if (valueArray.isNullAt(i)) {
-              if (toHiveStr || !legacyCastToStr) {
-                builder.append(s"${arrayElementSpace}null")
-              }
+              if (toHiveStr || !legacyCastToStr) builder.append(s"${arrayElementSpace}null")
             } else {
               builder.append(arrayElementSpace)
               builder.append(valueToUTF8String(valueArray.get(i, vt))
@@ -389,9 +382,7 @@ abstract class CastToStringBase  extends UnaryExpression
             builder.append("\"" + fields(0).name + "\":")
           }
           if (row.isNullAt(0)) {
-            if (toHiveStr || !legacyCastToStr) {
-              builder.append("null")
-            }
+            if (toHiveStr || !legacyCastToStr) builder.append("null")
           } else {
             builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
           }
@@ -402,9 +393,7 @@ abstract class CastToStringBase  extends UnaryExpression
               builder.append("\"" + fields(i).name + "\":")
             }
             if (row.isNullAt(i)) {
-              if (toHiveStr || !legacyCastToStr) {
-                builder.append(s"${arrayElementSpace}null")
-              }
+              if (toHiveStr || !legacyCastToStr) builder.append(s"${arrayElementSpace}null")
             } else {
               builder.append(arrayElementSpace)
               builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
