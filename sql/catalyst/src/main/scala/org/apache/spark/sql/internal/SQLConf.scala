@@ -3171,7 +3171,7 @@ object SQLConf {
     buildConf("spark.sql.legacy.castToString.enabled")
       .internal()
       .doc("When true, df.show() will print string as origin format." +
-        " Otherwise, if this is false, which is default, df.show() will print data " +
+        " Otherwise, if this is false, df.show() prints the output " +
         "as HiveResult's format.")
       .version("3.2.0")
       .booleanConf
