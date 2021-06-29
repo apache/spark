@@ -44,7 +44,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
       outerPlan: LogicalPlan,
       correctAnswer: LogicalPlan,
       conditions: Seq[Expression]): Unit = {
-    val (outputPlan, joinCond) = DecorrelateInnerQuery(innerPlan, outerPlan)
+    val (outputPlan, joinCond) = DecorrelateInnerQuery(innerPlan, outerPlan.select())
     assert(!hasOuterReferences(outputPlan))
     comparePlans(outputPlan, correctAnswer)
     assert(joinCond.length == conditions.length)
@@ -90,7 +90,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
       Project(Seq(a),
         Filter(OuterReference(a) === a,
           testRelation))
-    val (outputPlan, joinCond) = DecorrelateInnerQuery(innerPlan, outerPlan)
+    val (outputPlan, joinCond) = DecorrelateInnerQuery(innerPlan, outerPlan.select())
     val a1 = outputPlan.output.head
     val correctAnswer =
       Project(Seq(Alias(a, a1.name)(a1.exprId)),
@@ -197,7 +197,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
         Inner,
         Some(OuterReference(x) === a),
         JoinHint.NONE)
-    val error = intercept[AssertionError] { DecorrelateInnerQuery(innerPlan, outerPlan) }
+    val error = intercept[AssertionError] { DecorrelateInnerQuery(innerPlan, outerPlan.select()) }
     assert(error.getMessage.contains("Correlated column is not allowed in join"))
   }
 

@@ -597,7 +597,8 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
+  def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation] ||
+    logicalPlan.isInstanceOf[CommandResult]
 
   /**
    * Returns true if the `Dataset` is empty.
@@ -2080,10 +2081,8 @@ class Dataset[T] private[sql](
    * }}}
    *
    * Note that `allowMissingColumns` supports nested column in struct types. Missing nested columns
-   * of struct columns with same name will also be filled with null values. This currently does not
-   * support nested columns in array and map types. Note that if there is any missing nested columns
-   * to be filled, in order to make consistent schema between two sides of union, the nested fields
-   * of structs will be sorted after merging schema.
+   * of struct columns with the same name will also be filled with null values and added to the end
+   * of struct. This currently does not support nested columns in array and map types.
    *
    * @group typedrel
    * @since 3.1.0

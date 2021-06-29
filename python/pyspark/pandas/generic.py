@@ -57,6 +57,8 @@ from pyspark import pandas as ps  # For running doctests and reference resolutio
 from pyspark.pandas.indexing import AtIndexer, iAtIndexer, iLocIndexer, LocIndexer
 from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.typedef import Dtype, Scalar, spark_type_to_pandas_dtype
+from pyspark.pandas.spark import functions as SF
+from pyspark.pandas.typedef import Scalar, spark_type_to_pandas_dtype
 from pyspark.pandas.utils import (
     is_name_like_tuple,
     is_name_like_value,
@@ -67,13 +69,13 @@ from pyspark.pandas.utils import (
     validate_axis,
     SPARK_CONF_ARROW_ENABLED,
 )
-from pyspark.pandas.window import Rolling, Expanding
 
 if TYPE_CHECKING:
     from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.indexes.base import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.groupby import DataFrameGroupBy, SeriesGroupBy  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.groupby import GroupBy  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
+    from pyspark.pandas.window import Rolling, Expanding  # noqa: F401 (SPARK-34943)
 
 
 T_Frame = TypeVar("T_Frame", bound="Frame")
@@ -96,7 +98,9 @@ class Frame(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _apply_series_op(
-        self: T_Frame, op: Callable[["Series"], "Series"], should_resolve: bool = False
+        self: T_Frame,
+        op: Callable[["Series"], Union["Series", Column]],
+        should_resolve: bool = False,
     ) -> T_Frame:
         pass
 
@@ -1269,7 +1273,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            return F.coalesce(F.sum(spark_column), F.lit(0))
+            return F.coalesce(F.sum(spark_column), SF.lit(0))
 
         return self._reduce_for_stat_function(
             sum, name="sum", axis=axis, numeric_only=numeric_only, min_count=min_count
@@ -1346,7 +1350,7 @@ class Frame(object, metaclass=ABCMeta):
 
         def prod(spark_column: Column, spark_type: DataType) -> Column:
             if isinstance(spark_type, BooleanType):
-                scol = F.min(F.coalesce(spark_column, F.lit(True))).cast(LongType())
+                scol = F.min(F.coalesce(spark_column, SF.lit(True))).cast(LongType())
             elif isinstance(spark_type, NumericType):
                 num_zeros = F.sum(F.when(spark_column == 0, 1).otherwise(0))
                 sign = F.when(
@@ -1366,7 +1370,7 @@ class Frame(object, metaclass=ABCMeta):
                     )
                 )
 
-            return F.coalesce(scol, F.lit(1))
+            return F.coalesce(scol, SF.lit(1))
 
         return self._reduce_for_stat_function(
             prod, name="prod", axis=axis, numeric_only=numeric_only, min_count=min_count
@@ -2096,11 +2100,13 @@ class Frame(object, metaclass=ABCMeta):
         3  7  40   50
         """
 
-        def abs(psser: "Series") -> "Series":
+        def abs(psser: "Series") -> Union["Series", Column]:
             if isinstance(psser.spark.data_type, BooleanType):
                 return psser
             elif isinstance(psser.spark.data_type, NumericType):
-                return psser.spark.transform(F.abs)
+                return psser._with_new_scol(
+                    F.abs(psser.spark.column), field=psser._internal.data_fields[0]
+                )
             else:
                 raise TypeError(
                     "bad operand type for abs(): {} ({})".format(
@@ -2114,12 +2120,12 @@ class Frame(object, metaclass=ABCMeta):
     # TODO: by argument only support the grouping name and as_index only for now. Documentation
     # should be updated when it's supported.
     def groupby(
-        self,
+        self: T_Frame,
         by: Union[Any, Tuple, "Series", List[Union[Any, Tuple, "Series"]]],
         axis: Union[int, str] = 0,
         as_index: bool = True,
         dropna: bool = True,
-    ) -> Union["DataFrameGroupBy", "SeriesGroupBy"]:
+    ) -> "GroupBy[T_Frame]":
         """
         Group DataFrame or Series using a Series of columns.
 
@@ -2199,8 +2205,6 @@ class Frame(object, metaclass=ABCMeta):
         2.0  2  5
         NaN  1  4
         """
-        from pyspark.pandas.groupby import DataFrameGroupBy, SeriesGroupBy
-
         if isinstance(by, ps.DataFrame):
             raise ValueError("Grouper for '{}' not 1-dimensional".format(type(by).__name__))
         elif isinstance(by, ps.Series):
@@ -2242,14 +2246,13 @@ class Frame(object, metaclass=ABCMeta):
         if axis != 0:
             raise NotImplementedError('axis should be either 0 or "index" currently.')
 
-        if isinstance(self, ps.DataFrame):
-            return DataFrameGroupBy._build(self, new_by, as_index=as_index, dropna=dropna)
-        elif isinstance(self, ps.Series):
-            return SeriesGroupBy._build(self, new_by, as_index=as_index, dropna=dropna)
-        else:
-            raise TypeError(
-                "Constructor expects DataFrame or Series; however, " "got [%s]" % (self,)
-            )
+        return self._build_groupby(by=new_by, as_index=as_index, dropna=dropna)
+
+    @abstractmethod
+    def _build_groupby(
+        self: T_Frame, by: List[Union["Series", Tuple]], as_index: bool, dropna: bool
+    ) -> "GroupBy[T_Frame]":
+        pass
 
     def bool(self) -> bool:
         """
@@ -2507,7 +2510,9 @@ class Frame(object, metaclass=ABCMeta):
             return tuple(last_valid_row)
 
     # TODO: 'center', 'win_type', 'on', 'axis' parameter should be implemented.
-    def rolling(self, window: int, min_periods: Optional[int] = None) -> Rolling:
+    def rolling(
+        self: T_Frame, window: int, min_periods: Optional[int] = None
+    ) -> "Rolling[T_Frame]":
         """
         Provide rolling transformations.
 
@@ -2532,13 +2537,13 @@ class Frame(object, metaclass=ABCMeta):
         -------
         a Window sub-classed for the particular operation
         """
-        return Rolling(
-            cast(Union["Series", "DataFrame"], self), window=window, min_periods=min_periods
-        )
+        from pyspark.pandas.window import Rolling
+
+        return Rolling(self, window=window, min_periods=min_periods)
 
     # TODO: 'center' and 'axis' parameter should be implemented.
     #   'axis' implementation, refer https://github.com/pyspark.pandas/pull/607
-    def expanding(self, min_periods: int = 1) -> Expanding:
+    def expanding(self: T_Frame, min_periods: int = 1) -> "Expanding[T_Frame]":
         """
         Provide expanding transformations.
 
@@ -2556,7 +2561,9 @@ class Frame(object, metaclass=ABCMeta):
         -------
         a Window sub-classed for the particular operation
         """
-        return Expanding(cast(Union["Series", "DataFrame"], self), min_periods=min_periods)
+        from pyspark.pandas.window import Expanding
+
+        return Expanding(self, min_periods=min_periods)
 
     def get(self, key: Any, default: Optional[Any] = None) -> Any:
         """
@@ -3154,7 +3161,7 @@ class Frame(object, metaclass=ABCMeta):
         # Special handle floating point types because Spark's count treats nan as a valid value,
         # whereas pandas count doesn't include nan.
         if isinstance(spark_type, (FloatType, DoubleType)):
-            return F.count(F.nanvl(spark_column, F.lit(None)))
+            return F.count(F.nanvl(spark_column, SF.lit(None)))
         else:
             return F.count(spark_column)
 

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, NamedRelation, PartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
@@ -1095,6 +1095,89 @@ case class UnsetTableProperties(
     propertyKeys: Seq[String],
     ifExists: Boolean) extends UnaryCommand {
   override def child: LogicalPlan = table
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+}
+
+trait AlterTableCommand extends UnaryCommand {
+  def table: LogicalPlan
+  def operation: String
+  def changes: Seq[TableChange]
+  override def child: LogicalPlan = table
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... DROP COLUMNS command.
+ */
+case class AlterTableDropColumns(
+    table: LogicalPlan,
+    columnsToDrop: Seq[FieldName]) extends AlterTableCommand {
+  override def operation: String = "delete"
+
+  override def changes: Seq[TableChange] = {
+    columnsToDrop.map { col =>
+      require(col.resolved, "FieldName should be resolved before it's converted to TableChange.")
+      TableChange.deleteColumn(col.name.toArray)
+    }
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... RENAME COLUMN command.
+ */
+case class AlterTableRenameColumn(
+    table: LogicalPlan,
+    column: FieldName,
+    newName: String) extends AlterTableCommand {
+  override def operation: String = "rename"
+
+  override def changes: Seq[TableChange] = {
+    require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
+    Seq(TableChange.renameColumn(column.name.toArray, newName))
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... ALTER COLUMN command.
+ */
+case class AlterTableAlterColumn(
+    table: LogicalPlan,
+    column: FieldName,
+    dataType: Option[DataType],
+    nullable: Option[Boolean],
+    comment: Option[String],
+    position: Option[FieldPosition]) extends AlterTableCommand {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Util._
+  dataType.foreach(failNullType)
+
+  override def operation: String = "update"
+
+  override def changes: Seq[TableChange] = {
+    require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
+    val colName = column.name.toArray
+    val typeChange = dataType.map { newDataType =>
+      TableChange.updateColumnType(colName, newDataType)
+    }
+    val nullabilityChange = nullable.map { nullable =>
+      TableChange.updateColumnNullability(colName, nullable)
+    }
+    val commentChange = comment.map { newComment =>
+      TableChange.updateColumnComment(colName, newComment)
+    }
+    val positionChange = position.map { newPosition =>
+      require(newPosition.resolved,
+        "FieldPosition should be resolved before it's converted to TableChange.")
+      TableChange.updateColumnPosition(colName, newPosition.position)
+    }
+    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange
+  }
+
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
     copy(table = newChild)
 }

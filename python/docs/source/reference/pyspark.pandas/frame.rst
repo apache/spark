@@ -257,7 +257,6 @@ Serialization / IO / Conversion
    DataFrame.to_pandas
    DataFrame.to_html
    DataFrame.to_numpy
-   DataFrame.to_pandas_on_spark
    DataFrame.to_spark
    DataFrame.to_string
    DataFrame.to_json

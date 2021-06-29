@@ -26,6 +26,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
 import io.netty.util.internal.OutOfDirectMemoryError
+import org.apache.log4j.Level
 import org.mockito.ArgumentMatchers.{any, eq => meq}
 import org.mockito.Mockito.{mock, times, verify, when}
 import org.mockito.stubbing.Answer
@@ -465,6 +466,29 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     // The 6th request will be sent after next() is called.
     verifyFetchBlocksInvocationCount(6)
     assert(numResults == 6)
+  }
+
+  test("SPARK-35910: Update remoteBlockBytes based on merged fetch request") {
+    val blockManager = createMockBlockManager()
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val remoteBlocks = Seq[ShuffleBlockId](
+      ShuffleBlockId(0, 3, 0),
+      ShuffleBlockId(0, 3, 1),
+      ShuffleBlockId(0, 3, 2),
+      ShuffleBlockId(0, 4, 1))
+    val remoteBlockList = remoteBlocks.map(id => (id, id.mapId * 31L + id.reduceId, 1)).toSeq
+    val expectedSizeInBytes = Utils.bytesToString(remoteBlockList.map(_._2).sum)
+    val appender = new LogAppender(expectedSizeInBytes)
+    withLogAppender(appender, level = Some(Level.INFO)) {
+      createShuffleBlockIteratorWithDefaults(
+        Map(remoteBmId -> remoteBlockList),
+        blockManager = Some(blockManager),
+        doBatchFetch = true
+      )
+    }
+    assert(appender.loggingEvents.exists(
+      _.getRenderedMessage.contains(s"2 ($expectedSizeInBytes) remote blocks")),
+      "remote blocks should be merged to 2 blocks and kept the actual size")
   }
 
   test("fetch continuous blocks in batch should respect maxBlocksInFlightPerAddress") {

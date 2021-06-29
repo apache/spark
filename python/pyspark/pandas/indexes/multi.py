@@ -47,6 +47,7 @@ from pyspark.pandas.internal import (
     NATURAL_ORDER_COLUMN_NAME,
     SPARK_INDEX_NAME_FORMAT,
 )
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import Scalar
 
 
@@ -149,10 +150,12 @@ class MultiIndex(Index):
     def _column_label(self) -> Optional[Tuple]:
         return None
 
-    def __abs__(self) -> Index:
+    def __abs__(self) -> "MultiIndex":
         raise TypeError("TypeError: cannot perform __abs__ with this index type: MultiIndex")
 
-    def _with_new_scol(self, scol: spark.Column, *, field: Optional[InternalField] = None) -> Index:
+    def _with_new_scol(
+        self, scol: spark.Column, *, field: Optional[InternalField] = None
+    ) -> "MultiIndex":
         raise NotImplementedError("Not supported for type MultiIndex")
 
     @no_type_check
@@ -500,8 +503,8 @@ class MultiIndex(Index):
     def _is_monotonic_increasing(self) -> Series:
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(-1, -1)
 
-        cond = F.lit(True)
-        has_not_null = F.lit(True)
+        cond = SF.lit(True)
+        has_not_null = SF.lit(True)
         for scol in self._internal.index_spark_columns[::-1]:
             data_type = self._internal.spark_type_for(scol)
             prev = F.lag(scol, 1).over(window)
@@ -547,8 +550,8 @@ class MultiIndex(Index):
     def _is_monotonic_decreasing(self) -> Series:
         window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(-1, -1)
 
-        cond = F.lit(True)
-        has_not_null = F.lit(True)
+        cond = SF.lit(True)
+        has_not_null = SF.lit(True)
         for scol in self._internal.index_spark_columns[::-1]:
             data_type = self._internal.spark_type_for(scol)
             prev = F.lag(scol, 1).over(window)
@@ -1165,7 +1168,7 @@ class MultiIndex(Index):
 
     def factorize(
         self, sort: bool = True, na_sentinel: Optional[int] = -1
-    ) -> Tuple[Union["Series", "Index"], pd.Index]:
+    ) -> Tuple["MultiIndex", pd.Index]:
         return MissingPandasLikeMultiIndex.factorize(self, sort=sort, na_sentinel=na_sentinel)
 
     def __iter__(self) -> Iterator:
