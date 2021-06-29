@@ -42,6 +42,7 @@ from pyspark.sql.types import (
     TimestampType,
     UserDefinedType,
 )
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import Dtype, extension_dtypes
 from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
@@ -120,14 +121,14 @@ def _as_categorical_type(
     else:
         categories = dtype.categories
         if len(categories) == 0:
-            scol = F.lit(-1)
+            scol = SF.lit(-1)
         else:
             kvs = chain(
-                *[(F.lit(category), F.lit(code)) for code, category in enumerate(categories)]
+                *[(SF.lit(category), SF.lit(code)) for code, category in enumerate(categories)]
             )
             map_scol = F.create_map(*kvs)
 
-            scol = F.coalesce(map_scol.getItem(index_ops.spark.column), F.lit(-1))
+            scol = F.coalesce(map_scol.getItem(index_ops.spark.column), SF.lit(-1))
         return index_ops._with_new_scol(
             scol.cast(spark_type).alias(index_ops._internal.data_fields[0].name),
             field=index_ops._internal.data_fields[0].copy(
@@ -143,7 +144,7 @@ def _as_bool_type(index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_In
     if isinstance(dtype, extension_dtypes):
         scol = index_ops.spark.column.cast(BooleanType())
     else:
-        scol = F.when(index_ops.spark.column.isNull(), F.lit(False)).otherwise(
+        scol = F.when(index_ops.spark.column.isNull(), SF.lit(False)).otherwise(
             index_ops.spark.column.cast(BooleanType())
         )
     return index_ops._with_new_scol(

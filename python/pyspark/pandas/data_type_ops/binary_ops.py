@@ -29,6 +29,7 @@ from pyspark.pandas.data_type_ops.base import (
     _as_other_type,
     _as_string_type,
 )
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
 from pyspark.sql import functions as F
 from pyspark.sql.types import BinaryType, BooleanType, StringType
@@ -47,7 +48,7 @@ class BinaryOps(DataTypeOps):
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BinaryType):
             return column_op(F.concat)(left, right)
         elif isinstance(right, bytes):
-            return column_op(F.concat)(left, F.lit(right))
+            return column_op(F.concat)(left, SF.lit(right))
         else:
             raise TypeError(
                 "Concatenation can not be applied to %s and the given type." % self.pretty_name
@@ -56,7 +57,7 @@ class BinaryOps(DataTypeOps):
     def radd(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
         if isinstance(right, bytes):
             return cast(
-                IndexOpsLike, left._with_new_scol(F.concat(F.lit(right), left.spark.column))
+                IndexOpsLike, left._with_new_scol(F.concat(SF.lit(right), left.spark.column))
             )
         else:
             raise TypeError(

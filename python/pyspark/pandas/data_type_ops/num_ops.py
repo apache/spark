@@ -142,7 +142,7 @@ class NumericOps(DataTypeOps):
             raise TypeError("exponentiation can not be applied to given types.")
 
         def rpow_func(left: Column, right: Any) -> Column:
-            return F.when(F.lit(right == 1), right).otherwise(Column.__rpow__(left, right))
+            return F.when(SF.lit(right == 1), right).otherwise(Column.__rpow__(left, right))
 
         right = transform_boolean_operand_to_numeric(right)
         return column_op(rpow_func)(left, right)
@@ -199,9 +199,9 @@ class IntegralOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def truediv(left: Column, right: Any) -> Column:
-            return F.when(F.lit(right != 0) | F.lit(right).isNull(), left.__div__(right)).otherwise(
-                F.lit(np.inf).__div__(left)
-            )
+            return F.when(
+                SF.lit(right != 0) | SF.lit(right).isNull(), left.__div__(right)
+            ).otherwise(SF.lit(np.inf).__div__(left))
 
         return numpy_column_op(truediv)(left, right)
 
@@ -217,10 +217,10 @@ class IntegralOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def floordiv(left: Column, right: Any) -> Column:
-            return F.when(F.lit(right is np.nan), np.nan).otherwise(
+            return F.when(SF.lit(right is np.nan), np.nan).otherwise(
                 F.when(
-                    F.lit(right != 0) | F.lit(right).isNull(), F.floor(left.__div__(right))
-                ).otherwise(F.lit(np.inf).__div__(left))
+                    SF.lit(right != 0) | SF.lit(right).isNull(), F.floor(left.__div__(right))
+                ).otherwise(SF.lit(np.inf).__div__(left))
             )
 
         return numpy_column_op(floordiv)(left, right)
@@ -232,8 +232,8 @@ class IntegralOps(NumericOps):
             raise TypeError("division can not be applied to given types.")
 
         def rtruediv(left: Column, right: Any) -> Column:
-            return F.when(left == 0, F.lit(np.inf).__div__(right)).otherwise(
-                F.lit(right).__truediv__(left)
+            return F.when(left == 0, SF.lit(np.inf).__div__(right)).otherwise(
+                SF.lit(right).__truediv__(left)
             )
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
@@ -246,8 +246,8 @@ class IntegralOps(NumericOps):
             raise TypeError("division can not be applied to given types.")
 
         def rfloordiv(left: Column, right: Any) -> Column:
-            return F.when(F.lit(left == 0), F.lit(np.inf).__div__(right)).otherwise(
-                F.floor(F.lit(right).__div__(left))
+            return F.when(SF.lit(left == 0), SF.lit(np.inf).__div__(right)).otherwise(
+                F.floor(SF.lit(right).__div__(left))
             )
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
@@ -302,9 +302,11 @@ class FractionalOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def truediv(left: Column, right: Any) -> Column:
-            return F.when(F.lit(right != 0) | F.lit(right).isNull(), left.__div__(right)).otherwise(
-                F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
-                    F.lit(np.inf).__div__(left)
+            return F.when(
+                SF.lit(right != 0) | SF.lit(right).isNull(), left.__div__(right)
+            ).otherwise(
+                F.when(SF.lit(left == np.inf) | SF.lit(left == -np.inf), left).otherwise(
+                    SF.lit(np.inf).__div__(left)
                 )
             )
 
@@ -322,12 +324,12 @@ class FractionalOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def floordiv(left: Column, right: Any) -> Column:
-            return F.when(F.lit(right is np.nan), np.nan).otherwise(
+            return F.when(SF.lit(right is np.nan), np.nan).otherwise(
                 F.when(
-                    F.lit(right != 0) | F.lit(right).isNull(), F.floor(left.__div__(right))
+                    SF.lit(right != 0) | SF.lit(right).isNull(), F.floor(left.__div__(right))
                 ).otherwise(
-                    F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
-                        F.lit(np.inf).__div__(left)
+                    F.when(SF.lit(left == np.inf) | SF.lit(left == -np.inf), left).otherwise(
+                        SF.lit(np.inf).__div__(left)
                     )
                 )
             )
@@ -341,8 +343,8 @@ class FractionalOps(NumericOps):
             raise TypeError("division can not be applied to given types.")
 
         def rtruediv(left: Column, right: Any) -> Column:
-            return F.when(left == 0, F.lit(np.inf).__div__(right)).otherwise(
-                F.lit(right).__truediv__(left)
+            return F.when(left == 0, SF.lit(np.inf).__div__(right)).otherwise(
+                SF.lit(right).__truediv__(left)
             )
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
@@ -355,8 +357,10 @@ class FractionalOps(NumericOps):
             raise TypeError("division can not be applied to given types.")
 
         def rfloordiv(left: Column, right: Any) -> Column:
-            return F.when(F.lit(left == 0), F.lit(np.inf).__div__(right)).otherwise(
-                F.when(F.lit(left) == np.nan, np.nan).otherwise(F.floor(F.lit(right).__div__(left)))
+            return F.when(SF.lit(left == 0), SF.lit(np.inf).__div__(right)).otherwise(
+                F.when(SF.lit(left) == np.nan, np.nan).otherwise(
+                    F.floor(SF.lit(right).__div__(left))
+                )
             )
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
@@ -381,7 +385,7 @@ class FractionalOps(NumericOps):
             else:
                 scol = F.when(
                     index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column),
-                    F.lit(True),
+                    SF.lit(True),
                 ).otherwise(index_ops.spark.column.cast(spark_type))
             return index_ops._with_new_scol(
                 scol.alias(index_ops._internal.data_spark_column_names[0]),

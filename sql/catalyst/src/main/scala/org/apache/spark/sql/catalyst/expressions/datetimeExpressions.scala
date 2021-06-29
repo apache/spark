@@ -2650,17 +2650,19 @@ case class SubtractTimestamps(
   def this(endTimestamp: Expression, startTimestamp: Expression) =
     this(endTimestamp, startTimestamp, SQLConf.get.legacyIntervalEnabled)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType, AnyTimestampType)
   override def dataType: DataType =
     if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(left.dataType)
+
   @transient
   private lazy val evalFunc: (Long, Long) => Any = legacyInterval match {
     case false => (leftMicros, rightMicros) =>
-      subtractTimestamps(leftMicros, rightMicros, zoneId)
+      subtractTimestamps(leftMicros, rightMicros, zoneIdInEval)
     case true => (leftMicros, rightMicros) =>
       new CalendarInterval(0, 0, leftMicros - rightMicros)
   }
@@ -2671,7 +2673,7 @@ case class SubtractTimestamps(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = legacyInterval match {
     case false =>
-      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+      val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
       val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
       defineCodeGen(ctx, ev, (l, r) => s"""$dtu.subtractTimestamps($l, $r, $zid)""")
     case true =>

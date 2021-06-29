@@ -35,6 +35,7 @@ from pyspark.pandas.data_type_ops.base import (
     _as_other_type,
     _as_string_type,
 )
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
 
 
@@ -60,7 +61,7 @@ class DateOps(DataTypeOps):
             return column_op(F.datediff)(left, right).astype("long")
         elif isinstance(right, datetime.date) and not isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return column_op(F.datediff)(left, F.lit(right)).astype("long")
+            return column_op(F.datediff)(left, SF.lit(right)).astype("long")
         else:
             raise TypeError("date subtraction can only be applied to date series.")
 
@@ -74,7 +75,7 @@ class DateOps(DataTypeOps):
         )
         if isinstance(right, datetime.date) and not isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return -column_op(F.datediff)(left, F.lit(right)).astype("long")
+            return -column_op(F.datediff)(left, SF.lit(right)).astype("long")
         else:
             raise TypeError("date subtraction can only be applied to date series.")
 

@@ -57,6 +57,8 @@ from pyspark import pandas as ps  # For running doctests and reference resolutio
 from pyspark.pandas.indexing import AtIndexer, iAtIndexer, iLocIndexer, LocIndexer
 from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.typedef import Dtype, Scalar, spark_type_to_pandas_dtype
+from pyspark.pandas.spark import functions as SF
+from pyspark.pandas.typedef import Scalar, spark_type_to_pandas_dtype
 from pyspark.pandas.utils import (
     is_name_like_tuple,
     is_name_like_value,
@@ -1271,7 +1273,7 @@ class Frame(object, metaclass=ABCMeta):
                         spark_type_to_pandas_dtype(spark_type), spark_type.simpleString()
                     )
                 )
-            return F.coalesce(F.sum(spark_column), F.lit(0))
+            return F.coalesce(F.sum(spark_column), SF.lit(0))
 
         return self._reduce_for_stat_function(
             sum, name="sum", axis=axis, numeric_only=numeric_only, min_count=min_count
@@ -1348,7 +1350,7 @@ class Frame(object, metaclass=ABCMeta):
 
         def prod(spark_column: Column, spark_type: DataType) -> Column:
             if isinstance(spark_type, BooleanType):
-                scol = F.min(F.coalesce(spark_column, F.lit(True))).cast(LongType())
+                scol = F.min(F.coalesce(spark_column, SF.lit(True))).cast(LongType())
             elif isinstance(spark_type, NumericType):
                 num_zeros = F.sum(F.when(spark_column == 0, 1).otherwise(0))
                 sign = F.when(
@@ -1368,7 +1370,7 @@ class Frame(object, metaclass=ABCMeta):
                     )
                 )
 
-            return F.coalesce(scol, F.lit(1))
+            return F.coalesce(scol, SF.lit(1))
 
         return self._reduce_for_stat_function(
             prod, name="prod", axis=axis, numeric_only=numeric_only, min_count=min_count
@@ -3159,7 +3161,7 @@ class Frame(object, metaclass=ABCMeta):
         # Special handle floating point types because Spark's count treats nan as a valid value,
         # whereas pandas count doesn't include nan.
         if isinstance(spark_type, (FloatType, DoubleType)):
-            return F.count(F.nanvl(spark_column, F.lit(None)))
+            return F.count(F.nanvl(spark_column, SF.lit(None)))
         else:
             return F.count(spark_column)
 
