@@ -30,7 +30,7 @@ import org.apache.spark.{SparkException, SparkFiles, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, ToHiveString, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
@@ -51,7 +51,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         case _: ArrayType | _: MapType | _: StructType =>
           new StructsToJson(ioschema.inputSerdeProps.toMap, in)
             .withTimeZone(conf.sessionLocalTimeZone)
-        case _ => Cast(in, StringType).withTimeZone(conf.sessionLocalTimeZone)
+        case _ => ToHiveString(in).withTimeZone(conf.sessionLocalTimeZone)
       }
     }
   }

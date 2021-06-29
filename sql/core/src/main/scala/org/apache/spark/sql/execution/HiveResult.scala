@@ -45,7 +45,7 @@ object HiveResult {
   }
 
   private def stripRootCommandResult(executedPlan: SparkPlan): SparkPlan = executedPlan match {
-    case CommandResultExec(_, plan, _) => plan
+    case ProjectExec(_, CommandResultExec(_, plan, _)) => plan
     case other => other
   }
 
@@ -72,13 +72,8 @@ object HiveResult {
       case ExecutedCommandExec(_: ShowViewsCommand) =>
         executedPlan.executeCollect().map(_.getString(1))
       case other =>
-        val timeFormatters = getTimeFormatters
         val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
-        // We need the types so we can output struct field names
-        val types = executedPlan.output.map(_.dataType)
-        // Reformat to match hive tab delimited output.
-        result.map(_.zip(types).map(e => toHiveString(e, false, timeFormatters)))
-          .map(_.mkString("\t"))
+        result.map(_.mkString("\t"))
     }
 
   private def formatDescribeTableOutput(rows: Array[Row]): Seq[String] = {
