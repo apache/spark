@@ -654,7 +654,7 @@ case class DescribeTableCommand(
       metadata: CatalogTable,
       result: ArrayBuffer[Row]): Unit = {
     if (metadata.tableType == CatalogTableType.VIEW) {
-      throw QueryCompilationErrors.descPartitionNotAllowedOnTempView(table.identifier)
+      throw QueryCompilationErrors.descPartitionNotAllowedOnView(table.identifier)
     }
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
     val partition = catalog.getPartition(table, partitionSpec)

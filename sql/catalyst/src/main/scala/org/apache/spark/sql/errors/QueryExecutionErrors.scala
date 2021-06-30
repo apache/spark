@@ -1551,7 +1551,7 @@ object QueryExecutionErrors {
   }
 
   def failToSetOriginalACLBackError(aclEntries: String, path: Path, e: Throwable): Throwable = {
-    throw new SecurityException(s"Failed to set original ACL $aclEntries back to " +
+    new SecurityException(s"Failed to set original ACL $aclEntries back to " +
         s"the created path: $path. Exception: ${e.getMessage}")
   }
 }

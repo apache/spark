@@ -1938,6 +1938,11 @@ private[spark] object QueryCompilationErrors {
       s"DESC PARTITION is not allowed on a temporary view: $table")
   }
 
+  def descPartitionNotAllowedOnView(table: String): Throwable = {
+    new AnalysisException(
+      s"DESC PARTITION is not allowed on a view: $table")
+  }
+
   def showPartitionNotAllowedOnTableNotPartitionedError(tableIdentWithDB: String): Throwable = {
     new AnalysisException(
       s"SHOW PARTITIONS is not allowed on a table that is not partitioned: $tableIdentWithDB")
@@ -1976,7 +1981,7 @@ private[spark] object QueryCompilationErrors {
   }
 
   def isSparkDataSourceTableError(table: TableIdentifier): Throwable = {
-    throw new AnalysisException(
+    new AnalysisException(
       s"$table is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead.")
   }
 
