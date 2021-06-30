@@ -73,7 +73,7 @@ private[spark] object SparkError {
 trait SparkError extends Throwable {
   // Should be provided during Exception invocation
   val errorClass: Option[String]
-  val messageParameters: Seq[String]
+  protected val messageParameters: Seq[String]
 
   // Derived from error class
   private val errorInfo: Option[ErrorInfo] =
