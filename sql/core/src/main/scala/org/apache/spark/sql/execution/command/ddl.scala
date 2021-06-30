@@ -678,11 +678,11 @@ case class RepairTableCommand(
     try {
       spark.catalog.refreshTable(tableIdentWithDB)
     } catch {
-      case NonFatal(_) =>
+      case NonFatal(e) =>
         logError(s"Cannot refresh the table '$tableIdentWithDB'. A query of the table " +
           "might return wrong result if the table was cached. To avoid such issue, you should " +
           "uncache the table manually via the UNCACHE TABLE command after table recovering will " +
-          "complete fully.")
+          "complete fully.", e)
     }
     logInfo(s"Recovered all partitions: added ($addedAmount), dropped ($droppedAmount).")
     Seq.empty[Row]
