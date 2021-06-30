@@ -319,9 +319,10 @@ private[spark] object Utils extends Logging {
         // SPARK-35907
         // This could throw more meaningful exception information if directory creation failed.
         Files.createDirectories(dir.toPath)
-      } catch { case e: Exception =>
-        logError(s"Failed to create directory $dir", e)
-        dir = null
+      } catch {
+        case e @ (_ : IOException | _ : SecurityException) =>
+          logError(s"Failed to create directory $dir", e)
+          dir = null
       }
     }
 
