@@ -20,6 +20,8 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.sql.Date
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.commons.io.FileUtils
 import org.scalatest.exceptions.TestFailedException
 
@@ -1244,102 +1246,57 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
   import testImplicits._
 
-  private val flatMapGroupsWithStateFunc = (
-      key: String, values: Iterator[String],
-      state: GroupState[RunningCount]) => {
-    assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
-    assertCannotGetWatermark { state.getCurrentWatermarkMs() }
-
-    val count = state.getOption.map(_.count).getOrElse(0L) + values.size
-    if (count == 3) {
-      state.remove()
-      Iterator.empty
-    } else {
-      state.update(RunningCount(count))
-      Iterator((key, count.toString))
+  val flatMapGroupsWithStateFunc =
+    (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
+      val valList = values.toList
+      val count = state.getOption.map(_.count).getOrElse(0L) + valList.size
+      state.update(new RunningCount(count))
+      Iterator((key, valList))
     }
-  }
 
-  testWithAllStateVersions("mapGroupsWithState - initial state - basic") {
-    // Function to maintain running count up to 2, and then remove the count
-    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
-    val mapGroupsWithStateFunc =
-        (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
-      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
-      assertCannotGetWatermark { state.getCurrentWatermarkMs() }
+  Seq("1", "2", "6").foreach { shufflePartitions =>
+    testWithAllStateVersions(s"flatMapGroupsWithState - initial " +
+        s"state - all cases - shuffle partitions ${shufflePartitions}") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitions) {
+        // We will test them on different shuffle partition configuration to make sure the
+        // grouping by key will still work. On higher number of shuffle partitions its possible
+        // that all keys end up on different partitions.
+        val initialState: Dataset[(String, RunningCount)] = Seq(
+          ("keyInStateAndData-1", new RunningCount(1)),
+          ("keyInStateAndData-2", new RunningCount(1)),
+          ("keyOnlyInState-1", new RunningCount(2)),
+          ("keyOnlyInState-2", new RunningCount(1))
+        ).toDS()
 
-      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
-      if (count == 3) {
-        state.remove()
-        (key, "-1")
-      } else {
-        state.update(RunningCount(count))
-        (key, count.toString)
+        val inputData = MemoryStream[String]
+        val result =
+          inputData.toDS()
+            .groupByKey(x => x)
+            .flatMapGroupsWithState(
+              Update, GroupStateTimeout.NoTimeout, initialState)(flatMapGroupsWithStateFunc)
+
+        testStream(result, Update)(
+          AddData(inputData, "keyOnlyInData", "keyInStateAndData-1"),
+          CheckNewAnswer(
+            ("keyOnlyInState-1", ArrayBuffer[String]()),
+            ("keyOnlyInState-2", ArrayBuffer[String]()),
+            ("keyInStateAndData-1", ArrayBuffer[String]("keyInStateAndData-1")),
+            ("keyInStateAndData-2", ArrayBuffer[String]()),
+            ("keyOnlyInData", ArrayBuffer[String]("keyOnlyInData"))
+          ),
+          assertNumStateRows(total = 5, updated = 5),
+          // Stop and Start stream to make sure initial state doesn't get applied again.
+          StopStream,
+          StartStream(),
+          AddData(inputData, "keyInStateAndData-2"),
+          CheckNewAnswer(
+            ("keyInStateAndData-2", ArrayBuffer[String]("keyInStateAndData-2"))
+          ),
+          assertNumStateRows(total = 5, updated = 1),
+          StopStream
+        )
       }
     }
-    val initialState: Dataset[(String, RunningCount)] = Seq(
-      ("a", new RunningCount(1))
-    ).toDS()
-
-    val inputData = MemoryStream[String]
-    val result =
-      inputData.toDS()
-        .groupByKey(x => x)
-        .mapGroupsWithState(NoTimeout(), initialState)(mapGroupsWithStateFunc)
-    testStream(result, Update)(
-      AddData(inputData, "a"),
-      CheckNewAnswer(("a", "2")),
-      assertNumStateRows(total = 1, updated = 1),
-      AddData(inputData, "a", "b"),
-      CheckNewAnswer(("a", "-1"), ("b", "1")),
-      assertNumStateRows(total = 1, updated = 2),
-      StopStream,
-      StartStream(),
-      AddData(inputData, "a", "b"), // should remove state for "a" and return count as -1
-      CheckNewAnswer(("a", "1"), ("b", "2")),
-      assertNumStateRows(total = 2, updated = 2),
-      StopStream,
-      StartStream(),
-      AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1
-      CheckNewAnswer(("a", "2"), ("c", "1")),
-      assertNumStateRows(total = 3, updated = 2)
-    )
-  }
-
-  testWithAllStateVersions("flatMapGroupsWithState - initial state - case class values") {
-    // Function to maintain running count up to 2, and then remove the count
-    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
-
-    val stateFunc = (key: String, values: Iterator[User], state: GroupState[RunningCount]) => {
-      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
-      assertCannotGetWatermark { state.getCurrentWatermarkMs() }
-
-      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
-      if (count == 3) {
-        state.remove()
-        Iterator.empty
-      } else {
-        state.update(RunningCount(count))
-        Iterator((key, count.toString))
-      }
-    }
-
-    val initialState: Dataset[(String, RunningCount)] = Seq(
-      ("a", new RunningCount(1)), ("c", new RunningCount(2))
-    ).toDS()
-
-    val inputData = MemoryStream[User]
-    val result =
-      inputData.toDS()
-        .groupByKey(x => x.id)
-        .flatMapGroupsWithState(Update, NoTimeout(), initialState)(stateFunc)
-
-    testStream(result, Update)(
-      AddData(inputData, User("a", "msg"), User("b", "msg")),
-      CheckNewAnswer(("a", "2"), ("b", "1"), ("c", "2")),
-      assertNumStateRows(total = 3, updated = 3),
-      StopStream
-    )
   }
 
   test("flatMapGroupsWithState - initial state - duplicate keys") {
@@ -1362,70 +1319,54 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("flatMapGroupsWithState - initial state - streaming initial state") {
-    withTempDir { dir =>
-      val initialState: Dataset[(String, RunningCount)] = Seq(
-        ("a", new RunningCount(1))
-      ).toDS()
-      initialState.write.parquet(dir.getAbsolutePath)
+    val initStateData = MemoryStream[(String, RunningCount)]
+    initStateData.addData(("a", new RunningCount(1)))
 
-      val initStateStream = spark.readStream.format("parquet")
-        .load(dir.getAbsolutePath)
-        .as[(String, RunningCount)]
+    val inputData = MemoryStream[String]
 
-      val inputData = MemoryStream[String]
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(
+          Update, NoTimeout(), initStateData.toDS())(flatMapGroupsWithStateFunc)
 
-      val result =
-        inputData.toDS()
-          .groupByKey(x => x)
-          .flatMapGroupsWithState(Update, NoTimeout(), initStateStream)(flatMapGroupsWithStateFunc)
-
-      val e = intercept[AnalysisException] {
-        result.writeStream
-          .format("console")
-          .start()
-      }
-      assert(e.message.contains("Initial state cannot be a streaming relation."))
+    val e = intercept[AnalysisException] {
+      result.writeStream
+        .format("console")
+        .start()
     }
+    assert(e.message.contains("Initial state cannot be a streaming relation."))
   }
 
-  testWithAllStateVersions("flatMapGroupsWithState - initial state - state key not in data") {
+  testWithAllStateVersions("mapGroupsWithState - initial state - test api") {
+    val mapGroupsWithStateFunc =
+        (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
+      val valList = values.toList
+      val count = state.getOption.map(_.count).getOrElse(0L) + valList.size
+      state.update(new RunningCount(count))
+      (key, valList)
+    }
     val initialState: Dataset[(String, RunningCount)] = Seq(
-      ("a", new RunningCount(1)),
-      ("b", new RunningCount(2)) // b is not in the first batch of data yet get processed.
+      ("keyInStateAndData", new RunningCount(1))
     ).toDS()
 
     val inputData = MemoryStream[String]
     val result =
       inputData.toDS()
         .groupByKey(x => x)
-        .flatMapGroupsWithState(
-          Update, GroupStateTimeout.NoTimeout, initialState)(flatMapGroupsWithStateFunc)
-
+        .mapGroupsWithState(NoTimeout(), initialState)(mapGroupsWithStateFunc)
     testStream(result, Update)(
-      AddData(inputData, "a"),
-      CheckNewAnswer(("a", "2"), ("b", "2")),
-      assertNumStateRows(total = 2, updated = 2),
-      AddData(inputData, "a", "b"),
-      CheckNewAnswer(),
-      assertNumStateRows(total = 0, updated = 2),
-      StopStream,
-      StartStream(),
-      AddData(inputData, "a", "b"),
-      CheckNewAnswer(("a", "1"), ("b", "1")),
-      assertNumStateRows(total = 2, updated = 2),
-      StopStream,
-      StartStream(),
-      AddData(inputData, "a", "c"),
-      CheckNewAnswer(("a", "2"), ("c", "1")),
-      assertNumStateRows(total = 3, updated = 2)
+      AddData(inputData, "keyInStateAndData"),
+      CheckNewAnswer(("keyInStateAndData", ArrayBuffer("keyInStateAndData"))),
+      assertNumStateRows(total = 1, updated = 1),
+      StopStream
     )
   }
 
   testWithAllStateVersions("flatMapGroupsWithState - initial state - processing time timeout") {
-    // Function to maintain running count up to 2, and then remove the count
-    // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
+    // function return -1 on timeout and returns count of the state otherwise
     val stateFunc =
-    (key: String, values: Iterator[(String, Long)], state: GroupState[RunningCount]) => {
+        (key: String, values: Iterator[(String, Long)], state: GroupState[RunningCount]) => {
       if (state.hasTimedOut) {
         state.remove()
         Iterator((key, "-1"))
@@ -1450,14 +1391,13 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         .groupByKey(x => x._1)
         .flatMapGroupsWithState(Update, ProcessingTimeTimeout(), initialState)(stateFunc)
 
-    // make sure that c is not timed out
     testStream(result, Update)(
       StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
       AddData(inputData, ("a", 1L)),
-      AdvanceManualClock(1 * 1000),
+      AdvanceManualClock(1 * 1000), // a and c are processed here for the first time.
       CheckNewAnswer(("a", "1"), ("c", "2")),
       AdvanceManualClock(10 * 1000),
-      AddData(inputData, ("b", 1L)),
+      AddData(inputData, ("b", 1L)), // this will trigger c and a to get timed out
       AdvanceManualClock(1 * 1000),
       CheckNewAnswer(("a", "-1"), ("b", "1"), ("c", "-1"))
     )
@@ -1487,36 +1427,11 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       " pass an initial state."))
   }
 
-  test("flatMapGroupsWithState - initial state - no data in first batch") {
-    val initialState: Dataset[(String, RunningCount)] = Seq(
-      ("a", new RunningCount(1)),
-      ("c", new RunningCount(1))
-    ).toDS()
-
-    val inputData = MemoryStream[String]
-    val result =
-      inputData.toDS()
-        .groupByKey(x => x)
-        .flatMapGroupsWithState(
-          Update, GroupStateTimeout.NoTimeout, initialState)(flatMapGroupsWithStateFunc)
-
-    testStream(result, Update)(
-      CheckAnswer(),
-      StopStream,
-      StartStream(),
-      AddData(inputData, "a", "c"),
-      CheckNewAnswer(("a", "2"), ("c", "2")),
-      assertNumStateRows(total = 2, updated = 2)
-    )
-  }
-
   ignore("flatMapGroupsWithState - initial state - case class key") {
     // This test will fail now
     val stateFunc = (key: User, values: Iterator[User], state: GroupState[RunningCount]) => {
       assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
       assertCannotGetWatermark { state.getCurrentWatermarkMs() }
-
-      println(s"in function call ${key} : ${state}")
 
       val count = state.getOption.map(_.count).getOrElse(0L) + values.size
       if (count == 3) {
@@ -1544,35 +1459,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       assertNumStateRows(total = 2, updated = 2),
       StopStream
     )
-  }
-
-  test("flatMapGroupsWithState - initial state - all keys on same partition") {
-    val stateFunc =
-      (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
-        val valList = values.toList
-        Iterator((key, valList.length.toString))
-      }
-    withSQLConf("spark.defaultParallelism" -> "1", SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
-      val initialState: Dataset[(String, RunningCount)] = Seq(
-        ("d", new RunningCount(1)),
-        ("a", new RunningCount(1)),
-        ("e", new RunningCount(1))
-      ).toDS()
-
-      val inputData = MemoryStream[String]
-      val result =
-        inputData.toDS()
-          .groupByKey(x => x)
-          .flatMapGroupsWithState(
-            Update, GroupStateTimeout.NoTimeout, initialState)(stateFunc)
-
-      testStream(result, Update)(
-        AddData(inputData, "b", "c", "f"),
-        CheckNewAnswer(("a", "0"), ("b", "1"), ("c", "1"), ("d", "0"), ("e", "0"), ("f", "1")),
-        assertNumStateRows(total = 3, updated = 0),
-        StopStream
-      )
-    }
   }
 
   def testWithTimeout(timeoutConf: GroupStateTimeout): Unit = {
