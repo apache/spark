@@ -261,14 +261,6 @@ object RepartitionWritingDataSource extends Rule[LogicalPlan] {
       partitionColumns: Seq[Expression]): LogicalPlan = {
     val query = dataWriting.query
     (bucketSpec, partitionColumns) match {
-      case (None, Nil) =>
-        if (canApplyRebalancePartitions(query)) {
-          dataWriting.withNewChildrenInternal(
-            IndexedSeq(RebalancePartitions(Nil, query)))
-        } else {
-          dataWriting
-        }
-
       case (None, partExps) if partExps.nonEmpty =>
         query match {
           case RebalancePartitions(partitionExpressions, _) if partitionExpressions == partExps =>
@@ -301,6 +293,14 @@ object RepartitionWritingDataSource extends Rule[LogicalPlan] {
               dataWriting.withNewChildrenInternal(
                 IndexedSeq(RepartitionByExpression(bucketExps, query, Some(bucket.numBuckets))))
           }
+        }
+
+      case _ =>
+        if (canApplyRebalancePartitions(query)) {
+          dataWriting.withNewChildrenInternal(
+            IndexedSeq(RebalancePartitions(Nil, query)))
+        } else {
+          dataWriting
         }
     }
   }
