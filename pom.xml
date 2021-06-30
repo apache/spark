@@ -3313,6 +3313,15 @@
       </modules>
     </profile>
 
+    <profile>
+      <id>no-shaded-client</id>
+      <properties>
+        <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
+        <hadoop-client-runtime.artifact>hadoop-client</hadoop-client-runtime.artifact>
+        <hadoop-client-minicluster.artifact>hadoop-client</hadoop-client-minicluster.artifact>
+      </properties>
+    </profile>
+
     <!-- generally not enabled for automated builds, but will run k8s tests -->
     <profile>
       <id>kubernetes-integration-tests</id>
