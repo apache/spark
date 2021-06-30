@@ -123,7 +123,8 @@ case class AdaptiveSparkPlanExec(
     val origins = inputPlan.collect {
       case s: ShuffleExchangeLike => s.shuffleOrigin
     }
-    val allRules = queryStageOptimizerRules ++ postStageCreationRules
+    val allRules = queryStageOptimizerRules ++ postStageCreationRules ++
+      context.session.sessionState.finalQueryStagePrepRules
     allRules.filter {
       case c: CustomShuffleReaderRule =>
         origins.forall(c.supportedShuffleOrigins.contains)
