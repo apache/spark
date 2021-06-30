@@ -145,7 +145,7 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Inject a rule that can override the the query stage preparation phase of adaptive query
+   * Inject a rule that can override the query stage preparation phase of adaptive query
    * execution.
    */
   def injectQueryStagePrepRule(builder: PhysicalPlanRuleBuilder): Unit = {
@@ -153,7 +153,7 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Inject a rule that can override the the final query stage preparation phase of adaptive query
+   * Inject a rule that can override the final query stage preparation phase of adaptive query
    * execution.
    */
   def injectFinalStagePrepRule(builder: PhysicalPlanRuleBuilder): Unit = {
