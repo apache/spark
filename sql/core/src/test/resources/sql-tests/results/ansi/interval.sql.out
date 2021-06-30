@@ -67,7 +67,7 @@ select interval '2 seconds' / 0
 -- !query schema
 struct<>
 -- !query output
-java.lang.ArithmeticException
+org.apache.spark.SparkArithmeticException
 divide by zero
 
 

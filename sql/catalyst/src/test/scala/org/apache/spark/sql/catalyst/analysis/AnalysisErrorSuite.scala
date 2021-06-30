@@ -768,6 +768,11 @@ class AnalysisErrorSuite extends AnalysisTest {
       "which value you get." :: Nil)
   }
 
+  errorTest(
+    "SC-69611: error code to error message",
+    testRelation2.where($"bad_column" > 1).groupBy($"a")(UnresolvedAlias(max($"b"))),
+    "cannot resolve 'bad_column' given input columns: [a, b, c, d, e]" :: Nil)
+
   test("SPARK-35080: Unsupported correlated equality predicates in subquery") {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
