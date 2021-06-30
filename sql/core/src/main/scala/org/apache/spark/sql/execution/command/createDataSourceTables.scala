@@ -157,8 +157,8 @@ case class CreateDataSourceTableAsSelectCommand(
         s"Expect the table $tableName has been dropped when the save mode is Overwrite")
 
       if (mode == SaveMode.ErrorIfExists) {
-        throw QueryCompilationErrors
-          .tableAlreadyExistsError(tableName, " You need to drop it first.")
+        throw QueryCompilationErrors.tableAlreadyExistsError(
+          tableName, " You need to drop it first.")
       }
       if (mode == SaveMode.Ignore) {
         // Since the table already exists and the save mode is Ignore, we will just return.

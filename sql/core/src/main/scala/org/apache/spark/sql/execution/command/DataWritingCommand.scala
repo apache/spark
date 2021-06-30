@@ -115,8 +115,8 @@ object DataWritingCommand {
       if (fs.exists(filePath) &&
           fs.getFileStatus(filePath).isDirectory &&
           fs.listStatus(filePath).length != 0) {
-        throw QueryCompilationErrors
-          .createTableAsSelectCanNotCreateTableOnNonEmptyDirError(tablePath.toString)
+        throw QueryCompilationErrors.createTableAsSelectCanNotCreateTableOnNonEmptyDirError(
+          tablePath.toString)
       }
     }
   }

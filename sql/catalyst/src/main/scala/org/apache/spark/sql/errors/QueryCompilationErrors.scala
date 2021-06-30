@@ -1703,8 +1703,7 @@ private[spark] object QueryCompilationErrors {
   }
 
   def tempViewNotCachedForAnalyzingColError(tableIdent: TableIdentifier): Throwable = {
-    new AnalysisException(
-      s"Temporary view $tableIdent is not cached for analyzing columns.")
+    new AnalysisException(s"Temporary view $tableIdent is not cached for analyzing columns.")
   }
 
   def colNotExistError(col: String): Throwable = {
@@ -1715,9 +1714,8 @@ private[spark] object QueryCompilationErrors {
       name: String,
       tableIdent: TableIdentifier,
       dataType: DataType): Throwable = {
-    new AnalysisException(
-      s"Column $name in table $tableIdent is of type $dataType, " +
-        "and Spark does not support statistics collection on this column type.")
+    new AnalysisException(s"Column $name in table $tableIdent is of type $dataType, " +
+      "and Spark does not support statistics collection on this column type.")
   }
 
   def analyzeTableNotSupportedOnViewsError(): Throwable = {
@@ -1772,16 +1770,14 @@ private[spark] object QueryCompilationErrors {
   def alterTableChangeColumnNotSupportForTypeError(
       originColumn: StructField,
       newColumn: StructField): Throwable = {
-    new AnalysisException(
-      "ALTER TABLE CHANGE COLUMN is not supported for changing column " +
-        s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
-        s"'${newColumn.name}' with type '${newColumn.dataType}'")
+    new AnalysisException("ALTER TABLE CHANGE COLUMN is not supported for changing column " +
+      s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
+      s"'${newColumn.name}' with type '${newColumn.dataType}'")
   }
 
   def cannotFindColumnError(name: String, fieldNames: Array[String]): Throwable = {
-    new AnalysisException(
-      s"Can't find column `$name` given table data columns " +
-        s"${fieldNames.mkString("[`", "`, `", "`]")}")
+    new AnalysisException(s"Can't find column `$name` given table data columns " +
+      s"${fieldNames.mkString("[`", "`, `", "`]")}")
   }
 
   def alterTableSetSerdeForSpecificPartitionNotSupportedError(): Throwable = {
@@ -1934,13 +1930,11 @@ private[spark] object QueryCompilationErrors {
   }
 
   def descPartitionNotAllowedOnTempView(table: String): Throwable = {
-    new AnalysisException(
-      s"DESC PARTITION is not allowed on a temporary view: $table")
+    new AnalysisException(s"DESC PARTITION is not allowed on a temporary view: $table")
   }
 
   def descPartitionNotAllowedOnView(table: String): Throwable = {
-    new AnalysisException(
-      s"DESC PARTITION is not allowed on a view: $table")
+    new AnalysisException(s"DESC PARTITION is not allowed on a view: $table")
   }
 
   def showPartitionNotAllowedOnTableNotPartitionedError(tableIdentWithDB: String): Throwable = {
@@ -2030,8 +2024,7 @@ private[spark] object QueryCompilationErrors {
   }
 
   def createPersistedViewNotAllowError(): Throwable = {
-    new AnalysisException(
-      "It is not allowed to create a persisted view from the Dataset API")
+    new AnalysisException("It is not allowed to create a persisted view from the Dataset API")
   }
 
   def recursiveViewDetectedError(

@@ -344,8 +344,8 @@ case class AlterTableChangeColumnCommand(
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
-      throw QueryCompilationErrors
-        .alterTableChangeColumnNotSupportForTypeError(originColumn, newColumn)
+      throw QueryCompilationErrors.alterTableChangeColumnNotSupportForTypeError(
+        originColumn, newColumn)
     }
 
     val newDataSchema = table.dataSchema.fields.map { field =>
@@ -886,8 +886,8 @@ object DDLUtils {
         .actionNotAllowedOnTableSinceFilesourcePartitionManagementDisableError(action, tableName)
     }
     if (!table.tracksPartitionsInCatalog && isDatasourceTable(table)) {
-      throw QueryCompilationErrors
-        .actionNotAllowedOnTableSincePartitionMetadataNotStoredError(action, tableName)
+      throw QueryCompilationErrors.actionNotAllowedOnTableSincePartitionMetadataNotStoredError(
+        action, tableName)
     }
   }
 

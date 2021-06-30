@@ -86,8 +86,8 @@ case class AnalyzePartitionCommand(
 
     if (partitions.isEmpty) {
       if (partitionValueSpec.isDefined) {
-        throw QueryCompilationErrors
-          .noSuchPartitionError(db, tableIdent.table, partitionValueSpec.get)
+        throw QueryCompilationErrors.noSuchPartitionError(
+          db, tableIdent.table, partitionValueSpec.get)
       } else {
         // the user requested to analyze all partitions for a table which has no partitions
         // return normally, since there is nothing to do

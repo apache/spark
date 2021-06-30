@@ -92,8 +92,8 @@ case class AnalyzeColumnCommand(
     // Make sure the column types are supported for stats gathering.
     columnsToAnalyze.foreach { attr =>
       if (!supportsType(attr.dataType)) {
-        throw QueryCompilationErrors
-          .colTypeNotSupportStatisticsCollectionError(attr.name, tableIdent, attr.dataType)
+        throw QueryCompilationErrors.colTypeNotSupportStatisticsCollectionError(
+          attr.name, tableIdent, attr.dataType)
       }
     }
     columnsToAnalyze
