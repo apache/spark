@@ -234,7 +234,7 @@ class SparkContext(object):
             with warnings.catch_warnings():
                 warnings.simplefilter("once")
                 warnings.warn(
-                    "Python 3.6 support will be deprecated in Spark 3.2.",
+                    "Python 3.6 support is deprecated in Spark 3.2.",
                     FutureWarning
                 )
 
