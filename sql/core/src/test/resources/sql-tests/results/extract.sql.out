@@ -11,187 +11,187 @@ struct<>
 
 
 -- !query
-select extract(year from c), extract(year from i) from t
+select extract(year from c), extract(year from ntz), extract(year from i) from t
 -- !query schema
-struct<extract(year FROM c):int,extract(year FROM i):int>
+struct<extract(year FROM c):int,extract(year FROM ntz):int,extract(year FROM i):int>
 -- !query output
-2011	11
+2011	2011	11
 
 
 -- !query
-select extract(y from c), extract(y from i) from t
+select extract(y from c), extract(y from ntz), extract(y from i) from t
 -- !query schema
-struct<extract(y FROM c):int,extract(y FROM i):int>
+struct<extract(y FROM c):int,extract(y FROM ntz):int,extract(y FROM i):int>
 -- !query output
-2011	11
+2011	2011	11
 
 
 -- !query
-select extract(years from c), extract(years from i) from t
+select extract(years from c), extract(years from ntz), extract(years from i) from t
 -- !query schema
-struct<extract(years FROM c):int,extract(years FROM i):int>
+struct<extract(years FROM c):int,extract(years FROM ntz):int,extract(years FROM i):int>
 -- !query output
-2011	11
+2011	2011	11
 
 
 -- !query
-select extract(yr from c), extract(yr from i) from t
+select extract(yr from c), extract(yr from ntz), extract(yr from i) from t
 -- !query schema
-struct<extract(yr FROM c):int,extract(yr FROM i):int>
+struct<extract(yr FROM c):int,extract(yr FROM ntz):int,extract(yr FROM i):int>
 -- !query output
-2011	11
+2011	2011	11
 
 
 -- !query
-select extract(yrs from c), extract(yrs from i) from t
+select extract(yrs from c), extract(yrs from ntz), extract(yrs from i) from t
 -- !query schema
-struct<extract(yrs FROM c):int,extract(yrs FROM i):int>
+struct<extract(yrs FROM c):int,extract(yrs FROM ntz):int,extract(yrs FROM i):int>
 -- !query output
-2011	11
+2011	2011	11
 
 
 -- !query
-select extract(yearofweek from c) from t
+select extract(yearofweek from c), extract(yearofweek from ntz) from t
 -- !query schema
-struct<extract(yearofweek FROM c):int>
+struct<extract(yearofweek FROM c):int,extract(yearofweek FROM ntz):int>
 -- !query output
-2011
+2011	2011
 
 
 -- !query
-select extract(quarter from c) from t
+select extract(quarter from c), extract(quarter from ntz) from t
 -- !query schema
-struct<extract(quarter FROM c):int>
+struct<extract(quarter FROM c):int,extract(quarter FROM ntz):int>
 -- !query output
-2
+2	2
 
 
 -- !query
-select extract(qtr from c) from t
+select extract(qtr from c), extract(qtr from ntz) from t
 -- !query schema
-struct<extract(qtr FROM c):int>
+struct<extract(qtr FROM c):int,extract(qtr FROM ntz):int>
 -- !query output
-2
+2	2
 
 
 -- !query
-select extract(month from c), extract(month from i) from t
+select extract(month from c), extract(month from ntz), extract(month from i) from t
 -- !query schema
-struct<extract(month FROM c):int,extract(month FROM i):tinyint>
+struct<extract(month FROM c):int,extract(month FROM ntz):int,extract(month FROM i):tinyint>
 -- !query output
-5	8
+5	5	8
 
 
 -- !query
-select extract(mon from c), extract(mon from i) from t
+select extract(mon from c), extract(mon from ntz), extract(mon from i) from t
 -- !query schema
-struct<extract(mon FROM c):int,extract(mon FROM i):tinyint>
+struct<extract(mon FROM c):int,extract(mon FROM ntz):int,extract(mon FROM i):tinyint>
 -- !query output
-5	8
+5	5	8
 
 
 -- !query
-select extract(mons from c), extract(mons from i) from t
+select extract(mons from c), extract(mons from ntz), extract(mons from i) from t
 -- !query schema
-struct<extract(mons FROM c):int,extract(mons FROM i):tinyint>
+struct<extract(mons FROM c):int,extract(mons FROM ntz):int,extract(mons FROM i):tinyint>
 -- !query output
-5	8
+5	5	8
 
 
 -- !query
-select extract(months from c), extract(months from i) from t
+select extract(months from c), extract(months from ntz), extract(months from i) from t
 -- !query schema
-struct<extract(months FROM c):int,extract(months FROM i):tinyint>
+struct<extract(months FROM c):int,extract(months FROM ntz):int,extract(months FROM i):tinyint>
 -- !query output
-5	8
+5	5	8
 
 
 -- !query
-select extract(week from c) from t
+select extract(week from c), extract(week from ntz) from t
 -- !query schema
-struct<extract(week FROM c):int>
+struct<extract(week FROM c):int,extract(week FROM ntz):int>
 -- !query output
-18
+18	18
 
 
 -- !query
-select extract(w from c) from t
+select extract(w from c), extract(w from ntz) from t
 -- !query schema
-struct<extract(w FROM c):int>
+struct<extract(w FROM c):int,extract(w FROM ntz):int>
 -- !query output
-18
+18	18
 
 
 -- !query
-select extract(weeks from c) from t
+select extract(weeks from c), extract(weeks from ntz) from t
 -- !query schema
-struct<extract(weeks FROM c):int>
+struct<extract(weeks FROM c):int,extract(weeks FROM ntz):int>
 -- !query output
-18
+18	18
 
 
 -- !query
-select extract(day from c), extract(day from i) from t
+select extract(day from c), extract(day from ntz), extract(day from i) from t
 -- !query schema
-struct<extract(day FROM c):int,extract(day FROM i):int>
+struct<extract(day FROM c):int,extract(day FROM ntz):int,extract(day FROM i):int>
 -- !query output
-6	31
+6	6	31
 
 
 -- !query
-select extract(d from c), extract(d from i) from t
+select extract(d from c), extract(d from ntz), extract(d from i) from t
 -- !query schema
-struct<extract(d FROM c):int,extract(d FROM i):int>
+struct<extract(d FROM c):int,extract(d FROM ntz):int,extract(d FROM i):int>
 -- !query output
-6	31
+6	6	31
 
 
 -- !query
-select extract(days from c), extract(days from i) from t
+select extract(days from c), extract(days from ntz), extract(days from i) from t
 -- !query schema
-struct<extract(days FROM c):int,extract(days FROM i):int>
+struct<extract(days FROM c):int,extract(days FROM ntz):int,extract(days FROM i):int>
 -- !query output
-6	31
+6	6	31
 
 
 -- !query
-select extract(dayofweek from c) from t
+select extract(dayofweek from c), extract(dayofweek from ntz) from t
 -- !query schema
-struct<extract(dayofweek FROM c):int>
+struct<extract(dayofweek FROM c):int,extract(dayofweek FROM ntz):int>
 -- !query output
-6
+6	6
 
 
 -- !query
-select extract(dow from c) from t
+select extract(dow from c), extract(dow from ntz) from t
 -- !query schema
-struct<extract(dow FROM c):int>
+struct<extract(dow FROM c):int,extract(dow FROM ntz):int>
 -- !query output
-6
+6	6
 
 
 -- !query
-select extract(dayofweek_iso from c) from t
+select extract(dayofweek_iso from c), extract(dayofweek_iso from ntz) from t
 -- !query schema
-struct<extract(dayofweek_iso FROM c):int>
+struct<extract(dayofweek_iso FROM c):int,extract(dayofweek_iso FROM ntz):int>
 -- !query output
-5
+5	5
 
 
 -- !query
-select extract(dow_iso from c) from t
+select extract(dow_iso from c), extract(dow_iso from ntz) from t
 -- !query schema
-struct<extract(dow_iso FROM c):int>
+struct<extract(dow_iso FROM c):int,extract(dow_iso FROM ntz):int>
 -- !query output
-5
+5	5
 
 
 -- !query
-select extract(doy from c) from t
+select extract(doy from c), extract(doy from ntz) from t
 -- !query schema
-struct<extract(doy FROM c):int>
+struct<extract(doy FROM c):int,extract(doy FROM ntz):int>
 -- !query output
-126
+126	126
 
 
 -- !query
@@ -333,187 +333,187 @@ Literals of type 'not_supported' are currently not supported for the interval ty
 
 
 -- !query
-select date_part('year', c), date_part('year', i) from t
+select date_part('year', c), date_part('year', ntz), date_part('year', i) from t
 -- !query schema
-struct<date_part(year, c):int,date_part(year, i):int>
+struct<date_part(year, c):int,date_part(year, ntz):int,date_part(year, i):int>
 -- !query output
-2011	11
+2011	2011	11
 
 
 -- !query
-select date_part('y', c), date_part('y', i) from t
+select date_part('y', c), date_part('y', ntz), date_part('y', i) from t
 -- !query schema
-struct<date_part(y, c):int,date_part(y, i):int>
+struct<date_part(y, c):int,date_part(y, ntz):int,date_part(y, i):int>
 -- !query output
-2011	11
+2011	2011	11
 
 
 -- !query
-select date_part('years', c), date_part('years', i) from t
+select date_part('years', c), date_part('years', ntz), date_part('years', i) from t
 -- !query schema
-struct<date_part(years, c):int,date_part(years, i):int>
+struct<date_part(years, c):int,date_part(years, ntz):int,date_part(years, i):int>
 -- !query output
-2011	11
+2011	2011	11
 
 
 -- !query
-select date_part('yr', c), date_part('yr', i) from t
+select date_part('yr', c), date_part('yr', ntz), date_part('yr', i) from t
 -- !query schema
-struct<date_part(yr, c):int,date_part(yr, i):int>
+struct<date_part(yr, c):int,date_part(yr, ntz):int,date_part(yr, i):int>
 -- !query output
-2011	11
+2011	2011	11
 
 
 -- !query
-select date_part('yrs', c), date_part('yrs', i) from t
+select date_part('yrs', c), date_part('yrs', ntz), date_part('yrs', i) from t
 -- !query schema
-struct<date_part(yrs, c):int,date_part(yrs, i):int>
+struct<date_part(yrs, c):int,date_part(yrs, ntz):int,date_part(yrs, i):int>
 -- !query output
-2011	11
+2011	2011	11
 
 
 -- !query
-select date_part('yearofweek', c) from t
+select date_part('yearofweek', c), date_part('yearofweek', ntz) from t
 -- !query schema
-struct<date_part(yearofweek, c):int>
+struct<date_part(yearofweek, c):int,date_part(yearofweek, ntz):int>
 -- !query output
-2011
+2011	2011
 
 
 -- !query
-select date_part('quarter', c) from t
+select date_part('quarter', c), date_part('quarter', ntz) from t
 -- !query schema
-struct<date_part(quarter, c):int>
+struct<date_part(quarter, c):int,date_part(quarter, ntz):int>
 -- !query output
-2
+2	2
 
 
 -- !query
-select date_part('qtr', c) from t
+select date_part('qtr', c), date_part('qtr', ntz) from t
 -- !query schema
-struct<date_part(qtr, c):int>
+struct<date_part(qtr, c):int,date_part(qtr, ntz):int>
 -- !query output
-2
+2	2
 
 
 -- !query
-select date_part('month', c), date_part('month', i) from t
+select date_part('month', c), date_part('month', ntz), date_part('month', i) from t
 -- !query schema
-struct<date_part(month, c):int,date_part(month, i):tinyint>
+struct<date_part(month, c):int,date_part(month, ntz):int,date_part(month, i):tinyint>
 -- !query output
-5	8
+5	5	8
 
 
 -- !query
-select date_part('mon', c), date_part('mon', i) from t
+select date_part('mon', c), date_part('mon', ntz), date_part('mon', i) from t
 -- !query schema
-struct<date_part(mon, c):int,date_part(mon, i):tinyint>
+struct<date_part(mon, c):int,date_part(mon, ntz):int,date_part(mon, i):tinyint>
 -- !query output
-5	8
+5	5	8
 
 
 -- !query
-select date_part('mons', c), date_part('mons', i) from t
+select date_part('mons', c), date_part('mons', ntz), date_part('mons', i) from t
 -- !query schema
-struct<date_part(mons, c):int,date_part(mons, i):tinyint>
+struct<date_part(mons, c):int,date_part(mons, ntz):int,date_part(mons, i):tinyint>
 -- !query output
-5	8
+5	5	8
 
 
 -- !query
-select date_part('months', c), date_part('months', i) from t
+select date_part('months', c), date_part('months', ntz), date_part('months', i) from t
 -- !query schema
-struct<date_part(months, c):int,date_part(months, i):tinyint>
+struct<date_part(months, c):int,date_part(months, ntz):int,date_part(months, i):tinyint>
 -- !query output
-5	8
+5	5	8
 
 
 -- !query
-select date_part('week', c) from t
+select date_part('week', c), date_part('week', ntz) from t
 -- !query schema
-struct<date_part(week, c):int>
+struct<date_part(week, c):int,date_part(week, ntz):int>
 -- !query output
-18
+18	18
 
 
 -- !query
-select date_part('w', c) from t
+select date_part('w', c), date_part('w', ntz) from t
 -- !query schema
-struct<date_part(w, c):int>
+struct<date_part(w, c):int,date_part(w, ntz):int>
 -- !query output
-18
+18	18
 
 
 -- !query
-select date_part('weeks', c) from t
+select date_part('weeks', c), date_part('weeks', ntz) from t
 -- !query schema
-struct<date_part(weeks, c):int>
+struct<date_part(weeks, c):int,date_part(weeks, ntz):int>
 -- !query output
-18
+18	18
 
 
 -- !query
-select date_part('day', c), date_part('day', i) from t
+select date_part('day', c), date_part('day', ntz), date_part('day', i) from t
 -- !query schema
-struct<date_part(day, c):int,date_part(day, i):int>
+struct<date_part(day, c):int,date_part(day, ntz):int,date_part(day, i):int>
 -- !query output
-6	31
+6	6	31
 
 
 -- !query
-select date_part('d', c), date_part('d', i) from t
+select date_part('d', c), date_part('d', ntz), date_part('d', i) from t
 -- !query schema
-struct<date_part(d, c):int,date_part(d, i):int>
+struct<date_part(d, c):int,date_part(d, ntz):int,date_part(d, i):int>
 -- !query output
-6	31
+6	6	31
 
 
 -- !query
-select date_part('days', c), date_part('days', i) from t
+select date_part('days', c), date_part('days', ntz), date_part('days', i) from t
 -- !query schema
-struct<date_part(days, c):int,date_part(days, i):int>
+struct<date_part(days, c):int,date_part(days, ntz):int,date_part(days, i):int>
 -- !query output
-6	31
+6	6	31
 
 
 -- !query
-select date_part('dayofweek', c) from t
+select date_part('dayofweek', c), date_part('dayofweek', ntz) from t
 -- !query schema
-struct<date_part(dayofweek, c):int>
+struct<date_part(dayofweek, c):int,date_part(dayofweek, ntz):int>
 -- !query output
-6
+6	6
 
 
 -- !query
-select date_part('dow', c) from t
+select date_part('dow', c), date_part('dow', ntz) from t
 -- !query schema
-struct<date_part(dow, c):int>
+struct<date_part(dow, c):int,date_part(dow, ntz):int>
 -- !query output
-6
+6	6
 
 
 -- !query
-select date_part('dayofweek_iso', c) from t
+select date_part('dayofweek_iso', c), date_part('dayofweek_iso', ntz) from t
 -- !query schema
-struct<date_part(dayofweek_iso, c):int>
+struct<date_part(dayofweek_iso, c):int,date_part(dayofweek_iso, ntz):int>
 -- !query output
-5
+5	5
 
 
 -- !query
-select date_part('dow_iso', c) from t
+select date_part('dow_iso', c), date_part('dow_iso', ntz) from t
 -- !query schema
-struct<date_part(dow_iso, c):int>
+struct<date_part(dow_iso, c):int,date_part(dow_iso, ntz):int>
 -- !query output
-5
+5	5
 
 
 -- !query
-select date_part('doy', c) from t
+select date_part('doy', c), date_part('doy', ntz) from t
 -- !query schema
-struct<date_part(doy, c):int>
+struct<date_part(doy, c):int,date_part(doy, ntz):int>
 -- !query output
-126
+126	126
 
 
 -- !query

@@ -4027,9 +4027,11 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-35937: Extract date field from timestamp should work in ANSI mode") {
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      checkAnswer(sql("select extract(year from to_timestamp('2021-01-02 03:04:05'))"), Row(2021))
-      checkAnswer(sql("select extract(month from to_timestamp('2021-01-02 03:04:05'))"), Row(1))
-      checkAnswer(sql("select extract(day from to_timestamp('2021-01-02 03:04:05'))"), Row(2))
+      Seq("to_timestamp", "to_timestamp_ntz").foreach { func =>
+        checkAnswer(sql(s"select extract(year from $func('2021-01-02 03:04:05'))"), Row(2021))
+        checkAnswer(sql(s"select extract(month from $func('2021-01-02 03:04:05'))"), Row(1))
+        checkAnswer(sql(s"select extract(day from $func('2021-01-02 03:04:05'))"), Row(2))
+      }
     }
   }
 

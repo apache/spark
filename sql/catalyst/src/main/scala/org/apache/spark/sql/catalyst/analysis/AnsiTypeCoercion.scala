@@ -302,7 +302,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
    */
   object GetDateFieldOperations extends TypeCoercionRule {
     override def transform: PartialFunction[Expression, Expression] = {
-      case g: GetDateField if g.child.dataType == TimestampType =>
+      case g: GetDateField if AnyTimestampType.unapply(g.child) =>
         g.withNewChildren(Seq(Cast(g.child, DateType)))
     }
   }
