@@ -1131,8 +1131,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
       AddData(inputData, ("a", 4)),       // Add data older than watermark for "a"
       CheckNewAnswer(),                   // No output as data should get filtered by watermark
-      assertStateOperatorProgressMetric(
-        operatorName = "flatMapGroupsWithState", numShufflePartitions = 3, numStateStores = 3),
+      assertStateOperatorProgressMetric(operatorName = "flatMapGroupsWithState",
+        numShufflePartitions = 3, numStateStoreInstances = 3),
 
       AddData(inputData, ("a", 10)),      // Add data newer than watermark for "a"
       CheckNewAnswer(("a", 15)),          // Max event time is still the same

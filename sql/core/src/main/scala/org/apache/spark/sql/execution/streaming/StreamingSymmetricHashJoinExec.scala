@@ -432,7 +432,7 @@ case class StreamingSymmetricHashJoinExec(
       }
 
       val stateStoreNames = SymmetricHashJoinStateManager.allStateStoreNames(LeftSide, RightSide);
-      setOperatorMetrics(numStateStores = stateStoreNames.length)
+      setOperatorMetrics(numStateStoreInstances = stateStoreNames.length)
     }
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](

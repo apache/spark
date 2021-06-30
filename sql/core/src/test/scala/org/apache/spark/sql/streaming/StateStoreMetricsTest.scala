@@ -102,9 +102,10 @@ trait StateStoreMetricsTest extends StreamTest {
 
   /** Assert on [[StateOperatorProgress]] metrics */
   def assertStateOperatorProgressMetric(operatorName: String, numShufflePartitions: Long,
-      numStateStores: Long, operatorIndex: Int = 0): AssertOnQuery = {
+      numStateStoreInstances: Long, operatorIndex: Int = 0): AssertOnQuery = {
     AssertOnQuery(s"Check operator progress metrics: operatorName = $operatorName, " +
-      s"numShufflePartitions = $numShufflePartitions, numStateStore = $numStateStores") { q =>
+      s"numShufflePartitions = $numShufflePartitions, " +
+      s"numStateStoreInstances = $numStateStoreInstances") { q =>
       eventually(timeout(streamingTimeout)) {
         val (progressesSinceLastCheck, lastCheckedProgressIndex, numStateOperators) =
           retrieveProgressesSinceLastCheck(q)
@@ -118,7 +119,7 @@ trait StateStoreMetricsTest extends StreamTest {
           s"incorrect operator name, $debugString")
         assert(lastOpProgress.numShufflePartitions === numShufflePartitions,
           s"incorrect number of shuffle partitions, $debugString")
-        assert(lastOpProgress.numStateStores === numStateStores,
+        assert(lastOpProgress.numStateStoreInstances === numStateStoreInstances,
           s"incorrect number of state stores, $debugString")
 
         advanceLastCheckedRecentProgressIndex(lastCheckedProgressIndex)

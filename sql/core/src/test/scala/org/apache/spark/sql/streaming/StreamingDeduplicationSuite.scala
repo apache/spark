@@ -108,7 +108,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       AddData(inputData, 10),
       CheckNewAnswer(),
       assertStateOperatorProgressMetric(
-        operatorName = "dedupe", numShufflePartitions = 2, numStateStores = 2)
+        operatorName = "dedupe", numShufflePartitions = 2, numStateStoreInstances = 2)
     )
   }
 

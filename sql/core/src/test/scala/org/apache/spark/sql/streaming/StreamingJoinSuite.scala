@@ -669,8 +669,8 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
       StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
       AddData(input1, 1),
       CheckAnswer(),
-      assertStateOperatorProgressMetric(
-        operatorName = "symmetricHashJoin", numShufflePartitions = 3, numStateStores = 3 * 4),
+      assertStateOperatorProgressMetric(operatorName = "symmetricHashJoin",
+        numShufflePartitions = 3, numStateStoreInstances = 3 * 4),
 
       AddData(input2, 1),
       CheckAnswer((1, 10, 2, 3)),

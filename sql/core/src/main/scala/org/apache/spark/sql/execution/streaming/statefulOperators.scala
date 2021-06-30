@@ -106,7 +106,8 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
     "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
     "numShufflePartitions" -> SQLMetrics.createMetric(sparkContext, "number of shuffle partitions"),
-    "numStateStores" -> SQLMetrics.createMetric(sparkContext, "number of state stores")
+    "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
+      "number of state store instances")
   ) ++ stateStoreCustomMetrics
 
   /**
@@ -131,7 +132,7 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
       memoryUsedBytes = longMetric("stateMemory").value,
       numRowsDroppedByWatermark = longMetric("numRowsDroppedByWatermark").value,
       numShufflePartitions = longMetric("numShufflePartitions").value,
-      numStateStores = longMetric("numStateStores").value,
+      numStateStoreInstances = longMetric("numStateStoreInstances").value,
       javaConvertedCustomMetrics
     )
   }
@@ -140,12 +141,12 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
   protected def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
 
   /** Set the operator level metrics */
-  protected def setOperatorMetrics(numStateStores: Int = 1): Unit = {
-    assert(numStateStores >= 1, s"invalid number of stores: $numStateStores")
+  protected def setOperatorMetrics(numStateStoreInstances: Int = 1): Unit = {
+    assert(numStateStoreInstances >= 1, s"invalid number of stores: $numStateStoreInstances")
     // Shuffle partitions capture the number of tasks that have this stateful operator instance.
     // For each task instance this number is incremented by one.
     longMetric("numShufflePartitions") += 1
-    longMetric("numStateStores") += numStateStores
+    longMetric("numStateStoreInstances") += numStateStoreInstances
   }
 
   /**

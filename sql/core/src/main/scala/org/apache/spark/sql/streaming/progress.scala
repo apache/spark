@@ -51,7 +51,7 @@ class StateOperatorProgress private[sql](
     val memoryUsedBytes: Long,
     val numRowsDroppedByWatermark: Long,
     val numShufflePartitions: Long,
-    val numStateStores: Long,
+    val numStateStoreInstances: Long,
     val customMetrics: ju.Map[String, JLong] = new ju.HashMap()
   ) extends Serializable {
 
@@ -69,7 +69,7 @@ class StateOperatorProgress private[sql](
       allUpdatesTimeMs = allUpdatesTimeMs, numRowsRemoved = numRowsRemoved,
       allRemovalsTimeMs = allRemovalsTimeMs, commitTimeMs = commitTimeMs,
       memoryUsedBytes = memoryUsedBytes, numRowsDroppedByWatermark = newNumRowsDroppedByWatermark,
-      numShufflePartitions = numShufflePartitions, numStateStores = numStateStores,
+      numShufflePartitions = numShufflePartitions, numStateStoreInstances = numStateStoreInstances,
       customMetrics = customMetrics)
 
   private[sql] def jsonValue: JValue = {
@@ -83,7 +83,7 @@ class StateOperatorProgress private[sql](
     ("memoryUsedBytes" -> JInt(memoryUsedBytes)) ~
     ("numRowsDroppedByWatermark" -> JInt(numRowsDroppedByWatermark)) ~
     ("numShufflePartitions" -> JInt(numShufflePartitions)) ~
-    ("numStateStores" -> JInt(numStateStores)) ~
+    ("numStateStoreInstances" -> JInt(numStateStoreInstances)) ~
     ("customMetrics" -> {
       if (!customMetrics.isEmpty) {
         val keys = customMetrics.keySet.asScala.toSeq.sorted

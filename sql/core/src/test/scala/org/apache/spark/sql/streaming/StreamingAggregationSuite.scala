@@ -814,7 +814,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(inputData, 1, 4),
       CheckLastBatch((1, 2), (4, 1)),
       assertStateOperatorProgressMetric(
-        operatorName = "stateStoreSave", numShufflePartitions = 3, numStateStores = 3)
+        operatorName = "stateStoreSave", numShufflePartitions = 3, numStateStoreInstances = 3)
     )
 
     inputData.reset() // reset the input to clear any data from prev test
@@ -828,7 +828,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(inputData, 1, 4),
       CheckLastBatch((3, 2), (2, 1), (1, 2), (4, 1)),
       assertStateOperatorProgressMetric(
-        operatorName = "stateStoreSave", numShufflePartitions = 3, numStateStores = 3)
+        operatorName = "stateStoreSave", numShufflePartitions = 3, numStateStoreInstances = 3)
     )
 
     // with watermark and append output mode
@@ -845,7 +845,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       AddData(inputData, 3, 2, 1, 9),
       CheckLastBatch(),
       assertStateOperatorProgressMetric(
-        operatorName = "stateStoreSave", numShufflePartitions = 3, numStateStores = 3),
+        operatorName = "stateStoreSave", numShufflePartitions = 3, numStateStoreInstances = 3),
 
       AddData(inputData, 25), // Advance watermark to 15 secs, no-data-batch drops rows <= 15
       CheckLastBatch((0, 3), (5, 1)),
