@@ -108,6 +108,17 @@ private[spark] class TaskContextImpl(
     this
   }
 
+  @GuardedBy("this")
+  override def addTaskCompletionListenerToHead(listener: TaskCompletionListener)
+  : this.type = synchronized {
+    if (completed) {
+      listener.onTaskCompletion(this)
+    } else {
+      onCompleteCallbacks.insertElementAt(listener, 0)
+    }
+    this
+  }
+
   override def addTaskFailureListener(listener: TaskFailureListener): this.type = {
     synchronized {
       onFailureCallbacks.push(listener)
@@ -115,6 +126,8 @@ private[spark] class TaskContextImpl(
     }.foreach(invokeTaskFailureListeners)
     this
   }
+  
+  
 
   override def resourcesJMap(): java.util.Map[String, ResourceInformation] = {
     resources.asJava
