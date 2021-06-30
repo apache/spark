@@ -345,7 +345,7 @@ class RocksDBSuite extends SparkFunSuite {
       @volatile var exception: Exception = null
       val updatingThreads = Array.fill(numThreads) {
         new Thread() {
-          override def run() {
+          override def run(): Unit = {
             try {
               for (version <- 0 to numUpdatesInEachThread) {
                 withDB(
@@ -364,7 +364,6 @@ class RocksDBSuite extends SparkFunSuite {
                 }
                 throw e
             }
-
           }
         }
       }
