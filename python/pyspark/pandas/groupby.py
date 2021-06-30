@@ -58,7 +58,7 @@ from pyspark.sql.types import (  # noqa: F401
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import FrameLike
+from pyspark.pandas._typing import Axis, FrameLike
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.internal import (
@@ -1694,7 +1694,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         self,
         value: Optional[Any] = None,
         method: Optional[str] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         inplace: bool = False,
         limit: Optional[int] = None,
     ) -> FrameLike:

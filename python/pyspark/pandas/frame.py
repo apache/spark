@@ -83,7 +83,7 @@ from pyspark.sql.types import (  # noqa: F401 (SPARK-34943)
 from pyspark.sql.window import Window
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import DataFrameOrSeries, Dtype, Scalar, T
+from pyspark.pandas._typing import Axis, DataFrameOrSeries, Dtype, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkFrameMethods
 from pyspark.pandas.config import option_context, get_option
 from pyspark.pandas.spark import functions as SF
@@ -642,7 +642,7 @@ class DataFrame(Frame, Generic[T]):
         self,
         sfun: Union[Callable[[Column], Column], Callable[[Column, DataType], Column]],
         name: str,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         numeric_only: bool = True,
         **kwargs: Any
     ) -> "Series":
@@ -2336,7 +2336,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     T = property(transpose)
 
     def apply(
-        self, func: Callable, axis: Union[int, str] = 0, args: Sequence[Any] = (), **kwds: Any
+        self, func: Callable, axis: Axis = 0, args: Sequence[Any] = (), **kwds: Any
     ) -> Union["Series", "DataFrame", "Index"]:
         """
         Apply a function along an axis of the DataFrame.
@@ -2645,7 +2645,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return result
 
     def transform(
-        self, func: Callable[..., "Series"], axis: Union[int, str] = 0, *args: Any, **kwargs: Any
+        self, func: Callable[..., "Series"], axis: Axis = 0, *args: Any, **kwargs: Any
     ) -> "DataFrame":
         """
         Call ``func`` on self producing a Series with transformed values
@@ -2882,7 +2882,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     # TODO: add axis parameter can work when '1' or 'columns'
     def xs(
-        self, key: Union[Any, Tuple], axis: Union[int, str] = 0, level: Optional[int] = None
+        self, key: Union[Any, Tuple], axis: Axis = 0, level: Optional[int] = None
     ) -> DataFrameOrSeries:
         """
         Return cross-section from the DataFrame.
@@ -3017,7 +3017,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         end_time: Union[datetime.time, str],
         include_start: bool = True,
         include_end: bool = True,
-        axis: Union[int, str] = 0,
+        axis: Axis = 0,
     ) -> "DataFrame":
         """
         Select values between particular times of the day (example: 9:00-9:30 AM).
@@ -3113,7 +3113,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     # TODO: implement axis=1
     def at_time(
-        self, time: Union[datetime.time, str], asof: bool = False, axis: Union[int, str] = 0
+        self, time: Union[datetime.time, str], asof: bool = False, axis: Axis = 0
     ) -> "DataFrame":
         """
         Select values at particular time of day (example: 9:30AM).
@@ -4114,7 +4114,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
     # TODO: axis should support 1 or 'columns' either at this moment
-    def diff(self, periods: int = 1, axis: Union[int, str] = 0) -> "DataFrame":
+    def diff(self, periods: int = 1, axis: Axis = 0) -> "DataFrame":
         """
         First discrete difference of element.
 
@@ -4191,7 +4191,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     # TODO: axis should support 1 or 'columns' either at this moment
     def nunique(
         self,
-        axis: Union[int, str] = 0,
+        axis: Axis = 0,
         dropna: bool = True,
         approx: bool = False,
         rsd: float = 0.05,
@@ -5149,7 +5149,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def dropna(
         self,
-        axis: Union[int, str] = 0,
+        axis: Axis = 0,
         how: str = "any",
         thresh: Optional[int] = None,
         subset: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
@@ -5362,7 +5362,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self,
         value: Optional[Union[Any, Dict[Union[Any, Tuple], Any]]] = None,
         method: Optional[str] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         inplace: bool = False,
         limit: Optional[int] = None,
     ) -> Optional["DataFrame"]:
@@ -6523,7 +6523,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
     def droplevel(
-        self, level: Union[int, Any, Tuple, List[Union[int, Any, Tuple]]], axis: Union[int, str] = 0
+        self, level: Union[int, Any, Tuple, List[Union[int, Any, Tuple]]], axis: Axis = 0
     ) -> "DataFrame":
         """
         Return DataFrame with requested index / column level(s) removed.
@@ -6638,7 +6638,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def drop(
         self,
         labels: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
-        axis: Union[int, str] = 1,
+        axis: Axis = 1,
         columns: Union[Any, Tuple, List[Any], List[Tuple]] = None,
     ) -> "DataFrame":
         """
@@ -6875,7 +6875,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     def sort_index(
         self,
-        axis: int = 0,
+        axis: Axis = 0,
         level: Optional[Union[int, List[int]]] = None,
         ascending: bool = True,
         inplace: bool = False,
@@ -6983,10 +6983,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             return psdf
 
     def swaplevel(
-        self,
-        i: Union[int, Any, Tuple] = -2,
-        j: Union[int, Any, Tuple] = -1,
-        axis: Union[int, str] = 0,
+        self, i: Union[int, Any, Tuple] = -2, j: Union[int, Any, Tuple] = -1, axis: Axis = 0
     ) -> "DataFrame":
         """
         Swap levels i and j in a MultiIndex on a particular axis.
@@ -7088,7 +7085,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return DataFrame(internal)
 
-    def swapaxes(self, i: Union[str, int], j: Union[str, int], copy: bool = True) -> "DataFrame":
+    def swapaxes(self, i: Axis, j: Axis, copy: bool = True) -> "DataFrame":
         """
         Interchange axes and swap values axes appropriately.
 
@@ -8616,7 +8613,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         labels: Optional[Sequence[Any]] = None,
         index: Optional[Union["Index", Sequence[Any]]] = None,
         columns: Optional[Union[pd.Index, Sequence[Any]]] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         copy: Optional[bool] = True,
         fill_value: Optional[Any] = None,
     ) -> "DataFrame":
@@ -9557,7 +9554,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         )
 
     # TODO: axis, skipna, and many arguments should be implemented.
-    def all(self, axis: Union[int, str] = 0) -> "Series":
+    def all(self, axis: Axis = 0) -> "Series":
         """
         Return whether all elements are True.
 
@@ -9644,7 +9641,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return first_series(DataFrame(internal))
 
     # TODO: axis, skipna, and many arguments should be implemented.
-    def any(self, axis: Union[int, str] = 0) -> "Series":
+    def any(self, axis: Axis = 0) -> "Series":
         """
         Return whether any element is True.
 
@@ -9809,7 +9806,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         items: Optional[Sequence[Any]] = None,
         like: Optional[str] = None,
         regex: Optional[str] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
     ) -> "DataFrame":
         """
         Subset rows or columns of dataframe according to labels in
@@ -9970,7 +9967,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         mapper: Optional[Union[Dict, Callable[[Any], Any]]] = None,
         index: Optional[Union[Dict, Callable[[Any], Any]]] = None,
         columns: Optional[Union[Dict, Callable[[Any], Any]]] = None,
-        axis: Union[int, str] = "index",
+        axis: Axis = "index",
         inplace: bool = False,
         level: Optional[int] = None,
         errors: str = "ignore",
@@ -10205,7 +10202,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         columns: Union[
             Any, Sequence[Any], Dict[Union[Any, Tuple], Any], Callable[[Union[Any, Tuple]], Any]
         ] = None,
-        axis: Optional[Union[int, str]] = 0,
+        axis: Optional[Axis] = 0,
         inplace: Optional[bool] = False,
     ) -> Optional["DataFrame"]:
         """
@@ -10454,7 +10451,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return self._apply_series_op(op, should_resolve=True)
 
     # TODO: axis = 1
-    def idxmax(self, axis: Union[int, str] = 0) -> "Series":
+    def idxmax(self, axis: Axis = 0) -> "Series":
         """
         Return index of first occurrence of maximum over requested axis.
         NA/null values are excluded.
@@ -10532,7 +10529,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return cast(ps.Series, ps.from_pandas(psdf._to_internal_pandas().idxmax()))
 
     # TODO: axis = 1
-    def idxmin(self, axis: Union[int, str] = 0) -> "Series":
+    def idxmin(self, axis: Axis = 0) -> "Series":
         """
         Return index of first occurrence of minimum over requested axis.
         NA/null values are excluded.
@@ -10727,7 +10724,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def quantile(
         self,
         q: Union[float, Iterable[float]] = 0.5,
-        axis: Union[int, str] = 0,
+        axis: Axis = 0,
         numeric_only: bool = True,
         accuracy: int = 10000,
     ) -> DataFrameOrSeries:
@@ -10986,7 +10983,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         else:
             return DataFrame(internal)
 
-    def take(self, indices: List[int], axis: Union[int, str] = 0, **kwargs: Any) -> "DataFrame":
+    def take(self, indices: List[int], axis: Axis = 0, **kwargs: Any) -> "DataFrame":
         """
         Return the elements in the given *positional* indices along an axis.
 
@@ -11251,7 +11248,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         internal = psdf._internal.with_new_sdf(sdf, data_fields=data_fields)
         return DataFrame(internal)
 
-    def mad(self, axis: int = 0) -> "Series":
+    def mad(self, axis: Axis = 0) -> "Series":
         """
         Return the mean absolute deviation of values.
 
@@ -11432,7 +11429,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self,
         other: DataFrameOrSeries,
         join: str = "outer",
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         copy: bool = True,
     ) -> Tuple["DataFrame", DataFrameOrSeries]:
         """
@@ -11677,7 +11674,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def groupby(
         self,
         by: Union[Any, Tuple, "Series", List[Union[Any, Tuple, "Series"]]],
-        axis: Union[int, str] = 0,
+        axis: Axis = 0,
         as_index: bool = True,
         dropna: bool = True,
     ) -> "DataFrameGroupBy":

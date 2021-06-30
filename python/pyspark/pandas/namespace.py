@@ -65,6 +65,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # noqa: F401
+from pyspark.pandas._typing import Axis, Dtype
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -84,7 +85,6 @@ from pyspark.pandas.internal import (
 from pyspark.pandas.series import Series, first_series
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
-from pyspark.pandas.typedef.typehints import Dtype
 from pyspark.pandas.indexes import Index, DatetimeIndex
 
 
@@ -2041,7 +2041,7 @@ def get_dummies(
 # TODO: there are many parameters to implement and support. See pandas's pd.concat.
 def concat(
     objs: List[Union[DataFrame, Series]],
-    axis: Union[int, str] = 0,
+    axis: Axis = 0,
     join: str = "outer",
     ignore_index: bool = False,
     sort: bool = False,

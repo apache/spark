@@ -34,7 +34,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
+from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.internal import (
     InternalField,
@@ -951,7 +951,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     notna = notnull
 
     # TODO: axis, skipna, and many arguments should be implemented.
-    def all(self, axis: Union[int, str] = 0) -> bool:
+    def all(self, axis: Axis = 0) -> bool:
         """
         Return whether all elements are True.
 
@@ -1014,7 +1014,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             return ret
 
     # TODO: axis, skipna, and many arguments should be implemented.
-    def any(self, axis: Union[int, str] = 0) -> bool:
+    def any(self, axis: Axis = 0) -> bool:
         """
         Return whether any element is True.
 

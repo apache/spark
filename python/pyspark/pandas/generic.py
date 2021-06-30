@@ -53,7 +53,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import DataFrameOrSeries, Dtype, FrameLike, Scalar
+from pyspark.pandas._typing import Axis, DataFrameOrSeries, Dtype, FrameLike, Scalar
 from pyspark.pandas.indexing import AtIndexer, iAtIndexer, iLocIndexer, LocIndexer
 from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.spark import functions as SF
@@ -107,7 +107,7 @@ class Frame(object, metaclass=ABCMeta):
         self,
         sfun: Union[Callable[[Column], Column], Callable[[Column, DataType], Column]],
         name: str,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         numeric_only: bool = True,
         **kwargs: Any
     ) -> Union["Series", Scalar]:
@@ -1130,7 +1130,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def mean(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return the mean of the values.
@@ -1193,7 +1193,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def sum(
-        self, axis: Union[int, str] = None, numeric_only: bool = None, min_count: int = 0
+        self, axis: Optional[Axis] = None, numeric_only: bool = None, min_count: int = 0
     ) -> Union[Scalar, "Series"]:
         """
         Return the sum of the values.
@@ -1278,7 +1278,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def product(
-        self, axis: Union[int, str] = None, numeric_only: bool = None, min_count: int = 0
+        self, axis: Optional[Axis] = None, numeric_only: bool = None, min_count: int = 0
     ) -> Union[Scalar, "Series"]:
         """
         Return the product of the values.
@@ -1377,7 +1377,7 @@ class Frame(object, metaclass=ABCMeta):
     prod = product
 
     def skew(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return unbiased skew normalized by N-1.
@@ -1433,7 +1433,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def kurtosis(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return unbiased kurtosis using Fisher’s definition of kurtosis (kurtosis of normal == 0.0).
@@ -1492,7 +1492,7 @@ class Frame(object, metaclass=ABCMeta):
     kurt = kurtosis
 
     def min(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return the minimum of the values.
@@ -1547,7 +1547,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def max(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return the maximum of the values.
@@ -1602,7 +1602,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def count(
-        self, axis: Union[int, str] = None, numeric_only: bool = False
+        self, axis: Optional[Axis] = None, numeric_only: bool = False
     ) -> Union[Scalar, "Series"]:
         """
         Count non-NA cells for each column.
@@ -1676,7 +1676,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def std(
-        self, axis: Union[int, str] = None, ddof: int = 1, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, ddof: int = 1, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return sample standard deviation.
@@ -1755,7 +1755,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def var(
-        self, axis: Union[int, str] = None, ddof: int = 1, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, ddof: int = 1, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return unbiased variance.
@@ -1834,7 +1834,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def median(
-        self, axis: Union[int, str] = None, numeric_only: bool = None, accuracy: int = 10000
+        self, axis: Optional[Axis] = None, numeric_only: bool = None, accuracy: int = 10000
     ) -> Union[Scalar, "Series"]:
         """
         Return the median of the values for the requested axis.
@@ -1943,7 +1943,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def sem(
-        self, axis: Union[int, str] = None, ddof: int = 1, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, ddof: int = 1, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return unbiased standard error of the mean over requested axis.
@@ -2120,7 +2120,7 @@ class Frame(object, metaclass=ABCMeta):
     def groupby(
         self: FrameLike,
         by: Union[Any, Tuple, "Series", List[Union[Any, Tuple, "Series"]]],
-        axis: Union[int, str] = 0,
+        axis: Axis = 0,
         as_index: bool = True,
         dropna: bool = True,
     ) -> "GroupBy[FrameLike]":
@@ -2614,9 +2614,7 @@ class Frame(object, metaclass=ABCMeta):
         except (KeyError, ValueError, IndexError):
             return default
 
-    def squeeze(
-        self, axis: Optional[Union[int, str]] = None
-    ) -> Union[Scalar, "DataFrame", "Series"]:
+    def squeeze(self, axis: Optional[Axis] = None) -> Union[Scalar, "DataFrame", "Series"]:
         """
         Squeeze 1 dimensional axis objects into scalars.
 
@@ -2752,7 +2750,7 @@ class Frame(object, metaclass=ABCMeta):
         self,
         before: Optional[Any] = None,
         after: Optional[Any] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         copy: bool_type = True,
     ) -> DataFrameOrSeries:
         """
@@ -2960,7 +2958,7 @@ class Frame(object, metaclass=ABCMeta):
         self: FrameLike,
         value: Optional[Any] = None,
         method: Optional[str] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         inplace: bool_type = False,
         limit: Optional[int] = None,
     ) -> FrameLike:
@@ -2969,7 +2967,7 @@ class Frame(object, metaclass=ABCMeta):
     # TODO: add 'downcast' when value parameter exists
     def bfill(
         self: FrameLike,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         inplace: bool_type = False,
         limit: Optional[int] = None,
     ) -> FrameLike:
@@ -3048,7 +3046,7 @@ class Frame(object, metaclass=ABCMeta):
     # TODO: add 'downcast' when value parameter exists
     def ffill(
         self: FrameLike,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         inplace: bool_type = False,
         limit: Optional[int] = None,
     ) -> FrameLike:

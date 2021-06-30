@@ -40,6 +40,7 @@ Scalar = Union[
     int, float, bool, str, bytes, decimal.Decimal, datetime.date, datetime.datetime, None
 ]
 
+Axis = Union[int, str]
 Dtype = Union[np.dtype, ExtensionDtype]
 
 DataFrameOrSeries = Union["DataFrame", "Series"]
