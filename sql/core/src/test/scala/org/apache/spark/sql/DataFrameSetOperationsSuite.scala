@@ -925,12 +925,15 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-35756: unionByName support struct having same col names but different sequence") {
     // struct having same col names but different sequence
-    var df1 = Seq((1, Struct1(1, 2))).toDF("a", "b")
-    var df2 = Seq((1, Struct2(1, 2))).toDF("a", "b")
+    var df1 = Seq(("d1", Struct1(1, 2))).toDF("a", "b")
+    var df2 = Seq(("d2", Struct2(1, 2))).toDF("a", "b")
     var unionDF = df1.unionByName(df2)
-    var expected = Row(1, Row(1, 2)) :: Row(1, Row(2, 1)) :: Nil
-    val schema = "`a` INT,`b` STRUCT<`c1`: INT, `c2`: INT>"
-    assert(unionDF.schema.toDDL === schema)
+    var expected = Row("d1", Row(1, 2)) :: Row("d2", Row(2, 1)) :: Nil
+    val schema = StructType(Seq(StructField("a", StringType),
+      StructField("b", StructType(Seq(StructField("c1", IntegerType),
+        StructField("c2", IntegerType))))))
+
+    assert(unionDF.schema === schema)
     checkAnswer(unionDF, expected)
 
     // nested struct, inner struct having different col name
