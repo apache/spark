@@ -229,7 +229,7 @@ git clean -d -f -x
 rm -f .gitignore
 cd ..
 
-export MAVEN_OPTS="-Xmx12g"
+export MAVEN_OPTS="-Xss128m -Xmx12g"
 
 if [[ "$1" == "package" ]]; then
   # Source and binary tarballs
