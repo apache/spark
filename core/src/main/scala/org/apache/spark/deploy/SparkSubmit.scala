@@ -958,7 +958,7 @@ private[spark] class SparkSubmit extends Logging {
         throw findCause(t)
     } finally {
       if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass) &&
-        !isThriftServer(args.mainClass)) {
+        !isThriftServer(args.mainClass) && !isClientMode(args.deployMode)) {
         try {
           SparkContext.getActive.foreach(_.stop())
         } catch {
@@ -1096,6 +1096,13 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
   private[deploy] def isInternal(res: String): Boolean = {
     res == SparkLauncher.NO_RESOURCE
+  }
+
+  /**
+   * Return whether the given deployMode is client.
+   */
+  private[deploy] def isClientMode(deployMode: String): Boolean = {
+    deployMode == null || deployMode.equalsIgnoreCase("client")
   }
 
 }
