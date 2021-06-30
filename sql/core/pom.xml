@@ -36,6 +36,11 @@
 
   <dependencies>
     <dependency>
+      <groupId>org.rocksdb</groupId>
+      <artifactId>rocksdbjni</artifactId>
+      <version>6.2.2</version>
+    </dependency>
+    <dependency>
       <groupId>com.univocity</groupId>
       <artifactId>univocity-parsers</artifactId>
       <type>jar</type>
@@ -115,7 +120,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.xbean</groupId>
-      <artifactId>xbean-asm7-shaded</artifactId>
+      <artifactId>xbean-asm9-shaded</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>

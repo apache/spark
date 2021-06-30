@@ -15,26 +15,22 @@
 # limitations under the License.
 #
 
-from typing import TYPE_CHECKING, Union
+from typing import Any, Union, cast
 
 from pandas.api.types import CategoricalDtype
 
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    T_IndexOps,
     _as_bool_type,
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
 )
-from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
+from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql import functions as F
 from pyspark.sql.types import ArrayType, BooleanType, NumericType, StringType
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class ArrayOps(DataTypeOps):
@@ -46,7 +42,7 @@ class ArrayOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "arrays"
 
-    def add(self, left, right) -> Union["Series", "Index"]:
+    def add(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not isinstance(right, IndexOpsMixin) or (
             isinstance(right, IndexOpsMixin) and not isinstance(right.spark.data_type, ArrayType)
         ):
@@ -54,8 +50,8 @@ class ArrayOps(DataTypeOps):
                 "Concatenation can not be applied to %s and the given type." % self.pretty_name
             )
 
-        left_type = left.spark.data_type.elementType
-        right_type = right.spark.data_type.elementType
+        left_type = cast(ArrayType, left.spark.data_type).elementType
+        right_type = cast(ArrayType, right.spark.data_type).elementType
 
         if left_type != right_type and not (
             isinstance(left_type, NumericType) and isinstance(right_type, NumericType)
@@ -66,7 +62,7 @@ class ArrayOps(DataTypeOps):
 
         return column_op(F.concat)(left, right)
 
-    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):

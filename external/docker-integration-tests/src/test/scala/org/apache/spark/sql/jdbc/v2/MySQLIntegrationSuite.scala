@@ -79,7 +79,8 @@ class MySQLIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
     val msg1 = intercept[AnalysisException] {
       sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
     }.getMessage
-    assert(msg1.contains("Cannot update alt_table field ID: string cannot be cast to int"))
+    assert(msg1.contains(
+      s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
   }
 
   override def testRenameColumn(tbl: String): Unit = {

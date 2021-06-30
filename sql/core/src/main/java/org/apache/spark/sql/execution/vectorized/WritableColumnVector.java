@@ -611,6 +611,9 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   public final int appendArray(int length) {
     reserve(elementsAppended + 1);
+    for (WritableColumnVector childColumn : childColumns) {
+      childColumn.reserve(childColumn.elementsAppended + length);
+    }
     putArray(elementsAppended, arrayData().elementsAppended, length);
     return elementsAppended++;
   }

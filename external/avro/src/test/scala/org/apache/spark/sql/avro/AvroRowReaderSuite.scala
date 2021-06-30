@@ -70,6 +70,7 @@ class AvroRowReaderSuite
         override val deserializer = new AvroDeserializer(
           reader.getSchema,
           StructType(new StructField("value", IntegerType, true) :: Nil),
+          false,
           CORRECTED,
           new NoopFilters)
         override val stopPosition = fileSize

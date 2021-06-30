@@ -20,6 +20,7 @@ package org.apache.spark.internal.io
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapreduce._
 
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
@@ -41,7 +42,11 @@ import org.apache.spark.util.Utils
  *    (or abortTask if task failed).
  * 3. When all necessary tasks completed successfully, the driver calls commitJob. If the job
  *    failed to execute (e.g. too many failed tasks), the job should call abortJob.
+ *
+ * @note This class is exposed as an API considering the usage of many downstream custom
+ * implementations, but will be subject to be changed and/or moved.
  */
+@Unstable
 abstract class FileCommitProtocol extends Logging {
   import FileCommitProtocol._
 
@@ -107,9 +112,7 @@ abstract class FileCommitProtocol extends Logging {
    * if a task is going to write out multiple files to the same dir. The file commit protocol only
    * guarantees that files written by different tasks will not conflict.
    *
-   * This API should be implemented and called, instead of
-   * [[newTaskTempFile(taskContest, dir, ext)]]. Provide a default implementation here to be
-   * backward compatible with custom [[FileCommitProtocol]] implementations before Spark 3.2.0.
+   * @since 3.2.0
    */
   def newTaskTempFile(
       taskContext: TaskAttemptContext, dir: Option[String], spec: FileNameSpec): String = {
@@ -144,10 +147,7 @@ abstract class FileCommitProtocol extends Logging {
    * if a task is going to write out multiple files to the same dir. The file commit protocol only
    * guarantees that files written by different tasks will not conflict.
    *
-   * This API should be implemented and called, instead of
-   * [[newTaskTempFileAbsPath(taskContest, absoluteDir, ext)]]. Provide a default implementation
-   * here to be backward compatible with custom [[FileCommitProtocol]] implementations before
-   * Spark 3.2.0.
+   * @since 3.2.0
    */
   def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, spec: FileNameSpec): String = {
