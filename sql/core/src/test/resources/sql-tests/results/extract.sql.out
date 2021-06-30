@@ -3,7 +3,7 @@
 
 
 -- !query
-CREATE TEMPORARY VIEW t AS select '2011-05-06 07:08:09.1234567' as c, interval 10 year 20 month 30 day 40 hour 50 minute 6.7890 second as i
+CREATE TEMPORARY VIEW t AS select '2011-05-06 07:08:09.1234567' as c, to_timestamp_ntz('2011-05-06 07:08:09.1234567') as ntz,interval 10 year 20 month 30 day 40 hour 50 minute 6.7890 second as i
 -- !query schema
 struct<>
 -- !query output
@@ -195,123 +195,123 @@ struct<extract(doy FROM c):int>
 
 
 -- !query
-select extract(hour from c), extract(hour from i) from t
+select extract(hour from c), extract(hour from ntz), extract(hour from i) from t
 -- !query schema
-struct<extract(hour FROM c):int,extract(hour FROM i):tinyint>
+struct<extract(hour FROM c):int,extract(hour FROM ntz):int,extract(hour FROM i):tinyint>
 -- !query output
-7	16
+7	7	16
 
 
 -- !query
-select extract(h from c), extract(h from i) from t
+select extract(h from c), extract(h from ntz), extract(h from i) from t
 -- !query schema
-struct<extract(h FROM c):int,extract(h FROM i):tinyint>
+struct<extract(h FROM c):int,extract(h FROM ntz):int,extract(h FROM i):tinyint>
 -- !query output
-7	16
+7	7	16
 
 
 -- !query
-select extract(hours from c), extract(hours from i) from t
+select extract(hours from c), extract(hours from ntz), extract(hours from i) from t
 -- !query schema
-struct<extract(hours FROM c):int,extract(hours FROM i):tinyint>
+struct<extract(hours FROM c):int,extract(hours FROM ntz):int,extract(hours FROM i):tinyint>
 -- !query output
-7	16
+7	7	16
 
 
 -- !query
-select extract(hr from c), extract(hr from i) from t
+select extract(hr from c), extract(hr from ntz), extract(hr from i) from t
 -- !query schema
-struct<extract(hr FROM c):int,extract(hr FROM i):tinyint>
+struct<extract(hr FROM c):int,extract(hr FROM ntz):int,extract(hr FROM i):tinyint>
 -- !query output
-7	16
+7	7	16
 
 
 -- !query
-select extract(hrs from c), extract(hrs from i) from t
+select extract(hrs from c), extract(hrs from ntz), extract(hrs from i) from t
 -- !query schema
-struct<extract(hrs FROM c):int,extract(hrs FROM i):tinyint>
+struct<extract(hrs FROM c):int,extract(hrs FROM ntz):int,extract(hrs FROM i):tinyint>
 -- !query output
-7	16
+7	7	16
 
 
 -- !query
-select extract(minute from c), extract(minute from i) from t
+select extract(minute from c), extract(minute from ntz), extract(minute from i) from t
 -- !query schema
-struct<extract(minute FROM c):int,extract(minute FROM i):tinyint>
+struct<extract(minute FROM c):int,extract(minute FROM ntz):int,extract(minute FROM i):tinyint>
 -- !query output
-8	50
+8	8	50
 
 
 -- !query
-select extract(m from c), extract(m from i) from t
+select extract(m from c), extract(m from ntz), extract(m from i) from t
 -- !query schema
-struct<extract(m FROM c):int,extract(m FROM i):tinyint>
+struct<extract(m FROM c):int,extract(m FROM ntz):int,extract(m FROM i):tinyint>
 -- !query output
-8	50
+8	8	50
 
 
 -- !query
-select extract(min from c), extract(min from i) from t
+select extract(min from c), extract(min from ntz), extract(min from i) from t
 -- !query schema
-struct<extract(min FROM c):int,extract(min FROM i):tinyint>
+struct<extract(min FROM c):int,extract(min FROM ntz):int,extract(min FROM i):tinyint>
 -- !query output
-8	50
+8	8	50
 
 
 -- !query
-select extract(mins from c), extract(mins from i) from t
+select extract(mins from c), extract(mins from ntz), extract(mins from i) from t
 -- !query schema
-struct<extract(mins FROM c):int,extract(mins FROM i):tinyint>
+struct<extract(mins FROM c):int,extract(mins FROM ntz):int,extract(mins FROM i):tinyint>
 -- !query output
-8	50
+8	8	50
 
 
 -- !query
-select extract(minutes from c), extract(minutes from i) from t
+select extract(minutes from c), extract(minutes from ntz), extract(minutes from i) from t
 -- !query schema
-struct<extract(minutes FROM c):int,extract(minutes FROM i):tinyint>
+struct<extract(minutes FROM c):int,extract(minutes FROM ntz):int,extract(minutes FROM i):tinyint>
 -- !query output
-8	50
+8	8	50
 
 
 -- !query
-select extract(second from c), extract(second from i) from t
+select extract(second from c), extract(second from ntz), extract(second from i) from t
 -- !query schema
-struct<extract(second FROM c):decimal(8,6),extract(second FROM i):decimal(8,6)>
+struct<extract(second FROM c):decimal(8,6),extract(second FROM ntz):decimal(8,6),extract(second FROM i):decimal(8,6)>
 -- !query output
-9.123456	6.789000
+9.123456	9.123456	6.789000
 
 
 -- !query
-select extract(s from c), extract(s from i) from t
+select extract(s from c), extract(s from ntz), extract(s from i) from t
 -- !query schema
-struct<extract(s FROM c):decimal(8,6),extract(s FROM i):decimal(8,6)>
+struct<extract(s FROM c):decimal(8,6),extract(s FROM ntz):decimal(8,6),extract(s FROM i):decimal(8,6)>
 -- !query output
-9.123456	6.789000
+9.123456	9.123456	6.789000
 
 
 -- !query
-select extract(sec from c), extract(sec from i) from t
+select extract(sec from c), extract(sec from ntz), extract(sec from i) from t
 -- !query schema
-struct<extract(sec FROM c):decimal(8,6),extract(sec FROM i):decimal(8,6)>
+struct<extract(sec FROM c):decimal(8,6),extract(sec FROM ntz):decimal(8,6),extract(sec FROM i):decimal(8,6)>
 -- !query output
-9.123456	6.789000
+9.123456	9.123456	6.789000
 
 
 -- !query
-select extract(seconds from c), extract(seconds from i) from t
+select extract(seconds from c), extract(seconds from ntz), extract(seconds from i) from t
 -- !query schema
-struct<extract(seconds FROM c):decimal(8,6),extract(seconds FROM i):decimal(8,6)>
+struct<extract(seconds FROM c):decimal(8,6),extract(seconds FROM ntz):decimal(8,6),extract(seconds FROM i):decimal(8,6)>
 -- !query output
-9.123456	6.789000
+9.123456	9.123456	6.789000
 
 
 -- !query
-select extract(secs from c), extract(secs from i) from t
+select extract(secs from c), extract(secs from ntz), extract(secs from i) from t
 -- !query schema
-struct<extract(secs FROM c):decimal(8,6),extract(secs FROM i):decimal(8,6)>
+struct<extract(secs FROM c):decimal(8,6),extract(secs FROM ntz):decimal(8,6),extract(secs FROM i):decimal(8,6)>
 -- !query output
-9.123456	6.789000
+9.123456	9.123456	6.789000
 
 
 -- !query
@@ -517,123 +517,123 @@ struct<date_part(doy, c):int>
 
 
 -- !query
-select date_part('hour', c), date_part('hour', i) from t
+select date_part('hour', c), date_part('hour', ntz), date_part('hour', i) from t
 -- !query schema
-struct<date_part(hour, c):int,date_part(hour, i):tinyint>
+struct<date_part(hour, c):int,date_part(hour, ntz):int,date_part(hour, i):tinyint>
 -- !query output
-7	16
+7	7	16
 
 
 -- !query
-select date_part('h', c), date_part('h', i) from t
+select date_part('h', c), date_part('h', ntz), date_part('h', i) from t
 -- !query schema
-struct<date_part(h, c):int,date_part(h, i):tinyint>
+struct<date_part(h, c):int,date_part(h, ntz):int,date_part(h, i):tinyint>
 -- !query output
-7	16
+7	7	16
 
 
 -- !query
-select date_part('hours', c), date_part('hours', i) from t
+select date_part('hours', c), date_part('hours', ntz), date_part('hours', i) from t
 -- !query schema
-struct<date_part(hours, c):int,date_part(hours, i):tinyint>
+struct<date_part(hours, c):int,date_part(hours, ntz):int,date_part(hours, i):tinyint>
 -- !query output
-7	16
+7	7	16
 
 
 -- !query
-select date_part('hr', c), date_part('hr', i) from t
+select date_part('hr', c), date_part('hr', ntz), date_part('hr', i) from t
 -- !query schema
-struct<date_part(hr, c):int,date_part(hr, i):tinyint>
+struct<date_part(hr, c):int,date_part(hr, ntz):int,date_part(hr, i):tinyint>
 -- !query output
-7	16
+7	7	16
 
 
 -- !query
-select date_part('hrs', c), date_part('hrs', i) from t
+select date_part('hrs', c), date_part('hrs', ntz), date_part('hrs', i) from t
 -- !query schema
-struct<date_part(hrs, c):int,date_part(hrs, i):tinyint>
+struct<date_part(hrs, c):int,date_part(hrs, ntz):int,date_part(hrs, i):tinyint>
 -- !query output
-7	16
+7	7	16
 
 
 -- !query
-select date_part('minute', c), date_part('minute', i) from t
+select date_part('minute', c), date_part('minute', ntz), date_part('minute', i) from t
 -- !query schema
-struct<date_part(minute, c):int,date_part(minute, i):tinyint>
+struct<date_part(minute, c):int,date_part(minute, ntz):int,date_part(minute, i):tinyint>
 -- !query output
-8	50
+8	8	50
 
 
 -- !query
-select date_part('m', c), date_part('m', i) from t
+select date_part('m', c), date_part('m', ntz), date_part('m', i) from t
 -- !query schema
-struct<date_part(m, c):int,date_part(m, i):tinyint>
+struct<date_part(m, c):int,date_part(m, ntz):int,date_part(m, i):tinyint>
 -- !query output
-8	50
+8	8	50
 
 
 -- !query
-select date_part('min', c), date_part('min', i) from t
+select date_part('min', c), date_part('min', ntz), date_part('min', i) from t
 -- !query schema
-struct<date_part(min, c):int,date_part(min, i):tinyint>
+struct<date_part(min, c):int,date_part(min, ntz):int,date_part(min, i):tinyint>
 -- !query output
-8	50
+8	8	50
 
 
 -- !query
-select date_part('mins', c), date_part('mins', i) from t
+select date_part('mins', c), date_part('mins', ntz), date_part('mins', i) from t
 -- !query schema
-struct<date_part(mins, c):int,date_part(mins, i):tinyint>
+struct<date_part(mins, c):int,date_part(mins, ntz):int,date_part(mins, i):tinyint>
 -- !query output
-8	50
+8	8	50
 
 
 -- !query
-select date_part('minutes', c), date_part('minutes', i) from t
+select date_part('minutes', c), date_part('minutes', ntz), date_part('minutes', i) from t
 -- !query schema
-struct<date_part(minutes, c):int,date_part(minutes, i):tinyint>
+struct<date_part(minutes, c):int,date_part(minutes, ntz):int,date_part(minutes, i):tinyint>
 -- !query output
-8	50
+8	8	50
 
 
 -- !query
-select date_part('second', c), date_part('second', i) from t
+select date_part('second', c), date_part('second', ntz), date_part('second', i) from t
 -- !query schema
-struct<date_part(second, c):decimal(8,6),date_part(second, i):decimal(8,6)>
+struct<date_part(second, c):decimal(8,6),date_part(second, ntz):decimal(8,6),date_part(second, i):decimal(8,6)>
 -- !query output
-9.123456	6.789000
+9.123456	9.123456	6.789000
 
 
 -- !query
-select date_part('s', c), date_part('s', i) from t
+select date_part('s', c), date_part('s', ntz), date_part('s', i) from t
 -- !query schema
-struct<date_part(s, c):decimal(8,6),date_part(s, i):decimal(8,6)>
+struct<date_part(s, c):decimal(8,6),date_part(s, ntz):decimal(8,6),date_part(s, i):decimal(8,6)>
 -- !query output
-9.123456	6.789000
+9.123456	9.123456	6.789000
 
 
 -- !query
-select date_part('sec', c), date_part('sec', i) from t
+select date_part('sec', c), date_part('sec', ntz), date_part('sec', i) from t
 -- !query schema
-struct<date_part(sec, c):decimal(8,6),date_part(sec, i):decimal(8,6)>
+struct<date_part(sec, c):decimal(8,6),date_part(sec, ntz):decimal(8,6),date_part(sec, i):decimal(8,6)>
 -- !query output
-9.123456	6.789000
+9.123456	9.123456	6.789000
 
 
 -- !query
-select date_part('seconds', c), date_part('seconds', i) from t
+select date_part('seconds', c), date_part('seconds', ntz), date_part('seconds', i) from t
 -- !query schema
-struct<date_part(seconds, c):decimal(8,6),date_part(seconds, i):decimal(8,6)>
+struct<date_part(seconds, c):decimal(8,6),date_part(seconds, ntz):decimal(8,6),date_part(seconds, i):decimal(8,6)>
 -- !query output
-9.123456	6.789000
+9.123456	9.123456	6.789000
 
 
 -- !query
-select date_part('secs', c), date_part('secs', i) from t
+select date_part('secs', c), date_part('secs', ntz), date_part('secs', i) from t
 -- !query schema
-struct<date_part(secs, c):decimal(8,6),date_part(secs, i):decimal(8,6)>
+struct<date_part(secs, c):decimal(8,6),date_part(secs, ntz):decimal(8,6),date_part(secs, i):decimal(8,6)>
 -- !query output
-9.123456	6.789000
+9.123456	9.123456	6.789000
 
 
 -- !query

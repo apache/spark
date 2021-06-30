@@ -1,4 +1,4 @@
-CREATE TEMPORARY VIEW t AS select '2011-05-06 07:08:09.1234567' as c, interval 10 year 20 month 30 day 40 hour 50 minute 6.7890 second as i;
+CREATE TEMPORARY VIEW t AS select '2011-05-06 07:08:09.1234567' as c, to_timestamp_ntz('2011-05-06 07:08:09.1234567') as ntz,interval 10 year 20 month 30 day 40 hour 50 minute 6.7890 second as i;
 
 select extract(year from c), extract(year from i) from t;
 select extract(y from c), extract(y from i) from t;
@@ -32,23 +32,23 @@ select extract(dow_iso from c) from t;
 
 select extract(doy from c) from t;
 
-select extract(hour from c), extract(hour from i) from t;
-select extract(h from c), extract(h from i) from t;
-select extract(hours from c), extract(hours from i) from t;
-select extract(hr from c), extract(hr from i) from t;
-select extract(hrs from c), extract(hrs from i) from t;
+select extract(hour from c), extract(hour from ntz), extract(hour from i) from t;
+select extract(h from c), extract(h from ntz), extract(h from i) from t;
+select extract(hours from c), extract(hours from ntz), extract(hours from i) from t;
+select extract(hr from c), extract(hr from ntz), extract(hr from i) from t;
+select extract(hrs from c), extract(hrs from ntz), extract(hrs from i) from t;
 
-select extract(minute from c), extract(minute from i) from t;
-select extract(m from c), extract(m from i) from t;
-select extract(min from c), extract(min from i) from t;
-select extract(mins from c), extract(mins from i) from t;
-select extract(minutes from c), extract(minutes from i) from t;
+select extract(minute from c), extract(minute from ntz), extract(minute from i) from t;
+select extract(m from c), extract(m from ntz), extract(m from i) from t;
+select extract(min from c), extract(min from ntz), extract(min from i) from t;
+select extract(mins from c), extract(mins from ntz), extract(mins from i) from t;
+select extract(minutes from c), extract(minutes from ntz), extract(minutes from i) from t;
 
-select extract(second from c), extract(second from i) from t;
-select extract(s from c), extract(s from i) from t;
-select extract(sec from c), extract(sec from i) from t;
-select extract(seconds from c), extract(seconds from i) from t;
-select extract(secs from c), extract(secs from i) from t;
+select extract(second from c), extract(second from ntz), extract(second from i) from t;
+select extract(s from c), extract(s from ntz), extract(s from i) from t;
+select extract(sec from c), extract(sec from ntz), extract(sec from i) from t;
+select extract(seconds from c), extract(seconds from ntz), extract(seconds from i) from t;
+select extract(secs from c), extract(secs from ntz), extract(secs from i) from t;
 
 select extract(not_supported from c) from t;
 select extract(not_supported from i) from t;
@@ -85,23 +85,23 @@ select date_part('dow_iso', c) from t;
 
 select date_part('doy', c) from t;
 
-select date_part('hour', c), date_part('hour', i) from t;
-select date_part('h', c), date_part('h', i) from t;
-select date_part('hours', c), date_part('hours', i) from t;
-select date_part('hr', c), date_part('hr', i) from t;
-select date_part('hrs', c), date_part('hrs', i) from t;
+select date_part('hour', c), date_part('hour', ntz), date_part('hour', i) from t;
+select date_part('h', c), date_part('h', ntz), date_part('h', i) from t;
+select date_part('hours', c), date_part('hours', ntz), date_part('hours', i) from t;
+select date_part('hr', c), date_part('hr', ntz), date_part('hr', i) from t;
+select date_part('hrs', c), date_part('hrs', ntz), date_part('hrs', i) from t;
 
-select date_part('minute', c), date_part('minute', i) from t;
-select date_part('m', c), date_part('m', i) from t;
-select date_part('min', c), date_part('min', i) from t;
-select date_part('mins', c), date_part('mins', i) from t;
-select date_part('minutes', c), date_part('minutes', i) from t;
+select date_part('minute', c), date_part('minute', ntz), date_part('minute', i) from t;
+select date_part('m', c), date_part('m', ntz), date_part('m', i) from t;
+select date_part('min', c), date_part('min', ntz), date_part('min', i) from t;
+select date_part('mins', c), date_part('mins', ntz), date_part('mins', i) from t;
+select date_part('minutes', c), date_part('minutes', ntz), date_part('minutes', i) from t;
 
-select date_part('second', c), date_part('second', i) from t;
-select date_part('s', c), date_part('s', i) from t;
-select date_part('sec', c), date_part('sec', i) from t;
-select date_part('seconds', c), date_part('seconds', i) from t;
-select date_part('secs', c), date_part('secs', i) from t;
+select date_part('second', c), date_part('second', ntz), date_part('second', i) from t;
+select date_part('s', c), date_part('s', ntz), date_part('s', i) from t;
+select date_part('sec', c), date_part('sec', ntz), date_part('sec', i) from t;
+select date_part('seconds', c), date_part('seconds', ntz), date_part('seconds', i) from t;
+select date_part('secs', c), date_part('secs', ntz), date_part('secs', i) from t;
 
 select date_part('not_supported', c) from t;
 select date_part(c, c) from t;
