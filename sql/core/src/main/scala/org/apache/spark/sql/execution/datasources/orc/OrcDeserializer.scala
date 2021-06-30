@@ -137,26 +137,27 @@ class OrcDeserializer(
         v.changePrecision(precision, scale)
         updater.set(ordinal, v)
 
-      case st: StructType => (ordinal, value) =>
+      case st: StructType =>
         val result = new SpecificInternalRow(st)
         val fieldUpdater = new RowUpdater(result)
         val fieldConverters = st.map(_.dataType).map { dt =>
           newWriter(dt, fieldUpdater)
         }.toArray
-        val orcStruct = value.asInstanceOf[OrcStruct]
+        (ordinal, value) =>
+          val orcStruct = value.asInstanceOf[OrcStruct]
 
-        var i = 0
-        while (i < st.length) {
-          val value = orcStruct.getFieldValue(i)
-          if (value == null) {
-            result.setNullAt(i)
-          } else {
-            fieldConverters(i)(i, value)
+          var i = 0
+          while (i < st.length) {
+            val value = orcStruct.getFieldValue(i)
+            if (value == null) {
+              result.setNullAt(i)
+            } else {
+              fieldConverters(i)(i, value)
+            }
+            i += 1
           }
-          i += 1
-        }
 
-        updater.set(ordinal, result)
+          updater.set(ordinal, result)
 
       case ArrayType(elementType, _) => (ordinal, value) =>
         val orcArray = value.asInstanceOf[OrcList[WritableComparable[_]]]
