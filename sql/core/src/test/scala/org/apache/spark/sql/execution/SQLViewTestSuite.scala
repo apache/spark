@@ -375,20 +375,6 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
       }
     }
   }
-
-  test("SPARK-35685: Prompt recreating view message") {
-    withTable("t") {
-      sql("CREATE TABLE t(i INT, j INT) USING json")
-      val viewName = createView("v", "SELECT * FROM t")
-      withView(viewName) {
-        sql("SELECT * FROM v").show()
-        sql("DROP TABLE t")
-        sql("CREATE TABLE t(a INT, b INT) USING json")
-        sql("ALTER VIEW `v`  AS SELECT * FROM t")
-        sql("SELECT * FROM v").show()
-      }
-    }
-  }
 }
 
 class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
