@@ -35,7 +35,7 @@ import org.apache.spark.util.Utils
  * @param message C-style message format compatible with printf.
  *                The error message is constructed by concatenating the lines with newlines.
  */
-private[spark] class ErrorInfo(sqlState: Option[String], message: Seq[String]) {
+private[spark] case class ErrorInfo(message: Seq[String], sqlState: Option[String]) {
   // For compatibility with multi-line error messages
   @JsonIgnore
   val messageFormat: String = message.mkString("\n")
