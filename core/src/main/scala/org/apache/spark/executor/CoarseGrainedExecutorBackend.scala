@@ -284,6 +284,8 @@ private[spark] class CoarseGrainedExecutorBackend(
       }
 
       System.exit(code)
+    } else {
+      logInfo("Skip exiting executor since it's been already asked to exit before.")
     }
   }
 
