@@ -82,6 +82,7 @@ case class StreamingGlobalLimitExec(
         allUpdatesTimeMs += NANOSECONDS.toMillis(System.nanoTime - updatesStartTimeNs)
         commitTimeMs += timeTakenMs { store.commit() }
         setStoreMetrics(store)
+        setOperatorMetrics()
       })
     }
   }
@@ -95,6 +96,8 @@ case class StreamingGlobalLimitExec(
   private def getValueRow(value: Long): UnsafeRow = {
     UnsafeProjection.create(valueSchema)(new GenericInternalRow(Array[Any](value)))
   }
+
+  override def shortName: String = "globalLimit"
 
   override protected def withNewChildInternal(newChild: SparkPlan): StreamingGlobalLimitExec =
     copy(child = newChild)

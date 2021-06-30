@@ -91,7 +91,8 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      StringLiteralCoercion :: Nil) :: Nil
+      StringLiteralCoercion ::
+      GetDateFieldOperations:: Nil) :: Nil
 
   val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
     case (t1, t2) if t1 == t2 => Some(t1)
@@ -189,6 +190,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         }
 
       case (DateType, TimestampType) => Some(TimestampType)
+      case (DateType, AnyTimestampType) => Some(AnyTimestampType.defaultConcreteType)
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // first try to find the all the expected types we can implicitly cast:
@@ -287,6 +289,21 @@ object AnsiTypeCoercion extends TypeCoercionBase {
           case other => other
         }
         p.makeCopy(Array(a, newList))
+    }
+  }
+
+  /**
+   * When getting a date field from a Timestamp column, cast the column as date type.
+   *
+   * This is Spark's hack to make the implementation simple. In the default type coercion rules,
+   * the implicit cast rule does the work. However, The ANSI implicit cast rule doesn't allow
+   * converting Timestamp type as Date type, so we need to have this additional rule
+   * to make sure the date field extraction from Timestamp columns works.
+   */
+  object GetDateFieldOperations extends TypeCoercionRule {
+    override def transform: PartialFunction[Expression, Expression] = {
+      case g: GetDateField if AnyTimestampType.unapply(g.child) =>
+        g.withNewChildren(Seq(Cast(g.child, DateType)))
     }
   }
 }

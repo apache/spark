@@ -20,7 +20,7 @@ import org.apache.avro.SchemaBuilder
 
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
 
@@ -28,7 +28,7 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
     val avroSchema = SchemaBuilder.builder().intType()
 
     val msg = intercept[IncompatibleSchemaException] {
-      new AvroUtils.AvroSchemaHelper(avroSchema, Seq(""))
+      new AvroUtils.AvroSchemaHelper(avroSchema, Seq(""), false)
     }.getMessage
     assert(msg.contains("Attempting to treat int as a RECORD"))
   }
@@ -42,7 +42,7 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
     )
 
     val avroSchema = SchemaConverters.toAvroType(catalystSchema)
-    val helper = new AvroUtils.AvroSchemaHelper(avroSchema, Seq(""))
+    val helper = new AvroUtils.AvroSchemaHelper(avroSchema, Seq(""), false)
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
       assert(helper.getFieldByName("A").get.name() == "A")
       assert(helper.getFieldByName("a").get.name() == "a")
@@ -63,5 +63,23 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
       assert(helper.getFieldByName("b").get.name() == "b")
       assert(helper.getFieldByName("B").get.name() == "b")
     }
+  }
+
+  test("change field match strategy based on positionalFieldMatch value") {
+    val catalystSchema = new StructType().add("foo", IntegerType).add("bar", StringType)
+    val avroSchema = SchemaConverters.toAvroType(catalystSchema)
+
+    val posHelper = new AvroUtils.AvroSchemaHelper(avroSchema, Seq(""), true)
+    val nameHelper = new AvroUtils.AvroSchemaHelper(avroSchema, Seq(""), false)
+
+    for (name <- Seq("foo", "bar"); fieldPos <- Seq(0, 1)) {
+      assert(posHelper.getAvroField(name, fieldPos) === Some(avroSchema.getFields.get(fieldPos)))
+      assert(nameHelper.getAvroField(name, fieldPos) === Some(avroSchema.getField(name)))
+    }
+    assert(posHelper.getAvroField("foo", 5).isEmpty)
+    assert(nameHelper.getAvroField("foo", 5).isDefined)
+
+    assert(posHelper.getAvroField("nonexist", 1).isDefined)
+    assert(nameHelper.getAvroField("nonexist", 1).isEmpty)
   }
 }
