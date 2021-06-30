@@ -1293,4 +1293,29 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(ret, expected)
     }
   }
+
+  test("SPARK-35912: Cast struct contains the null value to struct") {
+    Seq(true, false).foreach { case nullable =>
+      val lit = Literal.create(InternalRow(1, null),
+        StructType(Seq(
+          StructField("c1", IntegerType, true),
+          StructField("c2", IntegerType, nullable)
+        ))
+      )
+      val toType = StructType(Seq(
+        StructField("c1", StringType, true),
+        StructField("c2", StringType, true)
+      ))
+
+      val expected = if (nullable) {
+        InternalRow(UTF8String.fromString("1"), null)
+      } else {
+        InternalRow(UTF8String.fromString("1"), UTF8String.fromString("0"))
+      }
+      val ret = cast(lit, toType)
+      assert(ret.resolved)
+      checkEvaluation(ret, expected)
+    }
+  }
+
 }

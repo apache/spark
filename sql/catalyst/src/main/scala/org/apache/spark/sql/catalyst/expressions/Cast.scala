@@ -870,8 +870,13 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       val newRow = new GenericInternalRow(from.fields.length)
       var i = 0
       while (i < row.numFields) {
-        newRow.update(i,
-          if (row.isNullAt(i)) null else castFuncs(i)(row.get(i, from.apply(i).dataType)))
+        val value = if (from.fields(i).nullable && row.isNullAt(i)) {
+          null
+        } else {
+          val accessor = InternalRow.getAccessor(from.fields(i).dataType, from.fields(i).nullable)
+          castFuncs(i)(accessor(row, i))
+        }
+        newRow.update(i, value)
         i += 1
       }
       newRow
@@ -1900,8 +1905,15 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       val toFieldNull = ctx.freshVariable("tfn", BooleanType)
       val fromType = JavaCode.javaType(from.fields(i).dataType)
       val setColumn = CodeGenerator.setColumn(tmpResult, to.fields(i).dataType, i, toFieldPrim)
+
+      val isNull = if (from.fields(i).nullable) {
+        code"boolean $fromFieldNull = $tmpInput.isNullAt($i);"
+      } else {
+        code"boolean $fromFieldNull = false;"
+      }
+
       code"""
-        boolean $fromFieldNull = $tmpInput.isNullAt($i);
+        $isNull
         if ($fromFieldNull) {
           $tmpResult.setNullAt($i);
         } else {
