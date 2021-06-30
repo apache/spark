@@ -1319,8 +1319,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("flatMapGroupsWithState - initial state - streaming initial state") {
-    val initStateData = MemoryStream[(String, RunningCount)]
-    initStateData.addData(("a", new RunningCount(1)))
+    val initialStateData = MemoryStream[(String, RunningCount)]
+    initialStateData.addData(("a", new RunningCount(1)))
 
     val inputData = MemoryStream[String]
 
@@ -1328,7 +1328,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       inputData.toDS()
         .groupByKey(x => x)
         .flatMapGroupsWithState(
-          Update, NoTimeout(), initStateData.toDS())(flatMapGroupsWithStateFunc)
+          Update, NoTimeout(), initialStateData.toDS())(flatMapGroupsWithStateFunc)
 
     val e = intercept[AnalysisException] {
       result.writeStream

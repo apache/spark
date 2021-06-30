@@ -472,11 +472,11 @@ object FlatMapGroupsWithState {
       isMapGroupsWithState: Boolean,
       timeout: GroupStateTimeout,
       child: LogicalPlan,
-      initStateGroupAttrs: Seq[Attribute],
+      initialStateGroupAttrs: Seq[Attribute],
       initialState: LogicalPlan): LogicalPlan = {
     val stateEncoder = encoderFor[S]
     val keyEncoder = encoderFor[K]
-    val initStateEncoder = ExpressionEncoder.tuple(keyEncoder, stateEncoder)
+    val initialStateEncoder = ExpressionEncoder.tuple(keyEncoder, stateEncoder)
 
     val mapped = new FlatMapGroupsWithState(
       func,
@@ -490,8 +490,8 @@ object FlatMapGroupsWithState {
       isMapGroupsWithState,
       timeout,
       hasInitialState = true,
-      initStateGroupAttrs,
-      initStateEncoder.asInstanceOf[ExpressionEncoder[Any]],
+      initialStateGroupAttrs,
+      initialStateEncoder.asInstanceOf[ExpressionEncoder[Any]],
       initialState,
       child)
     CatalystSerde.serialize[U](mapped)
