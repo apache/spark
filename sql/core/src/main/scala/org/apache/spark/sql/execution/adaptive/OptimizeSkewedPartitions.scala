@@ -51,7 +51,12 @@ object OptimizeSkewedPartitions extends CustomShuffleReaderRule {
 
     val newPartitionsSpec = ShufflePartitionsUtil.optimizeSkewedPartitions(
       mapStats.get.shuffleId, mapStats.get.bytesByPartitionId, advisorySize)
-    CustomShuffleReaderExec(shuffle, newPartitionsSpec)
+    // return origin plan if we can not optimize partitions
+    if (newPartitionsSpec.length == mapStats.get.bytesByPartitionId.length) {
+      shuffle
+    } else {
+      CustomShuffleReaderExec(shuffle, newPartitionsSpec)
+    }
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
