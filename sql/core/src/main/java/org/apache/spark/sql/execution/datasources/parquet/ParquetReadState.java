@@ -45,7 +45,7 @@ final class ParquetReadState {
   /** Maximum definition level for the Parquet column */
   final int maxDefinitionLevel;
 
-  /** The current index overall all rows within the column chunk. This is used to check if the
+  /** The current index over all rows within the column chunk. This is used to check if the
    * current row should be skipped by comparing against the row ranges. */
   long rowId;
 
@@ -60,7 +60,7 @@ final class ParquetReadState {
 
   ParquetReadState(int maxDefinitionLevel, PrimitiveIterator.OfLong rowIndexes) {
     this.maxDefinitionLevel = maxDefinitionLevel;
-    this.rowRanges = rowIndexes == null ? null : constructRanges(rowIndexes);
+    this.rowRanges = constructRanges(rowIndexes);
     nextRange();
   }
 
@@ -70,6 +70,10 @@ final class ParquetReadState {
    * `[0-2], [4-5], [7-9]`.
    */
   private Iterator<RowRange> constructRanges(PrimitiveIterator.OfLong rowIndexes) {
+    if (rowIndexes == null) {
+      return null;
+    }
+
     List<RowRange> rowRanges = new ArrayList<>();
     long currentStart = Long.MIN_VALUE;
     long previous = Long.MIN_VALUE;
