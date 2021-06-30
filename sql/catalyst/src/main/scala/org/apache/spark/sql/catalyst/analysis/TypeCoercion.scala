@@ -961,6 +961,7 @@ object TypeCoercion extends TypeCoercionBase {
 
       // Implicit cast between date time types
       case (DateType, TimestampType) => TimestampType
+      case (DateType, AnyTimestampType) => TimestampType
       case (TimestampType, DateType) => DateType
 
       // Implicit cast from/to string

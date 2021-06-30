@@ -189,6 +189,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         }
 
       case (DateType, TimestampType) => Some(TimestampType)
+      case (DateType, AnyTimestampType) => Some(TimestampType)
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // first try to find the all the expected types we can implicitly cast:
