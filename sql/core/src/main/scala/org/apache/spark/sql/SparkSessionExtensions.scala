@@ -131,7 +131,8 @@ class SparkSessionExtensions {
   }
 
   /**
-   * Build the override rules for the final query stage preparation phase of adaptive query execution.
+   * Build the override rules for the final query stage preparation phase of adaptive query
+   * execution.
    */
   private[sql] def buildFinalStagePrepRules(session: SparkSession): Seq[Rule[SparkPlan]] = {
     finalStagePrepRuleBuilders.map(_.apply(session)).toSeq
