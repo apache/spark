@@ -41,7 +41,8 @@ except ImportError:
     pass
 
 
-SPARK_HOME = os.environ["SPARK_HOME"]
+from pyspark.find_spark_home import _find_spark_home
+SPARK_HOME = _find_spark_home()
 
 
 def read_int(b):

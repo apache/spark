@@ -761,7 +761,9 @@ def main():
     # run the test suites
     run_scala_tests(build_tool, extra_profiles, test_modules, excluded_tags, included_tags)
 
-    modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
+    modules_with_python_tests = [
+        m for m in test_modules if (m.python_test_goals or m.python_discover_paths)
+    ]
     if modules_with_python_tests:
         # We only run PySpark tests with coverage report in one specific job with
         # Spark master with SBT in Jenkins.

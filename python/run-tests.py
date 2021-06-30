@@ -19,15 +19,19 @@
 
 import logging
 from argparse import ArgumentParser
+from importlib import import_module
+import inspect
 import os
 import re
 import shutil
 import subprocess
 import sys
+import unittest
 import tempfile
 from threading import Thread, Lock
 import time
 import uuid
+import pkgutil
 import queue as Queue
 from multiprocessing import Manager
 
@@ -40,6 +44,113 @@ from sparktestsupport import SPARK_HOME  # noqa (suppress pep8 warnings)
 from sparktestsupport.shellutils import which, subprocess_check_output  # noqa
 from sparktestsupport.modules import all_modules, pyspark_sql  # noqa
 
+# Make sure logging config before any possible logging print
+logging.basicConfig(stream=sys.stdout, format="%(message)s")
+LOGGER = logging.getLogger()
+
+
+def _contain_unittests_class(module_name, slow=False):
+    """
+    Check if the module contain unittest class or not.
+    Such as:
+    pyspark.tests.test_appsubmit, it will return True, because there is SparkSubmitTests which is
+    included under the module of pyspark.tests.test_appsubmit, inherits from unittest.TestCase.
+
+    Parameters
+    ----------
+    module_name : str
+        The module name to be check
+    slow : bool
+        Return True if module contains unittests and is_slow_test is marked as True.
+
+    Returns
+    -------
+    True if contains unittest classes otherwise False. An ``ModuleNotFoundError`` will raise if the
+    module is not found.
+
+    >>> _contain_unittests_class("pyspark.tests.test_appsubmit")
+    True
+    >>> _contain_unittests_class("pyspark.conf")
+    False
+    >>> _contain_unittests_class("pyspark.pandas.tests.test_dataframe", slow=True)
+    True
+    >>> _contain_unittests_class("pyspark.pandas.tests.test_dataframe")
+    False
+    """
+    module = import_module(module_name)
+    for _, _class in inspect.getmembers(module, inspect.isclass):
+        if issubclass(_class, unittest.TestCase):
+            if slow and hasattr(module, 'is_slow_test'):
+                return True
+            if not slow and not hasattr(module, 'is_slow_test'):
+                return True
+    return False
+
+
+def _discover_python_unittests(paths):
+    """Discover the python module which contains unittests under paths.
+
+    Such as:
+    ['pyspark/tests'], it will return the set of module name under the path of pyspark/tests, like
+    {'pyspark.tests.test_appsubmit', 'pyspark.tests.test_broadcast', ...}
+
+    Parameters
+    ----------
+    paths : list
+        Paths of modules to be discovered, currnet only support two styles:
+        - str, path, the module without 'is_slow_test' would be discovered.
+        - tuple, (path, 'slow'), only module with 'is_slow_test' would be discovered.
+
+    Returns
+    -------
+    A set of complete test module name discovered under specified paths
+
+    >>> sorted([x for x in _discover_python_unittests(['pyspark/tests'])])
+    ... # doctest: +NORMALIZE_WHITESPACE
+    ['pyspark.tests.test_appsubmit', 'pyspark.tests.test_broadcast', 'pyspark.tests.test_conf',
+    'pyspark.tests.test_context', 'pyspark.tests.test_daemon', 'pyspark.tests.test_install_spark',
+    'pyspark.tests.test_join', 'pyspark.tests.test_pin_thread', 'pyspark.tests.test_profiler',
+    'pyspark.tests.test_rdd', 'pyspark.tests.test_rddbarrier', 'pyspark.tests.test_readwrite',
+    'pyspark.tests.test_serializers', 'pyspark.tests.test_shuffle',
+    'pyspark.tests.test_taskcontext', 'pyspark.tests.test_util', 'pyspark.tests.test_worker']
+    >>> sorted([x for x in _discover_python_unittests([("pyspark/pandas/tests", "slow")])])
+    ... # doctest: +NORMALIZE_WHITESPACE
+    ['pyspark.pandas.tests.indexes.test_base', 'pyspark.pandas.tests.indexes.test_datetime',
+    'pyspark.pandas.tests.test_dataframe', 'pyspark.pandas.tests.test_groupby',
+    'pyspark.pandas.tests.test_indexing', 'pyspark.pandas.tests.test_ops_on_diff_frames',
+    'pyspark.pandas.tests.test_ops_on_diff_frames_groupby', 'pyspark.pandas.tests.test_series',
+    'pyspark.pandas.tests.test_stats']
+    >>> sorted([x for x in _discover_python_unittests([('pyspark/tests', 'slow')])])
+    []
+    """
+    if not paths:
+        return []
+    modules = set()
+    pyspark_path = os.path.join(SPARK_HOME, "python")
+    for path in paths:
+        slow_only = False
+        if isinstance(path, tuple) and len(path) == 2 and path[1] == "slow":
+            slow_only = True
+            path = path[0]
+        real_path = os.path.join(pyspark_path, path)
+        prefix = path.replace('/', '.')
+        # Travel the module under the real_path
+        for importer, module_name, ispkg in pkgutil.walk_packages([real_path], prefix=prefix+'.'):
+            if _contain_unittests_class(module_name, slow_only):
+                modules.add(module_name)
+
+    return sorted(list(modules))
+
+
+def _append_discovered_goals(all_modules):
+    goals = []
+    for m in all_modules:
+        if m.python_discover_paths:
+            goals = _discover_python_unittests(m.python_discover_paths)
+            m.python_test_goals += goals
+
+
+_append_discovered_goals(all_modules)
 
 python_modules = dict((m.name, m) for m in all_modules if m.python_test_goals if m.name != 'root')
 
@@ -51,7 +162,6 @@ def print_red(text):
 SKIPPED_TESTS = None
 LOG_FILE = os.path.join(SPARK_HOME, "python/unit-tests.log")
 FAILURE_REPORTING_LOCK = Lock()
-LOGGER = logging.getLogger()
 
 # Find out where the assembly jars are located.
 # TODO: revisit for Scala 2.13
@@ -240,7 +350,7 @@ def main():
     else:
         log_level = logging.INFO
     should_test_modules = opts.testnames is None
-    logging.basicConfig(stream=sys.stdout, level=log_level, format="%(message)s")
+    LOGGER.setLevel(log_level)
     LOGGER.info("Running PySpark tests. Output is in %s", LOG_FILE)
     if os.path.exists(LOG_FILE):
         os.remove(LOG_FILE)
@@ -326,6 +436,14 @@ def main():
             LOGGER.info("    %s" % line.rstrip())
 
 
+def _test():
+    import doctest
+    failure_count = doctest.testmod()[0]
+    if failure_count:
+        sys.exit(-1)
+
+
 if __name__ == "__main__":
     SKIPPED_TESTS = Manager().dict()
+    _test()
     main()

@@ -134,6 +134,7 @@ jobs:
         export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
         # Hive and SQL tests become flaky when running in parallel as it's too intensive.
         if [[ "$MODULES_TO_TEST" == "hive" ]] || [[ "$MODULES_TO_TEST" == "sql" ]]; then export SERIAL_SBT_TESTS=1; fi
+        export PYTHONPATH="`pwd`/python/lib/py4j-0.10.9.2-src.zip:${PYTHONPATH}"
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
       if: always()
@@ -231,6 +232,7 @@ jobs:
       run: |
         export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
         export PATH=$PATH:$HOME/miniconda/bin
+        export PYTHONPATH="`pwd`/python/lib/py4j-0.10.9.2-src.zip:${PYTHONPATH}"
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST"
     - name: Upload test results to report
       if: always()
