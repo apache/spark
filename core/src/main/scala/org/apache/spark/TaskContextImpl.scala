@@ -92,6 +92,17 @@ private[spark] class TaskContextImpl(
   }
 
   @GuardedBy("this")
+  override def addTaskCompletionListenerToHead(listener: TaskCompletionListener)
+      : this.type = synchronized {
+    if (completed) {
+      listener.onTaskCompletion(this)
+    } else {
+      onCompleteCallbacks.insert(0, listener)
+    }
+    this
+  }
+
+  @GuardedBy("this")
   override def addTaskFailureListener(listener: TaskFailureListener)
       : this.type = synchronized {
     if (failed) {

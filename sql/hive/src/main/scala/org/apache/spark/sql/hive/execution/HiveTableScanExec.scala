@@ -218,11 +218,13 @@ case class HiveTableScanExec(
     // Avoid to serialize MetastoreRelation because schema is lazy. (see SPARK-15649)
     val outputSchema = schema
     rdd.mapPartitionsWithIndexInternal { (index, iter) =>
-      TaskContext.get().addTaskCompletionListener(new TaskCompletionListener {
+      TaskContext.get().addTaskCompletionListenerToHead(new TaskCompletionListener {
         override def onTaskCompletion(context: TaskContext): Unit = {
           longMetric("readBytes").add(context.taskMetrics().inputMetrics.bytesRead)
         }
       })
+
+
       val proj = UnsafeProjection.create(outputSchema)
       proj.initialize(index)
       iter.map { r =>
