@@ -499,7 +499,6 @@ class RocksDBSuite extends SparkFunSuite {
   def listFiles(file: String): Seq[File] = listFiles(new File(file))
 }
 
-
 object RocksDBSuite {
   @volatile var singleton: RocksDB = _
 

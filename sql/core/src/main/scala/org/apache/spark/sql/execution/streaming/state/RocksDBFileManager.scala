@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
@@ -201,9 +202,9 @@ class RocksDBFileManager(
   /**
    * Delete old versions by deleting the associated version and SST files.
    * At a high-level, this method finds which versions to delete, and which SST files that were
-   * last used in those versions. Its safe to delete these SST files because a SST file can
+   * last used in those versions. It's safe to delete these SST files because a SST file can
    * be reused only in successive versions. Therefore, if a SST file F was last used in version
-   * V, then it wont be used in version V+1 or later, and if version V can be deleted, then
+   * V, then it won't be used in version V+1 or later, and if version V can be deleted, then
    * F can safely be deleted as well.
    *
    * To find old files, it does the following.
@@ -260,8 +261,9 @@ class RocksDBFileManager(
     }
 
     // Best effort attempt to delete SST files that were last used in to-be-deleted versions
-    val filesToDelete = fileToMaxUsedVersion.filter { case (_, v) => versionsToDelete.contains(v)}
+    val filesToDelete = fileToMaxUsedVersion.filter { case (_, v) => versionsToDelete.contains(v) }
     logInfo(s"Deleting ${filesToDelete.size} files not used in versions >= $minVersionToRetain")
+    var failedToDelete = 0
     filesToDelete.foreach { case (file, maxUsedVersion) =>
       try {
         val dfsFile = dfsFilePath(file.dfsFileName)
@@ -269,23 +271,25 @@ class RocksDBFileManager(
         logDebug(s"Deleted file $file that was last used in version $maxUsedVersion")
       } catch {
         case e: Exception =>
-          logWarning(s"Error deleting file $file, last used in version $maxVersionPresent", e)
+          failedToDelete += 1
+          logWarning(s"Error deleting file $file, last used in version $maxUsedVersion", e)
       }
     }
 
     // Delete the version files and forget about them
     versionsToDelete.foreach { version =>
+      val versionFile = dfsBatchZipFile(version)
       try {
-        val versionFile = dfsBatchZipFile(version)
         fm.delete(versionFile)
         versionToRocksDBFiles.remove(version)
         logDebug(s"Deleted version $version")
       } catch {
         case e: Exception =>
-          logWarning(s"Error deleting version file $version", e)
+          logWarning(s"Error deleting version file $versionFile for version $version", e)
       }
     }
-    logInfo(s"Deleted ${filesToDelete.size} files not used in versions >= $minVersionToRetain")
+    logInfo(s"Deleted ${filesToDelete.size - failedToDelete} files (failed to delete" +
+      s"$failedToDelete files) not used in versions >= $minVersionToRetain")
   }
 
   /** Save immutable files to DFS directory */
@@ -389,7 +393,7 @@ class RocksDBFileManager(
   private def getImmutableFilesFromVersionZip(version: Long): Seq[RocksDBImmutableFile] = {
     Utils.deleteRecursively(localTempDir)
     localTempDir.mkdirs()
-    Utils.unzipFromFile(fs, dfsBatchZipFile(version), localTempDir)
+    Utils.unzipFilesFromFile(fs, dfsBatchZipFile(version), localTempDir)
     val metadataFile = localMetadataFile(localTempDir)
     val metadata = RocksDBCheckpointMetadata.readFromFile(metadataFile)
     metadata.immutableFiles
