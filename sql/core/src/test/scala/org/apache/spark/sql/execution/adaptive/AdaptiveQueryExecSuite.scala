@@ -1806,8 +1806,7 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-35650: Use local shuffle reader if can not coalesce number of partitions") {
-    withSQLConf(SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
-      SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
       val query = "SELECT /*+ REPARTITION */ * FROM testData"
       val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
       collect(adaptivePlan) {
@@ -1848,11 +1847,11 @@ class AdaptiveQueryExecSuite
           assert(reader.head.partitionSpecs.size == totalNumber)
         }
 
-        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "150") {
           // partition size [0,258,72,72,72]
-          checkPartitionNumber("SELECT /*+ REBALANCE(c1) */ * FROM v", 3, 6)
+          checkPartitionNumber("SELECT /*+ REBALANCE(c1) */ * FROM v", 2, 4)
           // partition size [72,216,216,144,72]
-          checkPartitionNumber("SELECT /*+ REBALANCE */ * FROM v", 8, 10)
+          checkPartitionNumber("SELECT /*+ REBALANCE */ * FROM v", 4, 7)
         }
 
         // no skewed partition should be optimized
