@@ -80,6 +80,4 @@ trait SparkError extends Throwable {
     errorClass.flatMap(SparkError.errorClassToInfoMap.get)
   // None if the error class or SQLSTATE are not set
   val sqlState: Option[String] = errorInfo.flatMap(_.sqlState)
-  // None if the error class is not set
-  val messageFormat: Option[String] = errorInfo.map(_.messageFormat)
 }
