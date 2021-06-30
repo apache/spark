@@ -34,8 +34,8 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 import java.util.zip.{GZIPInputStream, ZipInputStream}
 
 import scala.annotation.tailrec
-import scala.collection.{mutable, Map, Seq}
 import scala.collection.JavaConverters._
+import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
