@@ -2025,7 +2025,7 @@ abstract class AvroSuite
 
   test("SPARK-31327: Write Spark version into Avro file metadata") {
     withTempPath { path =>
-      spark.range(1).repartition(1).write.format("avro").save(path.getCanonicalPath)
+      spark.range(2).repartition(1).write.format("avro").save(path.getCanonicalPath)
       checkMetaData(path, SPARK_VERSION_METADATA_KEY, SPARK_VERSION_SHORT)
     }
   }

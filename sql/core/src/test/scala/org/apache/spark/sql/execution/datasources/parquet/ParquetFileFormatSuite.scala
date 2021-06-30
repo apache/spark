@@ -43,9 +43,9 @@ abstract class ParquetFileFormatSuite
         val path2 = new Path(basePath, "second")
         val path3 = new Path(basePath, "third")
 
-        spark.range(1).toDF("a").coalesce(1).write.parquet(path1.toString)
-        spark.range(1, 2).toDF("a").coalesce(1).write.parquet(path2.toString)
-        spark.range(2, 3).toDF("a").coalesce(1).write.json(path3.toString)
+        spark.range(2).toDF("a").coalesce(1).write.parquet(path1.toString)
+        spark.range(1, 3).toDF("a").coalesce(1).write.parquet(path2.toString)
+        spark.range(2, 4).toDF("a").coalesce(1).write.json(path3.toString)
 
         val fileStatuses =
           Seq(fs.listStatus(path1), fs.listStatus(path2), fs.listStatus(path3)).flatten

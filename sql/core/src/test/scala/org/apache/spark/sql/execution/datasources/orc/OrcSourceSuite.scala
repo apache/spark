@@ -367,7 +367,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDa
 
   test("Write Spark version into ORC file metadata") {
     withTempPath { path =>
-      spark.range(1).repartition(1).write.orc(path.getCanonicalPath)
+      spark.range(2).repartition(1).write.orc(path.getCanonicalPath)
 
       val partFiles = path.listFiles()
         .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))

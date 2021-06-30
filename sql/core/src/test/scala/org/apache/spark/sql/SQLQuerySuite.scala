@@ -3695,7 +3695,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("Fold RepartitionExpression num partition should check if partition expression is empty") {
     withSQLConf((SQLConf.SHUFFLE_PARTITIONS.key, "5")) {
-      val df = spark.range(1).hint("REPARTITION_BY_RANGE")
+      val df = spark.range(2).hint("REPARTITION_BY_RANGE")
       val plan = df.queryExecution.optimizedPlan
       val res = plan.collect {
         case r: RepartitionByExpression if r.numPartitions == 5 => true
