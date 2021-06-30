@@ -46,6 +46,7 @@ import org.apache.spark.util.Utils
  * NOTE: this class is exposed as an API considering the usage of many downstream custom
  * implementations, but will be subject to be changed and/or moved.
  */
+@Unstable
 abstract class FileCommitProtocol extends Logging {
   import FileCommitProtocol._
 
@@ -113,7 +114,6 @@ abstract class FileCommitProtocol extends Logging {
    *
    * @since 3.2.0
    */
-  @Unstable
   def newTaskTempFile(
       taskContext: TaskAttemptContext, dir: Option[String], spec: FileNameSpec): String = {
     if (spec.prefix.isEmpty) {
@@ -149,7 +149,6 @@ abstract class FileCommitProtocol extends Logging {
    *
    * @since 3.2.0
    */
-  @Unstable
   def newTaskTempFileAbsPath(
       taskContext: TaskAttemptContext, absoluteDir: String, spec: FileNameSpec): String = {
     if (spec.prefix.isEmpty) {
