@@ -287,8 +287,8 @@ private[spark] object Utils extends Logging {
     try {
       // SPARK-35907
       // This could throw more meaningful exception information if directory creation failed.
+      // To be on the safe side, try to create and then check if directory was created or not.
       Files.createDirectories(dir.toPath)
-      // To be on the safe side, try to check that the directory has been created successfully.
       if ( !dir.exists() || !dir.isDirectory) {
         logError(s"Failed to create directory " + dir)
       }
