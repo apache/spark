@@ -230,7 +230,7 @@ class SparkContext(object):
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python3')
         self.pythonVer = "%d.%d" % sys.version_info[:2]
 
-        if self.pythonVer < (3, 7):
+        if sys.version_info[:2] < (3, 7):
             with warnings.catch_warnings():
                 warnings.simplefilter("once")
                 warnings.warn(
