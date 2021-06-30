@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.MapOutputStatistics
+import org.apache.spark.{MapOutputStatistics, MapOutputTrackerMaster, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.{CoalescedPartitionSpec, PartialReducerPartitionSpec, ShufflePartitionSpec}
 
@@ -268,7 +268,8 @@ object ShufflePartitionsUtil extends Logging {
    * so that the size sum of each partition is close to the target size. Each index indicates the
    * start of a partition.
    */
-  def splitSizeListByTargetSize(sizes: Seq[Long], targetSize: Long): Array[Int] = {
+  // Visible for testing
+  private[sql] def splitSizeListByTargetSize(sizes: Seq[Long], targetSize: Long): Array[Int] = {
     val partitionStartIndices = ArrayBuffer[Int]()
     partitionStartIndices += 0
     var i = 0
@@ -307,5 +308,39 @@ object ShufflePartitionsUtil extends Logging {
     }
     tryMergePartitions()
     partitionStartIndices.toArray
+  }
+
+  /**
+   * Get the map size of the specific reduce shuffle Id.
+   */
+  private def getMapSizesForReduceId(shuffleId: Int, partitionId: Int): Array[Long] = {
+    val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses.map{_.getSizeForBlock(partitionId)}
+  }
+
+  /**
+   * Splits the skewed partition based on the map size and the target partition size
+   * after split, and create a list of `PartialMapperPartitionSpec`. Returns None if can't split.
+   */
+  def createSkewPartitionSpecs(
+      shuffleId: Int,
+      reducerId: Int,
+      targetSize: Long): Option[Seq[PartialReducerPartitionSpec]] = {
+    val mapPartitionSizes = getMapSizesForReduceId(shuffleId, reducerId)
+    val mapStartIndices = splitSizeListByTargetSize(mapPartitionSizes, targetSize)
+    if (mapStartIndices.length > 1) {
+      Some(mapStartIndices.indices.map { i =>
+        val startMapIndex = mapStartIndices(i)
+        val endMapIndex = if (i == mapStartIndices.length - 1) {
+          mapPartitionSizes.length
+        } else {
+          mapStartIndices(i + 1)
+        }
+        val dataSize = startMapIndex.until(endMapIndex).map(mapPartitionSizes(_)).sum
+        PartialReducerPartitionSpec(reducerId, startMapIndex, endMapIndex, dataSize)
+      })
+    } else {
+      None
+    }
   }
 }
