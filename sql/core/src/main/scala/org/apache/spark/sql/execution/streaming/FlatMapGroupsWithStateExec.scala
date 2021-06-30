@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, BaseOrdering, BoundReference, Expression, GetStructField, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClusteredDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
@@ -42,7 +42,7 @@ import org.apache.spark.util.{CompletionIterator, NextIterator, SerializableConf
  * @param dataAttributes used to read the data
  * @param outputObjAttr Defines the output object
  * @param stateEncoder used to serialize/deserialize state before calling `func`
- * @param initStateEncoder encoder for the initial state used to deserialize init state.
+ * @param initialStateEncoder encoder for the initial state used to deserialize init state.
  * @param outputMode the output mode of `func`
  * @param timeoutConf used to timeout groups that have not received data in a while
  * @param batchTimestampMs processing timestamp of the current batch.
@@ -56,12 +56,12 @@ case class FlatMapGroupsWithStateExec(
     keyDeserializer: Expression,
     valueDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
-    initStateGroupAttrs: Seq[Attribute],
+    initialStateGroupAttrs: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     stateEncoder: ExpressionEncoder[Any],
-    initStateEncoder: ExpressionEncoder[Any],
+    initialStateEncoder: ExpressionEncoder[Any],
     stateFormatVersion: Int,
     outputMode: OutputMode,
     timeoutConf: GroupStateTimeout,
@@ -88,17 +88,24 @@ case class FlatMapGroupsWithStateExec(
   private[sql] val stateManager =
     createStateManager(stateEncoder, isTimeoutEnabled, stateFormatVersion)
 
-  /** Distribute by grouping attributes */
+  /**
+   * Distribute by grouping attributes - We need the underlying data and the initial state data
+   * to have the same grouping so that the data are co-lacated on the same task.
+   */
   override def requiredChildDistribution: Seq[Distribution] = {
-    HashClusteredDistribution(groupingAttributes, stateInfo.map(_.numPartitions)) ::
-    HashClusteredDistribution(initStateGroupAttrs, stateInfo.map(_.numPartitions)) ::
+    ClusteredDistribution(groupingAttributes, stateInfo.map(_.numPartitions)) ::
+    ClusteredDistribution(initialStateGroupAttrs, stateInfo.map(_.numPartitions)) ::
       Nil
   }
 
-  /** Ordering needed for using GroupingIterator */
+  /**
+   * Ordering needed for using GroupingIterator.
+   * We need the initial state to also use the ordering as the data so that we can co-locate the
+   * keys from the underlying data and the initial state.
+   */
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
       groupingAttributes.map(SortOrder(_, Ascending)),
-      initStateGroupAttrs.map(SortOrder(_, Ascending)))
+      initialStateGroupAttrs.map(SortOrder(_, Ascending)))
 
   override def keyExpressions: Seq[Attribute] = groupingAttributes
 
@@ -212,6 +219,8 @@ case class FlatMapGroupsWithStateExec(
         getStateInfo,
         storeNames = Seq(),
         session.sqlContext.streams.stateStoreCoordinator) {
+        // The state store aware zip partitions will provide us with two iterators,
+        // child data iterator and the initial state iterator per partition.
         case (partitionId, childDataIterator, initStateIterator) =>
           val stateStoreId = StateStoreId(
             stateInfo.get.checkpointLocation, stateInfo.get.operatorId, partitionId)
@@ -295,7 +304,7 @@ case class FlatMapGroupsWithStateExec(
 
       val groupedChildDataIter = GroupedIterator(childDataIter, groupingAttributes, child.output)
       val groupedInitStateIter =
-        GroupedIterator(initStateIter, initStateGroupAttrs, initialState.output)
+        GroupedIterator(initStateIter, initialStateGroupAttrs, initialState.output)
 
       val keyOrderingComparator = GenerateOrdering.generate(
         groupingAttributes.map(SortOrder(_, Ascending)), groupingAttributes)
@@ -311,7 +320,7 @@ case class FlatMapGroupsWithStateExec(
             throw new IllegalArgumentException("The initial state provided contained duplicates")
           }
           foundInitStateForKey = true
-          val fields = initStateRow.toSeq(initStateEncoder.schema)
+          val fields = initStateRow.toSeq(initialStateEncoder.schema)
           val initStateObj = stateDeserializerFunc(InternalRow(fields(1)))
           stateManager.putState(store, keyUnsafeRow, initStateObj, NO_TIMESTAMP)
         }
