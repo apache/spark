@@ -137,7 +137,7 @@ private[client] sealed abstract class Shim {
 
   def dropFunction(hive: Hive, db: String, name: String): Unit
 
-  def renameFunction(hive: Hive, db: String, oldName: String, newName: String, owner: String): Unit
+  def renameFunction(hive: Hive, db: String, oldName: String, newName: String): Unit
 
   def alterFunction(hive: Hive, db: String, func: CatalogFunction, owner: String): Unit
 
@@ -464,11 +464,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     throw new NoSuchPermanentFunctionException(db, name)
   }
 
-  def renameFunction(hive: Hive,
-       db: String,
-       oldName: String,
-       newName: String,
-       owner: String): Unit = {
+  def renameFunction(hive: Hive, db: String, oldName: String, newName: String): Unit = {
     throw new NoSuchPermanentFunctionException(db, oldName)
   }
 
@@ -588,15 +584,11 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     hive.dropFunction(db, name)
   }
 
-  override def renameFunction(hive: Hive,
-      db: String,
-      oldName: String,
-      newName: String,
-      owner: String): Unit = {
+  override def renameFunction(hive: Hive, db: String, oldName: String, newName: String): Unit = {
     val catalogFunc = getFunctionOption(hive, db, oldName)
       .getOrElse(throw new NoSuchPermanentFunctionException(db, oldName))
       .copy(identifier = FunctionIdentifier(newName, Some(db)))
-    val hiveFunc = toHiveFunction(catalogFunc, db, owner)
+    val hiveFunc = toHiveFunction(catalogFunc, db, hive.getFunction(db, oldName).getOwnerName)
     hive.alterFunction(db, oldName, hiveFunc)
   }
 

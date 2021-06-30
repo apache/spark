@@ -933,7 +933,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = withHiveState {
-    shim.renameFunction(client, db, oldName, newName, userName)
+    shim.renameFunction(client, db, oldName, newName)
   }
 
   override def alterFunction(db: String, func: CatalogFunction): Unit = withHiveState {
