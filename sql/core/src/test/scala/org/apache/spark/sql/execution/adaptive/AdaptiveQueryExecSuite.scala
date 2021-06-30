@@ -1836,24 +1836,20 @@ class AdaptiveQueryExecSuite
           .toDF("c1", "c2").createOrReplaceTempView("v")
 
         def checkPartitionNumber(
-            query: String, reducerPartitionNumber: Int, totalNumber: Int): Unit = {
+            query: String, skewedPartitionNumber: Int, totalNumber: Int): Unit = {
           val (_, adaptive) = runAdaptiveAndVerifyResult(query)
           val reader = collect(adaptive) {
             case reader: CustomShuffleReaderExec => reader
           }
-          if (totalNumber == 0) {
-            assert(reader.isEmpty)
-          } else {
-            assert(reader.size == 1)
-            assert(reader.head.partitionSpecs.count(_.isInstanceOf[PartialReducerPartitionSpec]) ==
-              reducerPartitionNumber)
-            assert(reader.head.partitionSpecs.size == totalNumber)
-          }
+          assert(reader.size == 1)
+          assert(reader.head.partitionSpecs.count(_.isInstanceOf[PartialReducerPartitionSpec]) ==
+            skewedPartitionNumber)
+          assert(reader.head.partitionSpecs.size == totalNumber)
         }
 
         withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
           // partition size [0,258,72,72,72]
-          checkPartitionNumber("SELECT /*+ REBALANCE(c1) */ * FROM v", 3, 7)
+          checkPartitionNumber("SELECT /*+ REBALANCE(c1) */ * FROM v", 3, 6)
           // partition size [72,216,216,144,72]
           checkPartitionNumber("SELECT /*+ REBALANCE */ * FROM v", 8, 10)
         }
