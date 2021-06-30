@@ -109,10 +109,12 @@ class SparkSessionExtensions {
   type FunctionDescription = (FunctionIdentifier, ExpressionInfo, FunctionBuilder)
   type TableFunctionDescription = (FunctionIdentifier, ExpressionInfo, TableFunctionBuilder)
   type ColumnarRuleBuilder = SparkSession => ColumnarRule
-  type QueryStagePrepRuleBuilder = SparkSession => Rule[SparkPlan]
+  type PhysicalPlanRuleBuilder = SparkSession => Rule[SparkPlan]
 
   private[this] val columnarRuleBuilders = mutable.Buffer.empty[ColumnarRuleBuilder]
-  private[this] val queryStagePrepRuleBuilders = mutable.Buffer.empty[QueryStagePrepRuleBuilder]
+  private[this] val queryStagePrepRuleBuilders = mutable.Buffer.empty[PhysicalPlanRuleBuilder]
+  private[this] val finalStagePrepRuleBuilders =
+    mutable.Buffer.empty[PhysicalPlanRuleBuilder]
 
   /**
    * Build the override rules for columnar execution.
@@ -129,6 +131,13 @@ class SparkSessionExtensions {
   }
 
   /**
+   * Build the override rules for the final query stage preparation phase of adaptive query execution.
+   */
+  private[sql] def buildFinalStagePrepRules(session: SparkSession): Seq[Rule[SparkPlan]] = {
+    finalStagePrepRuleBuilders.map(_.apply(session)).toSeq
+  }
+
+  /**
    * Inject a rule that can override the columnar execution of an executor.
    */
   def injectColumnar(builder: ColumnarRuleBuilder): Unit = {
@@ -139,8 +148,16 @@ class SparkSessionExtensions {
    * Inject a rule that can override the the query stage preparation phase of adaptive query
    * execution.
    */
-  def injectQueryStagePrepRule(builder: QueryStagePrepRuleBuilder): Unit = {
+  def injectQueryStagePrepRule(builder: PhysicalPlanRuleBuilder): Unit = {
     queryStagePrepRuleBuilders += builder
+  }
+
+  /**
+   * Inject a rule that can override the the final query stage preparation phase of adaptive query
+   * execution.
+   */
+  def injectFinalStagePrepRule(builder: PhysicalPlanRuleBuilder): Unit = {
+    finalStagePrepRuleBuilders += builder
   }
 
   private[this] val resolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]

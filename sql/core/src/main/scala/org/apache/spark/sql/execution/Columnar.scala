@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types._
@@ -65,7 +66,9 @@ trait ColumnarToRowTransition extends UnaryExecNode
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
 case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition with CodegenSupport {
-  assert(child.supportsColumnar)
+  // child plan must be columnar or an adaptive plan, which could either be row-based or
+  // columnar, but we don't know until we execute it
+  assert(child.supportsColumnar || child.isInstanceOf[AdaptiveSparkPlanExec])
 
   override def output: Seq[Attribute] = child.output
 
@@ -83,18 +86,25 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
   )
 
   override def doExecute(): RDD[InternalRow] = {
-    val numOutputRows = longMetric("numOutputRows")
-    val numInputBatches = longMetric("numInputBatches")
-    // This avoids calling `output` in the RDD closure, so that we don't need to include the entire
-    // plan (this) in the closure.
-    val localOutput = this.output
-    child.executeColumnar().mapPartitionsInternal { batches =>
-      val toUnsafe = UnsafeProjection.create(localOutput, localOutput)
-      batches.flatMap { batch =>
-        numInputBatches += 1
-        numOutputRows += batch.numRows()
-        batch.rowIterator().asScala.map(toUnsafe)
-      }
+    child match {
+      case a: AdaptiveSparkPlanExec if !a.finalPlanSupportsColumnar() =>
+        // if the child plan is adaptive and resulted in rows rather than columnar data
+        // then we can bypass any transition
+        a.execute()
+      case _ =>
+        val numOutputRows = longMetric("numOutputRows")
+        val numInputBatches = longMetric("numInputBatches")
+        // This avoids calling `output` in the RDD closure, so that we don't need to include
+        // the entire plan (this) in the closure.
+        val localOutput = this.output
+        child.executeColumnar().mapPartitionsInternal { batches =>
+          val toUnsafe = UnsafeProjection.create(localOutput, localOutput)
+          batches.flatMap { batch =>
+            numInputBatches += 1
+            numOutputRows += batch.numRows()
+            batch.rowIterator().asScala.map(toUnsafe)
+          }
+        }
     }
   }
 
