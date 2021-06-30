@@ -177,6 +177,9 @@ catalyst = Module(
     sbt_test_goals=[
         "catalyst/test",
     ],
+    environ=None if "GITHUB_ACTIONS" not in os.environ else {
+        "ENABLE_DOCKER_INTEGRATION_TESTS": "1"
+    },
 )
 
 sql = Module(
@@ -188,6 +191,9 @@ sql = Module(
     sbt_test_goals=[
         "sql/test",
     ],
+    environ=None if "GITHUB_ACTIONS" not in os.environ else {
+        "ENABLE_DOCKER_INTEGRATION_TESTS": "1"
+    },
 )
 
 hive = Module(
@@ -769,7 +775,7 @@ spark_ganglia_lgpl = Module(
 
 docker_integration_tests = Module(
     name="docker-integration-tests",
-    dependencies=[],
+    dependencies=[sql],
     build_profile_flags=["-Pdocker-integration-tests"],
     source_file_regexes=["external/docker-integration-tests"],
     sbt_test_goals=["docker-integration-tests/test"],

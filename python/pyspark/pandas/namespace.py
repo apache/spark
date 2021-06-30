@@ -46,8 +46,7 @@ from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype, is_list
 from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pyspark import sql as spark
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ByteType,
@@ -2919,8 +2918,8 @@ def read_orc(
 
 
 def _get_index_map(
-    sdf: spark.DataFrame, index_col: Optional[Union[str, List[str]]] = None
-) -> Tuple[Optional[List[spark.Column]], Optional[List[Tuple]]]:
+    sdf: SparkDataFrame, index_col: Optional[Union[str, List[str]]] = None
+) -> Tuple[Optional[List[Column]], Optional[List[Tuple]]]:
     if index_col is not None:
         if isinstance(index_col, str):
             index_col = [index_col]
@@ -2930,7 +2929,7 @@ def _get_index_map(
                 raise KeyError(col)
         index_spark_columns = [
             scol_for(sdf, col) for col in index_col
-        ]  # type: Optional[List[spark.Column]]
+        ]  # type: Optional[List[Column]]
         index_names = [(col,) for col in index_col]  # type: Optional[List[Tuple]]
     else:
         index_spark_columns = None

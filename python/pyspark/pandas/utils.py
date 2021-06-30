@@ -39,14 +39,14 @@ from typing import (  # noqa: F401 (SPARK-34943)
 )
 import warnings
 
-from pyspark import sql as spark
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame, SparkSession
 from pyspark.sql.types import DoubleType
 import pandas as pd
 from pandas.api.types import is_list_like
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
+from pyspark.pandas._typing import DataFrameOrSeries
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef.typehints import as_spark_type
 
@@ -104,7 +104,7 @@ def same_anchor(
 
 def combine_frames(
     this: "DataFrame",
-    *args: Union["DataFrame", "Series"],
+    *args: DataFrameOrSeries,
     how: str = "full",
     preserve_order_column: bool = False
 ) -> "DataFrame":
@@ -388,7 +388,7 @@ def align_diff_frames(
     that_columns_to_apply = []  # type: List[Tuple]
     this_columns_to_apply = []  # type: List[Tuple]
     additional_that_columns = []  # type: List[Tuple]
-    columns_to_keep = []  # type: List[Union[Series, spark.Column]]
+    columns_to_keep = []  # type: List[Union[Series, Column]]
     column_labels_to_keep = []  # type: List[Tuple]
 
     for combined_label in combined_column_labels:
@@ -423,7 +423,7 @@ def align_diff_frames(
         psser_set, column_labels_set = zip(
             *resolve_func(combined, this_columns_to_apply, that_columns_to_apply)
         )
-        columns_applied = list(psser_set)  # type: List[Union[Series, spark.Column]]
+        columns_applied = list(psser_set)  # type: List[Union[Series, Column]]
         column_labels_applied = list(column_labels_set)  # type: List[Tuple]
     else:
         columns_applied = []
@@ -460,11 +460,11 @@ def is_testing() -> bool:
     return "SPARK_TESTING" in os.environ
 
 
-def default_session(conf: Optional[Dict[str, Any]] = None) -> spark.SparkSession:
+def default_session(conf: Optional[Dict[str, Any]] = None) -> SparkSession:
     if conf is None:
         conf = dict()
 
-    builder = spark.SparkSession.builder.appName("pandas-on-Spark")
+    builder = SparkSession.builder.appName("pandas-on-Spark")
     for key, value in conf.items():
         builder = builder.config(key, value)
     # Currently, pandas-on-Spark is dependent on such join due to 'compute.ops_on_diff_frames'
@@ -478,9 +478,7 @@ def default_session(conf: Optional[Dict[str, Any]] = None) -> spark.SparkSession
 
 
 @contextmanager
-def sql_conf(
-    pairs: Dict[str, Any], *, spark: Optional[spark.SparkSession] = None
-) -> Iterator[None]:
+def sql_conf(pairs: Dict[str, Any], *, spark: Optional[SparkSession] = None) -> Iterator[None]:
     """
     A convenient context manager to set `value` to the Spark SQL configuration `key` and
     then restores it back when it exits.
@@ -589,7 +587,7 @@ def lazy_property(fn: Callable[[Any], Any]) -> property:
     return wrapped_lazy_property.deleter(deleter)
 
 
-def scol_for(sdf: spark.DataFrame, column_name: str) -> spark.Column:
+def scol_for(sdf: SparkDataFrame, column_name: str) -> Column:
     """Return Spark Column for the given column name."""
     return sdf["`{}`".format(column_name)]
 
@@ -757,7 +755,7 @@ def validate_how(how: str) -> str:
 
 
 @overload
-def verify_temp_column_name(df: spark.DataFrame, column_name_or_label: str) -> str:
+def verify_temp_column_name(df: SparkDataFrame, column_name_or_label: str) -> str:
     ...
 
 
@@ -769,7 +767,7 @@ def verify_temp_column_name(
 
 
 def verify_temp_column_name(
-    df: Union["DataFrame", spark.DataFrame], column_name_or_label: Union[Any, Tuple]
+    df: Union["DataFrame", SparkDataFrame], column_name_or_label: Union[Any, Tuple]
 ) -> Union[Any, Tuple]:
     """
     Verify that the given column name does not exist in the given pandas-on-Spark or
@@ -867,7 +865,7 @@ def verify_temp_column_name(
         )
         column_name = column_name_or_label
 
-    assert isinstance(df, spark.DataFrame), type(df)
+    assert isinstance(df, SparkDataFrame), type(df)
     assert (
         column_name not in df.columns
     ), "The given column name `{}` already exists in the Spark DataFrame: {}".format(
@@ -877,7 +875,7 @@ def verify_temp_column_name(
     return column_name_or_label
 
 
-def spark_column_equals(left: spark.Column, right: spark.Column) -> bool:
+def spark_column_equals(left: Column, right: Column) -> bool:
     """
     Check both `left` and `right` have the same expressions.
 
@@ -898,38 +896,38 @@ def spark_column_equals(left: spark.Column, right: spark.Column) -> bool:
 
 
 def compare_null_first(
-    left: spark.Column,
-    right: spark.Column,
-    comp: Callable[[spark.Column, spark.Column], spark.Column],
-) -> spark.Column:
+    left: Column,
+    right: Column,
+    comp: Callable[[Column, Column], Column],
+) -> Column:
     return (left.isNotNull() & right.isNotNull() & comp(left, right)) | (
         left.isNull() & right.isNotNull()
     )
 
 
 def compare_null_last(
-    left: spark.Column,
-    right: spark.Column,
-    comp: Callable[[spark.Column, spark.Column], spark.Column],
-) -> spark.Column:
+    left: Column,
+    right: Column,
+    comp: Callable[[Column, Column], Column],
+) -> Column:
     return (left.isNotNull() & right.isNotNull() & comp(left, right)) | (
         left.isNotNull() & right.isNull()
     )
 
 
 def compare_disallow_null(
-    left: spark.Column,
-    right: spark.Column,
-    comp: Callable[[spark.Column, spark.Column], spark.Column],
-) -> spark.Column:
+    left: Column,
+    right: Column,
+    comp: Callable[[Column, Column], Column],
+) -> Column:
     return left.isNotNull() & right.isNotNull() & comp(left, right)
 
 
 def compare_allow_null(
-    left: spark.Column,
-    right: spark.Column,
-    comp: Callable[[spark.Column, spark.Column], spark.Column],
-) -> spark.Column:
+    left: Column,
+    right: Column,
+    comp: Callable[[Column, Column], Column],
+) -> Column:
     return left.isNull() | right.isNull() | comp(left, right)
 
 

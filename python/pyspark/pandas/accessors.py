@@ -28,6 +28,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import DataType, LongType, StructField, StructType
 
+from pyspark.pandas._typing import DataFrameOrSeries
 from pyspark.pandas.internal import (
     InternalField,
     InternalFrame,
@@ -415,7 +416,7 @@ class PandasOnSparkFrameMethods(object):
 
     def transform_batch(
         self, func: Callable[..., Union[pd.DataFrame, pd.Series]], *args: Any, **kwargs: Any
-    ) -> Union["DataFrame", "Series"]:
+    ) -> DataFrameOrSeries:
         """
         Transform chunks with a function that takes pandas DataFrame and outputs pandas DataFrame.
         The pandas DataFrame given to the function is of a batch used internally. The length of

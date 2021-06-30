@@ -386,8 +386,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r, f), ansiEnabled = f))
           case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
             Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, f))), l.dataType)
-          case (TimestampType, _) => SubtractTimestamps(l, r)
-          case (_, TimestampType) => SubtractTimestamps(l, r)
+          case _ if AnyTimestampType.unapply(l) || AnyTimestampType.unapply(r) =>
+            SubtractTimestamps(l, r)
           case (_, DateType) => SubtractDates(l, r)
           case (DateType, dt) if dt != StringType => DateSub(l, r)
           case _ => s

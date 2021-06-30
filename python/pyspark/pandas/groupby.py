@@ -38,7 +38,6 @@ from typing import (
     Sequence,
     Set,
     Tuple,
-    TypeVar,
     Union,
     cast,
     TYPE_CHECKING,
@@ -59,9 +58,9 @@ from pyspark.sql.types import (  # noqa: F401
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import FrameLike
 from pyspark.pandas.typedef import infer_return_type, DataFrameType, ScalarType, SeriesType
 from pyspark.pandas.frame import DataFrame
-from pyspark.pandas.generic import Frame
 from pyspark.pandas.internal import (
     InternalField,
     InternalFrame,
@@ -96,10 +95,8 @@ if TYPE_CHECKING:
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
 
-T_Frame = TypeVar("T_Frame", bound=Frame)
 
-
-class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
+class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
     """
     :ivar _psdf: The parent dataframe that is used to perform the groupby
     :type _psdf: DataFrame
@@ -139,11 +136,11 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         op: Callable[["SeriesGroupBy"], Series],
         should_resolve: bool = False,
         numeric_only: bool = False,
-    ) -> T_Frame:
+    ) -> FrameLike:
         pass
 
     @abstractmethod
-    def _cleanup_and_return(self, psdf: DataFrame) -> T_Frame:
+    def _cleanup_and_return(self, psdf: DataFrame) -> FrameLike:
         pass
 
     # TODO: Series support is not implemented yet.
@@ -372,7 +369,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
             data_spark_columns=[scol_for(sdf, col) for col in data_columns],
         )
 
-    def count(self) -> T_Frame:
+    def count(self) -> FrameLike:
         """
         Compute count of group, excluding missing values.
 
@@ -395,7 +392,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         return self._reduce_for_stat_function(F.count, only_numeric=False)
 
     # TODO: We should fix See Also when Series implementation is finished.
-    def first(self) -> T_Frame:
+    def first(self) -> FrameLike:
         """
         Compute first of group values.
 
@@ -406,7 +403,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         """
         return self._reduce_for_stat_function(F.first, only_numeric=False)
 
-    def last(self) -> T_Frame:
+    def last(self) -> FrameLike:
         """
         Compute last of group values.
 
@@ -419,7 +416,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
             lambda col: F.last(col, ignorenulls=True), only_numeric=False
         )
 
-    def max(self) -> T_Frame:
+    def max(self) -> FrameLike:
         """
         Compute max of group values.
 
@@ -431,7 +428,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         return self._reduce_for_stat_function(F.max, only_numeric=False)
 
     # TODO: examples should be updated.
-    def mean(self) -> T_Frame:
+    def mean(self) -> FrameLike:
         """
         Compute mean of groups, excluding missing values.
 
@@ -462,7 +459,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
         return self._reduce_for_stat_function(F.mean, only_numeric=True)
 
-    def min(self) -> T_Frame:
+    def min(self) -> FrameLike:
         """
         Compute min of group values.
 
@@ -474,7 +471,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         return self._reduce_for_stat_function(F.min, only_numeric=False)
 
     # TODO: sync the doc.
-    def std(self, ddof: int = 1) -> T_Frame:
+    def std(self, ddof: int = 1) -> FrameLike:
         """
         Compute standard deviation of groups, excluding missing values.
 
@@ -495,7 +492,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
             F.stddev_pop if ddof == 0 else F.stddev_samp, only_numeric=True
         )
 
-    def sum(self) -> T_Frame:
+    def sum(self) -> FrameLike:
         """
         Compute sum of group values
 
@@ -507,7 +504,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         return self._reduce_for_stat_function(F.sum, only_numeric=True)
 
     # TODO: sync the doc.
-    def var(self, ddof: int = 1) -> T_Frame:
+    def var(self, ddof: int = 1) -> FrameLike:
         """
         Compute variance of groups, excluding missing values.
 
@@ -529,7 +526,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         )
 
     # TODO: skipna should be implemented.
-    def all(self) -> T_Frame:
+    def all(self) -> FrameLike:
         """
         Returns True if all values in the group are truthful, else False.
 
@@ -571,7 +568,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         )
 
     # TODO: skipna should be implemented.
-    def any(self) -> T_Frame:
+    def any(self) -> FrameLike:
         """
         Returns True if any value in the group is truthful, else False.
 
@@ -687,7 +684,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         )
         return first_series(DataFrame(internal))
 
-    def diff(self, periods: int = 1) -> T_Frame:
+    def diff(self, periods: int = 1) -> FrameLike:
         """
         First discrete difference of element.
 
@@ -806,7 +803,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         internal = ret._internal.resolved_copy
         return first_series(DataFrame(internal))
 
-    def cummax(self) -> T_Frame:
+    def cummax(self) -> FrameLike:
         """
         Cumulative max for each group.
 
@@ -855,7 +852,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
             numeric_only=True,
         )
 
-    def cummin(self) -> T_Frame:
+    def cummin(self) -> FrameLike:
         """
         Cumulative min for each group.
 
@@ -904,7 +901,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
             numeric_only=True,
         )
 
-    def cumprod(self) -> T_Frame:
+    def cumprod(self) -> FrameLike:
         """
         Cumulative product for each group.
 
@@ -953,7 +950,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
             numeric_only=True,
         )
 
-    def cumsum(self) -> T_Frame:
+    def cumsum(self) -> FrameLike:
         """
         Cumulative sum for each group.
 
@@ -1311,7 +1308,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
             return DataFrame(internal)
 
     # TODO: implement 'dropna' parameter
-    def filter(self, func: Callable[[T_Frame], T_Frame]) -> T_Frame:
+    def filter(self, func: Callable[[FrameLike], FrameLike]) -> FrameLike:
         """
         Return a copy of a DataFrame excluding elements from groups that
         do not satisfy the boolean criterion specified by func.
@@ -1462,7 +1459,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
         return rename_output
 
-    def rank(self, method: str = "average", ascending: bool = True) -> T_Frame:
+    def rank(self, method: str = "average", ascending: bool = True) -> FrameLike:
         """
         Provide the rank of values within each group.
 
@@ -1530,7 +1527,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         )
 
     # TODO: add axis parameter
-    def idxmax(self, skipna: bool = True) -> T_Frame:
+    def idxmax(self, skipna: bool = True) -> FrameLike:
         """
         Return index of first occurrence of maximum over requested axis in group.
         NA/null values are excluded.
@@ -1612,7 +1609,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         return self._cleanup_and_return(DataFrame(internal))
 
     # TODO: add axis parameter
-    def idxmin(self, skipna: bool = True) -> T_Frame:
+    def idxmin(self, skipna: bool = True) -> FrameLike:
         """
         Return index of first occurrence of minimum over requested axis in group.
         NA/null values are excluded.
@@ -1700,7 +1697,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         axis: Optional[Union[int, str]] = None,
         inplace: bool = False,
         limit: Optional[int] = None,
-    ) -> T_Frame:
+    ) -> FrameLike:
         """Fill NA/NaN values in group.
 
         Parameters
@@ -1768,7 +1765,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
             should_resolve=(method is not None),
         )
 
-    def bfill(self, limit: Optional[int] = None) -> T_Frame:
+    def bfill(self, limit: Optional[int] = None) -> FrameLike:
         """
         Synonym for `DataFrame.fillna()` with ``method=`bfill```.
 
@@ -1819,7 +1816,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
     backfill = bfill
 
-    def ffill(self, limit: Optional[int] = None) -> T_Frame:
+    def ffill(self, limit: Optional[int] = None) -> FrameLike:
         """
         Synonym for `DataFrame.fillna()` with ``method=`ffill```.
 
@@ -1870,7 +1867,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
     pad = ffill
 
-    def _limit(self, n: int, asc: bool) -> T_Frame:
+    def _limit(self, n: int, asc: bool) -> FrameLike:
         """
         Private function for tail and head.
         """
@@ -1914,7 +1911,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         internal = psdf._internal.with_new_sdf(sdf)
         return self._cleanup_and_return(DataFrame(internal).drop(groupkey_labels, axis=1))
 
-    def head(self, n: int = 5) -> T_Frame:
+    def head(self, n: int = 5) -> FrameLike:
         """
         Return first n rows of each group.
 
@@ -1962,7 +1959,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         """
         return self._limit(n, asc=True)
 
-    def tail(self, n: int = 5) -> T_Frame:
+    def tail(self, n: int = 5) -> FrameLike:
         """
         Return last n rows of each group.
 
@@ -2015,7 +2012,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
         """
         return self._limit(n, asc=False)
 
-    def shift(self, periods: int = 1, fill_value: Optional[Any] = None) -> T_Frame:
+    def shift(self, periods: int = 1, fill_value: Optional[Any] = None) -> FrameLike:
         """
         Shift each group by periods observations.
 
@@ -2077,7 +2074,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
             should_resolve=True,
         )
 
-    def transform(self, func: Callable[..., pd.Series], *args: Any, **kwargs: Any) -> T_Frame:
+    def transform(self, func: Callable[..., pd.Series], *args: Any, **kwargs: Any) -> FrameLike:
         """
         Apply function column-by-column to the GroupBy object.
 
@@ -2272,7 +2269,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
         return self._cleanup_and_return(DataFrame(internal))
 
-    def nunique(self, dropna: bool = True) -> T_Frame:
+    def nunique(self, dropna: bool = True) -> FrameLike:
         """
         Return DataFrame with number of distinct observations per group for each column.
 
@@ -2325,7 +2322,9 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
         return self._reduce_for_stat_function(stat_function, only_numeric=False)
 
-    def rolling(self, window: int, min_periods: Optional[int] = None) -> "RollingGroupby[T_Frame]":
+    def rolling(
+        self, window: int, min_periods: Optional[int] = None
+    ) -> "RollingGroupby[FrameLike]":
         """
         Return an rolling grouper, providing rolling
         functionality per group.
@@ -2354,7 +2353,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
         return RollingGroupby(self, window, min_periods=min_periods)
 
-    def expanding(self, min_periods: int = 1) -> "ExpandingGroupby[T_Frame]":
+    def expanding(self, min_periods: int = 1) -> "ExpandingGroupby[FrameLike]":
         """
         Return an expanding grouper, providing expanding
         functionality per group.
@@ -2378,7 +2377,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
         return ExpandingGroupby(self, min_periods=min_periods)
 
-    def get_group(self, name: Union[Any, Tuple, List[Union[Any, Tuple]]]) -> T_Frame:
+    def get_group(self, name: Union[Any, Tuple, List[Union[Any, Tuple]]]) -> FrameLike:
         """
         Construct DataFrame from group with provided name.
 
@@ -2457,7 +2456,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
         return self._cleanup_and_return(DataFrame(internal))
 
-    def median(self, numeric_only: bool = True, accuracy: int = 10000) -> T_Frame:
+    def median(self, numeric_only: bool = True, accuracy: int = 10000) -> FrameLike:
         """
         Compute median of groups, excluding missing values.
 
@@ -2526,7 +2525,7 @@ class GroupBy(Generic[T_Frame], metaclass=ABCMeta):
 
     def _reduce_for_stat_function(
         self, sfun: Callable[[Column], Column], only_numeric: bool
-    ) -> T_Frame:
+    ) -> FrameLike:
         agg_columns = self._agg_columns
         agg_columns_scols = self._agg_columns_scols
 

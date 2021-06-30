@@ -21,13 +21,12 @@ Base and utility classes for pandas-on-Spark objects.
 from abc import ABCMeta, abstractmethod
 from functools import wraps, partial
 from itertools import chain
-from typing import Any, Callable, Optional, Sequence, Tuple, TypeVar, Union, cast, TYPE_CHECKING
+from typing import Any, Callable, Optional, Sequence, Tuple, Union, cast, TYPE_CHECKING
 
 import numpy as np
 import pandas as pd  # noqa: F401
 from pandas.api.types import is_list_like, CategoricalDtype
-from pyspark import sql as spark
-from pyspark.sql import functions as F, Window, Column
+from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import (
     DoubleType,
     FloatType,
@@ -35,6 +34,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.internal import (
     InternalField,
@@ -44,10 +44,7 @@ from pyspark.pandas.internal import (
 )
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkIndexOpsMethods
-from pyspark.pandas.typedef import (
-    Dtype,
-    extension_dtypes,
-)
+from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.utils import (
     combine_frames,
     same_anchor,
@@ -58,16 +55,13 @@ from pyspark.pandas.utils import (
 from pyspark.pandas.frame import DataFrame
 
 if TYPE_CHECKING:
+    from pyspark.sql._typing import ColumnOrName  # noqa: F401 (SPARK-34943)
+
     from pyspark.pandas.data_type_ops.base import DataTypeOps  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
-T_IndexOps = TypeVar("T_IndexOps", bound="IndexOpsMixin")
-IndexOpsLike = Union["Series", "Index"]
-
-
-def should_alignment_for_column_op(self: IndexOpsLike, other: IndexOpsLike) -> bool:
+def should_alignment_for_column_op(self: SeriesOrIndex, other: SeriesOrIndex) -> bool:
     from pyspark.pandas.series import Series
 
     if isinstance(self, Series) and isinstance(other, Series):
@@ -77,8 +71,8 @@ def should_alignment_for_column_op(self: IndexOpsLike, other: IndexOpsLike) -> b
 
 
 def align_diff_index_ops(
-    func: Callable[..., Column], this_index_ops: IndexOpsLike, *args: Any
-) -> IndexOpsLike:
+    func: Callable[..., Column], this_index_ops: SeriesOrIndex, *args: Any
+) -> SeriesOrIndex:
     """
     Align the `IndexOpsMixin` objects and apply the function.
 
@@ -205,7 +199,7 @@ def booleanize_null(scol: Column, f: Callable[..., Column]) -> Column:
     return scol
 
 
-def column_op(f: Callable[..., Column]) -> Callable[..., IndexOpsLike]:
+def column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
     """
     A decorator that wraps APIs taking/returning Spark Column so that pandas-on-Spark Series can be
     supported too. If this decorator is used for the `f` function that takes Spark Column and
@@ -218,7 +212,7 @@ def column_op(f: Callable[..., Column]) -> Callable[..., IndexOpsLike]:
     """
 
     @wraps(f)
-    def wrapper(self: IndexOpsLike, *args: Any) -> IndexOpsLike:
+    def wrapper(self: SeriesOrIndex, *args: Any) -> SeriesOrIndex:
         from pyspark.pandas.indexes.base import Index
         from pyspark.pandas.series import Series
 
@@ -262,9 +256,9 @@ def column_op(f: Callable[..., Column]) -> Callable[..., IndexOpsLike]:
     return wrapper
 
 
-def numpy_column_op(f: Callable[..., Column]) -> Callable[..., IndexOpsLike]:
+def numpy_column_op(f: Callable[..., Column]) -> Callable[..., SeriesOrIndex]:
     @wraps(f)
-    def wrapper(self: IndexOpsLike, *args: Any) -> IndexOpsLike:
+    def wrapper(self: SeriesOrIndex, *args: Any) -> SeriesOrIndex:
         # PySpark does not support NumPy type out of the box. For now, we convert NumPy types
         # into some primitive types understandable in PySpark.
         new_args = []
@@ -297,8 +291,8 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _with_new_scol(
-        self: T_IndexOps, scol: spark.Column, *, field: Optional[InternalField] = None
-    ) -> T_IndexOps:
+        self: IndexOpsLike, scol: Column, *, field: Optional[InternalField] = None
+    ) -> IndexOpsLike:
         pass
 
     @property
@@ -308,7 +302,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def spark(self: T_IndexOps) -> SparkIndexOpsMethods[T_IndexOps]:
+    def spark(self: IndexOpsLike) -> SparkIndexOpsMethods[IndexOpsLike]:
         pass
 
     @property
@@ -318,23 +312,23 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return DataTypeOps(self.dtype, self.spark.data_type)
 
     @abstractmethod
-    def copy(self: T_IndexOps) -> T_IndexOps:
+    def copy(self: IndexOpsLike) -> IndexOpsLike:
         pass
 
     # arithmetic operators
-    def __neg__(self: T_IndexOps) -> T_IndexOps:
-        return cast(T_IndexOps, column_op(Column.__neg__)(self))
+    def __neg__(self: IndexOpsLike) -> IndexOpsLike:
+        return cast(IndexOpsLike, column_op(Column.__neg__)(self))
 
-    def __add__(self, other: Any) -> IndexOpsLike:
+    def __add__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.add(self, other)
 
-    def __sub__(self, other: Any) -> IndexOpsLike:
+    def __sub__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.sub(self, other)
 
-    def __mul__(self, other: Any) -> IndexOpsLike:
+    def __mul__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.mul(self, other)
 
-    def __truediv__(self, other: Any) -> IndexOpsLike:
+    def __truediv__(self, other: Any) -> SeriesOrIndex:
         """
         __truediv__ has different behaviour between pandas and PySpark for several cases.
         1. When divide np.inf by zero, PySpark returns null whereas pandas returns np.inf
@@ -353,22 +347,22 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         """
         return self._dtype_op.truediv(self, other)
 
-    def __mod__(self, other: Any) -> IndexOpsLike:
+    def __mod__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.mod(self, other)
 
-    def __radd__(self, other: Any) -> IndexOpsLike:
+    def __radd__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.radd(self, other)
 
-    def __rsub__(self, other: Any) -> IndexOpsLike:
+    def __rsub__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.rsub(self, other)
 
-    def __rmul__(self, other: Any) -> IndexOpsLike:
+    def __rmul__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.rmul(self, other)
 
-    def __rtruediv__(self, other: Any) -> IndexOpsLike:
+    def __rtruediv__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.rtruediv(self, other)
 
-    def __floordiv__(self, other: Any) -> IndexOpsLike:
+    def __floordiv__(self, other: Any) -> SeriesOrIndex:
         """
         __floordiv__ has different behaviour between pandas and PySpark for several cases.
         1. When divide np.inf by zero, PySpark returns null whereas pandas returns np.inf
@@ -387,26 +381,26 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         """
         return self._dtype_op.floordiv(self, other)
 
-    def __rfloordiv__(self, other: Any) -> IndexOpsLike:
+    def __rfloordiv__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.rfloordiv(self, other)
 
-    def __rmod__(self, other: Any) -> IndexOpsLike:
+    def __rmod__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.rmod(self, other)
 
-    def __pow__(self, other: Any) -> IndexOpsLike:
+    def __pow__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.pow(self, other)
 
-    def __rpow__(self, other: Any) -> IndexOpsLike:
+    def __rpow__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.rpow(self, other)
 
-    def __abs__(self: T_IndexOps) -> T_IndexOps:
-        return cast(T_IndexOps, column_op(F.abs)(self))
+    def __abs__(self: IndexOpsLike) -> IndexOpsLike:
+        return cast(IndexOpsLike, column_op(F.abs)(self))
 
     # comparison operators
-    def __eq__(self, other: Any) -> IndexOpsLike:  # type: ignore[override]
+    def __eq__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
         return column_op(Column.__eq__)(self, other)
 
-    def __ne__(self, other: Any) -> IndexOpsLike:  # type: ignore[override]
+    def __ne__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
         return column_op(Column.__ne__)(self, other)
 
     __lt__ = column_op(Column.__lt__)
@@ -414,21 +408,21 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     __ge__ = column_op(Column.__ge__)
     __gt__ = column_op(Column.__gt__)
 
-    def __invert__(self: T_IndexOps) -> T_IndexOps:
-        return cast(T_IndexOps, column_op(Column.__invert__)(self))
+    def __invert__(self: IndexOpsLike) -> IndexOpsLike:
+        return cast(IndexOpsLike, column_op(Column.__invert__)(self))
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
-    def __and__(self, other: Any) -> IndexOpsLike:
+    def __and__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.__and__(self, other)
 
-    def __or__(self, other: Any) -> IndexOpsLike:
+    def __or__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.__or__(self, other)
 
-    def __rand__(self, other: Any) -> IndexOpsLike:
+    def __rand__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.rand(self, other)
 
-    def __ror__(self, other: Any) -> IndexOpsLike:
+    def __ror__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.ror(self, other)
 
     def __len__(self) -> int:
@@ -437,7 +431,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     # NDArray Compat
     def __array_ufunc__(
         self, ufunc: Callable, method: str, *inputs: Any, **kwargs: Any
-    ) -> IndexOpsLike:
+    ) -> SeriesOrIndex:
         from pyspark.pandas import numpy_compat
 
         # Try dunder methods first.
@@ -452,7 +446,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             )
 
         if result is not NotImplemented:
-            return cast(IndexOpsLike, result)
+            return cast(SeriesOrIndex, result)
         else:
             # TODO: support more APIs?
             raise NotImplementedError(
@@ -789,7 +783,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         """
         return 1
 
-    def astype(self: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def astype(self: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         """
         Cast a pandas-on-Spark object to a specified dtype ``dtype``.
 
@@ -823,9 +817,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ser.rename("a").to_frame().set_index("a").index.astype('int64')
         Int64Index([1, 2], dtype='int64', name='a')
         """
-        return cast(T_IndexOps, self._dtype_op.astype(cast(IndexOpsLike, self), dtype))
+        return self._dtype_op.astype(self, dtype)
 
-    def isin(self: T_IndexOps, values: Sequence[Any]) -> T_IndexOps:
+    def isin(self: IndexOpsLike, values: Sequence[Any]) -> IndexOpsLike:
         """
         Check whether `values` are contained in Series or Index.
 
@@ -878,7 +872,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         values = values.tolist() if isinstance(values, np.ndarray) else list(values)
         return self._with_new_scol(self.spark.column.isin([SF.lit(v) for v in values]))
 
-    def isnull(self: T_IndexOps) -> T_IndexOps:
+    def isnull(self: IndexOpsLike) -> IndexOpsLike:
         """
         Detect existing (non-missing) values.
 
@@ -914,7 +908,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     isna = isnull
 
-    def notnull(self: T_IndexOps) -> T_IndexOps:
+    def notnull(self: IndexOpsLike) -> IndexOpsLike:
         """
         Detect existing (non-missing) values.
         Return a boolean same-sized object indicating if the values are not NA.
@@ -1083,7 +1077,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             return ret
 
     # TODO: add frep and axis parameter
-    def shift(self: T_IndexOps, periods: int = 1, fill_value: Optional[Any] = None) -> T_IndexOps:
+    def shift(
+        self: IndexOpsLike, periods: int = 1, fill_value: Optional[Any] = None
+    ) -> IndexOpsLike:
         """
         Shift Series/Index by desired number of periods.
 
@@ -1133,12 +1129,12 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._shift(periods, fill_value).spark.analyzed
 
     def _shift(
-        self: T_IndexOps,
+        self: IndexOpsLike,
         periods: int,
         fill_value: Any,
         *,
-        part_cols: Sequence[Union[str, Column]] = ()
-    ) -> T_IndexOps:
+        part_cols: Sequence["ColumnOrName"] = ()
+    ) -> IndexOpsLike:
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
 
@@ -1410,7 +1406,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                 ).otherwise(0)
             ).alias(colname)
 
-    def take(self: T_IndexOps, indices: Sequence[int]) -> T_IndexOps:
+    def take(self: IndexOpsLike, indices: Sequence[int]) -> IndexOpsLike:
         """
         Return the elements in the given *positional* indices along an axis.
 
@@ -1480,13 +1476,13 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         if not is_list_like(indices) or isinstance(indices, (dict, set)):
             raise TypeError("`indices` must be a list-like except dict or set")
         if isinstance(self, ps.Series):
-            return cast(T_IndexOps, self.iloc[indices])
+            return cast(IndexOpsLike, self.iloc[indices])
         else:
-            return cast(T_IndexOps, self._psdf.iloc[indices].index)
+            return cast(IndexOpsLike, self._psdf.iloc[indices].index)
 
     def factorize(
-        self: T_IndexOps, sort: bool = True, na_sentinel: Optional[int] = -1
-    ) -> Tuple[T_IndexOps, pd.Index]:
+        self: IndexOpsLike, sort: bool = True, na_sentinel: Optional[int] = -1
+    ) -> Tuple[IndexOpsLike, pd.Index]:
         """
         Encode the object as an enumerated type or categorical variable.
 
