@@ -43,7 +43,7 @@ import org.apache.spark.util.Utils
  * 3. When all necessary tasks completed successfully, the driver calls commitJob. If the job
  *    failed to execute (e.g. too many failed tasks), the job should call abortJob.
  *
- * NOTE: this class is exposed as an API considering the usage of many downstream custom
+ * @note This class is exposed as an API considering the usage of many downstream custom
  * implementations, but will be subject to be changed and/or moved.
  */
 @Unstable
