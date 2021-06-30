@@ -406,19 +406,21 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         if (row.numFields > 0) {
           val st = fields.map(_.dataType)
           val toUTF8StringFuncs = st.map(castToString)
-          if (row.isNullAt(0)) {
+          if (fields(0).nullable && row.isNullAt(0)) {
             if (!legacyCastToStr) builder.append("null")
           } else {
-            builder.append(toUTF8StringFuncs(0)(row.get(0, st(0))).asInstanceOf[UTF8String])
+            val accessor = InternalRow.getAccessor(fields(0).dataType, fields(0).nullable)
+            builder.append(toUTF8StringFuncs(0)(accessor(row, 0)).asInstanceOf[UTF8String])
           }
           var i = 1
           while (i < row.numFields) {
             builder.append(",")
-            if (row.isNullAt(i)) {
+            if (fields(i).nullable && row.isNullAt(i)) {
               if (!legacyCastToStr) builder.append(" null")
             } else {
               builder.append(" ")
-              builder.append(toUTF8StringFuncs(i)(row.get(i, st(i))).asInstanceOf[UTF8String])
+              val accessor = InternalRow.getAccessor(fields(i).dataType, fields(i).nullable)
+              builder.append(toUTF8StringFuncs(i)(accessor(row, i)).asInstanceOf[UTF8String])
             }
             i += 1
           }
@@ -1098,29 +1100,37 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   }
 
   private def writeStructToStringBuilder(
-      st: Seq[DataType],
+      st: Seq[StructField],
       row: ExprValue,
       buffer: ExprValue,
       ctx: CodegenContext): Block = {
-    val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
-      val fieldToStringCode = castToStringCode(ft, ctx)
-      val field = ctx.freshVariable("field", ft)
-      val fieldStr = ctx.freshVariable("fieldStr", StringType)
-      val javaType = JavaCode.javaType(ft)
-      code"""
-         |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
-         |if ($row.isNullAt($i)) {
-         |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "null" else " null")}
-         |} else {
-         |  ${if (i != 0) code"""$buffer.append(" ");""" else EmptyBlock}
-         |
-         |  // Append $i field into the string buffer
-         |  $javaType $field = ${CodeGenerator.getValue(row, ft, s"$i")};
-         |  UTF8String $fieldStr = null;
-         |  ${fieldToStringCode(field, fieldStr, null /* resultIsNull won't be used */)}
-         |  $buffer.append($fieldStr);
-         |}
-       """.stripMargin
+    val structToStringCode = st.zipWithIndex.map {
+      case (StructField(_, dataType, nullable, _), i) =>
+        val fieldToStringCode = castToStringCode(dataType, ctx)
+        val field = ctx.freshVariable("field", dataType)
+        val fieldStr = ctx.freshVariable("fieldStr", StringType)
+        val javaType = JavaCode.javaType(dataType)
+
+        val isNull = if (nullable) {
+          code"$row.isNullAt($i)"
+        } else {
+          code"false"
+        }
+
+        code"""
+           |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
+           |if ($isNull) {
+           |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "null" else " null")}
+           |} else {
+           |  ${if (i != 0) code"""$buffer.append(" ");""" else EmptyBlock}
+           |
+           |  // Append $i field into the string buffer
+           |  $javaType $field = ${CodeGenerator.getValue(row, dataType, s"$i")};
+           |  UTF8String $fieldStr = null;
+           |  ${fieldToStringCode(field, fieldStr, null /* resultIsNull won't be used */)}
+           |  $buffer.append($fieldStr);
+           |}
+         """.stripMargin
     }
 
     val writeStructCode = ctx.splitExpressions(
@@ -1184,7 +1194,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           val row = ctx.freshVariable("row", classOf[InternalRow])
           val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
           val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), row, buffer, ctx)
+          val writeStructCode = writeStructToStringBuilder(fields, row, buffer, ctx)
           code"""
              |InternalRow $row = $c;
              |$bufferClass $buffer = new $bufferClass();
