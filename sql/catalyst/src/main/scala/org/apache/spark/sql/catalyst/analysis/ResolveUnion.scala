@@ -58,13 +58,15 @@ object ResolveUnion extends Rule[LogicalPlan] {
           addFields(extractedValue, expectedType, allowMissing)
         case (Some(cf), _) =>
           ExtractValue(col, Literal(cf.name), resolver)
-        // for allowMissingCol allow the null values
-        case (None, expectedType) if allowMissing =>
-          Literal(null, expectedType)
-        // for allowMissingCol as false throw exception for missing col
-        case (_, _) if !allowMissing =>
-          throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(
-            expectedField.name, colType.fields)
+        case (None, expectedType) =>
+          if (allowMissing) {
+            // for allowMissingCol allow the null values
+            Literal(null, expectedType)
+          } else {
+            // for allowMissingCol as false throw exception for missing col
+            throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(
+              expectedField.name, colType.fields)
+          }
       }
       newStructFields ++= Literal(expectedField.name) :: newExpression :: Nil
     }
