@@ -1364,7 +1364,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   }
 
   testWithAllStateVersions("flatMapGroupsWithState - initial state - processing time timeout") {
-    // function return -1 on timeout and returns count of the state otherwise
+    // function will return -1 on timeout and returns count of the state otherwise
     val stateFunc =
         (key: String, values: Iterator[(String, Long)], state: GroupState[RunningCount]) => {
       if (state.hasTimedOut) {
@@ -1404,24 +1404,15 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("flatMapGroupsWithState - initial state - batch") {
-    // Function that returns running count only if its even, otherwise does not return
-    val stateFunc = (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
-      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() > 0 }
-      assertCannotGetWatermark { state.getCurrentWatermarkMs() }
-
-      if (state.exists) throw new IllegalArgumentException("state.exists should be false")
-      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
-      Iterator((key, count))
-    }
     val initialState: Dataset[(String, RunningCount)] = Seq(
-      ("a", new RunningCount(1)),
-      ("c", new RunningCount(2))
+      ("a", new RunningCount(1))
     ).toDS()
 
     val e = intercept[AnalysisException] {
       Seq("a", "a", "b").toDS
         .groupByKey(x => x)
-        .flatMapGroupsWithState(Update, GroupStateTimeout.NoTimeout, initialState)(stateFunc).toDF
+        .flatMapGroupsWithState(
+          Update, GroupStateTimeout.NoTimeout, initialState)(flatMapGroupsWithStateFunc).toDF
     }
     assert(e.getMessage.contains("Batch [flatMap|map]GroupsWithState queries should not" +
       " pass an initial state."))
