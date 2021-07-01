@@ -112,7 +112,8 @@ trait ThreadAudit extends Logging {
         .filterNot { t => threadExcludeList.exists(t.getName.matches(_)) }
       if (remainingThreads.nonEmpty) {
         logWarning(s"\n\n===== POSSIBLE THREAD LEAK IN SUITE $shortSuiteName, " +
-          s"threads: ${remainingThreads.map{ t => s"${t.getName} (daemon=${t.isDaemon})" }.mkString(", ")} =====\n")
+          s"threads: ${remainingThreads.map{ t => s"${t.getName} (daemon=${t.isDaemon})" }
+	  .mkString(", ")} =====\n")
       }
     } else {
       logWarning("\n\n===== THREAD AUDIT POST ACTION CALLED " +
