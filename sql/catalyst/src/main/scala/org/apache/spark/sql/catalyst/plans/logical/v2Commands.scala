@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
@@ -1104,6 +1104,66 @@ trait AlterTableCommand extends UnaryCommand {
   def operation: String
   def changes: Seq[TableChange]
   override def child: LogicalPlan = table
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... ADD COLUMNS command.
+ */
+case class AlterTableAddColumns(
+    table: LogicalPlan,
+    columnsToAdd: Seq[QualifiedColType]) extends AlterTableCommand {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Util._
+  columnsToAdd.foreach { c =>
+    failNullType(c.dataType)
+    TypeUtils.failWithIntervalType(c.dataType)
+  }
+
+  override def operation: String = "add"
+
+  override def changes: Seq[TableChange] = {
+    columnsToAdd.map { col =>
+      require(col.name.resolved)
+      TableChange.addColumn(
+        col.name.name.toArray,
+        col.dataType,
+        col.nullable,
+        col.comment.orNull,
+        col.position.map(_.position).orNull)
+    }
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
+}
+
+/**
+ * The logical plan of the ALTER TABLE ... REPLACE COLUMNS command.
+ */
+case class AlterTableReplaceColumns(
+    table: LogicalPlan,
+    columnsToAdd: Seq[QualifiedColType]) extends AlterTableCommand {
+  import org.apache.spark.sql.connector.catalog.CatalogV2Util._
+  columnsToAdd.foreach { c =>
+    failNullType(c.dataType)
+    TypeUtils.failWithIntervalType(c.dataType)
+  }
+
+  override def operation: String = "replace"
+
+  override def changes: Seq[TableChange] = {
+    columnsToAdd.map { col =>
+      require(col.name.resolved)
+      TableChange.addColumn(
+        col.name.name.toArray,
+        col.dataType,
+        col.nullable,
+        col.comment.orNull,
+        col.position.map(_.position).orNull)
+    }
+  }
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+    copy(table = newChild)
 }
 
 /**

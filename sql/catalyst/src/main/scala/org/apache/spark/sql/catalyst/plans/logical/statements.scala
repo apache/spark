@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.ViewType
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
-import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -229,22 +228,11 @@ case class ReplaceTableAsSelectStatement(
  * Column data as parsed by ALTER TABLE ... ADD COLUMNS.
  */
 case class QualifiedColType(
-    name: Seq[String],
+    name: FieldName,
     dataType: DataType,
     nullable: Boolean,
     comment: Option[String],
-    position: Option[ColumnPosition])
-
-/**
- * ALTER TABLE ... ADD COLUMNS command, as parsed from SQL.
- */
-case class AlterTableAddColumnsStatement(
-    tableName: Seq[String],
-    columnsToAdd: Seq[QualifiedColType]) extends LeafParsedStatement
-
-case class AlterTableReplaceColumnsStatement(
-    tableName: Seq[String],
-    columnsToAdd: Seq[QualifiedColType]) extends LeafParsedStatement
+    position: Option[FieldPosition]) extends LeafExpression with Unevaluable
 
 /**
  * An INSERT INTO statement, as parsed from SQL.

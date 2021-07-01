@@ -3517,16 +3517,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitQualifiedColTypeWithPosition(
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
+    val name = typedVisit[Seq[String]](ctx.name)
     QualifiedColType(
-      name = typedVisit[Seq[String]](ctx.name),
+      name = UnresolvedFieldName(name),
       dataType = typedVisit[DataType](ctx.dataType),
       nullable = ctx.NULL == null,
       comment = Option(ctx.commentSpec()).map(visitCommentSpec),
-      position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+      position = Option(ctx.colPosition).map( pos =>
+        UnresolvedFieldPosition(name, typedVisit[ColumnPosition](pos))))
   }
 
   /**
-   * Parse a [[AlterTableAddColumnsStatement]] command.
+   * Parse a [[AlterTableAddColumns]] command.
    *
    * For example:
    * {{{
@@ -3535,8 +3537,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitAddTableColumns(ctx: AddTableColumnsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableAddColumnsStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    val colToken = if (ctx.COLUMN() != null) "COLUMN" else "COLUMNS"
+    AlterTableAddColumns(
+      createUnresolvedTable(ctx.multipartIdentifier, s"ALTER TABLE ... ADD $colToken"),
       ctx.columns.qualifiedColTypeWithPosition.asScala.map(typedVisit[QualifiedColType]).toSeq
     )
   }
@@ -3655,8 +3658,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     if (ctx.partitionSpec != null) {
       operationNotAllowed("ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS", ctx)
     }
-    AlterTableReplaceColumnsStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    AlterTableReplaceColumns(
+      createUnresolvedTable(ctx.multipartIdentifier, "ALTER TABLE ... REPLACE COLUMNS"),
       ctx.columns.qualifiedColTypeWithPosition.asScala.map { colType =>
         if (colType.NULL != null) {
           throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(

@@ -1058,8 +1058,28 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
 
     alter match {
+      case AlterTableAddColumns(table: ResolvedTable, colsToAdd) =>
+        colsToAdd.foreach { colToAdd =>
+          checkColumnNotExists(colToAdd.name.name, table.schema)
+        }
+
+      case AlterTableReplaceColumns(table: ResolvedTable, colsToAdd) =>
+        // REPLACE COLUMNS has deletes followed by adds. Remember the deleted columns
+        // so that add operations do not fail when the columns to add exist and they
+        // are to be deleted.
+        val colsToDelete = mutable.Set.empty[Seq[String]]
+        table.schema.fieldNames.foreach { colsToDelete += Seq(_) }
+        // If a column to add is a part of columns to delete, we don't need to check
+        // if column already exists.
+        colsToAdd.foreach { colToAdd =>
+          if (!colsToDelete.contains(colToAdd.name.name)) {
+            checkColumnNotExists(colToAdd.name.name, table.schema)
+          }
+        }
+
       case AlterTableRenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists(col.path :+ newName, table.schema)
+
       case a @ AlterTableAlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
         val fieldName = col.name.quoted
         if (a.dataType.isDefined) {
