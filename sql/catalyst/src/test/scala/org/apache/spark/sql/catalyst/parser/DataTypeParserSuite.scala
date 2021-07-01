@@ -18,9 +18,12 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
 
-class DataTypeParserSuite extends SparkFunSuite {
+class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
 
   def parse(sql: String): DataType = CatalystSqlParser.parseDataType(sql)
 
@@ -133,6 +136,15 @@ class DataTypeParserSuite extends SparkFunSuite {
   test("Do not print empty parentheses for no params") {
     assert(intercept("unknown").getMessage.contains("unknown is not supported"))
     assert(intercept("unknown(1,2,3)").getMessage.contains("unknown(1,2,3) is not supported"))
+  }
+
+  test("Set default timestamp type") {
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
+      assert(parse("timestamp") === TimestampNTZType)
+    }
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_LTZ.toString) {
+      assert(parse("timestamp") === TimestampType)
+    }
   }
 
   // DataType parser accepts certain reserved keywords.

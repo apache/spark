@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -2820,6 +2821,24 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  object TimestampTypes extends Enumeration {
+    val TIMESTAMP_NTZ, TIMESTAMP_LTZ = Value
+  }
+
+  val TIMESTAMP_TYPE =
+    buildConf("spark.sql.timestampType")
+      .doc("Configures the default timestamp type of Spark SQL, including SQL DDL and Cast " +
+        s"clause. Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ.toString} will " +
+        "use TIMESTAMP WITHOUT TIME ZONE as the default type while putting it as " +
+        s"${TimestampTypes.TIMESTAMP_LTZ.toString} will use TIMESTAMP WITH LOCAL TIME ZONE. " +
+        "Before the 3.2.0 release, Spark only supports the TIMESTAMP WITH " +
+        "LOCAL TIME ZONE type.")
+      .version("3.2.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(TimestampTypes.values.map(_.toString))
+      .createWithDefault(TimestampTypes.TIMESTAMP_LTZ.toString)
+
   val DATETIME_JAVA8API_ENABLED = buildConf("spark.sql.datetime.java8API.enabled")
     .doc("If the configuration property is set to true, java.time.Instant and " +
       "java.time.LocalDate classes of Java 8 API are used as external types for " +
@@ -3896,6 +3915,15 @@ class SQLConf extends Serializable with Logging {
     StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
+
+  def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
+    case "TIMESTAMP_LTZ" =>
+      // For historical reason, the TimestampType maps to TIMESTAMP WITH LOCAL TIME ZONE
+      TimestampType
+
+    case "TIMESTAMP_NTZ" =>
+      TimestampNTZType
+  }
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 
