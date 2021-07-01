@@ -20,14 +20,12 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.sql.Date
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.commons.io.FileUtils
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.java.Optional
-import org.apache.spark.api.java.function.{FlatMapGroupsWithStateFunction, MapGroupsWithStateFunction}
+import org.apache.spark.api.java.function.{FlatMapGroupsWithStateFunction}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
@@ -1355,7 +1353,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       }
       val count = state.getOption.getOrElse(0L) + valList.size
       // We need to check if not explicitly calling update will still save the state or not
-      if (state.getOption.getOrElse(0L) != 2L) {
+      if (valList.nonEmpty || state.getOption.getOrElse(0L) != 2L) {
+        // this is not reached when valList is empty and the state count is 2
         state.update(count)
       }
       Iterator((key, valList.map(_.name), count.toString))
@@ -1414,73 +1413,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
-  test("flatMapGroupsWithState - initial state - java api") {
-    val initialState = Seq(
-      ("a", 2)
-    ).toDS().groupByKey(_._1).mapValues(_._2)
-
-    val javaStateFunc = new FlatMapGroupsWithStateFunction[String, String, Int, String] {
-      import java.util.{Iterator => JIterator}
-      override def call(
-          key: String,
-          values: JIterator[String],
-          state: GroupState[Int]): JIterator[String] = {
-        state.update(0)
-        new JIterator[String] {
-          override def hasNext: Boolean = false
-          override def next(): String = null
-        }
-      }
-    }
-
-    val inputData = MemoryStream[String]
-    val result = inputData.toDS().groupByKey(x => x).flatMapGroupsWithState(
-      javaStateFunc, OutputMode.Update,
-      implicitly[Encoder[Int]], implicitly[Encoder[String]],
-      GroupStateTimeout.NoTimeout, initialState)
-    testStream(result, Update)(
-      AddData(inputData, "b"),
-      CheckNewAnswer(),
-      assertNumStateRows(total = 2, updated = 2)
-    )
-  }
-
-  test("mapGroupsWithState - initial state - null key") {
-    val initialState = Seq(
-      ("a", 4),
-      (null, 2)
-    ).toDS().groupByKey(_._1).mapValues(_._2)
-
-    // Function that increments state(int) for every value
-    val javaStateFunc = new MapGroupsWithStateFunction[String, String, Int, String] {
-      import java.util.{Iterator => JIterator}
-      override def call(
-          key: String,
-          values: JIterator[String],
-          state: GroupState[Int]): String = {
-        var valSize = 0
-        while (values.hasNext) {
-          valSize += 1
-          values.next()
-        }
-        val count = state.getOption.getOrElse(0)
-        state.update(count + valSize)
-        state.get.toString
-      }
-    }
-
-    val inputData = MemoryStream[String]
-    val result = inputData.toDS().groupByKey(x => x).mapGroupsWithState(
-      javaStateFunc,
-      implicitly[Encoder[Int]], implicitly[Encoder[String]],
-      GroupStateTimeout.NoTimeout, initialState)
-    testStream(result, Update)(
-      AddData(inputData, null),
-      CheckNewAnswer("4", "3"),
-      assertNumStateRows(total = 2, updated = 2)
-    )
-  }
-
   test("flatMapGroupsWithState - initial state - streaming initial state") {
     val initialStateData = MemoryStream[(String, RunningCount)]
     initialStateData.addData(("a", new RunningCount(1)))
@@ -1506,16 +1438,17 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     assert(e.message.contains(expectedError))
   }
 
-  testWithAllStateVersions("mapGroupsWithState - initial state - test api") {
+  testWithAllStateVersions("mapGroupsWithState - initial state - null key") {
     val mapGroupsWithStateFunc =
         (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
       val valList = values.toList
       val count = state.getOption.map(_.count).getOrElse(0L) + valList.size
       state.update(new RunningCount(count))
-      (key, valList, state.get.count.toString)
+      (key, state.get.count.toString)
     }
     val initialState = Seq(
-      ("key", new RunningCount(5))
+      ("key", new RunningCount(5)),
+      (null, new RunningCount(2))
     ).toDS().groupByKey(_._1).mapValues(_._2)
 
     val inputData = MemoryStream[String]
@@ -1524,9 +1457,12 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         .groupByKey(x => x)
         .mapGroupsWithState(NoTimeout(), initialState)(mapGroupsWithStateFunc)
     testStream(result, Update)(
-      AddData(inputData, "key", "key"), // 2 values for the same key
-      CheckNewAnswer(("key", ArrayBuffer("key", "key"), "7")), // state is incremented by 2
-      assertNumStateRows(total = 1, updated = 1),
+      AddData(inputData, "key", null),
+      CheckNewAnswer(
+        ("key", "6"), // state is incremented by 1
+        (null, "3") // incremented by 1
+      ),
+      assertNumStateRows(total = 2, updated = 2),
       StopStream
     )
   }
@@ -1569,21 +1505,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       AdvanceManualClock(1 * 1000),
       CheckNewAnswer(("a", "-1"), ("b", "1"), ("c", "-1"))
     )
-  }
-
-  test("flatMapGroupsWithState - initial state - batch") {
-    val initialState = Seq(
-      ("a", new RunningCount(1))
-    ).toDS().groupByKey(_._1).mapValues(_._2)
-
-    val e = intercept[AnalysisException] {
-      Seq("a", "a", "b").toDS
-        .groupByKey(x => x)
-        .flatMapGroupsWithState(
-          Update, GroupStateTimeout.NoTimeout, initialState)(flatMapGroupsWithStateFunc).toDF.show()
-    }
-    assert(e.getMessage.contains("Initial state is not supported in [flatMap|map]GroupsWithState" +
-      " operation on a batch DataFrame/Dataset"))
   }
 
   def testWithTimeout(timeoutConf: GroupStateTimeout): Unit = {
