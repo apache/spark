@@ -21,6 +21,7 @@ import org.antlr.v4.runtime.atn.PredictionMode
 import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
 import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
+import org.apache.spark.SparkError
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
@@ -125,7 +126,8 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
         throw e.withCommand(command)
       case e: AnalysisException =>
         val position = Origin(e.line, e.startPosition)
-        throw new ParseException(Option(command), e.message, position, position)
+        throw new ParseException(
+          Option(command), e.message, position, position, e.errorClass, e.messageParameters)
     }
   }
 }
@@ -211,7 +213,17 @@ class ParseException(
     val command: Option[String],
     message: String,
     val start: Origin,
-    val stop: Origin) extends AnalysisException(message, start.line, start.startPosition) {
+    val stop: Origin,
+    errorClass: Option[String] = None,
+    messageParameters: Seq[String] = Seq.empty)
+  extends AnalysisException(
+    message,
+    start.line,
+    start.startPosition,
+    None,
+    None,
+    errorClass,
+    messageParameters) {
 
   def this(message: String, ctx: ParserRuleContext) = {
     this(Option(ParserUtils.command(ctx)),
@@ -219,6 +231,14 @@ class ParseException(
       ParserUtils.position(ctx.getStart),
       ParserUtils.position(ctx.getStop))
   }
+
+  def this(errorClass: String, messageParameters: Seq[String], ctx: ParserRuleContext) =
+    this(Option(ParserUtils.command(ctx)),
+      SparkError.getMessage(errorClass, messageParameters),
+      ParserUtils.position(ctx.getStart),
+      ParserUtils.position(ctx.getStop),
+      Some(errorClass),
+      messageParameters)
 
   override def getMessage: String = {
     val builder = new StringBuilder
@@ -242,7 +262,7 @@ class ParseException(
   }
 
   def withCommand(cmd: String): ParseException = {
-    new ParseException(Option(cmd), message, start, stop)
+    new ParseException(Option(cmd), message, start, stop, errorClass, messageParameters)
   }
 }
 

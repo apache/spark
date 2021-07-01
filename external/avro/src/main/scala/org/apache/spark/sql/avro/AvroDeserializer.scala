@@ -30,7 +30,7 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
 
-import org.apache.spark.sql.avro.AvroUtils.toFieldStr
+import org.apache.spark.sql.avro.AvroUtils.{toFieldDescription, toFieldStr}
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
@@ -45,6 +45,7 @@ import org.apache.spark.unsafe.types.UTF8String
 private[sql] class AvroDeserializer(
     rootAvroType: Schema,
     rootCatalystType: DataType,
+    positionalFieldMatch: Boolean,
     datetimeRebaseMode: LegacyBehaviorPolicy.Value,
     filters: StructFilters) {
 
@@ -55,6 +56,7 @@ private[sql] class AvroDeserializer(
     this(
       rootAvroType,
       rootCatalystType,
+      positionalFieldMatch = false,
       LegacyBehaviorPolicy.withName(datetimeRebaseMode),
       new NoopFilters)
   }
@@ -338,12 +340,13 @@ private[sql] class AvroDeserializer(
     val validFieldIndexes = ArrayBuffer.empty[Int]
     val fieldWriters = ArrayBuffer.empty[(CatalystDataUpdater, Any) => Unit]
 
-    val avroSchemaHelper = new AvroUtils.AvroSchemaHelper(avroType, avroPath)
+    val avroSchemaHelper =
+      new AvroUtils.AvroSchemaHelper(avroType, avroPath, positionalFieldMatch)
     val length = catalystType.length
     var i = 0
     while (i < length) {
       val catalystField = catalystType.fields(i)
-      avroSchemaHelper.getFieldByName(catalystField.name) match {
+      avroSchemaHelper.getAvroField(catalystField.name, i) match {
         case Some(avroField) =>
           validFieldIndexes += avroField.pos()
 
@@ -359,8 +362,10 @@ private[sql] class AvroDeserializer(
           }
           fieldWriters += fieldWriter
         case None if !catalystField.nullable =>
-          throw new IncompatibleSchemaException(s"Cannot find non-nullable " +
-              s"${toFieldStr(catalystPath :+ catalystField.name)} in Avro schema.")
+          val fieldDescription =
+            toFieldDescription(catalystPath :+ catalystField.name, i, positionalFieldMatch)
+          throw new IncompatibleSchemaException(
+            s"Cannot find non-nullable $fieldDescription in Avro schema.")
         case _ => // nothing to do
       }
       i += 1

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, DataType, IntegerType}
+import org.apache.spark.sql.types.{BinaryType, DataType, Decimal, IntegerType}
 
 class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Semantic equals and hash") {
@@ -282,7 +282,7 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
       ctx.withSubExprEliminationExprs(subExprs.states) {
         exprs.map(_.genCode(ctx))
       }
-      val subExprsCode = subExprs.codes.mkString("\n")
+      val subExprsCode = ctx.evaluateSubExprEliminationState(subExprs.states.values)
 
       val codeBody = s"""
         public java.lang.Object generate(Object[] references) {
@@ -390,6 +390,40 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     val exprs2 = Seq(caseWhenExpr, add2, add1, add2, add1, add2, add1)
     assert(exprs2.sorted(exprOrdering) ===
       Seq(add2, add1, add2, add1, add2, add1, caseWhenExpr))
+  }
+
+  test("SPARK-35829: SubExprEliminationState keeps children sub exprs") {
+    val add1 = Add(Literal(1), Literal(2))
+    val add2 = Add(add1, add1)
+
+    val exprs = Seq(add1, add1, add2, add2)
+    val ctx = new CodegenContext()
+    val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(exprs)
+
+    val add2State = subExprs.states(add2)
+    val add1State = subExprs.states(add1)
+    assert(add2State.children.contains(add1State))
+
+    subExprs.states.values.foreach { state =>
+      assert(state.eval.code != EmptyBlock)
+    }
+    ctx.evaluateSubExprEliminationState(subExprs.states.values)
+    subExprs.states.values.foreach { state =>
+      assert(state.eval.code == EmptyBlock)
+    }
+  }
+
+  test("SPARK-35886: PromotePrecision should not overwrite genCode") {
+    val p = PromotePrecision(Literal(Decimal("10.1")))
+
+    val ctx = new CodegenContext()
+    val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(Seq(p, p))
+    val code = ctx.withSubExprEliminationExprs(subExprs.states) {
+      Seq(p.genCode(ctx))
+    }.head
+    // Decimal `Literal` will add the value by `addReferenceObj`.
+    // So if `p` is replaced by subexpression, the literal will be reused.
+    assert(code.value.toString == "((Decimal) references[0] /* literal */)")
   }
 }
 

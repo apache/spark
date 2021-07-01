@@ -23,11 +23,11 @@ import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedSeed}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CONCAT, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{ARRAYS_ZIP, CONCAT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
@@ -181,16 +181,35 @@ case class MapKeys(child: Expression)
   """,
   group = "array_funcs",
   since = "2.4.0")
-case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsInputTypes {
+case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
+  extends Expression with ExpectsInputTypes {
 
+  def this(children: Seq[Expression]) = {
+    this(
+      children,
+      children.zipWithIndex.map {
+        case (u: UnresolvedAttribute, _) => Literal(u.nameParts.last)
+        case (e: NamedExpression, _) if e.resolved => Literal(e.name)
+        case (e: NamedExpression, _) => NamePlaceholder
+        case (_, idx) => Literal(idx.toString)
+      })
+  }
+
+  if (children.size != names.size) {
+    throw new IllegalArgumentException(
+      "The numbers of zipped arrays and field names should be the same")
+  }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_ZIP)
+
+  override lazy val resolved: Boolean =
+    childrenResolved && checkInputDataTypes().isSuccess && names.forall(_.resolved)
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.length)(ArrayType)
 
   @transient override lazy val dataType: DataType = {
-    val fields = children.zip(arrayElementTypes).zipWithIndex.map {
-      case ((expr: NamedExpression, elementType), _) =>
-        StructField(expr.name, elementType, nullable = true)
-      case ((_, elementType), idx) =>
-        StructField(idx.toString, elementType, nullable = true)
+    val fields = arrayElementTypes.zip(names).map {
+      case (elementType, Literal(name, StringType)) =>
+        StructField(name.toString, elementType, nullable = true)
     }
     ArrayType(StructType(fields), containsNull = false)
   }
@@ -330,6 +349,12 @@ case class ArraysZip(children: Seq[Expression]) extends Expression with ExpectsI
 
   override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): ArraysZip =
     copy(children = newChildren)
+}
+
+object ArraysZip {
+  def apply(children: Seq[Expression]): ArraysZip = {
+    new ArraysZip(children)
+  }
 }
 
 /**

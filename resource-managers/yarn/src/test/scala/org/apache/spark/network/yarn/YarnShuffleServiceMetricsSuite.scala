@@ -17,10 +17,11 @@
 package org.apache.spark.network.yarn
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
-import org.apache.hadoop.metrics2.MetricsRecordBuilder
+import org.apache.hadoop.metrics2.{MetricsInfo, MetricsRecordBuilder}
 import org.mockito.ArgumentMatchers.{any, anyDouble, anyInt, anyLong}
-import org.mockito.Mockito.{mock, times, verify, when}
+import org.mockito.Mockito.{mock, verify, when}
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
@@ -37,29 +38,60 @@ class YarnShuffleServiceMetricsSuite extends SparkFunSuite with Matchers {
   val metrics = new ExternalBlockHandler(streamManager, blockResolver).getAllMetrics
 
   test("metrics named as expected") {
-    val allMetrics = Set(
+    val allMetrics = Seq(
       "openBlockRequestLatencyMillis", "registerExecutorRequestLatencyMillis",
+      "blockTransferRate", "blockTransferMessageRate", "blockTransferAvgSize_1min",
       "blockTransferRateBytes", "registeredExecutorsSize", "numActiveConnections",
       "numCaughtExceptions", "finalizeShuffleMergeLatencyMillis",
       "fetchMergedBlocksMetaLatencyMillis")
 
-    metrics.getMetrics.keySet().asScala should be (allMetrics)
+    // Use sorted Seq instead of Set for easier comparison when there is a mismatch
+    metrics.getMetrics.keySet().asScala.toSeq.sorted should be (allMetrics.sorted)
   }
 
-  // these three metrics have the same effect on the collector
+  // these metrics will generate more metrics on the collector
   for (testname <- Seq("openBlockRequestLatencyMillis",
       "registerExecutorRequestLatencyMillis",
-      "blockTransferRateBytes")) {
+      "blockTransferRateBytes", "blockTransferRate", "blockTransferMessageRate")) {
     test(s"$testname - collector receives correct types") {
       val builder = mock(classOf[MetricsRecordBuilder])
-      when(builder.addCounter(any(), anyLong())).thenReturn(builder)
-      when(builder.addGauge(any(), anyDouble())).thenReturn(builder)
+      val counterNames = mutable.Buffer[String]()
+      when(builder.addCounter(any(), anyLong())).thenAnswer(iom => {
+        counterNames += iom.getArgument[MetricsInfo](0).name()
+        builder
+      })
+      val gaugeLongNames = mutable.Buffer[String]()
+      when(builder.addGauge(any(), anyLong())).thenAnswer(iom => {
+        gaugeLongNames += iom.getArgument[MetricsInfo](0).name()
+        builder
+      })
+      val gaugeDoubleNames = mutable.Buffer[String]()
+      when(builder.addGauge(any(), anyDouble())).thenAnswer(iom => {
+        gaugeDoubleNames += iom.getArgument[MetricsInfo](0).name()
+        builder
+      })
 
       YarnShuffleServiceMetrics.collectMetric(builder, testname,
         metrics.getMetrics.get(testname))
 
-      verify(builder).addCounter(any(), anyLong())
-      verify(builder, times(4)).addGauge(any(), anyDouble())
+      assert(counterNames === Seq(s"${testname}_count"))
+      val (expectLong, expectDouble) =
+        if (testname.matches("blockTransfer(Message)?Rate(Bytes)?$")) {
+          // blockTransfer(Message)?Rate(Bytes)? metrics are Meter so just have rate information
+          (Seq(), Seq("1", "5", "15", "Mean").map(suffix => s"${testname}_rate$suffix"))
+        } else {
+          // other metrics are Timer so have rate and timing information
+          (
+              Seq(s"${testname}_nanos_max", s"${testname}_nanos_min"),
+              Seq("rate1", "rate5", "rate15", "rateMean", "nanos_mean", "nanos_stdDev",
+                "nanos_1stPercentile", "nanos_5thPercentile", "nanos_25thPercentile",
+                "nanos_50thPercentile", "nanos_75thPercentile", "nanos_95thPercentile",
+                "nanos_98thPercentile", "nanos_99thPercentile", "nanos_999thPercentile")
+                  .map(suffix => s"${testname}_$suffix")
+          )
+        }
+      assert(gaugeLongNames.sorted === expectLong.sorted)
+      assert(gaugeDoubleNames.sorted === expectDouble.sorted)
     }
   }
 

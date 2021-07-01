@@ -1453,7 +1453,8 @@ private[spark] object MapOutputTracker extends Logging {
             // ShuffleBlockId with mapId being SHUFFLE_PUSH_MAP_ID to indicate this is
             // a merged shuffle block.
             splitsByAddress.getOrElseUpdate(mergeStatus.location, ListBuffer()) +=
-              ((ShuffleBlockId(shuffleId, SHUFFLE_PUSH_MAP_ID, partId), mergeStatus.totalSize, -1))
+              ((ShuffleBlockId(shuffleId, SHUFFLE_PUSH_MAP_ID, partId), mergeStatus.totalSize,
+                SHUFFLE_PUSH_MAP_ID))
             // For the "holes" in this pre-merged shuffle partition, i.e., unmerged mapper
             // shuffle partition blocks, fetch the original map produced shuffle partition blocks
             val mapStatusesWithIndex = mapStatuses.zipWithIndex

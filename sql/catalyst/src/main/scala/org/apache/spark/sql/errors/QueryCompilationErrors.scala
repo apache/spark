@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED, LEGACY_CTE_PRECEDENCE_POLICY}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
@@ -934,8 +934,8 @@ private[spark] object QueryCompilationErrors {
     notSupportedForV2TablesError("LOAD DATA")
   }
 
-  def showCreateTableNotSupportedForV2TablesError(): Throwable = {
-    notSupportedForV2TablesError("SHOW CREATE TABLE")
+  def showCreateTableAsSerdeNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("SHOW CREATE TABLE AS SERDE")
   }
 
   def showColumnsNotSupportedForV2TablesError(): Throwable = {
@@ -1519,8 +1519,11 @@ private[spark] object QueryCompilationErrors {
 
   def secondArgumentOfFunctionIsNotIntegerError(
       function: String, e: NumberFormatException): Throwable = {
+    // The second argument of '{function}' function needs to be an integer
     new AnalysisException(
-      s"The second argument of '$function' function needs to be an integer.", cause = Some(e))
+      errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
+      messageParameters = Seq(function),
+      cause = Some(e))
   }
 
   def nonPartitionPruningPredicatesNotExpectedError(
@@ -1646,5 +1649,52 @@ private[spark] object QueryCompilationErrors {
 
   def invalidYearMonthIntervalType(startFieldName: String, endFieldName: String): Throwable = {
     new AnalysisException(s"'interval $startFieldName to $endFieldName' is invalid.")
+  }
+
+  def configRemovedInVersionError(
+      configName: String,
+      version: String,
+      comment: String): Throwable = {
+    new AnalysisException(
+      s"The SQL config '$configName' was removed in the version $version. $comment")
+  }
+
+  def failedFallbackParsingError(msg: String, e1: Throwable, e2: Throwable): Throwable = {
+    new AnalysisException(s"$msg${e1.getMessage}\nFailed fallback parsing: ${e2.getMessage}",
+      cause = Some(e1.getCause))
+  }
+
+  def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {
+    new AnalysisException(s"Decimal scale ($scale) cannot be greater than precision ($precision).")
+  }
+
+  def decimalOnlySupportPrecisionUptoError(decimalType: String, precision: Int): Throwable = {
+    new AnalysisException(s"$decimalType can only support precision up to $precision")
+  }
+
+  def negativeScaleNotAllowedError(scale: Int): Throwable = {
+    new AnalysisException(
+      s"""|Negative scale is not allowed: $scale.
+         |You can use ${LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key}=true
+         |to enable legacy mode to allow it.""".stripMargin.replaceAll("\n", " "))
+  }
+
+  def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
+    new AnalysisException(s"$key is not a valid partition column in table $tblName.")
+  }
+
+  def invalidPartitionSpecError(
+      specKeys: String,
+      partitionColumnNames: Seq[String],
+      tableName: String): Throwable = {
+    new AnalysisException(
+      s"""|Partition spec is invalid. The spec ($specKeys) must match
+        |the partition spec (${partitionColumnNames.mkString(", ")}) defined in
+        |table '$tableName'""".stripMargin.replaceAll("\n", " "))
+  }
+
+  def foundDuplicateColumnError(colType: String, duplicateCol: Seq[String]): Throwable = {
+    new AnalysisException(
+      s"Found duplicate column(s) $colType: ${duplicateCol.sorted.mkString(", ")}")
   }
 }

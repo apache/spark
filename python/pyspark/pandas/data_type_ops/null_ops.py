@@ -15,24 +15,20 @@
 # limitations under the License.
 #
 
-from typing import TYPE_CHECKING, Union
+from typing import Union
 
 from pandas.api.types import CategoricalDtype
 
+from pyspark.pandas._typing import Dtype, IndexOpsLike
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    T_IndexOps,
     _as_bool_type,
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
 )
-from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
+from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql.types import BooleanType, StringType
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class NullOps(DataTypeOps):
@@ -44,7 +40,7 @@ class NullOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "nulls"
 
-    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):

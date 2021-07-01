@@ -21,8 +21,8 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -103,9 +103,9 @@ class CatalogManager(
       case _ if isSessionCatalog(currentCatalog) && namespace.length == 1 =>
         v1SessionCatalog.setCurrentDatabase(namespace.head)
       case _ if isSessionCatalog(currentCatalog) =>
-        throw new NoSuchNamespaceException(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
       case catalog: SupportsNamespaces if !catalog.namespaceExists(namespace) =>
-        throw new NoSuchNamespaceException(namespace)
+        throw QueryCompilationErrors.noSuchNamespaceError(namespace)
       case _ =>
         _currentNamespace = Some(namespace)
     }

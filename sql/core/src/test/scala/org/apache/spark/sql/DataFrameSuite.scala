@@ -2914,6 +2914,21 @@ class DataFrameSuite extends QueryTest
     val df2 = (1 to 10).toDF()
     assert(df2.isLocal)
   }
+
+  test("SPARK-35886: PromotePrecision should be subexpr replaced") {
+    withTable("tbl") {
+      sql(
+        """
+          |CREATE TABLE tbl (
+          |  c1 DECIMAL(18,6),
+          |  c2 DECIMAL(18,6),
+          |  c3 DECIMAL(18,6))
+          |USING parquet;
+          |""".stripMargin)
+      sql("INSERT INTO tbl SELECT 1, 1, 1")
+      checkAnswer(sql("SELECT sum(c1 * c3) + sum(c2 * c3) FROM tbl"), Row(2.00000000000) :: Nil)
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
