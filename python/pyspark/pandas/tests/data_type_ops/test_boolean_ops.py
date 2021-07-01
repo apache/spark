@@ -586,18 +586,9 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         cat_type = CategoricalDtype(categories=[False, True])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
         for dtype in self.extension_dtypes:
-            if extension_float_dtypes_available:
-                is_extension_float_dtype = dtype in [
-                    "Float32",
-                    "Float64",
-                    Float32Dtype(),
-                    Float64Dtype(),
-                ]
-
-                if is_extension_float_dtype:
-                    self.assert_eq([1.0, 0.0, np.nan], self.psser.astype(dtype).tolist())
-                else:
-                    self.check_extension(pser.astype(dtype), psser.astype(dtype))
+            if dtype in self.fractional_extension_dtypes:
+                # A pandas boolean extension series cannot be casted to fractional extension dtypes
+                self.assert_eq([1.0, 0.0, np.nan], self.psser.astype(dtype).tolist())
             else:
                 self.check_extension(pser.astype(dtype), psser.astype(dtype))
 
