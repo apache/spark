@@ -121,7 +121,7 @@ object ResolveUnion extends Rule[LogicalPlan] {
           Alias(Literal(null, lattr.dataType), lattr.name)()
         } else {
           throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
-            lattr, rightOutputAttrs)
+            lattr.name, rightOutputAttrs.map(_.name).mkString(", "))
         }
       }
     }

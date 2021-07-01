@@ -30,8 +30,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StructType}
 
 /**
@@ -100,9 +100,7 @@ class RelationalGroupedDataset protected[sql](
       colNames.map { colName =>
         val namedExpr = df.resolve(colName)
         if (!namedExpr.dataType.isInstanceOf[NumericType]) {
-          throw new AnalysisException(
-            s""""$colName" is not a numeric column. """ +
-            "Aggregation function can only be applied on a numeric column.")
+          throw QueryCompilationErrors.aggregationFunctionAppliedOnNonNumericColumnError(colName)
         }
         namedExpr
       }
@@ -429,11 +427,8 @@ class RelationalGroupedDataset protected[sql](
       .toSeq
 
     if (values.length > maxValues) {
-      throw new AnalysisException(
-        s"The pivot column $pivotColumn has more than $maxValues distinct values, " +
-          "this could indicate an error. " +
-          s"If this was intended, set ${SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key} " +
-          "to at least the number of distinct values of the pivot column.")
+      throw QueryCompilationErrors.aggregationFunctionAppliedOnNonNumericColumnError(
+        pivotColumn.toString, maxValues)
     }
 
     pivot(pivotColumn, values)
@@ -464,9 +459,9 @@ class RelationalGroupedDataset protected[sql](
           groupingExprs,
           RelationalGroupedDataset.PivotType(pivotColumn.expr, valueExprs))
       case _: RelationalGroupedDataset.PivotType =>
-        throw new UnsupportedOperationException("repeated pivots are not supported")
+        throw QueryExecutionErrors.repeatedPivotsUnsupportedError()
       case _ =>
-        throw new UnsupportedOperationException("pivot is only supported after a groupBy")
+        throw QueryExecutionErrors.pivotNotAfterGroupByUnsupportedError()
     }
   }
 
