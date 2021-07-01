@@ -48,7 +48,7 @@ class TimestampNTZType private() extends AtomicType {
    */
   override def defaultSize: Int = 8
 
-  override def typeName: String = "timestamp without time zone"
+  override def typeName: String = "timestamp_ntz"
 
   private[spark] override def asNullable: TimestampNTZType = this
 }
