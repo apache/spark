@@ -224,12 +224,12 @@ object DateTimeUtils {
    * value. The return type is [[Option]] in order to distinguish between 0L and null. The following
    * formats are allowed:
    *
-   * `yyyy`
-   * `yyyy-[m]m`
-   * `yyyy-[m]m-[d]d`
-   * `yyyy-[m]m-[d]d `
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `[+-]y*`
+   * `[+-]y*-[m]m`
+   * `[+-]y*-[m]m-[d]d`
+   * `[+-]y*-[m]m-[d]d `
+   * `[+-]y*-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `[+-]y*-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
    * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
    *
@@ -357,6 +357,7 @@ object DateTimeUtils {
       case "-" => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
       case zoneName: String => getZoneId(zoneName.trim)
     }
+    segments(0) *= sign
     (segments, zoneId, justTime)
   }
 
@@ -365,12 +366,12 @@ object DateTimeUtils {
    * value. The return type is [[Option]] in order to distinguish between 0L and null. The following
    * formats are allowed:
    *
-   * `yyyy`
-   * `yyyy-[m]m`
-   * `yyyy-[m]m-[d]d`
-   * `yyyy-[m]m-[d]d `
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `[+-]y*`
+   * `[+-]y*-[m]m`
+   * `[+-]y*-[m]m-[d]d`
+   * `[+-]y*-[m]m-[d]d `
+   * `[+-]y*-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `[+-]y*-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
    * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
    * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
    *
@@ -398,7 +399,7 @@ object DateTimeUtils {
       val localDate = if (justTime) {
         LocalDate.now(zoneId)
       } else {
-        LocalDate.of(sign * segments(0), segments(1), segments(2))
+        LocalDate.of(segments(0), segments(1), segments(2))
       }
       val localDateTime = LocalDateTime.of(localDate, localTime)
       val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
@@ -422,12 +423,12 @@ object DateTimeUtils {
    * The return type is [[Option]] in order to distinguish between 0L and null. The following
    * formats are allowed:
    *
-   * `yyyy`
-   * `yyyy-[m]m`
-   * `yyyy-[m]m-[d]d`
-   * `yyyy-[m]m-[d]d `
-   * `yyyy-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
-   * `yyyy-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `[+-]y*`
+   * `[+-]y*-[m]m`
+   * `[+-]y*-[m]m-[d]d`
+   * `[+-]y*-[m]m-[d]d `
+   * `[+-]y*-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
+   * `[+-]y*-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
    *
    * where `zone_id` should have one of the forms:
    *   - Z - Zulu time zone UTC+0
@@ -515,12 +516,12 @@ object DateTimeUtils {
    * The return type is [[Option]] in order to distinguish between 0 and null. The following
    * formats are allowed:
    *
-   * `yyyy`
-   * `yyyy-[m]m`
-   * `yyyy-[m]m-[d]d`
-   * `yyyy-[m]m-[d]d `
-   * `yyyy-[m]m-[d]d *`
-   * `yyyy-[m]m-[d]dT*`
+   * `[+-]y*`
+   * `[+-]y*-[m]m`
+   * `[+-]y*-[m]m-[d]d`
+   * `[+-]y*-[m]m-[d]d `
+   * `[+-]y*-[m]m-[d]d *`
+   * `[+-]y*-[m]m-[d]dT*`
    */
   def stringToDate(s: UTF8String): Option[Int] = {
     if (s == null) {
