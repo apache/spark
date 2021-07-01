@@ -635,7 +635,9 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
   private def getViewPlan(metadata: CatalogTable): LogicalPlan = {
     import org.apache.spark.sql.catalyst.dsl.expressions._
     val projectList = metadata.schema.map { field =>
-      UpCast(field.name.attr, field.dataType).as(field.name)
+      UpCast(
+        GetViewColumnByNameAndOrdinal(metadata.identifier.toString, field.name, 0, 1, None),
+        field.dataType).as(field.name)
     }
     Project(projectList, CatalystSqlParser.parsePlan(metadata.viewText.get))
   }
