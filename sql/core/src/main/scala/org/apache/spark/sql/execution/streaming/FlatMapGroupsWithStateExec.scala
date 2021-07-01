@@ -21,8 +21,7 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, BaseOrdering, Expression, SortOrder, UnsafeRow}
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
 import org.apache.spark.sql.execution._
@@ -30,7 +29,7 @@ import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper
 import org.apache.spark.sql.execution.streaming.state._
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode}
 import org.apache.spark.sql.streaming.GroupStateTimeout.NoTimeout
-import org.apache.spark.util.{CompletionIterator, NextIterator, SerializableConfiguration}
+import org.apache.spark.util.{CompletionIterator, SerializableConfiguration}
 
 /**
  * Physical operator for executing `FlatMapGroupsWithState`
@@ -300,16 +299,12 @@ case class FlatMapGroupsWithStateExec(
       val groupedInitStateIter =
         GroupedIterator(initStateIter, initialStateGroupAttrs, initialState.output)
 
-      val keyOrderingComparator = GenerateOrdering.generate(
-        groupingAttributes.map(SortOrder(_, Ascending)), groupingAttributes)
-
-      FlatMapGroupsWithStateExec.mergeGroupedIters(
-          groupedChildDataIter,
-          groupedInitStateIter,
-          keyOrderingComparator).flatMap { case (keyRow, valueRowIter, initStateRowIterator) =>
-        val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
+      new CoGroupedIterator(
+          groupedChildDataIter, groupedInitStateIter, groupingAttributes).flatMap {
+        case (keyRow, valueRowIter, initStateRowIter) =>
+          val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
         var foundInitStateForKey = false
-        initStateRowIterator.foreach { initStateRow =>
+        initStateRowIter.foreach { initStateRow =>
           if (foundInitStateForKey) {
             throw new IllegalArgumentException("The initial state provided contained duplicates")
           }
@@ -401,58 +396,3 @@ case class FlatMapGroupsWithStateExec(
     copy(child = newLeft, initialState = newRight)
 }
 
-object FlatMapGroupsWithStateExec {
-
-  /**
-   * This method merges two grouped iterators such that we have a combined iterator
-   * Iterator (K, Iterator(v), Iterator(s))
-   * @param leftGrpItr - Iterator (K, Iterator(V))
-   * @param rightGrpItr - Iterator (K, Iterator(S))
-   * @param comparator - BaseOrdering that can compare the items from both the iterators.
-   */
-  def mergeGroupedIters(
-      leftGrpItr: Iterator[(InternalRow, Iterator[InternalRow])],
-      rightGrpItr: Iterator[(InternalRow, Iterator[InternalRow])],
-      comparator: BaseOrdering
-    ): Iterator[(InternalRow, Iterator[InternalRow], Iterator[InternalRow])] = {
-    new NextIterator[(InternalRow, Iterator[InternalRow], Iterator[InternalRow])] {
-
-      var leftRow: (InternalRow, Iterator[InternalRow]) = null
-      var rightRow: (InternalRow, Iterator[InternalRow]) = null
-
-      override def getNext(): (InternalRow, Iterator[InternalRow], Iterator[InternalRow]) = {
-        if (leftRow == null && leftGrpItr.hasNext) {
-          leftRow = leftGrpItr.next()
-        }
-        if (rightRow == null && rightGrpItr.hasNext) {
-          rightRow = rightGrpItr.next()
-        }
-        if (leftRow == null && rightRow == null) {
-          finished = true
-          return null
-        }
-        val comparison =
-          if (leftRow != null && rightRow != null) comparator.compare(leftRow._1, rightRow._1)
-          else if (leftRow != null) -1
-          else 1
-
-        if (comparison == 0) {
-          val ret = (leftRow._1, leftRow._2, rightRow._2)
-          leftRow = null
-          rightRow = null
-          ret
-        } else if (comparison < 0) {
-          val ret = (leftRow._1, leftRow._2, Iterator.empty)
-          leftRow = null
-          ret
-        } else {
-          val ret = (rightRow._1, Iterator.empty, rightRow._2)
-          rightRow = null
-          ret
-        }
-      }
-
-      override protected def close(): Unit = { }
-    }
-  }
-}

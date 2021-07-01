@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.ObjectOperator
@@ -60,7 +59,6 @@ object FlatMapGroupsWithStateExecHelper {
     def putState(store: StateStore, keyRow: UnsafeRow, state: Any, timeoutTimestamp: Long): Unit
     def removeState(store: StateStore, keyRow: UnsafeRow): Unit
     def getAllState(store: StateStore): Iterator[StateData]
-    def stateDeserializerFunc: (InternalRow => Any)
   }
 
   def createStateManager(
@@ -110,9 +108,8 @@ object FlatMapGroupsWithStateExecHelper {
       }
     }
 
-
     private lazy val stateSerializerFunc = ObjectOperator.serializeObjectToRow(stateSerializerExprs)
-    override lazy val stateDeserializerFunc: (InternalRow => Any) = {
+    private lazy val stateDeserializerFunc = {
       ObjectOperator.deserializeRowToObject(stateDeserializerExpr, stateSchema.toAttributes)
     }
     private lazy val stateDataForGets = StateData()
