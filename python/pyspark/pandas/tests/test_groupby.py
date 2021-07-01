@@ -34,11 +34,6 @@ from pyspark.pandas.groupby import is_multi_agg_with_relabel
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
 
 
-# This is used in run-tests.py to discover the slow test. See more in the doc of
-# _discover_python_unittests of dev/sparktestsupport/modules.py
-is_slow_test = True
-
-
 class GroupByTest(PandasOnSparkTestCase, TestUtils):
     def test_groupby_simple(self):
         pdf = pd.DataFrame(

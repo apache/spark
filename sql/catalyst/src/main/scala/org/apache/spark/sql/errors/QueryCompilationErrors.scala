@@ -1519,8 +1519,11 @@ private[spark] object QueryCompilationErrors {
 
   def secondArgumentOfFunctionIsNotIntegerError(
       function: String, e: NumberFormatException): Throwable = {
+    // The second argument of '{function}' function needs to be an integer
     new AnalysisException(
-      s"The second argument of '$function' function needs to be an integer.", cause = Some(e))
+      errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
+      messageParameters = Seq(function),
+      cause = Some(e))
   }
 
   def nonPartitionPruningPredicatesNotExpectedError(

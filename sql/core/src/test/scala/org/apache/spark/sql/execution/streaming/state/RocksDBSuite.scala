@@ -33,6 +33,75 @@ import org.apache.spark.util.Utils
 
 class RocksDBSuite extends SparkFunSuite {
 
+  test("RocksDB: get, put, iterator, commit, load") {
+    def testOps(compactOnCommit: Boolean): Unit = {
+      val remoteDir = Utils.createTempDir().toString
+      new File(remoteDir).delete()  // to make sure that the directory gets created
+
+      val conf = RocksDBConf().copy(compactOnCommit = compactOnCommit)
+      withDB(remoteDir, conf = conf) { db =>
+        assert(db.get("a") === null)
+        assert(iterator(db).isEmpty)
+
+        db.put("a", "1")
+        assert(toStr(db.get("a")) === "1")
+        db.commit()
+      }
+
+      withDB(remoteDir, conf = conf, version = 0) { db =>
+        // version 0 can be loaded again
+        assert(toStr(db.get("a")) === null)
+        assert(iterator(db).isEmpty)
+      }
+
+      withDB(remoteDir, conf = conf, version = 1) { db =>
+        // version 1 data recovered correctly
+        assert(toStr(db.get("a")) === "1")
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
+
+        // make changes but do not commit version 2
+        db.put("b", "2")
+        assert(toStr(db.get("b")) === "2")
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+      }
+
+      withDB(remoteDir, conf = conf, version = 1) { db =>
+        // version 1 data not changed
+        assert(toStr(db.get("a")) === "1")
+        assert(db.get("b") === null)
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
+
+        // commit version 2
+        db.put("b", "2")
+        assert(toStr(db.get("b")) === "2")
+        db.commit()
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+      }
+
+      withDB(remoteDir, conf = conf, version = 1) { db =>
+        // version 1 data not changed
+        assert(toStr(db.get("a")) === "1")
+        assert(db.get("b") === null)
+      }
+
+      withDB(remoteDir, conf = conf, version = 2) { db =>
+        // version 2 can be loaded again
+        assert(toStr(db.get("b")) === "2")
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1"), ("b", "2")))
+
+        db.load(1)
+        assert(toStr(db.get("b")) === null)
+        assert(db.iterator().map(toStr).toSet === Set(("a", "1")))
+      }
+    }
+
+    for (compactOnCommit <- Seq(false, true)) {
+      withClue(s"compactOnCommit = $compactOnCommit") {
+        testOps(compactOnCommit)
+      }
+    }
+  }
+
   test("RocksDBFileManager: upload only new immutable files") {
     withTempDir { dir =>
       val dfsRootDir = dir.getAbsolutePath
@@ -167,6 +236,26 @@ class RocksDBSuite extends SparkFunSuite {
     // scalastyle:on line.size.limit
   }
 
+  def withDB[T](
+      remoteDir: String,
+      version: Int = 0,
+      conf: RocksDBConf = RocksDBConf().copy(compactOnCommit = false, minVersionsToRetain = 100),
+      hadoopConf: Configuration = new Configuration())(
+      func: RocksDB => T): T = {
+    var db: RocksDB = null
+    try {
+      db = new RocksDB(
+        remoteDir, conf = conf, hadoopConf = hadoopConf,
+        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+      db.load(version)
+      func(db)
+    } finally {
+      if (db != null) {
+        db.close()
+      }
+    }
+  }
+
   def generateFiles(dir: String, fileToLengths: Seq[(String, Int)]): Unit = {
     fileToLengths.foreach { case (fileName, length) =>
       val file = new File(dir, fileName)
@@ -199,6 +288,14 @@ class RocksDBSuite extends SparkFunSuite {
   }
 
   implicit def toFile(path: String): File = new File(path)
+
+  implicit def toArray(str: String): Array[Byte] = if (str != null) str.getBytes else null
+
+  implicit def toStr(bytes: Array[Byte]): String = if (bytes != null) new String(bytes) else null
+
+  def toStr(kv: ByteArrayPair): (String, String) = (toStr(kv.key), toStr(kv.value))
+
+  def iterator(db: RocksDB): Iterator[(String, String)] = db.iterator().map(toStr)
 
   def listFiles(file: File): Seq[File] = {
     if (!file.exists()) return Seq.empty

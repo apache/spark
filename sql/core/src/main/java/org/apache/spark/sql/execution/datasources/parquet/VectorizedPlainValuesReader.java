@@ -61,6 +61,14 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     }
   }
 
+  @Override
+  public final void skipBooleans(int total) {
+    // TODO: properly vectorize this
+    for (int i = 0; i < total; i++) {
+      readBoolean();
+    }
+  }
+
   private ByteBuffer getBuffer(int length) {
     try {
       return in.slice(length).order(ByteOrder.LITTLE_ENDIAN);
@@ -82,6 +90,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
         c.putInt(rowId + i, buffer.getInt());
       }
     }
+  }
+
+  @Override
+  public void skipIntegers(int total) {
+    in.skip(total * 4L);
   }
 
   @Override
@@ -138,6 +151,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
         c.putLong(rowId + i, buffer.getLong());
       }
     }
+  }
+
+  @Override
+  public void skipLongs(int total) {
+    in.skip(total * 8L);
   }
 
   @Override
@@ -198,6 +216,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
+  public void skipFloats(int total) {
+    in.skip(total * 4L);
+  }
+
+  @Override
   public final void readDoubles(int total, WritableColumnVector c, int rowId) {
     int requiredBytes = total * 8;
     ByteBuffer buffer = getBuffer(requiredBytes);
@@ -210,6 +233,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
         c.putDouble(rowId + i, buffer.getDouble());
       }
     }
+  }
+
+  @Override
+  public void skipDoubles(int total) {
+    in.skip(total * 8L);
   }
 
   @Override
@@ -227,6 +255,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
+  public final void skipBytes(int total) {
+    in.skip(total * 4L);
+  }
+
+  @Override
   public final void readShorts(int total, WritableColumnVector c, int rowId) {
     int requiredBytes = total * 4;
     ByteBuffer buffer = getBuffer(requiredBytes);
@@ -234,6 +267,11 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
     for (int i = 0; i < total; i += 1) {
       c.putShort(rowId + i, (short) buffer.getInt());
     }
+  }
+
+  @Override
+  public void skipShorts(int total) {
+    in.skip(total * 4L);
   }
 
   @Override
@@ -301,6 +339,14 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   }
 
   @Override
+  public void skipBinary(int total) {
+    for (int i = 0; i < total; i++) {
+      int len = readInteger();
+      in.skip(len);
+    }
+  }
+
+  @Override
   public final Binary readBinary(int len) {
     ByteBuffer buffer = getBuffer(len);
     if (buffer.hasArray()) {
@@ -311,5 +357,10 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
       buffer.get(bytes);
       return Binary.fromConstantByteArray(bytes);
     }
+  }
+
+  @Override
+  public void skipFixedLenByteArray(int total, int len) {
+    in.skip(total * (long) len);
   }
 }

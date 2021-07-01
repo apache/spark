@@ -1806,7 +1806,7 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-35650: Use local shuffle reader if can not coalesce number of partitions") {
-    withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2") {
+    withSQLConf(SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false") {
       val query = "SELECT /*+ REPARTITION */ * FROM testData"
       val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
       collect(adaptivePlan) {
@@ -1817,6 +1817,47 @@ class AdaptiveQueryExecSuite
           assert(customShuffleReader.isLocalReader)
         case _ =>
           fail("There should be a CustomShuffleReaderExec")
+      }
+    }
+  }
+
+  test("SPARK-35725: Support optimize skewed partitions in RebalancePartitions") {
+    withTempView("v") {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
+
+        spark.sparkContext.parallelize(
+          (1 to 10).map(i => TestData(if (i > 4) 5 else i, i.toString)), 3)
+          .toDF("c1", "c2").createOrReplaceTempView("v")
+
+        def checkPartitionNumber(
+            query: String, skewedPartitionNumber: Int, totalNumber: Int): Unit = {
+          val (_, adaptive) = runAdaptiveAndVerifyResult(query)
+          val reader = collect(adaptive) {
+            case reader: CustomShuffleReaderExec => reader
+          }
+          assert(reader.size == 1)
+          assert(reader.head.partitionSpecs.count(_.isInstanceOf[PartialReducerPartitionSpec]) ==
+            skewedPartitionNumber)
+          assert(reader.head.partitionSpecs.size == totalNumber)
+        }
+
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "150") {
+          // partition size [0,258,72,72,72]
+          checkPartitionNumber("SELECT /*+ REBALANCE(c1) */ * FROM v", 2, 4)
+          // partition size [72,216,216,144,72]
+          checkPartitionNumber("SELECT /*+ REBALANCE */ * FROM v", 4, 7)
+        }
+
+        // no skewed partition should be optimized
+        withSQLConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10000") {
+          checkPartitionNumber("SELECT /*+ REBALANCE(c1) */ * FROM v", 0, 1)
+        }
       }
     }
   }
