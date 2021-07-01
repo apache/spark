@@ -45,9 +45,7 @@ object ShufflePartitionsUtil extends Logging {
       mapOutputStatistics: Seq[Option[MapOutputStatistics]],
       inputPartitionSpecs: Seq[Option[Seq[ShufflePartitionSpec]]],
       advisoryTargetSize: Long,
-      // The default parameter values are only used in tests.
-      minNumPartitions: Int = 1,
-      minPartitionSize: Long = 0): Seq[Seq[ShufflePartitionSpec]] = {
+      minNumPartitions: Int): Seq[Seq[ShufflePartitionSpec]] = {
     assert(mapOutputStatistics.length == inputPartitionSpecs.length)
 
     if (mapOutputStatistics.isEmpty) {
@@ -63,16 +61,11 @@ object ShufflePartitionsUtil extends Logging {
     // `maxTargetSize` from being set to 0.
     val maxTargetSize = math.max(
       math.ceil(totalPostShuffleInputSize / minNumPartitions.toDouble).toLong, 16)
-    // The target size can be very small if minNumPartitions is super big. Here we use
-    // minPartitionSize as the lower bound to avoid too small partitions after coalescing.
-    val targetSize = math.max(
-      math.min(maxTargetSize, advisoryTargetSize),
-      // Prevent min partition size from being larger than advisoryTargetSize.
-      math.min(minPartitionSize, advisoryTargetSize))
+    val targetSize = math.min(maxTargetSize, advisoryTargetSize)
 
     val shuffleIds = mapOutputStatistics.flatMap(_.map(_.shuffleId)).mkString(", ")
     logInfo(s"For shuffle($shuffleIds), advisory target size: $advisoryTargetSize, " +
-      s"minimum partition size: $minPartitionSize, actual target size $targetSize.")
+      s"actual target size $targetSize.")
 
     // If `inputPartitionSpecs` are all empty, it means skew join optimization is not applied.
     if (inputPartitionSpecs.forall(_.isEmpty)) {
@@ -102,8 +95,7 @@ object ShufflePartitionsUtil extends Logging {
     }
 
     val numPartitions = validMetrics.head.bytesByPartitionId.length
-    val newPartitionSpecs = coalescePartitions(
-      0, numPartitions, validMetrics, targetSize, allowReturnEmpty = false)
+    val newPartitionSpecs = coalescePartitions(0, numPartitions, validMetrics, targetSize)
     if (newPartitionSpecs.length < numPartitions) {
       attachDataSize(mapOutputStatistics, newPartitionSpecs)
     } else {
@@ -223,7 +215,7 @@ object ShufflePartitionsUtil extends Logging {
       end: Int,
       mapOutputStatistics: Seq[MapOutputStatistics],
       targetSize: Long,
-      allowReturnEmpty: Boolean): Seq[CoalescedPartitionSpec] = {
+      allowReturnEmpty: Boolean = false): Seq[CoalescedPartitionSpec] = {
     val partitionSpecs = ArrayBuffer.empty[CoalescedPartitionSpec]
     var coalescedSize = 0L
     var i = start
