@@ -678,12 +678,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
-  val ADAPTIVE_COST_EVALUATOR_CLASS =
-    buildConf("spark.sql.adaptive.costEvaluatorClass")
+  val ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS =
+    buildConf("spark.sql.adaptive.customCostEvaluatorClass")
+      .doc("The custom cost evaluator class to be used for adaptive execution. If not being set," +
+        " Spark will use its own SimpleCostEvaluator by default.")
       .version("3.2.0")
       .internal()
       .stringConf
-      .createWithDefault("org.apache.spark.sql.execution.adaptive.SimpleCostEvaluator")
+      .createOptional
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
@@ -3589,7 +3591,8 @@ class SQLConf extends Serializable with Logging {
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
-  def adaptiveCostEvaluatorClass: String = getConf(ADAPTIVE_COST_EVALUATOR_CLASS)
+  def adaptiveCustomCostEvaluatorClass: Option[String] =
+    getConf(ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS)
 
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 

@@ -1900,10 +1900,11 @@ class AdaptiveQueryExecSuite
   }
 
   test("SPARK-35794: Allow custom plugin for cost evaluator") {
-    CostEvaluator.instantiate(classOf[SimpleShuffleSortCostEvaluator].getCanonicalName)
-    CostEvaluator.instantiate(classOf[SimpleCostEvaluator].getCanonicalName)
-    intercept[ClassCastException] {
-      CostEvaluator.instantiate(classOf[InvalidCostEvaluator].getCanonicalName)
+    CostEvaluator.instantiate(
+      classOf[SimpleShuffleSortCostEvaluator].getCanonicalName, spark.sparkContext.getConf)
+    intercept[IllegalArgumentException] {
+      CostEvaluator.instantiate(
+        classOf[InvalidCostEvaluator].getCanonicalName, spark.sparkContext.getConf)
     }
 
     withSQLConf(
@@ -1911,7 +1912,7 @@ class AdaptiveQueryExecSuite
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
       val query = "SELECT * FROM testData join testData2 ON key = a where value = '1'"
 
-      withSQLConf(SQLConf.ADAPTIVE_COST_EVALUATOR_CLASS.key ->
+      withSQLConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS.key ->
         "org.apache.spark.sql.execution.adaptive.SimpleShuffleSortCostEvaluator") {
         val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
         val smj = findTopLevelSortMergeJoin(plan)
@@ -1921,9 +1922,9 @@ class AdaptiveQueryExecSuite
         checkNumLocalShuffleReaders(adaptivePlan)
       }
 
-      withSQLConf(SQLConf.ADAPTIVE_COST_EVALUATOR_CLASS.key ->
+      withSQLConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS.key ->
         "org.apache.spark.sql.execution.adaptive.InvalidCostEvaluator") {
-        intercept[ClassCastException] {
+        intercept[IllegalArgumentException] {
           runAdaptiveAndVerifyResult(query)
         }
       }

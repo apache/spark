@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
@@ -38,11 +40,12 @@ object CostEvaluator extends Logging {
   /**
    * Instantiates a [[CostEvaluator]] using the given className.
    */
-  def instantiate(className: String): CostEvaluator = {
+  def instantiate(className: String, conf: SparkConf): CostEvaluator = {
     logDebug(s"Creating CostEvaluator $className")
-    val clazz = Utils.classForName[CostEvaluator](className)
-    // Use the default no-argument constructor.
-    val ctor = clazz.getDeclaredConstructor()
-    ctor.newInstance()
+    val evaluators = Utils.loadExtensions(classOf[CostEvaluator], Seq(className), conf)
+    require(evaluators.nonEmpty, "A valid AQE cost evaluator must be specified by config " +
+      s"${SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS.key}, but $className resulted in zero " +
+      "valid evaluator.")
+    evaluators.head
   }
 }
