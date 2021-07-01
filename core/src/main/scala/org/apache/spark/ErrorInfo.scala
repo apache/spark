@@ -62,6 +62,6 @@ private[spark] object SparkThrowableHelper {
   }
 
   def getSqlState(errorClass: String): String = {
-    errorClassToInfoMap.get(errorClass).flatMap(_.sqlState).orNull
+    Option(errorClass).flatMap(errorClassToInfoMap.get).flatMap(_.sqlState).orNull
   }
 }
