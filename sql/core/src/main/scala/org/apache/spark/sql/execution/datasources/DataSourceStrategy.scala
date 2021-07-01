@@ -640,7 +640,7 @@ object DataSourceStrategy
   protected[sql] def translateRuntimeFilter(expr: Expression): Option[Filter] = expr match {
     case in @ InSubqueryExec(e @ PushableColumnAndNestedColumn(name), _, _, _) =>
       val values = in.values().getOrElse {
-        throw new AnalysisException(s"Can't translate $in to source filter, no subquery result")
+        throw new IllegalStateException(s"Can't translate $in to source filter, no subquery result")
       }
       val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
       Some(sources.In(name, values.map(toScala)))
