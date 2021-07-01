@@ -642,6 +642,16 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(0L)
 
+  val ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED =
+    buildConf("spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled")
+      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark will optimize the " +
+        "skewed shuffle partitions in RebalancePartitions and split them to smaller ones " +
+        s"according to the target size (specified by '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'), " +
+        "to avoid data skew.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()

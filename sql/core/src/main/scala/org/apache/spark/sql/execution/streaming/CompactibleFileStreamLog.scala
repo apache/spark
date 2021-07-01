@@ -28,6 +28,7 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
 
 /**
@@ -179,8 +180,8 @@ abstract class CompactibleFileStreamLog[T <: AnyRef : ClassTag](
    * To simplify the situation, this method just throws UnsupportedOperationException regardless
    * of given parameter, and let CompactibleFileStreamLog handles purging by itself.
    */
-  override def purge(thresholdBatchId: Long): Unit = throw new UnsupportedOperationException(
-    s"Cannot purge as it might break internal state.")
+  override def purge(thresholdBatchId: Long): Unit =
+    throw QueryExecutionErrors.cannotPurgeAsBreakInternalStateError()
 
   /**
    * Apply function on all entries in the specific batch. The method will throw

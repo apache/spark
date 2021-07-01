@@ -116,7 +116,9 @@ private[sql] object AvroUtils extends Logging {
       job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, codec)
     }
 
-    new AvroOutputWriterFactory(dataSchema, outputAvroSchema.toString)
+    new AvroOutputWriterFactory(dataSchema,
+      outputAvroSchema.toString,
+      parsedOptions.positionalFieldMatching)
   }
 
   private def inferAvroSchemaFromFiles(
@@ -208,13 +210,20 @@ private[sql] object AvroUtils extends Logging {
    *
    * @param avroSchema The schema in which to search for fields. Must be of type RECORD.
    * @param avroPath The seq of parent field names leading to `avroSchema`.
+   * @param positionalFieldMatch If true, perform field matching in a positional fashion
+   *                             (structural comparison between schemas, ignoring names);
+   *                             otherwise, perform field matching using field names.
    */
-  class AvroSchemaHelper(avroSchema: Schema, avroPath: Seq[String]) {
+  class AvroSchemaHelper(
+      avroSchema: Schema,
+      avroPath: Seq[String],
+      positionalFieldMatch: Boolean) {
     if (avroSchema.getType != Schema.Type.RECORD) {
       throw new IncompatibleSchemaException(
         s"Attempting to treat ${avroSchema.getName} as a RECORD, but it was: ${avroSchema.getType}")
     }
 
+    private[this] val avroFieldArray = avroSchema.getFields.asScala.toArray
     private[this] val fieldMap = avroSchema.getFields.asScala
       .groupBy(_.name.toLowerCase(Locale.ROOT))
       .mapValues(_.toSeq) // toSeq needed for scala 2.13
@@ -226,11 +235,10 @@ private[sql] object AvroUtils extends Logging {
      * @param name The name of the field to search for.
      * @return `Some(match)` if a matching Avro field is found, otherwise `None`.
      */
-    def getFieldByName(name: String): Option[Schema.Field] = {
+    private[avro] def getFieldByName(name: String): Option[Schema.Field] = {
 
       // get candidates, ignoring case of field name
-      val candidates = fieldMap.get(name.toLowerCase(Locale.ROOT))
-        .getOrElse(Seq.empty[Schema.Field])
+      val candidates = fieldMap.getOrElse(name.toLowerCase(Locale.ROOT), Seq.empty)
 
       // search candidates, taking into account case sensitivity settings
       candidates.filter(f => SQLConf.get.resolver(f.name(), name)) match {
@@ -242,6 +250,30 @@ private[sql] object AvroUtils extends Logging {
         )
       }
     }
+
+    /** Get the Avro field corresponding to the provided Catalyst field name/position, if any. */
+    def getAvroField(fieldName: String, catalystPos: Int): Option[Schema.Field] = {
+      if (positionalFieldMatch) {
+        avroFieldArray.lift(catalystPos)
+      } else {
+        getFieldByName(fieldName)
+      }
+    }
+  }
+
+  /**
+   * Take a field's hierarchical names (see [[toFieldStr]]) and position, and convert it to a
+   * human-readable description of the field. Depending on the value of `positionalFieldMatch`,
+   * either the position or name will be emphasized (for true and false, respectively); both will
+   * be included in either case.
+   */
+  private[avro] def toFieldDescription(
+      names: Seq[String],
+      position: Int,
+      positionalFieldMatch: Boolean): String = if (positionalFieldMatch) {
+    s"field at position $position (${toFieldStr(names)})"
+  } else {
+    s"${toFieldStr(names)} (at position $position)"
   }
 
   /**

@@ -207,22 +207,32 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Seconds") {
     assert(Second(Literal.create(null, DateType), UTC_OPT).resolved === false)
     assert(Second(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT).resolved )
-    checkEvaluation(Second(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT), 0)
-    checkEvaluation(Second(Cast(Literal(date), TimestampType, UTC_OPT), UTC_OPT), 15)
+    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+      checkEvaluation(Second(Cast(Literal(d), dt, UTC_OPT), UTC_OPT), 0)
+      checkEvaluation(Second(Cast(Literal(date), dt, UTC_OPT), UTC_OPT), 15)
+    }
     checkEvaluation(Second(Literal(ts), UTC_OPT), 15)
 
     val c = Calendar.getInstance()
     for (zid <- outstandingZoneIds) {
       val timeZoneId = Option(zid.getId)
       c.setTimeZone(TimeZone.getTimeZone(zid))
-      (0 to 60 by 5).foreach { s =>
+      (0 to 59 by 5).foreach { s =>
+        // validate timestamp with local time zone
         c.set(2015, 18, 3, 3, 5, s)
         checkEvaluation(
           Second(Literal(new Timestamp(c.getTimeInMillis)), timeZoneId),
           c.get(Calendar.SECOND))
+
+        // validate timestamp without time zone
+        checkEvaluation(
+          Second(Literal(LocalDateTime.of(2015, 1, 3, 3, 5, s))),
+          s)
       }
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (child: Expression) => Second(child, timeZoneId), TimestampType)
+      Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (child: Expression) => Second(child, timeZoneId), dt)
+      }
     }
   }
 
@@ -311,51 +321,68 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Hour") {
     assert(Hour(Literal.create(null, DateType), UTC_OPT).resolved === false)
     assert(Hour(Literal(ts), UTC_OPT).resolved)
-    checkEvaluation(Hour(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT), 0)
-    checkEvaluation(Hour(Cast(Literal(date), TimestampType, UTC_OPT), UTC_OPT), 13)
+    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+      checkEvaluation(Hour(Cast(Literal(d), dt, UTC_OPT), UTC_OPT), 0)
+      checkEvaluation(Hour(Cast(Literal(date), dt, UTC_OPT), UTC_OPT), 13)
+    }
     checkEvaluation(Hour(Literal(ts), UTC_OPT), 13)
 
     val c = Calendar.getInstance()
     for (zid <- outstandingZoneIds) {
       val timeZoneId = Option(zid.getId)
       c.setTimeZone(TimeZone.getTimeZone(zid))
-      (0 to 24 by 6).foreach { h =>
-        (0 to 60 by 30).foreach { m =>
-          (0 to 60 by 30).foreach { s =>
+      (0 to 24 by 5).foreach { h =>
+        (0 to 60 by 29).foreach { m =>
+          (0 to 60 by 29).foreach { s =>
+            // validate timestamp with local time zone
             c.set(2015, 18, 3, h, m, s)
             checkEvaluation(
               Hour(Literal(new Timestamp(c.getTimeInMillis)), timeZoneId),
               c.get(Calendar.HOUR_OF_DAY))
+
+            // validate timestamp without time zone
+            val localDateTime = LocalDateTime.of(2015, 1, 3, h, m, s)
+            checkEvaluation(Hour(Literal(localDateTime), timeZoneId), h)
           }
         }
       }
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (child: Expression) => Hour(child, timeZoneId), TimestampType)
+      Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (child: Expression) => Hour(child, timeZoneId), dt)
+      }
     }
   }
 
   test("Minute") {
     assert(Minute(Literal.create(null, DateType), UTC_OPT).resolved === false)
     assert(Minute(Literal(ts), UTC_OPT).resolved)
-    checkEvaluation(Minute(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT), 0)
-    checkEvaluation(
-      Minute(Cast(Literal(date), TimestampType, UTC_OPT), UTC_OPT), 10)
+    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+      checkEvaluation(Minute(Cast(Literal(d), dt, UTC_OPT), UTC_OPT), 0)
+      checkEvaluation(Minute(Cast(Literal(date), dt, UTC_OPT), UTC_OPT), 10)
+    }
     checkEvaluation(Minute(Literal(ts), UTC_OPT), 10)
 
     val c = Calendar.getInstance()
     for (zid <- outstandingZoneIds) {
       val timeZoneId = Option(zid.getId)
       c.setTimeZone(TimeZone.getTimeZone(zid))
-      (0 to 60 by 5).foreach { m =>
-        (0 to 60 by 15).foreach { s =>
+      (0 to 59 by 5).foreach { m =>
+        (0 to 59 by 15).foreach { s =>
+          // validate timestamp with local time zone
           c.set(2015, 18, 3, 3, m, s)
           checkEvaluation(
             Minute(Literal(new Timestamp(c.getTimeInMillis)), timeZoneId),
             c.get(Calendar.MINUTE))
+
+          // validate timestamp without time zone
+          val localDateTime = LocalDateTime.of(2015, 1, 3, 3, m, s)
+          checkEvaluation(Minute(Literal(localDateTime), timeZoneId), m)
         }
       }
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (child: Expression) => Minute(child, timeZoneId), TimestampType)
+      Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (child: Expression) => Minute(child, timeZoneId), dt)
+      }
     }
   }
 
@@ -1254,6 +1281,71 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkConsistencyBetweenInterpretedAndCodegen(
           (end: Expression, start: Expression) => SubtractTimestamps(end, start, legacy, Some(tz)),
           TimestampType, TimestampType)
+      }
+    }
+  }
+
+  test("SPARK-35916: timestamps without time zone difference") {
+    val end = LocalDateTime.parse("2019-10-04T11:04:01.123456")
+    val epoch = LocalDateTime.ofEpochSecond(0, 0, java.time.ZoneOffset.UTC)
+
+    outstandingTimezonesIds.foreach { tz =>
+      def sub(left: LocalDateTime, right: LocalDateTime): Expression = {
+        SubtractTimestamps(
+          Literal(left),
+          Literal(right),
+          legacyInterval = true,
+          timeZoneId = Some(tz))
+      }
+      checkEvaluation(sub(end, end), new CalendarInterval(0, 0, 0))
+      checkEvaluation(sub(end, epoch),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "436163 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds")))
+      checkEvaluation(sub(epoch, end),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "-436163 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds")))
+      checkEvaluation(
+        sub(
+          LocalDateTime.parse("9999-12-31T23:59:59.999999"),
+          LocalDateTime.parse("0001-01-01T00:00:00")),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds")))
+    }
+
+    outstandingTimezonesIds.foreach { tz =>
+      def check(left: LocalDateTime, right: LocalDateTime): Unit = {
+        checkEvaluation(
+          SubtractTimestamps(
+            Literal(left),
+            Literal(right),
+            legacyInterval = false,
+            timeZoneId = Some(tz)),
+          Duration.between(
+            right.atZone(getZoneId(tz)).toLocalDateTime,
+            left.atZone(getZoneId(tz)).toLocalDateTime))
+      }
+
+      check(end, end)
+      check(end, epoch)
+      check(epoch, end)
+      check(LocalDateTime.parse("9999-12-31T23:59:59.999999"),
+        LocalDateTime.parse("0001-01-01T00:00:00"))
+
+      val errMsg = intercept[ArithmeticException] {
+        checkEvaluation(
+          SubtractTimestamps(
+            Literal(LocalDateTime.MIN),
+            Literal(LocalDateTime.MAX),
+            legacyInterval = false,
+            timeZoneId = Some(tz)),
+          Duration.ZERO)
+      }.getMessage
+      assert(errMsg.contains("overflow"))
+
+      Seq(false, true).foreach { legacy =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (end: Expression, start: Expression) => SubtractTimestamps(end, start, legacy, Some(tz)),
+          TimestampWithoutTZType, TimestampWithoutTZType)
       }
     }
   }

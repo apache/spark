@@ -31,10 +31,10 @@ import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, CatalogV2Implicits, CatalogV2Util, Identifier, SupportsCatalogOptions, Table, TableCatalog, TableProvider, V1Table}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource, DataSourceUtils, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.PartitionOverwriteMode
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
@@ -234,9 +234,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def save(path: String): Unit = {
     if (!df.sparkSession.sessionState.conf.legacyPathOptionBehavior &&
         extraOptions.contains("path")) {
-      throw new AnalysisException("There is a 'path' option set and save() is called with a path " +
-        "parameter. Either remove the path option, or call save() without the parameter. " +
-        s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
+      throw QueryCompilationErrors.pathOptionNotSetCorrectlyWhenWritingError()
     }
     saveInternal(Some(path))
   }
@@ -250,8 +248,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def saveInternal(path: Option[String]): Unit = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
-      throw new AnalysisException("Hive data source can only be used with tables, you can not " +
-        "write files of Hive data source directly.")
+      throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("write")
     }
 
     assertNotBucketed("save")
@@ -343,9 +340,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
               }
             case _: TableProvider =>
               if (getTable.supports(BATCH_WRITE)) {
-                throw new AnalysisException(s"TableProvider implementation $source cannot be " +
-                    s"written with $createMode mode, please use Append or Overwrite " +
-                    "modes instead.")
+                throw QueryCompilationErrors.writeWithSaveModeUnsupportedBySourceError(
+                  source, createMode.name())
               } else {
                 // Streaming also uses the data source V2 API. So it may be that the data source
                 // implements v2, but has no v2 implementation for batch writes. In that case, we
@@ -422,11 +418,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertNotBucketed("insertInto")
 
     if (partitioningColumns.isDefined) {
-      throw new AnalysisException(
-        "insertInto() can't be used together with partitionBy(). " +
-          "Partition columns have already been defined for the table. " +
-          "It is not necessary to use partitionBy()."
-      )
+      throw QueryCompilationErrors.partitionByDoesNotAllowedWhenUsingInsertIntoError()
     }
 
     val session = df.sparkSession
@@ -443,8 +435,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case AsTableIdentifier(tableIdentifier) =>
         insertInto(tableIdentifier)
       case other =>
-        throw new AnalysisException(
-          s"Couldn't find a catalog to handle the identifier ${other.quoted}.")
+        throw QueryCompilationErrors.cannotFindCatalogToHandleIdentifierError(other.quoted)
     }
   }
 
@@ -493,7 +484,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def getBucketSpec: Option[BucketSpec] = {
     if (sortColumnNames.isDefined && numBuckets.isEmpty) {
-      throw new AnalysisException("sortBy must be used together with bucketBy")
+      throw QueryCompilationErrors.sortByNotUsedWithBucketByError()
     }
 
     numBuckets.map { n =>
@@ -504,16 +495,16 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def assertNotBucketed(operation: String): Unit = {
     if (getBucketSpec.isDefined) {
       if (sortColumnNames.isEmpty) {
-        throw new AnalysisException(s"'$operation' does not support bucketBy right now")
+        throw QueryCompilationErrors.bucketByUnsupportedByOperationError(operation)
       } else {
-        throw new AnalysisException(s"'$operation' does not support bucketBy and sortBy right now")
+        throw QueryCompilationErrors.bucketByAndSortByUnsupportedByOperationError(operation)
       }
     }
   }
 
   private def assertNotPartitioned(operation: String): Unit = {
     if (partitioningColumns.isDefined) {
-      throw new AnalysisException(s"'$operation' does not support partitioning")
+      throw QueryCompilationErrors.operationNotSupportPartitioningError(operation)
     }
   }
 
@@ -574,8 +565,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         saveAsTable(tableIdentifier)
 
       case other =>
-        throw new AnalysisException(
-          s"Couldn't find a catalog to handle the identifier ${other.quoted}.")
+        throw QueryCompilationErrors.cannotFindCatalogToHandleIdentifierError(other.quoted)
     }
   }
 
@@ -647,7 +637,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         // Do nothing
 
       case (true, SaveMode.ErrorIfExists) =>
-        throw new AnalysisException(s"Table $tableIdent already exists.")
+        throw QueryCompilationErrors.tableAlreadyExistsError(tableIdent)
 
       case (true, SaveMode.Overwrite) =>
         // Get all input data source or hive relations of the query.
@@ -660,13 +650,11 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         EliminateSubqueryAliases(tableRelation) match {
           // check if the table is a data source table (the relation is a BaseRelation).
           case LogicalRelation(dest: BaseRelation, _, _, _) if srcRelations.contains(dest) =>
-            throw new AnalysisException(
-              s"Cannot overwrite table $tableName that is also being read from")
+            throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(tableName)
           // check hive table relation when overwrite mode
           case relation: HiveTableRelation
               if srcRelations.contains(relation.tableMeta.identifier) =>
-            throw new AnalysisException(
-              s"Cannot overwrite table $tableName that is also being read from")
+            throw QueryCompilationErrors.cannotOverwriteTableThatIsBeingReadFromError(tableName)
           case _ => // OK
         }
 

@@ -46,8 +46,7 @@ from pandas.api.types import is_datetime64_dtype, is_datetime64tz_dtype, is_list
 from pandas.tseries.offsets import DateOffset
 import pyarrow as pa
 import pyarrow.parquet as pq
-from pyspark import sql as spark
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (
     ByteType,
@@ -66,6 +65,7 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # noqa: F401
+from pyspark.pandas._typing import Axis, Dtype, Label, Name
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.utils import (
     align_diff_frames,
@@ -83,8 +83,8 @@ from pyspark.pandas.internal import (
     HIDDEN_COLUMNS,
 )
 from pyspark.pandas.series import Series, first_series
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.utils import as_nullable_spark_type, force_decimal_precision_scale
-from pyspark.pandas.typedef.typehints import Dtype
 from pyspark.pandas.indexes import Index, DatetimeIndex
 
 
@@ -398,7 +398,7 @@ def read_csv(
             if col not in column_labels:
                 raise KeyError(col)
         index_spark_column_names = [column_labels[col] for col in index_col]
-        index_names = [(col,) for col in index_col]  # type: List[Tuple]
+        index_names = [(col,) for col in index_col]  # type: List[Label]
         column_labels = OrderedDict(
             (label, col) for label, col in column_labels.items() if label not in index_col
         )
@@ -1818,7 +1818,7 @@ def get_dummies(
     prefix: Optional[Union[str, List[str], Dict[str, str]]] = None,
     prefix_sep: str = "_",
     dummy_na: bool = False,
-    columns: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+    columns: Optional[Union[Name, List[Name]]] = None,
     sparse: bool = False,
     drop_first: bool = False,
     dtype: Optional[Union[str, Dtype]] = None,
@@ -2041,7 +2041,7 @@ def get_dummies(
 # TODO: there are many parameters to implement and support. See pandas's pd.concat.
 def concat(
     objs: List[Union[DataFrame, Series]],
-    axis: Union[int, str] = 0,
+    axis: Axis = 0,
     join: str = "outer",
     ignore_index: bool = False,
     sort: bool = False,
@@ -2376,7 +2376,7 @@ def concat(
                 # TODO: NaN and None difference for missing values. pandas seems filling NaN.
                 sdf = psdf._internal.resolved_copy.spark_frame
                 for label in columns_to_add:
-                    sdf = sdf.withColumn(name_like_string(label), F.lit(None))
+                    sdf = sdf.withColumn(name_like_string(label), SF.lit(None))
 
                 data_columns = psdf._internal.data_spark_column_names + [
                     name_like_string(label) for label in columns_to_add
@@ -2443,8 +2443,8 @@ def concat(
 
 def melt(
     frame: DataFrame,
-    id_vars: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
-    value_vars: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+    id_vars: Optional[Union[Name, List[Name]]] = None,
+    value_vars: Optional[Union[Name, List[Name]]] = None,
     var_name: Optional[Union[str, List[str]]] = None,
     value_name: str = "value",
 ) -> DataFrame:
@@ -2616,9 +2616,9 @@ def merge(
     obj: DataFrame,
     right: DataFrame,
     how: str = "inner",
-    on: Union[Any, List[Any], Tuple, List[Tuple]] = None,
-    left_on: Union[Any, List[Any], Tuple, List[Tuple]] = None,
-    right_on: Union[Any, List[Any], Tuple, List[Tuple]] = None,
+    on: Optional[Union[Name, List[Name]]] = None,
+    left_on: Optional[Union[Name, List[Name]]] = None,
+    right_on: Optional[Union[Name, List[Name]]] = None,
     left_index: bool = False,
     right_index: bool = False,
     suffixes: Tuple[str, str] = ("_x", "_y"),
@@ -2918,8 +2918,8 @@ def read_orc(
 
 
 def _get_index_map(
-    sdf: spark.DataFrame, index_col: Optional[Union[str, List[str]]] = None
-) -> Tuple[Optional[List[spark.Column]], Optional[List[Tuple]]]:
+    sdf: SparkDataFrame, index_col: Optional[Union[str, List[str]]] = None
+) -> Tuple[Optional[List[Column]], Optional[List[Label]]]:
     if index_col is not None:
         if isinstance(index_col, str):
             index_col = [index_col]
@@ -2929,8 +2929,8 @@ def _get_index_map(
                 raise KeyError(col)
         index_spark_columns = [
             scol_for(sdf, col) for col in index_col
-        ]  # type: Optional[List[spark.Column]]
-        index_names = [(col,) for col in index_col]  # type: Optional[List[Tuple]]
+        ]  # type: Optional[List[Column]]
+        index_names = [(col,) for col in index_col]  # type: Optional[List[Label]]
     else:
         index_spark_columns = None
         index_names = None

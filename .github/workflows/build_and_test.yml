@@ -414,8 +414,14 @@ jobs:
         cd docs
         bundle exec jekyll build
 
-  java-11:
-    name: Java 11 build with Maven
+  java-11-17:
+    name: Java ${{ matrix.java }} build with Maven
+    strategy:
+      fail-fast: false
+      matrix:
+        java:
+          - 11
+          - 17-ea
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
@@ -446,19 +452,20 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/.m2/repository
-        key: java11-maven-${{ hashFiles('**/pom.xml') }}
+        key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
-          java11-maven-
-    - name: Install Java 11
+          java${{ matrix.java }}-maven-
+    - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v1
       with:
-        java-version: 11
+        java-version: ${{ matrix.java }}
     - name: Build with Maven
       run: |
         export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
+        export JAVA_VERSION=${{ matrix.java }}
         # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=11 install
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
         rm -rf ~/.m2/repository/org/apache/spark
 
   scala-213:

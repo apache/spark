@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, BoundFunction, ScalarFunction}
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
@@ -183,7 +183,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         analyzed
       } catch {
         case e: AnalysisException =>
-          val ae = new AnalysisException(e.message, e.line, e.startPosition, Option(analyzed))
+          val ae = e.copy(plan = Option(analyzed))
           ae.setStackTrace(e.getStackTrace)
           throw ae
       }
@@ -261,7 +261,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveReferences ::
-      ResolveCreateNamedStruct ::
+      ResolveExpressionsWithNamePlaceholders ::
       ResolveDeserializer ::
       ResolveNewInstance ::
       ResolveUpCast ::
@@ -299,7 +299,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),
-    Batch("Normalize Alter Table Field Names", Once, ResolveFieldNames),
+    Batch("Normalize Alter Table Commands", Once, ResolveAlterTableCommands),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints),
@@ -386,8 +386,8 @@ class Analyzer(override val catalogManager: CatalogManager)
             DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r, f), ansiEnabled = f))
           case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
             Cast(DatetimeSub(l, r, TimeAdd(l, UnaryMinus(r, f))), l.dataType)
-          case (TimestampType, _) => SubtractTimestamps(l, r)
-          case (_, TimestampType) => SubtractTimestamps(l, r)
+          case _ if AnyTimestampType.unapply(l) || AnyTimestampType.unapply(r) =>
+            SubtractTimestamps(l, r)
           case (_, DateType) => SubtractDates(l, r)
           case (DateType, dt) if dt != StringType => DateSub(l, r)
           case _ => s
@@ -3527,13 +3527,35 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Rule to mostly resolve, normalize and rewrite column names based on case sensitivity
    * for alter table commands.
    */
-  object ResolveFieldNames extends Rule[LogicalPlan] {
+  object ResolveAlterTableCommands extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
       case a: AlterTableCommand if a.table.resolved =>
-        a.transformExpressions {
+        val table = a.table.asInstanceOf[ResolvedTable]
+        val transformed = a.transformExpressions {
           case u: UnresolvedFieldName =>
-            val table = a.table.asInstanceOf[ResolvedTable]
-            resolveFieldNames(table.schema, u.name).map(ResolvedFieldName(_)).getOrElse(u)
+            resolveFieldNames(table.schema, u.name).getOrElse(u)
+          case u: UnresolvedFieldPosition => u.position match {
+            case after: After =>
+              resolveFieldNames(table.schema, u.fieldName.init :+ after.column())
+                .map { resolved =>
+                  ResolvedFieldPosition(ColumnPosition.after(resolved.field.name))
+                }.getOrElse(u)
+            case _ => ResolvedFieldPosition(u.position)
+          }
+        }
+
+        transformed match {
+          case alter @ AlterTableAlterColumn(
+              _: ResolvedTable, ResolvedFieldName(_, field), Some(dataType), _, _, _) =>
+            // Hive style syntax provides the column type, even if it may not have changed.
+            val dt = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
+            if (dt == dataType) {
+              // The user didn't want the field to change, so remove this change.
+              alter.copy(dataType = None)
+            } else {
+              alter
+            }
+          case other => other
         }
     }
 
@@ -3543,10 +3565,10 @@ class Analyzer(override val catalogManager: CatalogManager)
      */
     private def resolveFieldNames(
         schema: StructType,
-        fieldNames: Seq[String]): Option[Seq[String]] = {
+        fieldNames: Seq[String]): Option[ResolvedFieldName] = {
       val fieldOpt = schema.findNestedField(
         fieldNames, includeCollections = true, conf.resolver)
-      fieldOpt.map { case (path, field) => path :+ field.name }
+      fieldOpt.map { case (path, field) => ResolvedFieldName(path, field) }
     }
   }
 
@@ -3597,68 +3619,6 @@ class Analyzer(override val catalogManager: CatalogManager)
               // Adding to the root. Just need to normalize position
               Some(addColumn(schema, "root", Nil))
             }
-
-          case typeChange: UpdateColumnType =>
-            // Hive style syntax provides the column type, even if it may not have changed
-            val fieldOpt = schema.findNestedField(
-              typeChange.fieldNames(), includeCollections = true, conf.resolver)
-
-            if (fieldOpt.isEmpty) {
-              // We couldn't resolve the field. Leave it to CheckAnalysis
-              Some(typeChange)
-            } else {
-              val (fieldNames, field) = fieldOpt.get
-              val dt = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
-              if (dt == typeChange.newDataType()) {
-                // The user didn't want the field to change, so remove this change
-                None
-              } else {
-                Some(TableChange.updateColumnType(
-                  (fieldNames :+ field.name).toArray, typeChange.newDataType()))
-              }
-            }
-          case n: UpdateColumnNullability =>
-            // Need to resolve column
-            resolveFieldNames(
-              schema,
-              n.fieldNames(),
-              TableChange.updateColumnNullability(_, n.nullable())).orElse(Some(n))
-
-          case position: UpdateColumnPosition =>
-            position.position() match {
-              case after: After =>
-                // Need to resolve column as well as position reference
-                val fieldOpt = schema.findNestedField(
-                  position.fieldNames(), includeCollections = true, conf.resolver)
-
-                if (fieldOpt.isEmpty) {
-                  Some(position)
-                } else {
-                  val (normalizedPath, field) = fieldOpt.get
-                  val targetCol = schema.findNestedField(
-                    normalizedPath :+ after.column(), includeCollections = true, conf.resolver)
-                  if (targetCol.isEmpty) {
-                    // Leave unchanged to CheckAnalysis
-                    Some(position)
-                  } else {
-                    Some(TableChange.updateColumnPosition(
-                      (normalizedPath :+ field.name).toArray,
-                      ColumnPosition.after(targetCol.get._2.name)))
-                  }
-                }
-              case _ =>
-                // Need to resolve column
-                resolveFieldNames(
-                  schema,
-                  position.fieldNames(),
-                  TableChange.updateColumnPosition(_, position.position())).orElse(Some(position))
-            }
-
-          case comment: UpdateColumnComment =>
-            resolveFieldNames(
-              schema,
-              comment.fieldNames(),
-              TableChange.updateColumnComment(_, comment.newComment())).orElse(Some(comment))
 
           case delete: DeleteColumn =>
             resolveFieldNames(schema, delete.fieldNames(), TableChange.deleteColumn)
@@ -3921,11 +3881,19 @@ object TimeWindowing extends Rule[LogicalPlan] {
 }
 
 /**
- * Resolve a [[CreateNamedStruct]] if it contains [[NamePlaceholder]]s.
+ * Resolve expressions if they contains [[NamePlaceholder]]s.
  */
-object ResolveCreateNamedStruct extends Rule[LogicalPlan] {
+object ResolveExpressionsWithNamePlaceholders extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsWithPruning(
-    _.containsPattern(CREATE_NAMED_STRUCT), ruleId) {
+    _.containsAnyPattern(ARRAYS_ZIP, CREATE_NAMED_STRUCT), ruleId) {
+    case e: ArraysZip if !e.resolved =>
+      val names = e.children.zip(e.names).map {
+        case (e: NamedExpression, NamePlaceholder) if e.resolved =>
+          Literal(e.name)
+        case (_, other) => other
+      }
+      ArraysZip(e.children, names)
+
     case e: CreateNamedStruct if !e.resolved =>
       val children = e.children.grouped(2).flatMap {
         case Seq(NamePlaceholder, e: NamedExpression) if e.resolved =>

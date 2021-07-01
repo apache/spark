@@ -911,11 +911,6 @@ object CollapseRepartition extends Rule[LogicalPlan] {
     // we can remove the child.
     case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
       r.copy(child = child.child)
-
-    // Case 3: When a RebalancePartitions has a child of Repartition or RepartitionByExpression
-    // we can remove the child.
-    case r @ RebalancePartitions(_, child: RepartitionOperation) =>
-      r.copy(child = child.child)
   }
 }
 
@@ -1202,14 +1197,15 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  * Removes Sort operations if they don't affect the final output ordering.
  * Note that changes in the final output ordering may affect the file size (SPARK-32318).
  * This rule handles the following cases:
- * 1) if the sort order is empty or the sort order does not have any reference
- * 2) if the Sort operator is a local sort and the child is already sorted
- * 3) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
+ * 1) if the child maximum number of rows less than or equal to 1
+ * 2) if the sort order is empty or the sort order does not have any reference
+ * 3) if the Sort operator is a local sort and the child is already sorted
+ * 4) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression (with deterministic expressions) operators
- * 4) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
+ * 5) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression (with deterministic expressions) operators only and the Join condition
  *    is deterministic
- * 5) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
+ * 6) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression (with deterministic expressions) operators only and the aggregate
  *    function is order irrelevant
  */
@@ -1218,6 +1214,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
     _.containsPattern(SORT))(applyLocally)
 
   private val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
+    case Sort(_, _, child) if child.maxRows.exists(_ <= 1L) => child
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) {
