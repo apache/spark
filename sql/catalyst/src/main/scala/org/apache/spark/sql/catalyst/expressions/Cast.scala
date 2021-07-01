@@ -1193,7 +1193,7 @@ abstract class CastBase extends CastToStringBase {
   override def genCode(ctx: CodegenContext): ExprCode = {
     // If the cast does not change the structure, then we don't really need to cast anything.
     // We can return what the children return. Same thing should happen in the interpreted path.
-    if (DataType.equalsStructurally(child.dataType, dataType)) {
+    if (DataType.equalsStructurally(child.dataType, dataType) && !toHiveString) {
       child.genCode(ctx)
     } else {
       super.genCode(ctx)

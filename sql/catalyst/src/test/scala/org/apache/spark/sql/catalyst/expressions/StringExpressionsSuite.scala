@@ -1027,6 +1027,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-35228: Add ToPrettyString for keep consistent between hive/spark string format") {
     Seq(
+      Literal.create("aaa", StringType) -> "aaa",
       Literal.create(true, BooleanType) -> "true",
       Literal.create(Date.valueOf("2020-01-01")) -> "2020-01-01",
       Literal.create(Timestamp.valueOf("2020-01-01 00:00:00.000"), TimestampType) ->
@@ -1049,8 +1050,8 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           StructField("c2", DoubleType) ::
           StructField("c3", FloatType) :: Nil)) -> "{\"c1\":1,\"c2\":2.0,\"c3\":3.0}")
       .foreach { case (literal: Literal, result: String) =>
-        val expr = ToHiveString(literal, Option(SQLConf.get.sessionLocalTimeZone))
-        checkEvaluation(expr, result)
+        val expression = ToHiveString(literal, Option(SQLConf.get.sessionLocalTimeZone))
+        checkEvaluation(expression, result)
       }
   }
 }

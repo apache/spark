@@ -45,7 +45,7 @@ object HiveResult {
   }
 
   private def stripRootCommandResult(executedPlan: SparkPlan): SparkPlan = executedPlan match {
-    case ProjectExec(_, CommandResultExec(_, plan, _)) => plan
+    case CommandResultExec(_, plan, _) => plan
     case other => other
   }
 

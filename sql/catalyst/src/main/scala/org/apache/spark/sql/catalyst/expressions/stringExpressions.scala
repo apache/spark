@@ -2660,6 +2660,32 @@ case class ToHiveString(child: Expression, timeZoneId: Option[String] = None)
 
   override def toHiveString: Boolean = true
 
+  override def eval(input: InternalRow): Any = {
+    val value = child.eval(input)
+    if (value == null) {
+      UTF8String.fromString("NULL")
+    } else {
+      nullSafeEval(value)
+    }
+  }
+
+  // Since we need to cast input expressions recursively inside ComplexTypes, such as Map's
+  // Key and Value, Struct's field, we need to name out all the variable names involved in a cast.
+  override def castCode(ctx: CodegenContext, input: ExprValue, inputIsNull: ExprValue,
+    result: ExprValue, resultIsNull: ExprValue, resultType: DataType, cast: CastFunction): Block = {
+    val javaType = JavaCode.javaType(resultType)
+    code"""
+      boolean $resultIsNull = $inputIsNull;
+      $javaType $result = ${CodeGenerator.defaultValue(resultType)};
+      if (!$inputIsNull) {
+        ${cast(input, result, resultIsNull)}
+      } else if ($toHiveString) {
+        $resultIsNull = false; // avoid just set null to final InternalRow.
+        $result = UTF8String.fromString(\"NULL\");
+      }
+    """
+  }
+
   override def prettyName: String = "to_hive_string"
 
   override protected def withNewChildInternal(newChild: Expression): ToHiveString =
