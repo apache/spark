@@ -36,7 +36,6 @@ from typing import (
     Sequence,
     Tuple,
     Type,
-    TypeVar,
     Union,
     cast,
     no_type_check,
@@ -68,6 +67,7 @@ from pyspark.sql.types import (
 from pyspark.sql.window import Window
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import Axis, Dtype, Label, Name, Scalar, T
 from pyspark.pandas.accessors import PandasOnSparkSeriesMethods
 from pyspark.pandas.categorical import CategoricalAccessor
 from pyspark.pandas.config import get_option
@@ -101,18 +101,19 @@ from pyspark.pandas.utils import (
     SPARK_CONF_ARROW_ENABLED,
 )
 from pyspark.pandas.datetimes import DatetimeMethods
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.spark.accessors import SparkSeriesMethods
 from pyspark.pandas.strings import StringMethods
 from pyspark.pandas.typedef import (
     infer_return_type,
     spark_type_to_pandas_dtype,
-    Dtype,
     ScalarType,
-    Scalar,
     SeriesType,
 )
 
 if TYPE_CHECKING:
+    from pyspark.sql._typing import ColumnOrName  # noqa: F401 (SPARK-34943)
+
     from pyspark.pandas.groupby import SeriesGroupBy  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
 
@@ -338,8 +339,6 @@ d    NaN
 dtype: float64
 """
 
-T = TypeVar("T")
-
 # Needed to disambiguate Series.str and str type
 str_type = str
 
@@ -411,7 +410,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             assert not fastpath
 
             self._anchor = data  # type: DataFrame
-            self._col_label = index  # type: Tuple
+            self._col_label = index  # type: Label
         else:
             if isinstance(data, pd.Series):
                 assert index is None
@@ -442,7 +441,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return self._psdf._internal.select_column(self._column_label)
 
     @property
-    def _column_label(self) -> Optional[Tuple]:
+    def _column_label(self) -> Optional[Label]:
         return self._col_label
 
     def _update_anchor(self, psdf: DataFrame) -> None:
@@ -1018,21 +1017,21 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         if isinstance(arg, dict):
             is_start = True
             # In case dictionary is empty.
-            current = F.when(F.lit(False), F.lit(None).cast(self.spark.data_type))
+            current = F.when(SF.lit(False), SF.lit(None).cast(self.spark.data_type))
 
             for to_replace, value in arg.items():
                 if is_start:
-                    current = F.when(self.spark.column == F.lit(to_replace), value)
+                    current = F.when(self.spark.column == SF.lit(to_replace), value)
                     is_start = False
                 else:
-                    current = current.when(self.spark.column == F.lit(to_replace), value)
+                    current = current.when(self.spark.column == SF.lit(to_replace), value)
 
             if hasattr(arg, "__missing__"):
                 tmp_val = arg[np._NoValue]
                 del arg[np._NoValue]  # Remove in case it's set in defaultdict.
-                current = current.otherwise(F.lit(tmp_val))
+                current = current.otherwise(SF.lit(tmp_val))
             else:
-                current = current.otherwise(F.lit(None).cast(self.spark.data_type))
+                current = current.otherwise(SF.lit(None).cast(self.spark.data_type))
             return self._with_new_scol(current)
         else:
             return self.apply(arg)
@@ -1043,7 +1042,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         return (len(self),)
 
     @property
-    def name(self) -> Union[Any, Tuple]:
+    def name(self) -> Name:
         """Return name of the Series."""
         name = self._column_label
         if name is not None and len(name) == 1:
@@ -1052,12 +1051,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return name
 
     @name.setter
-    def name(self, name: Union[Any, Tuple]) -> None:
+    def name(self, name: Name) -> None:
         self.rename(name, inplace=True)
 
     # TODO: Functionality and documentation should be matched. Currently, changing index labels
     # taking dictionary and function to change index are not supported.
-    def rename(self, index: Optional[Union[Any, Tuple]] = None, **kwargs: Any) -> "Series":
+    def rename(self, index: Optional[Name] = None, **kwargs: Any) -> "Series":
         """
         Alter Series name.
 
@@ -1228,9 +1227,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def reset_index(
         self,
-        level: Optional[Union[int, Any, Tuple, Sequence[Union[int, Any, Tuple]]]] = None,
+        level: Optional[Union[int, Name, Sequence[Union[int, Name]]]] = None,
         drop: bool = False,
-        name: Optional[Union[Any, Tuple]] = None,
+        name: Optional[Name] = None,
         inplace: bool = False,
     ) -> Optional[Union["Series", DataFrame]]:
         """
@@ -1325,7 +1324,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return psdf
 
-    def to_frame(self, name: Optional[Union[Any, Tuple]] = None) -> DataFrame:
+    def to_frame(self, name: Optional[Name] = None) -> DataFrame:
         """
         Convert Series to DataFrame.
 
@@ -1492,13 +1491,13 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     def to_latex(
         self,
         buf: Optional[IO[str]] = None,
-        columns: Optional[List[Union[Any, Tuple]]] = None,
+        columns: Optional[List[Name]] = None,
         col_space: Optional[int] = None,
         header: bool = True,
         index: bool = True,
         na_rep: str = "NaN",
         formatters: Optional[
-            Union[List[Callable[[Any], str]], Dict[Union[Any, Tuple], Callable[[Any], str]]]
+            Union[List[Callable[[Any], str]], Dict[Name, Callable[[Any], str]]]
         ] = None,
         float_format: Optional[Callable[[float], str]] = None,
         sparsify: Optional[bool] = None,
@@ -1804,7 +1803,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self,
         value: Optional[Any] = None,
         method: Optional[str] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         inplace: bool = False,
         limit: Optional[int] = None,
     ) -> Optional["Series"]:
@@ -1900,9 +1899,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self,
         value: Optional[Any] = None,
         method: Optional[str] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         limit: Optional[int] = None,
-        part_cols: Sequence[Union[str, Column]] = (),
+        part_cols: Sequence["ColumnOrName"] = (),
     ) -> "Series":
         axis = validate_axis(axis)
         if axis != 0:
@@ -1956,9 +1955,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
         )._psser_for(self._column_label)
 
-    def dropna(
-        self, axis: Union[int, str] = 0, inplace: bool = False, **kwargs: Any
-    ) -> Optional["Series"]:
+    def dropna(self, axis: Axis = 0, inplace: bool = False, **kwargs: Any) -> Optional["Series"]:
         """
         Return a new Series with missing values removed.
 
@@ -2065,8 +2062,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def drop(
         self,
-        labels: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
-        index: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+        labels: Optional[Union[Name, List[Name]]] = None,
+        index: Optional[Union[Name, List[Name]]] = None,
         level: Optional[int] = None,
     ) -> "Series":
         """
@@ -2180,8 +2177,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def _drop(
         self,
-        labels: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
-        index: Optional[Union[Any, Tuple, List[Union[Any, Tuple]]]] = None,
+        labels: Optional[Union[Name, List[Name]]] = None,
+        index: Optional[Union[Name, List[Name]]] = None,
         level: Optional[int] = None,
     ) -> DataFrame:
         if labels is not None:
@@ -2196,7 +2193,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 raise ValueError("'level' should be less than the number of indexes")
 
             if is_name_like_tuple(index):  # type: ignore
-                index_list = [cast(Tuple, index)]
+                index_list = [cast(Label, index)]
             elif is_name_like_value(index):
                 index_list = [(index,)]
             elif all(is_name_like_value(idxes, allow_tuple=False) for idxes in index):
@@ -2208,7 +2205,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     "that contain index names"
                 )
             else:
-                index_list = cast(List[Tuple], index)
+                index_list = cast(List[Label], index)
 
             drop_index_scols = []
             for idxes in index_list:
@@ -2511,7 +2508,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def sort_index(
         self,
-        axis: int = 0,
+        axis: Axis = 0,
         level: Optional[Union[int, List[int]]] = None,
         ascending: bool = True,
         inplace: bool = False,
@@ -2605,7 +2602,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return first_series(psdf)
 
     def swaplevel(
-        self, i: Union[int, Any, Tuple] = -2, j: Union[int, Any, Tuple] = -1, copy: bool = True
+        self, i: Union[int, Name] = -2, j: Union[int, Name] = -1, copy: bool = True
     ) -> "Series":
         """
         Swap levels i and j in a MultiIndex.
@@ -2656,7 +2653,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         return first_series(self.to_frame().swaplevel(i, j, axis=0)).rename(self.name)
 
-    def swapaxes(self, i: Union[str, int], j: Union[str, int], copy: bool = True) -> "Series":
+    def swapaxes(self, i: Axis, j: Axis, copy: bool = True) -> "Series":
         """
         Interchange axes and swap values axes appropriately.
 
@@ -2738,7 +2735,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         internal = self._internal.resolved_copy
         sdf = internal.spark_frame.select(
             [
-                F.concat(F.lit(prefix), index_spark_column).alias(index_spark_column_name)
+                F.concat(SF.lit(prefix), index_spark_column).alias(index_spark_column_name)
                 for index_spark_column, index_spark_column_name in zip(
                     internal.index_spark_columns, internal.index_spark_column_names
                 )
@@ -2793,7 +2790,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         internal = self._internal.resolved_copy
         sdf = internal.spark_frame.select(
             [
-                F.concat(index_spark_column, F.lit(suffix)).alias(index_spark_column_name)
+                F.concat(index_spark_column, SF.lit(suffix)).alias(index_spark_column_name)
                 for index_spark_column, index_spark_column_name in zip(
                     internal.index_spark_columns, internal.index_spark_column_names
                 )
@@ -3254,11 +3251,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
     T = property(transpose)
 
     def transform(
-        self,
-        func: Union[Callable, List[Callable]],
-        axis: Union[int, str] = 0,
-        *args: Any,
-        **kwargs: Any
+        self, func: Union[Callable, List[Callable]], axis: Axis = 0, *args: Any, **kwargs: Any
     ) -> Union["Series", DataFrame]:
         """
         Call ``func`` producing the same type as `self` with transformed values
@@ -3549,7 +3542,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         method: str = "average",
         ascending: bool = True,
         *,
-        part_cols: Sequence[Union[str, Column]] = ()
+        part_cols: Sequence["ColumnOrName"] = ()
     ) -> "Series":
         if method not in ["average", "min", "max", "first", "dense"]:
             msg = "method must be one of 'average', 'min', 'max', 'first', 'dense'"
@@ -3604,7 +3597,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         items: Optional[Sequence[Any]] = None,
         like: Optional[str] = None,
         regex: Optional[str] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
     ) -> "Series":
         axis = validate_axis(axis)
         if axis == 1:
@@ -3688,7 +3681,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self._diff(periods).spark.analyzed
 
-    def _diff(self, periods: int, *, part_cols: Sequence[Union[str, Column]] = ()) -> "Series":
+    def _diff(self, periods: int, *, part_cols: Sequence["ColumnOrName"] = ()) -> "Series":
         if not isinstance(periods, int):
             raise TypeError("periods should be an int; however, got [%s]" % type(periods).__name__)
         window = (
@@ -3910,7 +3903,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         else:
             return tuple(values)
 
-    def pop(self, item: Union[Any, Tuple]) -> Union["Series", Scalar]:
+    def pop(self, item: Name) -> Union["Series", Scalar]:
         """
         Return item and drop from series.
 
@@ -4061,7 +4054,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 return pdf[internal.data_spark_column_names[0]].iloc[0]
 
             item_string = name_like_string(item)
-            sdf = sdf.withColumn(SPARK_DEFAULT_INDEX_NAME, F.lit(str(item_string)))
+            sdf = sdf.withColumn(SPARK_DEFAULT_INDEX_NAME, SF.lit(str(item_string)))
             internal = InternalFrame(
                 spark_frame=sdf,
                 index_spark_columns=[scol_for(sdf, SPARK_DEFAULT_INDEX_NAME)],
@@ -4406,7 +4399,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                     cond = (
                         (F.isnan(self.spark.column) | self.spark.column.isNull())
                         if pd.isna(to_replace_)
-                        else (self.spark.column == F.lit(to_replace_))
+                        else (self.spark.column == SF.lit(to_replace_))
                     )
                     if is_start:
                         current = F.when(cond, value)
@@ -4678,7 +4671,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self.where(cast(Series, ~cond), other)
 
-    def xs(self, key: Union[Any, Tuple], level: Optional[int] = None) -> "Series":
+    def xs(self, key: Name, level: Optional[int] = None) -> "Series":
         """
         Return cross-section from the Series.
 
@@ -5070,7 +5063,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
             psdf = self._psdf[[self.name]]
             if repeats == 0:
-                return first_series(DataFrame(psdf._internal.with_filter(F.lit(False))))
+                return first_series(DataFrame(psdf._internal.with_filter(SF.lit(False))))
             else:
                 return first_series(ps.concat([psdf] * repeats))
 
@@ -5148,7 +5141,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         index_scol = self._internal.index_spark_columns[0]
         index_type = self._internal.spark_type_for(index_scol)
         cond = [
-            F.max(F.when(index_scol <= F.lit(index).cast(index_type), self.spark.column))
+            F.max(F.when(index_scol <= SF.lit(index).cast(index_type), self.spark.column))
             for index in where
         ]
         sdf = self._internal.spark_frame.select(cond)
@@ -5285,7 +5278,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         """
         return self.head(2)._to_internal_pandas().item()
 
-    def iteritems(self) -> Iterable[Tuple[Union[Any, Tuple], Any]]:
+    def iteritems(self) -> Iterable[Tuple[Name, Any]]:
         """
         Lazily iterate over (index, value) tuples.
 
@@ -5318,7 +5311,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         internal_index_columns = self._internal.index_spark_column_names
         internal_data_column = self._internal.data_spark_column_names[0]
 
-        def extract_kv_from_spark_row(row: Row) -> Tuple[Union[Any, Tuple], Any]:
+        def extract_kv_from_spark_row(row: Row) -> Tuple[Name, Any]:
             k = (
                 row[internal_index_columns[0]]
                 if len(internal_index_columns) == 1
@@ -5332,11 +5325,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ):
             yield k, v
 
-    def items(self) -> Iterable[Tuple[Union[Any, Tuple], Any]]:
+    def items(self) -> Iterable[Tuple[Name, Any]]:
         """This is an alias of ``iteritems``."""
         return self.iteritems()
 
-    def droplevel(self, level: Union[int, Any, Tuple, List[Union[int, Any, Tuple]]]) -> "Series":
+    def droplevel(self, level: Union[int, Name, List[Union[int, Name]]]) -> "Series":
         """
         Return Series with requested index level(s) removed.
 
@@ -5585,7 +5578,8 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         psser = first_series(DataFrame(internal))
 
         return cast(
-            Series, ps.concat([psser, self.loc[self.isnull()].spark.transform(lambda _: F.lit(-1))])
+            Series,
+            ps.concat([psser, self.loc[self.isnull()].spark.transform(lambda _: SF.lit(-1))]),
         )
 
     def argmax(self) -> int:
@@ -5814,7 +5808,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self,
         other: Union[DataFrame, "Series"],
         join: str = "outer",
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         copy: bool = True,
     ) -> Tuple["Series", Union[DataFrame, "Series"]]:
         """
@@ -5910,7 +5904,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         end_time: Union[datetime.time, str],
         include_start: bool = True,
         include_end: bool = True,
-        axis: Union[int, str] = 0,
+        axis: Axis = 0,
     ) -> "Series":
         """
         Select values between particular times of the day (example: 9:00-9:30 AM).
@@ -5969,7 +5963,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ).rename(self.name)
 
     def at_time(
-        self, time: Union[datetime.time, str], asof: bool = False, axis: Union[int, str] = 0
+        self, time: Union[datetime.time, str], asof: bool = False, axis: Axis = 0
     ) -> "Series":
         """
         Select values at particular time of day (example: 9:30AM).
@@ -6016,7 +6010,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self,
         func: Callable[[Column], Column],
         skipna: bool,
-        part_cols: Sequence[Union[str, Column]] = (),
+        part_cols: Sequence["ColumnOrName"] = (),
         ascending: bool = True,
     ) -> "Series":
         # This is used to cummin, cummax, cumsum, etc.
@@ -6064,7 +6058,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             scol = F.when(
                 # Manually sets nulls given the column defined above.
                 self.spark.column.isNull(),
-                F.lit(None),
+                SF.lit(None),
             ).otherwise(func(self.spark.column).over(window))
         else:
             # Here, we use two Windows.
@@ -6100,12 +6094,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 # By going through with max, it sets True after the first time it meets null.
                 F.max(self.spark.column.isNull()).over(window),
                 # Manually sets nulls given the column defined above.
-                F.lit(None),
+                SF.lit(None),
             ).otherwise(func(self.spark.column).over(window))
 
         return self._with_new_scol(scol)
 
-    def _cumsum(self, skipna: bool, part_cols: Sequence[Union[str, Column]] = ()) -> "Series":
+    def _cumsum(self, skipna: bool, part_cols: Sequence["ColumnOrName"] = ()) -> "Series":
         psser = self
         if isinstance(psser.spark.data_type, BooleanType):
             psser = psser.spark.transform(lambda scol: scol.cast(LongType()))
@@ -6118,10 +6112,10 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             )
         return psser._cum(F.sum, skipna, part_cols)
 
-    def _cumprod(self, skipna: bool, part_cols: Sequence[Union[str, Column]] = ()) -> "Series":
+    def _cumprod(self, skipna: bool, part_cols: Sequence["ColumnOrName"] = ()) -> "Series":
         if isinstance(self.spark.data_type, BooleanType):
             scol = self._cum(
-                lambda scol: F.min(F.coalesce(scol, F.lit(True))), skipna, part_cols
+                lambda scol: F.min(F.coalesce(scol, SF.lit(True))), skipna, part_cols
             ).spark.column.cast(LongType())
         elif isinstance(self.spark.data_type, NumericType):
             num_zeros = self._cum(
@@ -6178,7 +6172,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         self,
         sfun: Union[Callable[[Column], Column], Callable[[Column, DataType], Column]],
         name: str_type,
-        axis: Optional[Union[int, str_type]] = None,
+        axis: Optional[Axis] = None,
         numeric_only: bool = True,
         **kwargs: Any
     ) -> Scalar:
@@ -6216,8 +6210,22 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         result = unpack_scalar(self._internal.spark_frame.select(scol))
         return result if result is not None else np.nan
 
+    # Override the `groupby` to specify the actual return type annotation.
+    def groupby(
+        self,
+        by: Union[Name, "Series", List[Union[Name, "Series"]]],
+        axis: Axis = 0,
+        as_index: bool = True,
+        dropna: bool = True,
+    ) -> "SeriesGroupBy":
+        return cast(
+            "SeriesGroupBy", super().groupby(by=by, axis=axis, as_index=as_index, dropna=dropna)
+        )
+
+    groupby.__doc__ = Frame.groupby.__doc__
+
     def _build_groupby(
-        self, by: List[Union["Series", Tuple]], as_index: bool, dropna: bool
+        self, by: List[Union["Series", Label]], as_index: bool, dropna: bool
     ) -> "SeriesGroupBy":
         from pyspark.pandas.groupby import SeriesGroupBy
 
@@ -6323,7 +6331,7 @@ def unpack_scalar(sdf: SparkDataFrame) -> Any:
 
 
 @overload
-def first_series(df: DataFrame) -> "Series":
+def first_series(df: DataFrame) -> Series:
     ...
 
 
@@ -6332,7 +6340,7 @@ def first_series(df: pd.DataFrame) -> pd.Series:
     ...
 
 
-def first_series(df: Union[DataFrame, pd.DataFrame]) -> Union["Series", pd.Series]:
+def first_series(df: Union[DataFrame, pd.DataFrame]) -> Union[Series, pd.Series]:
     """
     Takes a DataFrame and returns the first column of the DataFrame as a Series
     """

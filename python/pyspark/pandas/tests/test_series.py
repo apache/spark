@@ -433,6 +433,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.isin(np.array(["cow", "lama"])), pser.isin(np.array(["cow", "lama"])))
         self.assert_eq(psser.isin({"cow"}), pser.isin({"cow"}))
 
+        pser = pd.Series([np.int64(1), np.int32(1), 1])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin([np.int64(1)]), pser.isin([np.int64(1)]))
+
         msg = "only list-like objects are allowed to be passed to isin()"
         with self.assertRaisesRegex(TypeError, msg):
             psser.isin(1)

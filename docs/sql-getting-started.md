@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -41,7 +41,7 @@ The entry point into all functionality in Spark is the [`SparkSession`](api/java
 
 <div data-lang="python"  markdown="1">
 
-The entry point into all functionality in Spark is the [`SparkSession`](api/python/pyspark.sql.html#pyspark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.builder`:
+The entry point into all functionality in Spark is the [`SparkSession`](api/python/reference/api/pyspark.sql.SparkSession.html) class. To create a basic `SparkSession`, just use `SparkSession.builder`:
 
 {% include_example init_session python/sql/basic.py %}
 </div>
@@ -104,7 +104,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 
 ## Untyped Dataset Operations (aka DataFrame Operations)
 
-DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/org/apache/spark/sql/Dataset.html), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html), [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame) and [R](api/R/SparkDataFrame.html).
+DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/org/apache/spark/sql/Dataset.html), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html), [Python](api/python/reference/api/pyspark.sql.DataFrame.html) and [R](api/R/SparkDataFrame.html).
 
 As mentioned above, in Spark 2.0, DataFrames are just Dataset of `Row`s in Scala and Java API. These operations are also referred as "untyped transformations" in contrast to "typed transformations" come with strongly typed Scala/Java Datasets.
 
@@ -136,9 +136,9 @@ latter form, which is future proof and won't break with column names that
 are also attributes on the DataFrame class.
 
 {% include_example untyped_ops python/sql/basic.py %}
-For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/python/pyspark.sql.html#pyspark.sql.DataFrame).
+For a complete list of the types of operations that can be performed on a DataFrame refer to the [API Documentation](api/python/reference/pyspark.sql.html#dataframe-apis).
 
-In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/python/pyspark.sql.html#module-pyspark.sql.functions).
+In addition to simple column references and expressions, DataFrames also have a rich library of functions including string manipulation, date arithmetic, common math operations and more. The complete list is available in the [DataFrame Function Reference](api/python/reference/pyspark.sql.html#functions).
 
 </div>
 
@@ -356,5 +356,3 @@ Aggregate functions are functions that return a single value on a group of rows.
 Users are not limited to the predefined aggregate functions and can create their own. For more details
 about user defined aggregate functions, please refer to the documentation of
 [User Defined Aggregate Functions](sql-ref-functions-udf-aggregate.html).
-
-

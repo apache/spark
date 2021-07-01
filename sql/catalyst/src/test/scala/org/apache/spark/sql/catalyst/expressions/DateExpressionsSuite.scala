@@ -55,6 +55,27 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   val time = "2013-11-08 13:10:15"
   val ts = new Timestamp(toMillis(time))
 
+  private def timestampLiteral(s: String, sdf: SimpleDateFormat, dt: DataType): Literal = {
+    dt match {
+      case _: TimestampType =>
+        Literal(new Timestamp(sdf.parse(s).getTime))
+
+      case _: TimestampWithoutTZType =>
+        Literal(LocalDateTime.parse(s.replace(" ", "T")))
+    }
+  }
+
+  private def timestampAnswer(s: String, sdf: SimpleDateFormat, dt: DataType): Any = {
+    dt match {
+      case _: TimestampType =>
+        DateTimeUtils.fromJavaTimestamp(
+          new Timestamp(sdf.parse(s).getTime))
+
+      case _: TimestampWithoutTZType =>
+        LocalDateTime.parse(s.replace(" ", "T"))
+    }
+  }
+
   test("datetime function current_date") {
     val d0 = DateTimeUtils.currentDate(UTC)
     val cd = CurrentDate(UTC_OPT).eval(EmptyRow).asInstanceOf[Int]
@@ -186,22 +207,32 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Seconds") {
     assert(Second(Literal.create(null, DateType), UTC_OPT).resolved === false)
     assert(Second(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT).resolved )
-    checkEvaluation(Second(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT), 0)
-    checkEvaluation(Second(Cast(Literal(date), TimestampType, UTC_OPT), UTC_OPT), 15)
+    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+      checkEvaluation(Second(Cast(Literal(d), dt, UTC_OPT), UTC_OPT), 0)
+      checkEvaluation(Second(Cast(Literal(date), dt, UTC_OPT), UTC_OPT), 15)
+    }
     checkEvaluation(Second(Literal(ts), UTC_OPT), 15)
 
     val c = Calendar.getInstance()
     for (zid <- outstandingZoneIds) {
       val timeZoneId = Option(zid.getId)
       c.setTimeZone(TimeZone.getTimeZone(zid))
-      (0 to 60 by 5).foreach { s =>
+      (0 to 59 by 5).foreach { s =>
+        // validate timestamp with local time zone
         c.set(2015, 18, 3, 3, 5, s)
         checkEvaluation(
           Second(Literal(new Timestamp(c.getTimeInMillis)), timeZoneId),
           c.get(Calendar.SECOND))
+
+        // validate timestamp without time zone
+        checkEvaluation(
+          Second(Literal(LocalDateTime.of(2015, 1, 3, 3, 5, s))),
+          s)
       }
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (child: Expression) => Second(child, timeZoneId), TimestampType)
+      Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (child: Expression) => Second(child, timeZoneId), dt)
+      }
     }
   }
 
@@ -290,51 +321,68 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Hour") {
     assert(Hour(Literal.create(null, DateType), UTC_OPT).resolved === false)
     assert(Hour(Literal(ts), UTC_OPT).resolved)
-    checkEvaluation(Hour(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT), 0)
-    checkEvaluation(Hour(Cast(Literal(date), TimestampType, UTC_OPT), UTC_OPT), 13)
+    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+      checkEvaluation(Hour(Cast(Literal(d), dt, UTC_OPT), UTC_OPT), 0)
+      checkEvaluation(Hour(Cast(Literal(date), dt, UTC_OPT), UTC_OPT), 13)
+    }
     checkEvaluation(Hour(Literal(ts), UTC_OPT), 13)
 
     val c = Calendar.getInstance()
     for (zid <- outstandingZoneIds) {
       val timeZoneId = Option(zid.getId)
       c.setTimeZone(TimeZone.getTimeZone(zid))
-      (0 to 24 by 6).foreach { h =>
-        (0 to 60 by 30).foreach { m =>
-          (0 to 60 by 30).foreach { s =>
+      (0 to 24 by 5).foreach { h =>
+        (0 to 60 by 29).foreach { m =>
+          (0 to 60 by 29).foreach { s =>
+            // validate timestamp with local time zone
             c.set(2015, 18, 3, h, m, s)
             checkEvaluation(
               Hour(Literal(new Timestamp(c.getTimeInMillis)), timeZoneId),
               c.get(Calendar.HOUR_OF_DAY))
+
+            // validate timestamp without time zone
+            val localDateTime = LocalDateTime.of(2015, 1, 3, h, m, s)
+            checkEvaluation(Hour(Literal(localDateTime), timeZoneId), h)
           }
         }
       }
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (child: Expression) => Hour(child, timeZoneId), TimestampType)
+      Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (child: Expression) => Hour(child, timeZoneId), dt)
+      }
     }
   }
 
   test("Minute") {
     assert(Minute(Literal.create(null, DateType), UTC_OPT).resolved === false)
     assert(Minute(Literal(ts), UTC_OPT).resolved)
-    checkEvaluation(Minute(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT), 0)
-    checkEvaluation(
-      Minute(Cast(Literal(date), TimestampType, UTC_OPT), UTC_OPT), 10)
+    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+      checkEvaluation(Minute(Cast(Literal(d), dt, UTC_OPT), UTC_OPT), 0)
+      checkEvaluation(Minute(Cast(Literal(date), dt, UTC_OPT), UTC_OPT), 10)
+    }
     checkEvaluation(Minute(Literal(ts), UTC_OPT), 10)
 
     val c = Calendar.getInstance()
     for (zid <- outstandingZoneIds) {
       val timeZoneId = Option(zid.getId)
       c.setTimeZone(TimeZone.getTimeZone(zid))
-      (0 to 60 by 5).foreach { m =>
-        (0 to 60 by 15).foreach { s =>
+      (0 to 59 by 5).foreach { m =>
+        (0 to 59 by 15).foreach { s =>
+          // validate timestamp with local time zone
           c.set(2015, 18, 3, 3, m, s)
           checkEvaluation(
             Minute(Literal(new Timestamp(c.getTimeInMillis)), timeZoneId),
             c.get(Calendar.MINUTE))
+
+          // validate timestamp without time zone
+          val localDateTime = LocalDateTime.of(2015, 1, 3, 3, m, s)
+          checkEvaluation(Minute(Literal(localDateTime), timeZoneId), m)
         }
       }
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (child: Expression) => Minute(child, timeZoneId), TimestampType)
+      Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (child: Expression) => Minute(child, timeZoneId), dt)
+      }
     }
   }
 
@@ -428,39 +476,39 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("time_add") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
-    for (zid <- outstandingZoneIds) {
-      val timeZoneId = Option(zid.getId)
-      sdf.setTimeZone(TimeZone.getTimeZone(zid))
+    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+      for (zid <- outstandingZoneIds) {
+        val timeZoneId = Option(zid.getId)
+        sdf.setTimeZone(TimeZone.getTimeZone(zid))
+        checkEvaluation(
+          TimeAdd(
+            timestampLiteral("2016-01-29 10:00:00.000", sdf, dt),
+            Literal(new CalendarInterval(1, 2, 123000L)),
+            timeZoneId),
+          timestampAnswer("2016-03-02 10:00:00.123", sdf, dt))
 
-      checkEvaluation(
-        TimeAdd(
-          Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
-          Literal(new CalendarInterval(1, 2, 123000L)),
-          timeZoneId),
-        DateTimeUtils.fromJavaTimestamp(
-          new Timestamp(sdf.parse("2016-03-02 10:00:00.123").getTime)))
-
-      checkEvaluation(
-        TimeAdd(
-          Literal.create(null, TimestampType),
-          Literal(new CalendarInterval(1, 2, 123000L)),
-          timeZoneId),
-        null)
-      checkEvaluation(
-        TimeAdd(
-          Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
-          Literal.create(null, CalendarIntervalType),
-          timeZoneId),
-        null)
-      checkEvaluation(
-        TimeAdd(
-          Literal.create(null, TimestampType),
-          Literal.create(null, CalendarIntervalType),
-          timeZoneId),
-        null)
-      checkConsistencyBetweenInterpretedAndCodegen(
-        (start: Expression, interval: Expression) => TimeAdd(start, interval, timeZoneId),
-        TimestampType, CalendarIntervalType)
+        checkEvaluation(
+          TimeAdd(
+            Literal.create(null, dt),
+            Literal(new CalendarInterval(1, 2, 123000L)),
+            timeZoneId),
+          null)
+        checkEvaluation(
+          TimeAdd(
+            timestampLiteral("2016-01-29 10:00:00.000", sdf, dt),
+            Literal.create(null, CalendarIntervalType),
+            timeZoneId),
+          null)
+        checkEvaluation(
+          TimeAdd(
+            Literal.create(null, dt),
+            Literal.create(null, CalendarIntervalType),
+            timeZoneId),
+          null)
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (start: Expression, interval: Expression) => TimeAdd(start, interval, timeZoneId),
+          dt, CalendarIntervalType)
+      }
     }
   }
 
@@ -1237,6 +1285,71 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-35916: timestamps without time zone difference") {
+    val end = LocalDateTime.parse("2019-10-04T11:04:01.123456")
+    val epoch = LocalDateTime.ofEpochSecond(0, 0, java.time.ZoneOffset.UTC)
+
+    outstandingTimezonesIds.foreach { tz =>
+      def sub(left: LocalDateTime, right: LocalDateTime): Expression = {
+        SubtractTimestamps(
+          Literal(left),
+          Literal(right),
+          legacyInterval = true,
+          timeZoneId = Some(tz))
+      }
+      checkEvaluation(sub(end, end), new CalendarInterval(0, 0, 0))
+      checkEvaluation(sub(end, epoch),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "436163 hours 4 minutes 1 seconds 123 milliseconds 456 microseconds")))
+      checkEvaluation(sub(epoch, end),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "-436163 hours -4 minutes -1 seconds -123 milliseconds -456 microseconds")))
+      checkEvaluation(
+        sub(
+          LocalDateTime.parse("9999-12-31T23:59:59.999999"),
+          LocalDateTime.parse("0001-01-01T00:00:00")),
+        IntervalUtils.stringToInterval(UTF8String.fromString("interval " +
+          "87649415 hours 59 minutes 59 seconds 999 milliseconds 999 microseconds")))
+    }
+
+    outstandingTimezonesIds.foreach { tz =>
+      def check(left: LocalDateTime, right: LocalDateTime): Unit = {
+        checkEvaluation(
+          SubtractTimestamps(
+            Literal(left),
+            Literal(right),
+            legacyInterval = false,
+            timeZoneId = Some(tz)),
+          Duration.between(
+            right.atZone(getZoneId(tz)).toLocalDateTime,
+            left.atZone(getZoneId(tz)).toLocalDateTime))
+      }
+
+      check(end, end)
+      check(end, epoch)
+      check(epoch, end)
+      check(LocalDateTime.parse("9999-12-31T23:59:59.999999"),
+        LocalDateTime.parse("0001-01-01T00:00:00"))
+
+      val errMsg = intercept[ArithmeticException] {
+        checkEvaluation(
+          SubtractTimestamps(
+            Literal(LocalDateTime.MIN),
+            Literal(LocalDateTime.MAX),
+            legacyInterval = false,
+            timeZoneId = Some(tz)),
+          Duration.ZERO)
+      }.getMessage
+      assert(errMsg.contains("overflow"))
+
+      Seq(false, true).foreach { legacy =>
+        checkConsistencyBetweenInterpretedAndCodegen(
+          (end: Expression, start: Expression) => SubtractTimestamps(end, start, legacy, Some(tz)),
+          TimestampWithoutTZType, TimestampWithoutTZType)
+      }
+    }
+  }
+
   test("SPARK-34896: subtract dates") {
     val end = LocalDate.of(2019, 10, 5)
     val epochDate = Literal(LocalDate.ofEpochDay(0))
@@ -1600,99 +1713,99 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  test("SPARK-34739: add a year-month interval to a timestamp") {
+  test("SPARK-34739,SPARK-35889: add a year-month interval to a timestamp") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
-    for (zid <- outstandingZoneIds) {
-      val timeZoneId = Option(zid.getId)
-      sdf.setTimeZone(TimeZone.getTimeZone(zid))
+    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+      for (zid <- outstandingZoneIds) {
+        val timeZoneId = Option(zid.getId)
+        sdf.setTimeZone(TimeZone.getTimeZone(zid))
 
-      checkEvaluation(
-        TimestampAddYMInterval(
-          Literal(new Timestamp(sdf.parse("2016-01-29 10:11:12.123").getTime)),
-          Literal(Period.ofMonths(2)),
-          timeZoneId),
-        DateTimeUtils.fromJavaTimestamp(
-          new Timestamp(sdf.parse("2016-03-29 10:11:12.123").getTime)))
+        checkEvaluation(
+          TimestampAddYMInterval(
+            timestampLiteral("2016-01-29 10:11:12.123", sdf, dt),
+            Literal(Period.ofMonths(2)),
+            timeZoneId),
+          timestampAnswer("2016-03-29 10:11:12.123", sdf, dt))
 
-      checkEvaluation(
-        TimestampAddYMInterval(
-          Literal.create(null, TimestampType),
-          Literal(Period.ofMonths(1)),
-          timeZoneId),
-        null)
-      checkEvaluation(
-        TimestampAddYMInterval(
-          Literal(new Timestamp(sdf.parse("2016-01-29 10:00:00.000").getTime)),
-          Literal.create(null, YearMonthIntervalType()),
-          timeZoneId),
-        null)
-      checkEvaluation(
-        TimestampAddYMInterval(
-          Literal.create(null, TimestampType),
-          Literal.create(null, YearMonthIntervalType()),
-          timeZoneId),
-        null)
-      yearMonthIntervalTypes.foreach { it =>
-        checkConsistencyBetweenInterpretedAndCodegen(
-          (ts: Expression, interval: Expression) =>
-            TimestampAddYMInterval(ts, interval, timeZoneId),
-          TimestampType, it)
+        checkEvaluation(
+          TimestampAddYMInterval(
+            Literal.create(null, dt),
+            Literal(Period.ofMonths(1)),
+            timeZoneId),
+          null)
+        checkEvaluation(
+          TimestampAddYMInterval(
+            timestampLiteral("2016-01-29 10:00:00.000", sdf, dt),
+            Literal.create(null, YearMonthIntervalType()),
+            timeZoneId),
+          null)
+        checkEvaluation(
+          TimestampAddYMInterval(
+            Literal.create(null, dt),
+            Literal.create(null, YearMonthIntervalType()),
+            timeZoneId),
+          null)
+        yearMonthIntervalTypes.foreach { it =>
+          checkConsistencyBetweenInterpretedAndCodegen(
+            (ts: Expression, interval: Expression) =>
+              TimestampAddYMInterval(ts, interval, timeZoneId), dt, it)
+        }
       }
     }
   }
 
-  test("SPARK-34761: add a day-time interval to a timestamp") {
+  test("SPARK-34761,SPARK-35889: add a day-time interval to a timestamp") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
-    for (zid <- outstandingZoneIds) {
-      val timeZoneId = Option(zid.getId)
-      sdf.setTimeZone(TimeZone.getTimeZone(zid))
-      checkEvaluation(
-        TimeAdd(
-          Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
-          Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321)),
-          timeZoneId),
-        DateTimeUtils.fromJavaTimestamp(
-          new Timestamp(sdf.parse("2021-01-11 00:10:00.444").getTime)))
-      checkEvaluation(
-        TimeAdd(
-          Literal(new Timestamp(sdf.parse("2021-01-01 00:10:00.123").getTime)),
-          Literal(Duration.ofDays(-10).minusMinutes(9).minusMillis(120)),
-          timeZoneId),
-        DateTimeUtils.fromJavaTimestamp(
-          new Timestamp(sdf.parse("2020-12-22 00:01:00.003").getTime)))
-
-      val e = intercept[Exception] {
+    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+      for (zid <- outstandingZoneIds) {
+        val timeZoneId = Option(zid.getId)
+        sdf.setTimeZone(TimeZone.getTimeZone(zid))
         checkEvaluation(
           TimeAdd(
-            Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
-            Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+            timestampLiteral("2021-01-01 00:00:00.123", sdf, dt),
+            Literal(Duration.ofDays(10).plusMinutes(10).plusMillis(321)),
+            timeZoneId),
+          timestampAnswer("2021-01-11 00:10:00.444", sdf, dt))
+        checkEvaluation(
+          TimeAdd(
+            timestampLiteral("2021-01-01 00:10:00.123", sdf, dt),
+            Literal(Duration.ofDays(-10).minusMinutes(9).minusMillis(120)),
+            timeZoneId),
+          timestampAnswer("2020-12-22 00:01:00.003", sdf, dt))
+
+        val e = intercept[Exception] {
+          checkEvaluation(
+            TimeAdd(
+              timestampLiteral("2021-01-01 00:00:00.123", sdf, dt),
+              Literal(Duration.of(Long.MaxValue, ChronoUnit.MICROS)),
+              timeZoneId),
+            null)
+        }.getCause
+        assert(e.isInstanceOf[ArithmeticException])
+        assert(e.getMessage.contains("long overflow"))
+
+        checkEvaluation(
+          TimeAdd(
+            Literal.create(null, dt),
+            Literal(Duration.ofDays(1)),
             timeZoneId),
           null)
-      }.getCause
-      assert(e.isInstanceOf[ArithmeticException])
-      assert(e.getMessage.contains("long overflow"))
-
-      checkEvaluation(
-        TimeAdd(
-          Literal.create(null, TimestampType),
-          Literal(Duration.ofDays(1)),
-          timeZoneId),
-        null)
-      checkEvaluation(
-        TimeAdd(
-          Literal(new Timestamp(sdf.parse("2021-01-01 00:00:00.123").getTime)),
-          Literal.create(null, DayTimeIntervalType()),
-          timeZoneId),
-        null)
-      checkEvaluation(
-        TimeAdd(
-          Literal.create(null, TimestampType),
-          Literal.create(null, DayTimeIntervalType()),
-          timeZoneId),
-        null)
-      dayTimeIntervalTypes.foreach { it =>
-        checkConsistencyBetweenInterpretedAndCodegen((ts: Expression, interval: Expression) =>
-          TimeAdd(ts, interval, timeZoneId), TimestampType, it)
+        checkEvaluation(
+          TimeAdd(
+            timestampLiteral("2021-01-01 00:00:00.123", sdf, dt),
+            Literal.create(null, DayTimeIntervalType()),
+            timeZoneId),
+          null)
+        checkEvaluation(
+          TimeAdd(
+            Literal.create(null, dt),
+            Literal.create(null, DayTimeIntervalType()),
+            timeZoneId),
+          null)
+        dayTimeIntervalTypes.foreach { it =>
+          checkConsistencyBetweenInterpretedAndCodegen((ts: Expression, interval: Expression) =>
+            TimeAdd(ts, interval, timeZoneId), dt, it)
+        }
       }
     }
   }
