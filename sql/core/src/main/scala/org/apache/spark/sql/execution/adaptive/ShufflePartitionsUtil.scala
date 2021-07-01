@@ -96,9 +96,8 @@ object ShufflePartitionsUtil extends Logging {
 
     val numPartitions = validMetrics.head.bytesByPartitionId.length
     val newPartitionSpecs = coalescePartitions(0, numPartitions, validMetrics, targetSize)
-    assert(newPartitionSpecs.length == validMetrics.length)
-    if (newPartitionSpecs.head.length < numPartitions) {
-      newPartitionSpecs
+    if (newPartitionSpecs.length < numPartitions) {
+      attachDataSize(mapOutputStatistics, newPartitionSpecs)
     } else {
       Seq.empty
     }
@@ -148,7 +147,8 @@ object ShufflePartitionsUtil extends Logging {
         if (i - 1 > start) {
           val partitionSpecs = coalescePartitions(
             partitionIndices(start), repeatValue, validMetrics, targetSize, true)
-          newPartitionSpecsSeq.zip(partitionSpecs).foreach(spec => spec._1 ++= spec._2)
+          newPartitionSpecsSeq.zip(attachDataSize(mapOutputStatistics, partitionSpecs))
+            .foreach(spec => spec._1 ++= spec._2)
         }
         // find the end of this skew section, skipping partition(i - 1) and partition(i).
         var repeatIndex = i + 1
@@ -173,7 +173,8 @@ object ShufflePartitionsUtil extends Logging {
     if (numPartitions > start) {
       val partitionSpecs = coalescePartitions(
         partitionIndices(start), partitionIndices.last + 1, validMetrics, targetSize, true)
-      newPartitionSpecsSeq.zip(partitionSpecs).foreach(spec => spec._1 ++= spec._2)
+      newPartitionSpecsSeq.zip(attachDataSize(mapOutputStatistics, partitionSpecs))
+        .foreach(spec => spec._1 ++= spec._2)
     }
     // only return coalesced result if any coalescing has happened.
     if (newPartitionSpecsSeq.head.length < numPartitions) {
@@ -204,19 +205,17 @@ object ShufflePartitionsUtil extends Logging {
    *  - coalesced partition 2: shuffle partition 2 (size 170 MiB)
    *  - coalesced partition 3: shuffle partition 3 and 4 (size 50 MiB)
    *
-   *  @return A sequence of sequence of [[CoalescedPartitionSpec]]s. which each inner sequence as
-   *          the new partition specs for its corresponding shuffle after coalescing. For example,
-   *          if partitions [0, 1, 2, 3, 4] and partition bytes [10, 10, 100, 10, 20] with
-   *          targetSize 100, split at indices [0, 2, 3], the returned partition specs will be:
-   *          CoalescedPartitionSpec(0, 2, 20), CoalescedPartitionSpec(2, 3, 100) and
-   *          CoalescedPartitionSpec(3, 5, 30).
+   *  @return A sequence of [[CoalescedPartitionSpec]]s. For example, if partitions [0, 1, 2, 3, 4]
+   *          split at indices [0, 2, 3], the returned partition specs will be:
+   *          CoalescedPartitionSpec(0, 2), CoalescedPartitionSpec(2, 3) and
+   *          CoalescedPartitionSpec(3, 5).
    */
   private def coalescePartitions(
       start: Int,
       end: Int,
       mapOutputStatistics: Seq[MapOutputStatistics],
       targetSize: Long,
-      allowReturnEmpty: Boolean = false): Seq[Seq[CoalescedPartitionSpec]] = {
+      allowReturnEmpty: Boolean = false): Seq[CoalescedPartitionSpec] = {
     val partitionSpecs = ArrayBuffer.empty[CoalescedPartitionSpec]
     var coalescedSize = 0L
     var i = start
@@ -252,14 +251,20 @@ object ShufflePartitionsUtil extends Logging {
     }
     // If do not allowReturnEmpty, create at least one partition if all partitions are empty.
     createPartitionSpec(!allowReturnEmpty && partitionSpecs.isEmpty)
+    partitionSpecs.toSeq
+  }
 
-    // add data size for each partitionSpecs
-    mapOutputStatistics.map { mapStats =>
-      partitionSpecs.map { spec =>
-        val dataSize = spec.startReducerIndex.until(spec.endReducerIndex)
-          .map(mapStats.bytesByPartitionId).sum
-        spec.copy(dataSize = Some(dataSize))
-      }.toSeq
+  private def attachDataSize(
+      mapOutputStatistics: Seq[Option[MapOutputStatistics]],
+      partitionSpecs: Seq[CoalescedPartitionSpec]): Seq[Seq[CoalescedPartitionSpec]] = {
+    mapOutputStatistics.map {
+      case Some(mapStats) =>
+        partitionSpecs.map { spec =>
+          val dataSize = spec.startReducerIndex.until(spec.endReducerIndex)
+            .map(mapStats.bytesByPartitionId).sum
+          spec.copy(dataSize = Some(dataSize))
+        }.toSeq
+      case None => partitionSpecs.map(_.copy(dataSize = Some(0))).toSeq
     }.toSeq
   }
 
