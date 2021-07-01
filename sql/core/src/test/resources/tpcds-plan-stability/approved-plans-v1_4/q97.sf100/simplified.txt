@@ -23,7 +23,7 @@ WholeStageCodegen (8)
                                             BroadcastExchange #3
                                               WholeStageCodegen (1)
                                                 Project [d_date_sk]
-                                                  Filter [d_month_seq,d_date_sk]
+                                                  Filter [d_month_seq]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet default.date_dim [d_date_sk,d_month_seq]

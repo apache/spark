@@ -37,7 +37,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                         BroadcastExchange #4
                                                                           WholeStageCodegen (1)
                                                                             Project [d_date_sk]
-                                                                              Filter [d_date,d_date_sk]
+                                                                              Filter [d_date]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
                                                                                     Scan parquet default.date_dim [d_date_sk,d_date]
@@ -51,10 +51,9 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                       InputAdapter
                                                         BroadcastExchange #5
                                                           WholeStageCodegen (3)
-                                                            Filter [s_store_sk]
-                                                              ColumnarToRow
-                                                                InputAdapter
-                                                                  Scan parquet default.store [s_store_sk,s_store_id]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet default.store [s_store_sk,s_store_id]
                                                   InputAdapter
                                                     ReusedExchange [d_date_sk] #4
                                   WholeStageCodegen (12)
@@ -86,10 +85,9 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                       InputAdapter
                                                         BroadcastExchange #7
                                                           WholeStageCodegen (9)
-                                                            Filter [cp_catalog_page_sk]
-                                                              ColumnarToRow
-                                                                InputAdapter
-                                                                  Scan parquet default.catalog_page [cp_catalog_page_sk,cp_catalog_page_id]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet default.catalog_page [cp_catalog_page_sk,cp_catalog_page_id]
                                                   InputAdapter
                                                     ReusedExchange [d_date_sk] #4
                                   WholeStageCodegen (22)
@@ -131,17 +129,16 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                                         Exchange [ws_item_sk,ws_order_number] #10
                                                                           WholeStageCodegen (16)
                                                                             Project [ws_item_sk,ws_web_site_sk,ws_order_number]
-                                                                              Filter [ws_item_sk,ws_order_number,ws_web_site_sk]
+                                                                              Filter [ws_web_site_sk]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
                                                                                     Scan parquet default.web_sales [ws_item_sk,ws_web_site_sk,ws_order_number,ws_sold_date_sk]
                                                       InputAdapter
                                                         BroadcastExchange #11
                                                           WholeStageCodegen (19)
-                                                            Filter [web_site_sk]
-                                                              ColumnarToRow
-                                                                InputAdapter
-                                                                  Scan parquet default.web_site [web_site_sk,web_site_id]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet default.web_site [web_site_sk,web_site_id]
                                                   InputAdapter
                                                     ReusedExchange [d_date_sk] #4
                   WholeStageCodegen (49)

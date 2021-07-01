@@ -35,7 +35,7 @@ import org.apache.spark.sql.types._
   since = "1.0.0")
 case class Min(child: Expression) extends DeclarativeAggregate with UnaryLike[Expression] {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = child.nullable
 
   // Return data type.
   override def dataType: DataType = child.dataType

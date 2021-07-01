@@ -17,7 +17,7 @@ WholeStageCodegen (7)
                                 BroadcastExchange #3
                                   WholeStageCodegen (1)
                                     Project [i_item_sk]
-                                      Filter [i_manufact_id,i_item_sk]
+                                      Filter [i_manufact_id]
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.item [i_item_sk,i_manufact_id]
@@ -29,21 +29,20 @@ WholeStageCodegen (7)
                                         HashAggregate [ws_item_sk,ws_ext_discount_amt] [sum,count,sum,count]
                                           Project [ws_item_sk,ws_ext_discount_amt]
                                             BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
-                                              Filter [ws_item_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.web_sales [ws_item_sk,ws_ext_discount_amt,ws_sold_date_sk]
-                                                      SubqueryBroadcast [d_date_sk] #1
-                                                        BroadcastExchange #5
-                                                          WholeStageCodegen (1)
-                                                            Project [d_date_sk]
-                                                              Filter [d_date,d_date_sk]
-                                                                ColumnarToRow
-                                                                  InputAdapter
-                                                                    Scan parquet default.date_dim [d_date_sk,d_date]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.web_sales [ws_item_sk,ws_ext_discount_amt,ws_sold_date_sk]
+                                                    SubqueryBroadcast [d_date_sk] #1
+                                                      BroadcastExchange #5
+                                                        WholeStageCodegen (1)
+                                                          Project [d_date_sk]
+                                                            Filter [d_date]
+                                                              ColumnarToRow
+                                                                InputAdapter
+                                                                  Scan parquet default.date_dim [d_date_sk,d_date]
                                               InputAdapter
                                                 ReusedExchange [d_date_sk] #5
-                    Filter [ws_item_sk,ws_ext_discount_amt]
+                    Filter [ws_ext_discount_amt]
                       ColumnarToRow
                         InputAdapter
                           Scan parquet default.web_sales [ws_item_sk,ws_ext_discount_amt,ws_sold_date_sk]

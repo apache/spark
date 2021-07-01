@@ -21,7 +21,7 @@ WholeStageCodegen (10)
                               BroadcastExchange #2
                                 WholeStageCodegen (1)
                                   Project [wp_web_page_sk]
-                                    Filter [wp_char_count,wp_web_page_sk]
+                                    Filter [wp_char_count]
                                       ColumnarToRow
                                         InputAdapter
                                           Scan parquet default.web_page [wp_web_page_sk,wp_char_count]
@@ -29,7 +29,7 @@ WholeStageCodegen (10)
                           BroadcastExchange #3
                             WholeStageCodegen (2)
                               Project [hd_demo_sk]
-                                Filter [hd_dep_count,hd_demo_sk]
+                                Filter [hd_dep_count]
                                   ColumnarToRow
                                     InputAdapter
                                       Scan parquet default.household_demographics [hd_demo_sk,hd_dep_count]
@@ -37,7 +37,7 @@ WholeStageCodegen (10)
                       BroadcastExchange #4
                         WholeStageCodegen (3)
                           Project [t_time_sk]
-                            Filter [t_hour,t_time_sk]
+                            Filter [t_hour]
                               ColumnarToRow
                                 InputAdapter
                                   Scan parquet default.time_dim [t_time_sk,t_hour]
@@ -68,7 +68,7 @@ WholeStageCodegen (10)
                             BroadcastExchange #7
                               WholeStageCodegen (7)
                                 Project [t_time_sk]
-                                  Filter [t_hour,t_time_sk]
+                                  Filter [t_hour]
                                     ColumnarToRow
                                       InputAdapter
                                         Scan parquet default.time_dim [t_time_sk,t_hour]

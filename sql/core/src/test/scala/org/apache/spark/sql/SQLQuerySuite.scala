@@ -4058,6 +4058,31 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         Row(1, 2, 1, 2) :: Nil)
     }
   }
+
+  test("SPARK-35967: Update nullability based on column statistics") {
+    withTable("t1", "t2", "t3") {
+      spark.range(5).write.saveAsTable("t1")
+      spark.range(5).selectExpr("if(id % 2 = 0, null, id) AS id").write.saveAsTable("t2")
+      spark.range(5).write.saveAsTable("t3")
+      spark.sql("ANALYZE TABLE t1 COMPUTE STATISTICS FOR ALL COLUMNS")
+      spark.sql("ANALYZE TABLE t2 COMPUTE STATISTICS FOR ALL COLUMNS")
+
+      val output1 = spark.table("t1").queryExecution.analyzed.collectFirst {
+        case LogicalRelation(_, output, _, _) => output
+      }.get
+      assert(output1.forall(_.nullable === false))
+
+      val output2 = spark.table("t2").queryExecution.analyzed.collectFirst {
+        case LogicalRelation(_, output, _, _) => output
+      }.get
+      assert(output2.forall(_.nullable === true))
+
+      val output3 = spark.table("t3").queryExecution.analyzed.collectFirst {
+        case LogicalRelation(_, output, _, _) => output
+      }.get
+      assert(output3.forall(_.nullable === true))
+    }
+  }
 }
 
 case class Foo(bar: Option[String])

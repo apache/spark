@@ -7,7 +7,7 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
             Project [item_sk,rnk,item_sk]
               BroadcastHashJoin [rnk,rnk]
                 Project [item_sk,rnk]
-                  Filter [rnk,item_sk]
+                  Filter [rnk]
                     InputAdapter
                       Window [rank_col]
                         WholeStageCodegen (3)
@@ -42,7 +42,7 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
                   BroadcastExchange #4
                     WholeStageCodegen (7)
                       Project [item_sk,rnk]
-                        Filter [rnk,item_sk]
+                        Filter [rnk]
                           InputAdapter
                             Window [rank_col]
                               WholeStageCodegen (6)
@@ -52,9 +52,8 @@ TakeOrderedAndProject [rnk,best_performing,worst_performing]
             InputAdapter
               BroadcastExchange #5
                 WholeStageCodegen (8)
-                  Filter [i_item_sk]
-                    ColumnarToRow
-                      InputAdapter
-                        Scan parquet default.item [i_item_sk,i_product_name]
+                  ColumnarToRow
+                    InputAdapter
+                      Scan parquet default.item [i_item_sk,i_product_name]
         InputAdapter
           ReusedExchange [i_item_sk,i_product_name] #5

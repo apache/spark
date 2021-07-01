@@ -28,7 +28,7 @@ TakeOrderedAndProject [cd_gender,cd_marital_status,cd_education_status,cd_purcha
                                                       InputAdapter
                                                         Exchange [c_customer_sk] #3
                                                           WholeStageCodegen (1)
-                                                            Filter [c_current_addr_sk,c_current_cdemo_sk]
+                                                            Filter [c_current_cdemo_sk]
                                                               ColumnarToRow
                                                                 InputAdapter
                                                                   Scan parquet default.customer [c_customer_sk,c_current_cdemo_sk,c_current_addr_sk]
@@ -47,7 +47,7 @@ TakeOrderedAndProject [cd_gender,cd_marital_status,cd_education_status,cd_purcha
                                                                         BroadcastExchange #5
                                                                           WholeStageCodegen (1)
                                                                             Project [d_date_sk]
-                                                                              Filter [d_year,d_moy,d_date_sk]
+                                                                              Filter [d_year,d_moy]
                                                                                 ColumnarToRow
                                                                                   InputAdapter
                                                                                     Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
@@ -83,7 +83,7 @@ TakeOrderedAndProject [cd_gender,cd_marital_status,cd_education_status,cd_purcha
                                     BroadcastExchange #8
                                       WholeStageCodegen (13)
                                         Project [ca_address_sk]
-                                          Filter [ca_county,ca_address_sk]
+                                          Filter [ca_county]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.customer_address [ca_address_sk,ca_county]
@@ -93,7 +93,6 @@ TakeOrderedAndProject [cd_gender,cd_marital_status,cd_education_status,cd_purcha
                         InputAdapter
                           Exchange [cd_demo_sk] #9
                             WholeStageCodegen (16)
-                              Filter [cd_demo_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_education_status,cd_purchase_estimate,cd_credit_rating,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.customer_demographics [cd_demo_sk,cd_gender,cd_marital_status,cd_education_status,cd_purchase_estimate,cd_credit_rating,cd_dep_count,cd_dep_employed_count,cd_dep_college_count]

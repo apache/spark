@@ -1,7 +1,7 @@
 == Physical Plan ==
-TakeOrderedAndProject (33)
-+- * Project (32)
-   +- * SortMergeJoin Inner (31)
+TakeOrderedAndProject (32)
++- * Project (31)
+   +- * SortMergeJoin Inner (30)
       :- * Sort (25)
       :  +- Exchange (24)
       :     +- * HashAggregate (23)
@@ -27,11 +27,10 @@ TakeOrderedAndProject (33)
       :                          +- * Filter (16)
       :                             +- * ColumnarToRow (15)
       :                                +- Scan parquet default.store (14)
-      +- * Sort (30)
-         +- Exchange (29)
-            +- * Filter (28)
-               +- * ColumnarToRow (27)
-                  +- Scan parquet default.customer (26)
+      +- * Sort (29)
+         +- Exchange (28)
+            +- * ColumnarToRow (27)
+               +- Scan parquet default.customer (26)
 
 
 (1) Scan parquet default.store_sales
@@ -49,7 +48,7 @@ Input [8]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_addr_sk#3, ss_store_sk#4, ss_tic
 Input [8]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_addr_sk#3, ss_store_sk#4, ss_ticket_number#5, ss_coupon_amt#6, ss_net_profit#7, ss_sold_date_sk#8]
 Condition : ((isnotnull(ss_store_sk#4) AND isnotnull(ss_hdemo_sk#2)) AND isnotnull(ss_customer_sk#1))
 
-(4) ReusedExchange [Reuses operator id: 38]
+(4) ReusedExchange [Reuses operator id: 37]
 Output [1]: [d_date_sk#10]
 
 (5) BroadcastHashJoin [codegen id : 4]
@@ -65,7 +64,7 @@ Input [9]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_addr_sk#3, ss_store_sk#4, ss_tic
 Output [3]: [hd_demo_sk#11, hd_dep_count#12, hd_vehicle_count#13]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [Or(EqualTo(hd_dep_count,8),GreaterThan(hd_vehicle_count,0)), IsNotNull(hd_demo_sk)]
+PushedFilters: [Or(EqualTo(hd_dep_count,8),GreaterThan(hd_vehicle_count,0))]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int,hd_vehicle_count:int>
 
 (8) ColumnarToRow [codegen id : 2]
@@ -73,7 +72,7 @@ Input [3]: [hd_demo_sk#11, hd_dep_count#12, hd_vehicle_count#13]
 
 (9) Filter [codegen id : 2]
 Input [3]: [hd_demo_sk#11, hd_dep_count#12, hd_vehicle_count#13]
-Condition : (((hd_dep_count#12 = 8) OR (hd_vehicle_count#13 > 0)) AND isnotnull(hd_demo_sk#11))
+Condition : ((hd_dep_count#12 = 8) OR (hd_vehicle_count#13 > 0))
 
 (10) Project [codegen id : 2]
 Output [1]: [hd_demo_sk#11]
@@ -81,7 +80,7 @@ Input [3]: [hd_demo_sk#11, hd_dep_count#12, hd_vehicle_count#13]
 
 (11) BroadcastExchange
 Input [1]: [hd_demo_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#14]
 
 (12) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_hdemo_sk#2]
@@ -96,7 +95,7 @@ Input [8]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_addr_sk#3, ss_store_sk#4, ss_tic
 Output [3]: [s_store_sk#15, s_number_employees#16, s_city#17]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [IsNotNull(s_number_employees), GreaterThanOrEqual(s_number_employees,200), LessThanOrEqual(s_number_employees,295), IsNotNull(s_store_sk)]
+PushedFilters: [IsNotNull(s_number_employees), GreaterThanOrEqual(s_number_employees,200), LessThanOrEqual(s_number_employees,295)]
 ReadSchema: struct<s_store_sk:int,s_number_employees:int,s_city:string>
 
 (15) ColumnarToRow [codegen id : 3]
@@ -104,7 +103,7 @@ Input [3]: [s_store_sk#15, s_number_employees#16, s_city#17]
 
 (16) Filter [codegen id : 3]
 Input [3]: [s_store_sk#15, s_number_employees#16, s_city#17]
-Condition : (((isnotnull(s_number_employees#16) AND (s_number_employees#16 >= 200)) AND (s_number_employees#16 <= 295)) AND isnotnull(s_store_sk#15))
+Condition : ((isnotnull(s_number_employees#16) AND (s_number_employees#16 >= 200)) AND (s_number_employees#16 <= 295))
 
 (17) Project [codegen id : 3]
 Output [2]: [s_store_sk#15, s_city#17]
@@ -112,7 +111,7 @@ Input [3]: [s_store_sk#15, s_number_employees#16, s_city#17]
 
 (18) BroadcastExchange
 Input [2]: [s_store_sk#15, s_city#17]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#18]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#18]
 
 (19) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#4]
@@ -153,67 +152,62 @@ Arguments: [ss_customer_sk#1 ASC NULLS FIRST], false, 0
 Output [3]: [c_customer_sk#29, c_first_name#30, c_last_name#31]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
-PushedFilters: [IsNotNull(c_customer_sk)]
 ReadSchema: struct<c_customer_sk:int,c_first_name:string,c_last_name:string>
 
 (27) ColumnarToRow [codegen id : 7]
 Input [3]: [c_customer_sk#29, c_first_name#30, c_last_name#31]
 
-(28) Filter [codegen id : 7]
-Input [3]: [c_customer_sk#29, c_first_name#30, c_last_name#31]
-Condition : isnotnull(c_customer_sk#29)
-
-(29) Exchange
+(28) Exchange
 Input [3]: [c_customer_sk#29, c_first_name#30, c_last_name#31]
 Arguments: hashpartitioning(c_customer_sk#29, 5), ENSURE_REQUIREMENTS, [id=#32]
 
-(30) Sort [codegen id : 8]
+(29) Sort [codegen id : 8]
 Input [3]: [c_customer_sk#29, c_first_name#30, c_last_name#31]
 Arguments: [c_customer_sk#29 ASC NULLS FIRST], false, 0
 
-(31) SortMergeJoin [codegen id : 9]
+(30) SortMergeJoin [codegen id : 9]
 Left keys [1]: [ss_customer_sk#1]
 Right keys [1]: [c_customer_sk#29]
 Join condition: None
 
-(32) Project [codegen id : 9]
+(31) Project [codegen id : 9]
 Output [7]: [c_last_name#31, c_first_name#30, substr(s_city#17, 1, 30) AS substr(s_city, 1, 30)#33, ss_ticket_number#5, amt#26, profit#27, s_city#17]
 Input [8]: [ss_ticket_number#5, ss_customer_sk#1, s_city#17, amt#26, profit#27, c_customer_sk#29, c_first_name#30, c_last_name#31]
 
-(33) TakeOrderedAndProject
+(32) TakeOrderedAndProject
 Input [7]: [c_last_name#31, c_first_name#30, substr(s_city, 1, 30)#33, ss_ticket_number#5, amt#26, profit#27, s_city#17]
 Arguments: 100, [c_last_name#31 ASC NULLS FIRST, c_first_name#30 ASC NULLS FIRST, substr(s_city#17, 1, 30) ASC NULLS FIRST, profit#27 ASC NULLS FIRST], [c_last_name#31, c_first_name#30, substr(s_city, 1, 30)#33, ss_ticket_number#5, amt#26, profit#27]
 
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#8 IN dynamicpruning#9
-BroadcastExchange (38)
-+- * Project (37)
-   +- * Filter (36)
-      +- * ColumnarToRow (35)
-         +- Scan parquet default.date_dim (34)
+BroadcastExchange (37)
++- * Project (36)
+   +- * Filter (35)
+      +- * ColumnarToRow (34)
+         +- Scan parquet default.date_dim (33)
 
 
-(34) Scan parquet default.date_dim
+(33) Scan parquet default.date_dim
 Output [3]: [d_date_sk#10, d_year#34, d_dow#35]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_dow), EqualTo(d_dow,1), In(d_year, [1998,1999,2000]), GreaterThanOrEqual(d_date_sk,2450819), LessThanOrEqual(d_date_sk,2451904), IsNotNull(d_date_sk)]
+PushedFilters: [EqualTo(d_dow,1), In(d_year, [1998,1999,2000]), GreaterThanOrEqual(d_date_sk,2450819), LessThanOrEqual(d_date_sk,2451904)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_dow:int>
 
-(35) ColumnarToRow [codegen id : 1]
+(34) ColumnarToRow [codegen id : 1]
 Input [3]: [d_date_sk#10, d_year#34, d_dow#35]
 
-(36) Filter [codegen id : 1]
+(35) Filter [codegen id : 1]
 Input [3]: [d_date_sk#10, d_year#34, d_dow#35]
-Condition : (((((isnotnull(d_dow#35) AND (d_dow#35 = 1)) AND d_year#34 IN (1998,1999,2000)) AND (d_date_sk#10 >= 2450819)) AND (d_date_sk#10 <= 2451904)) AND isnotnull(d_date_sk#10))
+Condition : ((((d_dow#35 = 1) AND d_year#34 IN (1998,1999,2000)) AND (d_date_sk#10 >= 2450819)) AND (d_date_sk#10 <= 2451904))
 
-(37) Project [codegen id : 1]
+(36) Project [codegen id : 1]
 Output [1]: [d_date_sk#10]
 Input [3]: [d_date_sk#10, d_year#34, d_dow#35]
 
-(38) BroadcastExchange
+(37) BroadcastExchange
 Input [1]: [d_date_sk#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#36]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#36]
 
 

@@ -19,7 +19,7 @@ WholeStageCodegen (5)
                           BroadcastExchange #2
                             WholeStageCodegen (1)
                               Project [t_time_sk]
-                                Filter [t_hour,t_minute,t_time_sk]
+                                Filter [t_hour,t_minute]
                                   ColumnarToRow
                                     InputAdapter
                                       Scan parquet default.time_dim [t_time_sk,t_hour,t_minute]
@@ -27,7 +27,7 @@ WholeStageCodegen (5)
                       BroadcastExchange #3
                         WholeStageCodegen (2)
                           Project [s_store_sk]
-                            Filter [s_store_name,s_store_sk]
+                            Filter [s_store_name]
                               ColumnarToRow
                                 InputAdapter
                                   Scan parquet default.store [s_store_sk,s_store_name]
@@ -35,7 +35,7 @@ WholeStageCodegen (5)
                   BroadcastExchange #4
                     WholeStageCodegen (3)
                       Project [hd_demo_sk]
-                        Filter [hd_dep_count,hd_demo_sk]
+                        Filter [hd_dep_count]
                           ColumnarToRow
                             InputAdapter
                               Scan parquet default.household_demographics [hd_demo_sk,hd_dep_count]

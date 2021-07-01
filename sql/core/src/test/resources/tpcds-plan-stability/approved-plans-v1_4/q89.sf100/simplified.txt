@@ -23,11 +23,11 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_cla
                                             InputAdapter
                                               BroadcastExchange #3
                                                 WholeStageCodegen (1)
-                                                  Filter [i_category,i_class,i_item_sk]
+                                                  Filter [i_category,i_class]
                                                     ColumnarToRow
                                                       InputAdapter
                                                         Scan parquet default.item [i_item_sk,i_brand,i_class,i_category]
-                                            Filter [ss_item_sk,ss_store_sk]
+                                            Filter [ss_store_sk]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_sales_price,ss_sold_date_sk]
@@ -35,7 +35,7 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_cla
                                                       BroadcastExchange #4
                                                         WholeStageCodegen (1)
                                                           Project [d_date_sk,d_moy]
-                                                            Filter [d_year,d_date_sk]
+                                                            Filter [d_year]
                                                               ColumnarToRow
                                                                 InputAdapter
                                                                   Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
@@ -44,7 +44,6 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,s_store_name,i_category,i_cla
                                     InputAdapter
                                       BroadcastExchange #5
                                         WholeStageCodegen (3)
-                                          Filter [s_store_sk]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.store [s_store_sk,s_store_name,s_company_name]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.store [s_store_sk,s_store_name,s_company_name]

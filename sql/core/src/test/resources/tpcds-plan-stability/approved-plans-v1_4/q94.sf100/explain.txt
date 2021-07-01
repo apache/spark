@@ -132,7 +132,7 @@ Join condition: None
 Output [2]: [ca_address_sk#17, ca_state#18]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
-PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,IL), IsNotNull(ca_address_sk)]
+PushedFilters: [IsNotNull(ca_state), EqualTo(ca_state,IL)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string>
 
 (21) ColumnarToRow [codegen id : 8]
@@ -140,7 +140,7 @@ Input [2]: [ca_address_sk#17, ca_state#18]
 
 (22) Filter [codegen id : 8]
 Input [2]: [ca_address_sk#17, ca_state#18]
-Condition : ((isnotnull(ca_state#18) AND (ca_state#18 = IL)) AND isnotnull(ca_address_sk#17))
+Condition : (isnotnull(ca_state#18) AND (ca_state#18 = IL))
 
 (23) Project [codegen id : 8]
 Output [1]: [ca_address_sk#17]
@@ -148,7 +148,7 @@ Input [2]: [ca_address_sk#17, ca_state#18]
 
 (24) BroadcastExchange
 Input [1]: [ca_address_sk#17]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#19]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#19]
 
 (25) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [ws_ship_addr_sk#2]
@@ -163,7 +163,7 @@ Input [7]: [ws_ship_date_sk#1, ws_ship_addr_sk#2, ws_web_site_sk#3, ws_order_num
 Output [2]: [web_site_sk#20, web_company_name#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_site]
-PushedFilters: [IsNotNull(web_company_name), EqualTo(web_company_name,pri                                               ), IsNotNull(web_site_sk)]
+PushedFilters: [EqualTo(web_company_name,pri                                               )]
 ReadSchema: struct<web_site_sk:int,web_company_name:string>
 
 (28) ColumnarToRow [codegen id : 9]
@@ -171,7 +171,7 @@ Input [2]: [web_site_sk#20, web_company_name#21]
 
 (29) Filter [codegen id : 9]
 Input [2]: [web_site_sk#20, web_company_name#21]
-Condition : ((isnotnull(web_company_name#21) AND (web_company_name#21 = pri                                               )) AND isnotnull(web_site_sk#20))
+Condition : (web_company_name#21 = pri                                               )
 
 (30) Project [codegen id : 9]
 Output [1]: [web_site_sk#20]
@@ -179,7 +179,7 @@ Input [2]: [web_site_sk#20, web_company_name#21]
 
 (31) BroadcastExchange
 Input [1]: [web_site_sk#20]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#22]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#22]
 
 (32) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [ws_web_site_sk#3]
@@ -194,7 +194,7 @@ Input [6]: [ws_ship_date_sk#1, ws_web_site_sk#3, ws_order_number#5, ws_ext_ship_
 Output [2]: [d_date_sk#23, d_date#24]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_date), GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02), IsNotNull(d_date_sk)]
+PushedFilters: [GreaterThanOrEqual(d_date,1999-02-01), LessThanOrEqual(d_date,1999-04-02)]
 ReadSchema: struct<d_date_sk:int,d_date:date>
 
 (35) ColumnarToRow [codegen id : 10]
@@ -202,7 +202,7 @@ Input [2]: [d_date_sk#23, d_date#24]
 
 (36) Filter [codegen id : 10]
 Input [2]: [d_date_sk#23, d_date#24]
-Condition : (((isnotnull(d_date#24) AND (d_date#24 >= 1999-02-01)) AND (d_date#24 <= 1999-04-02)) AND isnotnull(d_date_sk#23))
+Condition : ((d_date#24 >= 1999-02-01) AND (d_date#24 <= 1999-04-02))
 
 (37) Project [codegen id : 10]
 Output [1]: [d_date_sk#23]
@@ -210,7 +210,7 @@ Input [2]: [d_date_sk#23, d_date#24]
 
 (38) BroadcastExchange
 Input [1]: [d_date_sk#23]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#25]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#25]
 
 (39) BroadcastHashJoin [codegen id : 11]
 Left keys [1]: [ws_ship_date_sk#1]

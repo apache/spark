@@ -28,7 +28,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                                       BroadcastExchange #3
                                                         WholeStageCodegen (1)
                                                           Project [d_date_sk]
-                                                            Filter [d_date,d_date_sk]
+                                                            Filter [d_date]
                                                               ColumnarToRow
                                                                 InputAdapter
                                                                   Scan parquet default.date_dim [d_date_sk,d_date]
@@ -37,10 +37,9 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                         InputAdapter
                                           BroadcastExchange #4
                                             WholeStageCodegen (2)
-                                              Filter [s_store_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.store [s_store_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.store [s_store_sk]
                           InputAdapter
                             BroadcastExchange #5
                               WholeStageCodegen (7)
@@ -116,10 +115,9 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                         InputAdapter
                                           BroadcastExchange #11
                                             WholeStageCodegen (16)
-                                              Filter [wp_web_page_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.web_page [wp_web_page_sk]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.web_page [wp_web_page_sk]
                           InputAdapter
                             BroadcastExchange #12
                               WholeStageCodegen (21)

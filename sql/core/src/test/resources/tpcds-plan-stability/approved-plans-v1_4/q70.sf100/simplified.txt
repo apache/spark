@@ -26,7 +26,7 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                                   BroadcastExchange #3
                                                     WholeStageCodegen (1)
                                                       Project [d_date_sk]
-                                                        Filter [d_month_seq,d_date_sk]
+                                                        Filter [d_month_seq]
                                                           ColumnarToRow
                                                             InputAdapter
                                                               Scan parquet default.date_dim [d_date_sk,d_month_seq]
@@ -36,10 +36,9 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                       BroadcastExchange #4
                                         WholeStageCodegen (8)
                                           BroadcastHashJoin [s_state,s_state]
-                                            Filter [s_store_sk]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.store [s_store_sk,s_county,s_state]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.store [s_store_sk,s_county,s_state]
                                             InputAdapter
                                               BroadcastExchange #5
                                                 WholeStageCodegen (7)
@@ -71,7 +70,6 @@ TakeOrderedAndProject [lochierarchy,s_state,rank_within_parent,total_sum,s_count
                                                                                   InputAdapter
                                                                                     BroadcastExchange #8
                                                                                       WholeStageCodegen (3)
-                                                                                        Filter [s_store_sk]
-                                                                                          ColumnarToRow
-                                                                                            InputAdapter
-                                                                                              Scan parquet default.store [s_store_sk,s_state]
+                                                                                        ColumnarToRow
+                                                                                          InputAdapter
+                                                                                            Scan parquet default.store [s_store_sk,s_state]

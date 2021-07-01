@@ -1,8 +1,8 @@
 == Physical Plan ==
-* Sort (35)
-+- Exchange (34)
-   +- * Project (33)
-      +- * SortMergeJoin Inner (32)
+* Sort (34)
++- Exchange (33)
+   +- * Project (32)
+      +- * SortMergeJoin Inner (31)
          :- * Sort (26)
          :  +- Exchange (25)
          :     +- * Filter (24)
@@ -29,11 +29,10 @@
          :                             +- * Filter (16)
          :                                +- * ColumnarToRow (15)
          :                                   +- Scan parquet default.household_demographics (14)
-         +- * Sort (31)
-            +- Exchange (30)
-               +- * Filter (29)
-                  +- * ColumnarToRow (28)
-                     +- Scan parquet default.customer (27)
+         +- * Sort (30)
+            +- Exchange (29)
+               +- * ColumnarToRow (28)
+                  +- Scan parquet default.customer (27)
 
 
 (1) Scan parquet default.store_sales
@@ -51,7 +50,7 @@ Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, 
 Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, ss_sold_date_sk#5]
 Condition : ((isnotnull(ss_store_sk#3) AND isnotnull(ss_hdemo_sk#2)) AND isnotnull(ss_customer_sk#1))
 
-(4) ReusedExchange [Reuses operator id: 40]
+(4) ReusedExchange [Reuses operator id: 39]
 Output [1]: [d_date_sk#7]
 
 (5) BroadcastHashJoin [codegen id : 4]
@@ -67,7 +66,7 @@ Input [6]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, 
 Output [2]: [s_store_sk#8, s_county#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/store]
-PushedFilters: [In(s_county, [Bronx County,Franklin Parish,Orange County,Williamson County]), IsNotNull(s_store_sk)]
+PushedFilters: [In(s_county, [Bronx County,Franklin Parish,Orange County,Williamson County])]
 ReadSchema: struct<s_store_sk:int,s_county:string>
 
 (8) ColumnarToRow [codegen id : 2]
@@ -75,7 +74,7 @@ Input [2]: [s_store_sk#8, s_county#9]
 
 (9) Filter [codegen id : 2]
 Input [2]: [s_store_sk#8, s_county#9]
-Condition : (s_county#9 IN (Williamson County,Franklin Parish,Bronx County,Orange County) AND isnotnull(s_store_sk#8))
+Condition : s_county#9 IN (Williamson County,Franklin Parish,Bronx County,Orange County)
 
 (10) Project [codegen id : 2]
 Output [1]: [s_store_sk#8]
@@ -83,7 +82,7 @@ Input [2]: [s_store_sk#8, s_county#9]
 
 (11) BroadcastExchange
 Input [1]: [s_store_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#10]
 
 (12) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_store_sk#3]
@@ -98,7 +97,7 @@ Input [5]: [ss_customer_sk#1, ss_hdemo_sk#2, ss_store_sk#3, ss_ticket_number#4, 
 Output [4]: [hd_demo_sk#11, hd_buy_potential#12, hd_dep_count#13, hd_vehicle_count#14]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [IsNotNull(hd_vehicle_count), IsNotNull(hd_dep_count), Or(EqualTo(hd_buy_potential,>10000         ),EqualTo(hd_buy_potential,unknown        )), GreaterThan(hd_vehicle_count,0), IsNotNull(hd_demo_sk)]
+PushedFilters: [Or(EqualTo(hd_buy_potential,>10000         ),EqualTo(hd_buy_potential,unknown        )), GreaterThan(hd_vehicle_count,0)]
 ReadSchema: struct<hd_demo_sk:int,hd_buy_potential:string,hd_dep_count:int,hd_vehicle_count:int>
 
 (15) ColumnarToRow [codegen id : 3]
@@ -106,7 +105,7 @@ Input [4]: [hd_demo_sk#11, hd_buy_potential#12, hd_dep_count#13, hd_vehicle_coun
 
 (16) Filter [codegen id : 3]
 Input [4]: [hd_demo_sk#11, hd_buy_potential#12, hd_dep_count#13, hd_vehicle_count#14]
-Condition : (((((isnotnull(hd_vehicle_count#14) AND isnotnull(hd_dep_count#13)) AND ((hd_buy_potential#12 = >10000         ) OR (hd_buy_potential#12 = unknown        ))) AND (hd_vehicle_count#14 > 0)) AND ((cast(hd_dep_count#13 as double) / cast(hd_vehicle_count#14 as double)) > 1.0)) AND isnotnull(hd_demo_sk#11))
+Condition : ((((hd_buy_potential#12 = >10000         ) OR (hd_buy_potential#12 = unknown        )) AND (hd_vehicle_count#14 > 0)) AND ((cast(hd_dep_count#13 as double) / cast(hd_vehicle_count#14 as double)) > 1.0))
 
 (17) Project [codegen id : 3]
 Output [1]: [hd_demo_sk#11]
@@ -114,7 +113,7 @@ Input [4]: [hd_demo_sk#11, hd_buy_potential#12, hd_dep_count#13, hd_vehicle_coun
 
 (18) BroadcastExchange
 Input [1]: [hd_demo_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#15]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#15]
 
 (19) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ss_hdemo_sk#2]
@@ -159,71 +158,66 @@ Arguments: [ss_customer_sk#1 ASC NULLS FIRST], false, 0
 Output [5]: [c_customer_sk#22, c_salutation#23, c_first_name#24, c_last_name#25, c_preferred_cust_flag#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer]
-PushedFilters: [IsNotNull(c_customer_sk)]
 ReadSchema: struct<c_customer_sk:int,c_salutation:string,c_first_name:string,c_last_name:string,c_preferred_cust_flag:string>
 
 (28) ColumnarToRow [codegen id : 7]
 Input [5]: [c_customer_sk#22, c_salutation#23, c_first_name#24, c_last_name#25, c_preferred_cust_flag#26]
 
-(29) Filter [codegen id : 7]
-Input [5]: [c_customer_sk#22, c_salutation#23, c_first_name#24, c_last_name#25, c_preferred_cust_flag#26]
-Condition : isnotnull(c_customer_sk#22)
-
-(30) Exchange
+(29) Exchange
 Input [5]: [c_customer_sk#22, c_salutation#23, c_first_name#24, c_last_name#25, c_preferred_cust_flag#26]
 Arguments: hashpartitioning(c_customer_sk#22, 5), ENSURE_REQUIREMENTS, [id=#27]
 
-(31) Sort [codegen id : 8]
+(30) Sort [codegen id : 8]
 Input [5]: [c_customer_sk#22, c_salutation#23, c_first_name#24, c_last_name#25, c_preferred_cust_flag#26]
 Arguments: [c_customer_sk#22 ASC NULLS FIRST], false, 0
 
-(32) SortMergeJoin [codegen id : 9]
+(31) SortMergeJoin [codegen id : 9]
 Left keys [1]: [ss_customer_sk#1]
 Right keys [1]: [c_customer_sk#22]
 Join condition: None
 
-(33) Project [codegen id : 9]
+(32) Project [codegen id : 9]
 Output [6]: [c_last_name#25, c_first_name#24, c_salutation#23, c_preferred_cust_flag#26, ss_ticket_number#4, cnt#20]
 Input [8]: [ss_ticket_number#4, ss_customer_sk#1, cnt#20, c_customer_sk#22, c_salutation#23, c_first_name#24, c_last_name#25, c_preferred_cust_flag#26]
 
-(34) Exchange
+(33) Exchange
 Input [6]: [c_last_name#25, c_first_name#24, c_salutation#23, c_preferred_cust_flag#26, ss_ticket_number#4, cnt#20]
 Arguments: rangepartitioning(cnt#20 DESC NULLS LAST, 5), ENSURE_REQUIREMENTS, [id=#28]
 
-(35) Sort [codegen id : 10]
+(34) Sort [codegen id : 10]
 Input [6]: [c_last_name#25, c_first_name#24, c_salutation#23, c_preferred_cust_flag#26, ss_ticket_number#4, cnt#20]
 Arguments: [cnt#20 DESC NULLS LAST], true, 0
 
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 1 Hosting Expression = ss_sold_date_sk#5 IN dynamicpruning#6
-BroadcastExchange (40)
-+- * Project (39)
-   +- * Filter (38)
-      +- * ColumnarToRow (37)
-         +- Scan parquet default.date_dim (36)
+BroadcastExchange (39)
++- * Project (38)
+   +- * Filter (37)
+      +- * ColumnarToRow (36)
+         +- Scan parquet default.date_dim (35)
 
 
-(36) Scan parquet default.date_dim
+(35) Scan parquet default.date_dim
 Output [3]: [d_date_sk#7, d_year#29, d_dom#30]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
-PushedFilters: [IsNotNull(d_dom), GreaterThanOrEqual(d_dom,1), LessThanOrEqual(d_dom,2), In(d_year, [1999,2000,2001]), IsNotNull(d_date_sk)]
+PushedFilters: [GreaterThanOrEqual(d_dom,1), LessThanOrEqual(d_dom,2), In(d_year, [1999,2000,2001])]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_dom:int>
 
-(37) ColumnarToRow [codegen id : 1]
+(36) ColumnarToRow [codegen id : 1]
 Input [3]: [d_date_sk#7, d_year#29, d_dom#30]
 
-(38) Filter [codegen id : 1]
+(37) Filter [codegen id : 1]
 Input [3]: [d_date_sk#7, d_year#29, d_dom#30]
-Condition : ((((isnotnull(d_dom#30) AND (d_dom#30 >= 1)) AND (d_dom#30 <= 2)) AND d_year#29 IN (1999,2000,2001)) AND isnotnull(d_date_sk#7))
+Condition : (((d_dom#30 >= 1) AND (d_dom#30 <= 2)) AND d_year#29 IN (1999,2000,2001))
 
-(39) Project [codegen id : 1]
+(38) Project [codegen id : 1]
 Output [1]: [d_date_sk#7]
 Input [3]: [d_date_sk#7, d_year#29, d_dom#30]
 
-(40) BroadcastExchange
+(39) BroadcastExchange
 Input [1]: [d_date_sk#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#31]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#31]
 
 

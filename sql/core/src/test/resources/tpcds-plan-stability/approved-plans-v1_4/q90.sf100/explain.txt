@@ -74,7 +74,7 @@ Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, ws_sold_dat
 Output [2]: [wp_web_page_sk#5, wp_char_count#6]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/web_page]
-PushedFilters: [IsNotNull(wp_char_count), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,5200), IsNotNull(wp_web_page_sk)]
+PushedFilters: [IsNotNull(wp_char_count), GreaterThanOrEqual(wp_char_count,5000), LessThanOrEqual(wp_char_count,5200)]
 ReadSchema: struct<wp_web_page_sk:int,wp_char_count:int>
 
 (6) ColumnarToRow [codegen id : 1]
@@ -82,7 +82,7 @@ Input [2]: [wp_web_page_sk#5, wp_char_count#6]
 
 (7) Filter [codegen id : 1]
 Input [2]: [wp_web_page_sk#5, wp_char_count#6]
-Condition : (((isnotnull(wp_char_count#6) AND (wp_char_count#6 >= 5000)) AND (wp_char_count#6 <= 5200)) AND isnotnull(wp_web_page_sk#5))
+Condition : ((isnotnull(wp_char_count#6) AND (wp_char_count#6 >= 5000)) AND (wp_char_count#6 <= 5200))
 
 (8) Project [codegen id : 1]
 Output [1]: [wp_web_page_sk#5]
@@ -90,7 +90,7 @@ Input [2]: [wp_web_page_sk#5, wp_char_count#6]
 
 (9) BroadcastExchange
 Input [1]: [wp_web_page_sk#5]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#7]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#7]
 
 (10) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_web_page_sk#3]
@@ -105,7 +105,7 @@ Input [4]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, ws_web_page_sk#3, wp_web_page
 Output [2]: [hd_demo_sk#8, hd_dep_count#9]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/household_demographics]
-PushedFilters: [IsNotNull(hd_dep_count), EqualTo(hd_dep_count,6), IsNotNull(hd_demo_sk)]
+PushedFilters: [EqualTo(hd_dep_count,6)]
 ReadSchema: struct<hd_demo_sk:int,hd_dep_count:int>
 
 (13) ColumnarToRow [codegen id : 2]
@@ -113,7 +113,7 @@ Input [2]: [hd_demo_sk#8, hd_dep_count#9]
 
 (14) Filter [codegen id : 2]
 Input [2]: [hd_demo_sk#8, hd_dep_count#9]
-Condition : ((isnotnull(hd_dep_count#9) AND (hd_dep_count#9 = 6)) AND isnotnull(hd_demo_sk#8))
+Condition : (hd_dep_count#9 = 6)
 
 (15) Project [codegen id : 2]
 Output [1]: [hd_demo_sk#8]
@@ -121,7 +121,7 @@ Input [2]: [hd_demo_sk#8, hd_dep_count#9]
 
 (16) BroadcastExchange
 Input [1]: [hd_demo_sk#8]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#10]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#10]
 
 (17) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_ship_hdemo_sk#2]
@@ -136,7 +136,7 @@ Input [3]: [ws_sold_time_sk#1, ws_ship_hdemo_sk#2, hd_demo_sk#8]
 Output [2]: [t_time_sk#11, t_hour#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
-PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,8), LessThanOrEqual(t_hour,9), IsNotNull(t_time_sk)]
+PushedFilters: [GreaterThanOrEqual(t_hour,8), LessThanOrEqual(t_hour,9)]
 ReadSchema: struct<t_time_sk:int,t_hour:int>
 
 (20) ColumnarToRow [codegen id : 3]
@@ -144,7 +144,7 @@ Input [2]: [t_time_sk#11, t_hour#12]
 
 (21) Filter [codegen id : 3]
 Input [2]: [t_time_sk#11, t_hour#12]
-Condition : (((isnotnull(t_hour#12) AND (t_hour#12 >= 8)) AND (t_hour#12 <= 9)) AND isnotnull(t_time_sk#11))
+Condition : ((t_hour#12 >= 8) AND (t_hour#12 <= 9))
 
 (22) Project [codegen id : 3]
 Output [1]: [t_time_sk#11]
@@ -152,7 +152,7 @@ Input [2]: [t_time_sk#11, t_hour#12]
 
 (23) BroadcastExchange
 Input [1]: [t_time_sk#11]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#13]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#13]
 
 (24) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [ws_sold_time_sk#1]
@@ -227,7 +227,7 @@ Input [3]: [ws_sold_time_sk#19, ws_ship_hdemo_sk#20, hd_demo_sk#24]
 Output [2]: [t_time_sk#25, t_hour#26]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/time_dim]
-PushedFilters: [IsNotNull(t_hour), GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20), IsNotNull(t_time_sk)]
+PushedFilters: [GreaterThanOrEqual(t_hour,19), LessThanOrEqual(t_hour,20)]
 ReadSchema: struct<t_time_sk:int,t_hour:int>
 
 (40) ColumnarToRow [codegen id : 7]
@@ -235,7 +235,7 @@ Input [2]: [t_time_sk#25, t_hour#26]
 
 (41) Filter [codegen id : 7]
 Input [2]: [t_time_sk#25, t_hour#26]
-Condition : (((isnotnull(t_hour#26) AND (t_hour#26 >= 19)) AND (t_hour#26 <= 20)) AND isnotnull(t_time_sk#25))
+Condition : ((t_hour#26 >= 19) AND (t_hour#26 <= 20))
 
 (42) Project [codegen id : 7]
 Output [1]: [t_time_sk#25]
@@ -243,7 +243,7 @@ Input [2]: [t_time_sk#25, t_hour#26]
 
 (43) BroadcastExchange
 Input [1]: [t_time_sk#25]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#27]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#27]
 
 (44) BroadcastHashJoin [codegen id : 8]
 Left keys [1]: [ws_sold_time_sk#19]

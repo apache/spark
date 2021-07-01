@@ -20,7 +20,7 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
                                       HashAggregate [ss_store_sk,ss_item_sk,ss_sales_price] [sum,sum]
                                         Project [ss_item_sk,ss_store_sk,ss_sales_price]
                                           BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                            Filter [ss_store_sk,ss_item_sk]
+                                            Filter [ss_store_sk]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_sales_price,ss_sold_date_sk]
@@ -44,23 +44,10 @@ TakeOrderedAndProject [s_store_name,i_item_desc,revenue,i_current_price,i_wholes
                                           HashAggregate [ss_store_sk,revenue] [sum,count,sum,count]
                                             HashAggregate [ss_store_sk,ss_item_sk,sum] [sum(UnscaledValue(ss_sales_price)),revenue,sum]
                                               InputAdapter
-                                                Exchange [ss_store_sk,ss_item_sk] #7
-                                                  WholeStageCodegen (4)
-                                                    HashAggregate [ss_store_sk,ss_item_sk,ss_sales_price] [sum,sum]
-                                                      Project [ss_item_sk,ss_store_sk,ss_sales_price]
-                                                        BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                          Filter [ss_store_sk]
-                                                            ColumnarToRow
-                                                              InputAdapter
-                                                                Scan parquet default.store_sales [ss_item_sk,ss_store_sk,ss_sales_price,ss_sold_date_sk]
-                                                                  ReusedSubquery [d_date_sk] #1
-                                                          InputAdapter
-                                                            ReusedExchange [d_date_sk] #4
-                  Filter [s_store_sk]
-                    ColumnarToRow
-                      InputAdapter
-                        Scan parquet default.store [s_store_sk,s_store_name]
-        Filter [i_item_sk]
-          ColumnarToRow
-            InputAdapter
-              Scan parquet default.item [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]
+                                                ReusedExchange [ss_store_sk,ss_item_sk,sum] #3
+                  ColumnarToRow
+                    InputAdapter
+                      Scan parquet default.store [s_store_sk,s_store_name]
+        ColumnarToRow
+          InputAdapter
+            Scan parquet default.item [i_item_sk,i_item_desc,i_current_price,i_wholesale_cost,i_brand]

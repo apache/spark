@@ -81,6 +81,13 @@ object LogicalRelation {
     // The v1 source may return schema containing char/varchar type. We replace char/varchar
     // with "annotated" string type here as the query engine doesn't support char/varchar yet.
     val schema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(relation.schema)
-    LogicalRelation(relation, schema.toAttributes, Some(table), false)
+    val attributes = schema.toAttributes
+    val output = table.stats.map(_.colStats) match {
+      case Some(colStats) =>
+        attributes.map(a => a.withNullability(colStats(a.name).nullCount.forall(_ > 0L)))
+      case None =>
+        attributes
+    }
+    LogicalRelation(relation, output, Some(table), false)
   }
 }

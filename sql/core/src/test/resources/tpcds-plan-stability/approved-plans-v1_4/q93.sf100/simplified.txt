@@ -16,7 +16,7 @@ TakeOrderedAndProject [sumsales,ss_customer_sk]
                               Project [sr_item_sk,sr_ticket_number,sr_return_quantity]
                                 BroadcastHashJoin [sr_reason_sk,r_reason_sk]
                                   Project [sr_item_sk,sr_reason_sk,sr_ticket_number,sr_return_quantity]
-                                    Filter [sr_item_sk,sr_ticket_number,sr_reason_sk]
+                                    Filter [sr_reason_sk]
                                       ColumnarToRow
                                         InputAdapter
                                           Scan parquet default.store_returns [sr_item_sk,sr_reason_sk,sr_ticket_number,sr_return_quantity,sr_returned_date_sk]
@@ -24,7 +24,7 @@ TakeOrderedAndProject [sumsales,ss_customer_sk]
                                     BroadcastExchange #3
                                       WholeStageCodegen (1)
                                         Project [r_reason_sk]
-                                          Filter [r_reason_desc,r_reason_sk]
+                                          Filter [r_reason_desc]
                                             ColumnarToRow
                                               InputAdapter
                                                 Scan parquet default.reason [r_reason_sk,r_reason_desc]

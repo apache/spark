@@ -18,14 +18,14 @@ WholeStageCodegen (9)
                                   BroadcastHashJoin [c_current_hdemo_sk,hd_demo_sk]
                                     Project [c_customer_sk,c_current_hdemo_sk,c_current_addr_sk,cd_marital_status,cd_education_status]
                                       BroadcastHashJoin [c_current_cdemo_sk,cd_demo_sk]
-                                        Filter [c_customer_sk,c_current_addr_sk,c_current_cdemo_sk,c_current_hdemo_sk]
+                                        Filter [c_current_cdemo_sk,c_current_hdemo_sk]
                                           ColumnarToRow
                                             InputAdapter
                                               Scan parquet default.customer [c_customer_sk,c_current_cdemo_sk,c_current_hdemo_sk,c_current_addr_sk]
                                         InputAdapter
                                           BroadcastExchange #3
                                             WholeStageCodegen (1)
-                                              Filter [cd_marital_status,cd_education_status,cd_demo_sk]
+                                              Filter [cd_marital_status,cd_education_status]
                                                 ColumnarToRow
                                                   InputAdapter
                                                     Scan parquet default.customer_demographics [cd_demo_sk,cd_marital_status,cd_education_status]
@@ -33,7 +33,7 @@ WholeStageCodegen (9)
                                       BroadcastExchange #4
                                         WholeStageCodegen (2)
                                           Project [hd_demo_sk]
-                                            Filter [hd_buy_potential,hd_demo_sk]
+                                            Filter [hd_buy_potential]
                                               ColumnarToRow
                                                 InputAdapter
                                                   Scan parquet default.household_demographics [hd_demo_sk,hd_buy_potential]
@@ -41,7 +41,7 @@ WholeStageCodegen (9)
                                   BroadcastExchange #5
                                     WholeStageCodegen (3)
                                       Project [ca_address_sk]
-                                        Filter [ca_gmt_offset,ca_address_sk]
+                                        Filter [ca_gmt_offset]
                                           ColumnarToRow
                                             InputAdapter
                                               Scan parquet default.customer_address [ca_address_sk,ca_gmt_offset]
@@ -58,7 +58,7 @@ WholeStageCodegen (9)
                                                 BroadcastExchange #7
                                                   WholeStageCodegen (1)
                                                     Project [d_date_sk]
-                                                      Filter [d_year,d_moy,d_date_sk]
+                                                      Filter [d_year,d_moy]
                                                         ColumnarToRow
                                                           InputAdapter
                                                             Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
@@ -67,7 +67,6 @@ WholeStageCodegen (9)
                         InputAdapter
                           BroadcastExchange #8
                             WholeStageCodegen (6)
-                              Filter [cc_call_center_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.call_center [cc_call_center_sk,cc_call_center_id,cc_name,cc_manager]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.call_center [cc_call_center_sk,cc_call_center_id,cc_name,cc_manager]
