@@ -1273,8 +1273,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-35912: Cast struct contains the null value to string") {
-    Seq(true, false).foreach {
-      case nullable =>
+    Seq(true, false).foreach { nullable =>
         val lit = Literal.create(InternalRow(InternalRow(1, null)),
           StructType(Seq(StructField("c1",
             StructType(Seq(
@@ -1295,7 +1294,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-35912: Cast struct contains the null value to struct") {
-    Seq(true, false).foreach { case nullable =>
+    Seq(true, false).foreach { nullable =>
       val lit = Literal.create(InternalRow(1, null),
         StructType(Seq(
           StructField("c1", IntegerType, true),
@@ -1317,5 +1316,4 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(ret, expected)
     }
   }
-
 }
