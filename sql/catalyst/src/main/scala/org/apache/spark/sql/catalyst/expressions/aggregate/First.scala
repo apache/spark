@@ -60,7 +60,7 @@ case class First(child: Expression, ignoreNulls: Boolean)
     this(child, FirstLast.validateIgnoreNullExpr(ignoreNullsExpr, "first"))
   }
 
-  override def nullable: Boolean = child.nullable
+  override def nullable: Boolean = true
 
   // First is not a deterministic function.
   override lazy val deterministic: Boolean = false
