@@ -1293,12 +1293,13 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
           ("keyOnlyInState-2", new RunningCount(1))
         ).toDS()
 
+        val it = initialState.groupByKey(x => x._1).mapValues(_._2)
         val inputData = MemoryStream[String]
         val result =
           inputData.toDS()
             .groupByKey(x => x)
             .flatMapGroupsWithState(
-              Update, GroupStateTimeout.NoTimeout, initialState)(flatMapGroupsWithStateFunc)
+              Update, GroupStateTimeout.NoTimeout, it)(flatMapGroupsWithStateFunc)
 
         testStream(result, Update)(
           AddData(inputData, "keyOnlyInData", "keyInStateAndData-1"),
@@ -1325,10 +1326,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("flatMapGroupsWithState - initial state - duplicate keys") {
-    val initialState: Dataset[(String, RunningCount)] = Seq(
+    val initialState = Seq(
       ("a", new RunningCount(2)),
       ("a", new RunningCount(1))
-    ).toDS()
+    ).toDS().groupByKey(_._1).mapValues(_._2)
 
     val inputData = MemoryStream[String]
     val result =
@@ -1353,7 +1354,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       inputData.toDS()
         .groupByKey(x => x)
         .flatMapGroupsWithState(
-          Update, NoTimeout(), initialStateData.toDS())(flatMapGroupsWithStateFunc)
+          Update, NoTimeout(), initialStateData.toDS().groupByKey(_._1).mapValues(_._2)
+        )(flatMapGroupsWithStateFunc)
 
     val e = intercept[AnalysisException] {
       result.writeStream
@@ -1371,9 +1373,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       state.update(new RunningCount(count))
       (key, valList)
     }
-    val initialState: Dataset[(String, RunningCount)] = Seq(
+    val initialState = Seq(
       ("keyInStateAndData", new RunningCount(1))
-    ).toDS()
+    ).toDS().groupByKey(_._1).mapValues(_._2)
 
     val inputData = MemoryStream[String]
     val result =
@@ -1405,9 +1407,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
 
     val clock = new StreamManualClock
     val inputData = MemoryStream[(String, Long)]
-    val initialState: Dataset[(String, RunningCount)] = Seq(
+    val initialState = Seq(
       ("c", new RunningCount(2))
-    ).toDS()
+    ).toDS().groupByKey(_._1).mapValues(_._2)
     val result =
       inputData.toDF().toDF("key", "time")
         .selectExpr("key", "timestamp_seconds(time) as timestamp")
@@ -1429,9 +1431,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("flatMapGroupsWithState - initial state - batch") {
-    val initialState: Dataset[(String, RunningCount)] = Seq(
+    val initialState = Seq(
       ("a", new RunningCount(1))
-    ).toDS()
+    ).toDS().groupByKey(_._1).mapValues(_._2)
 
     val e = intercept[AnalysisException] {
       Seq("a", "a", "b").toDS
@@ -1443,8 +1445,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       " pass an initial state."))
   }
 
-  ignore("flatMapGroupsWithState - initial state - case class key") {
-    // This test will fail now
+  test("flatMapGroupsWithState - initial state - case class key") {
     val stateFunc = (key: User, values: Iterator[User], state: GroupState[RunningCount]) => {
       assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
       assertCannotGetWatermark { state.getCurrentWatermarkMs() }
@@ -1459,9 +1460,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       }
     }
 
-    val ds: Dataset[(User, RunningCount)] = spark.range(0, 1).map { x =>
+    val ds = spark.range(0, 1).map { x =>
       (User("a", "1"), RunningCount(1))
-    }
+    }.groupByKey(_._1).mapValues(_._2)
 
     val inputData = MemoryStream[User]
     val result =
@@ -1482,7 +1483,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       // Function to maintain running count up to 2, and then remove the count
       // Returns the data and the count (-1 if count reached beyond 2 and state was just removed)
       val stateFunc =
-      (key: String, values: Iterator[(String, Long)], state: GroupState[RunningCount]) => {
+          (key: String, values: Iterator[(String, Long)], state: GroupState[RunningCount]) => {
         if (state.hasTimedOut) {
           state.remove()
           Iterator((key, "-1"))
@@ -1620,9 +1621,10 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       .groupByKey(x => x)
       .flatMapGroupsWithState[Int, Int](Append, timeoutConf = timeoutType)(func)
       .logicalPlan.collectFirst {
-        case FlatMapGroupsWithState(f, k, v, g, d, o, s, m, _, t, hasInitialState, sga, kE, i, c) =>
+        case FlatMapGroupsWithState(f, k, v, g, d, o, s, m, _, t,
+            hasInitialState, sga, sda, se, i, c) =>
           FlatMapGroupsWithStateExec(
-            f, k, v, g, sga, d, o, None, s, kE, stateFormatVersion, m, t,
+            f, k, v, se, g, sga, d, sda, o, None, s, stateFormatVersion, m, t,
             Some(currentBatchTimestamp), Some(currentBatchWatermark),
             RDDScanExec(g, emptyRdd, "rdd"),
             hasInitialState,

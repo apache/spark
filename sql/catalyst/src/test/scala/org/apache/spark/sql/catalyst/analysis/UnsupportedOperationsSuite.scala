@@ -1047,7 +1047,8 @@ object FlatMapGroupsWithState {
       timeout,
       false,
       groupingAttributes,
-      stateEncoder,
+      dataAttributes,
+      valueDeserializer,
       batchRelation,
       child
     )

@@ -304,7 +304,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    */
   def mapGroupsWithState[S: Encoder, U: Encoder](
       timeoutConf: GroupStateTimeout,
-      initialState: Dataset[(K, S)])(
+      initialState: KeyValueGroupedDataset[K, S])(
       func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
     val flatMapFunc = (key: K, it: Iterator[V], s: GroupState[S]) => Iterator(func(key, it, s))
 
@@ -321,7 +321,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
         isMapGroupsWithState = true,
         timeoutConf,
         child = logicalPlan,
-        stateGroupAttrs,
+        initialState.groupingAttributes,
+        initialState.dataAttributes,
         initialState.queryExecution.analyzed
       ))
   }
@@ -382,6 +383,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
     )(stateEncoder, outputEncoder)
   }
 
+  /*
   /**
    * (Java-specific)
    * Applies the given function to each group of data, while maintaining a user-defined per-group
@@ -415,6 +417,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
       (key: K, it: Iterator[V], s: GroupState[S]) => func.call(key, it.asJava, s)
     )(stateEncoder, outputEncoder)
   }
+  */
 
   /**
    * (Scala-specific)
@@ -478,13 +481,13 @@ class KeyValueGroupedDataset[K, V] private[sql](
   def flatMapGroupsWithState[S: Encoder, U: Encoder](
       outputMode: OutputMode,
       timeoutConf: GroupStateTimeout,
-      initialState: Dataset[(K, S)])(
+      initialState: KeyValueGroupedDataset[K, S])(
       func: (K, Iterator[V], GroupState[S]) => Iterator[U]): Dataset[U] = {
     if (outputMode != OutputMode.Append && outputMode != OutputMode.Update) {
       throw new IllegalArgumentException("The output mode of function should be append or update")
     }
-    val stateGroupAttrs: Seq[Attribute] = getStateGroupAttributes(
-      initialState.queryExecution.analyzed)
+    val stateGroupAttrs: Seq[Attribute] = initialState.groupingAttributes
+    val stateDataAttrs: Seq[Attribute] = initialState.dataAttributes
 
     Dataset[U](
       sparkSession,
@@ -497,6 +500,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
         timeoutConf,
         child = logicalPlan,
         stateGroupAttrs,
+        stateDataAttrs,
         initialState.queryExecution.analyzed
       ))
   }
@@ -531,6 +535,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
     flatMapGroupsWithState[S, U](outputMode, timeoutConf)(f)(stateEncoder, outputEncoder)
   }
 
+  /*
   /**
    * (Java-specific)
    * Applies the given function to each group of data, while maintaining a user-defined per-group
@@ -565,6 +570,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
     val f = (key: K, it: Iterator[V], s: GroupState[S]) => func.call(key, it.asJava, s).asScala
     flatMapGroupsWithState[S, U](outputMode, timeoutConf)(f)(stateEncoder, outputEncoder)
   }
+
+   */
 
   /**
    * (Scala-specific)

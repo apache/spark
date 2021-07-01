@@ -21,7 +21,7 @@ import java.util.concurrent.TimeUnit.NANOSECONDS
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, BaseOrdering, BoundReference, Expression, GetStructField, SortOrder, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, BaseOrdering, Expression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
@@ -38,11 +38,11 @@ import org.apache.spark.util.{CompletionIterator, NextIterator, SerializableConf
  * @param func function called on each group
  * @param keyDeserializer used to extract the key object for each group.
  * @param valueDeserializer used to extract the items in the iterator from an input row.
+ * @param initialStateDeserializer used to extract the state object from the initialState dataset
  * @param groupingAttributes used to group the data
  * @param dataAttributes used to read the data
  * @param outputObjAttr Defines the output object
  * @param stateEncoder used to serialize/deserialize state before calling `func`
- * @param initialStateEncoder encoder for the initial state used to deserialize init state.
  * @param outputMode the output mode of `func`
  * @param timeoutConf used to timeout groups that have not received data in a while
  * @param batchTimestampMs processing timestamp of the current batch.
@@ -55,13 +55,14 @@ case class FlatMapGroupsWithStateExec(
     func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
     keyDeserializer: Expression,
     valueDeserializer: Expression,
+    initialStateDeserializer: Expression,
     groupingAttributes: Seq[Attribute],
     initialStateGroupAttrs: Seq[Attribute],
     dataAttributes: Seq[Attribute],
+    initialStateDataAttrs: Seq[Attribute],
     outputObjAttr: Attribute,
     stateInfo: Option[StatefulOperatorStateInfo],
     stateEncoder: ExpressionEncoder[Any],
-    initialStateEncoder: ExpressionEncoder[Any],
     stateFormatVersion: Int,
     outputMode: OutputMode,
     timeoutConf: GroupStateTimeout,
@@ -129,13 +130,13 @@ case class FlatMapGroupsWithStateExec(
    * @param iter - Iterator of the data rows
    * @param store - associated state store for this partition
    * @param processor - handle to the input processor object.
-   * @param initStateIterOption - optional initial state iterator
+   * @param initialStateIterOption - optional initial state iterator
    */
   def processDataWithPartition(
       iter: Iterator[InternalRow],
       store: StateStore,
       processor: InputProcessor,
-      initStateIterOption: Option[Iterator[InternalRow]] = None
+      initialStateIterOption: Option[Iterator[InternalRow]] = None
     ): CompletionIterator[InternalRow, Iterator[InternalRow]] = {
     val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
     val commitTimeMs = longMetric("commitTimeMs")
@@ -153,7 +154,7 @@ case class FlatMapGroupsWithStateExec(
         iter
     }
 
-    val processedOutputIterator = initStateIterOption match {
+    val processedOutputIterator = initialStateIterOption match {
       case Some(initStateIter) if initStateIter.hasNext =>
         processor.processNewDataWithInitState(filteredIter, initStateIter)
       case _ => processor.processNewData(filteredIter)
@@ -210,7 +211,6 @@ case class FlatMapGroupsWithStateExec(
     if (hasInitialState) {
       // If the user provided initial state we need to have the initial state and the
       // data in the same partition so that we can still have just one commit at the end.
-
       val storeConf = new StateStoreConf(session.sqlContext.sessionState.conf)
       val hadoopConfBroadcast = sparkContext.broadcast(
         new SerializableConfiguration(session.sqlContext.sessionState.newHadoopConf()))
@@ -258,17 +258,11 @@ case class FlatMapGroupsWithStateExec(
     private val getValueObj =
       ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
     private val getOutputRow = ObjectOperator.wrapObjectToRow(outputObjectType)
-
-    private val stateDeserializerExpr: Expression = {
-      val boundRefToNestedState =
-        BoundReference(0, stateEncoder.schema, nullable = true)
-      stateEncoder.resolveAndBind().deserializer.transformUp {
-        case BoundReference(ordinal, _, _) => GetStructField(boundRefToNestedState, ordinal)
-      }
+    private val getStateObj = if (hasInitialState) {
+      Some(ObjectOperator.deserializeRowToObject(initialStateDeserializer, initialStateDataAttrs))
+    } else {
+      None
     }
-
-    private val stateDeserializerFunc = ObjectOperator
-      .deserializeRowToObject(stateDeserializerExpr, stateEncoder.schema.toAttributes)
 
     // Metrics
     private val numUpdatedStateRows = longMetric("numUpdatedStateRows")
@@ -312,16 +306,15 @@ case class FlatMapGroupsWithStateExec(
       FlatMapGroupsWithStateExec.mergeGroupedIters(
           groupedChildDataIter,
           groupedInitStateIter,
-          keyOrderingComparator).flatMap { case (keyRow, valueRowIter, initStateRowOption) =>
+          keyOrderingComparator).flatMap { case (keyRow, valueRowIter, initStateRowIterator) =>
         val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
         var foundInitStateForKey = false
-        initStateRowOption.foreach { initStateRow =>
+        initStateRowIterator.foreach { initStateRow =>
           if (foundInitStateForKey) {
             throw new IllegalArgumentException("The initial state provided contained duplicates")
           }
           foundInitStateForKey = true
-          val fields = initStateRow.toSeq(initialStateEncoder.schema)
-          val initStateObj = stateDeserializerFunc(InternalRow(fields(1)))
+          val initStateObj = getStateObj.get(initStateRow)
           stateManager.putState(store, keyUnsafeRow, initStateObj, NO_TIMESTAMP)
         }
         callFunctionAndUpdateState(

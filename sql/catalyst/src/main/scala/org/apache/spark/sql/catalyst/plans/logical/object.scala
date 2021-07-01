@@ -441,8 +441,6 @@ object FlatMapGroupsWithState {
       timeout: GroupStateTimeout,
       child: LogicalPlan): LogicalPlan = {
     val stateEncoder = encoderFor[S]
-    val keyEncoder = encoderFor[K]
-    val initStateEncoder = ExpressionEncoder.tuple(keyEncoder, stateEncoder)
 
     val mapped = new FlatMapGroupsWithState(
       func,
@@ -457,7 +455,8 @@ object FlatMapGroupsWithState {
       timeout,
       hasInitialState = false,
       groupingAttributes,
-      initStateEncoder.asInstanceOf[ExpressionEncoder[Any]],
+      dataAttributes,
+      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
       LocalRelation(stateEncoder.schema.toAttributes), // empty data set
       child
     )
@@ -473,10 +472,9 @@ object FlatMapGroupsWithState {
       timeout: GroupStateTimeout,
       child: LogicalPlan,
       initialStateGroupAttrs: Seq[Attribute],
+      initialStateDataAttrs: Seq[Attribute],
       initialState: LogicalPlan): LogicalPlan = {
     val stateEncoder = encoderFor[S]
-    val keyEncoder = encoderFor[K]
-    val initialStateEncoder = ExpressionEncoder.tuple(keyEncoder, stateEncoder)
 
     val mapped = new FlatMapGroupsWithState(
       func,
@@ -491,7 +489,8 @@ object FlatMapGroupsWithState {
       timeout,
       hasInitialState = true,
       initialStateGroupAttrs,
-      initialStateEncoder.asInstanceOf[ExpressionEncoder[Any]],
+      initialStateDataAttrs,
+      UnresolvedDeserializer(encoderFor[S].deserializer, initialStateDataAttrs),
       initialState,
       child)
     CatalystSerde.serialize[U](mapped)
@@ -516,7 +515,8 @@ object FlatMapGroupsWithState {
  * @param timeout used to timeout groups that have not received data in a while
  * @param hasInitialState Indicates whether initial state needs to be applied or not.
  * @param initialStateGroupAttrs grouping attributes for the initial state
- * @param initialStateEncoder encoder for the user provided initial state
+ * @param initialStateDataAttrs used to read the initial state
+ * @param initialStateDeserializer used to extract the initial state objects.
  * @param initialState user defined initial state that is applied in the first batch.
  * @param child logical plan of the underlying data
  */
@@ -533,7 +533,8 @@ case class FlatMapGroupsWithState(
     timeout: GroupStateTimeout,
     hasInitialState: Boolean = false,
     initialStateGroupAttrs: Seq[Attribute] = Seq.empty,
-    initialStateEncoder: ExpressionEncoder[Any],
+    initialStateDataAttrs: Seq[Attribute] = Seq.empty,
+    initialStateDeserializer: Expression,
     initialState: LogicalPlan,
     child: LogicalPlan) extends BinaryNode with ObjectProducer {
 
