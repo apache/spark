@@ -43,7 +43,6 @@ from pyspark.sql.types import (
     UserDefinedType,
 )
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
-from pyspark.pandas.base import column_op
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import (
@@ -319,19 +318,49 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def ror(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         return left.__or__(right)
 
+    def __neg__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__neg__)(operand)
+
+    def __abs__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(F.abs)(operand)
+
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
         return column_op(Column.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
         return column_op(Column.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
         return column_op(Column.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
         return column_op(Column.__gt__)(left, right)
 
+    def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__eq__)(left, right)
+
+    def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__ne__)(left, right)
+
     def __invert__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
         return column_op(Column.__invert__)(operand)
 
     def __len__(self, operand: IndexOpsLike) -> int:

@@ -317,7 +317,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     # arithmetic operators
     def __neg__(self: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, column_op(Column.__neg__)(self))
+        return cast(IndexOpsLike, self._dtype_op.__neg__(self))
 
     def __add__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.add(self, other)
@@ -394,14 +394,14 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._dtype_op.rpow(self, other)
 
     def __abs__(self: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, column_op(F.abs)(self))
+        return cast(IndexOpsLike, self._dtype_op.__abs__(self))
 
     # comparison operators
     def __eq__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
-        return column_op(Column.__eq__)(self, other)
+        return self._dtype_op.eq(self, other)
 
     def __ne__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
-        return column_op(Column.__ne__)(self, other)
+        return self._dtype_op.ne(self, other)
 
     def __lt__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.lt(self, other)
