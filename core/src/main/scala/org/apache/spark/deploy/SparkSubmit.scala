@@ -957,8 +957,7 @@ private[spark] class SparkSubmit extends Logging {
       case t: Throwable =>
         throw findCause(t)
     } finally {
-      if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass) &&
-        !isThriftServer(args.mainClass) && !isClientMode(args.deployMode)) {
+      if (isK8S(args.master)) {
         try {
           SparkContext.getActive.foreach(_.stop())
         } catch {
@@ -1099,10 +1098,10 @@ object SparkSubmit extends CommandLineUtils with Logging {
   }
 
   /**
-   * Return whether the given deployMode is client.
+   * Return whether master is k8s.
    */
-  private[deploy] def isClientMode(deployMode: String): Boolean = {
-    deployMode == null || deployMode.equalsIgnoreCase("client")
+  private[deploy] def isK8S(master: String): Boolean = {
+    master != null && master.startsWith("k8s")
   }
 
 }
