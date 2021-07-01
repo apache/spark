@@ -185,6 +185,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             // cannot resolve '${a.sql}' given input columns: [$from]
             a.failAnalysis(errorClass = "MISSING_COLUMN", messageParameters = Seq(a.sql, from))
 
+          case s: Star =>
+            withPosition(s) {
+              throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName)
+            }
+
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
               case TypeCheckResult.TypeCheckFailure(message) =>
