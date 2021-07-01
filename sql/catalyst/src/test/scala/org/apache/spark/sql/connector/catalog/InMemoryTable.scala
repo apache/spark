@@ -265,25 +265,7 @@ class InMemoryTable(
       val numRows = inputPartitions.map(_.rows.size).sum
       // we assume an average object header is 12 bytes
       val objectHeaderSizeInBytes = 12L
-      val rowSizeInBytes = schema.fields.zipWithIndex.map { case (field, index) =>
-        field.dataType match {
-          case BooleanType => 1L
-          case ByteType => 1L
-          case ShortType => 2L
-          case IntegerType => 4L
-          case LongType => 8L
-          case FloatType => 4L
-          case DoubleType => 8L
-          case StringType =>
-            val totalNumChars = inputPartitions
-              .map(_.rows.map(_.getString(index).length).sum)
-              .sum
-            // each char in a String is 2 bytes
-            val avgNumChars = totalNumChars / numRows
-            objectHeaderSizeInBytes + avgNumChars * 2L
-          case _ => 8L
-        }
-      }.sum + objectHeaderSizeInBytes
+      val rowSizeInBytes = objectHeaderSizeInBytes + schema.defaultSize
       val sizeInBytes = numRows * rowSizeInBytes
       InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows))
     }
