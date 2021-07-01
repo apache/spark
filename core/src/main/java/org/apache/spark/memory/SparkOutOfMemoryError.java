@@ -16,6 +16,7 @@
  */
 package org.apache.spark.memory;
 
+import org.apache.spark.SparkThrowable;
 import org.apache.spark.annotation.Private;
 
 /**
@@ -24,7 +25,9 @@ import org.apache.spark.annotation.Private;
  * we should use throw this exception, which just kills the current task.
  */
 @Private
-public final class SparkOutOfMemoryError extends OutOfMemoryError {
+public final class SparkOutOfMemoryError extends OutOfMemoryError implements SparkThrowable {
+    String errorClass;
+    String[] messageParameters;
 
     public SparkOutOfMemoryError(String s) {
         super(s);
@@ -32,5 +35,23 @@ public final class SparkOutOfMemoryError extends OutOfMemoryError {
 
     public SparkOutOfMemoryError(OutOfMemoryError e) {
         super(e.getMessage());
+    }
+
+    public SparkOutOfMemoryError(String errorClass, String[] messageParameters) {
+        super(SparkThrowable.SparkThrowableHelper.getMessage(errorClass, messageParameters));
+        this.errorClass = errorClass;
+        this.messageParameters = messageParameters;
+    }
+
+    public String getErrorClass() {
+        return errorClass;
+    }
+
+    public String[] getMessageParameters() {
+        return messageParameters;
+    }
+
+    public String getSqlState() {
+        return SparkThrowable.SparkThrowableHelper.getSqlState(errorClass);
     }
 }

@@ -40,8 +40,8 @@ import org.apache.spark.util.Utils;
  */
 public interface SparkThrowable {
     String getErrorClass();
-    String getSqlState();
     String[] getMessageParameters();
+    String getSqlState();
 
     class SparkThrowableHelper {
         protected final static URL errorClassesUrl =

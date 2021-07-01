@@ -45,7 +45,8 @@ public class SparkThrowableSuite implements Serializable {
             String originalFileContents = IOUtils.toString(stream, Charset.defaultCharset());
             String rewrittenFileContents = mapper.writeValueAsString(
                     SparkThrowableHelper.errorClassToInfoMap);
-            assert originalFileContents.equals(rewrittenFileContents) : "Indentation error";
+            System.out.println(rewrittenFileContents);
+            assert originalFileContents.equals(rewrittenFileContents) : rewrittenFileContents;
         } catch (IOException e) {
             throw new IllegalArgumentException(e.getMessage());
         }
@@ -71,9 +72,10 @@ public class SparkThrowableSuite implements Serializable {
                 String errorClass = entry.getKey();
                 ErrorInfo errorInfo = entry.getValue();
                 assert rereadErrorClassToInfoMap.containsKey(errorClass);
-                assert rereadErrorClassToInfoMap.get(errorClass).messageFormat.equals(
-                        errorInfo.messageFormat);
-                assert rereadErrorClassToInfoMap.get(errorClass).sqlState.equals(errorInfo.sqlState);
+                ErrorInfo rereadErrorInfo = rereadErrorClassToInfoMap.get(errorClass);
+                assert rereadErrorInfo.messageFormat.equals(errorInfo.messageFormat);
+                assert (rereadErrorInfo.sqlState == null && errorInfo.sqlState == null) ||
+                        rereadErrorClassToInfoMap.get(errorClass).sqlState.equals(errorInfo.sqlState);
             }
         } catch (IOException e) {
             throw new IllegalArgumentException(e.getMessage());
