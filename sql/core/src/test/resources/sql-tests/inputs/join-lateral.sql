@@ -16,6 +16,7 @@ SELECT * FROM t1, LATERAL (SELECT t1.*);
 SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2);
 SELECT * FROM t1, LATERAL (SELECT t1.* FROM t2 AS t1);
 -- expect error: cannot resolve 't1.*'
+-- TODO: Currently we don't allow deep correlation so t1.* cannot be resolved using the outermost query.
 SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2, LATERAL (SELECT t1.*, t2.*, t3.* FROM t2 AS t3));
 
 -- lateral join with different join types
