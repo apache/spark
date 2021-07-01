@@ -26,7 +26,8 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
       bytesByPartitionIdArray: Array[Array[Long]],
       expectedPartitionStartIndices: Seq[Seq[CoalescedPartitionSpec]],
       targetSize: Long,
-      minNumPartitions: Int = 1): Unit = {
+      minNumPartitions: Int = 1,
+      minPartitionSize: Long = 0): Unit = {
     val mapOutputStatistics = bytesByPartitionIdArray.zipWithIndex.map {
       case (bytesByPartitionId, index) =>
         Some(new MapOutputStatistics(index, bytesByPartitionId))
@@ -35,7 +36,8 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
       mapOutputStatistics,
       Seq.fill(mapOutputStatistics.length)(None),
       targetSize,
-      minNumPartitions)
+      minNumPartitions,
+      minPartitionSize)
     assert(estimatedPartitionStartIndices.length === expectedPartitionStartIndices.length)
     estimatedPartitionStartIndices.zip(expectedPartitionStartIndices).foreach {
       case (actual, expect) => assert(actual === expect)
@@ -100,7 +102,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
         Array(
           Some(new MapOutputStatistics(0, bytesByPartitionId1)),
           Some(new MapOutputStatistics(1, bytesByPartitionId2))),
-        Seq.fill(2)(None), targetSize, 1)
+        Seq.fill(2)(None), targetSize, 1, 0)
       assert(coalesced.isEmpty)
     }
 
@@ -340,7 +342,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
         Seq(
           Some(specs1),
           Some(specs2)),
-        targetSize, 1)
+        targetSize, 1, 0)
       assert(coalesced == Seq(expected1, expected2))
     }
 
@@ -373,7 +375,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
         Seq(
           Some(specs1),
           Some(specs2)),
-        targetSize, 1)
+        targetSize, 1, 0)
       assert(coalesced == Seq(expected1, expected2))
     }
 
@@ -412,7 +414,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
         Seq(
           Some(specs1),
           Some(specs2)),
-        targetSize, 1)
+        targetSize, 1, 0)
       assert(coalesced == Seq(expected1, expected2))
     }
 
@@ -455,7 +457,47 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
         Seq(
           Some(specs1),
           Some(specs2)),
-        targetSize, 1)
+        targetSize, 1, 0)
+      assert(coalesced == Seq(expected1, expected2))
+    }
+
+    {
+      // Partitions below `minPartitionSize` packed with smaller adjacent partition.
+      val minPartitionSize = 10L
+      val bytesByPartitionId1 = Array[Long](300, 90, 4, 16, 3, 24, 10, 60, 5)
+      val bytesByPartitionId2 = Array[Long](10, 10, 5, 102, 4, 80, 200, 36, 3)
+      val specs1 =
+        Seq.tabulate(3)(i => PartialReducerPartitionSpec(0, i, i + 1, 100L)) ++ // 0 - skew
+        createPartitionSpecsBeforeCoalesce(1 to 5, bytesByPartitionId1) ++ // 1, 2, 3, 4, 5
+        Seq.fill(2)(CoalescedPartitionSpec(6, 7, 10)) ++ // 6 - other side skew
+        createPartitionSpecsBeforeCoalesce(7 to 8, bytesByPartitionId1) // 7, 8
+      val specs2 =
+        Seq.tabulate(3)(i => CoalescedPartitionSpec(0, 1, 10)) ++ // 0 - other side skew
+        createPartitionSpecsBeforeCoalesce(1 to 5, bytesByPartitionId2) ++ // 1, 2, 3, 4, 5
+        Seq.tabulate(2)(i => PartialReducerPartitionSpec(6, i, i + 1, 100L)) ++ // 6 - skew
+        createPartitionSpecsBeforeCoalesce(7 to 8, bytesByPartitionId2) // 7, 8
+      val expected1 =
+        Seq.tabulate(3)(i => PartialReducerPartitionSpec(0, i, i + 1, 100L)) ++ // 0 - skew
+        Seq(CoalescedPartitionSpec(1, 3, 94)) ++ // 1, 2 - coalesced
+        Seq(CoalescedPartitionSpec(3, 4, 16)) ++ // 3
+        Seq(CoalescedPartitionSpec(4, 6, 27)) ++ // 4, 5 - coalesced
+        Seq.fill(2)(CoalescedPartitionSpec(6, 7, 10)) ++ // 6 - other side skew
+        Seq(CoalescedPartitionSpec(7, 9, 65)) // 7, 8 - coalesced
+      val expected2 =
+        Seq.tabulate(3)(i => CoalescedPartitionSpec(0, 1, 10)) ++ // 0 - other side skew
+        Seq(CoalescedPartitionSpec(1, 3, 15)) ++ // 1, 2 - coalesced
+        Seq(CoalescedPartitionSpec(3, 4, 102)) ++ // 3
+        Seq(CoalescedPartitionSpec(4, 6, 84)) ++ // 4, 5 - coalesced
+        Seq.tabulate(2)(i => PartialReducerPartitionSpec(6, i, i + 1, 100L)) ++ // 6 - skew
+        Seq(CoalescedPartitionSpec(7, 9, 39)) // 7, 8 - coalesced
+      val coalesced = ShufflePartitionsUtil.coalescePartitions(
+        Array(
+          Some(new MapOutputStatistics(0, bytesByPartitionId1)),
+          Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+        Seq(
+          Some(specs1),
+          Some(specs2)),
+        targetSize, 1, minPartitionSize)
       assert(coalesced == Seq(expected1, expected2))
     }
 
@@ -482,7 +524,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
         Seq(
           Some(specs1),
           Some(specs2)),
-        targetSize, 1)
+        targetSize, 1, 0)
       assert(coalesced.isEmpty)
     }
   }
@@ -502,7 +544,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
         Seq(
           Some(specs1),
           None),
-        targetSize, 1)
+        targetSize, 1, 0)
       assert(coalesced.isEmpty)
     }
 
@@ -518,7 +560,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
         Seq(
           Some(specs1),
           Some(specs2)),
-        targetSize, 1)
+        targetSize, 1, 0)
       assert(coalesced.isEmpty)
     }
 
@@ -537,7 +579,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
           Seq(
             Some(specs1),
             Some(specs2)),
-          targetSize, 1)
+          targetSize, 1, 0)
       }
     }
 
@@ -555,7 +597,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
           Seq(
             Some(specs1),
             Some(specs2)),
-          targetSize, 1)
+          targetSize, 1, 0)
       }
     }
 
@@ -574,7 +616,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
           Seq(
             Some(specs1),
             Some(specs2)),
-          targetSize, 1)
+          targetSize, 1, 0)
       }
     }
 
@@ -595,7 +637,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
           Seq(
             Some(specs1),
             Some(specs2)),
-          targetSize, 1)
+          targetSize, 1, 0)
       }
     }
 
@@ -613,7 +655,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
           Seq(
             Some(specs1),
             Some(specs2)),
-          targetSize, 1)
+          targetSize, 1, 0)
       }
     }
 
@@ -632,7 +674,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
           Seq(
             Some(specs1),
             Some(specs2)),
-          targetSize, 1)
+          targetSize, 1, 0)
       }
     }
 
@@ -651,7 +693,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
           Seq(
             Some(specs1),
             Some(specs2)),
-          targetSize, 1)
+          targetSize, 1, 0)
       }
     }
   }
@@ -720,7 +762,7 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
       Seq(
         Some(specs1),
         Some(specs2)),
-      targetSize, 1)
+      targetSize, 1, 0)
     assert(coalesced == Seq(expected1, expected2))
   }
 }

@@ -55,33 +55,34 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
     if (!shuffleStageInfos.forall(s => supportCoalesce(s.shuffleStage.shuffle))) {
       plan
     } else {
-      // Ideally, this rule should simply coalesce partition using the target size specified by
-      // ADVISORY_PARTITION_SIZE_IN_BYTES. To avoid perf regression in AQE, this rule by default
-      // tries to maximize the parallelism and use 1MB as the target size. For history reason,
-      // this rule also need to support the config COALESCE_PARTITIONS_MIN_PARTITION_NUM. So the
-      // overall logic is:
-      //   1. If COALESCE_PARTITIONS_MIN_PARTITION_NUM is set, pass its value to
-      //      ShufflePartitionsUtil.coalescePartitions and use ADVISORY_PARTITION_SIZE_IN_BYTES
-      //      as the target size.
-      //   2. Otherwise, if COALESCE_PARTITIONS_PARALLELISM_FIRST is true, use 1MB as the target
-      //      size, and 1 as the min number of partitions.
-      //   3. Otherwise, which is the most ideal case, use ADVISORY_PARTITION_SIZE_IN_BYTES as
-      //      the target size. and 1 as the min number of partitions.
+      // Ideally, this rule should simply coalesce partition w.r.t. the target size specified by
+      // ADVISORY_PARTITION_SIZE_IN_BYTES (default 64MB). To avoid perf regression in AQE, this
+      // rule by default ignores the target size (set it to 0), and only respect the minimum
+      // partition size specified by COALESCE_PARTITIONS_MIN_PARTITION_SIZE (default 1MB).
+      // For history reason, this rule also need to support the config
+      // COALESCE_PARTITIONS_MIN_PARTITION_NUM: if it's set, we will respect both the target
+      // size and minimum partition number, no matter COALESCE_PARTITIONS_PARALLELISM_FIRST is true
+      // or false.
       // TODO: remove the `minNumPartitions` parameter from
       //       `ShufflePartitionsUtil.coalescePartitions` after we remove the config
       //       COALESCE_PARTITIONS_MIN_PARTITION_NUM
       val minPartitionNum = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
+      val advisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+      // `minPartitionSize` can be at most 20% of `advisorySize`.
+      val minPartitionSize = math.min(
+        advisorySize / 5, conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE))
       val parallelismFirst = conf.getConf(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST)
-      val advisoryTargetSize = if (minPartitionNum.isDefined || !parallelismFirst) {
-        conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+      val advisoryTargetSize = if (minPartitionNum.isEmpty && parallelismFirst) {
+        0
       } else {
-        1024 * 1024 // 1MB
+        advisorySize
       }
       val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
         shuffleStageInfos.map(_.shuffleStage.mapStats),
         shuffleStageInfos.map(_.partitionSpecs),
         advisoryTargetSize = advisoryTargetSize,
-        minNumPartitions = minPartitionNum.getOrElse(1))
+        minNumPartitions = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM).getOrElse(1),
+        minPartitionSize = minPartitionSize)
 
       if (newPartitionSpecs.nonEmpty) {
         val specsMap = shuffleStageInfos.zip(newPartitionSpecs).map { case (stageInfo, partSpecs) =>
