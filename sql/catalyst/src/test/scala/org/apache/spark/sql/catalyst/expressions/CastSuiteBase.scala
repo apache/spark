@@ -939,11 +939,11 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
   test("disallow type conversions between Numeric types and Timestamp without time zone type") {
     import DataTypeTestUtils.numericTypes
     checkInvalidCastFromNumericType(TimestampNTZType)
-    var errorMsg = "cannot cast bigint to timestamp without time zone"
+    var errorMsg = "cannot cast bigint to timestamp_ntz"
     verifyCastFailure(cast(Literal(0L), TimestampNTZType), Some(errorMsg))
 
     val timestampNTZLiteral = Literal.create(LocalDateTime.now(), TimestampNTZType)
-    errorMsg = "cannot cast timestamp without time zone to"
+    errorMsg = "cannot cast timestamp_ntz to"
     numericTypes.foreach { numericType =>
       verifyCastFailure(cast(timestampNTZLiteral, numericType), Some(errorMsg))
     }
