@@ -25,8 +25,8 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.java.Optional
-import org.apache.spark.api.java.function.{FlatMapGroupsWithStateFunction}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder}
+import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
+import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder, KeyValueGroupedDataset}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical.FlatMapGroupsWithState
@@ -1413,7 +1413,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
-  test("flatMapGroupsWithState - initial state - streaming initial state") {
+  testQuietly("flatMapGroupsWithState - initial state - streaming initial state") {
     val initialStateData = MemoryStream[(String, RunningCount)]
     initialStateData.addData(("a", new RunningCount(1)))
 
@@ -1436,6 +1436,35 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       " as the initial state in [flatMap|map]GroupsWithState" +
       " operation on a streaming DataFrame/Dataset"
     assert(e.message.contains(expectedError))
+  }
+
+  test("flatMapGroupsWithState - initial state - initial state has flatMapGroupsWithState") {
+    val initialStateDS = Seq(("keyInStateAndData", new RunningCount(1))).toDS()
+    val initialState: KeyValueGroupedDataset[String, RunningCount] =
+      initialStateDS.groupByKey(_._1).mapValues(_._2)
+        .mapGroupsWithState(
+          GroupStateTimeout.NoTimeout())(
+            (key: String, values: Iterator[RunningCount], state: GroupState[Boolean]) => {
+              (key, values.next())
+            }
+          ).groupByKey(_._1).mapValues(_._2)
+
+    val inputData = MemoryStream[String]
+
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(
+          Update, NoTimeout(), initialState
+        )(flatMapGroupsWithStateFunc)
+
+    testStream(result, Update)(
+      AddData(inputData, "keyInStateAndData"),
+      CheckNewAnswer(
+        ("keyInStateAndData", Seq[String]("keyInStateAndData"), "2")
+      ),
+      StopStream
+    )
   }
 
   testWithAllStateVersions("mapGroupsWithState - initial state - null key") {
