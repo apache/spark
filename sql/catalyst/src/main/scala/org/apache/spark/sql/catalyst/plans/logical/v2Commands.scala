@@ -643,6 +643,15 @@ case class ShowCurrentNamespace(catalogManager: CatalogManager) extends LeafComm
 }
 
 /**
+ * The logical plan of the SHOW CATALOGS command.
+ */
+case class ShowCatalogs(catalogManager: CatalogManager) extends LeafCommand {
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("catalog", StringType, nullable = false)(),
+    AttributeReference("default-namespace", StringType, nullable = false)())
+}
+
+/**
  * The logical plan of the SHOW TBLPROPERTIES command.
  */
 case class ShowTableProperties(

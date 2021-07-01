@@ -212,6 +212,7 @@ statement
         (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
     | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
     | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
+    | SHOW CATALOGS                                                    #showCatalogs
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
         multipartIdentifier                                            #describeNamespace
@@ -1061,6 +1062,7 @@ ansiNonReserved
     | BY
     | CACHE
     | CASCADE
+    | CATALOGS
     | CHANGE
     | CLEAR
     | CLUSTER
@@ -1289,6 +1291,7 @@ nonReserved
     | CASCADE
     | CASE
     | CAST
+    | CATALOGS
     | CHANGE
     | CHECK
     | CLEAR
@@ -1542,6 +1545,7 @@ CACHE: 'CACHE';
 CASCADE: 'CASCADE';
 CASE: 'CASE';
 CAST: 'CAST';
+CATALOGS: 'CATALOGS';
 CHANGE: 'CHANGE';
 CHECK: 'CHECK';
 CLEAR: 'CLEAR';

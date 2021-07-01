@@ -21,6 +21,7 @@ import java.sql.Timestamp
 import java.time.LocalDate
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
@@ -2914,6 +2915,21 @@ class DataSourceV2SQLSuite
         checkAnswer(query, Seq(Row(1, "a", 0, "3/1"), Row(2, "b", 0, "0/2"), Row(3, "c", 0, "1/3")))
       }
     }
+  }
+
+  test("ShowCatalogs") {
+    val schema = new StructType()
+      .add("catalog", StringType, nullable = false)
+      .add("default-namespace", StringType, nullable = false)
+    val r = new ArrayBuffer[Row]()
+    r += Row("spark_catalog", "default")
+    val df = sql("SHOW CATALOGS")
+    assert(df.schema === schema)
+    assert(df.collect === r.toSeq)
+
+    sql("use testcat")
+    r += Row("testcat", "")
+    assert(sql("SHOW CATALOGS").collect === r.toSeq)
   }
 
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {

@@ -2107,6 +2107,12 @@ class DDLParserSuite extends AnalysisTest {
       ShowCurrentNamespaceStatement())
   }
 
+  test("show catalogs") {
+    comparePlans(
+      parsePlan("SHOW CATALOGS"),
+      ShowCatalogsStatement())
+  }
+
   test("alter table: SerDe properties") {
     val sql1 = "ALTER TABLE table_name SET SERDE 'org.apache.class'"
     val hint = Some("Please use ALTER VIEW instead.")

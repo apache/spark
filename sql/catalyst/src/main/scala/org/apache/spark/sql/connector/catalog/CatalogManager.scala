@@ -128,6 +128,10 @@ class CatalogManager(
     }
   }
 
+  def listCatalogs(): mutable.HashMap[String, CatalogPlugin] = synchronized {
+    catalogs
+  }
+
   // Clear all the registered catalogs. Only used in tests.
   private[sql] def reset(): Unit = synchronized {
     catalogs.clear()
