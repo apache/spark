@@ -579,7 +579,7 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         pser = self.pser
         psser = self.psser
 
-        # [True, False, <NA>] is returned in pandas
+        # TODO(SPARK-35976): [True, False, <NA>] is returned in pandas
         self.assert_eq(["True", "False", "None"], self.psser.astype(str).tolist())
 
         self.assert_eq(pser.astype("category"), psser.astype("category"))
