@@ -75,11 +75,11 @@ class EquivalentExpressions {
       map: mutable.HashMap[ExpressionEquals, ExpressionStats]): Unit = {
     assert(exprs.length > 1)
     var localEquivalenceMap = mutable.HashMap.empty[ExpressionEquals, ExpressionStats]
-    addExprTree0(exprs.head, localEquivalenceMap)
+    addExprTree(exprs.head, localEquivalenceMap)
 
     exprs.tail.foreach { expr =>
       val otherLocalEquivalenceMap = mutable.HashMap.empty[ExpressionEquals, ExpressionStats]
-      addExprTree0(expr, otherLocalEquivalenceMap)
+      addExprTree(expr, otherLocalEquivalenceMap)
       localEquivalenceMap = localEquivalenceMap.filter { case (key, _) =>
         otherLocalEquivalenceMap.contains(key)
       }
@@ -91,12 +91,12 @@ class EquivalentExpressions {
         k == commonExpr || k.e.find(_.semanticEquals(commonExpr.e)).isEmpty
       }
       if (notChild) {
-        // If the `commonExpr` already appears in the equivalence map, calling `addExprTree0` will
-        // increase the `useCount` and mark it as a common subexpression. Otherwise, `addExprTree0`
+        // If the `commonExpr` already appears in the equivalence map, calling `addExprTree` will
+        // increase the `useCount` and mark it as a common subexpression. Otherwise, `addExprTree`
         // will recursively add `commonExpr` and its descendant to the equivalence map, in case
         // they also appear in other places. For example, `If(a + b > 1, a + b + c, a + b + c)`,
         // `a + b` also appears in the condition and should be treated as common subexpression.
-        addExprTree0(commonExpr.e, map)
+        addExprTree(commonExpr.e, map)
       }
     }
   }
@@ -156,13 +156,9 @@ class EquivalentExpressions {
    * Adds the expression to this data structure recursively. Stops if a matching expression
    * is found. That is, if `expr` has already been added, its children are not added.
    */
-  def addExprTree(expr: Expression): Unit = {
-    addExprTree0(expr, equivalenceMap)
-  }
-
-  private def addExprTree0(
+  def addExprTree(
       expr: Expression,
-      map: mutable.HashMap[ExpressionEquals, ExpressionStats]): Int = {
+      map: mutable.HashMap[ExpressionEquals, ExpressionStats] = equivalenceMap): Unit = {
     val skip = expr.isInstanceOf[LeafExpression] ||
       // `LambdaVariable` is usually used as a loop variable, which can't be evaluated ahead of the
       // loop. So we can't evaluate sub-expressions containing `LambdaVariable` at the beginning.
@@ -172,15 +168,8 @@ class EquivalentExpressions {
       (expr.isInstanceOf[PlanExpression[_]] && TaskContext.get != null)
 
     if (!skip && !addExprToMap(expr, map)) {
-      val height = childrenToRecurse(expr).map(addExprTree0(_, map))
-        .reduceOption(_ max _).map(_ + 1).getOrElse(0)
-      map(ExpressionEquals(expr)).height = height
-      // `commonChildrenToRecurse` are some additional children to find common subexpression, and
-      // we should only use `childrenToRecurse` to calculate the height.
+      childrenToRecurse(expr).foreach(addExprTree(_, map))
       commonChildrenToRecurse(expr).filter(_.nonEmpty).foreach(addCommonExprs(_, map))
-      height
-    } else {
-      0
     }
   }
 
@@ -236,10 +225,13 @@ case class ExpressionEquals(e: Expression) {
  * This saves a lot of memory when there are a lot of expressions in a same equivalence group.
  * Instead of appending to a mutable list/buffer of Expressions, just update the "flattened"
  * useCount in this wrapper in-place.
- *
- * This also tracks the "height" of the expression, so that we can return expressions with smaller
- * height first in `EquivalentExpressions.getAllExprStates`, which guarantees that child expression
- * always comes before parent expressions.
  */
-case class ExpressionStats(expr: Expression)(
-  var useCount: Int = 1, var height: Int = Int.MaxValue)
+case class ExpressionStats(expr: Expression)(var useCount: Int = 1) {
+  // This is used to do a fast pre-check for child-parent relationship. For example, expr1 can
+  // only be a parent of expr2 if expr1.height is larger than expr2.height.
+  lazy val height = getHeight(expr)
+
+  private def getHeight(tree: Expression): Int = {
+    tree.children.map(getHeight).reduceOption(_ max _).getOrElse(0) + 1
+  }
+}
