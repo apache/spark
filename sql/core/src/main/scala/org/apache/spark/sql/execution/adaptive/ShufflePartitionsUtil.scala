@@ -45,7 +45,9 @@ object ShufflePartitionsUtil extends Logging {
       mapOutputStatistics: Seq[Option[MapOutputStatistics]],
       inputPartitionSpecs: Seq[Option[Seq[ShufflePartitionSpec]]],
       advisoryTargetSize: Long,
-      minNumPartitions: Int): Seq[Seq[ShufflePartitionSpec]] = {
+      // The default parameter values are only used in tests.
+      minNumPartitions: Int = 1,
+      minPartitionSize: Long = 0): Seq[Seq[ShufflePartitionSpec]] = {
     assert(mapOutputStatistics.length == inputPartitionSpecs.length)
 
     if (mapOutputStatistics.isEmpty) {
@@ -61,7 +63,9 @@ object ShufflePartitionsUtil extends Logging {
     // `maxTargetSize` from being set to 0.
     val maxTargetSize = math.max(
       math.ceil(totalPostShuffleInputSize / minNumPartitions.toDouble).toLong, 16)
-    val targetSize = math.min(maxTargetSize, advisoryTargetSize)
+    // The target size can be very small if minNumPartitions is super big. Here we use
+    // minPartitionSize as the lower bound to avoid too small partitions after coalescing.
+    val targetSize = math.max(math.min(maxTargetSize, advisoryTargetSize), minPartitionSize)
 
     val shuffleIds = mapOutputStatistics.flatMap(_.map(_.shuffleId)).mkString(", ")
     logInfo(s"For shuffle($shuffleIds), advisory target size: $advisoryTargetSize, " +
@@ -95,7 +99,8 @@ object ShufflePartitionsUtil extends Logging {
     }
 
     val numPartitions = validMetrics.head.bytesByPartitionId.length
-    val newPartitionSpecs = coalescePartitions(0, numPartitions, validMetrics, targetSize)
+    val newPartitionSpecs = coalescePartitions(
+      0, numPartitions, validMetrics, targetSize, allowReturnEmpty = false)
     if (newPartitionSpecs.length < numPartitions) {
       attachDataSize(mapOutputStatistics, newPartitionSpecs)
     } else {
@@ -215,7 +220,7 @@ object ShufflePartitionsUtil extends Logging {
       end: Int,
       mapOutputStatistics: Seq[MapOutputStatistics],
       targetSize: Long,
-      allowReturnEmpty: Boolean = false): Seq[CoalescedPartitionSpec] = {
+      allowReturnEmpty: Boolean): Seq[CoalescedPartitionSpec] = {
     val partitionSpecs = ArrayBuffer.empty[CoalescedPartitionSpec]
     var coalescedSize = 0L
     var i = start

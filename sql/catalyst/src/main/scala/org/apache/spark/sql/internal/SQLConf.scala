@@ -525,17 +525,33 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  private val MIN_PARTITION_NUM_KEY = "spark.sql.adaptive.coalescePartitions.minPartitionNum"
+  private val MIN_PARTITION_SIZE_KEY = "spark.sql.adaptive.coalescePartitions.minPartitionSize"
+
   val COALESCE_PARTITIONS_MIN_PARTITION_NUM =
-    buildConf("spark.sql.adaptive.coalescePartitions.minPartitionNum")
+    buildConf(MIN_PARTITION_NUM_KEY)
       .doc("The suggested (not guaranteed) minimum number of shuffle partitions after " +
         "coalescing. If not set, the default value is the default parallelism of the " +
-        "Spark cluster. This configuration only has an effect when " +
-        s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
+        s"Spark cluster, w.r.t. the minimum partition size set by '$MIN_PARTITION_SIZE_KEY'. " +
+        s"This configuration only has an effect when '${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${COALESCE_PARTITIONS_ENABLED.key}' are both true.")
       .version("3.0.0")
       .intConf
       .checkValue(_ > 0, "The minimum number of partitions must be positive.")
       .createOptional
+
+  val COALESCE_PARTITIONS_MIN_PARTITION_SIZE =
+    buildConf(MIN_PARTITION_SIZE_KEY)
+      .doc(s"The minimum size of shuffle partitions after coalescing if '$MIN_PARTITION_NUM_KEY' " +
+        s"is not set. When '$MIN_PARTITION_NUM_KEY' is not set, the minimum number of " +
+        "shuffle partitions after coalescing will fall back to the default parallelism " +
+        "of the Spark cluster, sometimes causing partition sizes to be too small. This config " +
+        "aims to prevent this situation. Note that this config does not take effect if " +
+        s"'${COALESCE_PARTITIONS_MIN_PARTITION_NUM.key}' is set by the user.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "The minimum partition size must be positive.")
+      .createWithDefaultString("1MB")
 
   val COALESCE_PARTITIONS_INITIAL_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.initialPartitionNum")

@@ -55,15 +55,22 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
     if (!shuffleStageInfos.forall(s => supportCoalesce(s.shuffleStage.shuffle))) {
       plan
     } else {
-      // We fall back to Spark default parallelism if the minimum number of coalesced partitions
-      // is not set, so to avoid perf regressions compared to no coalescing.
+      // We fall back to Spark default parallelism and meanwhile guarantee the coalesced sizes
+      // of partitions are no smaller than `COALESCE_PARTITIONS_MIN_PARTITION_SIZE` if
+      // `COALESCE_PARTITIONS_MIN_PARTITION_NUM` is not set, so to guarantee task parallelism
+      // while avoiding too small partitions.
       val minPartitionNum = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
-        .getOrElse(session.sparkContext.defaultParallelism)
+      val minPartitionSize = if (minPartitionNum.isDefined) {
+        0
+      } else {
+        conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE)
+      }
       val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
         shuffleStageInfos.map(_.shuffleStage.mapStats),
         shuffleStageInfos.map(_.partitionSpecs),
         advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
-        minNumPartitions = minPartitionNum)
+        minNumPartitions = minPartitionNum.getOrElse(session.sparkContext.defaultParallelism),
+        minPartitionSize = minPartitionSize)
 
       if (newPartitionSpecs.nonEmpty) {
         val specsMap = shuffleStageInfos.zip(newPartitionSpecs).map { case (stageInfo, partSpecs) =>
