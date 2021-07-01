@@ -97,7 +97,7 @@ object ShufflePartitionsUtil extends Logging {
     val numPartitions = validMetrics.head.bytesByPartitionId.length
     val newPartitionSpecs = coalescePartitions(0, numPartitions, validMetrics, targetSize)
     if (newPartitionSpecs.length < numPartitions) {
-      attachDateSize(mapOutputStatistics, newPartitionSpecs)
+      attachDataSize(mapOutputStatistics, newPartitionSpecs)
     } else {
       Seq.empty
     }
@@ -147,7 +147,7 @@ object ShufflePartitionsUtil extends Logging {
         if (i - 1 > start) {
           val partitionSpecs = coalescePartitions(
             partitionIndices(start), repeatValue, validMetrics, targetSize, true)
-          newPartitionSpecsSeq.zip(attachDateSize(mapOutputStatistics, partitionSpecs))
+          newPartitionSpecsSeq.zip(attachDataSize(mapOutputStatistics, partitionSpecs))
             .foreach(spec => spec._1 ++= spec._2)
         }
         // find the end of this skew section, skipping partition(i - 1) and partition(i).
@@ -173,7 +173,7 @@ object ShufflePartitionsUtil extends Logging {
     if (numPartitions > start) {
       val partitionSpecs = coalescePartitions(
         partitionIndices(start), partitionIndices.last + 1, validMetrics, targetSize, true)
-      newPartitionSpecsSeq.zip(attachDateSize(mapOutputStatistics, partitionSpecs))
+      newPartitionSpecsSeq.zip(attachDataSize(mapOutputStatistics, partitionSpecs))
         .foreach(spec => spec._1 ++= spec._2)
     }
     // only return coalesced result if any coalescing has happened.
@@ -254,7 +254,7 @@ object ShufflePartitionsUtil extends Logging {
     partitionSpecs.toSeq
   }
 
-  private def attachDateSize(
+  private def attachDataSize(
       mapOutputStatistics: Seq[Option[MapOutputStatistics]],
       partitionSpecs: Seq[CoalescedPartitionSpec]): Seq[Seq[CoalescedPartitionSpec]] = {
     mapOutputStatistics.map {
