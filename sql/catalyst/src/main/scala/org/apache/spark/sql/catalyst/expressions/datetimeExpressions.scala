@@ -61,7 +61,7 @@ trait TimeZoneAwareExpression extends Expression {
   @transient lazy val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId.get)
 
   def zoneIdForType(dataType: DataType): ZoneId = dataType match {
-    case _: TimestampWithoutTZType => java.time.ZoneOffset.UTC
+    case _: TimestampNTZType => java.time.ZoneOffset.UTC
     case _ => zoneId
   }
 }
@@ -72,9 +72,9 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
 
   protected def isParsing: Boolean
 
-  // Whether the timestamp formatter is for TimestampWithoutTZType.
+  // Whether the timestamp formatter is for TimestampNTZType.
   // If yes, the formatter is always `Iso8601TimestampFormatter`.
-  protected def forTimestampWithoutTZ: Boolean = false
+  protected def forTimestampNTZ: Boolean = false
 
   @transient final protected lazy val formatterOption: Option[TimestampFormatter] =
     if (formatString.foldable) {
@@ -87,7 +87,7 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
       zoneId = zoneId,
       legacyFormat = SIMPLE_DATE_FORMAT,
       isParsing = isParsing,
-      forTimestampWithoutTZ = forTimestampWithoutTZ)
+      forTimestampNTZ = forTimestampNTZ)
   }
 }
 
@@ -1008,17 +1008,17 @@ case class UnixTimestamp(
     copy(timeExp = newLeft, format = newRight)
 }
 
-case class GetTimestampWithoutTZ(
+case class GetTimestampNTZ(
     left: Expression,
     right: Expression,
     timeZoneId: Option[String] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled) extends ToTimestamp {
 
-  override val forTimestampWithoutTZ: Boolean = true
+  override val forTimestampNTZ: Boolean = true
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
 
-  override def dataType: DataType = TimestampWithoutTZType
+  override def dataType: DataType = TimestampNTZType
 
   override protected def downScaleFactor: Long = 1
 
@@ -1058,24 +1058,24 @@ case class GetTimestampWithoutTZ(
   group = "datetime_funcs",
   since = "3.2.0")
 // scalastyle:on line.size.limit
-case class ParseToTimestampWithoutTZ(
+case class ParseToTimestampNTZ(
     left: Expression,
     format: Option[Expression],
     child: Expression) extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), GetTimestampWithoutTZ(left, format))
+    this(left, Option(format), GetTimestampNTZ(left, format))
   }
 
-  def this(left: Expression) = this(left, None, Cast(left, TimestampWithoutTZType))
+  def this(left: Expression) = this(left, None, Cast(left, TimestampNTZType))
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
   override def exprsReplaced: Seq[Expression] = left +: format.toSeq
 
   override def prettyName: String = "to_timestamp_ntz"
-  override def dataType: DataType = TimestampWithoutTZType
+  override def dataType: DataType = TimestampNTZType
 
-  override protected def withNewChildInternal(newChild: Expression): ParseToTimestampWithoutTZ =
+  override protected def withNewChildInternal(newChild: Expression): ParseToTimestampNTZ =
     copy(child = newChild)
 }
 
@@ -1121,7 +1121,7 @@ abstract class ToTimestamp
           } else {
             val formatter = formatterOption.getOrElse(getFormatter(fmt.toString))
             try {
-              if (forTimestampWithoutTZ) {
+              if (forTimestampNTZ) {
                 formatter.parseWithoutTimeZone(t.asInstanceOf[UTF8String].toString)
               } else {
                 formatter.parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
@@ -1142,12 +1142,12 @@ abstract class ToTimestamp
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
     val parseErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
-    val parseMethod = if (forTimestampWithoutTZ) {
+    val parseMethod = if (forTimestampNTZ) {
       "parseWithoutTimeZone"
     } else {
       "parse"
     }
-    val downScaleCode = if (forTimestampWithoutTZ) {
+    val downScaleCode = if (forTimestampNTZ) {
       ""
     } else {
       s"/ $downScaleFactor"

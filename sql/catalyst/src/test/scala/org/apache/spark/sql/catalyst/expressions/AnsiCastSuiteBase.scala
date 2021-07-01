@@ -418,8 +418,8 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       "2021-06-17abc",
       "2021-06-17 00:00:00ABC").foreach { invalidInput =>
       checkExceptionInExpression[DateTimeException](
-        cast(invalidInput, TimestampWithoutTZType),
-        s"Cannot cast $invalidInput to TimestampWithoutTZType")
+        cast(invalidInput, TimestampNTZType),
+        s"Cannot cast $invalidInput to TimestampNTZType")
     }
   }
 }
