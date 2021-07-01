@@ -37,6 +37,12 @@ object UnsupportedOperationChecker extends Logging {
       case p if p.isStreaming =>
         throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
 
+      case f: FlatMapGroupsWithState =>
+        if (f.hasInitialState) {
+          throwError("Batch [flatMap|map]GroupsWithState queries should not" +
+            " pass an initial state.")(f)
+        }
+
       case _ =>
     }
   }
@@ -234,7 +240,7 @@ object UnsupportedOperationChecker extends Logging {
 
           if (m.initialState.isStreaming) {
             // initial state has to be a batch relation
-            throwError("Initial state cannot be a streaming relation.")
+            throwError("Initial state cannot be a streaming DataFrame/Dataset.")
           }
           if (m.isMapGroupsWithState) {                       // check mapGroupsWithState
             // allowed only in update query output mode and without aggregation

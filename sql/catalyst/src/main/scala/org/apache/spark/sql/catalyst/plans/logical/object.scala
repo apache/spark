@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.api.java.function.FilterFunction
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.{AnalysisException, Encoder, Row}
+import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
@@ -540,11 +540,6 @@ case class FlatMapGroupsWithState(
 
   if (isMapGroupsWithState) {
     assert(outputMode == OutputMode.Update)
-  }
-
-  if (hasInitialState && !child.isStreaming) {
-    throw new AnalysisException("Batch [flatMap|map]GroupsWithState queries should not" +
-      " pass an initial state.")
   }
 
   override def left: LogicalPlan = child

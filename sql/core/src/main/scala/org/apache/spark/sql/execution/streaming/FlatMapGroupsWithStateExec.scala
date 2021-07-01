@@ -155,7 +155,7 @@ case class FlatMapGroupsWithStateExec(
 
     val processedOutputIterator = initialStateIterOption match {
       case Some(initStateIter) if initStateIter.hasNext =>
-        processor.processNewDataWithInitState(filteredIter, initStateIter)
+        processor.processNewDataWithInitialState(filteredIter, initStateIter)
       case _ => processor.processNewData(filteredIter)
     }
 
@@ -286,36 +286,43 @@ case class FlatMapGroupsWithStateExec(
     /**
      * Process the new data iterator along with the initial state. The initial state is applied
      * before processing the new data for every key. The user defined function is called only
-     * once on the data.
+     * once for every key that has either initial state or data or both.
      */
-    def processNewDataWithInitState(
+    def processNewDataWithInitialState(
         childDataIter: Iterator[InternalRow],
         initStateIter: Iterator[InternalRow]
       ): Iterator[InternalRow] = {
 
       if (!childDataIter.hasNext && !initStateIter.hasNext) return Iterator.empty
 
+      // Create iterators for the child data and the initial state grouped by their grouping
+      // attributes.
       val groupedChildDataIter = GroupedIterator(childDataIter, groupingAttributes, child.output)
-      val groupedInitStateIter =
+      val groupedInitialStateIter =
         GroupedIterator(initStateIter, initialStateGroupAttrs, initialState.output)
 
+      // Create a CoGroupedIterator that will group the two iterators together for every key group.
       new CoGroupedIterator(
-          groupedChildDataIter, groupedInitStateIter, groupingAttributes).flatMap {
-        case (keyRow, valueRowIter, initStateRowIter) =>
+          groupedChildDataIter, groupedInitialStateIter, groupingAttributes).flatMap {
+        case (keyRow, valueRowIter, initialStateRowIter) =>
           val keyUnsafeRow = keyRow.asInstanceOf[UnsafeRow]
-        var foundInitStateForKey = false
-        initStateRowIter.foreach { initStateRow =>
-          if (foundInitStateForKey) {
-            throw new IllegalArgumentException("The initial state provided contained duplicates")
+          var foundInitialStateForKey = false
+          initialStateRowIter.foreach { initialStateRow =>
+            if (foundInitialStateForKey) {
+              throw new IllegalArgumentException("The initial state provided contained " +
+                "multiple rows(state) with the same key. Make sure to de-duplicate the " +
+                "initial state before passing it.")
+            }
+            foundInitialStateForKey = true
+            val initStateObj = getStateObj.get(initialStateRow)
+            stateManager.putState(store, keyUnsafeRow, initStateObj, NO_TIMESTAMP)
           }
-          foundInitStateForKey = true
-          val initStateObj = getStateObj.get(initStateRow)
-          stateManager.putState(store, keyUnsafeRow, initStateObj, NO_TIMESTAMP)
-        }
-        callFunctionAndUpdateState(
-          stateManager.getState(store, keyUnsafeRow),
-          valueRowIter,
-          hasTimedOut = false)
+          // We apply the values for the key after applying the initial state.
+          callFunctionAndUpdateState(
+            stateManager.getState(store, keyUnsafeRow),
+              valueRowIter,
+              hasTimedOut = false
+          )
       }
     }
 
