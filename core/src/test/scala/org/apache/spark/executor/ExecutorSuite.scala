@@ -452,8 +452,7 @@ class ExecutorSuite extends SparkFunSuite
     }
   }
 
-  // TODO: will fix it later.
-  ignore("SPARK-33587: isFatalError") {
+  test("SPARK-33587: isFatalError") {
     def errorInThreadPool(e: => Throwable): Throwable = {
       intercept[Throwable] {
         val taskPool = ThreadUtils.newDaemonFixedThreadPool(1, "test")
@@ -485,17 +484,16 @@ class ExecutorSuite extends SparkFunSuite
       import Executor.isFatalError
       // `e`'s depth is 1 so `depthToCheck` needs to be at least 3 to detect fatal errors.
       assert(isFatalError(e, depthToCheck) == (depthToCheck >= 1 && isFatal))
+      assert(isFatalError(errorInCaffeine(e), depthToCheck) == (depthToCheck >= 1 && isFatal))
       // `e`'s depth is 2 so `depthToCheck` needs to be at least 3 to detect fatal errors.
       assert(isFatalError(errorInThreadPool(e), depthToCheck) == (depthToCheck >= 2 && isFatal))
-      assert(isFatalError(errorInCaffeine(e),
-        depthToCheck) == (depthToCheck >= 2 && isFatal))
       assert(isFatalError(
         new SparkException("foo", e),
         depthToCheck) == (depthToCheck >= 2 && isFatal))
-      // `e`'s depth is 3 so `depthToCheck` needs to be at least 3 to detect fatal errors.
       assert(isFatalError(
         errorInThreadPool(errorInCaffeine(e)),
-        depthToCheck) == (depthToCheck >= 3 && isFatal))
+        depthToCheck) == (depthToCheck >= 2 && isFatal))
+      // `e`'s depth is 3 so `depthToCheck` needs to be at least 3 to detect fatal errors.
       assert(isFatalError(
         errorInCaffeine(errorInThreadPool(e)),
         depthToCheck) == (depthToCheck >= 3 && isFatal))
@@ -504,11 +502,11 @@ class ExecutorSuite extends SparkFunSuite
         depthToCheck) == (depthToCheck >= 3 && isFatal))
     }
 
-    for (depthToCheck <- 0 to 5) {
+    for (depthToCheck <- 1 to 5) {
       testThrowable(new OutOfMemoryError(), depthToCheck, isFatal = true)
-      testThrowable(new InterruptedException(), depthToCheck, isFatal = false)
-      testThrowable(new RuntimeException("test"), depthToCheck, isFatal = false)
-      testThrowable(new SparkOutOfMemoryError("test"), depthToCheck, isFatal = false)
+       testThrowable(new InterruptedException(), depthToCheck, isFatal = false)
+       testThrowable(new RuntimeException("test"), depthToCheck, isFatal = false)
+       testThrowable(new SparkOutOfMemoryError("test"), depthToCheck, isFatal = false)
     }
 
     // Verify we can handle the cycle in the exception chain
