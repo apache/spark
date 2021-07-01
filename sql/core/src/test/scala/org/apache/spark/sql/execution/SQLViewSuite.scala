@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class SimpleSQLViewSuite extends SQLViewSuite with SharedSparkSession
 
@@ -844,9 +843,9 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
         sql("CREATE VIEW v1 (c1) AS SELECT C1 FROM t")
         sql("CREATE VIEW v2 (c1) AS SELECT c1 FROM t ORDER BY 1 ASC, c1 DESC")
-        sql("CREATE VIEW v3 (c1, count) AS SELECT c1, count(c1) FROM t GROUP BY 1")
-        sql("CREATE VIEW v4 (a, count) AS SELECT c1 as a, count(c1) FROM t GROUP BY a")
-        sql("CREATE VIEW v5 (c1) AS SELECT 1/0")
+        sql("CREATE VIEW v3 (c1, count) AS SELECT c1, count(c1) AS cnt FROM t GROUP BY 1")
+        sql("CREATE VIEW v4 (a, count) AS SELECT c1 as a, count(c1) AS cnt FROM t GROUP BY a")
+        sql("CREATE VIEW v5 (c1) AS SELECT 1/0 AS invalid")
 
         withSQLConf(CASE_SENSITIVE.key -> "true") {
           checkAnswer(sql("SELECT * FROM v1"), Seq(Row(2), Row(3), Row(1)))
@@ -902,35 +901,12 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         }
 
         withSQLConf(ANSI_ENABLED.key -> "true") {
-          sql("ALTER VIEW v1 AS SELECT 1/0")
+          sql("ALTER VIEW v1 AS SELECT 1/0 AS invalid")
         }
         val e = intercept[ArithmeticException] {
           sql("SELECT * FROM v1").collect()
         }.getMessage
         assert(e.contains("divide by zero"))
-      }
-    }
-  }
-
-  test("SPARK-35685: Prompt recreating view message for schema mismatch") {
-    withTable("t") {
-      sql("CREATE TABLE t USING json AS SELECT 1 AS col_i")
-      val catalog = spark.sessionState.catalog
-      withView("test_view") {
-        sql("CREATE VIEW test_view AS SELECT * FROM t")
-        val meta = catalog.getTableRawMetadata(TableIdentifier("test_view", Some("default")))
-        // simulate a view meta with incompatible schema change
-        val newProp = meta.properties
-          .mapValues(_.replace("col_i", "col_j")).toMap
-        val newSchema = StructType(Seq(StructField("col_j", IntegerType)))
-        catalog.alterTable(meta.copy(properties = newProp, schema = newSchema))
-        val e = intercept[AnalysisException] {
-          sql(s"SELECT * FROM test_view")
-        }
-        assert(e.getMessage.contains("re-create the view by running: CREATE OR REPLACE"))
-        val ddl = e.getMessage.split(": ").last
-        sql(ddl)
-        checkAnswer(sql("select * FROM test_view"), Row(1))
       }
     }
   }
