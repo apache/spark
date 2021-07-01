@@ -62,7 +62,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 
   private implicit val formats = DefaultFormats
 
-  private[this] val stopping = new AtomicBoolean(false)
+  private[executor] val stopping = new AtomicBoolean(false)
   var executor: Executor = null
   @volatile var driver: Option[RpcEndpointRef] = None
 
@@ -229,18 +229,22 @@ private[spark] class CoarseGrainedExecutorBackend(
                              reason: String,
                              throwable: Throwable = null,
                              notifyDriver: Boolean = true) = {
-    val message = "Executor self-exiting due to : " + reason
-    if (throwable != null) {
-      logError(message, throwable)
+    if (stopping.compareAndSet(false, true)) {
+      val message = "Executor self-exiting due to : " + reason
+      if (throwable != null) {
+        logError(message, throwable)
+      } else {
+        logError(message)
+      }
+
+      if (notifyDriver && driver.nonEmpty) {
+        driver.get.send(RemoveExecutor(executorId, new ExecutorLossReason(reason)))
+      }
+
+      System.exit(code)
     } else {
-      logError(message)
+      logInfo("Skip exiting executor since it's been already asked to exit before.")
     }
-
-    if (notifyDriver && driver.nonEmpty) {
-      driver.get.send(RemoveExecutor(executorId, new ExecutorLossReason(reason)))
-    }
-
-    System.exit(code)
   }
 }
 
@@ -331,10 +335,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val env = SparkEnv.createExecutorEnv(driverConf, arguments.executorId, arguments.bindAddress,
         arguments.hostname, arguments.cores, cfg.ioEncryptionKey, isLocal = false)
 
-      env.rpcEnv.setupEndpoint("Executor",
-        backendCreateFn(env.rpcEnv, arguments, env, cfg.resourceProfile))
+      val backend = backendCreateFn(env.rpcEnv, arguments, env, cfg.resourceProfile)
+      env.rpcEnv.setupEndpoint("Executor", backend)
       arguments.workerUrl.foreach { url =>
-        env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
+        env.rpcEnv.setupEndpoint("WorkerWatcher",
+          new WorkerWatcher(env.rpcEnv, url, isChildProcessStopping = backend.stopping))
       }
       env.rpcEnv.awaitTermination()
     }
