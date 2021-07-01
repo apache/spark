@@ -535,7 +535,7 @@ class CastSuite extends CastSuiteBase {
       checkEvaluation(
         cast(cast(cast(cast(cast(cast("5", TimestampType, UTC_OPT), ByteType),
           DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
-        null)
+        -128.toShort)
       checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
         ByteType), TimestampType), LongType), StringType), ShortType),
         5.toShort)
@@ -569,7 +569,6 @@ class CastSuite extends CastSuiteBase {
   test("SPARK-35720: cast invalid string input to timestamp without time zone") {
     Seq("00:00:00",
       "a",
-      "123",
       "a2021-06-17",
       "2021-06-17abc",
       "2021-06-17 00:00:00ABC").foreach { invalidInput =>

@@ -371,7 +371,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
           s"Cannot cast $str to TimestampType.")
       }
 
-      checkCastWithParseError("123")
       checkCastWithParseError("2015-03-18 123142")
       checkCastWithParseError("2015-03-18T123123")
       checkCastWithParseError("2015-03-18X")
@@ -392,8 +391,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
           s"Cannot cast $str to DateType.")
       }
 
-      checkCastWithParseError("12345")
-      checkCastWithParseError("12345-12-18")
       checkCastWithParseError("2015-13-18")
       checkCastWithParseError("2015-03-128")
       checkCastWithParseError("2015/03/18")
@@ -413,7 +410,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
   test("SPARK-35720: cast invalid string input to timestamp without time zone") {
     Seq("00:00:00",
       "a",
-      "123",
       "a2021-06-17",
       "2021-06-17abc",
       "2021-06-17 00:00:00ABC").foreach { invalidInput =>

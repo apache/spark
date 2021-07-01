@@ -142,13 +142,11 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("2015.03.18").isEmpty)
     assert(toDate("20150318").isEmpty)
     assert(toDate("2015-031-8").isEmpty)
-    assert(toDate("02015-03-18").isEmpty)
-    assert(toDate("015-03-18").isEmpty)
-    assert(toDate("015").isEmpty)
-    assert(toDate("02015").isEmpty)
     assert(toDate("1999 08 01").isEmpty)
     assert(toDate("1999-08 01").isEmpty)
     assert(toDate("1999 08").isEmpty)
+    assert(toDate("").isEmpty)
+    assert(toDate("   ").isEmpty)
   }
 
   test("SPARK-35780: support full range of date string") {
@@ -268,8 +266,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       expected = Option(date(2011, 5, 6, 7, 8, 9, 100000, zid = zid))
       checkStringToTimestamp("2011-05-06 07:08:09.1000", expected)
 
-      checkStringToTimestamp("238", None)
-      checkStringToTimestamp("00238", None)
       checkStringToTimestamp("2015-03-18 123142", None)
       checkStringToTimestamp("2015-03-18T123123", None)
       checkStringToTimestamp("2015-03-18X", None)
@@ -277,14 +273,14 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("2015.03.18", None)
       checkStringToTimestamp("20150318", None)
       checkStringToTimestamp("2015-031-8", None)
-      checkStringToTimestamp("02015-01-18", None)
-      checkStringToTimestamp("015-01-18", None)
       checkStringToTimestamp("2015-03-18T12:03.17-20:0", None)
       checkStringToTimestamp("2015-03-18T12:03.17-0:70", None)
       checkStringToTimestamp("2015-03-18T12:03.17-1:0:0", None)
       checkStringToTimestamp("1999 08 01", None)
       checkStringToTimestamp("1999-08 01", None)
       checkStringToTimestamp("1999 08", None)
+      checkStringToTimestamp("", None)
+      checkStringToTimestamp("    ", None)
 
       // Truncating the fractional seconds
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = UTC))
@@ -308,10 +304,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     checkStringToTimestamp("015-03-18 16:00:00", Option(date(15, 3, 18, 16, zid = UTC)))
     checkStringToTimestamp("000001", Option(date(1, 1, 1, 0, zid = UTC)))
     checkStringToTimestamp("-000001", Option(date(-1, 1, 1, 0, zid = UTC)))
-    checkStringToTimestamp("99999-03-18T12:03:17",
-      Option(date(99999, 3, 18, 12, 3, 17, zid = UTC)))
-    checkStringToTimestamp("-99999-03-18T12:03:17",
-      Option(date(-99999, 3, 18, 12, 3, 17, zid = UTC)))
+    checkStringToTimestamp("238", Option(date(238, 1, 1, 0, zid = UTC)))
+    checkStringToTimestamp("00238", Option(date(238, 1, 1, 0, zid = UTC)))
   }
 
   test("SPARK-15379: special invalid date string") {

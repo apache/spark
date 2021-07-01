@@ -249,7 +249,7 @@ object DateTimeUtils {
    *         the input string can't be parsed as timestamp, the result timestamp segments are empty.
    */
   private def parseTimestampString(s: UTF8String): (Array[Int], Option[ZoneId], Boolean) = {
-    if (s == null) {
+    if (s == null || s.trimAll().numBytes() == 0) {
       return (Array.empty, None, false)
     }
     var tz: Option[String] = None
@@ -524,7 +524,7 @@ object DateTimeUtils {
    * `[+-]y*-[m]m-[d]dT*`
    */
   def stringToDate(s: UTF8String): Option[Int] = {
-    if (s == null) {
+    if (s == null || s.trimAll().numBytes() == 0) {
       return None
     }
     val segments: Array[Int] = Array[Int](1, 1, 1)
