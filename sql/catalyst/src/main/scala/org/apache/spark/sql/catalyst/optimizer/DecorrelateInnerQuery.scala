@@ -243,7 +243,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
             s"Child of a domain join shouldn't contain another domain join.\n$child")
           child
         case o =>
-          throw QueryExecutionErrors.unexpectedDomainJoinTypeError(o)
+          throw new IllegalStateException(s"Unexpected domain join type $o")
       }
 
       // We should only rewrite a domain join when all corresponding outer plan attributes
@@ -552,7 +552,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
               //      +- Aggregate [a] [count(1) AS cnt', a, true AS alwaysTrue]
               //         +- Relation [a, b]
               //
-              val agg = newAggregate.copy(aggregateExpressions = expressions :+ alwaysTrue)
+              val agg = newAggregate.copy(aggregateExpressions = expressions.toSeq :+ alwaysTrue)
               // Find all outer references that are used in the join conditions.
               val outerAttrs = collectOuterReferences(joinCond).toSeq
               // Create new instance of the outer attributes as if they are generated inside
