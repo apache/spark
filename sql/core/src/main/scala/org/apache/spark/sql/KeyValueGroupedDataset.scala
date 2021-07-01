@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, CreateStruct}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.expressions.ReduceAggregator
@@ -244,8 +244,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
         OutputMode.Update,
         isMapGroupsWithState = true,
         GroupStateTimeout.NoTimeout,
-        child = logicalPlan)
-    )
+        child = logicalPlan))
   }
 
   /**
@@ -297,7 +296,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param initialState The user provided state that will be initialized when the first batch
    *                     of data is processed in the streaming query. The user defined function
    *                     will be called on the state data even if there are no other values in
-   *                     the group.
+   *                     the group. To convert a Dataset ds of type Dataset[(K, S)] to a
+   *                     KeyValueGroupedDataset[K, S]
+   *                     do {{{ ds.groupByKey(x => x._1).mapValues(_._2) }}}
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 3.2.0
@@ -307,9 +308,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
       initialState: KeyValueGroupedDataset[K, S])(
       func: (K, Iterator[V], GroupState[S]) => U): Dataset[U] = {
     val flatMapFunc = (key: K, it: Iterator[V], s: GroupState[S]) => Iterator(func(key, it, s))
-
-    val stateGroupAttrs: Seq[Attribute] = getStateGroupAttributes(
-      initialState.queryExecution.analyzed)
 
     Dataset[U](
       sparkSession,
@@ -383,7 +381,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
     )(stateEncoder, outputEncoder)
   }
 
-  /*
   /**
    * (Java-specific)
    * Applies the given function to each group of data, while maintaining a user-defined per-group
@@ -412,12 +409,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U],
       timeoutConf: GroupStateTimeout,
-      initialState: Dataset[(K, S)]): Dataset[U] = {
+      initialState: KeyValueGroupedDataset[K, S]): Dataset[U] = {
     mapGroupsWithState[S, U](timeoutConf, initialState)(
       (key: K, it: Iterator[V], s: GroupState[S]) => func.call(key, it.asJava, s)
     )(stateEncoder, outputEncoder)
   }
-  */
 
   /**
    * (Scala-specific)
@@ -473,7 +469,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param initialState The user provided state that will be initialized when the first batch
    *                     of data is processed in the streaming query. The user defined function
    *                     will be called on the state data even if there are no other values in
-   *                     the group.
+   *                     the group. To convert a Dataset ds of type Dataset[(K, S)] to a
+   *                     KeyValueGroupedDataset[K, S]
+   *                     do {{{ ds.groupByKey(x => x._1).mapValues(_._2) }}}
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 3.2.0
@@ -486,9 +484,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
     if (outputMode != OutputMode.Append && outputMode != OutputMode.Update) {
       throw new IllegalArgumentException("The output mode of function should be append or update")
     }
-    val stateGroupAttrs: Seq[Attribute] = initialState.groupingAttributes
-    val stateDataAttrs: Seq[Attribute] = initialState.dataAttributes
-
     Dataset[U](
       sparkSession,
       FlatMapGroupsWithState[K, V, S, U](
@@ -499,8 +494,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
         isMapGroupsWithState = false,
         timeoutConf,
         child = logicalPlan,
-        stateGroupAttrs,
-        stateDataAttrs,
+        initialState.groupingAttributes,
+        initialState.dataAttributes,
         initialState.queryExecution.analyzed
       ))
   }
@@ -535,7 +530,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
     flatMapGroupsWithState[S, U](outputMode, timeoutConf)(f)(stateEncoder, outputEncoder)
   }
 
-  /*
   /**
    * (Java-specific)
    * Applies the given function to each group of data, while maintaining a user-defined per-group
@@ -566,12 +560,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
       stateEncoder: Encoder[S],
       outputEncoder: Encoder[U],
       timeoutConf: GroupStateTimeout,
-      initialState: Dataset[(K, S)]): Dataset[U] = {
+      initialState: KeyValueGroupedDataset[K, S]): Dataset[U] = {
     val f = (key: K, it: Iterator[V], s: GroupState[S]) => func.call(key, it.asJava, s).asScala
-    flatMapGroupsWithState[S, U](outputMode, timeoutConf)(f)(stateEncoder, outputEncoder)
+    flatMapGroupsWithState[S, U](
+      outputMode, timeoutConf, initialState)(f)(stateEncoder, outputEncoder)
   }
-
-   */
 
   /**
    * (Scala-specific)
@@ -798,15 +791,5 @@ class KeyValueGroupedDataset[K, V] private[sql](
       builder.append(" ... " + (vFields.length - 2) + " more field(s)")
     }
     builder.append("]]").toString()
-  }
-
-  /**
-   * Extract the grouping attributes of the initial state dataset.
-   */
-  private def getStateGroupAttributes(logicalPlan: LogicalPlan): Seq[Attribute] = {
-    logicalPlan.output.collect {
-      case a@AttributeReference(name, _, _, _) if name == "_1" =>
-        a
-    }
   }
 }

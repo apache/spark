@@ -221,6 +221,7 @@ case class FlatMapGroupsWithStateExec(
         // The state store aware zip partitions will provide us with two iterators,
         // child data iterator and the initial state iterator per partition.
         case (partitionId, childDataIterator, initStateIterator) =>
+
           val stateStoreId = StateStoreId(
             stateInfo.get.checkpointLocation, stateInfo.get.operatorId, partitionId)
           val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)

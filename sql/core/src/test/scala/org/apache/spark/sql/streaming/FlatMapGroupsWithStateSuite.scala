@@ -27,7 +27,7 @@ import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkException
 import org.apache.spark.api.java.Optional
-import org.apache.spark.api.java.function.FlatMapGroupsWithStateFunction
+import org.apache.spark.api.java.function.{FlatMapGroupsWithStateFunction, MapGroupsWithStateFunction}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoder}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, UnsafeProjection, UnsafeRow}
@@ -1347,6 +1347,72 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         assert(e.getCause.getMessage.contains("The initial state provided contained " +
           "multiple rows(state) with the same key"))
       }
+    )
+  }
+
+  test("flatMapGroupsWithState - initial state - java api") {
+    val initialState = Seq(
+      ("a", 2)
+    ).toDS().groupByKey(_._1).mapValues(_._2)
+
+    val javaStateFunc = new FlatMapGroupsWithStateFunction[String, String, Int, String] {
+      import java.util.{Iterator => JIterator}
+      override def call(
+          key: String,
+          values: JIterator[String],
+          state: GroupState[Int]): JIterator[String] = {
+        state.update(0)
+        new JIterator[String] {
+          override def hasNext: Boolean = false
+          override def next(): String = null
+        }
+      }
+    }
+
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS().groupByKey(x => x).flatMapGroupsWithState(
+      javaStateFunc, OutputMode.Update,
+      implicitly[Encoder[Int]], implicitly[Encoder[String]],
+      GroupStateTimeout.NoTimeout, initialState)
+    testStream(result, Update)(
+      AddData(inputData, "b"),
+      CheckNewAnswer(),
+      assertNumStateRows(total = 2, updated = 2)
+    )
+  }
+
+  test("mapGroupsWithState - initial state - java api") {
+    val initialState = Seq(
+      ("a", 4),
+      (null, 2)
+    ).toDS().groupByKey(_._1).mapValues(_._2)
+
+    val javaStateFunc = new MapGroupsWithStateFunction[String, String, Int, String] {
+      import java.util.{Iterator => JIterator}
+      override def call(
+          key: String,
+          values: JIterator[String],
+          state: GroupState[Int]): String = {
+        var valSize = 0
+        while (values.hasNext) {
+          valSize += 1
+          values.next()
+        }
+        val count = state.getOption.getOrElse(0)
+        state.update(count + valSize)
+        state.get.toString
+      }
+    }
+
+    val inputData = MemoryStream[String]
+    val result = inputData.toDS().groupByKey(x => x).mapGroupsWithState(
+      javaStateFunc,
+      implicitly[Encoder[Int]], implicitly[Encoder[String]],
+      GroupStateTimeout.NoTimeout, initialState)
+    testStream(result, Update)(
+      AddData(inputData, null),
+      CheckNewAnswer("4", "3"),
+      assertNumStateRows(total = 2, updated = 2)
     )
   }
 
