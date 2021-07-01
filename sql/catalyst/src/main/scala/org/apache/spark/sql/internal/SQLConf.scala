@@ -547,10 +547,10 @@ object SQLConf {
         "shuffle partitions after coalescing will fall back to the default parallelism " +
         "of the Spark cluster, sometimes causing partition sizes to be too small. This config " +
         "aims to prevent this situation. Note that this config does not take effect if " +
-        s"'${COALESCE_PARTITIONS_MIN_PARTITION_NUM.key}' is set by the user.")
+        s"'$MIN_PARTITION_NUM_KEY' is set by the user. Its maximum value is the value " +
+        s"of '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'.")
       .version("3.2.0")
       .bytesConf(ByteUnit.BYTE)
-      .checkValue(_ > 0, "The minimum partition size must be positive.")
       .createWithDefaultString("1MB")
 
   val COALESCE_PARTITIONS_INITIAL_PARTITION_NUM =

@@ -65,11 +65,14 @@ object ShufflePartitionsUtil extends Logging {
       math.ceil(totalPostShuffleInputSize / minNumPartitions.toDouble).toLong, 16)
     // The target size can be very small if minNumPartitions is super big. Here we use
     // minPartitionSize as the lower bound to avoid too small partitions after coalescing.
-    val targetSize = math.max(math.min(maxTargetSize, advisoryTargetSize), minPartitionSize)
+    val targetSize = math.max(
+      math.min(maxTargetSize, advisoryTargetSize),
+      // Prevent min partition size from being larger than advisoryTargetSize.
+      math.min(minPartitionSize, advisoryTargetSize))
 
     val shuffleIds = mapOutputStatistics.flatMap(_.map(_.shuffleId)).mkString(", ")
     logInfo(s"For shuffle($shuffleIds), advisory target size: $advisoryTargetSize, " +
-      s"actual target size $targetSize.")
+      s"minimum partition size: $minPartitionSize, actual target size $targetSize.")
 
     // If `inputPartitionSpecs` are all empty, it means skew join optimization is not applied.
     if (inputPartitionSpecs.forall(_.isEmpty)) {
