@@ -1706,10 +1706,6 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"Temporary view $tableIdent is not cached for analyzing columns.")
   }
 
-  def colNotExistError(col: String): Throwable = {
-    new AnalysisException(s"Column $col does not exist.")
-  }
-
   def colTypeNotSupportStatisticsCollectionError(
       name: String,
       tableIdent: TableIdentifier,
@@ -1727,11 +1723,14 @@ private[spark] object QueryCompilationErrors {
       database: String,
       schemaColumns: String,
       specColumns: String): Throwable = {
-    new AnalysisException("The list of partition columns with values " +
-      s"in partition specification for table '${table}' " +
-      s"in database '${database}' is not a prefix of the list of " +
-      "partition columns defined in the table schema. " +
-      s"Expected a prefix of [${schemaColumns}], but got [${specColumns}].")
+    new AnalysisException(
+      s"""
+         |The list of partition columns with values
+         |in partition specification for table '${table}'
+         |in database '${database}' is not a prefix of the list of
+         |partition columns defined in the table schema.
+         |Expected a prefix of [${schemaColumns}], but got [${specColumns}].
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def noSuchPartitionError(
@@ -1867,19 +1866,21 @@ private[spark] object QueryCompilationErrors {
   }
 
   def alterAddColNotSupportViewError(table: TableIdentifier): Throwable = {
-    new AnalysisException(s"""
-         ALTER ADD COLUMNS does not support views.
-         You must drop and re-create the views for adding the new columns. Views: $table
-         """)
+    new AnalysisException(
+      s"""
+         |ALTER ADD COLUMNS does not support views.
+         |You must drop and re-create the views for adding the new columns. Views: $table
+       """.stripMargin)
   }
 
   def alterAddColNotSupportDatasourceTableError(
       tableType: Any,
       table: TableIdentifier): Throwable = {
-    new AnalysisException(s"""
-         ALTER ADD COLUMNS does not support datasource table with type $tableType.
-         You must drop and re-create the table for adding the new columns. Tables: $table
-         """)
+    new AnalysisException(
+      s"""
+         |ALTER ADD COLUMNS does not support datasource table with type $tableType.
+         |You must drop and re-create the table for adding the new columns. Tables: $table
+       """.stripMargin)
   }
 
   def loadDataNotSupportedForDatasourceTablesError(tableIdentWithDB: String): Throwable = {
@@ -1895,10 +1896,12 @@ private[spark] object QueryCompilationErrors {
       tableIdentWithDB: String,
       partitionSize: Int,
       targetTableSize: Int): Throwable = {
-    new AnalysisException(s"LOAD DATA target table $tableIdentWithDB is partitioned, " +
-      s"but number of columns in provided partition spec ($partitionSize) " +
-      s"do not match number of partitioned columns in table " +
-      s"($targetTableSize)")
+    new AnalysisException(
+      s"""
+         |LOAD DATA target table $tableIdentWithDB is partitioned,
+         |but number of columns in provided partition spec ($partitionSize)
+         |do not match number of partitioned columns in table ($targetTableSize)
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def loadDataButPartitionSpecWasProvidedError(tableIdentWithDB: String): Throwable = {

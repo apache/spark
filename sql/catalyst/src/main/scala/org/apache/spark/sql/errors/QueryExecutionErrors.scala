@@ -1539,7 +1539,7 @@ object QueryExecutionErrors {
   }
 
   def onlyDataSourcesProvidingFileFormatSupportedError(providingClass: String): Throwable = {
-    new SparkException("Only Data Sources providing FileFormat are supported: " + providingClass)
+    new SparkException(s"Only Data Sources providing FileFormat are supported: $providingClass")
   }
 
   def failSetOriginalPermissionBackError(
@@ -1547,11 +1547,11 @@ object QueryExecutionErrors {
       path: Path,
       e: Throwable): Throwable = {
     new SecurityException(s"Failed to set original permission $permission back to " +
-        s"the created path: $path. Exception: ${e.getMessage}")
+      s"the created path: $path. Exception: ${e.getMessage}")
   }
 
   def failToSetOriginalACLBackError(aclEntries: String, path: Path, e: Throwable): Throwable = {
     new SecurityException(s"Failed to set original ACL $aclEntries back to " +
-        s"the created path: $path. Exception: ${e.getMessage}")
+      s"the created path: $path. Exception: ${e.getMessage}")
   }
 }

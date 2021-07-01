@@ -86,7 +86,7 @@ case class AnalyzeColumnCommand(
     } else {
       columnNames.get.map { col =>
         val exprOption = relation.output.find(attr => conf.resolver(attr.name, col))
-        exprOption.getOrElse(throw QueryCompilationErrors.colNotExistError(col))
+        exprOption.getOrElse(throw QueryCompilationErrors.columnDoesNotExistError(col))
       }
     }
     // Make sure the column types are supported for stats gathering.
