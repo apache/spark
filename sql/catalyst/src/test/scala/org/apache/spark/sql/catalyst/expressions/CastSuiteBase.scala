@@ -920,7 +920,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       val inputDate = LocalDate.parse(s.split("T")(0))
       // The hour/minute/second of the expect result should be 0
       val expectedTs = LocalDateTime.parse(s.split("T")(0) + "T00:00:00")
-      checkEvaluation(cast(inputDate, TimestampWithoutTZType), expectedTs)
+      checkEvaluation(cast(inputDate, TimestampNTZType), expectedTs)
     }
   }
 
@@ -930,7 +930,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         specialTs.foreach { s =>
           val input = Timestamp.valueOf(s.replace("T", " "))
           val expectedTs = LocalDateTime.parse(s)
-          checkEvaluation(cast(input, TimestampWithoutTZType), expectedTs)
+          checkEvaluation(cast(input, TimestampNTZType), expectedTs)
         }
       }
     }
@@ -938,34 +938,34 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   test("disallow type conversions between Numeric types and Timestamp without time zone type") {
     import DataTypeTestUtils.numericTypes
-    checkInvalidCastFromNumericType(TimestampWithoutTZType)
+    checkInvalidCastFromNumericType(TimestampNTZType)
     var errorMsg = "cannot cast bigint to timestamp without time zone"
-    verifyCastFailure(cast(Literal(0L), TimestampWithoutTZType), Some(errorMsg))
+    verifyCastFailure(cast(Literal(0L), TimestampNTZType), Some(errorMsg))
 
-    val timestampWithoutTZLiteral = Literal.create(LocalDateTime.now(), TimestampWithoutTZType)
+    val timestampNTZLiteral = Literal.create(LocalDateTime.now(), TimestampNTZType)
     errorMsg = "cannot cast timestamp without time zone to"
     numericTypes.foreach { numericType =>
-      verifyCastFailure(cast(timestampWithoutTZLiteral, numericType), Some(errorMsg))
+      verifyCastFailure(cast(timestampNTZLiteral, numericType), Some(errorMsg))
     }
   }
 
   test("SPARK-35720: cast string to timestamp without timezone") {
     specialTs.foreach { s =>
       val expectedTs = LocalDateTime.parse(s)
-      checkEvaluation(cast(s, TimestampWithoutTZType), expectedTs)
+      checkEvaluation(cast(s, TimestampNTZType), expectedTs)
       // Trim spaces before casting
-      checkEvaluation(cast("  " + s + "   ", TimestampWithoutTZType), expectedTs)
+      checkEvaluation(cast("  " + s + "   ", TimestampNTZType), expectedTs)
       // The result is independent of timezone
       outstandingZoneIds.foreach { zoneId =>
-        checkEvaluation(cast(s + zoneId.toString, TimestampWithoutTZType), expectedTs)
+        checkEvaluation(cast(s + zoneId.toString, TimestampNTZType), expectedTs)
         val tsWithMicros = s + ".123456"
         val expectedTsWithNanoSeconds = LocalDateTime.parse(tsWithMicros)
-        checkEvaluation(cast(tsWithMicros + zoneId.toString, TimestampWithoutTZType),
+        checkEvaluation(cast(tsWithMicros + zoneId.toString, TimestampNTZType),
           expectedTsWithNanoSeconds)
       }
     }
     // The input string can contain date only
-    checkEvaluation(cast("2021-06-17", TimestampWithoutTZType),
+    checkEvaluation(cast("2021-06-17", TimestampNTZType),
       LocalDateTime.of(2021, 6, 17, 0, 0))
   }
 

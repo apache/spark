@@ -60,7 +60,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       case _: TimestampType =>
         Literal(new Timestamp(sdf.parse(s).getTime))
 
-      case _: TimestampWithoutTZType =>
+      case _: TimestampNTZType =>
         Literal(LocalDateTime.parse(s.replace(" ", "T")))
     }
   }
@@ -71,7 +71,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         DateTimeUtils.fromJavaTimestamp(
           new Timestamp(sdf.parse(s).getTime))
 
-      case _: TimestampWithoutTZType =>
+      case _: TimestampNTZType =>
         LocalDateTime.parse(s.replace(" ", "T"))
     }
   }
@@ -207,7 +207,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Seconds") {
     assert(Second(Literal.create(null, DateType), UTC_OPT).resolved === false)
     assert(Second(Cast(Literal(d), TimestampType, UTC_OPT), UTC_OPT).resolved )
-    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+    Seq(TimestampType, TimestampNTZType).foreach { dt =>
       checkEvaluation(Second(Cast(Literal(d), dt, UTC_OPT), UTC_OPT), 0)
       checkEvaluation(Second(Cast(Literal(date), dt, UTC_OPT), UTC_OPT), 15)
     }
@@ -229,7 +229,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           Second(Literal(LocalDateTime.of(2015, 1, 3, 3, 5, s))),
           s)
       }
-      Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+      Seq(TimestampType, TimestampNTZType).foreach { dt =>
         checkConsistencyBetweenInterpretedAndCodegen(
           (child: Expression) => Second(child, timeZoneId), dt)
       }
@@ -321,7 +321,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Hour") {
     assert(Hour(Literal.create(null, DateType), UTC_OPT).resolved === false)
     assert(Hour(Literal(ts), UTC_OPT).resolved)
-    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+    Seq(TimestampType, TimestampNTZType).foreach { dt =>
       checkEvaluation(Hour(Cast(Literal(d), dt, UTC_OPT), UTC_OPT), 0)
       checkEvaluation(Hour(Cast(Literal(date), dt, UTC_OPT), UTC_OPT), 13)
     }
@@ -346,7 +346,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           }
         }
       }
-      Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+      Seq(TimestampType, TimestampNTZType).foreach { dt =>
         checkConsistencyBetweenInterpretedAndCodegen(
           (child: Expression) => Hour(child, timeZoneId), dt)
       }
@@ -356,7 +356,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("Minute") {
     assert(Minute(Literal.create(null, DateType), UTC_OPT).resolved === false)
     assert(Minute(Literal(ts), UTC_OPT).resolved)
-    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+    Seq(TimestampType, TimestampNTZType).foreach { dt =>
       checkEvaluation(Minute(Cast(Literal(d), dt, UTC_OPT), UTC_OPT), 0)
       checkEvaluation(Minute(Cast(Literal(date), dt, UTC_OPT), UTC_OPT), 10)
     }
@@ -379,7 +379,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           checkEvaluation(Minute(Literal(localDateTime), timeZoneId), m)
         }
       }
-      Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+      Seq(TimestampType, TimestampNTZType).foreach { dt =>
         checkConsistencyBetweenInterpretedAndCodegen(
           (child: Expression) => Minute(child, timeZoneId), dt)
       }
@@ -476,7 +476,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("time_add") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
-    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+    Seq(TimestampType, TimestampNTZType).foreach { dt =>
       for (zid <- outstandingZoneIds) {
         val timeZoneId = Option(zid.getId)
         sdf.setTimeZone(TimeZone.getTimeZone(zid))
@@ -1345,7 +1345,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Seq(false, true).foreach { legacy =>
         checkConsistencyBetweenInterpretedAndCodegen(
           (end: Expression, start: Expression) => SubtractTimestamps(end, start, legacy, Some(tz)),
-          TimestampWithoutTZType, TimestampWithoutTZType)
+          TimestampNTZType, TimestampNTZType)
       }
     }
   }
@@ -1409,12 +1409,12 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           val input = s.replace("T", " ")
           val expectedTs = LocalDateTime.parse(s)
           checkEvaluation(
-            GetTimestampWithoutTZ(Literal(input), Literal("yyyy-MM-dd HH:mm:ss")), expectedTs)
+            GetTimestampNTZ(Literal(input), Literal("yyyy-MM-dd HH:mm:ss")), expectedTs)
           Seq(".123456", ".123456PST", ".123456CST", ".123456UTC").foreach { segment =>
             val input2 = input + segment
             val expectedTs2 = LocalDateTime.parse(s + ".123456")
             checkEvaluation(
-              GetTimestampWithoutTZ(Literal(input2), Literal("yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]")),
+              GetTimestampNTZ(Literal(input2), Literal("yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]")),
               expectedTs2)
           }
         }
@@ -1715,7 +1715,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-34739,SPARK-35889: add a year-month interval to a timestamp") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
-    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+    Seq(TimestampType, TimestampNTZType).foreach { dt =>
       for (zid <- outstandingZoneIds) {
         val timeZoneId = Option(zid.getId)
         sdf.setTimeZone(TimeZone.getTimeZone(zid))
@@ -1756,7 +1756,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-34761,SPARK-35889: add a day-time interval to a timestamp") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
-    Seq(TimestampType, TimestampWithoutTZType).foreach { dt =>
+    Seq(TimestampType, TimestampNTZType).foreach { dt =>
       for (zid <- outstandingZoneIds) {
         val timeZoneId = Option(zid.getId)
         sdf.setTimeZone(TimeZone.getTimeZone(zid))
