@@ -1278,9 +1278,21 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   val flatMapGroupsWithStateFunc =
     (key: String, values: Iterator[String], state: GroupState[RunningCount]) => {
       val valList = values.toSeq
+      if (valList.isEmpty) {
+        // When the function is called on just the initial state make sure the other fields
+        // are set correctly
+        assert(state.exists)
+        assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
+        assertCannotGetWatermark { state.getCurrentWatermarkMs() }
+        assert(!state.hasTimedOut)
+      }
       val count = state.getOption.map(_.count).getOrElse(0L) + valList.size
-      state.update(new RunningCount(count))
-      Iterator((key, valList, state.get.count.toString))
+      // We need to check if not explicitly calling update will still save the init state or not
+      if (valList.nonEmpty || state.getOption.map(_.count).getOrElse(0L) != 2L) {
+        // this is not reached when valList is empty and the state count is 2
+        state.update(new RunningCount(count))
+      }
+      Iterator((key, valList, count.toString))
     }
 
   Seq("1", "2", "6").foreach { shufflePartitions =>
@@ -1292,9 +1304,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         // that all keys end up on different partitions.
         val initialState: Dataset[(String, RunningCount)] = Seq(
           ("keyInStateAndData-1", new RunningCount(1)),
-          ("keyInStateAndData-2", new RunningCount(1)),
-          ("keyOnlyInState-1", new RunningCount(2)),
-          ("keyOnlyInState-2", new RunningCount(1))
+          ("keyInStateAndData-2", new RunningCount(2)), // state.update will not be called
+          ("keyOnlyInState-2", new RunningCount(2)),
+          ("keyOnlyInState-1", new RunningCount(1))
         ).toDS()
 
         val it = initialState.groupByKey(x => x._1).mapValues(_._2)
@@ -1306,28 +1318,80 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
               Update, GroupStateTimeout.NoTimeout, it)(flatMapGroupsWithStateFunc)
 
         testStream(result, Update)(
-          AddData(inputData, "keyOnlyInData", "keyInStateAndData-1"),
+          AddData(inputData, "keyOnlyInData", "keyInStateAndData-2"),
           CheckNewAnswer(
-            ("keyOnlyInState-1", Seq[String](), "2"),
-            ("keyOnlyInState-2", Seq[String](), "1"),
-            ("keyInStateAndData-1", Seq[String]("keyInStateAndData-1"), "2"), // inc by 1
-            ("keyInStateAndData-2", Seq[String](), "1"),
+            ("keyOnlyInState-1", Seq[String](), "1"),
+            ("keyOnlyInState-2", Seq[String](), "2"),
+            ("keyInStateAndData-2", Seq[String]("keyInStateAndData-2"), "3"), // inc by 1
+            ("keyInStateAndData-1", Seq[String](), "1"),
             ("keyOnlyInData", Seq[String]("keyOnlyInData"), "1") // inc by 1
           ),
-          assertNumStateRows(total = 5, updated = 5),
+          assertNumStateRows(total = 5, updated = 4),
           // Stop and Start stream to make sure initial state doesn't get applied again.
           StopStream,
           StartStream(),
-          AddData(inputData, "keyInStateAndData-2"),
+          AddData(inputData, "keyInStateAndData-1"),
           CheckNewAnswer(
             // state incremented by 1
-            ("keyInStateAndData-2", ArrayBuffer[String]("keyInStateAndData-2"), "2")
+            ("keyInStateAndData-1", Seq[String]("keyInStateAndData-1"), "2")
           ),
           assertNumStateRows(total = 5, updated = 1),
           StopStream
         )
       }
     }
+  }
+
+  testWithAllStateVersions("flatMapGroupsWithState - initial state - case class key") {
+    val stateFunc = (key: User, values: Iterator[User], state: GroupState[Long]) => {
+      val valList = values.toSeq
+      if (valList.isEmpty) {
+        // When the function is called on just the initial state make sure the other fields
+        // are set correctly
+        assert(state.exists)
+        assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
+        assertCannotGetWatermark { state.getCurrentWatermarkMs() }
+        assert(!state.hasTimedOut)
+      }
+      val count = state.getOption.getOrElse(0L) + valList.size
+      // We need to check if not explicitly calling update will still save the state or not
+      if (state.getOption.getOrElse(0L) != 2L) {
+        state.update(count)
+      }
+      Iterator((key, valList.map(_.name), count.toString))
+    }
+
+    val ds = Seq(
+      (User("keyInStateAndData", "1"), (1L)),
+      (User("keyOnlyInState", "1"), (1L)),
+      (User("keyOnlyInState", "2"), (2L)) // state.update will not be called on this in the function
+    ).toDS().groupByKey(_._1).mapValues(_._2)
+
+    val inputData = MemoryStream[User]
+    val result =
+      inputData.toDS()
+        .groupByKey(x => x)
+        .flatMapGroupsWithState(Update, NoTimeout(), ds)(stateFunc)
+
+    testStream(result, Update)(
+      AddData(inputData, User("keyInStateAndData", "1"), User("keyOnlyInData", "1")),
+      CheckNewAnswer(
+        (("keyInStateAndData", "1"), Seq[String]("keyInStateAndData"), "2"),
+        (("keyOnlyInState", "1"), Seq[String](), "1"),
+        (("keyOnlyInState", "2"), Seq[String](), "2"),
+        (("keyOnlyInData", "1"), Seq[String]("keyOnlyInData"), "1")
+      ),
+      assertNumStateRows(total = 4, updated = 3), // (keyOnlyInState, 2) does not call update()
+      // Stop and Start stream to make sure initial state doesn't get applied again.
+      StopStream,
+      StartStream(),
+      AddData(inputData, User("keyOnlyInData", "1")),
+      CheckNewAnswer(
+        (("keyOnlyInData", "1"), Seq[String]("keyOnlyInData"), "2")
+      ),
+      assertNumStateRows(total = 4, updated = 1),
+      StopStream
+    )
   }
 
   testQuietly("flatMapGroupsWithState - initial state - duplicate keys") {
@@ -1381,12 +1445,13 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
-  test("mapGroupsWithState - initial state - java api") {
+  test("mapGroupsWithState - initial state - null key") {
     val initialState = Seq(
       ("a", 4),
       (null, 2)
     ).toDS().groupByKey(_._1).mapValues(_._2)
 
+    // Function that increments state(int) for every value
     val javaStateFunc = new MapGroupsWithStateFunction[String, String, Int, String] {
       import java.util.{Iterator => JIterator}
       override def call(
@@ -1434,7 +1499,11 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         .format("console")
         .start()
     }
-    assert(e.message.contains("Initial state cannot be a streaming DataFrame/Dataset."))
+
+    val expectedError = "Non-streaming DataFrame/Dataset is not supported" +
+      " as the initial state in [flatMap|map]GroupsWithState" +
+      " operation on a streaming DataFrame/Dataset"
+    assert(e.message.contains(expectedError))
   }
 
   testWithAllStateVersions("mapGroupsWithState - initial state - test api") {
@@ -1513,46 +1582,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         .flatMapGroupsWithState(
           Update, GroupStateTimeout.NoTimeout, initialState)(flatMapGroupsWithStateFunc).toDF.show()
     }
-    assert(e.getMessage.contains("Batch [flatMap|map]GroupsWithState queries should not" +
-      " pass an initial state."))
-  }
-
-  testWithAllStateVersions("flatMapGroupsWithState - initial state - case class key") {
-    // function updates state with count of values until count = 3
-    // returns empty iterator when count hits 3.
-    val stateFunc = (key: User, values: Iterator[User], state: GroupState[RunningCount]) => {
-      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
-      assertCannotGetWatermark { state.getCurrentWatermarkMs() }
-
-      val count = state.getOption.map(_.count).getOrElse(0L) + values.size
-      if (count == 3) {
-        state.remove()
-        Iterator.empty
-      } else {
-        state.update(RunningCount(count))
-        Iterator((key, count.toString))
-      }
-    }
-
-    val ds = spark.range(0, 1).map { x =>
-      (User("a", "1"), RunningCount(1))
-    }.groupByKey(_._1).mapValues(_._2)
-
-    val inputData = MemoryStream[User]
-    val result =
-      inputData.toDS()
-        .groupByKey(x => x)
-        .flatMapGroupsWithState(Update, NoTimeout(), ds)(stateFunc)
-
-    testStream(result, Update)(
-      AddData(inputData, User("a", "1"), User("b", "2")),
-      CheckNewAnswer((("a", "1"), "2"), (("b", "2"), "1")),
-      assertNumStateRows(total = 2, updated = 2),
-      AddData(inputData, User("a", "1")),
-      CheckNewAnswer(),
-      assertNumStateRows(total = 1, updated = 0),
-      StopStream
-    )
+    assert(e.getMessage.contains("Initial state is not supported in [flatMap|map]GroupsWithState" +
+      " operation on a batch DataFrame/Dataset"))
   }
 
   def testWithTimeout(timeoutConf: GroupStateTimeout): Unit = {
@@ -1751,7 +1782,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   }
 }
 
-case class User(id: String, message: String)
+case class User(name: String, id: String)
 
 object FlatMapGroupsWithStateSuite {
 

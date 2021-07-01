@@ -532,8 +532,8 @@ case class FlatMapGroupsWithState(
     isMapGroupsWithState: Boolean = false,
     timeout: GroupStateTimeout,
     hasInitialState: Boolean = false,
-    initialStateGroupAttrs: Seq[Attribute] = Seq.empty,
-    initialStateDataAttrs: Seq[Attribute] = Seq.empty,
+    initialStateGroupAttrs: Seq[Attribute],
+    initialStateDataAttrs: Seq[Attribute],
     initialStateDeserializer: Expression,
     initialState: LogicalPlan,
     child: LogicalPlan) extends BinaryNode with ObjectProducer {

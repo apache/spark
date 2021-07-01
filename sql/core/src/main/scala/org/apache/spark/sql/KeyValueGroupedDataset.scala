@@ -469,10 +469,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param initialState The user provided state that will be initialized when the first batch
    *                     of data is processed in the streaming query. The user defined function
    *                     will be called on the state data even if there are no other values in
-   *                     the group. To convert a Dataset ds of type Dataset[(K, S)] to a
-   *                     KeyValueGroupedDataset[K, S]
-   *                     do {{{ ds.groupByKey(x => x._1).mapValues(_._2) }}}
-   *
+   *                     the group. To covert a Dataset `ds` of type  of type `Dataset[(K, S)]`
+   *                     to a `KeyValueGroupedDataset[K, S]`, use
+   *                     {{{ ds.groupByKey(x => x._1).mapValues(_._2) }}}
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 3.2.0
    */
@@ -549,7 +548,9 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * @param initialState The user provided state that will be initialized when the first batch
    *                     of data is processed in the streaming query. The user defined function
    *                     will be called on the state data even if there are no other values in
-   *                     the group.
+   *                     the group. To covert a Dataset `ds` of type  of type `Dataset[(K, S)]`
+   *                     to a `KeyValueGroupedDataset[K, S]`, use
+   *                     {{{ ds.groupByKey(x => x._1).mapValues(_._2) }}}
    *
    * See [[Encoder]] for more details on what types are encodable to Spark SQL.
    * @since 3.2.0
