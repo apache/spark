@@ -21,4 +21,4 @@
 # Jupyter notebook.
 
 VERSION=$(python -c "exec(open('python/pyspark/version.py').read()); print(__version__)")
-pip install "pyspark[sql,ml,mllib]<=$VERSION"
+pip install plotly "pyspark[sql,ml,mllib,pandas_on_spark]<=$VERSION"

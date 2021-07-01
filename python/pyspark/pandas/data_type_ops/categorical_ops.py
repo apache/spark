@@ -15,9 +15,17 @@
 # limitations under the License.
 #
 
-import pandas as pd
+from itertools import chain
+from typing import Union
 
+import pandas as pd
+from pandas.api.types import CategoricalDtype
+
+from pyspark.pandas._typing import Dtype, IndexOpsLike
 from pyspark.pandas.data_type_ops.base import DataTypeOps
+from pyspark.pandas.spark import functions as SF
+from pyspark.pandas.typedef import pandas_on_spark_type
+from pyspark.sql import functions as F
 
 
 class CategoricalOps(DataTypeOps):
@@ -38,3 +46,22 @@ class CategoricalOps(DataTypeOps):
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
         return col.cat.codes
+
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
+        dtype, spark_type = pandas_on_spark_type(dtype)
+
+        if isinstance(dtype, CategoricalDtype) and dtype.categories is None:
+            return index_ops.copy()
+
+        categories = index_ops.dtype.categories
+        if len(categories) == 0:
+            scol = SF.lit(None)
+        else:
+            kvs = chain(
+                *[(SF.lit(code), SF.lit(category)) for code, category in enumerate(categories)]
+            )
+            map_scol = F.create_map(*kvs)
+            scol = map_scol.getItem(index_ops.spark.column)
+        return index_ops._with_new_scol(
+            scol.alias(index_ops._internal.data_spark_column_names[0])
+        ).astype(dtype)

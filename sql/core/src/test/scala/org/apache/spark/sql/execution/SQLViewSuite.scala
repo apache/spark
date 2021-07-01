@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 class SimpleSQLViewSuite extends SQLViewSuite with SharedSparkSession
 
@@ -907,6 +908,29 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
           sql("SELECT * FROM v1").collect()
         }.getMessage
         assert(e.contains("divide by zero"))
+      }
+    }
+  }
+
+  test("SPARK-35685: Prompt recreating view message for schema mismatch") {
+    withTable("t") {
+      sql("CREATE TABLE t USING json AS SELECT 1 AS col_i")
+      val catalog = spark.sessionState.catalog
+      withView("test_view") {
+        sql("CREATE VIEW test_view AS SELECT * FROM t")
+        val meta = catalog.getTableRawMetadata(TableIdentifier("test_view", Some("default")))
+        // simulate a view meta with incompatible schema change
+        val newProp = meta.properties
+          .mapValues(_.replace("col_i", "col_j")).toMap
+        val newSchema = StructType(Seq(StructField("col_j", IntegerType)))
+        catalog.alterTable(meta.copy(properties = newProp, schema = newSchema))
+        val e = intercept[AnalysisException] {
+          sql(s"SELECT * FROM test_view")
+        }
+        assert(e.getMessage.contains("re-create the view by running: CREATE OR REPLACE"))
+        val ddl = e.getMessage.split(": ").last
+        sql(ddl)
+        checkAnswer(sql("select * FROM test_view"), Row(1))
       }
     }
   }

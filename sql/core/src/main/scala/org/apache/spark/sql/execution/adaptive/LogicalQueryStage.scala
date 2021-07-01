@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{LOGICAL_QUERY_STAGE, TreePattern}
 import org.apache.spark.sql.execution.SparkPlan
 
 /**
@@ -39,6 +40,7 @@ case class LogicalQueryStage(
   override def output: Seq[Attribute] = logicalPlan.output
   override val isStreaming: Boolean = logicalPlan.isStreaming
   override val outputOrdering: Seq[SortOrder] = physicalPlan.outputOrdering
+  override protected val nodePatterns: Seq[TreePattern] = Seq(LOGICAL_QUERY_STAGE)
 
   override def computeStats(): Statistics = {
     // TODO this is not accurate when there is other physical nodes above QueryStageExec.

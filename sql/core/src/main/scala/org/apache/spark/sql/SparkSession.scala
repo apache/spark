@@ -41,6 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
@@ -640,7 +641,7 @@ class SparkSession private(
           source.newInstance().asInstanceOf[ExternalCommandRunner], command, options))
 
       case _ =>
-        throw new AnalysisException(s"Command execution is not supported in runner $runner")
+        throw QueryCompilationErrors.commandExecutionInRunnerUnsupportedError(runner)
     }
   }
 
@@ -965,7 +966,7 @@ object SparkSession extends Logging {
 
     private def applyModifiableSettings(session: SparkSession): Unit = {
       val (staticConfs, otherConfs) =
-        options.partition(kv => SQLConf.staticConfKeys.contains(kv._1))
+        options.partition(kv => SQLConf.isStaticConfigKey(kv._1))
 
       otherConfs.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
 

@@ -363,13 +363,8 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
 
             // One less duplicated column if caseSensitive=false.
             sql("CREATE OR REPLACE VIEW v1 AS SELECT 1 a, 2 b")
-            if (caseSensitive) {
-              val e = intercept[AnalysisException](spark.table(viewName2).collect())
-              assert(e.message.contains("cannot resolve 'COL'"))
-            } else {
-              val e = intercept[AnalysisException](spark.table(viewName2).collect())
-              assert(e.message.contains("incompatible schema change"))
-            }
+            val e = intercept[AnalysisException](spark.table(viewName2).collect())
+            assert(e.message.contains("incompatible schema change"))
           }
         }
       }

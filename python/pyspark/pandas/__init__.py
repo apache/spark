@@ -31,31 +31,6 @@ except ImportError as e:
     else:
         raise
 
-from pyspark.pandas.version import __version__  # noqa: F401
-
-
-def assert_python_version() -> None:
-    major = 3
-    minor = 5
-    deprecated_version = (major, minor)
-    min_supported_version = (major, minor + 1)
-
-    if sys.version_info[:2] <= deprecated_version:
-        warnings.warn(
-            "pandas-on-Spark support for Python {dep_ver} is deprecated and will be dropped in "
-            "the future release. At that point, existing Python {dep_ver} workflows "
-            "that use pandas-on-Spark will continue to work without modification, but "
-            "Python {dep_ver} users will no longer get access to the latest pandas-on-Spark "
-            "features and bugfixes. We recommend that you upgrade to Python {min_ver} or "
-            "newer.".format(
-                dep_ver=".".join(map(str, deprecated_version)),
-                min_ver=".".join(map(str, min_supported_version)),
-            ),
-            FutureWarning,
-        )
-
-
-assert_python_version()
 
 import pyarrow
 
@@ -132,22 +107,6 @@ def _auto_patch_spark() -> None:
                     logger_module, str(e)
                 )
             )
-
-    # Autopatching is on by default.
-    x = os.getenv("SPARK_KOALAS_AUTOPATCH", "true")
-    if x.lower() in ("true", "1", "enabled"):
-        logger = logging.getLogger("spark")
-        logger.info(
-            "Patching spark automatically. You can disable it by setting "
-            "SPARK_KOALAS_AUTOPATCH=false in your environment"
-        )
-
-        from pyspark.sql import dataframe as df
-
-        df.DataFrame.to_pandas_on_spark = DataFrame.to_pandas_on_spark  # type: ignore
-
-        # Keep to_koalas for backward compatibility for now.
-        df.DataFrame.to_koalas = DataFrame.to_koalas  # type: ignore
 
 
 _frame_has_class_getitem = False

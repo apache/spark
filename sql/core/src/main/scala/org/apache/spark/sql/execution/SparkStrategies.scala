@@ -32,11 +32,10 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NONE, REPARTITION_BY_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
-import org.apache.spark.sql.expressions.CommandResult
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
@@ -715,11 +714,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
         val shuffleOrigin = if (r.partitionExpressions.isEmpty && r.optNumPartitions.isEmpty) {
-          REPARTITION_BY_NONE
+          REBALANCE_PARTITIONS_BY_NONE
         } else if (r.optNumPartitions.isEmpty) {
           REPARTITION_BY_COL
         } else {
           REPARTITION_BY_NUM
+        }
+        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
+      case r: logical.RebalancePartitions =>
+        val shuffleOrigin = if (r.partitionExpressions.isEmpty) {
+          REBALANCE_PARTITIONS_BY_NONE
+        } else {
+          REBALANCE_PARTITIONS_BY_COL
         }
         exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil

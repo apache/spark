@@ -119,9 +119,9 @@ object JavaTypeInference {
       case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
       case c: Class[_] if c == classOf[java.time.Instant] => (TimestampType, true)
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
-      case c: Class[_] if c == classOf[java.time.LocalDateTime] => (TimestampWithoutTZType, true)
-      case c: Class[_] if c == classOf[java.time.Duration] => (DayTimeIntervalType, true)
-      case c: Class[_] if c == classOf[java.time.Period] => (YearMonthIntervalType, true)
+      case c: Class[_] if c == classOf[java.time.LocalDateTime] => (TimestampNTZType, true)
+      case c: Class[_] if c == classOf[java.time.Duration] => (DayTimeIntervalType(), true)
+      case c: Class[_] if c == classOf[java.time.Period] => (YearMonthIntervalType(), true)
 
       case _ if typeToken.isArray =>
         val (dataType, nullable) = inferDataType(typeToken.getComponentType, seenTypeSet)

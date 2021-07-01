@@ -257,7 +257,6 @@ Serialization / IO / Conversion
    DataFrame.to_pandas
    DataFrame.to_html
    DataFrame.to_numpy
-   DataFrame.to_pandas_on_spark
    DataFrame.to_spark
    DataFrame.to_string
    DataFrame.to_json
@@ -314,9 +313,9 @@ specific plotting methods of the form ``DataFrame.plot.<kind>``.
    DataFrame.hist
    DataFrame.kde
 
-Koalas-specific
----------------
-``DataFrame.pandas_on_spark`` provides Koalas-specific features that exists only in Koalas.
+Pandas-on-Spark specific
+------------------------
+``DataFrame.pandas_on_spark`` provides pandas-on-Spark specific features that exists only in pandas API on Spark.
 These can be accessed by ``DataFrame.pandas_on_spark.<function/property>``.
 
 .. autosummary::

@@ -110,6 +110,7 @@ private[spark] class SerializerManager(
   private def shouldCompress(blockId: BlockId): Boolean = {
     blockId match {
       case _: ShuffleBlockId => compressShuffle
+      case _: ShuffleBlockChunkId => compressShuffle
       case _: BroadcastBlockId => compressBroadcast
       case _: RDDBlockId => compressRdds
       case _: TempLocalBlockId => compressShuffleSpill

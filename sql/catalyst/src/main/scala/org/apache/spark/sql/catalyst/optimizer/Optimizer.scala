@@ -950,15 +950,28 @@ object OptimizeWindowFunctions extends Rule[LogicalPlan] {
  *   independent and are of the same window function type, collapse into the parent.
  */
 object CollapseWindow extends Rule[LogicalPlan] {
+  private def windowsCompatible(w1: Window, w2: Window): Boolean = {
+    w1.partitionSpec == w2.partitionSpec &&
+      w1.orderSpec == w2.orderSpec &&
+      w1.references.intersect(w2.windowOutputSet).isEmpty &&
+      w1.windowExpressions.nonEmpty && w2.windowExpressions.nonEmpty &&
+      // This assumes Window contains the same type of window expressions. This is ensured
+      // by ExtractWindowFunctions.
+      WindowFunctionType.functionType(w1.windowExpressions.head) ==
+        WindowFunctionType.functionType(w2.windowExpressions.head)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(WINDOW), ruleId) {
-    case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
-        if ps1 == ps2 && os1 == os2 && w1.references.intersect(w2.windowOutputSet).isEmpty &&
-          we1.nonEmpty && we2.nonEmpty &&
-          // This assumes Window contains the same type of window expressions. This is ensured
-          // by ExtractWindowFunctions.
-          WindowFunctionType.functionType(we1.head) == WindowFunctionType.functionType(we2.head) =>
+    case w1 @ Window(we1, _, _, w2 @ Window(we2, _, _, grandChild))
+        if windowsCompatible(w1, w2) =>
       w1.copy(windowExpressions = we2 ++ we1, child = grandChild)
+
+    case w1 @ Window(we1, _, _, Project(pl, w2 @ Window(we2, _, _, grandChild)))
+        if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
+      Project(
+        pl ++ w1.windowOutputSet,
+        w1.copy(windowExpressions = we2 ++ we1, child = grandChild))
   }
 }
 
@@ -974,14 +987,24 @@ object TransposeWindow extends Rule[LogicalPlan] {
     })
   }
 
+  private def windowsCompatible(w1: Window, w2: Window): Boolean = {
+    w1.references.intersect(w2.windowOutputSet).isEmpty &&
+      w1.expressions.forall(_.deterministic) &&
+      w2.expressions.forall(_.deterministic) &&
+      compatiblePartitions(w1.partitionSpec, w2.partitionSpec)
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(WINDOW), ruleId) {
-    case w1 @ Window(we1, ps1, os1, w2 @ Window(we2, ps2, os2, grandChild))
-        if w1.references.intersect(w2.windowOutputSet).isEmpty &&
-           w1.expressions.forall(_.deterministic) &&
-           w2.expressions.forall(_.deterministic) &&
-           compatiblePartitions(ps1, ps2) =>
-      Project(w1.output, Window(we2, ps2, os2, Window(we1, ps1, os1, grandChild)))
+    case w1 @ Window(_, _, _, w2 @ Window(_, _, _, grandChild))
+      if windowsCompatible(w1, w2) =>
+      Project(w1.output, w2.copy(child = w1.copy(child = grandChild)))
+
+    case w1 @ Window(_, _, _, Project(pl, w2 @ Window(_, _, _, grandChild)))
+      if windowsCompatible(w1, w2) && w1.references.subsetOf(grandChild.outputSet) =>
+      Project(
+        pl ++ w1.windowOutputSet,
+        w2.copy(child = w1.copy(child = grandChild)))
   }
 }
 
@@ -1174,14 +1197,15 @@ object CombineFilters extends Rule[LogicalPlan] with PredicateHelper {
  * Removes Sort operations if they don't affect the final output ordering.
  * Note that changes in the final output ordering may affect the file size (SPARK-32318).
  * This rule handles the following cases:
- * 1) if the sort order is empty or the sort order does not have any reference
- * 2) if the Sort operator is a local sort and the child is already sorted
- * 3) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
+ * 1) if the child maximum number of rows less than or equal to 1
+ * 2) if the sort order is empty or the sort order does not have any reference
+ * 3) if the Sort operator is a local sort and the child is already sorted
+ * 4) if there is another Sort operator separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression (with deterministic expressions) operators
- * 4) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
+ * 5) if the Sort operator is within Join separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression (with deterministic expressions) operators only and the Join condition
  *    is deterministic
- * 5) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
+ * 6) if the Sort operator is within GroupBy separated by 0...n Project, Filter, Repartition or
  *    RepartitionByExpression (with deterministic expressions) operators only and the aggregate
  *    function is order irrelevant
  */
@@ -1190,6 +1214,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
     _.containsPattern(SORT))(applyLocally)
 
   private val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
+    case Sort(_, _, child) if child.maxRows.exists(_ <= 1L) => child
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) {

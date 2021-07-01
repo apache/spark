@@ -17,6 +17,7 @@
 package org.apache.spark.sql.avro
 
 import java.io.{FileNotFoundException, IOException}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 
@@ -115,7 +116,9 @@ private[sql] object AvroUtils extends Logging {
       job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, codec)
     }
 
-    new AvroOutputWriterFactory(dataSchema, outputAvroSchema.toString)
+    new AvroOutputWriterFactory(dataSchema,
+      outputAvroSchema.toString,
+      parsedOptions.positionalFieldMatching)
   }
 
   private def inferAvroSchemaFromFiles(
@@ -203,34 +206,74 @@ private[sql] object AvroUtils extends Logging {
   }
 
   /**
-   * Extract a single field from `avroSchema` which has the desired field name,
-   * performing the matching with proper case sensitivity according to [[SQLConf.resolver]].
+   * Wraps an Avro Schema object so that field lookups are faster.
    *
-   * @param avroSchema The schema in which to search for the field. Must be of type RECORD.
-   * @param name The name of the field to search for.
+   * @param avroSchema The schema in which to search for fields. Must be of type RECORD.
    * @param avroPath The seq of parent field names leading to `avroSchema`.
-   * @return `Some(match)` if a matching Avro field is found, otherwise `None`.
-   * @throws IncompatibleSchemaException if `avroSchema` is not a RECORD or contains multiple
-   *                                     fields matching `name` (i.e., case-insensitive matching
-   *                                     is used and `avroSchema` has two or more fields that have
-   *                                     the same name with difference case).
+   * @param positionalFieldMatch If true, perform field matching in a positional fashion
+   *                             (structural comparison between schemas, ignoring names);
+   *                             otherwise, perform field matching using field names.
    */
-  private[avro] def getAvroFieldByName(
+  class AvroSchemaHelper(
       avroSchema: Schema,
-      name: String,
-      avroPath: Seq[String]): Option[Schema.Field] = {
+      avroPath: Seq[String],
+      positionalFieldMatch: Boolean) {
     if (avroSchema.getType != Schema.Type.RECORD) {
       throw new IncompatibleSchemaException(
         s"Attempting to treat ${avroSchema.getName} as a RECORD, but it was: ${avroSchema.getType}")
     }
-    avroSchema.getFields.asScala.filter(f => SQLConf.get.resolver(f.name(), name)).toSeq match {
-      case Seq(avroField) => Some(avroField)
-      case Seq() => None
-      case matches => throw new IncompatibleSchemaException(s"Searching for '$name' in Avro " +
+
+    private[this] val avroFieldArray = avroSchema.getFields.asScala.toArray
+    private[this] val fieldMap = avroSchema.getFields.asScala
+      .groupBy(_.name.toLowerCase(Locale.ROOT))
+      .mapValues(_.toSeq) // toSeq needed for scala 2.13
+
+    /**
+     * Extract a single field from the contained avro schema which has the desired field name,
+     * performing the matching with proper case sensitivity according to SQLConf.resolver.
+     *
+     * @param name The name of the field to search for.
+     * @return `Some(match)` if a matching Avro field is found, otherwise `None`.
+     */
+    private[avro] def getFieldByName(name: String): Option[Schema.Field] = {
+
+      // get candidates, ignoring case of field name
+      val candidates = fieldMap.getOrElse(name.toLowerCase(Locale.ROOT), Seq.empty)
+
+      // search candidates, taking into account case sensitivity settings
+      candidates.filter(f => SQLConf.get.resolver(f.name(), name)) match {
+        case Seq(avroField) => Some(avroField)
+        case Seq() => None
+        case matches => throw new IncompatibleSchemaException(s"Searching for '$name' in Avro " +
           s"schema at ${toFieldStr(avroPath)} gave ${matches.size} matches. Candidates: " +
           matches.map(_.name()).mkString("[", ", ", "]")
-      )
+        )
+      }
     }
+
+    /** Get the Avro field corresponding to the provided Catalyst field name/position, if any. */
+    def getAvroField(fieldName: String, catalystPos: Int): Option[Schema.Field] = {
+      if (positionalFieldMatch) {
+        avroFieldArray.lift(catalystPos)
+      } else {
+        getFieldByName(fieldName)
+      }
+    }
+  }
+
+  /**
+   * Take a field's hierarchical names (see [[toFieldStr]]) and position, and convert it to a
+   * human-readable description of the field. Depending on the value of `positionalFieldMatch`,
+   * either the position or name will be emphasized (for true and false, respectively); both will
+   * be included in either case.
+   */
+  private[avro] def toFieldDescription(
+      names: Seq[String],
+      position: Int,
+      positionalFieldMatch: Boolean): String = if (positionalFieldMatch) {
+    s"field at position $position (${toFieldStr(names)})"
+  } else {
+    s"${toFieldStr(names)} (at position $position)"
   }
 
   /**

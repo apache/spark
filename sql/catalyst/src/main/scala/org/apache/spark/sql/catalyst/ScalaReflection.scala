@@ -753,15 +753,15 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, localTypeOf[java.sql.Timestamp]) =>
         Schema(TimestampType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.LocalDateTime]) =>
-        Schema(TimestampWithoutTZType, nullable = true)
+        Schema(TimestampNTZType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.LocalDate]) => Schema(DateType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.sql.Date]) => Schema(DateType, nullable = true)
       case t if isSubtype(t, localTypeOf[CalendarInterval]) =>
         Schema(CalendarIntervalType, nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.Duration]) =>
-        Schema(DayTimeIntervalType, nullable = true)
+        Schema(DayTimeIntervalType(), nullable = true)
       case t if isSubtype(t, localTypeOf[java.time.Period]) =>
-        Schema(YearMonthIntervalType, nullable = true)
+        Schema(YearMonthIntervalType(), nullable = true)
       case t if isSubtype(t, localTypeOf[BigDecimal]) =>
         Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if isSubtype(t, localTypeOf[java.math.BigDecimal]) =>
@@ -858,11 +858,9 @@ object ScalaReflection extends ScalaReflection {
     StringType -> classOf[UTF8String],
     DateType -> classOf[DateType.InternalType],
     TimestampType -> classOf[TimestampType.InternalType],
-    TimestampWithoutTZType -> classOf[TimestampWithoutTZType.InternalType],
+    TimestampNTZType -> classOf[TimestampNTZType.InternalType],
     BinaryType -> classOf[BinaryType.InternalType],
-    CalendarIntervalType -> classOf[CalendarInterval],
-    DayTimeIntervalType -> classOf[DayTimeIntervalType.InternalType],
-    YearMonthIntervalType -> classOf[YearMonthIntervalType.InternalType]
+    CalendarIntervalType -> classOf[CalendarInterval]
   )
 
   val typeBoxedJavaMapping = Map[DataType, Class[_]](
@@ -875,14 +873,14 @@ object ScalaReflection extends ScalaReflection {
     DoubleType -> classOf[java.lang.Double],
     DateType -> classOf[java.lang.Integer],
     TimestampType -> classOf[java.lang.Long],
-    TimestampWithoutTZType -> classOf[java.lang.Long],
-    DayTimeIntervalType -> classOf[java.lang.Long],
-    YearMonthIntervalType -> classOf[java.lang.Integer]
+    TimestampNTZType -> classOf[java.lang.Long]
   )
 
   def dataTypeJavaClass(dt: DataType): Class[_] = {
     dt match {
       case _: DecimalType => classOf[Decimal]
+      case it: DayTimeIntervalType => classOf[it.InternalType]
+      case it: YearMonthIntervalType => classOf[it.InternalType]
       case _: StructType => classOf[InternalRow]
       case _: ArrayType => classOf[ArrayData]
       case _: MapType => classOf[MapData]
@@ -893,6 +891,8 @@ object ScalaReflection extends ScalaReflection {
 
   def javaBoxedType(dt: DataType): Class[_] = dt match {
     case _: DecimalType => classOf[Decimal]
+    case _: DayTimeIntervalType => classOf[java.lang.Long]
+    case _: YearMonthIntervalType => classOf[java.lang.Integer]
     case BinaryType => classOf[Array[Byte]]
     case StringType => classOf[UTF8String]
     case CalendarIntervalType => classOf[CalendarInterval]

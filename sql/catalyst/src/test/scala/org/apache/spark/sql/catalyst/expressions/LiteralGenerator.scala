@@ -139,10 +139,10 @@ object LiteralGenerator {
       yield Literal.create(new Timestamp(millis), TimestampType)
   }
 
-  lazy val timestampWithoutTZLiteralGen: Gen[Literal] = {
+  lazy val timestampNTZLiteralGen: Gen[Literal] = {
     for { millis <- millisGen }
       yield Literal.create(
-        DateTimeUtils.microsToLocalDateTime(millis * MICROS_PER_MILLIS), TimestampWithoutTZType)
+        DateTimeUtils.microsToLocalDateTime(millis * MICROS_PER_MILLIS), TimestampNTZType)
   }
 
   // Valid range for DateType and TimestampType is [0001-01-01, 9999-12-31]
@@ -178,13 +178,13 @@ object LiteralGenerator {
     calendarIntervalLiterGen.map { calendarIntervalLiteral =>
       Literal.create(
         calendarIntervalLiteral.value.asInstanceOf[CalendarInterval].extractAsDuration(),
-        DayTimeIntervalType)
+        DayTimeIntervalType())
     }
   }
 
   lazy val yearMonthIntervalLiteralGen: Gen[Literal] = {
     for { months <- Gen.choose(-1 * maxIntervalInMonths, maxIntervalInMonths) }
-      yield Literal.create(Period.ofMonths(months), YearMonthIntervalType)
+      yield Literal.create(Period.ofMonths(months), YearMonthIntervalType())
   }
 
   def randomGen(dt: DataType): Gen[Literal] = {
@@ -197,14 +197,14 @@ object LiteralGenerator {
       case FloatType => floatLiteralGen
       case DateType => dateLiteralGen
       case TimestampType => timestampLiteralGen
-      case TimestampWithoutTZType => timestampWithoutTZLiteralGen
+      case TimestampNTZType => timestampNTZLiteralGen
       case BooleanType => booleanLiteralGen
       case StringType => stringLiteralGen
       case BinaryType => binaryLiteralGen
       case CalendarIntervalType => calendarIntervalLiterGen
       case DecimalType.Fixed(precision, scale) => decimalLiteralGen(precision, scale)
-      case DayTimeIntervalType => dayTimeIntervalLiteralGen
-      case YearMonthIntervalType => yearMonthIntervalLiteralGen
+      case _: DayTimeIntervalType => dayTimeIntervalLiteralGen
+      case _: YearMonthIntervalType => yearMonthIntervalLiteralGen
       case dt => throw new IllegalArgumentException(s"not supported type $dt")
     }
   }

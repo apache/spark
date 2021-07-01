@@ -101,10 +101,10 @@ case class WindowSpecDefinition(
 
   private def isValidFrameType(ft: DataType): Boolean = (orderSpec.head.dataType, ft) match {
     case (DateType, IntegerType) => true
-    case (DateType, YearMonthIntervalType) => true
+    case (DateType, _: YearMonthIntervalType) => true
     case (TimestampType, CalendarIntervalType) => true
-    case (TimestampType, YearMonthIntervalType) => true
-    case (TimestampType, DayTimeIntervalType) => true
+    case (TimestampType, _: YearMonthIntervalType) => true
+    case (TimestampType, _: DayTimeIntervalType) => true
     case (a, b) => a == b
   }
 }

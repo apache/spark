@@ -17,18 +17,13 @@
 
 package org.apache.spark.sql.execution.exchange
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SortOrder}
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /**
@@ -94,48 +89,5 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
        |$formattedNodeName [Reuses operator id: $reuse_op_str]
        |${ExplainUtils.generateFieldString("Output", output)}
        |""".stripMargin
-  }
-}
-
-/**
- * Find out duplicated exchanges in the spark plan, then use the same exchange for all the
- * references.
- */
-object ReuseExchange extends Rule[SparkPlan] {
-
-  def apply(plan: SparkPlan): SparkPlan = {
-    if (!conf.exchangeReuseEnabled) {
-      return plan
-    }
-    // Build a hash map using schema of exchanges to avoid O(N*N) sameResult calls.
-    val exchanges = mutable.HashMap[StructType, ArrayBuffer[Exchange]]()
-
-    // Replace a Exchange duplicate with a ReusedExchange
-    def reuse: PartialFunction[Exchange, SparkPlan] = {
-      case exchange: Exchange =>
-        val sameSchema = exchanges.getOrElseUpdate(exchange.schema, ArrayBuffer[Exchange]())
-        val samePlan = sameSchema.find { e =>
-          exchange.sameResult(e)
-        }
-        if (samePlan.isDefined) {
-          // Keep the output of this exchange, the following plans require that to resolve
-          // attributes.
-          ReusedExchangeExec(exchange.output, samePlan.get)
-        } else {
-          sameSchema += exchange
-          exchange
-        }
-    }
-
-    plan.transformUpWithPruning(_.containsPattern(EXCHANGE))({
-      case exchange: Exchange => reuse(exchange)
-    }).transformAllExpressionsWithPruning(_.containsPattern(IN_SUBQUERY_EXEC)) {
-      // Lookup inside subqueries for duplicate exchanges
-      case in: InSubqueryExec =>
-        val newIn = in.plan.transformUpWithPruning(_.containsPattern(EXCHANGE)) {
-          case exchange: Exchange => reuse(exchange)
-        }
-        in.copy(plan = newIn.asInstanceOf[BaseSubqueryExec])
-    }
   }
 }

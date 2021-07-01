@@ -17,8 +17,7 @@
 
 package org.apache.spark.util
 
-import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataOutput, DataOutputStream, File,
-  FileOutputStream, PrintStream, SequenceInputStream}
+import java.io._
 import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
@@ -42,6 +41,7 @@ import org.apache.spark.{SparkConf, SparkException, SparkFunSuite, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Tests.IS_TESTING
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.scheduler.SparkListener
 import org.apache.spark.util.io.ChunkedByteBufferInputStream
@@ -1438,15 +1438,19 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(message.contains(expected))
   }
 
-  test("isPushBasedShuffleEnabled when both PUSH_BASED_SHUFFLE_ENABLED" +
-    " and SHUFFLE_SERVICE_ENABLED are true") {
+  test("isPushBasedShuffleEnabled when PUSH_BASED_SHUFFLE_ENABLED " +
+    "and SHUFFLE_SERVICE_ENABLED are both set to true in YARN mode with maxAttempts set to 1") {
     val conf = new SparkConf()
     assert(Utils.isPushBasedShuffleEnabled(conf) === false)
     conf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
     conf.set(IS_TESTING, false)
     assert(Utils.isPushBasedShuffleEnabled(conf) === false)
     conf.set(SHUFFLE_SERVICE_ENABLED, true)
+    conf.set(SparkLauncher.SPARK_MASTER, "yarn")
+    conf.set("spark.yarn.maxAttempts", "1")
     assert(Utils.isPushBasedShuffleEnabled(conf) === true)
+    conf.set("spark.yarn.maxAttempts", "2")
+    assert(Utils.isPushBasedShuffleEnabled(conf) === false)
   }
 }
 
