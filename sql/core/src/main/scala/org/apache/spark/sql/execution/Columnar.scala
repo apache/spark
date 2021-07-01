@@ -429,6 +429,10 @@ trait RowToColumnarTransition extends UnaryExecNode
  * would only be to reduce code.
  */
 case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
+  // child plan must be row-based or an adaptive plan, which could either be row-based or
+  // columnar, but we don't know until we execute it
+  assert(!child.supportsColumnar || child.isInstanceOf[AdaptiveSparkPlanExec])
+
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -451,52 +455,60 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
   )
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val enableOffHeapColumnVector = conf.offHeapColumnVectorEnabled
-    val numInputRows = longMetric("numInputRows")
-    val numOutputBatches = longMetric("numOutputBatches")
-    // Instead of creating a new config we are reusing columnBatchSize. In the future if we do
-    // combine with some of the Arrow conversion tools we will need to unify some of the configs.
-    val numRows = conf.columnBatchSize
-    // This avoids calling `schema` in the RDD closure, so that we don't need to include the entire
-    // plan (this) in the closure.
-    val localSchema = this.schema
-    child.execute().mapPartitionsInternal { rowIterator =>
-      if (rowIterator.hasNext) {
-        new Iterator[ColumnarBatch] {
-          private val converters = new RowToColumnConverter(localSchema)
-          private val vectors: Seq[WritableColumnVector] = if (enableOffHeapColumnVector) {
-            OffHeapColumnVector.allocateColumns(numRows, localSchema)
-          } else {
-            OnHeapColumnVector.allocateColumns(numRows, localSchema)
-          }
-          private val cb: ColumnarBatch = new ColumnarBatch(vectors.toArray)
+    child match {
+      case a: AdaptiveSparkPlanExec if a.finalPlanSupportsColumnar() =>
+        // if the child plan is adaptive and resulted in columnar data
+        // then we can bypass any transition
+        a.executeColumnar()
+      case _ =>
+        val enableOffHeapColumnVector = conf.offHeapColumnVectorEnabled
+        val numInputRows = longMetric("numInputRows")
+        val numOutputBatches = longMetric("numOutputBatches")
+        // Instead of creating a new config we are reusing columnBatchSize. In the future if we do
+        // combine with some of the Arrow conversion tools we will need to unify some of the
+        // configs.
+        val numRows = conf.columnBatchSize
+        // This avoids calling `schema` in the RDD closure, so that we don't need to include the
+        // entire plan (this) in the closure.
+        val localSchema = this.schema
+        child.execute().mapPartitionsInternal { rowIterator =>
+          if (rowIterator.hasNext) {
+            new Iterator[ColumnarBatch] {
+              private val converters = new RowToColumnConverter(localSchema)
+              private val vectors: Seq[WritableColumnVector] = if (enableOffHeapColumnVector) {
+                OffHeapColumnVector.allocateColumns(numRows, localSchema)
+              } else {
+                OnHeapColumnVector.allocateColumns(numRows, localSchema)
+              }
+              private val cb: ColumnarBatch = new ColumnarBatch(vectors.toArray)
 
-          TaskContext.get().addTaskCompletionListener[Unit] { _ =>
-            cb.close()
-          }
+              TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+                cb.close()
+              }
 
-          override def hasNext: Boolean = {
-            rowIterator.hasNext
-          }
+              override def hasNext: Boolean = {
+                rowIterator.hasNext
+              }
 
-          override def next(): ColumnarBatch = {
-            cb.setNumRows(0)
-            vectors.foreach(_.reset())
-            var rowCount = 0
-            while (rowCount < numRows && rowIterator.hasNext) {
-              val row = rowIterator.next()
-              converters.convert(row, vectors.toArray)
-              rowCount += 1
+              override def next(): ColumnarBatch = {
+                cb.setNumRows(0)
+                vectors.foreach(_.reset())
+                var rowCount = 0
+                while (rowCount < numRows && rowIterator.hasNext) {
+                  val row = rowIterator.next()
+                  converters.convert(row, vectors.toArray)
+                  rowCount += 1
+                }
+                cb.setNumRows(rowCount)
+                numInputRows += rowCount
+                numOutputBatches += 1
+                cb
+              }
             }
-            cb.setNumRows(rowCount)
-            numInputRows += rowCount
-            numOutputBatches += 1
-            cb
+          } else {
+            Iterator.empty
           }
         }
-      } else {
-        Iterator.empty
-      }
     }
   }
 
