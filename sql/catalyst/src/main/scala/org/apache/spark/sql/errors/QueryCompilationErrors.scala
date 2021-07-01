@@ -1522,7 +1522,7 @@ private[spark] object QueryCompilationErrors {
     // The second argument of '{function}' function needs to be an integer
     new AnalysisException(
       errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
-      messageParameters = Seq(function),
+      messageParameters = Array(function),
       cause = Some(e))
   }
 

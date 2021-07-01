@@ -10,9 +10,9 @@ To throw an exception, do the following.
 1. Check if an appropriate error class already exists in `error-class.json`.
    If true, skip to step 3. Otherwise, continue to step 2.
 2. Add a new class to `error-class.json`; keep in mind the invariants below.
-3. Check if the exception type already extends `SparkError`.
+3. Check if the exception type already extends `SparkThrowable`.
    If true, skip to step 5. Otherwise, continue to step 4.
-4. Mix `SparkError` into the exception.
+4. Mix `SparkThrowable` into the exception.
 5. Throw the exception with the error class and message parameters.
 
 ### Before
@@ -34,10 +34,15 @@ Throw exception:
 `SparkException.scala`
 
     class SparkTestException(
-        val errorClass: String,
-        val messageParameters: Seq[String])
-      extends TestException(SparkError.getMessage(errorClass, messageParameters))
-        with SparkError
+        errorClass: String,
+        messageParameters: Seq[String])
+      extends TestException(SparkThrowable.SparkThrowableHelper.getMessage(errorClass, messageParameters))
+        with SparkThrowable {
+        
+      def getErrorClass: String = errorClass
+      def getMessageParameters: Array[String] = messageParameters
+      def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+    }
 
 Throw exception:
 
@@ -45,7 +50,7 @@ Throw exception:
 
 ## Access fields
 
-To access error fields, catch exceptions that extend `org.apache.spark.SparkError` and access
+To access error fields, catch exceptions that extend `org.apache.spark.SparkThrowable` and access
   - Error class with `errorClass`
   - SQLSTATE with `sqlState`
 
@@ -53,7 +58,7 @@ To access error fields, catch exceptions that extend `org.apache.spark.SparkErro
     try {
         ...
     } catch {
-        case e: SparkError if e.sqlState.forall(_.startsWith("42")) =>
+        case e: SparkThrowable if e.sqlState.forall(_.startsWith("42")) =>
             warn("Syntax error")
     }
 
