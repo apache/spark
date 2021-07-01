@@ -403,13 +403,20 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
     def __ne__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
         return column_op(Column.__ne__)(self, other)
 
-    __lt__ = column_op(Column.__lt__)
-    __le__ = column_op(Column.__le__)
-    __ge__ = column_op(Column.__ge__)
-    __gt__ = column_op(Column.__gt__)
+    def __lt__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.lt(self, other)
+
+    def __le__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.le(self, other)
+
+    def __ge__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.ge(self, other)
+
+    def __gt__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.gt(self, other)
 
     def __invert__(self: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, column_op(Column.__invert__)(self))
+        return cast(IndexOpsLike, self._dtype_op.__invert__(self))
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
@@ -426,7 +433,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._dtype_op.ror(self, other)
 
     def __len__(self) -> int:
-        return len(self._psdf)
+        return self._dtype_op.__len__(self)
 
     # NDArray Compat
     def __array_ufunc__(

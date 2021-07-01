@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -43,6 +43,7 @@ from pyspark.sql.types import (
     UserDefinedType,
 )
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
+from pyspark.pandas.base import column_op
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import extension_dtypes
 from pyspark.pandas.typedef.typehints import (
@@ -317,6 +318,24 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
     def ror(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         return left.__or__(right)
+
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        return column_op(Column.__lt__)(left, right)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        return column_op(Column.__le__)(left, right)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        return column_op(Column.__ge__)(left, right)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        return column_op(Column.__gt__)(left, right)
+
+    def __invert__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+        return column_op(Column.__invert__)(operand)
+
+    def __len__(self, operand: IndexOpsLike) -> int:
+        return len(operand._psdf)
 
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""
