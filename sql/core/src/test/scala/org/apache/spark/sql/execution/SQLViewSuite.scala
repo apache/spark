@@ -921,7 +921,7 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
         val meta = catalog.getTableRawMetadata(TableIdentifier("test_view", Some("default")))
         // simulate a view meta with incompatible schema change
         val newProp = meta.properties
-          .mapValues(_.replace("col_i", "col_j"))
+          .mapValues(_.replace("col_i", "col_j")).toMap
         val newSchema = StructType(Seq(StructField("col_j", IntegerType)))
         catalog.alterTable(meta.copy(properties = newProp, schema = newSchema))
         val e = intercept[AnalysisException] {
