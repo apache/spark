@@ -370,6 +370,29 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
+  test("SPARK-35969: Make the pod prefix more readable and tallied with K8S DNS Label Names") {
+    baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+    baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
+    val baseDriverPod = SparkPod.initialPod()
+    val step1 = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val podConfigured1 = step1.configurePod(baseDriverPod)
+    assert(podConfigured1.pod.getMetadata.getName
+      .startsWith("xyz-abc-i-am-a-app-name-w-some-abbrs"))
+
+    // scalastyle:off nonascii
+    baseConf.set("spark.app.name", "time.is the#most￥valuable_—thing。it's&about?time.")
+    // scalastyle:on
+
+    val step2 = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+
+    val podConfigured2 = step2.configurePod(baseDriverPod)
+    assert(podConfigured2.pod.getMetadata.getName
+      .startsWith("time-is-the-most-valuable-thing-it-s-about-time-"))
+
+  }
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)
