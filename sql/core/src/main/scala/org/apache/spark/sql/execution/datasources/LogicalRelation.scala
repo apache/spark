@@ -84,7 +84,8 @@ object LogicalRelation {
     val attributes = schema.toAttributes
     val output = table.stats.map(_.colStats) match {
       case Some(colStats) =>
-        attributes.map(a => a.withNullability(colStats(a.name).nullCount.forall(_ > 0L)))
+        attributes
+          .map(a => a.withNullability(colStats.get(a.name).forall(_.nullCount.forall(_ > 0L))))
       case None =>
         attributes
     }
