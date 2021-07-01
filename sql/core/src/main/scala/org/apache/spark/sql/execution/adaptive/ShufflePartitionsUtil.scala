@@ -233,11 +233,9 @@ object ShufflePartitionsUtil extends Logging {
       targetSize: Long,
       minPartitionSize: Long,
       allowReturnEmpty: Boolean = false): Seq[CoalescedPartitionSpec] = {
-    // `minPartitionSize` is not effective in most cases, as it's usually much smaller than
-    // `targetSize`, and the coalesced partitions will always be larger than `minPartitionSize`.
-    // The useful case is: for [64MB, 0.5MB, 64MB], we can't coalesce, because merging 0.5MB to
-    // either the left or right partition will exceed the target size. If 0.5MB is smaller than
-    // `minPartitionSize`, we will force-merge it to the left/right side.
+    // `minPartitionSize` is useful for cases like [64MB, 0.5MB, 64MB]: we can't do coalesce,
+    // because merging 0.5MB to either the left or right partition will exceed the target size.
+    // If 0.5MB is smaller than `minPartitionSize`, we will force-merge it to the left/right side.
     val partitionSpecs = ArrayBuffer.empty[CoalescedPartitionSpec]
     var coalescedSize = 0L
     var i = start
