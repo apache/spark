@@ -77,7 +77,7 @@
       </dependencies>
     </profile>
     <profile>
-      <id>no-shaded-client</id>
+      <id>no-shaded-hadoop-client</id>
       <dependencies>
         <dependency>
           <groupId>org.apache.hadoop</groupId>

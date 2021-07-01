@@ -3314,7 +3314,7 @@
     </profile>
 
     <profile>
-      <id>no-shaded-client</id>
+      <id>no-shaded-hadoop-client</id>
       <properties>
         <hadoop-client-api.artifact>hadoop-client</hadoop-client-api.artifact>
         <hadoop-client-runtime.artifact>hadoop-client</hadoop-client-runtime.artifact>
