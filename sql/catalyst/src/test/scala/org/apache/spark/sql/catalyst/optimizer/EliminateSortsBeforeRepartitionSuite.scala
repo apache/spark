@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -30,8 +31,12 @@ class EliminateSortsBeforeRepartitionSuite extends PlanTest {
   val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry)
   val analyzer = new Analyzer(catalog)
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-  val anotherTestRelation = LocalRelation('d.int, 'e.int)
+  val testRelation = LocalRelation.fromExternalRows(
+    Seq('a.int, 'b.int, 'c.int),
+    Seq(Row(1, 2, 3), Row(4, 5, 6)))
+  val anotherTestRelation = LocalRelation.fromExternalRows(
+    Seq('d.int, 'e.int),
+    Seq(Row(1, 2), Row(3, 4)))
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =

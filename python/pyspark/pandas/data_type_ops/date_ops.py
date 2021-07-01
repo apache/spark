@@ -25,18 +25,17 @@ from pandas.api.types import CategoricalDtype
 from pyspark.sql import functions as F
 from pyspark.sql.types import BooleanType, DateType, StringType
 
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    IndexOpsLike,
-    T_IndexOps,
     _as_bool_type,
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
 )
 from pyspark.pandas.spark import functions as SF
-from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
+from pyspark.pandas.typedef import pandas_on_spark_type
 
 
 class DateOps(DataTypeOps):
@@ -48,7 +47,7 @@ class DateOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "dates"
 
-    def sub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (
@@ -65,7 +64,7 @@ class DateOps(DataTypeOps):
         else:
             raise TypeError("date subtraction can only be applied to date series.")
 
-    def rsub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (
@@ -79,7 +78,7 @@ class DateOps(DataTypeOps):
         else:
             raise TypeError("date subtraction can only be applied to date series.")
 
-    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):

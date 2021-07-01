@@ -54,6 +54,30 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   import GroupStateImpl._
   import GroupStateTimeout._
 
+  /**
+   * Sample `flatMapGroupsWithState` function implementation. It maintains the max event time as
+   * state and set the timeout timestamp based on the current max event time seen. It returns the
+   * max event time in the state, or -1 if the state was removed by timeout. Timeout is 5sec.
+   */
+  val sampleTestFunction =
+      (key: String, values: Iterator[(String, Long)], state: GroupState[Long]) => {
+    assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
+    assertCanGetWatermark { state.getCurrentWatermarkMs() >= -1 }
+
+    val timeoutDelaySec = 5
+    if (state.hasTimedOut) {
+      state.remove()
+      Iterator((key, -1))
+    } else {
+      val valuesSeq = values.toSeq
+      val maxEventTimeSec = math.max(valuesSeq.map(_._2).max, state.getOption.getOrElse(0L))
+      val timeoutTimestampSec = maxEventTimeSec + timeoutDelaySec
+      state.update(maxEventTimeSec)
+      state.setTimeoutTimestamp(timeoutTimestampSec * 1000)
+      Iterator((key, maxEventTimeSec.toInt))
+    }
+  }
+
   test("SPARK-35800: ensure TestGroupState creates instances the same as prod") {
     val testState = TestGroupState.create[Int](
       Optional.of(5), EventTimeTimeout, 1L, Optional.of(1L), hasTimedOut = false)
@@ -737,7 +761,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       StartStream(),
       AddData(inputData, "a", "b"), // should remove state for "a" and not return anything for a
       CheckNewAnswer(("b", "2")),
-      assertNumStateRows(total = 1, updated = 2),
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(1))),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1 and
@@ -881,7 +906,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       AddData(inputData, "b"),
       AdvanceManualClock(10 * 1000),
       CheckNewAnswer(("a", "-1"), ("b", "2")),
-      assertNumStateRows(total = 1, updated = 2),
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(1))),
 
       StopStream,
       StartStream(Trigger.ProcessingTime("1 second"), triggerClock = clock),
@@ -889,7 +915,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       AddData(inputData, "c"),
       AdvanceManualClock(11 * 1000),
       CheckNewAnswer(("b", "-1"), ("c", "1")),
-      assertNumStateRows(total = 1, updated = 2),
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(1))),
 
       AdvanceManualClock(12 * 1000),
       AssertOnQuery { _ => clock.getTimeMillis() == 35000 },
@@ -901,31 +928,12 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         }
       },
       CheckNewAnswer(("c", "-1")),
-      assertNumStateRows(total = 0, updated = 1)
+      assertNumStateRows(
+        total = Seq(0), updated = Seq(0), droppedByWatermark = Seq(0), removed = Some(Seq(1)))
     )
   }
 
   testWithAllStateVersions("flatMapGroupsWithState - streaming w/ event time timeout + watermark") {
-    // Function to maintain the max event time as state and set the timeout timestamp based on the
-    // current max event time seen. It returns the max event time in the state, or -1 if the state
-    // was removed by timeout.
-    val stateFunc = (key: String, values: Iterator[(String, Long)], state: GroupState[Long]) => {
-      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
-      assertCanGetWatermark { state.getCurrentWatermarkMs() >= -1 }
-
-      val timeoutDelaySec = 5
-      if (state.hasTimedOut) {
-        state.remove()
-        Iterator((key, -1))
-      } else {
-        val valuesSeq = values.toSeq
-        val maxEventTimeSec = math.max(valuesSeq.map(_._2).max, state.getOption.getOrElse(0L))
-        val timeoutTimestampSec = maxEventTimeSec + timeoutDelaySec
-        state.update(maxEventTimeSec)
-        state.setTimeoutTimestamp(timeoutTimestampSec * 1000)
-        Iterator((key, maxEventTimeSec.toInt))
-      }
-    }
     val inputData = MemoryStream[(String, Int)]
     val result =
       inputData.toDS
@@ -933,7 +941,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         .withWatermark("eventTime", "10 seconds")
         .as[(String, Long)]
         .groupByKey(_._1)
-        .flatMapGroupsWithState(Update, EventTimeTimeout)(stateFunc)
+        .flatMapGroupsWithState(Update, EventTimeTimeout)(sampleTestFunction)
 
     testStream(result, Update)(
       StartStream(),
@@ -981,26 +989,6 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
   }
 
   test("flatMapGroupsWithState - recovery from checkpoint uses state format version 1") {
-    // Function to maintain the max event time as state and set the timeout timestamp based on the
-    // current max event time seen. It returns the max event time in the state, or -1 if the state
-    // was removed by timeout.
-    val stateFunc = (key: String, values: Iterator[(String, Long)], state: GroupState[Long]) => {
-      assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
-      assertCanGetWatermark { state.getCurrentWatermarkMs() >= -1 }
-
-      val timeoutDelaySec = 5
-      if (state.hasTimedOut) {
-        state.remove()
-        Iterator((key, -1))
-      } else {
-        val valuesSeq = values.toSeq
-        val maxEventTimeSec = math.max(valuesSeq.map(_._2).max, state.getOption.getOrElse(0L))
-        val timeoutTimestampSec = maxEventTimeSec + timeoutDelaySec
-        state.update(maxEventTimeSec)
-        state.setTimeoutTimestamp(timeoutTimestampSec * 1000)
-        Iterator((key, maxEventTimeSec.toInt))
-      }
-    }
     val inputData = MemoryStream[(String, Int)]
     val result =
       inputData.toDS
@@ -1008,7 +996,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         .withWatermark("eventTime", "10 seconds")
         .as[(String, Long)]
         .groupByKey(_._1)
-        .flatMapGroupsWithState(Update, EventTimeTimeout)(stateFunc)
+        .flatMapGroupsWithState(Update, EventTimeTimeout)(sampleTestFunction)
 
     val resourceUri = this.getClass.getResource(
       "/structured-streaming/checkpoint-version-2.3.1-flatMapGroupsWithState-state-format-1/").toURI
@@ -1089,7 +1077,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       StartStream(),
       AddData(inputData, "a", "b"), // should remove state for "a" and return count as -1
       CheckNewAnswer(("a", "-1"), ("b", "2")),
-      assertNumStateRows(total = 1, updated = 2),
+      assertNumStateRows(total = 1, updated = 1),
       StopStream,
       StartStream(),
       AddData(inputData, "a", "c"), // should recreate state for "a" and return count as 1
@@ -1120,6 +1108,43 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         .mapGroupsWithState(EventTimeTimeout)(stateFunc)
         .toDF,
       spark.createDataset(Seq(("a", 2), ("b", 1))).toDF)
+  }
+
+  test("SPARK-35896: metrics in StateOperatorProgress are output correctly") {
+    val inputData = MemoryStream[(String, Int)]
+    val result =
+      inputData.toDS
+        .select($"_1".as("key"), timestamp_seconds($"_2").as("eventTime"))
+        .withWatermark("eventTime", "10 seconds")
+        .as[(String, Long)]
+        .groupByKey(_._1)
+        .flatMapGroupsWithState(Update, EventTimeTimeout)(sampleTestFunction)
+
+    testStream(result, Update)(
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
+
+      AddData(inputData, ("a", 11), ("a", 13), ("a", 15)),
+      // Max event time = 15. Timeout timestamp for "a" = 15 + 5 = 20. Watermark = 15 - 10 = 5.
+      CheckNewAnswer(("a", 15)),  // Output = max event time of a
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+
+      AddData(inputData, ("a", 4)),       // Add data older than watermark for "a"
+      CheckNewAnswer(),                   // No output as data should get filtered by watermark
+      assertStateOperatorProgressMetric(operatorName = "flatMapGroupsWithState",
+        numShufflePartitions = 3, numStateStoreInstances = 3),
+
+      AddData(inputData, ("a", 10)),      // Add data newer than watermark for "a"
+      CheckNewAnswer(("a", 15)),          // Max event time is still the same
+      // Timeout timestamp for "a" is still 20 as max event time for "a" is still 15.
+      // Watermark is still 5 as max event time for all data is still 15.
+
+      AddData(inputData, ("b", 31)),      // Add data newer than watermark for "b", not "a"
+      // Watermark = 31 - 10 = 21, so "a" should be timed out as timeout timestamp for "a" is 20.
+      CheckNewAnswer(("a", -1), ("b", 31)), // State for "a" should timeout and emit -1
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(2), droppedByWatermark = Seq(0), removed = Some(Seq(1)))
+    )
   }
 
   testWithAllStateVersions("SPARK-29438: ensure UNION doesn't lead (flat)MapGroupsWithState" +
