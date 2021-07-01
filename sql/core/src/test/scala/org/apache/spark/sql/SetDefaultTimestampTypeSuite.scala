@@ -25,7 +25,9 @@ import org.apache.spark.sql.types.{StructField, StructType, TimestampNTZType, Ti
 import org.apache.spark.util.ResetSystemProperties
 
 // Test suite for setting the default timestamp type of Spark SQL
-class TimestampTypeSuite extends QueryTest with SharedSparkSession with ResetSystemProperties {
+class SetDefaultTimestampTypeSuite extends QueryTest
+    with SharedSparkSession
+    with ResetSystemProperties {
   test("Create and Alter Table") {
     Seq(("TIMESTAMP_NTZ", TimestampNTZType), ("TIMESTAMP_LTZ", TimestampType)).foreach {
       case (v, dt) =>

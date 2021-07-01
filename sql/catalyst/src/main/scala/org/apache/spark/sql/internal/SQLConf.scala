@@ -2828,9 +2828,10 @@ object SQLConf {
   val TIMESTAMP_TYPE =
     buildConf("spark.sql.timestampType")
       .doc("Configures the default timestamp type of Spark SQL, including SQL DDL and Cast " +
-        "clause. Setting the configuration as TIMESTAMP_NTZ will use TIMESTAMP WITHOUT TIME " +
-        "ZONE as the default type while putting it as TIMESTAMP_LTZ will use TIMESTAMP WITH " +
-        "LOCAL TIME ZONE. Before the 3.2.0 release, Spark only supports the TIMESTAMP WITH " +
+        s"clause. Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ.toString} will " +
+        "use TIMESTAMP WITHOUT TIME ZONE as the default type while putting it as " +
+        s"${TimestampTypes.TIMESTAMP_LTZ.toString} will use TIMESTAMP WITH LOCAL TIME ZONE. " +
+        "Before the 3.2.0 release, Spark only supports the TIMESTAMP WITH " +
         "LOCAL TIME ZONE type.")
       .version("3.2.0")
       .stringConf
