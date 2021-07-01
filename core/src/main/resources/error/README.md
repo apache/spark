@@ -51,14 +51,14 @@ Throw exception:
 ## Access fields
 
 To access error fields, catch exceptions that extend `org.apache.spark.SparkThrowable` and access
-  - Error class with `errorClass`
-  - SQLSTATE with `sqlState`
+  - Error class with `getErrorClass`
+  - SQLSTATE with `getSqlState`
 
 
     try {
         ...
     } catch {
-        case e: SparkThrowable if e.sqlState.forall(_.startsWith("42")) =>
+        case e: SparkThrowable if Option(e.getSqlState).forall(_.startsWith("42")) =>
             warn("Syntax error")
     }
 
