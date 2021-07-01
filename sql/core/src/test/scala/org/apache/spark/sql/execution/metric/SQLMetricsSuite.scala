@@ -657,9 +657,9 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
 
   test("SPARK-25602: SparkPlan.getByteArrayRdd should not consume the input when not necessary") {
     def checkFilterAndRangeMetrics(
-                                    df: DataFrame,
-                                    filterNumOutputs: Int,
-                                    rangeNumOutputs: Int): Unit = {
+        df: DataFrame,
+        filterNumOutputs: Int,
+        rangeNumOutputs: Int): Unit = {
       val plan = df.queryExecution.executedPlan
 
       val filters = collectNodeWithinWholeStage[FilterExec](plan)

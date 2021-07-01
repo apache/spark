@@ -69,29 +69,13 @@ case class HashAggregateExec(
       "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
       "avgHashProbe" ->
         SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iters"),
-      "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks"))
+      "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext,
+        "number of sort fallback tasks"))
     if (skipPartialAggregateEnabled) {
       metrics ++ Map("partialAggSkipped" -> SQLMetrics.createMetric(sparkContext,
         "number of skipped records for partial aggregates"))
     } else {
       metrics
-    }
-  }
-
-  override def output: Seq[Attribute] = resultExpressions.map(_.toAttribute)
-
-  override protected def outputExpressions: Seq[NamedExpression] = resultExpressions
-
-  override def producedAttributes: AttributeSet =
-    AttributeSet(aggregateAttributes) ++
-    AttributeSet(resultExpressions.diff(groupingExpressions).map(_.toAttribute)) ++
-    AttributeSet(aggregateBufferAttributes)
-
-  override def requiredChildDistribution: List[Distribution] = {
-    requiredChildDistributionExpressions match {
-      case Some(exprs) if exprs.isEmpty => AllTuples :: Nil
-      case Some(exprs) if exprs.nonEmpty => ClusteredDistribution(exprs) :: Nil
-      case None => UnspecifiedDistribution :: Nil
     }
   }
 
@@ -520,8 +504,6 @@ case class HashAggregateExec(
 
     // merge the final hashMap into sorter
     numTasksFallBacked += 1
-    sorter.merge(hashMap.destructAndCreateExternalSorter())
-    hashMap.free()
     if (!skipPartialAggTerm) {
       sorter.merge(hashMap.destructAndCreateExternalSorter())
       hashMap.free()
@@ -724,8 +706,6 @@ case class HashAggregateExec(
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
-    if (conf.enableTwoLevelAggMap) {
-
     var childrenConsumed: String = null
     if (skipPartialAggregateEnabled) {
       skipPartialAggTerm = ctx.
@@ -833,7 +813,8 @@ case class HashAggregateExec(
     }
 
     val finishRegularHashMap = s"$iterTerm = $thisPlan.finishAggregate(" +
-      s"$hashMapTerm, $sorterTerm, $peakMemory, $spillSize, $avgHashProbe, $numTasksFallBacked, $mapCleared);"
+      s"$hashMapTerm, $sorterTerm, $peakMemory, $spillSize, $avgHashProbe, $numTasksFallBacked," +
+      s" $mapCleared);"
     val finishHashMap = if (isFastHashMapEnabled) {
       s"""
          |$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();
