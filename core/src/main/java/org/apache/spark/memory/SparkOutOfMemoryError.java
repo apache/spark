@@ -14,9 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.memory;
 
 import org.apache.spark.SparkThrowable;
+import org.apache.spark.SparkThrowableHelper;
 import org.apache.spark.annotation.Private;
 
 /**
@@ -38,7 +40,7 @@ public final class SparkOutOfMemoryError extends OutOfMemoryError implements Spa
     }
 
     public SparkOutOfMemoryError(String errorClass, String[] messageParameters) {
-        super(SparkThrowable.SparkThrowableHelper.getMessage(errorClass, messageParameters));
+        super(SparkThrowableHelper.getMessage(errorClass, messageParameters));
         this.errorClass = errorClass;
         this.messageParameters = messageParameters;
     }
@@ -52,6 +54,6 @@ public final class SparkOutOfMemoryError extends OutOfMemoryError implements Spa
     }
 
     public String getSqlState() {
-        return SparkThrowable.SparkThrowableHelper.getSqlState(errorClass);
+        return SparkThrowableHelper.getSqlState(errorClass);
     }
 }

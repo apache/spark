@@ -36,7 +36,7 @@ Throw exception:
     class SparkTestException(
         errorClass: String,
         messageParameters: Seq[String])
-      extends TestException(SparkThrowable.SparkThrowableHelper.getMessage(errorClass, messageParameters))
+      extends TestException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
         with SparkThrowable {
         
       def getErrorClass: String = errorClass

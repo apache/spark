@@ -17,8 +17,6 @@
 
 package org.apache.spark
 
-import org.apache.spark.SparkThrowable.SparkThrowableHelper
-
 class SparkException(
     message: String,
     cause: Throwable,

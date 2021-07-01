@@ -21,7 +21,7 @@ import org.antlr.v4.runtime.atn.PredictionMode
 import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
 import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
-import org.apache.spark.SparkThrowable.SparkThrowableHelper
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
