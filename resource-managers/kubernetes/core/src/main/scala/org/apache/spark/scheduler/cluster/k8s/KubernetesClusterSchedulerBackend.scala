@@ -18,6 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
+import scala.collection.JavaConverters._
 import scala.concurrent.Future
 
 import io.fabric8.kubernetes.api.model.Pod
@@ -193,13 +194,17 @@ private[spark] class KubernetesClusterSchedulerBackend(
           val podsToLabel = kubernetesClient.pods()
             .withLabel(SPARK_APP_ID_LABEL, applicationId())
             .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-            .withLabelIn(SPARK_EXECUTOR_ID_LABEL, execIds: _*).list().getItems()
+            .withLabelIn(SPARK_EXECUTOR_ID_LABEL, execIds: _*)
+            .list().getItems().asScala
 
           podsToLabel.foreach { pod =>
-            pod.edit(p => new PodBuilder(p).editMetaData()
-            .addToLabels(label, conf.get(KUBERNETES_EXECUTOR_POD_DECOMMISSION_LABEL_VALUE))
-            .endMetadata()
-              .build());
+            kubernetesClient.pods()
+              .inNamespace(pod.getMetadata.getNamespace)
+              .withName(pod.getMetadata.getName)
+              .edit({p: Pod => new PodBuilder(p).editMetadata()
+                .addToLabels(label, conf.get(KUBERNETES_EXECUTOR_POD_DECOMMISSION_LABEL_VALUE))
+                .endMetadata()
+                .build()})
           }
         }
       }
