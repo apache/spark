@@ -61,13 +61,13 @@ class ExternalShuffleServiceMetricsSuite extends SparkFunSuite {
         "numActiveConnections",
         "numCaughtExceptions",
         "numRegisteredConnections",
-        "openBlockRequestLatency",
+        "openBlockRequestLatencyMillis",
         "registeredExecutorsSize",
-        "registerExecutorRequestLatency",
+        "registerExecutorRequestLatencyMillis",
         "shuffle-server.usedDirectMemory",
         "shuffle-server.usedHeapMemory",
-        "finalizeShuffleMergeLatency",
-        "fetchMergedBlocksMetaLatency").sorted
+        "finalizeShuffleMergeLatencyMillis",
+        "fetchMergedBlocksMetaLatencyMillis").sorted
     )
   }
 }

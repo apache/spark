@@ -323,10 +323,13 @@ public class ExternalBlockHandler extends RpcHandler
 
     public ShuffleMetrics() {
       allMetrics = new HashMap<>();
-      allMetrics.put("openBlockRequestLatency", openBlockRequestLatency);
-      allMetrics.put("registerExecutorRequestLatency", registerExecutorRequestLatency);
-      allMetrics.put("fetchMergedBlocksMetaLatency", fetchMergedBlocksMetaLatency);
-      allMetrics.put("finalizeShuffleMergeLatency", finalizeShuffleMergeLatency);
+      // Note that for the latency metrics, the default unit is actually nanos, not millis.
+      // The variables have been renamed, but to preserve backwards compatibility, the metric
+      // names remain unchanged. See SPARK-35259 for more details.
+      allMetrics.put("openBlockRequestLatencyMillis", openBlockRequestLatency);
+      allMetrics.put("registerExecutorRequestLatencyMillis", registerExecutorRequestLatency);
+      allMetrics.put("fetchMergedBlocksMetaLatencyMillis", fetchMergedBlocksMetaLatency);
+      allMetrics.put("finalizeShuffleMergeLatencyMillis", finalizeShuffleMergeLatency);
       allMetrics.put("blockTransferRate", blockTransferRate);
       allMetrics.put("blockTransferMessageRate", blockTransferMessageRate);
       allMetrics.put("blockTransferRateBytes", blockTransferRateBytes);
