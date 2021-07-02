@@ -1786,7 +1786,6 @@ class AdaptiveQueryExecSuite
     }
   }
 
-<<<<<<< HEAD
   test("SPARK-35650: Coalesce number of partitions by AEQ") {
     withSQLConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1") {
       Seq("REPARTITION", "REBALANCE(key)")
@@ -1890,6 +1889,7 @@ class AdaptiveQueryExecSuite
   test("SPARK-33832: Support optimize skew join even if introduce extra shuffle") {
     withSQLConf(
       SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "false",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
       SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",

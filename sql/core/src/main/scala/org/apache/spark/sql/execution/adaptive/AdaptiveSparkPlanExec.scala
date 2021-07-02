@@ -153,11 +153,7 @@ case class AdaptiveSparkPlanExec(
   }
 
   @transient private val costEvaluator =
-    if (conf.getConf(SQLConf.ADAPTIVE_FORCE_ENABLE_SKEW_JOIN)) {
-      SkewJoinAwareCostEvaluator
-    } else {
-      SimpleCostEvaluator
-    }
+    SkewJoinAwareCostEvaluator(conf.getConf(SQLConf.ADAPTIVE_FORCE_ENABLE_SKEW_JOIN))
 
   @transient val initialPlan = context.session.withActive {
     applyPhysicalRules(
@@ -279,16 +275,25 @@ case class AdaptiveSparkPlanExec(
         // plans are updated, we can clear the query stage list because at this point the two plans
         // are semantically and physically in sync again.
         val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
-        val (newPhysicalPlan, newLogicalPlan) = reOptimize(logicalPlan)
+        val (reOptimizePhysicalPlan, newLogicalPlan) = reOptimize(logicalPlan)
+        val planWithExtraShuffle = rePlanWithExtraShuffle(reOptimizePhysicalPlan)
         val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
-        val newCost = costEvaluator.evaluateCost(newPhysicalPlan)
-        if (newCost < origCost ||
-            (newCost == origCost && currentPhysicalPlan != newPhysicalPlan)) {
+        val newCost = costEvaluator.evaluateCost(reOptimizePhysicalPlan)
+        val extraShuffleCost = costEvaluator.evaluateCost(planWithExtraShuffle)
+        def updateCurrentPlan(newPhysicalPlan: SparkPlan): Unit = {
           logOnLevel(s"Plan changed from $currentPhysicalPlan to $newPhysicalPlan")
           cleanUpTempTags(newPhysicalPlan)
           currentPhysicalPlan = newPhysicalPlan
           currentLogicalPlan = newLogicalPlan
           stagesToReplace = Seq.empty[QueryStageExec]
+        }
+
+        if (extraShuffleCost < newCost ||
+          (extraShuffleCost == newCost && planWithExtraShuffle != reOptimizePhysicalPlan)) {
+          updateCurrentPlan(planWithExtraShuffle)
+        } else if (newCost < origCost ||
+          (newCost == origCost && currentPhysicalPlan != reOptimizePhysicalPlan)) {
+          updateCurrentPlan(reOptimizePhysicalPlan)
         }
         // Now that some stages have finished, we can try creating new stages.
         result = createQueryStages(currentPhysicalPlan)
@@ -651,16 +656,6 @@ case class AdaptiveSparkPlanExec(
       preprocessingRules ++ queryStagePreparationRules,
       Some((planChangeLogger, "AQE Replanning")))
 
-    val preparationWithExtraShuffleRules = if (isFinalStage(newPlan)) {
-      finalStagePreparationWithExtraShuffleRules
-    } else {
-      queryStagePreparationWithExtraShuffleRules
-    }
-    val newPlanWithExtraShuffle = applyPhysicalRules(
-      newPlan,
-      preparationWithExtraShuffleRules,
-      Some((planChangeLogger, "AQE Replanning")))
-
     // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
     // add the `BroadcastExchangeExec` node manually in the DPP subquery,
     // not through `EnsureRequirements` rule. Therefore, when the DPP subquery is complicated
@@ -670,12 +665,23 @@ case class AdaptiveSparkPlanExec(
     // is already the `BroadcastExchangeExec` plan after apply the `LogicalQueryStageStrategy` rule.
     val finalPlan = currentPhysicalPlan match {
       case b: BroadcastExchangeLike
-        if (!newPlanWithExtraShuffle.isInstanceOf[BroadcastExchangeLike]) =>
-        b.withNewChildren(Seq(newPlanWithExtraShuffle))
-      case _ => newPlanWithExtraShuffle
+        if (!newPlan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(newPlan))
+      case _ => newPlan
     }
 
     (finalPlan, optimized)
+  }
+
+  private def rePlanWithExtraShuffle(sparkPlan: SparkPlan): SparkPlan = {
+    val preparationWithExtraShuffleRules = if (isFinalStage(sparkPlan)) {
+      finalStagePreparationWithExtraShuffleRules
+    } else {
+      queryStagePreparationWithExtraShuffleRules
+    }
+    applyPhysicalRules(
+      sparkPlan,
+      preparationWithExtraShuffleRules,
+      Some((planChangeLogger, "AQE Replanning")))
   }
 
   /**

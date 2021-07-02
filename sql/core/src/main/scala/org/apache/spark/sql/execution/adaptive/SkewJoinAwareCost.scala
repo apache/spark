@@ -25,7 +25,9 @@ import org.apache.spark.sql.execution.joins.ShuffledJoin
 /**
  * A skew join aware implementation of [[Cost]], which consider shuffle number and skew join number
  */
-case class SkewJoinAwareCost(numShuffles: Int, numSkewJoins: Int) extends Cost {
+case class SkewJoinAwareCost(
+    numShuffles: Int,
+    numSkewJoins: Int) extends Cost {
   override def compare(that: Cost): Int = that match {
     case other: SkewJoinAwareCost =>
       if (numSkewJoins > other.numSkewJoins || numShuffles < other.numShuffles) {
@@ -36,6 +38,7 @@ case class SkewJoinAwareCost(numShuffles: Int, numSkewJoins: Int) extends Cost {
       } else {
         0
       }
+
     case _ =>
       throw QueryExecutionErrors.cannotCompareCostWithTargetCostError(that.toString)
   }
@@ -45,14 +48,19 @@ case class SkewJoinAwareCost(numShuffles: Int, numSkewJoins: Int) extends Cost {
  * A skew join aware implementation of [[CostEvaluator]], which counts the number of
  * [[ShuffleExchangeLike]] nodes and skew join nodes in the plan.
  */
-object SkewJoinAwareCostEvaluator extends CostEvaluator {
+case class SkewJoinAwareCostEvaluator(forceOptimizeSkewJoin: Boolean) extends CostEvaluator {
   override def evaluateCost(plan: SparkPlan): Cost = {
     val shuffleNumber = plan.collect {
       case s: ShuffleExchangeLike => s
     }.size
-    val skewJoinNumber = plan.collect {
-      case j: ShuffledJoin if j.isSkewJoin => j
-    }.size
-    SkewJoinAwareCost(shuffleNumber, skewJoinNumber)
+
+    if (forceOptimizeSkewJoin) {
+      val skewJoinNumber = plan.collect {
+        case j: ShuffledJoin if j.isSkewJoin => j
+      }.size
+      SkewJoinAwareCost(shuffleNumber, skewJoinNumber)
+    } else {
+      SimpleCost(shuffleNumber)
+    }
   }
 }
