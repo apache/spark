@@ -46,7 +46,6 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.LongAccumulator;
-import scala.collection.immutable.Range;
 
 import static org.apache.spark.sql.functions.col;
 import static org.apache.spark.sql.functions.expr;
@@ -171,10 +170,9 @@ public class JavaDatasetSuite implements Serializable {
       Encoders.tuple(Encoders.INT(), Encoders.LONG())
     );
 
-    KeyValueGroupedDataset<Integer, Tuple2<Integer, Long>> kvInitStateDS = initialStateDS.groupByKey(
-      (MapFunction<Tuple2<Integer, Long>, Integer>) f -> f._1,
-      Encoders.INT()
-    );
+    KeyValueGroupedDataset<Integer, Tuple2<Integer, Long>> kvInitStateDS =
+      initialStateDS.groupByKey(
+        (MapFunction<Tuple2<Integer, Long>, Integer>) f -> f._1, Encoders.INT());
 
     KeyValueGroupedDataset<Integer, Long> kvInitStateMappedDS = kvInitStateDS.mapValues(
       (MapFunction<Tuple2<Integer, Long>, Long>) f -> f._2,
