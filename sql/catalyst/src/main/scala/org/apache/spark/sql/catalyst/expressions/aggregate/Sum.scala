@@ -46,6 +46,8 @@ case class Sum(
   with ImplicitCastInputTypes
   with UnaryLike[Expression] {
 
+  def this(child: Expression) = this(child, failOnError = SQLConf.get.ansiEnabled)
+
   override def nullable: Boolean = true
 
   // Return data type.

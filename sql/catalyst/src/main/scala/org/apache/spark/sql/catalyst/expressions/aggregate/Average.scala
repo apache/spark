@@ -44,6 +44,8 @@ case class Average(
   with ImplicitCastInputTypes
   with UnaryLike[Expression] {
 
+  def this(child: Expression) = this(child, failOnError = SQLConf.get.ansiEnabled)
+
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
 
   override def inputTypes: Seq[AbstractDataType] =
