@@ -116,7 +116,7 @@ class SparkSubmitOptionParser {
     { REPOSITORIES },
     { STATUS },
     { TOTAL_EXECUTOR_CORES },
-    {IS_SERVER},
+    { IS_SERVER },
   };
 
   /**
