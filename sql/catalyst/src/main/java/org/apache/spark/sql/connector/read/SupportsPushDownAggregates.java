@@ -46,7 +46,6 @@ public interface SupportsPushDownAggregates extends ScanBuilder {
 
     // 0: aggregates not pushed down
     // 1: aggregates partially pushed down, need to final aggregate in Spark
-    // 2: aggregates completely pushed down, doesn't need to final aggregate in Spark
     int pushedDownResult = 0;
     StructType pushedDownAggSchema;
 
@@ -57,10 +56,6 @@ public interface SupportsPushDownAggregates extends ScanBuilder {
 
     public int getPushedDownResult() {
       return pushedDownResult;
-    }
-
-    public StructType getPushedDownAggSchema() {
-      return pushedDownAggSchema;
     }
   }
 }
