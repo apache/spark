@@ -337,7 +337,7 @@ class RocksDBSuite extends SparkFunSuite {
     }
   }
 
-  test("ensure that concurrent update and cleanup consistent versions") {
+  ignore("ensure that concurrent update and cleanup consistent versions") {
     quietly {
       val numThreads = 20
       val numUpdatesInEachThread = 20
