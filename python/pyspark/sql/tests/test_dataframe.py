@@ -209,7 +209,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(df4.rdd.take(3), df2.rdd.take(3))
 
         # test repartitionByRange(*cols)
-        df5 = df1.repartitionByRange("name", "age")
+        df5 = df1.repartitionByRange(5, "name", "age")
         self.assertEqual(df5.rdd.first(), df2.rdd.first())
         self.assertEqual(df5.rdd.take(3), df2.rdd.take(3))
 
