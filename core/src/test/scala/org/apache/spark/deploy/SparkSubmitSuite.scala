@@ -1525,6 +1525,18 @@ class SparkSubmitSuite
       conf.get(k) should be (v)
     }
   }
+
+  test("handles arguments with --is-server") {
+    val clArgs = Seq(
+      "--name=myApp",
+      "--class=org.FooBar",
+      "--is-server", "true",
+      "test.jar"
+    )
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.name should be ("myApp")
+    appArgs.isServer should be (true)
+  }
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {
