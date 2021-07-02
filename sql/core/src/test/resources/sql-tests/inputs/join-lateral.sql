@@ -12,9 +12,12 @@ SELECT * FROM t1, LATERAL (SELECT t1.c1 + t2.c1 FROM t2);
 -- lateral join with star expansion
 SELECT * FROM t1, LATERAL (SELECT *);
 SELECT * FROM t1, LATERAL (SELECT * FROM t2);
--- TODO(SPARK-35618): resolve star expressions in subquery
--- SELECT * FROM t1, LATERAL (SELECT t1.*);
--- SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2);
+SELECT * FROM t1, LATERAL (SELECT t1.*);
+SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2);
+SELECT * FROM t1, LATERAL (SELECT t1.* FROM t2 AS t1);
+-- expect error: cannot resolve 't1.*'
+-- TODO: Currently we don't allow deep correlation so t1.* cannot be resolved using the outermost query.
+SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2, LATERAL (SELECT t1.*, t2.*, t3.* FROM t2 AS t3));
 
 -- lateral join with different join types
 SELECT * FROM t1 JOIN LATERAL (SELECT c1 + c2 AS c3) ON c2 = c3;

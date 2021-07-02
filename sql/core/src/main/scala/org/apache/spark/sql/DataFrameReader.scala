@@ -35,13 +35,13 @@ import org.apache.spark.sql.catalyst.json.{CreateJacksonParser, JacksonParser, J
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, FailureSafeParser}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsCatalogOptions, SupportsRead}
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
@@ -198,17 +198,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
     if (source.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
-      throw new AnalysisException("Hive data source can only be used with tables, you can not " +
-        "read files of Hive data source directly.")
+      throw QueryCompilationErrors.cannotOperateOnHiveDataSourceFilesError("read")
     }
 
     val legacyPathOptionBehavior = sparkSession.sessionState.conf.legacyPathOptionBehavior
     if (!legacyPathOptionBehavior &&
         (extraOptions.contains("path") || extraOptions.contains("paths")) && paths.nonEmpty) {
-      throw new AnalysisException("There is a 'path' or 'paths' option set and load() is called " +
-        "with path parameters. Either remove the path option if it's the same as the path " +
-        "parameter, or add it to the load() parameter if you do want to read multiple paths. " +
-        s"To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.")
+      throw QueryCompilationErrors.pathOptionNotSetCorrectlyWhenReadingError()
     }
 
     DataSource.lookupDataSourceV2(source, sparkSession.sessionState.conf).map { provider =>
@@ -725,7 +721,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   private def assertNoSpecifiedSchema(operation: String): Unit = {
     if (userSpecifiedSchema.nonEmpty) {
-      throw new AnalysisException(s"User specified schema not supported with `$operation`")
+      throw QueryCompilationErrors.userSpecifiedSchemaUnsupportedError(operation)
     }
   }
 

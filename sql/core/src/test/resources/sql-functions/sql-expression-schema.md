@@ -206,7 +206,7 @@
 | org.apache.spark.sql.catalyst.expressions.Overlay | overlay | SELECT overlay('Spark SQL' PLACING '_' FROM 6) | struct<overlay(Spark SQL, _, 6, -1):string> |
 | org.apache.spark.sql.catalyst.expressions.ParseToDate | to_date | SELECT to_date('2009-07-30 04:17:52') | struct<to_date(2009-07-30 04:17:52):date> |
 | org.apache.spark.sql.catalyst.expressions.ParseToTimestamp | to_timestamp | SELECT to_timestamp('2016-12-31 00:12:00') | struct<to_timestamp(2016-12-31 00:12:00):timestamp> |
-| org.apache.spark.sql.catalyst.expressions.ParseToTimestampWithoutTZ | to_timestamp_ntz | SELECT to_timestamp_ntz('2016-12-31 00:12:00') | struct<to_timestamp_ntz(2016-12-31 00:12:00):timestamp without time zone> |
+| org.apache.spark.sql.catalyst.expressions.ParseToTimestampNTZ | to_timestamp_ntz | SELECT to_timestamp_ntz('2016-12-31 00:12:00') | struct<to_timestamp_ntz(2016-12-31 00:12:00):timestamp_ntz> |
 | org.apache.spark.sql.catalyst.expressions.ParseUrl | parse_url | SELECT parse_url('http://spark.apache.org/path?query=1', 'HOST') | struct<parse_url(http://spark.apache.org/path?query=1, HOST):string> |
 | org.apache.spark.sql.catalyst.expressions.PercentRank | percent_rank | SELECT a, b, percent_rank(b) OVER (PARTITION BY a ORDER BY b) FROM VALUES ('A1', 2), ('A1', 1), ('A2', 3), ('A1', 1) tab(a, b) | struct<a:string,b:int,PERCENT_RANK() OVER (PARTITION BY a ORDER BY b ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW):double> |
 | org.apache.spark.sql.catalyst.expressions.Pi | pi | SELECT pi() | struct<PI():double> |

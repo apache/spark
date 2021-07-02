@@ -28,12 +28,12 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.Stable
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.DataTypeJsonUtils.{DataTypeJsonDeserializer, DataTypeJsonSerializer}
 import org.apache.spark.sql.catalyst.util.StringUtils.StringConcat
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy.{ANSI, STRICT}
@@ -161,9 +161,7 @@ object DataType {
           fallbackParser(schema)
         } catch {
           case NonFatal(e2) =>
-            throw new AnalysisException(
-              message = s"$errorMsg${e1.getMessage}\nFailed fallback parsing: ${e2.getMessage}",
-              cause = Some(e1.getCause))
+            throw QueryCompilationErrors.failedFallbackParsingError(errorMsg, e1, e2)
         }
     }
   }
@@ -186,7 +184,7 @@ object DataType {
       YearMonthIntervalType(YEAR),
       YearMonthIntervalType(MONTH),
       YearMonthIntervalType(YEAR, MONTH),
-      TimestampWithoutTZType)
+      TimestampNTZType)
       .map(t => t.typeName -> t).toMap
   }
 

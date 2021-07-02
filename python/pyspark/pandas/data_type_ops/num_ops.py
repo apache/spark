@@ -22,11 +22,10 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    IndexOpsLike,
-    T_IndexOps,
     is_valid_operand_for_numeric_arithmetic,
     transform_boolean_operand_to_numeric,
     _as_bool_type,
@@ -36,7 +35,7 @@ from pyspark.pandas.data_type_ops.base import (
 )
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.spark import functions as SF
-from pyspark.pandas.typedef import Dtype, extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
 from pyspark.sql import functions as F
 from pyspark.sql.column import Column
 from pyspark.sql.types import (
@@ -53,7 +52,7 @@ class NumericOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "numerics"
 
-    def add(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def add(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -66,7 +65,7 @@ class NumericOps(DataTypeOps):
 
         return column_op(Column.__add__)(left, right)
 
-    def sub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -79,7 +78,7 @@ class NumericOps(DataTypeOps):
 
         return column_op(Column.__sub__)(left, right)
 
-    def mod(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -95,7 +94,7 @@ class NumericOps(DataTypeOps):
 
         return column_op(mod)(left, right)
 
-    def pow(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def pow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -111,7 +110,7 @@ class NumericOps(DataTypeOps):
 
         return column_op(pow_func)(left, right)
 
-    def radd(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def radd(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
             raise TypeError("string addition can only be applied to string series or literals.")
         if not isinstance(right, numbers.Number):
@@ -119,7 +118,7 @@ class NumericOps(DataTypeOps):
         right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__radd__)(left, right)
 
-    def rsub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
             raise TypeError("subtraction can not be applied to string series or literals.")
         if not isinstance(right, numbers.Number):
@@ -127,7 +126,7 @@ class NumericOps(DataTypeOps):
         right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__rsub__)(left, right)
 
-    def rmul(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rmul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
             raise TypeError("multiplication can not be applied to a string literal.")
         if not isinstance(right, numbers.Number):
@@ -135,19 +134,19 @@ class NumericOps(DataTypeOps):
         right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__rmul__)(left, right)
 
-    def rpow(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
             raise TypeError("exponentiation can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("exponentiation can not be applied to given types.")
 
         def rpow_func(left: Column, right: Any) -> Column:
-            return F.when(F.lit(right == 1), right).otherwise(Column.__rpow__(left, right))
+            return F.when(SF.lit(right == 1), right).otherwise(Column.__rpow__(left, right))
 
         right = transform_boolean_operand_to_numeric(right)
         return column_op(rpow_func)(left, right)
 
-    def rmod(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rmod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
             raise TypeError("modulo can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
@@ -170,7 +169,7 @@ class IntegralOps(NumericOps):
     def pretty_name(self) -> str:
         return "integrals"
 
-    def mul(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
             raise TypeError("multiplication can not be applied to a string literal.")
 
@@ -187,7 +186,7 @@ class IntegralOps(NumericOps):
 
         return column_op(Column.__mul__)(left, right)
 
-    def truediv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -199,13 +198,13 @@ class IntegralOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def truediv(left: Column, right: Any) -> Column:
-            return F.when(F.lit(right != 0) | F.lit(right).isNull(), left.__div__(right)).otherwise(
-                F.lit(np.inf).__div__(left)
-            )
+            return F.when(
+                SF.lit(right != 0) | SF.lit(right).isNull(), left.__div__(right)
+            ).otherwise(SF.lit(np.inf).__div__(left))
 
         return numpy_column_op(truediv)(left, right)
 
-    def floordiv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -217,43 +216,43 @@ class IntegralOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def floordiv(left: Column, right: Any) -> Column:
-            return F.when(F.lit(right is np.nan), np.nan).otherwise(
+            return F.when(SF.lit(right is np.nan), np.nan).otherwise(
                 F.when(
-                    F.lit(right != 0) | F.lit(right).isNull(), F.floor(left.__div__(right))
-                ).otherwise(F.lit(np.inf).__div__(left))
+                    SF.lit(right != 0) | SF.lit(right).isNull(), F.floor(left.__div__(right))
+                ).otherwise(SF.lit(np.inf).__div__(left))
             )
 
         return numpy_column_op(floordiv)(left, right)
 
-    def rtruediv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("division can not be applied to given types.")
 
         def rtruediv(left: Column, right: Any) -> Column:
-            return F.when(left == 0, F.lit(np.inf).__div__(right)).otherwise(
-                F.lit(right).__truediv__(left)
+            return F.when(left == 0, SF.lit(np.inf).__div__(right)).otherwise(
+                SF.lit(right).__truediv__(left)
             )
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rtruediv)(left, right)
 
-    def rfloordiv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("division can not be applied to given types.")
 
         def rfloordiv(left: Column, right: Any) -> Column:
-            return F.when(F.lit(left == 0), F.lit(np.inf).__div__(right)).otherwise(
-                F.floor(F.lit(right).__div__(left))
+            return F.when(SF.lit(left == 0), SF.lit(np.inf).__div__(right)).otherwise(
+                F.floor(SF.lit(right).__div__(left))
             )
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
 
-    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
@@ -276,7 +275,7 @@ class FractionalOps(NumericOps):
     def pretty_name(self) -> str:
         return "fractions"
 
-    def mul(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
             raise TypeError("multiplication can not be applied to a string literal.")
 
@@ -290,7 +289,7 @@ class FractionalOps(NumericOps):
 
         return column_op(Column.__mul__)(left, right)
 
-    def truediv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -302,15 +301,17 @@ class FractionalOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def truediv(left: Column, right: Any) -> Column:
-            return F.when(F.lit(right != 0) | F.lit(right).isNull(), left.__div__(right)).otherwise(
-                F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
-                    F.lit(np.inf).__div__(left)
+            return F.when(
+                SF.lit(right != 0) | SF.lit(right).isNull(), left.__div__(right)
+            ).otherwise(
+                F.when(SF.lit(left == np.inf) | SF.lit(left == -np.inf), left).otherwise(
+                    SF.lit(np.inf).__div__(left)
                 )
             )
 
         return numpy_column_op(truediv)(left, right)
 
-    def floordiv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if (
             isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
         ) or isinstance(right, str):
@@ -322,47 +323,49 @@ class FractionalOps(NumericOps):
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def floordiv(left: Column, right: Any) -> Column:
-            return F.when(F.lit(right is np.nan), np.nan).otherwise(
+            return F.when(SF.lit(right is np.nan), np.nan).otherwise(
                 F.when(
-                    F.lit(right != 0) | F.lit(right).isNull(), F.floor(left.__div__(right))
+                    SF.lit(right != 0) | SF.lit(right).isNull(), F.floor(left.__div__(right))
                 ).otherwise(
-                    F.when(F.lit(left == np.inf) | F.lit(left == -np.inf), left).otherwise(
-                        F.lit(np.inf).__div__(left)
+                    F.when(SF.lit(left == np.inf) | SF.lit(left == -np.inf), left).otherwise(
+                        SF.lit(np.inf).__div__(left)
                     )
                 )
             )
 
         return numpy_column_op(floordiv)(left, right)
 
-    def rtruediv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("division can not be applied to given types.")
 
         def rtruediv(left: Column, right: Any) -> Column:
-            return F.when(left == 0, F.lit(np.inf).__div__(right)).otherwise(
-                F.lit(right).__truediv__(left)
+            return F.when(left == 0, SF.lit(np.inf).__div__(right)).otherwise(
+                SF.lit(right).__truediv__(left)
             )
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rtruediv)(left, right)
 
-    def rfloordiv(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
             raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("division can not be applied to given types.")
 
         def rfloordiv(left: Column, right: Any) -> Column:
-            return F.when(F.lit(left == 0), F.lit(np.inf).__div__(right)).otherwise(
-                F.when(F.lit(left) == np.nan, np.nan).otherwise(F.floor(F.lit(right).__div__(left)))
+            return F.when(SF.lit(left == 0), SF.lit(np.inf).__div__(right)).otherwise(
+                F.when(SF.lit(left) == np.nan, np.nan).otherwise(
+                    F.floor(SF.lit(right).__div__(left))
+                )
             )
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
 
-    def isnull(self, index_ops: T_IndexOps) -> T_IndexOps:
+    def isnull(self, index_ops: IndexOpsLike) -> IndexOpsLike:
         return index_ops._with_new_scol(
             index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column),
             field=index_ops._internal.data_fields[0].copy(
@@ -370,7 +373,7 @@ class FractionalOps(NumericOps):
             ),
         )
 
-    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
@@ -381,7 +384,7 @@ class FractionalOps(NumericOps):
             else:
                 scol = F.when(
                     index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column),
-                    F.lit(True),
+                    SF.lit(True),
                 ).otherwise(index_ops.spark.column.cast(spark_type))
             return index_ops._with_new_scol(
                 scol.alias(index_ops._internal.data_spark_column_names[0]),
@@ -403,7 +406,7 @@ class DecimalOps(FractionalOps):
     def pretty_name(self) -> str:
         return "decimal"
 
-    def isnull(self, index_ops: T_IndexOps) -> T_IndexOps:
+    def isnull(self, index_ops: IndexOpsLike) -> IndexOpsLike:
         return index_ops._with_new_scol(
             index_ops.spark.column.isNull(),
             field=index_ops._internal.data_fields[0].copy(
@@ -411,7 +414,7 @@ class DecimalOps(FractionalOps):
             ),
         )
 
-    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):

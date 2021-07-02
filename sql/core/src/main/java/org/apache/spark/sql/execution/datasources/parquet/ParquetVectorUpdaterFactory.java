@@ -185,7 +185,7 @@ public class ParquetVectorUpdaterFactory {
 
   private static class BooleanUpdater implements ParquetVectorUpdater {
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
@@ -194,7 +194,12 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipBooleans(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -213,7 +218,7 @@ public class ParquetVectorUpdaterFactory {
 
   private static class IntegerUpdater implements ParquetVectorUpdater {
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
@@ -222,7 +227,12 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -241,7 +251,7 @@ public class ParquetVectorUpdaterFactory {
 
   private static class UnsignedIntegerUpdater implements ParquetVectorUpdater {
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
@@ -250,7 +260,12 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -270,7 +285,7 @@ public class ParquetVectorUpdaterFactory {
 
   private static class ByteUpdater implements ParquetVectorUpdater {
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
@@ -279,7 +294,12 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipBytes(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -298,7 +318,7 @@ public class ParquetVectorUpdaterFactory {
 
   private static class ShortUpdater implements ParquetVectorUpdater {
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
@@ -307,7 +327,12 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipShorts(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -332,7 +357,7 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
@@ -341,7 +366,12 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipIntegers(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -362,7 +392,7 @@ public class ParquetVectorUpdaterFactory {
 
   private static class LongUpdater implements ParquetVectorUpdater {
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
@@ -371,7 +401,12 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -390,7 +425,7 @@ public class ParquetVectorUpdaterFactory {
 
   private static class DowncastLongUpdater implements ParquetVectorUpdater {
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
@@ -401,7 +436,12 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -420,7 +460,7 @@ public class ParquetVectorUpdaterFactory {
 
   private static class UnsignedLongUpdater implements ParquetVectorUpdater {
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
@@ -429,7 +469,12 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -457,7 +502,7 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
@@ -466,7 +511,12 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -487,18 +537,23 @@ public class ParquetVectorUpdaterFactory {
 
   private static class LongAsMicrosUpdater implements ParquetVectorUpdater {
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       for (int i = 0; i < total; ++i) {
-        update(offset + i, values, valuesReader);
+        readValue(offset + i, values, valuesReader);
       }
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -524,18 +579,23 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       for (int i = 0; i < total; ++i) {
-        update(offset + i, values, valuesReader);
+        readValue(offset + i, values, valuesReader);
       }
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipLongs(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -557,7 +617,7 @@ public class ParquetVectorUpdaterFactory {
 
   private static class FloatUpdater implements ParquetVectorUpdater {
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
@@ -566,7 +626,12 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipFloats(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -585,7 +650,7 @@ public class ParquetVectorUpdaterFactory {
 
   private static class DoubleUpdater implements ParquetVectorUpdater {
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
@@ -594,7 +659,12 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipDoubles(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -613,7 +683,7 @@ public class ParquetVectorUpdaterFactory {
 
   private static class BinaryUpdater implements ParquetVectorUpdater {
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
@@ -622,7 +692,12 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipBinary(total);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -642,18 +717,23 @@ public class ParquetVectorUpdaterFactory {
 
   private static class BinaryToSQLTimestampUpdater implements ParquetVectorUpdater {
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       for (int i = 0; i < total; i++) {
-        update(offset + i, values, valuesReader);
+        readValue(offset + i, values, valuesReader);
       }
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipFixedLenByteArray(total, 12);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -681,18 +761,23 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       for (int i = 0; i < total; i++) {
-        update(offset + i, values, valuesReader);
+        readValue(offset + i, values, valuesReader);
       }
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipFixedLenByteArray(total, 12);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -723,18 +808,23 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       for (int i = 0; i < total; i++) {
-        update(offset + i, values, valuesReader);
+        readValue(offset + i, values, valuesReader);
       }
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipFixedLenByteArray(total, 12);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -767,18 +857,23 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       for (int i = 0; i < total; i++) {
-        update(offset + i, values, valuesReader);
+        readValue(offset + i, values, valuesReader);
       }
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipFixedLenByteArray(total, 12);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -811,18 +906,23 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       for (int i = 0; i < total; i++) {
-        update(offset + i, values, valuesReader);
+        readValue(offset + i, values, valuesReader);
       }
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipFixedLenByteArray(total, arrayLen);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -848,18 +948,23 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       for (int i = 0; i < total; i++) {
-        update(offset + i, values, valuesReader);
+        readValue(offset + i, values, valuesReader);
       }
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipFixedLenByteArray(total, arrayLen);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
@@ -886,18 +991,23 @@ public class ParquetVectorUpdaterFactory {
     }
 
     @Override
-    public void updateBatch(
+    public void readValues(
         int total,
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {
       for (int i = 0; i < total; i++) {
-        update(offset + i, values, valuesReader);
+        readValue(offset + i, values, valuesReader);
       }
     }
 
     @Override
-    public void update(
+    public void skipValues(int total, VectorizedValuesReader valuesReader) {
+      valuesReader.skipFixedLenByteArray(total, arrayLen);
+    }
+
+    @Override
+    public void readValue(
         int offset,
         WritableColumnVector values,
         VectorizedValuesReader valuesReader) {

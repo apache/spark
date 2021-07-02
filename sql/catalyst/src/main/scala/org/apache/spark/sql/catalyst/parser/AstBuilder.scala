@@ -2502,7 +2502,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case ("float" | "real", Nil) => FloatType
       case ("double", Nil) => DoubleType
       case ("date", Nil) => DateType
-      case ("timestamp", Nil) => TimestampType
+      case ("timestamp", Nil) => SQLConf.get.timestampType
       case ("string", Nil) => StringType
       case ("character" | "char", length :: Nil) => CharType(length.getText.toInt)
       case ("varchar", length :: Nil) => VarcharType(length.getText.toInt)
@@ -3558,7 +3558,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse a [[AlterTableAlterColumnStatement]] command to alter a column's property.
+   * Parse a [[AlterTableAlterColumn]] command to alter a column's property.
    *
    * For example:
    * {{{
@@ -3573,13 +3573,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitAlterTableAlterColumn(
       ctx: AlterTableAlterColumnContext): LogicalPlan = withOrigin(ctx) {
     val action = ctx.alterColumnAction
+    val verb = if (ctx.CHANGE != null) "CHANGE" else "ALTER"
     if (action == null) {
-      val verb = if (ctx.CHANGE != null) "CHANGE" else "ALTER"
       operationNotAllowed(
         s"ALTER TABLE table $verb COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER",
         ctx)
     }
-
+    val columnNameParts = typedVisit[Seq[String]](ctx.column)
     val dataType = if (action.dataType != null) {
       Some(typedVisit[DataType](action.dataType))
     } else {
@@ -3599,16 +3599,16 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       None
     }
     val position = if (action.colPosition != null) {
-      Some(typedVisit[ColumnPosition](action.colPosition))
+      Some(UnresolvedFieldPosition(columnNameParts, typedVisit[ColumnPosition](action.colPosition)))
     } else {
       None
     }
 
     assert(Seq(dataType, nullable, comment, position).count(_.nonEmpty) == 1)
 
-    AlterTableAlterColumnStatement(
-      visitMultipartIdentifier(ctx.table),
-      typedVisit[Seq[String]](ctx.column),
+    AlterTableAlterColumn(
+      createUnresolvedTable(ctx.table, s"ALTER TABLE ... $verb COLUMN"),
+      UnresolvedFieldName(columnNameParts),
       dataType = dataType,
       nullable = nullable,
       comment = comment,
@@ -3616,7 +3616,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
-   * Parse a [[AlterTableAlterColumnStatement]] command. This is Hive SQL syntax.
+   * Parse a [[AlterTableAlterColumn]] command. This is Hive SQL syntax.
    *
    * For example:
    * {{{
@@ -3640,13 +3640,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         Some("please run ALTER COLUMN ... SET/DROP NOT NULL instead"))
     }
 
-    AlterTableAlterColumnStatement(
-      typedVisit[Seq[String]](ctx.table),
-      columnNameParts,
+    AlterTableAlterColumn(
+      createUnresolvedTable(ctx.table, s"ALTER TABLE ... CHANGE COLUMN"),
+      UnresolvedFieldName(columnNameParts),
       dataType = Option(ctx.colType().dataType()).map(typedVisit[DataType]),
       nullable = None,
       comment = Option(ctx.colType().commentSpec()).map(visitCommentSpec),
-      position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+      position = Option(ctx.colPosition).map(
+        pos => UnresolvedFieldPosition(columnNameParts, typedVisit[ColumnPosition](pos))))
   }
 
   override def visitHiveReplaceColumns(

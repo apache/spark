@@ -362,7 +362,7 @@ final class DataStreamReader private[sql](sparkSession: SparkSession) extends Lo
    */
   def textFile(path: String): Dataset[String] = {
     if (userSpecifiedSchema.nonEmpty) {
-      throw QueryCompilationErrors.userSpecifiedSchemaWithTextFileError()
+      throw QueryCompilationErrors.userSpecifiedSchemaUnsupportedError("textFile")
     }
     text(path).select("value").as[String](sparkSession.implicits.newStringEncoder)
   }

@@ -78,6 +78,16 @@ select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01';
 select timestamp'2019-10-06 10:11:12.345678' - null;
 select null - timestamp'2019-10-06 10:11:12.345678';
 
+-- subtract timestamps without time zone
+select date'2020-01-01' - to_timestamp_ntz('2019-10-06 10:11:12.345678');
+select to_timestamp_ntz('2019-10-06 10:11:12.345678') - date'2020-01-01';
+select to_timestamp_ntz('2019-10-06 10:11:12.345678') - null;
+select null - to_timestamp_ntz('2019-10-06 10:11:12.345678');
+select to_timestamp_ntz('2019-10-07 10:11:12.345678') - to_timestamp_ntz('2019-10-06 10:11:12.345677');
+select to_timestamp_ntz('2019-10-06 10:11:12.345677') - to_timestamp_ntz('2019-10-07 10:11:12.345678');
+select to_timestamp_ntz('2019-10-07 10:11:12.345678') - to_timestamp('2019-10-06 10:11:12.345678');
+select to_timestamp('2019-10-06 10:11:12.345678') - to_timestamp_ntz('2019-10-07 10:11:12.345678');
+
 -- date add/sub
 select date_add('2011-11-11', 1Y);
 select date_add('2011-11-11', 1S);
@@ -226,7 +236,7 @@ select next_day("xx", "Mon");
 select next_day(null, "Mon");
 select next_day(null, "xx");
 
--- TimestampWithoutTZ + Intervals
+-- TimestampNTZ + Intervals
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval 2 day;
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval '0-0' year to month;
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval '1-2' year to month;
@@ -237,7 +247,7 @@ select to_timestamp_ntz('2021-06-25 10:11:12') + interval '20 15' day to hour;
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval '20 15:40' day to minute;
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval '20 15:40:32.99899999' day to second;
 
--- TimestampWithoutTZ - Intervals
+-- TimestampNTZ - Intervals
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval 2 day;
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval '0-0' year to month;
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval '1-2' year to month;

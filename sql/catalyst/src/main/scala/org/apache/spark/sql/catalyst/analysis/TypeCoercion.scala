@@ -633,10 +633,15 @@ abstract class TypeCoercionBase {
       case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
-      case s @ SubtractTimestamps(DateType(), _, _, _) =>
-        s.copy(left = Cast(s.left, TimestampType))
-      case s @ SubtractTimestamps(_, DateType(), _, _) =>
-        s.copy(right = Cast(s.right, TimestampType))
+      case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
+        s.copy(left = Cast(s.left, s.right.dataType))
+      case s @ SubtractTimestamps(AnyTimestampType(), DateType(), _, _) =>
+        s.copy(right = Cast(s.right, s.left.dataType))
+      case s @ SubtractTimestamps(AnyTimestampType(), AnyTimestampType(), _, _)
+        if s.left.dataType != s.right.dataType =>
+        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
+        val newRight = castIfNotSameType(s.right, TimestampNTZType)
+        s.copy(left = newLeft, right = newRight)
 
       case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
     }
@@ -956,13 +961,15 @@ object TypeCoercion extends TypeCoercionBase {
 
       // Implicit cast between date time types
       case (DateType, TimestampType) => TimestampType
-      case (TimestampType, DateType) => DateType
+      case (DateType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
+      case (TimestampType | TimestampNTZType, DateType) => DateType
 
       // Implicit cast from/to string
       case (StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
       case (StringType, target: NumericType) => target
       case (StringType, DateType) => DateType
       case (StringType, TimestampType) => TimestampType
+      case (StringType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
       case (StringType, BinaryType) => BinaryType
       // Cast any atomic type to string.
       case (any: AtomicType, StringType) if any != StringType => StringType

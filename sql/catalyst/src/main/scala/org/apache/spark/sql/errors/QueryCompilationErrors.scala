@@ -33,7 +33,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.{NamedReference, Transform}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
+import org.apache.spark.sql.internal.SQLConf.{LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED, LEGACY_CTE_PRECEDENCE_POLICY}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types._
@@ -934,8 +934,8 @@ private[spark] object QueryCompilationErrors {
     notSupportedForV2TablesError("LOAD DATA")
   }
 
-  def showCreateTableNotSupportedForV2TablesError(): Throwable = {
-    notSupportedForV2TablesError("SHOW CREATE TABLE")
+  def showCreateTableAsSerdeNotSupportedForV2TablesError(): Throwable = {
+    notSupportedForV2TablesError("SHOW CREATE TABLE AS SERDE")
   }
 
   def showColumnsNotSupportedForV2TablesError(): Throwable = {
@@ -1290,10 +1290,12 @@ private[spark] object QueryCompilationErrors {
       viewName: String,
       colName: String,
       expectedNum: Int,
-      actualCols: Seq[Attribute]): Throwable = {
+      actualCols: Seq[Attribute],
+      viewDDL: Option[String]): Throwable = {
     new AnalysisException(s"The SQL query of view $viewName has an incompatible schema change " +
       s"and column $colName cannot be resolved. Expected $expectedNum columns named $colName but " +
-      s"got ${actualCols.map(_.name).mkString("[", ",", "]")}")
+      s"got ${actualCols.map(_.name).mkString("[", ",", "]")}" +
+      viewDDL.map(s => s"\nPlease try to re-create the view by running: $s").getOrElse(""))
   }
 
   def numberOfPartitionsNotAllowedWithUnspecifiedDistributionError(): Throwable = {
@@ -1405,8 +1407,8 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin.replaceAll("\n", " "))
   }
 
-  def userSpecifiedSchemaWithTextFileError(): Throwable = {
-    new AnalysisException("User specified schema not supported with `textFile`")
+  def userSpecifiedSchemaUnsupportedError(operation: String): Throwable = {
+    new AnalysisException(s"User specified schema not supported with `$operation`")
   }
 
   def tempViewNotSupportStreamingWriteError(viewName: String): Throwable = {
@@ -1485,12 +1487,8 @@ private[spark] object QueryCompilationErrors {
   }
 
   def cannotResolveColumnNameAmongAttributesError(
-      lattr: Attribute, rightOutputAttrs: Seq[Attribute]): Throwable = {
-    new AnalysisException(
-      s"""
-         |Cannot resolve column name "${lattr.name}" among
-         |(${rightOutputAttrs.map(_.name).mkString(", ")})
-       """.stripMargin.replaceAll("\n", " "))
+      colName: String, fieldNames: String): Throwable = {
+    new AnalysisException(s"""Cannot resolve column name "$colName" among ($fieldNames)""")
   }
 
   def cannotWriteTooManyColumnsToTableError(
@@ -1519,8 +1517,11 @@ private[spark] object QueryCompilationErrors {
 
   def secondArgumentOfFunctionIsNotIntegerError(
       function: String, e: NumberFormatException): Throwable = {
+    // The second argument of '{function}' function needs to be an integer
     new AnalysisException(
-      s"The second argument of '$function' function needs to be an integer.", cause = Some(e))
+      errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
+      messageParameters = Seq(function),
+      cause = Some(e))
   }
 
   def nonPartitionPruningPredicatesNotExpectedError(
@@ -1646,5 +1647,340 @@ private[spark] object QueryCompilationErrors {
 
   def invalidYearMonthIntervalType(startFieldName: String, endFieldName: String): Throwable = {
     new AnalysisException(s"'interval $startFieldName to $endFieldName' is invalid.")
+  }
+
+  def configRemovedInVersionError(
+      configName: String,
+      version: String,
+      comment: String): Throwable = {
+    new AnalysisException(
+      s"The SQL config '$configName' was removed in the version $version. $comment")
+  }
+
+  def failedFallbackParsingError(msg: String, e1: Throwable, e2: Throwable): Throwable = {
+    new AnalysisException(s"$msg${e1.getMessage}\nFailed fallback parsing: ${e2.getMessage}",
+      cause = Some(e1.getCause))
+  }
+
+  def decimalCannotGreaterThanPrecisionError(scale: Int, precision: Int): Throwable = {
+    new AnalysisException(s"Decimal scale ($scale) cannot be greater than precision ($precision).")
+  }
+
+  def decimalOnlySupportPrecisionUptoError(decimalType: String, precision: Int): Throwable = {
+    new AnalysisException(s"$decimalType can only support precision up to $precision")
+  }
+
+  def negativeScaleNotAllowedError(scale: Int): Throwable = {
+    new AnalysisException(
+      s"""|Negative scale is not allowed: $scale.
+         |You can use ${LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key}=true
+         |to enable legacy mode to allow it.""".stripMargin.replaceAll("\n", " "))
+  }
+
+  def invalidPartitionColumnKeyInTableError(key: String, tblName: String): Throwable = {
+    new AnalysisException(s"$key is not a valid partition column in table $tblName.")
+  }
+
+  def invalidPartitionSpecError(
+      specKeys: String,
+      partitionColumnNames: Seq[String],
+      tableName: String): Throwable = {
+    new AnalysisException(
+      s"""|Partition spec is invalid. The spec ($specKeys) must match
+        |the partition spec (${partitionColumnNames.mkString(", ")}) defined in
+        |table '$tableName'""".stripMargin.replaceAll("\n", " "))
+  }
+
+  def foundDuplicateColumnError(colType: String, duplicateCol: Seq[String]): Throwable = {
+    new AnalysisException(
+      s"Found duplicate column(s) $colType: ${duplicateCol.sorted.mkString(", ")}")
+  }
+
+  def queryFromRawFilesIncludeCorruptRecordColumnError(): Throwable = {
+    new AnalysisException(
+      """
+        |Since Spark 2.3, the queries from raw JSON/CSV files are disallowed when the
+        |referenced columns only include the internal corrupt record column
+        |(named _corrupt_record by default). For example:
+        |spark.read.schema(schema).csv(file).filter($"_corrupt_record".isNotNull).count()
+        |and spark.read.schema(schema).csv(file).select("_corrupt_record").show().
+        |Instead, you can cache or save the parsed results and then send the same query.
+        |For example, val df = spark.read.schema(schema).csv(file).cache() and then
+        |df.filter($"_corrupt_record".isNotNull).count().
+      """.stripMargin)
+  }
+
+  def userDefinedPartitionNotFoundInJDBCRelationError(
+      columnName: String, schema: String): Throwable = {
+    new AnalysisException(s"User-defined partition column $columnName not " +
+      s"found in the JDBC relation: $schema")
+  }
+
+  def invalidPartitionColumnTypeError(column: StructField): Throwable = {
+    new AnalysisException(
+      s"""
+         |Partition column type should be ${NumericType.simpleString},
+         |${DateType.catalogString}, or ${TimestampType.catalogString}, but
+         |${column.dataType.catalogString} found.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def tableOrViewAlreadyExistsError(name: String): Throwable = {
+    new AnalysisException(
+      s"Table or view '$name' already exists. SaveMode: ErrorIfExists.")
+  }
+
+  def columnNameContainsInvalidCharactersError(name: String): Throwable = {
+    new AnalysisException(
+      s"""
+         |Column name "$name" contains invalid character(s).
+         |Please use alias to rename it.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def textDataSourceWithMultiColumnsError(schema: StructType): Throwable = {
+    new AnalysisException(
+      s"Text data source supports only a single column, and you have ${schema.size} columns.")
+  }
+
+  def cannotFindPartitionColumnInPartitionSchemaError(
+      readField: StructField, partitionSchema: StructType): Throwable = {
+    new AnalysisException(s"Can't find required partition column ${readField.name} " +
+      s"in partition schema $partitionSchema")
+  }
+
+  def cannotSpecifyDatabaseForTempViewError(tableIdent: TableIdentifier): Throwable = {
+    new AnalysisException(
+      s"Temporary view '$tableIdent' should not have specified a database")
+  }
+
+  def cannotCreateTempViewUsingHiveDataSourceError(): Throwable = {
+    new AnalysisException("Hive data source can only be used with tables, " +
+      "you can't use it with CREATE TEMP VIEW USING")
+  }
+
+  def invalidTimestampProvidedForStrategyError(
+      strategy: String, timeString: String): Throwable = {
+    new AnalysisException(
+      s"The timestamp provided for the '$strategy' option is invalid. The expected format " +
+        s"is 'YYYY-MM-DDTHH:mm:ss', but the provided timestamp: $timeString")
+  }
+
+  def hostOptionNotSetError(): Throwable = {
+    new AnalysisException("Set a host to read from with option(\"host\", ...).")
+  }
+
+  def portOptionNotSetError(): Throwable = {
+    new AnalysisException("Set a port to read from with option(\"port\", ...).")
+  }
+
+  def invalidIncludeTimestampValueError(): Throwable = {
+    new AnalysisException("includeTimestamp must be set to either \"true\" or \"false\"")
+  }
+
+  def checkpointLocationNotSpecifiedError(): Throwable = {
+    new AnalysisException(
+      s"""
+         |checkpointLocation must be specified either
+         |through option("checkpointLocation", ...) or
+         |SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def recoverQueryFromCheckpointUnsupportedError(checkpointPath: Path): Throwable = {
+    new AnalysisException("This query does not support recovering from checkpoint location. " +
+      s"Delete $checkpointPath to start over.")
+  }
+
+  def cannotFindColumnInRelationOutputError(
+      colName: String, relation: LogicalPlan): Throwable = {
+    new AnalysisException(s"Unable to find the column `$colName` " +
+      s"given [${relation.output.map(_.name).mkString(", ")}]")
+  }
+
+  def invalidBoundaryStartError(start: Long): Throwable = {
+    new AnalysisException(s"Boundary start is not a valid integer: $start")
+  }
+
+  def invalidBoundaryEndError(end: Long): Throwable = {
+    new AnalysisException(s"Boundary end is not a valid integer: $end")
+  }
+
+  def databaseDoesNotExistError(dbName: String): Throwable = {
+    new AnalysisException(s"Database '$dbName' does not exist.")
+  }
+
+  def tableDoesNotExistInDatabaseError(tableName: String, dbName: String): Throwable = {
+    new AnalysisException(s"Table '$tableName' does not exist in database '$dbName'.")
+  }
+
+  def tableOrViewNotFoundInDatabaseError(tableName: String, dbName: String): Throwable = {
+    new AnalysisException(s"Table or view '$tableName' not found in database '$dbName'")
+  }
+
+  def unexpectedTypeOfRelationError(relation: LogicalPlan, tableName: String): Throwable = {
+    new AnalysisException(
+      s"Unexpected type ${relation.getClass.getCanonicalName} of the relation $tableName")
+  }
+
+  def unsupportedTableChangeInJDBCCatalogError(change: TableChange): Throwable = {
+    new AnalysisException(s"Unsupported TableChange $change in JDBC catalog.")
+  }
+
+  def pathOptionNotSetCorrectlyWhenReadingError(): Throwable = {
+    new AnalysisException(
+      s"""
+         |There is a 'path' or 'paths' option set and load() is called
+         |with path parameters. Either remove the path option if it's the same as the path
+         |parameter, or add it to the load() parameter if you do want to read multiple paths.
+         |To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def pathOptionNotSetCorrectlyWhenWritingError(): Throwable = {
+    new AnalysisException(
+      s"""
+         |There is a 'path' option set and save() is called with a path
+         |parameter. Either remove the path option, or call save() without the parameter.
+         |To ignore this check, set '${SQLConf.LEGACY_PATH_OPTION_BEHAVIOR.key}' to 'true'.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def writeWithSaveModeUnsupportedBySourceError(source: String, createMode: String): Throwable = {
+    new AnalysisException(s"TableProvider implementation $source cannot be " +
+      s"written with $createMode mode, please use Append or Overwrite modes instead.")
+  }
+
+  def partitionByDoesNotAllowedWhenUsingInsertIntoError(): Throwable = {
+    new AnalysisException(
+      """
+        |insertInto() can't be used together with partitionBy().
+        |Partition columns have already been defined for the table.
+        |It is not necessary to use partitionBy().
+      """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def cannotFindCatalogToHandleIdentifierError(quote: String): Throwable = {
+    new AnalysisException(s"Couldn't find a catalog to handle the identifier $quote.")
+  }
+
+  def sortByNotUsedWithBucketByError(): Throwable = {
+    new AnalysisException("sortBy must be used together with bucketBy")
+  }
+
+  def bucketByUnsupportedByOperationError(operation: String): Throwable = {
+    new AnalysisException(s"'$operation' does not support bucketBy right now")
+  }
+
+  def bucketByAndSortByUnsupportedByOperationError(operation: String): Throwable = {
+    new AnalysisException(s"'$operation' does not support bucketBy and sortBy right now")
+  }
+
+  def tableAlreadyExistsError(tableIdent: TableIdentifier): Throwable = {
+    new AnalysisException(s"Table $tableIdent already exists.")
+  }
+
+  def cannotOverwriteTableThatIsBeingReadFromError(tableName: String): Throwable = {
+    new AnalysisException(s"Cannot overwrite table $tableName that is also being read from")
+  }
+
+  def invalidPartitionTransformationError(expr: Expression): Throwable = {
+    new AnalysisException(s"Invalid partition transformation: ${expr.sql}")
+  }
+
+  def cannotResolveColumnNameAmongFieldsError(
+      colName: String, fieldsStr: String, extraMsg: String): AnalysisException = {
+    new AnalysisException(
+      s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}""")
+  }
+
+  def cannotParseTimeDelayError(delayThreshold: String, e: IllegalArgumentException): Throwable = {
+    new AnalysisException(s"Unable to parse time delay '$delayThreshold'", cause = Some(e))
+  }
+
+  def invalidJoinTypeInJoinWithError(joinType: JoinType): Throwable = {
+    new AnalysisException(s"Invalid join type in joinWith: ${joinType.sql}")
+  }
+
+  def cannotPassTypedColumnInUntypedSelectError(typedCol: String): Throwable = {
+    new AnalysisException(s"Typed column $typedCol that needs input type and schema " +
+      "cannot be passed in untyped `select` API. Use the typed `Dataset.select` API instead.")
+  }
+
+  def invalidViewNameError(viewName: String): Throwable = {
+    new AnalysisException(s"Invalid view name: $viewName")
+  }
+
+  def invalidBucketsNumberError(numBuckets: String, e: String): Throwable = {
+    new AnalysisException(s"Invalid number of buckets: bucket($numBuckets, $e)")
+  }
+
+  def usingUntypedScalaUDFError(): Throwable = {
+    new AnalysisException("You're using untyped Scala UDF, which does not have the input type " +
+      "information. Spark may blindly pass null to the Scala closure with primitive-type " +
+      "argument, and the closure will see the default value of the Java type for the null " +
+      "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
+      "To get rid of this error, you could:\n" +
+      "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n" +
+      "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
+      "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
+      "if input types are all non primitive\n" +
+      s"3. set ${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and " +
+      s"use this API with caution")
+  }
+
+  def aggregationFunctionAppliedOnNonNumericColumnError(colName: String): Throwable = {
+    new AnalysisException(s""""$colName" is not a numeric column. """ +
+      "Aggregation function can only be applied on a numeric column.")
+  }
+
+  def aggregationFunctionAppliedOnNonNumericColumnError(
+      pivotColumn: String, maxValues: Int): Throwable = {
+    new AnalysisException(
+      s"""
+         |The pivot column $pivotColumn has more than $maxValues distinct values,
+         |this could indicate an error.
+         |If this was intended, set ${SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key}
+         |to at least the number of distinct values of the pivot column.
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def cannotModifyValueOfStaticConfigError(key: String): Throwable = {
+    new AnalysisException(s"Cannot modify the value of a static config: $key")
+  }
+
+  def cannotModifyValueOfSparkConfigError(key: String): Throwable = {
+    new AnalysisException(s"Cannot modify the value of a Spark config: $key")
+  }
+
+  def commandExecutionInRunnerUnsupportedError(runner: String): Throwable = {
+    new AnalysisException(s"Command execution is not supported in runner $runner")
+  }
+
+  def udfClassDoesNotImplementAnyUDFInterfaceError(className: String): Throwable = {
+    new AnalysisException(s"UDF class $className doesn't implement any UDF interface")
+  }
+
+  def udfClassNotAllowedToImplementMultiUDFInterfacesError(className: String): Throwable = {
+    new AnalysisException(
+      s"It is invalid to implement multiple UDF interfaces, UDF class $className")
+  }
+
+  def udfClassWithTooManyTypeArgumentsError(n: Int): Throwable = {
+    new AnalysisException(s"UDF class with $n type arguments is not supported.")
+  }
+
+  def classWithoutPublicNonArgumentConstructorError(className: String): Throwable = {
+    new AnalysisException(s"Can not instantiate class $className, please make sure" +
+      " it has public non argument constructor")
+  }
+
+  def cannotLoadClassNotOnClassPathError(className: String): Throwable = {
+    new AnalysisException(s"Can not load class $className, please make sure it is on the classpath")
+  }
+
+  def classDoesNotImplementUserDefinedAggregateFunctionError(className: String): Throwable = {
+    new AnalysisException(
+      s"class $className doesn't implement interface UserDefinedAggregateFunction")
   }
 }
