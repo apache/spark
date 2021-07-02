@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - '**'
-      - '!branch-*.*'
 
 jobs:
   # Build: build Spark and run the tests for specified modules.
