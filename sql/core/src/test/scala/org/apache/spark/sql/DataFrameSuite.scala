@@ -1821,7 +1821,7 @@ class DataFrameSuite extends QueryTest
       (1 to 100).map(i => TestData2(i % 10, i))).toDF()
 
     // Distribute and order by.
-    val df4 = data.repartition($"a").sortWithinPartitions($"b".desc)
+    val df4 = data.repartition(5, $"a").sortWithinPartitions($"b".desc)
     // Walk each partition and verify that it is sorted descending and does not contain all
     // the values.
     df4.rdd.foreachPartition { p =>
