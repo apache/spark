@@ -295,6 +295,13 @@ class JacksonParser(
           IntervalUtils.safeStringToInterval(UTF8String.fromString(parser.getText))
       }
 
+    case ym: YearMonthIntervalType => (parser: JsonParser) =>
+      parseJsonToken[Integer](parser, dataType) {
+        case VALUE_STRING =>
+          val expr = Cast(Literal(parser.getText), ym)
+          Integer.valueOf(expr.eval(EmptyRow).asInstanceOf[Int])
+      }
+
     case st: StructType =>
       val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
       (parser: JsonParser) => parseJsonToken[InternalRow](parser, dataType) {
