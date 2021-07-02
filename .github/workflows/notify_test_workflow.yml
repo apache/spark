@@ -34,7 +34,7 @@ jobs:
     steps:
       - name: "Notify test workflow"
         uses: actions/github-script@v3
-        if: ${{ github.base_ref == 'master' }}
+        if: ${{ github.base_ref == 'branch-3.2' }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |

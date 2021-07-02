@@ -3,15 +3,7 @@ name: Build and test
 on:
   push:
     branches:
-    - branch-3.2
-  pull_request:
-    branches:
-    - branch-3.2
-  workflow_dispatch:
-    inputs:
-      target:
-        description: 'Target branch to run'
-        required: true
+      - '**'
 
 jobs:
   # Build: build Spark and run the tests for specified modules.
@@ -88,7 +80,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       id: sync-branch
@@ -185,7 +177,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       id: sync-branch
@@ -269,7 +261,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       id: sync-branch
@@ -328,7 +320,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       id: sync-branch
@@ -436,7 +428,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       id: sync-branch
@@ -484,7 +476,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       id: sync-branch
@@ -528,7 +520,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       id: sync-branch
@@ -573,7 +565,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       id: sync-branch
@@ -653,7 +645,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       id: sync-branch
