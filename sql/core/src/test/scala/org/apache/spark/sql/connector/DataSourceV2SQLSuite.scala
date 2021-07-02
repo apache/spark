@@ -2917,7 +2917,7 @@ class DataSourceV2SQLSuite
     }
   }
 
-  test("ShowCatalogs") {
+  test("SPARK-35973: ShowCatalogs") {
     val schema = new StructType()
       .add("catalog", StringType, nullable = false)
       .add("default-namespace", StringType, nullable = false)
