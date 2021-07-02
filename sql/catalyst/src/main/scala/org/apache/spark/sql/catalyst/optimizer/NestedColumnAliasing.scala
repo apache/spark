@@ -169,8 +169,13 @@ object NestedColumnAliasing {
       projectList: Seq[NamedExpression],
       nestedFieldToAlias: Map[ExtractValue, Alias]): Seq[NamedExpression] = {
     projectList.map(_.transform {
-      case f: ExtractValue if nestedFieldToAlias.contains(f) =>
-        nestedFieldToAlias(f).toAttribute
+      case f: ExtractValue =>
+        val matched = nestedFieldToAlias.find(_._1.semanticEquals(f))
+        if (matched.isDefined) {
+          matched.get._2.toAttribute
+        } else {
+          f
+        }
     }.asInstanceOf[NamedExpression])
   }
 
@@ -185,8 +190,13 @@ object NestedColumnAliasing {
     plan.withNewChildren(plan.children.map { plan =>
       Project(plan.output.flatMap(a => attrToAliases.getOrElse(a, Seq(a))), plan)
     }).transformExpressions {
-      case f: ExtractValue if nestedFieldToAlias.contains(f) =>
-        nestedFieldToAlias(f).toAttribute
+      case f: ExtractValue =>
+        val matched = nestedFieldToAlias.find(_._1.semanticEquals(f))
+        if (matched.isDefined) {
+          matched.get._2.toAttribute
+        } else {
+          f
+        }
     }
   }
 
