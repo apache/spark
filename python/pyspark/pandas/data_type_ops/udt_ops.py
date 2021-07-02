@@ -15,6 +15,9 @@
 # limitations under the License.
 #
 
+from typing import Any
+
+from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 
 
@@ -27,3 +30,24 @@ class UDTOps(DataTypeOps):
     @property
     def pretty_name(self) -> str:
         return "user defined types"
+
+    def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("Unary - can not be applied to %s." % self.pretty_name)
+
+    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
+
+    def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("abs() can not be applied to %s." % self.pretty_name)
+
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise TypeError("< can not be applied to %s." % self.pretty_name)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise TypeError("<= can not be applied to %s." % self.pretty_name)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise TypeError("> can not be applied to %s." % self.pretty_name)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise TypeError(">= can not be applied to %s." % self.pretty_name)
