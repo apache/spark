@@ -118,7 +118,7 @@ private[state] class RocksDBStateStoreProvider
         CUSTOM_METRIC_PUT_TIME -> avgNativeOpsLatencyMs("put"),
         CUSTOM_METRIC_WRITEBATCH_TIME -> commitLatencyMs("writeBatch"),
         CUSTOM_METRIC_FLUSH_TIME -> commitLatencyMs("flush"),
-        CUSTOM_METRIC_PAUSE_TIME -> commitLatencyMs("pauseBg"),
+        CUSTOM_METRIC_PAUSE_TIME -> commitLatencyMs("pause"),
         CUSTOM_METRIC_CHECKPOINT_TIME -> commitLatencyMs("checkpoint"),
         CUSTOM_METRIC_FILESYNC_TIME -> commitLatencyMs("fileSync"),
         CUSTOM_METRIC_BYTES_COPIED -> rocksDBMetrics.bytesCopied,
