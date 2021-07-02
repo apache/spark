@@ -110,11 +110,12 @@ class SparkSessionExtensions {
   type TableFunctionDescription = (FunctionIdentifier, ExpressionInfo, TableFunctionBuilder)
   type ColumnarRuleBuilder = SparkSession => ColumnarRule
   type QueryStagePrepRuleBuilder = SparkSession => Rule[SparkPlan]
+  type PostStageCreationRuleBuilder = SparkSession => Rule[SparkPlan]
 
   private[this] val columnarRuleBuilders = mutable.Buffer.empty[ColumnarRuleBuilder]
   private[this] val queryStagePrepRuleBuilders = mutable.Buffer.empty[QueryStagePrepRuleBuilder]
   private[this] val postStageCreationRuleBuilders =
-    mutable.Buffer.empty[QueryStagePrepRuleBuilder]
+    mutable.Buffer.empty[PostStageCreationRuleBuilder]
 
   /**
    * Build the override rules for columnar execution.
@@ -157,7 +158,7 @@ class SparkSessionExtensions {
    * Inject a rule that can override the final query stage preparation phase of adaptive query
    * execution.
    */
-  def injectPostStageCreationRule(builder: QueryStagePrepRuleBuilder): Unit = {
+  def injectPostStageCreationRule(builder: PostStageCreationRuleBuilder): Unit = {
     postStageCreationRuleBuilders += builder
   }
 
