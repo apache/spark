@@ -3591,9 +3591,6 @@ class SQLConf extends Serializable with Logging {
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 
-  def adaptiveCustomCostEvaluatorClass: Option[String] =
-    getConf(ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS)
-
   def minBatchesToRetain: Int = getConf(MIN_BATCHES_TO_RETAIN)
 
   def maxBatchesToRetainInMemory: Int = getConf(MAX_BATCHES_TO_RETAIN_IN_MEMORY)
