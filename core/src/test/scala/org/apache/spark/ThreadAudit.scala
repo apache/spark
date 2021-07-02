@@ -113,7 +113,7 @@ trait ThreadAudit extends Logging {
       if (remainingThreads.nonEmpty) {
         logWarning(s"\n\n===== POSSIBLE THREAD LEAK IN SUITE $shortSuiteName, " +
           s"threads: ${remainingThreads.map{ t => s"${t.getName} (daemon=${t.isDaemon})" }
-	  .mkString(", ")} =====\n")
+          .mkString(", ")} =====\n")
       }
     } else {
       logWarning("\n\n===== THREAD AUDIT POST ACTION CALLED " +
