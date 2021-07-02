@@ -957,8 +957,8 @@ private[spark] class SparkSubmit extends Logging {
       case t: Throwable =>
         throw findCause(t)
     } finally {
-      if (isK8S(args.master) && (!isShell(args.primaryResource) &&
-        !isSqlShell(args.mainClass) && !isThriftServer(args.mainClass))) {
+      if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass) &&
+        !isThriftServer(args.mainClass) && !args.isServer) {
         try {
           SparkContext.getActive.foreach(_.stop())
         } catch {
@@ -1096,13 +1096,6 @@ object SparkSubmit extends CommandLineUtils with Logging {
 
   private[deploy] def isInternal(res: String): Boolean = {
     res == SparkLauncher.NO_RESOURCE
-  }
-
-  /**
-   * Return whether master is k8s.
-   */
-  private[deploy] def isK8S(master: String): Boolean = {
-    master != null && master.startsWith("k8s")
   }
 
 }
