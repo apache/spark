@@ -353,9 +353,6 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(self.pser >= self.other_pser, self.psser >= self.other_psser)
             self.assert_eq(self.pser >= self.pser, self.psser >= self.psser)
 
-    def test_len(self):
-        self.assert_eq(len(self.pser), len(self.psser))
-
 
 @unittest.skipIf(
     not extension_object_dtypes_available, "pandas extension object dtypes are not available"
@@ -674,9 +671,6 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         with option_context("compute.ops_on_diff_frames", True):
             self.check_extension(self.pser >= self.other_pser, self.psser >= self.other_psser)
             self.check_extension(self.pser >= self.pser, self.psser >= self.psser)
-
-    def test_len(self):
-        self.assert_eq(len(self.pser), len(self.psser))
 
 
 if __name__ == "__main__":

@@ -205,9 +205,6 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_ge(self):
         self.assertRaises(NotImplementedError, lambda: self.psser >= self.other_psser)
 
-    def test_len(self):
-        self.assert_eq(len(self.pser), len(self.psser))
-
 
 if __name__ == "__main__":
     import unittest

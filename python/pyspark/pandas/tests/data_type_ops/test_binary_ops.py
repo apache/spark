@@ -206,9 +206,6 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(self.pser >= self.other_pser, self.psser >= self.other_psser)
             self.assert_eq(self.pser >= self.pser, self.psser >= self.psser)
 
-    def test_len(self):
-        self.assert_eq(len(self.pser), len(self.psser))
-
 
 if __name__ == "__main__":
     import unittest
