@@ -112,7 +112,7 @@ case class AdaptiveSparkPlanExec(
   @transient private val postStageCreationRules = Seq(
     ApplyColumnarRulesAndInsertTransitions(context.session.sessionState.columnarRules),
     CollapseCodegenStages()
-  )
+  ) ++ context.session.sessionState.postStageCreationRules
 
   // The partitioning of the query output depends on the shuffle(s) in the final stage. If the
   // original plan contains a repartition operator, we need to preserve the specified partitioning,
@@ -123,8 +123,7 @@ case class AdaptiveSparkPlanExec(
     val origins = inputPlan.collect {
       case s: ShuffleExchangeLike => s.shuffleOrigin
     }
-    val allRules = queryStageOptimizerRules ++ postStageCreationRules ++
-      context.session.sessionState.finalQueryStagePrepRules
+    val allRules = queryStageOptimizerRules ++ postStageCreationRules
     allRules.filter {
       case c: CustomShuffleReaderRule =>
         origins.forall(c.supportedShuffleOrigins.contains)

@@ -113,7 +113,7 @@ class SparkSessionExtensions {
 
   private[this] val columnarRuleBuilders = mutable.Buffer.empty[ColumnarRuleBuilder]
   private[this] val queryStagePrepRuleBuilders = mutable.Buffer.empty[QueryStagePrepRuleBuilder]
-  private[this] val finalStagePrepRuleBuilders =
+  private[this] val postStageCreationRuleBuilders =
     mutable.Buffer.empty[QueryStagePrepRuleBuilder]
 
   /**
@@ -134,8 +134,8 @@ class SparkSessionExtensions {
    * Build the override rules for the final query stage preparation phase of adaptive query
    * execution.
    */
-  private[sql] def buildFinalStagePrepRules(session: SparkSession): Seq[Rule[SparkPlan]] = {
-    finalStagePrepRuleBuilders.map(_.apply(session)).toSeq
+  private[sql] def buildPostStageCreationRules(session: SparkSession): Seq[Rule[SparkPlan]] = {
+    postStageCreationRuleBuilders.map(_.apply(session)).toSeq
   }
 
   /**
@@ -157,8 +157,8 @@ class SparkSessionExtensions {
    * Inject a rule that can override the final query stage preparation phase of adaptive query
    * execution.
    */
-  def injectFinalStagePrepRule(builder: QueryStagePrepRuleBuilder): Unit = {
-    finalStagePrepRuleBuilders += builder
+  def injectPostStageCreationRule(builder: QueryStagePrepRuleBuilder): Unit = {
+    postStageCreationRuleBuilders += builder
   }
 
   private[this] val resolutionRuleBuilders = mutable.Buffer.empty[RuleBuilder]
