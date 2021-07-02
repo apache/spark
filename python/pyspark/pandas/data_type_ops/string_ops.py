@@ -112,6 +112,15 @@ class StringOps(DataTypeOps):
     def rmod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("modulo can not be applied on string series or literals.")
 
+    def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("Unary - can not be applied to %s." % self.pretty_name)
+
+    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
+
+    def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("abs() can not be applied to %s." % self.pretty_name)
+
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
