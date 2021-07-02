@@ -16,7 +16,7 @@
 #
 
 import numbers
-from typing import Any, Union
+from typing import Any, cast, Union
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -47,7 +47,7 @@ class BooleanOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return "booleans"
+        return "bools"
 
     def add(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
@@ -272,12 +272,22 @@ class BooleanOps(DataTypeOps):
         else:
             return _as_other_type(index_ops, dtype, spark_type)
 
+    def __neg__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+        return cast(SeriesOrIndex, ~operand)
+
+    def __abs__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+        return cast(SeriesOrIndex, operand)
+
 
 class BooleanExtensionOps(BooleanOps):
     """
     The class for binary operations of pandas-on-Spark objects with spark type BooleanType,
     and dtype BooleanDtype.
     """
+
+    @property
+    def pretty_name(self) -> str:
+        return "booleans"
 
     def __and__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         def and_func(left: Column, right: Any) -> Column:
@@ -304,3 +314,12 @@ class BooleanExtensionOps(BooleanOps):
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""
         return col.astype(self.dtype)
+
+    def __neg__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+        raise TypeError("Unary - can not be applied to %s." % self.pretty_name)
+
+    def __invert__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+        raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
+
+    def __abs__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+        raise TypeError("abs() can not be applied to %s." % self.pretty_name)
