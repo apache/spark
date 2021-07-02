@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation, PruneFileSourcePartitions}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
@@ -109,9 +110,25 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase {
     }
   }
 
+  test("SPARK-35985 push filters for empty read schema") {
+    // Force datasource v2 for parquet
+    withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
+      withTempPath { dir =>
+        spark.range(10).selectExpr("id", "id % 3 as p")
+          .write.partitionBy("p").parquet(dir.getCanonicalPath)
+        withTempView("tmp") {
+          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+          assertPrunedPartitions("SELECT COUNT(*) FROM tmp WHERE p = 0", 1, "(tmp.p = 0)")
+          assertPrunedPartitions("SELECT input_file_name() FROM tmp WHERE p = 0", 1, "(tmp.p = 0)")
+        }
+      }
+    }
+  }
+
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {
     plan.collectFirst {
-      case p: FileSourceScanExec => p
-    }.get.selectedPartitions.length
+      case p: FileSourceScanExec => p.selectedPartitions.length
+      case b: BatchScanExec => b.partitions.size
+    }.get
   }
 }
