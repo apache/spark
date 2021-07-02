@@ -160,7 +160,7 @@ class OrcEncryptionSuite extends OrcTest with SharedSparkSession {
     }
   }
 
-  test("Write and read fully-encrypted columns with default masking") {
+  test("SPARK-35992: Write and read fully-encrypted columns with default masking") {
     val conf = spark.sessionState.newHadoopConf()
     val provider = HadoopShimsFactory.get.getHadoopKeyProvider(conf, new Random)
     assume(!provider.getKeyNames.isEmpty,
