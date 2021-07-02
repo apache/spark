@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, Metadata, StringType, StructField, StructType}
 
 class NestedColumnAliasingSuite extends SchemaPruningTest {
 
@@ -737,6 +737,32 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, query)
+  }
+
+  test("SPARK-35972: When replace ExtractValue we should use semanticEquals") {
+    val dataType = new StructType()
+      .add(StructField("itemid", StringType))
+      .add(StructField("search_params", StructType(Seq(
+        StructField("col1", StringType),
+        StructField("col2", StringType)
+      )), true, Metadata.fromJson("{\"name\":\"aaa\",\"idx\":0}")))
+    val relation = LocalRelation('struct_data.struct(dataType))
+    val plan = relation
+      .repartition(100)
+      .select(
+        GetStructField('struct_data, 1, None).as("value"),
+        $"struct_data.search_params.col1".as("col1"),
+        $"struct_data.search_params.col2".as("col2")).analyze
+    val query = Optimize.execute(plan)
+    val optimized = relation
+      .select(GetStructField('struct_data, 1, None).as("_extract_search_params"))
+      .repartition(100)
+      .select(
+        $"_extract_search_params".as("value"),
+        $"_extract_search_params.col1".as("col1"),
+        $"_extract_search_params.col2".as("col2")).analyze
+    comparePlans(optimized, query)
+
   }
 }
 
