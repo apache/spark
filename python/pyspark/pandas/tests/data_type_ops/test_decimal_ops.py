@@ -64,11 +64,9 @@ class DecimalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(self.float_pser.isnull(), self.float_psser.isnull())
 
     def test_neg(self):
-        # self.assert_eq(-self.decimal_pser, -self.decimal_psser)
         self.assert_eq(-self.other_decimal_pser, -self.other_decimal_psser)
 
     def test_abs(self):
-        # self.assert_eq(abs(self.decimal_pser), abs(self.decimal_psser))
         self.assert_eq(abs(self.other_decimal_pser), abs(self.other_decimal_psser))
 
     def test_invert(self):

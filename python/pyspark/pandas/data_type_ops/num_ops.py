@@ -158,6 +158,10 @@ class NumericOps(DataTypeOps):
         right = transform_boolean_operand_to_numeric(right)
         return column_op(rmod)(left, right)
 
+    # TODO(SPARK-36003): Implement unary operator `invert` as below
+    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise NotImplementedError("Unary ~ can not be applied to %s." % self.pretty_name)
+
 
 class IntegralOps(NumericOps):
     """
