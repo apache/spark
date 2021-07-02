@@ -161,7 +161,3 @@ case class Sum(
 
   override protected def withNewChildInternal(newChild: Expression): Sum = copy(child = newChild)
 }
-
-object Sum {
-  def apply(child: Expression): Sum = Sum(child, failOnError = SQLConf.get.ansiEnabled)
-}

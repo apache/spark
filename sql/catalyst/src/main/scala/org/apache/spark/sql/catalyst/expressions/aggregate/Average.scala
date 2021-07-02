@@ -37,7 +37,11 @@ import org.apache.spark.sql.types._
   """,
   group = "agg_funcs",
   since = "1.0.0")
-case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes
+case class Average(
+    child: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled)
+  extends DeclarativeAggregate
+  with ImplicitCastInputTypes
   with UnaryLike[Expression] {
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
@@ -91,7 +95,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
     case d: DecimalType =>
       DecimalPrecision.decimalAndDecimal()(
         Divide(
-          CheckOverflowInSum(sum, d, !SQLConf.get.ansiEnabled),
+          CheckOverflowInSum(sum, d, !failOnError),
           count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
     case _: YearMonthIntervalType =>
       If(EqualTo(count, Literal(0L)),
