@@ -58,6 +58,7 @@ class SparkSubmitOptionParser {
   protected final String REPOSITORIES = "--repositories";
   protected final String STATUS = "--status";
   protected final String TOTAL_EXECUTOR_CORES = "--total-executor-cores";
+  protected final String KEEP_SPARK_CONTEXT_ALIVE = "--keep-spark-context-alive";
 
   // Options that do not take arguments.
   protected final String HELP = "--help";
@@ -115,6 +116,7 @@ class SparkSubmitOptionParser {
     { REPOSITORIES },
     { STATUS },
     { TOTAL_EXECUTOR_CORES },
+    { KEEP_SPARK_CONTEXT_ALIVE },
   };
 
   /**

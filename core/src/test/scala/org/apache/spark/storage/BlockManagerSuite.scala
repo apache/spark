@@ -52,6 +52,7 @@ import org.apache.spark.network.netty.{NettyBlockTransferService, SparkTransport
 import org.apache.spark.network.server.{NoOpRpcHandler, TransportServer, TransportServerBootstrap}
 import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, ExecutorDiskUtils, ExternalBlockStoreClient}
 import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, RegisterExecutor}
+import org.apache.spark.network.util.{MapConfigProvider, TransportConf}
 import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEnv}
 import org.apache.spark.scheduler.{LiveListenerBus, MapStatus, MergeStatus, SparkListenerBlockUpdated}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedClusterMessages, CoarseGrainedSchedulerBackend}
@@ -303,6 +304,39 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // locations to BlockManagerMaster)
     master.updateBlockInfo(bm1Id, RDDBlockId(0, 0), StorageLevel.MEMORY_ONLY, 100, 0)
     master.updateBlockInfo(bm2Id, RDDBlockId(0, 1), StorageLevel.MEMORY_ONLY, 100, 0)
+  }
+
+  test("SPARK-36036: make sure temporary download files are deleted") {
+    val store = makeBlockManager(8000, "executor")
+
+    def createAndRegisterTempFileForDeletion(): String = {
+      val transportConf = new TransportConf("test", MapConfigProvider.EMPTY)
+      val tempDownloadFile = store.remoteBlockTempFileManager.createTempFile(transportConf)
+
+      tempDownloadFile.openForWriting().close()
+      assert(new File(tempDownloadFile.path()).exists(), "The file has been created")
+
+      val registered = store.remoteBlockTempFileManager.registerTempFileToClean(tempDownloadFile)
+      assert(registered, "The file has been successfully registered for auto clean up")
+
+      // tempDownloadFile and the channel for writing are local to the function so the references
+      // are going to be eliminated on exit
+      tempDownloadFile.path()
+    }
+
+    val filePath = createAndRegisterTempFileForDeletion()
+
+    val numberOfTries = 100 // try increasing if the test starts to behave flaky
+    val fileHasBeenDeleted = (1 to numberOfTries).exists { tryNo =>
+      // Unless -XX:-DisableExplicitGC is set it works in Hotspot JVM
+      System.gc()
+      Thread.sleep(tryNo)
+      val fileStillExists = new File(filePath).exists()
+      !fileStillExists
+    }
+
+    assert(fileHasBeenDeleted,
+      s"The file was supposed to be auto deleted (GC hinted $numberOfTries times)")
   }
 
   test("SPARK-32091: count failures from active executors when remove rdd/broadcast/shuffle") {

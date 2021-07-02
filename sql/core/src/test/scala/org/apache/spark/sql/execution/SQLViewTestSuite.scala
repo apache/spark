@@ -465,4 +465,32 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-36011: Disallow altering permanent views based on temporary views or UDFs") {
+    import testImplicits._
+    withTable("t") {
+      (1 to 10).toDF("id").write.saveAsTable("t")
+      withView("v1") {
+        withTempView("v2") {
+          sql("CREATE VIEW v1 AS SELECT * FROM t")
+          sql("CREATE TEMPORARY VIEW v2 AS  SELECT * FROM t")
+          var e = intercept[AnalysisException] {
+            sql("ALTER VIEW v1 AS SELECT * FROM v2")
+          }.getMessage
+          assert(e.contains("Not allowed to create a permanent view `default`.`v1` by " +
+            "referencing a temporary view v2"))
+          val tempFunctionName = "temp_udf"
+          val functionClass = "test.org.apache.spark.sql.MyDoubleAvg"
+          withUserDefinedFunction(tempFunctionName -> true) {
+            sql(s"CREATE TEMPORARY FUNCTION $tempFunctionName AS '$functionClass'")
+            e = intercept[AnalysisException] {
+              sql(s"ALTER VIEW v1 AS SELECT $tempFunctionName(id) from t")
+            }.getMessage
+            assert(e.contains("Not allowed to create a permanent view `default`.`v1` by " +
+              s"referencing a temporary function `$tempFunctionName`"))
+          }
+        }
+      }
+    }
+  }
 }

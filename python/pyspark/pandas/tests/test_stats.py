@@ -283,7 +283,7 @@ class StatsTest(PandasOnSparkTestCase, SQLTestUtils):
                 index=pd.Index([1, 2, 3], name="myindex"),
             )
             psdf = ps.from_pandas(pdf)
-            self.assert_eq(psdf.corr(), pdf.corr())
+            self.assert_eq(psdf.corr(), pdf.corr(), check_exact=False)
 
     def test_stats_on_boolean_dataframe(self):
         pdf = pd.DataFrame({"A": [True, False, True], "B": [False, False, True]})

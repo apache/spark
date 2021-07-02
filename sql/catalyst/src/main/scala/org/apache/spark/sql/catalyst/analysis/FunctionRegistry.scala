@@ -552,6 +552,8 @@ object FunctionRegistry {
     expression[TimeWindow]("window"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
+    expression[MakeTimestampNTZ]("make_timestamp_ntz", true),
+    expression[MakeTimestampLTZ]("make_timestamp_ltz", true),
     expression[MakeInterval]("make_interval"),
     expression[MakeDTInterval]("make_dt_interval"),
     expression[MakeYMInterval]("make_ym_interval"),

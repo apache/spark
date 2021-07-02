@@ -317,7 +317,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     # arithmetic operators
     def __neg__(self: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, column_op(Column.__neg__)(self))
+        return self._dtype_op.neg(self)
 
     def __add__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.add(self, other)
@@ -394,22 +394,29 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._dtype_op.rpow(self, other)
 
     def __abs__(self: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, column_op(F.abs)(self))
+        return self._dtype_op.abs(self)
 
     # comparison operators
     def __eq__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
-        return column_op(Column.__eq__)(self, other)
+        return self._dtype_op.eq(self, other)
 
     def __ne__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
-        return column_op(Column.__ne__)(self, other)
+        return self._dtype_op.ne(self, other)
 
-    __lt__ = column_op(Column.__lt__)
-    __le__ = column_op(Column.__le__)
-    __ge__ = column_op(Column.__ge__)
-    __gt__ = column_op(Column.__gt__)
+    def __lt__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.lt(self, other)
+
+    def __le__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.le(self, other)
+
+    def __ge__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.ge(self, other)
+
+    def __gt__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.gt(self, other)
 
     def __invert__(self: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, column_op(Column.__invert__)(self))
+        return self._dtype_op.invert(self)
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators

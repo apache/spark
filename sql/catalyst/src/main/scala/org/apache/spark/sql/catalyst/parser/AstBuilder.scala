@@ -38,9 +38,8 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, getZoneId, stringToDate, stringToTimestamp}
-import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
@@ -2119,16 +2118,44 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         throw QueryParsingErrors.cannotParseValueTypeError(valueType, value, ctx)
       }
     }
+
+    def constructTimestampLTZLiteral(value: String): Literal = {
+      val zoneId = getZoneId(conf.sessionLocalTimeZone)
+      val specialTs = convertSpecialTimestamp(value, zoneId).map(Literal(_, TimestampType))
+      specialTs.getOrElse(toLiteral(stringToTimestamp(_, zoneId), TimestampType))
+    }
+
     try {
       valueType match {
         case "DATE" =>
           val zoneId = getZoneId(conf.sessionLocalTimeZone)
           val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
           specialDate.getOrElse(toLiteral(stringToDate, DateType))
+        case "TIMESTAMP_NTZ" =>
+          val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
+          specialTs.getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
+        case "TIMESTAMP_LTZ" =>
+          constructTimestampLTZLiteral(value)
         case "TIMESTAMP" =>
-          val zoneId = getZoneId(conf.sessionLocalTimeZone)
-          val specialTs = convertSpecialTimestamp(value, zoneId).map(Literal(_, TimestampType))
-          specialTs.getOrElse(toLiteral(stringToTimestamp(_, zoneId), TimestampType))
+          SQLConf.get.timestampType match {
+            case TimestampNTZType =>
+              val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
+              specialTs.getOrElse {
+                val containsTimeZonePart =
+                  DateTimeUtils.parseTimestampString(UTF8String.fromString(value))._2.isDefined
+                // If the input string contains time zone part, return a timestamp with local time
+                // zone literal.
+                if (containsTimeZonePart) {
+                  constructTimestampLTZLiteral(value)
+                } else {
+                  toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
+                }
+              }
+
+            case TimestampType =>
+              constructTimestampLTZLiteral(value)
+          }
+
         case "INTERVAL" =>
           val interval = try {
             IntervalUtils.stringToInterval(UTF8String.fromString(value))
@@ -2459,18 +2486,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         (from, to) match {
           case ("year", "month") =>
             IntervalUtils.fromYearMonthString(value)
-          case ("day", "hour") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.HOUR)
-          case ("day", "minute") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.MINUTE)
-          case ("day", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.SECOND)
-          case ("hour", "minute") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.MINUTE)
-          case ("hour", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.SECOND)
-          case ("minute", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.MINUTE, IntervalUnit.SECOND)
+          case ("day", "hour") | ("day", "minute") | ("day", "second") | ("hour", "minute") |
+               ("hour", "second") | ("minute", "second") =>
+            IntervalUtils.fromDayTimeString(value,
+              DayTimeIntervalType.stringToField(from), DayTimeIntervalType.stringToField(to))
           case _ =>
             throw QueryParsingErrors.fromToIntervalUnsupportedError(from, to, ctx)
         }
@@ -2503,6 +2522,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case ("double", Nil) => DoubleType
       case ("date", Nil) => DateType
       case ("timestamp", Nil) => SQLConf.get.timestampType
+      case ("timestamp_ntz", Nil) => TimestampNTZType
+      case ("timestamp_ltz", Nil) => TimestampType
       case ("string", Nil) => StringType
       case ("character" | "char", length :: Nil) => CharType(length.getText.toInt)
       case ("varchar", length :: Nil) => VarcharType(length.getText.toInt)
@@ -3553,7 +3574,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: RenameTableColumnContext): LogicalPlan = withOrigin(ctx) {
     AlterTableRenameColumn(
       createUnresolvedTable(ctx.table, "ALTER TABLE ... RENAME COLUMN"),
-      UnresolvedFieldName(ctx.from.parts.asScala.map(_.getText).toSeq),
+      UnresolvedFieldName(typedVisit[Seq[String]](ctx.from)),
       ctx.to.getText)
   }
 
@@ -3579,7 +3600,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         s"ALTER TABLE table $verb COLUMN requires a TYPE, a SET/DROP, a COMMENT, or a FIRST/AFTER",
         ctx)
     }
-    val columnNameParts = typedVisit[Seq[String]](ctx.column)
     val dataType = if (action.dataType != null) {
       Some(typedVisit[DataType](action.dataType))
     } else {
@@ -3599,7 +3619,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       None
     }
     val position = if (action.colPosition != null) {
-      Some(UnresolvedFieldPosition(columnNameParts, typedVisit[ColumnPosition](action.colPosition)))
+      Some(UnresolvedFieldPosition(typedVisit[ColumnPosition](action.colPosition)))
     } else {
       None
     }
@@ -3608,7 +3628,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
     AlterTableAlterColumn(
       createUnresolvedTable(ctx.table, s"ALTER TABLE ... $verb COLUMN"),
-      UnresolvedFieldName(columnNameParts),
+      UnresolvedFieldName(typedVisit[Seq[String]](ctx.column)),
       dataType = dataType,
       nullable = nullable,
       comment = comment,
@@ -3647,7 +3667,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       nullable = None,
       comment = Option(ctx.colType().commentSpec()).map(visitCommentSpec),
       position = Option(ctx.colPosition).map(
-        pos => UnresolvedFieldPosition(columnNameParts, typedVisit[ColumnPosition](pos))))
+        pos => UnresolvedFieldPosition(typedVisit[ColumnPosition](pos))))
   }
 
   override def visitHiveReplaceColumns(

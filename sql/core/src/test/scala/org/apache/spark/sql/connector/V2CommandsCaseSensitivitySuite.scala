@@ -192,7 +192,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
         AlterTableDropColumns(table, Seq(UnresolvedFieldName(ref))),
-        Seq("Cannot delete missing field", ref.quoted)
+        Seq("Missing field " + ref.quoted)
       )
     }
   }
@@ -201,7 +201,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
         AlterTableRenameColumn(table, UnresolvedFieldName(ref), "newName"),
-        Seq("Cannot rename missing field", ref.quoted)
+        Seq("Missing field " + ref.quoted)
       )
     }
   }
@@ -210,7 +210,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
         AlterTableAlterColumn(table, UnresolvedFieldName(ref), None, Some(true), None, None),
-        Seq("Cannot update missing field", ref.quoted)
+        Seq("Missing field " + ref.quoted)
       )
     }
   }
@@ -219,7 +219,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
         AlterTableAlterColumn(table, UnresolvedFieldName(ref), Some(StringType), None, None, None),
-        Seq("Cannot update missing field", ref.quoted)
+        Seq("Missing field " + ref.quoted)
       )
     }
   }
@@ -228,7 +228,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
         AlterTableAlterColumn(table, UnresolvedFieldName(ref), None, None, Some("comment"), None),
-        Seq("Cannot update missing field", ref.quoted)
+        Seq("Missing field " + ref.quoted)
       )
     }
   }

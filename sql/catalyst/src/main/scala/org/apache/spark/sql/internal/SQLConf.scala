@@ -526,10 +526,35 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  private val MIN_PARTITION_SIZE_KEY = "spark.sql.adaptive.coalescePartitions.minPartitionSize"
+
+  val COALESCE_PARTITIONS_PARALLELISM_FIRST =
+    buildConf("spark.sql.adaptive.coalescePartitions.parallelismFirst")
+      .doc("When true, Spark ignores the target size specified by " +
+        s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' (default 64MB) when coalescing contiguous " +
+        "shuffle partitions, and only respect the minimum partition size specified by " +
+        s"'$MIN_PARTITION_SIZE_KEY' (default 1MB), to maximize the parallelism. " +
+        "This is to avoid performance regression when enabling adaptive query execution. " +
+        "It's recommended to set this config to false and respect the target size specified by " +
+        s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val COALESCE_PARTITIONS_MIN_PARTITION_SIZE =
+    buildConf("spark.sql.adaptive.coalescePartitions.minPartitionSize")
+      .doc("The minimum size of shuffle partitions after coalescing. Its value can be at most " +
+        s"20% of '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'. This is useful when the target size " +
+        "is ignored during partition coalescing, which is the default case.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("1MB")
+
   val COALESCE_PARTITIONS_MIN_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.minPartitionNum")
-      .doc("The suggested (not guaranteed) minimum number of shuffle partitions after " +
-        "coalescing. If not set, the default value is the default parallelism of the " +
+      .internal()
+      .doc("(deprecated) The suggested (not guaranteed) minimum number of shuffle partitions " +
+        "after coalescing. If not set, the default value is the default parallelism of the " +
         "Spark cluster. This configuration only has an effect when " +
         s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${COALESCE_PARTITIONS_ENABLED.key}' are both true.")
@@ -652,6 +677,14 @@ object SQLConf {
       .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
+
+  val ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS =
+    buildConf("spark.sql.adaptive.customCostEvaluatorClass")
+      .doc("The custom cost evaluator class to be used for adaptive execution. If not being set," +
+        " Spark will use its own SimpleCostEvaluator by default.")
+      .version("3.2.0")
+      .stringConf
+      .createOptional
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
@@ -2827,10 +2860,10 @@ object SQLConf {
 
   val TIMESTAMP_TYPE =
     buildConf("spark.sql.timestampType")
-      .doc("Configures the default timestamp type of Spark SQL, including SQL DDL and Cast " +
-        s"clause. Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ.toString} will " +
+      .doc("Configures the default timestamp type of Spark SQL, including SQL DDL, Cast clause " +
+        s"and type literal. Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ} will " +
         "use TIMESTAMP WITHOUT TIME ZONE as the default type while putting it as " +
-        s"${TimestampTypes.TIMESTAMP_LTZ.toString} will use TIMESTAMP WITH LOCAL TIME ZONE. " +
+        s"${TimestampTypes.TIMESTAMP_LTZ} will use TIMESTAMP WITH LOCAL TIME ZONE. " +
         "Before the 3.2.0 release, Spark only supports the TIMESTAMP WITH " +
         "LOCAL TIME ZONE type.")
       .version("3.2.0")
@@ -3302,6 +3335,13 @@ object SQLConf {
     .intConf
     .createWithDefault(0)
 
+  val INFER_NESTED_DICT_AS_STRUCT = buildConf("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
+    .doc("PySpark's SparkSession.createDataFrame infers the nested dict as a map by default. " +
+      "When it set to true, it infers the nested dict as a struct.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3352,7 +3392,9 @@ object SQLConf {
       DeprecatedConfig(AVRO_REBASE_MODE_IN_READ.alternatives.head, "3.2",
         s"Use '${AVRO_REBASE_MODE_IN_READ.key}' instead."),
       DeprecatedConfig(LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key, "3.2",
-        """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead.""")
+        """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead."""),
+      DeprecatedConfig(COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, "3.2",
+        s"Use '${COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key}' instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -4012,6 +4054,8 @@ class SQLConf extends Serializable with Logging {
   def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
 
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
+
+  def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
 
   /** ********************** SQLConf functionality methods ************ */
 

@@ -1525,6 +1525,18 @@ class SparkSubmitSuite
       conf.get(k) should be (v)
     }
   }
+
+  test("handles arguments with --keep-spark-context-alive") {
+    val clArgs = Seq(
+      "--name=myApp",
+      "--class=org.FooBar",
+      "--keep-spark-context-alive", "true",
+      "test.jar"
+    )
+    val appArgs = new SparkSubmitArguments(clArgs)
+    appArgs.name should be ("myApp")
+    appArgs.keepSparkContextAlive should be (true)
+  }
 }
 
 object SparkSubmitSuite extends SparkFunSuite with TimeLimits {

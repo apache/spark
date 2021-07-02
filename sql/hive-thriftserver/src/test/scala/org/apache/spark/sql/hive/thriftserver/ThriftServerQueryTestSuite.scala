@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.util.fileToString
 import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveString, TimeFormatters}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
 
 // scalastyle:off line.size.limit
@@ -112,6 +113,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
           statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key} = true")
         case _: AnsiTest =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
+        case _: TimestampNTZTest =>
+          statement.execute(s"SET ${SQLConf.TIMESTAMP_TYPE.key} = " +
+            s"${TimestampTypes.TIMESTAMP_NTZ.toString}")
         case _ =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = false")
       }
@@ -244,6 +248,8 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
         AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}timestampNTZ")) {
+        TimestampNTZTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }

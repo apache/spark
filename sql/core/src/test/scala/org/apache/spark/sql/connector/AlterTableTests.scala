@@ -616,8 +616,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t ALTER COLUMN data TYPE string")
       }
 
-      assert(exc.getMessage.contains("data"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field data"))
     }
   }
 
@@ -630,8 +629,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t ALTER COLUMN point.x TYPE double")
       }
 
-      assert(exc.getMessage.contains("point.x"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field point.x"))
     }
   }
 
@@ -689,7 +687,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val e1 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ALTER COLUMN b AFTER non_exist"))
-      assert(e1.getMessage.contains("Couldn't resolve positional argument"))
+      assert(e1.getMessage.contains("Missing field non_exist"))
 
       sql(s"ALTER TABLE $t ALTER COLUMN point.y FIRST")
       assert(getTableMetadata(tableName).schema == new StructType()
@@ -711,7 +709,7 @@ trait AlterTableTests extends SharedSparkSession {
 
       val e2 = intercept[AnalysisException](
         sql(s"ALTER TABLE $t ALTER COLUMN point.y AFTER non_exist"))
-      assert(e2.getMessage.contains("Couldn't resolve positional argument"))
+      assert(e2.getMessage.contains("Missing field point.non_exist"))
 
       // `AlterTable.resolved` checks column existence.
       intercept[AnalysisException](
@@ -802,8 +800,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t ALTER COLUMN data COMMENT 'doc'")
       }
 
-      assert(exc.getMessage.contains("data"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field data"))
     }
   }
 
@@ -816,8 +813,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t ALTER COLUMN point.x COMMENT 'doc'")
       }
 
-      assert(exc.getMessage.contains("point.x"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field point.x"))
     }
   }
 
@@ -918,8 +914,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t RENAME COLUMN data TO some_string")
       }
 
-      assert(exc.getMessage.contains("data"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field data"))
     }
   }
 
@@ -932,8 +927,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t RENAME COLUMN point.x TO z")
       }
 
-      assert(exc.getMessage.contains("point.x"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field point.x"))
     }
   }
 
@@ -1063,8 +1057,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t DROP COLUMN data")
       }
 
-      assert(exc.getMessage.contains("data"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field data"))
     }
   }
 
@@ -1077,8 +1070,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t DROP COLUMN point.x")
       }
 
-      assert(exc.getMessage.contains("point.x"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field point.x"))
     }
   }
 

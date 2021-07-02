@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
-import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -454,6 +454,17 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("type constructors") {
+    def checkTimestampNTZAndLTZ(): Unit = {
+      // Timestamp with local time zone
+      assertEqual("tImEstAmp_LTZ '2016-03-11 20:54:00.000'",
+        Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
+      intercept("timestamP_LTZ '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP_LTZ value")
+      // Timestamp without time zone
+      assertEqual("tImEstAmp_Ntz '2016-03-11 20:54:00.000'",
+        Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
+      intercept("tImEstAmp_Ntz '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP_NTZ value")
+    }
+
     // Dates.
     assertEqual("dAte '2016-03-11'", Literal(Date.valueOf("2016-03-11")))
     intercept("DAtE 'mar 11 2016'", "Cannot parse the DATE value")
@@ -463,6 +474,20 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
     intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
+    checkTimestampNTZAndLTZ()
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
+      assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
+        Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
+
+      intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
+
+      // If the timestamp string contains time zone, return a timestamp with local time zone literal
+      assertEqual("tImEstAmp '1970-01-01 00:00:00.000 +01:00'",
+        Literal(-3600000000L, TimestampType))
+
+      // The behavior of TIMESTAMP_NTZ and TIMESTAMP_LTZ is independent of SQLConf.TIMESTAMP_TYPE
+      checkTimestampNTZAndLTZ()
+    }
     // Interval.
     val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
@@ -653,18 +678,7 @@ class ExpressionParserSuite extends AnalysisTest {
     }
   }
 
-  val intervalUnits = Seq(
-    YEAR,
-    MONTH,
-    WEEK,
-    DAY,
-    HOUR,
-    MINUTE,
-    SECOND,
-    MILLISECOND,
-    MICROSECOND)
-
-  def intervalLiteral(u: IntervalUnit, s: String): Literal = {
+  def intervalLiteral(u: UTF8String, s: String): Literal = {
     Literal(IntervalUtils.stringToInterval(s + " " + u.toString))
   }
 
@@ -684,18 +698,19 @@ class ExpressionParserSuite extends AnalysisTest {
     // Single Intervals.
     val forms = Seq("", "s")
     val values = Seq("0", "10", "-7", "21")
-    intervalUnits.foreach { unit =>
-      forms.foreach { form =>
-         values.foreach { value =>
-           val expected = intervalLiteral(unit, value)
-           checkIntervals(s"$value $unit$form", expected)
-           checkIntervals(s"'$value' $unit$form", expected)
-         }
+    Seq("year", "month", "week", "day", "hour", "minute", "second", "millisecond", "microsecond")
+      .foreach { unit =>
+        forms.foreach { form =>
+          values.foreach { value =>
+            val expected = intervalLiteral(unit, value)
+            checkIntervals(s"$value $unit$form", expected)
+            checkIntervals(s"'$value' $unit$form", expected)
+          }
+        }
       }
-    }
 
     // Hive nanosecond notation.
-    checkIntervals("13.123456789 seconds", intervalLiteral(SECOND, "13.123456789"))
+    checkIntervals("13.123456789 seconds", intervalLiteral("second", "13.123456789"))
     checkIntervals(
       "-13.123456789 second",
       Literal(new CalendarInterval(
@@ -744,7 +759,8 @@ class ExpressionParserSuite extends AnalysisTest {
         "0:0:0",
         "0:0:1")
       hourTimeValues.foreach { value =>
-        val result = Literal(IntervalUtils.fromDayTimeString(value, HOUR, SECOND))
+        val result = Literal(IntervalUtils.fromDayTimeString(
+          value, DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND))
         checkIntervals(s"'$value' hour to second", result)
       }
     }
