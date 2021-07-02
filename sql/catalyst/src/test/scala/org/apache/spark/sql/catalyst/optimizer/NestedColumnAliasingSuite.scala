@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Cross
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.types.{IntegerType, Metadata, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 class NestedColumnAliasingSuite extends SchemaPruningTest {
 
@@ -745,7 +745,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
       .add(StructField("search_params", StructType(Seq(
         StructField("col1", StringType),
         StructField("col2", StringType)
-      )), true, Metadata.fromJson("{\"name\":\"aaa\",\"idx\":0}")))
+      ))))
     val relation = LocalRelation('struct_data.struct(dataType))
     val plan = relation
       .repartition(100)
