@@ -144,7 +144,8 @@ object NestedColumnAliasing {
         attr -> evAliasSeq
       }
 
-    val nestedFieldToAlias = attributeToExtractValuesAndAliases.values.flatten.toMap
+    val nestedFieldToAlias = attributeToExtractValuesAndAliases.values.flatten
+      .map { case (field, alias) => field.canonicalized -> alias }.toMap
 
     // A reference attribute can have multiple aliases for nested fields.
     val attrToAliases =
@@ -167,15 +168,10 @@ object NestedColumnAliasing {
    */
   def getNewProjectList(
       projectList: Seq[NamedExpression],
-      nestedFieldToAlias: Map[ExtractValue, Alias]): Seq[NamedExpression] = {
+      nestedFieldToAlias: Map[Expression, Alias]): Seq[NamedExpression] = {
     projectList.map(_.transform {
-      case f: ExtractValue =>
-        val matched = nestedFieldToAlias.find(_._1.semanticEquals(f))
-        if (matched.isDefined) {
-          matched.get._2.toAttribute
-        } else {
-          f
-        }
+      case f: ExtractValue if nestedFieldToAlias.contains(f.canonicalized) =>
+        nestedFieldToAlias(f.canonicalized).toAttribute
     }.asInstanceOf[NamedExpression])
   }
 
@@ -185,18 +181,13 @@ object NestedColumnAliasing {
    */
   def replaceWithAliases(
       plan: LogicalPlan,
-      nestedFieldToAlias: Map[ExtractValue, Alias],
+      nestedFieldToAlias: Map[Expression, Alias],
       attrToAliases: AttributeMap[Seq[Alias]]): LogicalPlan = {
     plan.withNewChildren(plan.children.map { plan =>
       Project(plan.output.flatMap(a => attrToAliases.getOrElse(a, Seq(a))), plan)
     }).transformExpressions {
-      case f: ExtractValue =>
-        val matched = nestedFieldToAlias.find(_._1.semanticEquals(f))
-        if (matched.isDefined) {
-          matched.get._2.toAttribute
-        } else {
-          f
-        }
+      case f: ExtractValue if nestedFieldToAlias.contains(f.canonicalized) =>
+        nestedFieldToAlias(f.canonicalized).toAttribute
     }
   }
 
