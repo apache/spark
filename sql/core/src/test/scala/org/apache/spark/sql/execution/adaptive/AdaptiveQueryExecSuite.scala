@@ -1526,8 +1526,8 @@ class AdaptiveQueryExecSuite
         val dfRepartitionWithNum = df.repartition(5, 'b)
         dfRepartitionWithNum.collect()
         val planWithNum = dfRepartitionWithNum.queryExecution.executedPlan
-        // The top shuffle from repartition is optimized out.
-        assert(!hasRepartitionShuffle(planWithNum))
+        // The top shuffle from repartition is not optimized out.
+        assert(hasRepartitionShuffle(planWithNum))
         val bhjWithNum = findTopLevelBroadcastHashJoin(planWithNum)
         assert(bhjWithNum.length == 1)
         checkNumLocalShuffleReaders(planWithNum, 1)
