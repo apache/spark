@@ -3,8 +3,15 @@ name: Build and test
 on:
   push:
     branches:
-    - '**'
-    - '!branch-*.*'
+    - branch-3.2
+  pull_request:
+    branches:
+    - branch-3.2
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Target branch to run'
+        required: true
 
 jobs:
   # Build: build Spark and run the tests for specified modules.
