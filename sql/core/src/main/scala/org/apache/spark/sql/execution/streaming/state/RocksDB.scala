@@ -88,7 +88,6 @@ class RocksDB(
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
   @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
-  @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
 
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
@@ -303,8 +302,8 @@ class RocksDB(
     }
 
     RocksDBMetrics(
-      numCommittedKeys,
-      numUncommittedKeys,
+      numKeysOnLoadedVersion,
+      numKeysOnWritingVersion,
       readerMemUsage + memTableMemUsage,
       totalSSTFilesBytes,
       nativeOpsLatencyMicros,
@@ -344,6 +343,10 @@ class RocksDB(
   private def release(): Unit = acquireLock.synchronized {
     acquiredThreadInfo = null
     acquireLock.notifyAll()
+  }
+
+  private def getDBProperty(property: String): Long = {
+    db.getProperty(property).toLong
   }
 
   private def openDB(): Unit = {
