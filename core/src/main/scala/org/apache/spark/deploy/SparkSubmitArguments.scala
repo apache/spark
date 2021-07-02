@@ -82,7 +82,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var submissionToKill: String = null
   var submissionToRequestStatusFor: String = null
   var useRest: Boolean = false // used internally
-  var isServer: Boolean = false
+  var isServer: Boolean = false // whether start as server
 
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
