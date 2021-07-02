@@ -145,6 +145,13 @@ object SubExprUtils extends PredicateHelper {
   }
 
   /**
+   * Wrap attributes in the expression with [[OuterReference]]s.
+   */
+  def wrapOuterReference[E <: Expression](e: E): E = {
+    e.transform { case a: Attribute => OuterReference(a) }.asInstanceOf[E]
+  }
+
+  /**
    * Given a logical plan, returns TRUE if it has an outer reference and false otherwise.
    */
   def hasOuterReferences(plan: LogicalPlan): Boolean = {

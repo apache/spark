@@ -18,13 +18,14 @@
 """
 MLflow-related functions to load models and apply them to pandas-on-Spark dataframes.
 """
-from typing import List, Tuple, Union  # noqa: F401 (SPARK-34943)
+from typing import List, Union  # noqa: F401 (SPARK-34943)
 
 from pyspark.sql.types import DataType
 import pandas as pd
 import numpy as np
 from typing import Any
 
+from pyspark.pandas._typing import Label  # noqa: F401 (SPARK-34943)
 from pyspark.pandas.utils import lazy_property, default_session
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series, first_series
@@ -99,7 +100,7 @@ class PythonModelWrapper(object):
             # return_col = self._model_udf(s)
             column_labels = [
                 (col,) for col in data._internal.spark_frame.select(return_col).columns
-            ]  # type: List[Tuple]
+            ]  # type: List[Label]
             internal = data._internal.copy(
                 column_labels=column_labels, data_spark_columns=[return_col], data_fields=None
             )

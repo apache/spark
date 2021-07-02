@@ -40,7 +40,7 @@ from pyspark.sql import functions as F, Column
 from pyspark.sql.types import FractionalType, IntegralType, TimestampType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import Dtype, Scalar
+from pyspark.pandas._typing import Dtype, Label, Name, Scalar
 from pyspark.pandas.config import get_option, option_context
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.frame import DataFrame
@@ -125,7 +125,7 @@ class Index(IndexOpsMixin):
         data: Optional[Any] = None,
         dtype: Optional[Union[str, Dtype]] = None,
         copy: bool = False,
-        name: Optional[Union[Any, Tuple]] = None,
+        name: Optional[Name] = None,
         tupleize_cols: bool = True,
         **kwargs: Any
     ) -> "Index":
@@ -215,7 +215,7 @@ class Index(IndexOpsMixin):
         )
 
     @property
-    def _column_label(self) -> Optional[Tuple]:
+    def _column_label(self) -> Optional[Label]:
         return self._psdf._internal.index_names[0]
 
     def _with_new_scol(self, scol: Column, *, field: Optional[InternalField] = None) -> "Index":
@@ -636,24 +636,24 @@ class Index(IndexOpsMixin):
         return not self.has_duplicates
 
     @property
-    def name(self) -> Union[Any, Tuple]:
+    def name(self) -> Name:
         """Return name of the Index."""
         return self.names[0]
 
     @name.setter
-    def name(self, name: Union[Any, Tuple]) -> None:
+    def name(self, name: Name) -> None:
         self.names = [name]
 
     @property
-    def names(self) -> List[Union[Any, Tuple]]:
+    def names(self) -> List[Name]:
         """Return names of the Index."""
         return [
             name if name is None or len(name) > 1 else name[0]
-            for name in self._internal.index_names  # type: ignore
+            for name in self._internal.index_names
         ]
 
     @names.setter
-    def names(self, names: List[Union[Any, Tuple]]) -> None:
+    def names(self, names: List[Name]) -> None:
         if not is_list_like(names):
             raise ValueError("Names must be a list-like")
         if self._internal.index_level != len(names):
@@ -684,9 +684,7 @@ class Index(IndexOpsMixin):
         """
         return self._internal.index_level
 
-    def rename(
-        self, name: Union[Any, Tuple, List[Union[Any, Tuple]]], inplace: bool = False
-    ) -> Optional["Index"]:
+    def rename(self, name: Union[Name, List[Name]], inplace: bool = False) -> Optional["Index"]:
         """
         Alter Index or MultiIndex name.
         Able to set new names without level. Defaults to returning new index.
@@ -749,7 +747,7 @@ class Index(IndexOpsMixin):
         else:
             return DataFrame(internal).index
 
-    def _verify_for_rename(self, name: Union[Any, Tuple]) -> List[Tuple]:
+    def _verify_for_rename(self, name: Name) -> List[Label]:
         if is_hashable(name):
             if is_name_like_tuple(name):
                 return [name]
@@ -830,7 +828,7 @@ class Index(IndexOpsMixin):
         )
         return DataFrame(internal).index
 
-    def to_series(self, name: Optional[Union[Any, Tuple]] = None) -> Series:
+    def to_series(self, name: Optional[Name] = None) -> Series:
         """
         Create a Series with both index and values equal to the index keys
         useful with map for returning an indexer based on an index.
@@ -868,7 +866,7 @@ class Index(IndexOpsMixin):
             name = self.name
         column_labels = [
             name if is_name_like_tuple(name) else (name,)
-        ]  # type: List[Optional[Tuple]]
+        ]  # type: List[Optional[Label]]
         internal = self._internal.copy(
             column_labels=column_labels,
             data_spark_columns=[scol],
@@ -877,7 +875,7 @@ class Index(IndexOpsMixin):
         )
         return first_series(DataFrame(internal))
 
-    def to_frame(self, index: bool = True, name: Optional[Union[Any, Tuple]] = None) -> DataFrame:
+    def to_frame(self, index: bool = True, name: Optional[Name] = None) -> DataFrame:
         """
         Create a DataFrame with a column containing the Index.
 
@@ -939,7 +937,7 @@ class Index(IndexOpsMixin):
 
         return self._to_frame(index=index, names=[name])
 
-    def _to_frame(self, index: bool, names: List[Tuple]) -> DataFrame:
+    def _to_frame(self, index: bool, names: List[Label]) -> DataFrame:
         if index:
             index_spark_columns = self._internal.index_spark_columns
             index_names = self._internal.index_names
@@ -1115,7 +1113,7 @@ class Index(IndexOpsMixin):
         )
         return DataFrame(internal).index
 
-    def unique(self, level: Optional[Union[int, Any, Tuple]] = None) -> "Index":
+    def unique(self, level: Optional[Union[int, Name]] = None) -> "Index":
         """
         Return unique values in the index.
 
@@ -1203,7 +1201,7 @@ class Index(IndexOpsMixin):
         )
         return DataFrame(internal).index
 
-    def _validate_index_level(self, level: Union[int, Any, Tuple]) -> None:
+    def _validate_index_level(self, level: Union[int, Name]) -> None:
         """
         Validate index level.
         For single-level Index getting level number is a no-op, but some
@@ -1222,7 +1220,7 @@ class Index(IndexOpsMixin):
                 "Requested level ({}) does not match index name ({})".format(level, self.name)
             )
 
-    def get_level_values(self, level: Union[int, Any, Tuple]) -> "Index":
+    def get_level_values(self, level: Union[int, Name]) -> "Index":
         """
         Return Index if a valid level is given.
 
@@ -1238,9 +1236,7 @@ class Index(IndexOpsMixin):
         self._validate_index_level(level)
         return self
 
-    def copy(
-        self, name: Optional[Union[Any, Tuple]] = None, deep: Optional[bool] = None
-    ) -> "Index":
+    def copy(self, name: Optional[Name] = None, deep: Optional[bool] = None) -> "Index":
         """
         Make a copy of this object. name sets those attributes on the new object.
 
@@ -1279,7 +1275,7 @@ class Index(IndexOpsMixin):
             result.name = name
         return result
 
-    def droplevel(self, level: Union[int, Any, Tuple, List[Union[int, Any, Tuple]]]) -> "Index":
+    def droplevel(self, level: Union[int, Name, List[Union[int, Name]]]) -> "Index":
         """
         Return index with requested level(s) removed.
         If resulting index has only 1 level left, the result will be
@@ -1317,9 +1313,9 @@ class Index(IndexOpsMixin):
         names = self.names
         nlevels = self.nlevels
         if not is_list_like(level):
-            levels = [cast(Union[int, Any, Tuple], level)]
+            levels = [cast(Union[int, Name], level)]
         else:
-            levels = cast(List[Union[int, Any, Tuple]], level)
+            levels = cast(List[Union[int, Name]], level)
 
         int_level = set()
         for n in levels:
@@ -1375,7 +1371,7 @@ class Index(IndexOpsMixin):
     def symmetric_difference(
         self,
         other: "Index",
-        result_name: Optional[Union[Any, Tuple]] = None,
+        result_name: Optional[Name] = None,
         sort: Optional[bool] = None,
     ) -> "Index":
         """
@@ -1887,8 +1883,8 @@ class Index(IndexOpsMixin):
 
     def set_names(
         self,
-        names: Union[Any, Tuple, List[Union[Any, Tuple]]],
-        level: Optional[Union[int, Any, Tuple, List[Union[int, Any, Tuple]]]] = None,
+        names: Union[Name, List[Name]],
+        level: Optional[Union[int, Name, List[Union[int, Name]]]] = None,
         inplace: bool = False,
     ) -> Optional["Index"]:
         """

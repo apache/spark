@@ -28,11 +28,11 @@ import org.apache.spark.annotation.Unstable
  * Its valid range is [0001-01-01T00:00:00.000000, 9999-12-31T23:59:59.999999].
  * To represent an absolute point in time, use `TimestampType` instead.
  *
- * Please use the singleton `DataTypes.TimestampWithoutTZType` to refer the type.
+ * Please use the singleton `DataTypes.TimestampNTZType` to refer the type.
  * @since 3.2.0
  */
 @Unstable
-class TimestampWithoutTZType private() extends AtomicType {
+class TimestampNTZType private() extends AtomicType {
   /**
    * Internally, a timestamp is stored as the number of microseconds from
    * the epoch of 1970-01-01T00:00:00.000000(Unix system time zero)
@@ -44,22 +44,22 @@ class TimestampWithoutTZType private() extends AtomicType {
   private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
-   * The default size of a value of the TimestampWithoutTZType is 8 bytes.
+   * The default size of a value of the TimestampNTZType is 8 bytes.
    */
   override def defaultSize: Int = 8
 
-  override def typeName: String = "timestamp without time zone"
+  override def typeName: String = "timestamp_ntz"
 
-  private[spark] override def asNullable: TimestampWithoutTZType = this
+  private[spark] override def asNullable: TimestampNTZType = this
 }
 
 /**
  * The companion case object and its class is separated so the companion object also subclasses
- * the TimestampWithoutTZType class. Otherwise, the companion object would be of type
- * "TimestampWithoutTZType" in byte code. Defined with a private constructor so the companion
+ * the TimestampNTZType class. Otherwise, the companion object would be of type
+ * "TimestampNTZType" in byte code. Defined with a private constructor so the companion
  * object is the only possible instantiation.
  *
  * @since 3.2.0
  */
 @Unstable
-case object TimestampWithoutTZType extends TimestampWithoutTZType
+case object TimestampNTZType extends TimestampNTZType

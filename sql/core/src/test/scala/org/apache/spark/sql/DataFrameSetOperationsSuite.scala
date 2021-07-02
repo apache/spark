@@ -922,12 +922,70 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-35756: unionByName support struct having same col names but different sequence") {
+    // struct having same col names but different sequence
+    var df1 = Seq(("d1", Struct1(1, 2))).toDF("a", "b")
+    var df2 = Seq(("d2", Struct2(1, 2))).toDF("a", "b")
+    var unionDF = df1.unionByName(df2)
+    var expected = Row("d1", Row(1, 2)) :: Row("d2", Row(2, 1)) :: Nil
+    val schema = StructType(Seq(StructField("a", StringType),
+      StructField("b", StructType(Seq(StructField("c1", IntegerType),
+        StructField("c2", IntegerType))))))
+
+    assert(unionDF.schema === schema)
+    checkAnswer(unionDF, expected)
+
+    // nested struct, inner struct having different col name
+    df1 = Seq((0, UnionClass1a(0, 1L, UnionClass2(1, "2")))).toDF("id", "a")
+    df2 = Seq((1, UnionClass1b(1, 2L, UnionClass3(2, 3L)))).toDF("id", "a")
+    var errMsg = intercept[AnalysisException] {
+      df1.unionByName(df2)
+    }.getMessage
+    assert(errMsg.contains("No such struct field c in a, b"))
+
+    // If right side of the nested struct has extra col.
+    df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
+    df2 = Seq((1, 2, UnionClass1e(1, 2, Struct4(1, 5)))).toDF("a", "b", "c")
+    errMsg = intercept[AnalysisException] {
+      df1.unionByName(df2)
+    }.getMessage
+    assert(errMsg.contains("Union can only be performed on tables with" +
+      " the compatible column types." +
+      " struct<c1:int,c2:int,c3:struct<c3:int,c5:int>> <> struct<c1:int,c2:int,c3:struct<c3:int>>" +
+      " at the third column of the second table"))
+
+    // diff Case sensitive attributes names and diff sequence scenario for unionByName
+    df1 = Seq((1, 2, UnionClass1d(1, 2, Struct3(1)))).toDF("a", "b", "c")
+    df2 = Seq((1, 2, UnionClass1f(1, 2, Struct3a(1)))).toDF("a", "b", "c")
+    expected =
+      Row(1, 2, Row(1, 2, Row(1))) :: Row(1, 2, Row(2, 1, Row(1))) :: Nil
+
+    unionDF = df1.unionByName(df2)
+    checkAnswer(unionDF, expected)
+
+    df1 = Seq((1, Struct1(1, 2))).toDF("a", "b")
+    df2 = Seq((1, Struct2a(1, 2))).toDF("a", "b")
+    expected = Row(1, Row(1, 2)) :: Row(1, Row(2, 1)) :: Nil
+
+    unionDF = df1.unionByName(df2)
+    checkAnswer(unionDF, expected)
+  }
 }
 
 case class UnionClass1a(a: Int, b: Long, nested: UnionClass2)
 case class UnionClass1b(a: Int, b: Long, nested: UnionClass3)
 case class UnionClass1c(a: Int, b: Long, nested: UnionClass4)
+case class UnionClass1d(c1: Int, c2: Int, c3: Struct3)
+case class UnionClass1e(c2: Int, c1: Int, c3: Struct4)
+case class UnionClass1f(c2: Int, c1: Int, c3: Struct3a)
 
 case class UnionClass2(a: Int, c: String)
 case class UnionClass3(a: Int, b: Long)
 case class UnionClass4(A: Int, b: Long)
+case class Struct1(c1: Int, c2: Int)
+case class Struct2(c2: Int, c1: Int)
+case class Struct2a(C2: Int, c1: Int)
+case class Struct3(c3: Int)
+case class Struct3a(C3: Int)
+case class Struct4(c3: Int, c5: Int)

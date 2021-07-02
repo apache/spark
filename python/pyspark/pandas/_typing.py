@@ -16,7 +16,7 @@
 #
 import datetime
 import decimal
-from typing import TypeVar, Union, TYPE_CHECKING
+from typing import Any, Tuple, TypeVar, Union, TYPE_CHECKING
 
 import numpy as np
 from pandas.api.extensions import ExtensionDtype
@@ -39,6 +39,10 @@ IndexOpsLike = TypeVar("IndexOpsLike", bound="IndexOpsMixin")
 Scalar = Union[
     int, float, bool, str, bytes, decimal.Decimal, datetime.date, datetime.datetime, None
 ]
+
+# TODO: use the actual type parameters.
+Label = Tuple[Any, ...]
+Name = Union[Any, Label]
 
 Axis = Union[int, str]
 Dtype = Union[np.dtype, ExtensionDtype]

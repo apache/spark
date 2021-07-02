@@ -41,6 +41,7 @@ from pyspark.sql.types import (  # noqa: F401
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps
+from pyspark.pandas._typing import Label
 
 if TYPE_CHECKING:
     # This is required in old Python 3.5 to prevent circular reference.
@@ -529,12 +530,12 @@ class InternalFrame(object):
         self,
         spark_frame: SparkDataFrame,
         index_spark_columns: Optional[List[Column]],
-        index_names: Optional[List[Optional[Tuple]]] = None,
+        index_names: Optional[List[Optional[Label]]] = None,
         index_fields: Optional[List[InternalField]] = None,
-        column_labels: Optional[List[Tuple]] = None,
+        column_labels: Optional[List[Label]] = None,
         data_spark_columns: Optional[List[Column]] = None,
         data_fields: Optional[List[InternalField]] = None,
-        column_label_names: Optional[List[Optional[Tuple]]] = None,
+        column_label_names: Optional[List[Optional[Label]]] = None,
     ):
         """
         Create a new internal immutable DataFrame to manage Spark DataFrame, column fields and
@@ -783,13 +784,13 @@ class InternalFrame(object):
             is_name_like_tuple(index_name, check_type=True) for index_name in index_names
         ), index_names
 
-        self._index_names = index_names  # type: List[Optional[Tuple]]
+        self._index_names = index_names  # type: List[Optional[Label]]
 
         # column_labels
         if column_labels is None:
             self._column_labels = [
                 (col,) for col in spark_frame.select(self._data_spark_columns).columns
-            ]  # type: List[Tuple]
+            ]  # type: List[Label]
         else:
             assert len(column_labels) == len(self._data_spark_columns), (
                 len(column_labels),
@@ -810,7 +811,7 @@ class InternalFrame(object):
         if column_label_names is None:
             self._column_label_names = [None] * column_labels_level(
                 self._column_labels
-            )  # type: List[Optional[Tuple]]
+            )  # type: List[Optional[Label]]
         else:
             if len(self._column_labels) > 0:
                 assert len(column_label_names) == column_labels_level(self._column_labels), (
@@ -1027,7 +1028,7 @@ class InternalFrame(object):
             False,
         )
 
-    def spark_column_for(self, label: Tuple) -> Column:
+    def spark_column_for(self, label: Label) -> Column:
         """Return Spark Column for the given column label."""
         column_labels_to_scol = dict(zip(self.column_labels, self.data_spark_columns))
         if label in column_labels_to_scol:
@@ -1035,28 +1036,28 @@ class InternalFrame(object):
         else:
             raise KeyError(name_like_string(label))
 
-    def spark_column_name_for(self, label_or_scol: Union[Tuple, Column]) -> str:
+    def spark_column_name_for(self, label_or_scol: Union[Label, Column]) -> str:
         """Return the actual Spark column name for the given column label."""
         if isinstance(label_or_scol, Column):
             return self.spark_frame.select(label_or_scol).columns[0]
         else:
             return self.field_for(label_or_scol).name
 
-    def spark_type_for(self, label_or_scol: Union[Tuple, Column]) -> DataType:
+    def spark_type_for(self, label_or_scol: Union[Label, Column]) -> DataType:
         """Return DataType for the given column label."""
         if isinstance(label_or_scol, Column):
             return self.spark_frame.select(label_or_scol).schema[0].dataType
         else:
             return self.field_for(label_or_scol).spark_type
 
-    def spark_column_nullable_for(self, label_or_scol: Union[Tuple, Column]) -> bool:
+    def spark_column_nullable_for(self, label_or_scol: Union[Label, Column]) -> bool:
         """Return nullability for the given column label."""
         if isinstance(label_or_scol, Column):
             return self.spark_frame.select(label_or_scol).schema[0].nullable
         else:
             return self.field_for(label_or_scol).nullable
 
-    def field_for(self, label: Tuple) -> InternalField:
+    def field_for(self, label: Label) -> InternalField:
         """Return InternalField for the given column label."""
         column_labels_to_fields = dict(zip(self.column_labels, self.data_fields))
         if label in column_labels_to_fields:
@@ -1105,7 +1106,7 @@ class InternalFrame(object):
         ]
 
     @property
-    def index_names(self) -> List[Optional[Tuple]]:
+    def index_names(self) -> List[Optional[Label]]:
         """Return the managed index names."""
         return self._index_names
 
@@ -1115,7 +1116,7 @@ class InternalFrame(object):
         return len(self._index_names)
 
     @property
-    def column_labels(self) -> List[Tuple]:
+    def column_labels(self) -> List[Label]:
         """Return the managed column index."""
         return self._column_labels
 
@@ -1125,7 +1126,7 @@ class InternalFrame(object):
         return len(self._column_label_names)
 
     @property
-    def column_label_names(self) -> List[Optional[Tuple]]:
+    def column_label_names(self) -> List[Optional[Label]]:
         """Return names of the index levels."""
         return self._column_label_names
 
@@ -1197,10 +1198,10 @@ class InternalFrame(object):
         pdf: pd.DataFrame,
         *,
         index_columns: List[str],
-        index_names: List[Tuple],
+        index_names: List[Label],
         data_columns: List[str],
-        column_labels: List[Tuple],
-        column_label_names: List[Tuple],
+        column_labels: List[Label],
+        column_label_names: List[Label],
         fields: List[InternalField] = None,
     ) -> pd.DataFrame:
         """
@@ -1335,9 +1336,9 @@ class InternalFrame(object):
         self,
         scols_or_pssers: Sequence[Union[Column, "Series"]],
         *,
-        column_labels: Optional[List[Tuple]] = None,
+        column_labels: Optional[List[Label]] = None,
         data_fields: Optional[List[InternalField]] = None,
-        column_label_names: Union[Optional[List[Optional[Tuple]]], _NoValueType] = _NoValue,
+        column_label_names: Union[Optional[List[Optional[Label]]], _NoValueType] = _NoValue,
         keep_order: bool = True,
     ) -> "InternalFrame":
         """
@@ -1439,7 +1440,7 @@ class InternalFrame(object):
 
     def with_new_spark_column(
         self,
-        column_label: Tuple,
+        column_label: Label,
         scol: Column,
         *,
         field: Optional[InternalField] = None,
@@ -1465,7 +1466,7 @@ class InternalFrame(object):
             data_spark_columns, data_fields=data_fields, keep_order=keep_order
         )
 
-    def select_column(self, column_label: Tuple) -> "InternalFrame":
+    def select_column(self, column_label: Label) -> "InternalFrame":
         """
         Copy the immutable InternalFrame with the specified column.
 
@@ -1486,12 +1487,12 @@ class InternalFrame(object):
         *,
         spark_frame: Union[SparkDataFrame, _NoValueType] = _NoValue,
         index_spark_columns: Union[List[Column], _NoValueType] = _NoValue,
-        index_names: Union[Optional[List[Optional[Tuple]]], _NoValueType] = _NoValue,
+        index_names: Union[Optional[List[Optional[Label]]], _NoValueType] = _NoValue,
         index_fields: Union[Optional[List[InternalField]], _NoValueType] = _NoValue,
-        column_labels: Union[Optional[List[Tuple]], _NoValueType] = _NoValue,
+        column_labels: Union[Optional[List[Label]], _NoValueType] = _NoValue,
         data_spark_columns: Union[Optional[List[Column]], _NoValueType] = _NoValue,
         data_fields: Union[Optional[List[InternalField]], _NoValueType] = _NoValue,
-        column_label_names: Union[Optional[List[Optional[Tuple]]], _NoValueType] = _NoValue,
+        column_label_names: Union[Optional[List[Optional[Label]]], _NoValueType] = _NoValue,
     ) -> "InternalFrame":
         """
         Copy the immutable InternalFrame.
@@ -1530,12 +1531,12 @@ class InternalFrame(object):
         return InternalFrame(
             spark_frame=cast(SparkDataFrame, spark_frame),
             index_spark_columns=cast(List[Column], index_spark_columns),
-            index_names=cast(Optional[List[Optional[Tuple]]], index_names),
+            index_names=cast(Optional[List[Optional[Label]]], index_names),
             index_fields=cast(Optional[List[InternalField]], index_fields),
-            column_labels=cast(Optional[List[Tuple]], column_labels),
+            column_labels=cast(Optional[List[Label]], column_labels),
             data_spark_columns=cast(Optional[List[Column]], data_spark_columns),
             data_fields=cast(Optional[List[InternalField]], data_fields),
-            column_label_names=cast(Optional[List[Optional[Tuple]]], column_label_names),
+            column_label_names=cast(Optional[List[Optional[Label]]], column_label_names),
         )
 
     @staticmethod
@@ -1548,16 +1549,16 @@ class InternalFrame(object):
 
         index_names = [
             name if name is None or isinstance(name, tuple) else (name,) for name in pdf.index.names
-        ]
+        ]  # type: List[Optional[Label]]
 
         columns = pdf.columns
         if isinstance(columns, pd.MultiIndex):
-            column_labels = columns.tolist()
+            column_labels = columns.tolist()  # type: List[Label]
         else:
             column_labels = [(col,) for col in columns]
         column_label_names = [
             name if name is None or isinstance(name, tuple) else (name,) for name in columns.names
-        ]
+        ]  # type: List[Optional[Label]]
 
         (
             pdf,

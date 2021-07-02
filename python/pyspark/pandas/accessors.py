@@ -28,7 +28,7 @@ from pyspark.sql import functions as F
 from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import DataType, LongType, StructField, StructType
 
-from pyspark.pandas._typing import DataFrameOrSeries
+from pyspark.pandas._typing import DataFrameOrSeries, Name
 from pyspark.pandas.internal import (
     InternalField,
     InternalFrame,
@@ -56,7 +56,7 @@ class PandasOnSparkFrameMethods(object):
     def __init__(self, frame: "DataFrame"):
         self._psdf = frame
 
-    def attach_id_column(self, id_type: str, column: Union[Any, Tuple]) -> "DataFrame":
+    def attach_id_column(self, id_type: str, column: Name) -> "DataFrame":
         """
         Attach a column to be used as identifier of rows similar to the default index.
 

@@ -35,6 +35,7 @@ import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 import org.apache.spark.sql.types.StructType
@@ -470,8 +471,7 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
         if (keySize == -1) {
           eof = true
         } else if (keySize < 0) {
-          throw new IOException(
-            s"Error reading delta file $fileToRead of $this: key size cannot be $keySize")
+          throw QueryExecutionErrors.failedToReadDeltaFileError(fileToRead, toString(), keySize)
         } else {
           val keyRowBuffer = new Array[Byte](keySize)
           ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
@@ -568,8 +568,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
         if (keySize == -1) {
           eof = true
         } else if (keySize < 0) {
-          throw new IOException(
-            s"Error reading snapshot file $fileToRead of $this: key size cannot be $keySize")
+          throw QueryExecutionErrors.failedToReadSnapshotFileError(
+            fileToRead, toString(), s"key size cannot be $keySize")
         } else {
           val keyRowBuffer = new Array[Byte](keySize)
           ByteStreams.readFully(input, keyRowBuffer, 0, keySize)
@@ -579,8 +579,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
 
           val valueSize = input.readInt()
           if (valueSize < 0) {
-            throw new IOException(
-              s"Error reading snapshot file $fileToRead of $this: value size cannot be $valueSize")
+            throw QueryExecutionErrors.failedToReadSnapshotFileError(
+              fileToRead, toString(), s"value size cannot be $valueSize")
           } else {
             val valueRowBuffer = new Array[Byte](valueSize)
             ByteStreams.readFully(input, valueRowBuffer, 0, valueSize)
