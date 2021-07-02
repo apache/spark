@@ -88,6 +88,15 @@ class DatetimeOps(DataTypeOps):
         else:
             raise TypeError("datetime subtraction can only be applied to datetime series.")
 
+    def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("Unary - can not be applied to %s." % self.pretty_name)
+
+    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
+
+    def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("abs() can not be applied to %s." % self.pretty_name)
+
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
         return col
