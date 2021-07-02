@@ -37,6 +37,12 @@ object UnsupportedOperationChecker extends Logging {
       case p if p.isStreaming =>
         throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
 
+      case f: FlatMapGroupsWithState =>
+        if (f.hasInitialState) {
+          throwError("Initial state is not supported in [flatMap|map]GroupsWithState" +
+            " operation on a batch DataFrame/Dataset")(f)
+        }
+
       case _ =>
     }
   }
@@ -232,6 +238,12 @@ object UnsupportedOperationChecker extends Logging {
           // Check compatibility with output modes and aggregations in query
           val aggsInQuery = collectStreamingAggregates(plan)
 
+          if (m.initialState.isStreaming) {
+            // initial state has to be a batch relation
+            throwError("Non-streaming DataFrame/Dataset is not supported as the" +
+              " initial state in [flatMap|map]GroupsWithState operation on a streaming" +
+              " DataFrame/Dataset")
+          }
           if (m.isMapGroupsWithState) {                       // check mapGroupsWithState
             // allowed only in update query output mode and without aggregation
             if (aggsInQuery.nonEmpty) {
