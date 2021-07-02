@@ -317,7 +317,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     # arithmetic operators
     def __neg__(self: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, self._dtype_op.__neg__(self))
+        return self._dtype_op.neg(self)
 
     def __add__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.add(self, other)
@@ -394,7 +394,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._dtype_op.rpow(self, other)
 
     def __abs__(self: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, self._dtype_op.__abs__(self))
+        return self._dtype_op.abs(self)
 
     # comparison operators
     def __eq__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
@@ -416,7 +416,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._dtype_op.gt(self, other)
 
     def __invert__(self: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, self._dtype_op.__invert__(self))
+        return self._dtype_op.invert(self)
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
@@ -433,7 +433,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._dtype_op.ror(self, other)
 
     def __len__(self) -> int:
-        return self._dtype_op.__len__(self)
+        return len(self._psdf)
 
     # NDArray Compat
     def __array_ufunc__(

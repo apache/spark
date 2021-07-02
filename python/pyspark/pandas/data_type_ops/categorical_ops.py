@@ -66,13 +66,13 @@ class CategoricalOps(DataTypeOps):
             scol.alias(index_ops._internal.data_spark_column_names[0])
         ).astype(dtype)
 
-    def __neg__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+    def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("Unary - can not be applied to %s." % self.pretty_name)
 
-    def __invert__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
 
-    def __abs__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+    def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("abs() can not be applied to %s." % self.pretty_name)
 
     # TODO(SPARK-35997): Implement comparison operators below

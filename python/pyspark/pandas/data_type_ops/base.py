@@ -18,7 +18,7 @@
 import numbers
 from abc import ABCMeta
 from itertools import chain
-from typing import Any, Optional, Union
+from typing import Any, cast, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -318,15 +318,15 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def ror(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         return left.__or__(right)
 
-    def __neg__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+    def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
         from pyspark.pandas.base import column_op
 
-        return column_op(Column.__neg__)(operand)
+        return cast(IndexOpsLike, column_op(Column.__neg__)(operand))
 
-    def __abs__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+    def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
         from pyspark.pandas.base import column_op
 
-        return column_op(F.abs)(operand)
+        return cast(IndexOpsLike, column_op(F.abs)(operand))
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
@@ -358,13 +358,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
 
         return column_op(Column.__ne__)(left, right)
 
-    def __invert__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         from pyspark.pandas.base import column_op
 
-        return column_op(Column.__invert__)(operand)
-
-    def __len__(self, operand: IndexOpsLike) -> int:
-        return len(operand._psdf)
+        return cast(IndexOpsLike, column_op(Column.__invert__)(operand))
 
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""

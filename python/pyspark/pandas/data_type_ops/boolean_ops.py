@@ -16,7 +16,7 @@
 #
 
 import numbers
-from typing import Any, cast, Union
+from typing import Any, Union
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -272,11 +272,11 @@ class BooleanOps(DataTypeOps):
         else:
             return _as_other_type(index_ops, dtype, spark_type)
 
-    def __neg__(self, operand: IndexOpsLike) -> SeriesOrIndex:
-        return cast(SeriesOrIndex, ~operand)
+    def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
+        return ~operand
 
-    def __abs__(self, operand: IndexOpsLike) -> SeriesOrIndex:
-        return cast(SeriesOrIndex, operand)
+    def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
+        return operand
 
 
 class BooleanExtensionOps(BooleanOps):
@@ -315,11 +315,11 @@ class BooleanExtensionOps(BooleanOps):
         """Restore column when to_pandas."""
         return col.astype(self.dtype)
 
-    def __neg__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+    def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("Unary - can not be applied to %s." % self.pretty_name)
 
-    def __invert__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
 
-    def __abs__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+    def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("abs() can not be applied to %s." % self.pretty_name)

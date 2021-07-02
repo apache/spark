@@ -63,13 +63,13 @@ class BinaryOps(DataTypeOps):
                 "Concatenation can not be applied to %s and the given type." % self.pretty_name
             )
 
-    def __neg__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+    def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("Unary - can not be applied to %s." % self.pretty_name)
 
-    def __invert__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
 
-    def __abs__(self, operand: IndexOpsLike) -> SeriesOrIndex:
+    def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("abs() can not be applied to %s." % self.pretty_name)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
