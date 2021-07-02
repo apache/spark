@@ -250,7 +250,10 @@ object EnsureRequirements extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     // TODO: remove this after we create a physical operator for `RepartitionByExpression`.
-    case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, _) =>
+    // SPARK-35989: AQE will change the partition number so we should retain the REPARTITION_BY_NUM
+    // shuffle which is specified by user.
+    case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin)
+        if !(shuffleOrigin == REPARTITION_BY_NUM && conf.adaptiveExecutionEnabled) =>
       def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {
         partitioning match {
           case lower: HashPartitioning if upper.semanticEquals(lower) => true
