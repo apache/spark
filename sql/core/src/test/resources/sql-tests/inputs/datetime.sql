@@ -282,4 +282,21 @@ select cast('294247-01-10T04:00:54.775808Z' as timestamp);
 -- Long.MinValue and Long.MinValue - 1 micro seconds
 select cast('-290308-12-21T19:59:05.224192Z' as timestamp);
 select cast('-290308-12-21T19:59:05.224191Z' as timestamp);
+
+-- Check overflow of single segment in date format
+select cast('4294967297' as date);
+select cast('2021-4294967297-11' as date);
+
+-- Check overflow of single segment in timestamp format
+select cast('4294967297' as timestamp);
+select cast('2021-4294967297-11' as timestamp);
+select cast('4294967297:30:00' as timestamp);
+select cast('2021-11-4294967297T12:30:00' as timestamp);
+select cast('2021-01-01T12:4294967297:00' as timestamp);
+select cast('2021-01-01T12:30:4294967297' as timestamp);
+select cast('2021-01-01T12:30:4294967297.123456' as timestamp);
+select cast('2021-01-01T12:30:4294967297+07:30' as timestamp);
+select cast('2021-01-01T12:30:4294967297UTC' as timestamp);
+select cast('2021-01-01T12:30:4294967297+4294967297:30' as timestamp);
+
 set spark.sql.datetime.java8API.enabled=false;
