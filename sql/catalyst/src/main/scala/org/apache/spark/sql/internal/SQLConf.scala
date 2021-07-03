@@ -423,8 +423,8 @@ object SQLConf {
     .internal()
     .doc("When true, force applying shuffled hash join even if the table sizes exceed the " +
       "threshold. This is for testing/benchmarking only. If this config is set to true, the " +
-      "value spark.sql.join.perferSortMergejoin will be ignored.")
-    .version("3.2.0")
+      s"value ${PREFER_SORTMERGEJOIN.key} will be ignored.")
+    .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
 

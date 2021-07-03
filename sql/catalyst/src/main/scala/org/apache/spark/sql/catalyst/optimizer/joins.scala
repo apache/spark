@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
@@ -272,16 +273,18 @@ trait JoinSelectionHelper {
     val buildLeft = if (hintOnly) {
       hintToShuffleHashJoinLeft(hint)
     } else {
-      hintToPreferShuffleHashJoinLeft(hint) || conf.forceApplyShuffledHashJoin ||
+      hintToPreferShuffleHashJoinLeft(hint) ||
         (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(left, conf) &&
-          muchSmaller(left, right))
+          muchSmaller(left, right)) ||
+        (Utils.isTesting && conf.forceApplyShuffledHashJoin)
     }
     val buildRight = if (hintOnly) {
       hintToShuffleHashJoinRight(hint)
     } else {
       hintToPreferShuffleHashJoinRight(hint) || conf.forceApplyShuffledHashJoin ||
         (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(right, conf) &&
-          muchSmaller(right, left))
+          muchSmaller(right, left)) ||
+        (Utils.isTesting && conf.forceApplyShuffledHashJoin)
     }
     getBuildSide(
       canBuildShuffledHashJoinLeft(joinType) && buildLeft,
