@@ -457,6 +457,8 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       Seq.range(0, 100).map(x => Literal(x.toLong))) == 201)
   }
 
+  private def wrap(expr: Expression): ExpressionEquals = ExpressionEquals(expr)
+
   test("SPARK-23760: CodegenContext.withSubExprEliminationExprs should save/restore correctly") {
 
     val ref = BoundReference(0, IntegerType, true)
@@ -472,19 +474,19 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       val ctx = new CodegenContext
       val e = ref.genCode(ctx)
       // before
-      ctx.subExprEliminationExprs += ref -> SubExprEliminationState(
+      ctx.subExprEliminationExprs += wrap(ref) -> SubExprEliminationState(
         ExprCode(EmptyBlock, e.isNull, e.value))
-      assert(ctx.subExprEliminationExprs.contains(ref))
+      assert(ctx.subExprEliminationExprs.contains(wrap(ref)))
       // call withSubExprEliminationExprs
-      ctx.withSubExprEliminationExprs(Map(add1 -> dummy)) {
-        assert(ctx.subExprEliminationExprs.contains(add1))
-        assert(!ctx.subExprEliminationExprs.contains(ref))
+      ctx.withSubExprEliminationExprs(Map(wrap(add1) -> dummy)) {
+        assert(ctx.subExprEliminationExprs.contains(wrap(add1)))
+        assert(!ctx.subExprEliminationExprs.contains(wrap(ref)))
         Seq.empty
       }
       // after
       assert(ctx.subExprEliminationExprs.nonEmpty)
-      assert(ctx.subExprEliminationExprs.contains(ref))
-      assert(!ctx.subExprEliminationExprs.contains(add1))
+      assert(ctx.subExprEliminationExprs.contains(wrap(ref)))
+      assert(!ctx.subExprEliminationExprs.contains(wrap(add1)))
     }
 
     // emulate an actual codegen workload
@@ -492,17 +494,17 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       val ctx = new CodegenContext
       // before
       ctx.generateExpressions(Seq(add2, add1), doSubexpressionElimination = true) // trigger CSE
-      assert(ctx.subExprEliminationExprs.contains(add1))
+      assert(ctx.subExprEliminationExprs.contains(wrap(add1)))
       // call withSubExprEliminationExprs
-      ctx.withSubExprEliminationExprs(Map(ref -> dummy)) {
-        assert(ctx.subExprEliminationExprs.contains(ref))
-        assert(!ctx.subExprEliminationExprs.contains(add1))
+      ctx.withSubExprEliminationExprs(Map(wrap(ref) -> dummy)) {
+        assert(ctx.subExprEliminationExprs.contains(wrap(ref)))
+        assert(!ctx.subExprEliminationExprs.contains(wrap(add1)))
         Seq.empty
       }
       // after
       assert(ctx.subExprEliminationExprs.nonEmpty)
-      assert(ctx.subExprEliminationExprs.contains(add1))
-      assert(!ctx.subExprEliminationExprs.contains(ref))
+      assert(ctx.subExprEliminationExprs.contains(wrap(add1)))
+      assert(!ctx.subExprEliminationExprs.contains(wrap(ref)))
     }
   }
 
