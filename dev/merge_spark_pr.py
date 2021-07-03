@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -31,15 +31,9 @@ import re
 import subprocess
 import sys
 import traceback
-if sys.version < '3':
-    input = raw_input  # noqa
-    from urllib2 import urlopen
-    from urllib2 import Request
-    from urllib2 import HTTPError
-else:
-    from urllib.request import urlopen
-    from urllib.request import Request
-    from urllib.error import HTTPError
+from urllib.request import urlopen
+from urllib.request import Request
+from urllib.error import HTTPError
 
 try:
     import jira.client
@@ -565,7 +559,7 @@ def main():
             print("JIRA_USERNAME and JIRA_PASSWORD not set")
             print("Exiting without trying to close the associated JIRA.")
     else:
-        print("Could not find jira-python library. Run 'sudo pip install jira' to install.")
+        print("Could not find jira-python library. Run 'sudo pip3 install jira' to install.")
         print("Exiting without trying to close the associated JIRA.")
 
 if __name__ == "__main__":

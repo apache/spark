@@ -25,7 +25,7 @@ import scala.collection.Map
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 
 import org.apache.spark.TaskEndReason
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.cluster.ExecutorInfo
@@ -118,12 +118,22 @@ case class SparkListenerExecutorRemoved(time: Long, executorId: String, reason: 
   extends SparkListenerEvent
 
 @DeveloperApi
+@deprecated("use SparkListenerExecutorExcluded instead", "3.1.0")
 case class SparkListenerExecutorBlacklisted(
     time: Long,
     executorId: String,
     taskFailures: Int)
   extends SparkListenerEvent
 
+@DeveloperApi
+@Since("3.1.0")
+case class SparkListenerExecutorExcluded(
+    time: Long,
+    executorId: String,
+    taskFailures: Int)
+  extends SparkListenerEvent
+
+@deprecated("use SparkListenerExecutorExcludedForStage instead", "3.1.0")
 @DeveloperApi
 case class SparkListenerExecutorBlacklistedForStage(
     time: Long,
@@ -133,6 +143,18 @@ case class SparkListenerExecutorBlacklistedForStage(
     stageAttemptId: Int)
   extends SparkListenerEvent
 
+
+@DeveloperApi
+@Since("3.1.0")
+case class SparkListenerExecutorExcludedForStage(
+    time: Long,
+    executorId: String,
+    taskFailures: Int,
+    stageId: Int,
+    stageAttemptId: Int)
+  extends SparkListenerEvent
+
+@deprecated("use SparkListenerNodeExcludedForStage instead", "3.1.0")
 @DeveloperApi
 case class SparkListenerNodeBlacklistedForStage(
     time: Long,
@@ -142,10 +164,28 @@ case class SparkListenerNodeBlacklistedForStage(
     stageAttemptId: Int)
   extends SparkListenerEvent
 
+
+@DeveloperApi
+@Since("3.1.0")
+case class SparkListenerNodeExcludedForStage(
+    time: Long,
+    hostId: String,
+    executorFailures: Int,
+    stageId: Int,
+    stageAttemptId: Int)
+  extends SparkListenerEvent
+
+@deprecated("use SparkListenerExecutorUnexcluded instead", "3.1.0")
 @DeveloperApi
 case class SparkListenerExecutorUnblacklisted(time: Long, executorId: String)
   extends SparkListenerEvent
 
+
+@DeveloperApi
+case class SparkListenerExecutorUnexcluded(time: Long, executorId: String)
+  extends SparkListenerEvent
+
+@deprecated("use SparkListenerNodeExcluded instead", "3.1.0")
 @DeveloperApi
 case class SparkListenerNodeBlacklisted(
     time: Long,
@@ -153,18 +193,51 @@ case class SparkListenerNodeBlacklisted(
     executorFailures: Int)
   extends SparkListenerEvent
 
+
+@DeveloperApi
+@Since("3.1.0")
+case class SparkListenerNodeExcluded(
+    time: Long,
+    hostId: String,
+    executorFailures: Int)
+  extends SparkListenerEvent
+
+@deprecated("use SparkListenerNodeUnexcluded instead", "3.1.0")
 @DeveloperApi
 case class SparkListenerNodeUnblacklisted(time: Long, hostId: String)
   extends SparkListenerEvent
 
 @DeveloperApi
+@Since("3.1.0")
+case class SparkListenerNodeUnexcluded(time: Long, hostId: String)
+  extends SparkListenerEvent
+
+@DeveloperApi
+@Since("3.1.0")
+case class SparkListenerUnschedulableTaskSetAdded(
+  stageId: Int,
+  stageAttemptId: Int) extends SparkListenerEvent
+
+@DeveloperApi
+@Since("3.1.0")
+case class SparkListenerUnschedulableTaskSetRemoved(
+  stageId: Int,
+  stageAttemptId: Int) extends SparkListenerEvent
+
+@DeveloperApi
 case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerMiscellaneousProcessAdded(time: Long, processId: String,
+    info: MiscellaneousProcessDetails) extends SparkListenerEvent
 
 /**
  * Periodic updates from executors.
  * @param execId executor id
  * @param accumUpdates sequence of (taskId, stageId, stageAttemptId, accumUpdates)
  * @param executorUpdates executor level per-stage metrics updates
+ *
+ * @since 3.1.0
  */
 @DeveloperApi
 case class SparkListenerExecutorMetricsUpdate(
@@ -209,6 +282,7 @@ case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 case class SparkListenerLogStart(sparkVersion: String) extends SparkListenerEvent
 
 @DeveloperApi
+@Since("3.1.0")
 case class SparkListenerResourceProfileAdded(resourceProfile: ResourceProfile)
   extends SparkListenerEvent
 
@@ -309,35 +383,86 @@ private[spark] trait SparkListenerInterface {
   def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved): Unit
 
   /**
-   * Called when the driver blacklists an executor for a Spark application.
+   * Called when the driver excludes an executor for a Spark application.
    */
+  @deprecated("use onExecutorExcluded instead", "3.1.0")
   def onExecutorBlacklisted(executorBlacklisted: SparkListenerExecutorBlacklisted): Unit
 
   /**
-   * Called when the driver blacklists an executor for a stage.
+   * Called when the driver excludes an executor for a Spark application.
    */
+  def onExecutorExcluded(executorExcluded: SparkListenerExecutorExcluded): Unit
+
+  /**
+   * Called when the driver excludes an executor for a stage.
+   */
+  @deprecated("use onExecutorExcludedForStage instead", "3.1.0")
   def onExecutorBlacklistedForStage(
       executorBlacklistedForStage: SparkListenerExecutorBlacklistedForStage): Unit
 
   /**
-   * Called when the driver blacklists a node for a stage.
+   * Called when the driver excludes an executor for a stage.
    */
+  def onExecutorExcludedForStage(
+      executorExcludedForStage: SparkListenerExecutorExcludedForStage): Unit
+
+  /**
+   * Called when the driver excludes a node for a stage.
+   */
+  @deprecated("use onNodeExcludedForStage instead", "3.1.0")
   def onNodeBlacklistedForStage(nodeBlacklistedForStage: SparkListenerNodeBlacklistedForStage): Unit
 
   /**
-   * Called when the driver re-enables a previously blacklisted executor.
+   * Called when the driver excludes a node for a stage.
    */
+  def onNodeExcludedForStage(nodeExcludedForStage: SparkListenerNodeExcludedForStage): Unit
+
+  /**
+   * Called when the driver re-enables a previously excluded executor.
+   */
+  @deprecated("use onExecutorUnexcluded instead", "3.1.0")
   def onExecutorUnblacklisted(executorUnblacklisted: SparkListenerExecutorUnblacklisted): Unit
 
   /**
-   * Called when the driver blacklists a node for a Spark application.
+   * Called when the driver re-enables a previously excluded executor.
    */
+  def onExecutorUnexcluded(executorUnexcluded: SparkListenerExecutorUnexcluded): Unit
+
+  /**
+   * Called when the driver excludes a node for a Spark application.
+   */
+  @deprecated("use onNodeExcluded instead", "3.1.0")
   def onNodeBlacklisted(nodeBlacklisted: SparkListenerNodeBlacklisted): Unit
 
   /**
-   * Called when the driver re-enables a previously blacklisted node.
+   * Called when the driver excludes a node for a Spark application.
    */
+  def onNodeExcluded(nodeExcluded: SparkListenerNodeExcluded): Unit
+
+  /**
+   * Called when the driver re-enables a previously excluded node.
+   */
+  @deprecated("use onNodeUnexcluded instead", "3.1.0")
   def onNodeUnblacklisted(nodeUnblacklisted: SparkListenerNodeUnblacklisted): Unit
+
+  /**
+   * Called when the driver re-enables a previously excluded node.
+   */
+  def onNodeUnexcluded(nodeUnexcluded: SparkListenerNodeUnexcluded): Unit
+
+  /**
+   * Called when a taskset becomes unschedulable due to exludeOnFailure and dynamic allocation
+   * is enabled.
+   */
+  def onUnschedulableTaskSetAdded(
+      unschedulableTaskSetAdded: SparkListenerUnschedulableTaskSetAdded): Unit
+
+  /**
+   * Called when an unschedulable taskset becomes schedulable and dynamic allocation
+   * is enabled.
+   */
+  def onUnschedulableTaskSetRemoved(
+      unschedulableTaskSetRemoved: SparkListenerUnschedulableTaskSetRemoved): Unit
 
   /**
    * Called when the driver receives a block update info.
@@ -409,21 +534,39 @@ abstract class SparkListener extends SparkListenerInterface {
 
   override def onExecutorBlacklisted(
       executorBlacklisted: SparkListenerExecutorBlacklisted): Unit = { }
+  override def onExecutorExcluded(
+      executorExcluded: SparkListenerExecutorExcluded): Unit = { }
 
-  def onExecutorBlacklistedForStage(
+  override def onExecutorBlacklistedForStage(
       executorBlacklistedForStage: SparkListenerExecutorBlacklistedForStage): Unit = { }
+  override def onExecutorExcludedForStage(
+      executorExcludedForStage: SparkListenerExecutorExcludedForStage): Unit = { }
 
-  def onNodeBlacklistedForStage(
+  override def onNodeBlacklistedForStage(
       nodeBlacklistedForStage: SparkListenerNodeBlacklistedForStage): Unit = { }
+  override def onNodeExcludedForStage(
+      nodeExcludedForStage: SparkListenerNodeExcludedForStage): Unit = { }
 
   override def onExecutorUnblacklisted(
       executorUnblacklisted: SparkListenerExecutorUnblacklisted): Unit = { }
+  override def onExecutorUnexcluded(
+      executorUnexcluded: SparkListenerExecutorUnexcluded): Unit = { }
 
   override def onNodeBlacklisted(
       nodeBlacklisted: SparkListenerNodeBlacklisted): Unit = { }
+  override def onNodeExcluded(
+      nodeExcluded: SparkListenerNodeExcluded): Unit = { }
 
   override def onNodeUnblacklisted(
       nodeUnblacklisted: SparkListenerNodeUnblacklisted): Unit = { }
+  override def onNodeUnexcluded(
+      nodeUnexcluded: SparkListenerNodeUnexcluded): Unit = { }
+
+  override def onUnschedulableTaskSetAdded(
+      unschedulableTaskSetAdded: SparkListenerUnschedulableTaskSetAdded): Unit = { }
+
+  override def onUnschedulableTaskSetRemoved(
+      unschedulableTaskSetRemoved: SparkListenerUnschedulableTaskSetRemoved): Unit = { }
 
   override def onBlockUpdated(blockUpdated: SparkListenerBlockUpdated): Unit = { }
 

@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import java.util.Locale
-
-import scala.collection.mutable
-
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.execution.FileRelation
@@ -44,6 +40,8 @@ import org.apache.spark.sql.types.{StructField, StructType}
 case class HadoopFsRelation(
     location: FileIndex,
     partitionSchema: StructType,
+    // The top-level columns in `dataSchema` should match the actual physical file schema, otherwise
+    // the ORC data source may not work with the by-ordinal mode.
     dataSchema: StructType,
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,

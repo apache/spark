@@ -17,6 +17,8 @@
 
 package org.apache.spark.executor
 
+import org.mockito.Mockito.{spy, when}
+
 import org.apache.spark.SparkFunSuite
 
 
@@ -37,5 +39,27 @@ class ProcfsMetricsGetterSuite extends SparkFunSuite {
     assert(r.pythonRSSTotal == 7831552)
     assert(r.jvmVmemTotal == 4769947648L)
     assert(r.jvmRSSTotal == 262610944)
+  }
+
+  test("SPARK-34845: partial metrics shouldn't be returned") {
+    val p = new ProcfsMetricsGetter(getTestResourcePath("ProcfsMetrics"))
+    val mockedP = spy(p)
+
+    var ptree: Set[Int] = Set(26109, 22763)
+    when(mockedP.computeProcessTree).thenReturn(ptree)
+    var r = mockedP.computeAllMetrics
+    assert(r.jvmVmemTotal == 4769947648L)
+    assert(r.jvmRSSTotal == 262610944)
+    assert(r.pythonVmemTotal == 360595456)
+    assert(r.pythonRSSTotal == 7831552)
+
+    // proc file of pid 22764 doesn't exist, so partial metrics shouldn't be returned
+    ptree = Set(26109, 22764, 22763)
+    when(mockedP.computeProcessTree).thenReturn(ptree)
+    r = mockedP.computeAllMetrics
+    assert(r.jvmVmemTotal == 0)
+    assert(r.jvmRSSTotal == 0)
+    assert(r.pythonVmemTotal == 0)
+    assert(r.pythonRSSTotal == 0)
   }
 }

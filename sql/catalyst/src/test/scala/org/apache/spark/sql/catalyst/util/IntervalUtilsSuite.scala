@@ -17,15 +17,18 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import java.time.{Duration, Period}
 import java.util.concurrent.TimeUnit
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
+import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE}
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DayTimeIntervalType
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
@@ -77,6 +80,19 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("string to interval: interval with dangling parts should not results null") {
+    checkFromInvalidString("+", "expect a number after '+' but hit EOL")
+    checkFromInvalidString("-", "expect a number after '-' but hit EOL")
+    checkFromInvalidString("+ 2", "expect a unit name after '2' but hit EOL")
+    checkFromInvalidString("- 1", "expect a unit name after '1' but hit EOL")
+    checkFromInvalidString("1", "expect a unit name after '1' but hit EOL")
+    checkFromInvalidString("1.2", "expect a unit name after '1.2' but hit EOL")
+    checkFromInvalidString("1 day 2", "expect a unit name after '2' but hit EOL")
+    checkFromInvalidString("1 day 2.2", "expect a unit name after '2.2' but hit EOL")
+    checkFromInvalidString("1 day -", "expect a number after '-' but hit EOL")
+    checkFromInvalidString("-.", "expect a unit name after '-.' but hit EOL")
+  }
+
   test("string to interval: multiple units") {
     Seq(
       "-1 MONTH 1 day -1 microseconds" -> new CalendarInterval(-1, 1, -1),
@@ -115,6 +131,14 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     checkFromString("1 \t day \n 2 \r hour", new CalendarInterval(0, 1, 2 * MICROS_PER_HOUR))
     checkFromInvalidString("interval1 \t day \n 2 \r hour", "invalid interval prefix interval1")
     checkFromString("interval\r1\tday", new CalendarInterval(0, 1, 0))
+    // scalastyle:off nonascii
+    checkFromInvalidString("中国 interval 1 day", "unrecognized number '中国'")
+    checkFromInvalidString("interval浙江 1 day", "invalid interval prefix interval浙江")
+    checkFromInvalidString("interval 1杭州 day", "invalid value '1杭州'")
+    checkFromInvalidString("interval 1 滨江day", "invalid unit '滨江day'")
+    checkFromInvalidString("interval 1 day长河", "invalid unit 'day长河'")
+    checkFromInvalidString("interval 1 day 网商路", "unrecognized number '网商路'")
+    // scalastyle:on nonascii
   }
 
   test("string to interval: seconds with fractional part") {
@@ -146,6 +170,19 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
       fromYearMonthString)
     failFuncWithInvalidInput("-\t99-15", "Interval string does not match year-month format",
       fromYearMonthString)
+
+    assert(fromYearMonthString("178956970-6") == new CalendarInterval(Int.MaxValue - 1, 0, 0))
+    assert(fromYearMonthString("178956970-7") == new CalendarInterval(Int.MaxValue, 0, 0))
+
+    val e1 = intercept[IllegalArgumentException]{
+      assert(fromYearMonthString("178956970-8") == new CalendarInterval(Int.MinValue, 0, 0))
+    }.getMessage
+    assert(e1.contains("integer overflow"))
+    assert(fromYearMonthString("-178956970-8") == new CalendarInterval(Int.MinValue, 0, 0))
+    val e2 = intercept[IllegalArgumentException]{
+      assert(fromYearMonthString("-178956970-9") == new CalendarInterval(Int.MinValue, 0, 0))
+    }.getMessage
+    assert(e2.contains("integer overflow"))
   }
 
   test("from day-time string - legacy") {
@@ -357,5 +394,277 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
 
     intercept[ArithmeticException](multiplyExact(maxMonth, 2))
     intercept[ArithmeticException](divideExact(maxDay, 0.5))
+  }
+
+  test("SPARK-34605: microseconds to duration") {
+    assert(microsToDuration(0).isZero)
+    assert(microsToDuration(-1).toNanos === -1000)
+    assert(microsToDuration(1).toNanos === 1000)
+    assert(microsToDuration(Long.MaxValue).toDays === 106751991)
+    assert(microsToDuration(Long.MinValue).toDays === -106751991)
+  }
+
+  test("SPARK-34605: duration to microseconds") {
+    assert(durationToMicros(Duration.ZERO) === 0)
+    assert(durationToMicros(Duration.ofSeconds(-1)) === -1000000)
+    assert(durationToMicros(Duration.ofNanos(123456)) === 123)
+    assert(durationToMicros(Duration.ofDays(106751991)) ===
+      (Long.MaxValue / MICROS_PER_DAY) * MICROS_PER_DAY)
+
+    val errMsg = intercept[ArithmeticException] {
+      durationToMicros(Duration.ofDays(106751991 + 1))
+    }.getMessage
+    assert(errMsg.contains("long overflow"))
+  }
+
+  test("SPARK-34615: period to months") {
+    assert(periodToMonths(Period.ZERO) === 0)
+    assert(periodToMonths(Period.of(0, -1, 0)) === -1)
+    assert(periodToMonths(Period.of(-1, 0, 10)) === -12) // ignore days
+    assert(periodToMonths(Period.of(178956970, 7, 0)) === Int.MaxValue)
+    assert(periodToMonths(Period.of(-178956970, -8, 123)) === Int.MinValue)
+    assert(periodToMonths(Period.of(0, Int.MaxValue, Int.MaxValue)) === Int.MaxValue)
+
+    val errMsg = intercept[ArithmeticException] {
+      periodToMonths(Period.of(Int.MaxValue, 0, 0))
+    }.getMessage
+    assert(errMsg.contains("integer overflow"))
+  }
+
+  test("SPARK-34615: months to period") {
+    assert(monthsToPeriod(0) === Period.ZERO)
+    assert(monthsToPeriod(-11) === Period.of(0, -11, 0))
+    assert(monthsToPeriod(11) === Period.of(0, 11, 0))
+    assert(monthsToPeriod(27) === Period.of(2, 3, 0))
+    assert(monthsToPeriod(-13) === Period.of(-1, -1, 0))
+    assert(monthsToPeriod(Int.MaxValue) === Period.ofYears(178956970).withMonths(7))
+    assert(monthsToPeriod(Int.MinValue) === Period.ofYears(-178956970).withMonths(-8))
+  }
+
+  test("SPARK-34695: round trip conversion of micros -> duration -> micros") {
+    Seq(
+      0,
+      MICROS_PER_SECOND - 1,
+      -MICROS_PER_SECOND + 1,
+      MICROS_PER_SECOND,
+      -MICROS_PER_SECOND,
+      Long.MaxValue - MICROS_PER_SECOND,
+      Long.MinValue + MICROS_PER_SECOND,
+      Long.MaxValue,
+      Long.MinValue).foreach { micros =>
+      val duration = microsToDuration(micros)
+      assert(durationToMicros(duration) === micros)
+    }
+  }
+
+  test("SPARK-34715: Add round trip tests for period <-> month and duration <-> micros") {
+    // Months -> Period -> Months
+    Seq(
+      0,
+      MONTHS_PER_YEAR - 1,
+      MONTHS_PER_YEAR + 1,
+      MONTHS_PER_YEAR,
+      -MONTHS_PER_YEAR,
+      Int.MaxValue - MONTHS_PER_YEAR,
+      Int.MinValue + MONTHS_PER_YEAR,
+      Int.MaxValue,
+      Int.MinValue).foreach { months =>
+      val period = monthsToPeriod(months)
+      assert(periodToMonths(period) === months)
+    }
+    // Period -> Months -> Period
+    Seq(
+      monthsToPeriod(0),
+      monthsToPeriod(MONTHS_PER_YEAR - 1),
+      monthsToPeriod(MONTHS_PER_YEAR + 1),
+      monthsToPeriod(MONTHS_PER_YEAR),
+      monthsToPeriod(-MONTHS_PER_YEAR),
+      monthsToPeriod(Int.MaxValue - MONTHS_PER_YEAR),
+      monthsToPeriod(Int.MinValue + MONTHS_PER_YEAR),
+      monthsToPeriod(Int.MaxValue),
+      monthsToPeriod(Int.MinValue)).foreach { period =>
+      val months = periodToMonths(period)
+      assert(monthsToPeriod(months) === period)
+    }
+    // Duration -> micros -> Duration
+    Seq(
+      microsToDuration(0),
+      microsToDuration(MICROS_PER_SECOND - 1),
+      microsToDuration(-MICROS_PER_SECOND + 1),
+      microsToDuration(MICROS_PER_SECOND),
+      microsToDuration(-MICROS_PER_SECOND),
+      microsToDuration(Long.MaxValue - MICROS_PER_SECOND),
+      microsToDuration(Long.MinValue + MICROS_PER_SECOND),
+      microsToDuration(Long.MaxValue),
+      microsToDuration(Long.MinValue)).foreach { duration =>
+      val micros = durationToMicros(duration)
+      assert(microsToDuration(micros) === duration)
+    }
+  }
+
+  test("SPARK-35016: format year-month intervals") {
+    import org.apache.spark.sql.types.YearMonthIntervalType._
+    Seq(
+      0 -> ("0-0", "INTERVAL '0-0' YEAR TO MONTH"),
+      -11 -> ("-0-11", "INTERVAL '-0-11' YEAR TO MONTH"),
+      11 -> ("0-11", "INTERVAL '0-11' YEAR TO MONTH"),
+      -13 -> ("-1-1", "INTERVAL '-1-1' YEAR TO MONTH"),
+      13 -> ("1-1", "INTERVAL '1-1' YEAR TO MONTH"),
+      -24 -> ("-2-0", "INTERVAL '-2-0' YEAR TO MONTH"),
+      24 -> ("2-0", "INTERVAL '2-0' YEAR TO MONTH"),
+      Int.MinValue -> ("-178956970-8", "INTERVAL '-178956970-8' YEAR TO MONTH"),
+      Int.MaxValue -> ("178956970-7", "INTERVAL '178956970-7' YEAR TO MONTH")
+    ).foreach { case (months, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, MONTH) === ansiIntervalStr)
+      assert(toYearMonthIntervalString(months, HIVE_STYLE, YEAR, MONTH) === hiveIntervalStr)
+    }
+  }
+
+  test("SPARK-35016: format day-time intervals") {
+    import DayTimeIntervalType._
+    Seq(
+      0L -> ("0 00:00:00.000000000", "INTERVAL '0 00:00:00' DAY TO SECOND"),
+      -1L -> ("-0 00:00:00.000001000", "INTERVAL '-0 00:00:00.000001' DAY TO SECOND"),
+      10 * MICROS_PER_MILLIS -> ("0 00:00:00.010000000", "INTERVAL '0 00:00:00.01' DAY TO SECOND"),
+      (-123 * MICROS_PER_DAY - 3 * MICROS_PER_SECOND) ->
+        ("-123 00:00:03.000000000", "INTERVAL '-123 00:00:03' DAY TO SECOND"),
+      Long.MinValue -> ("-106751991 04:00:54.775808000",
+        "INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND")
+    ).foreach { case (micros, (hiveIntervalStr, ansiIntervalStr)) =>
+      assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, SECOND) === ansiIntervalStr)
+      assert(toDayTimeIntervalString(micros, HIVE_STYLE, DAY, SECOND) === hiveIntervalStr)
+    }
+  }
+
+  test("SPARK-35734: Format day-time intervals using type fields") {
+    import DayTimeIntervalType._
+    Seq(
+      0L ->
+        ("INTERVAL '0 00:00:00' DAY TO SECOND",
+          "INTERVAL '0 00:00' DAY TO MINUTE",
+          "INTERVAL '0 00' DAY TO HOUR",
+          "INTERVAL '00:00:00' HOUR TO SECOND",
+          "INTERVAL '00:00' HOUR TO MINUTE",
+          "INTERVAL '00:00' MINUTE TO SECOND",
+          "INTERVAL '0' DAY",
+          "INTERVAL '00' HOUR",
+          "INTERVAL '00' MINUTE",
+          "INTERVAL '00' SECOND"),
+      -1L ->
+        ("INTERVAL '-0 00:00:00.000001' DAY TO SECOND",
+          "INTERVAL '-0 00:00' DAY TO MINUTE",
+          "INTERVAL '-0 00' DAY TO HOUR",
+          "INTERVAL '-00:00:00.000001' HOUR TO SECOND",
+          "INTERVAL '-00:00' HOUR TO MINUTE",
+          "INTERVAL '-00:00.000001' MINUTE TO SECOND",
+          "INTERVAL '-0' DAY",
+          "INTERVAL '-00' HOUR",
+          "INTERVAL '-00' MINUTE",
+          "INTERVAL '-00.000001' SECOND"),
+      10 * MICROS_PER_MILLIS ->
+        ("INTERVAL '0 00:00:00.01' DAY TO SECOND",
+          "INTERVAL '0 00:00' DAY TO MINUTE",
+          "INTERVAL '0 00' DAY TO HOUR",
+          "INTERVAL '00:00:00.01' HOUR TO SECOND",
+          "INTERVAL '00:00' HOUR TO MINUTE",
+          "INTERVAL '00:00.01' MINUTE TO SECOND",
+          "INTERVAL '0' DAY",
+          "INTERVAL '00' HOUR",
+          "INTERVAL '00' MINUTE",
+          "INTERVAL '00.01' SECOND"),
+      (-123 * MICROS_PER_DAY - 3 * MICROS_PER_SECOND) ->
+        ("INTERVAL '-123 00:00:03' DAY TO SECOND",
+          "INTERVAL '-123 00:00' DAY TO MINUTE",
+          "INTERVAL '-123 00' DAY TO HOUR",
+          "INTERVAL '-2952:00:03' HOUR TO SECOND",
+          "INTERVAL '-2952:00' HOUR TO MINUTE",
+          "INTERVAL '-177120:03' MINUTE TO SECOND",
+          "INTERVAL '-123' DAY",
+          "INTERVAL '-2952' HOUR",
+          "INTERVAL '-177120' MINUTE",
+          "INTERVAL '-10627203' SECOND"),
+      Long.MinValue ->
+        ("INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND",
+          "INTERVAL '-106751991 04:00' DAY TO MINUTE",
+          "INTERVAL '-106751991 04' DAY TO HOUR",
+          "INTERVAL '-2562047788:00:54.775808' HOUR TO SECOND",
+          "INTERVAL '-2562047788:00' HOUR TO MINUTE",
+          "INTERVAL '-153722867280:54.775808' MINUTE TO SECOND",
+          "INTERVAL '-106751991' DAY",
+          "INTERVAL '-2562047788' HOUR",
+          "INTERVAL '-153722867280' MINUTE",
+          "INTERVAL '-9223372036854.775808' SECOND"),
+      69159782123456L ->
+        ("INTERVAL '800 11:03:02.123456' DAY TO SECOND",
+          "INTERVAL '800 11:03' DAY TO MINUTE",
+          "INTERVAL '800 11' DAY TO HOUR",
+          "INTERVAL '19211:03:02.123456' HOUR TO SECOND",
+          "INTERVAL '19211:03' HOUR TO MINUTE",
+          "INTERVAL '1152663:02.123456' MINUTE TO SECOND",
+          "INTERVAL '800' DAY",
+          "INTERVAL '19211' HOUR",
+          "INTERVAL '1152663' MINUTE",
+          "INTERVAL '69159782.123456' SECOND"),
+      -69159782123456L ->
+        ("INTERVAL '-800 11:03:02.123456' DAY TO SECOND",
+          "INTERVAL '-800 11:03' DAY TO MINUTE",
+          "INTERVAL '-800 11' DAY TO HOUR",
+          "INTERVAL '-19211:03:02.123456' HOUR TO SECOND",
+          "INTERVAL '-19211:03' HOUR TO MINUTE",
+          "INTERVAL '-1152663:02.123456' MINUTE TO SECOND",
+          "INTERVAL '-800' DAY",
+          "INTERVAL '-19211' HOUR",
+          "INTERVAL '-1152663' MINUTE",
+          "INTERVAL '-69159782.123456' SECOND")
+    ).foreach {
+      case (
+        micros, (
+          dayToSec,
+          dayToMinute,
+          dayToHour,
+          hourToSec,
+          hourToMinute,
+          minuteToSec,
+          day,
+          hour,
+          minute,
+          sec)) =>
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, SECOND) === dayToSec)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, MINUTE) === dayToMinute)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, HOUR) === dayToHour)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, HOUR, SECOND) === hourToSec)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, HOUR, MINUTE) === hourToMinute)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, MINUTE, SECOND) === minuteToSec)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, DAY, DAY) === day)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, HOUR, HOUR) === hour)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, MINUTE, MINUTE) === minute)
+        assert(toDayTimeIntervalString(micros, ANSI_STYLE, SECOND, SECOND) === sec)
+    }
+  }
+
+  test("SPARK-35771: Format year-month intervals using type fields") {
+    import org.apache.spark.sql.types.YearMonthIntervalType._
+    Seq(
+      0 ->
+        ("INTERVAL '0-0' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '0' MONTH"),
+      -11 -> ("INTERVAL '-0-11' YEAR TO MONTH", "INTERVAL '-0' YEAR", "INTERVAL '-11' MONTH"),
+      11 -> ("INTERVAL '0-11' YEAR TO MONTH", "INTERVAL '0' YEAR", "INTERVAL '11' MONTH"),
+      -13 -> ("INTERVAL '-1-1' YEAR TO MONTH", "INTERVAL '-1' YEAR", "INTERVAL '-13' MONTH"),
+      13 -> ("INTERVAL '1-1' YEAR TO MONTH", "INTERVAL '1' YEAR", "INTERVAL '13' MONTH"),
+      -24 -> ("INTERVAL '-2-0' YEAR TO MONTH", "INTERVAL '-2' YEAR", "INTERVAL '-24' MONTH"),
+      24 -> ("INTERVAL '2-0' YEAR TO MONTH", "INTERVAL '2' YEAR", "INTERVAL '24' MONTH"),
+      Int.MinValue ->
+        ("INTERVAL '-178956970-8' YEAR TO MONTH",
+          "INTERVAL '-178956970' YEAR",
+          "INTERVAL '-2147483648' MONTH"),
+      Int.MaxValue ->
+        ("INTERVAL '178956970-7' YEAR TO MONTH",
+          "INTERVAL '178956970' YEAR",
+          "INTERVAL '2147483647' MONTH")
+    ).foreach { case (months, (yearToMonth, year, month)) =>
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, MONTH) === yearToMonth)
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, YEAR, YEAR) === year)
+      assert(toYearMonthIntervalString(months, ANSI_STYLE, MONTH, MONTH) === month)
+    }
   }
 }

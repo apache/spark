@@ -40,7 +40,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
   }
 
   test("MetricsSystem with default config") {
-    val metricsSystem = MetricsSystem.createMetricsSystem("default", conf, securityMgr)
+    val metricsSystem = MetricsSystem.createMetricsSystem("default", conf)
     metricsSystem.start()
     val sources = PrivateMethod[ArrayBuffer[Source]](Symbol("sources"))
     val sinks = PrivateMethod[ArrayBuffer[Sink]](Symbol("sinks"))
@@ -51,7 +51,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
   }
 
   test("MetricsSystem with sources add") {
-    val metricsSystem = MetricsSystem.createMetricsSystem("test", conf, securityMgr)
+    val metricsSystem = MetricsSystem.createMetricsSystem("test", conf)
     metricsSystem.start()
     val sources = PrivateMethod[ArrayBuffer[Source]](Symbol("sources"))
     val sinks = PrivateMethod[ArrayBuffer[Sink]](Symbol("sinks"))
@@ -77,7 +77,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     conf.set("spark.executor.id", executorId)
 
     val instanceName = MetricsSystemInstances.DRIVER
-    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf)
 
     val metricName = driverMetricsSystem.buildRegistryName(source)
     assert(metricName === s"$appId.$executorId.${source.sourceName}")
@@ -93,7 +93,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     conf.set("spark.executor.id", executorId)
 
     val instanceName = MetricsSystemInstances.DRIVER
-    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf)
 
     val metricName = driverMetricsSystem.buildRegistryName(source)
     assert(metricName === source.sourceName)
@@ -109,7 +109,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     conf.set("spark.app.id", appId)
 
     val instanceName = MetricsSystemInstances.DRIVER
-    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf)
 
     val metricName = driverMetricsSystem.buildRegistryName(source)
     assert(metricName === source.sourceName)
@@ -127,7 +127,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     conf.set("spark.executor.id", executorId)
 
     val instanceName = MetricsSystemInstances.EXECUTOR
-    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf)
 
     val metricName = executorMetricsSystem.buildRegistryName(source)
     assert(metricName === s"$appId.$executorId.${source.sourceName}")
@@ -143,7 +143,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     conf.set("spark.executor.id", executorId)
 
     val instanceName = MetricsSystemInstances.EXECUTOR
-    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf)
 
     val metricName = executorMetricsSystem.buildRegistryName(source)
     assert(metricName === source.sourceName)
@@ -159,7 +159,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     conf.set("spark.app.id", appId)
 
     val instanceName = MetricsSystemInstances.EXECUTOR
-    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf)
 
     val metricName = executorMetricsSystem.buildRegistryName(source)
     assert(metricName === source.sourceName)
@@ -177,7 +177,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     conf.set("spark.executor.id", executorId)
 
     val instanceName = "testInstance"
-    val testMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+    val testMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf)
 
     val metricName = testMetricsSystem.buildRegistryName(source)
 
@@ -201,7 +201,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     conf.set(METRICS_NAMESPACE, "${spark.app.name}")
 
     val instanceName = MetricsSystemInstances.EXECUTOR
-    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf)
 
     val metricName = executorMetricsSystem.buildRegistryName(source)
     assert(metricName === s"$appName.$executorId.${source.sourceName}")
@@ -219,7 +219,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     conf.set(METRICS_NAMESPACE, namespaceToResolve)
 
     val instanceName = MetricsSystemInstances.EXECUTOR
-    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf)
 
     val metricName = executorMetricsSystem.buildRegistryName(source)
     // If the user set the spark.metrics.namespace property to an expansion of another property
@@ -239,7 +239,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     conf.set(METRICS_NAMESPACE, "${spark.app.name}")
 
     val instanceName = MetricsSystemInstances.EXECUTOR
-    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+    val executorMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf)
 
     val metricName = executorMetricsSystem.buildRegistryName(source)
     assert(metricName === source.sourceName)
@@ -260,7 +260,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     conf.set("spark.executor.id", executorId)
 
     val instanceName = "testInstance"
-    val testMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+    val testMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf)
 
     val metricName = testMetricsSystem.buildRegistryName(source)
 

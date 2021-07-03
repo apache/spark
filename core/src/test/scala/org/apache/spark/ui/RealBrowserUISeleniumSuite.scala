@@ -17,9 +17,11 @@
 
 package org.apache.spark.ui
 
-import org.openqa.selenium.{By, WebDriver}
-import org.scalatest._
+import org.openqa.selenium.{By, JavascriptExecutor, WebDriver}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.SpanSugar._
 import org.scalatestplus.selenium.WebBrowser
 
@@ -35,7 +37,7 @@ import org.apache.spark.util.CallSite
 abstract class RealBrowserUISeleniumSuite(val driverProp: String)
   extends SparkFunSuite with WebBrowser with Matchers with BeforeAndAfterAll {
 
-  implicit var webDriver: WebDriver
+  implicit var webDriver: WebDriver with JavascriptExecutor
   private val driverPropPrefix = "spark.test."
 
   override def beforeAll(): Unit = {
@@ -75,6 +77,108 @@ abstract class RealBrowserUISeleniumSuite(val driverProp: String)
         val nodeDesc = webDriver.findElement(By.cssSelector("g[class='node_0 node']"))
         nodeDesc.getAttribute("name") should include ("collect at &lt;console&gt;:25")
       }
+    }
+  }
+
+  test("SPARK-31882: Link URL for Stage DAGs should not depend on paged table.") {
+    withSpark(newSparkContext()) { sc =>
+      sc.parallelize(1 to 100).map(v => (v, v)).repartition(10).reduceByKey(_ + _).collect
+
+      eventually(timeout(10.seconds), interval(50.microseconds)) {
+        val pathWithPagedTable =
+          "/jobs/job/?id=0&completedStage.page=2&completedStage.sort=Stage+Id&" +
+            "completedStage.desc=true&completedStage.pageSize=1#completed"
+        goToUi(sc, pathWithPagedTable)
+
+        // Open DAG Viz.
+        webDriver.findElement(By.id("job-dag-viz")).click()
+        val stages = webDriver.findElements(By.cssSelector("svg[class='job'] > a"))
+        stages.size() should be (3)
+
+        stages.get(0).getAttribute("href") should include ("/stages/stage/?id=0&attempt=0")
+        stages.get(1).getAttribute("href") should include ("/stages/stage/?id=1&attempt=0")
+        stages.get(2).getAttribute("href") should include ("/stages/stage/?id=2&attempt=0")
+      }
+    }
+  }
+
+  test("SPARK-31886: Color barrier execution mode RDD correctly") {
+    withSpark(newSparkContext()) { sc =>
+      sc.parallelize(1 to 10).barrier.mapPartitions(identity).repartition(1).collect()
+
+      eventually(timeout(10.seconds), interval(50.milliseconds)) {
+        goToUi(sc, "/jobs/job/?id=0")
+        webDriver.findElement(By.id("job-dag-viz")).click()
+
+        val stage0 = webDriver.findElement(By.cssSelector("g[id='graph_0']"))
+        val stage1 = webDriver.findElement(By.cssSelector("g[id='graph_1']"))
+        val barrieredOps = webDriver.findElements(By.className("barrier-rdd")).iterator()
+
+        while (barrieredOps.hasNext) {
+          val barrieredOpId = barrieredOps.next().getAttribute("innerHTML")
+          val foundInStage0 =
+            stage0.findElements(
+              By.cssSelector("g.barrier.cluster.cluster_" + barrieredOpId))
+          assert(foundInStage0.size === 1)
+
+          val foundInStage1 =
+            stage1.findElements(
+              By.cssSelector("g.barrier.cluster.cluster_" + barrieredOpId))
+          assert(foundInStage1.size === 0)
+        }
+      }
+    }
+  }
+
+  test("Search text for paged tables should not be saved") {
+    withSpark(newSparkContext()) { sc =>
+      sc.parallelize(1 to 10).collect
+
+      eventually(timeout(10.seconds), interval(1.seconds)) {
+        val taskSearchBox = "$(\"input[aria-controls='active-tasks-table']\")"
+        goToUi(sc, "/stages/stage/?id=0&attempt=0")
+        // Wait for ajax loading done.
+        Thread.sleep(20)
+        setValueToSearchBox(taskSearchBox, "task1")
+        val taskSearchText = getTextFromSearchBox(taskSearchBox)
+        assert(taskSearchText === "task1")
+
+        val executorSearchBox = "$(\"input[aria-controls='active-executors-table']\")"
+        goToUi(sc, "/executors")
+        Thread.sleep(20)
+        setValueToSearchBox(executorSearchBox, "executor1")
+        val executorSearchText = getTextFromSearchBox(executorSearchBox)
+        assert(executorSearchText === "executor1")
+
+        goToUi(sc, "/stages/stage/?id=0&attempt=0")
+        Thread.sleep(20)
+        val revisitTaskSearchText = getTextFromSearchBox(taskSearchBox)
+        assert(revisitTaskSearchText === "")
+
+        goToUi(sc, "/executors")
+        Thread.sleep(20)
+        val revisitExecutorSearchText = getTextFromSearchBox(executorSearchBox)
+        assert(revisitExecutorSearchText === "")
+      }
+    }
+
+    def setValueToSearchBox(searchBox: String, text: String): Unit = {
+      webDriver.executeScript(s"$searchBox.val('$text');")
+      fireDataTable(searchBox)
+    }
+
+    def getTextFromSearchBox(searchBox: String): String = {
+      webDriver.executeScript(s"return $searchBox.val();").toString
+    }
+
+    def fireDataTable(searchBox: String): Unit = {
+      webDriver.executeScript(
+        s"""
+           |var keyEvent = $$.Event('keyup');
+           |// 13 means enter key.
+           |keyEvent.keyCode = keyEvent.which = 13;
+           |$searchBox.trigger(keyEvent);
+         """.stripMargin)
     }
   }
 

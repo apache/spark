@@ -22,4 +22,5 @@ recursive-include deps/data *.data *.txt
 recursive-include deps/licenses *.txt
 recursive-include deps/examples *.py
 recursive-include lib *.zip
+recursive-include pyspark *.pyi py.typed
 include README.md

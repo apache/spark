@@ -33,8 +33,7 @@ import org.apache.spark.sql.types._
  * {{{
  *   To run this benchmark:
  *   1. without sbt: bin/spark-submit --class <this class>
- *        --jars <catalyst test jar>,<core test jar>,<sql jar>,<hive-exec jar>,<spark-hive jar>
- *       <spark-hive test jar>
+ *        --jars <catalyst test jar>,<core test jar>,<spark sql test jar> <spark-hive test jar>
  *   2. build/sbt "hive/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "hive/test:runMain <this class>"
  *      Results will be written to "benchmarks/OrcReadBenchmark-results.txt".

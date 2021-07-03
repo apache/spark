@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.catalog;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.sources.AlwaysTrue;
 import org.apache.spark.sql.sources.Filter;
 
 /**
@@ -27,9 +28,33 @@ import org.apache.spark.sql.sources.Filter;
  * @since 3.0.0
  */
 @Evolving
-public interface SupportsDelete {
+public interface SupportsDelete extends TruncatableTable {
+
   /**
-   * Delete data from a data source table that matches filter expressions.
+   * Checks whether it is possible to delete data from a data source table that matches filter
+   * expressions.
+   * <p>
+   * Rows should be deleted from the data source iff all of the filter expressions match.
+   * That is, the expressions must be interpreted as a set of filters that are ANDed together.
+   * <p>
+   * Spark will call this method at planning time to check whether {@link #deleteWhere(Filter[])}
+   * would reject the delete operation because it requires significant effort. If this method
+   * returns false, Spark will not call {@link #deleteWhere(Filter[])} and will try to rewrite
+   * the delete operation and produce row-level changes if the data source table supports deleting
+   * individual records.
+   *
+   * @param filters filter expressions, used to select rows to delete when all expressions match
+   * @return true if the delete operation can be performed
+   *
+   * @since 3.1.0
+   */
+  default boolean canDeleteWhere(Filter[] filters) {
+    return true;
+  }
+
+  /**
+   * Delete data from a data source table that matches filter expressions. Note that this method
+   * will be invoked only if {@link #canDeleteWhere(Filter[])} returns true.
    * <p>
    * Rows are deleted from the data source iff all of the filter expressions match. That is, the
    * expressions must be interpreted as a set of filters that are ANDed together.
@@ -44,4 +69,14 @@ public interface SupportsDelete {
    * @throws IllegalArgumentException If the delete is rejected due to required effort
    */
   void deleteWhere(Filter[] filters);
+
+  @Override
+  default boolean truncateTable() {
+    Filter[] filters = new Filter[] { new AlwaysTrue() };
+    boolean canDelete = canDeleteWhere(filters);
+    if (canDelete) {
+      deleteWhere(filters);
+    }
+    return canDelete;
+  }
 }

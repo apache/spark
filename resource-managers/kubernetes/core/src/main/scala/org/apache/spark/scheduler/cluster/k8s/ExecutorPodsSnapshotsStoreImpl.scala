@@ -28,6 +28,8 @@ import scala.util.control.NonFatal
 import io.fabric8.kubernetes.api.model.Pod
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.Clock
+import org.apache.spark.util.SystemClock
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -52,9 +54,11 @@ import org.apache.spark.util.ThreadUtils
  * time-windowed chunks. Each subscriber can choose to receive their snapshot chunks at different
  * time intervals.
  * <br>
- * The subcriber notification callback is guaranteed to be called from a single thread at a time.
+ * The subscriber notification callback is guaranteed to be called from a single thread at a time.
  */
-private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: ScheduledExecutorService)
+private[spark] class ExecutorPodsSnapshotsStoreImpl(
+    subscribersExecutor: ScheduledExecutorService,
+    clock: Clock = new SystemClock)
   extends ExecutorPodsSnapshotsStore with Logging {
 
   private val SNAPSHOT_LOCK = new Object()
@@ -99,7 +103,7 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: Schedul
   }
 
   override def replaceSnapshot(newSnapshot: Seq[Pod]): Unit = SNAPSHOT_LOCK.synchronized {
-    currentSnapshot = ExecutorPodsSnapshot(newSnapshot)
+    currentSnapshot = ExecutorPodsSnapshot(newSnapshot, clock.getTimeMillis())
     addCurrentSnapshotToSubscribers()
   }
 
@@ -131,15 +135,18 @@ private[spark] class ExecutorPodsSnapshotsStoreImpl(subscribersExecutor: Schedul
           try {
             val snapshots = new ArrayList[ExecutorPodsSnapshot]()
             snapshotsBuffer.drainTo(snapshots)
-            onNewSnapshots(snapshots.asScala)
+            onNewSnapshots(snapshots.asScala.toSeq)
           } catch {
+            case e: IllegalArgumentException =>
+              logError("Going to stop due to IllegalArgumentException", e)
+              System.exit(1)
             case NonFatal(e) => logWarning("Exception when notifying snapshot subscriber.", e)
           } finally {
             lock.unlock()
           }
 
           if (notificationCount.decrementAndGet() > 0) {
-            // There was another concurrent request for this subcriber. Schedule a task to
+            // There was another concurrent request for this subscriber. Schedule a task to
             // immediately process snapshots again, so that the subscriber can pick up any
             // changes that may have happened between the time it started looking at snapshots
             // above, and the time the concurrent request arrived.

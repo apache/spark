@@ -26,7 +26,7 @@ import java.util.function.Supplier
 
 import scala.collection.mutable.{HashMap, HashSet, LinkedHashMap}
 import scala.concurrent.ExecutionContext
-import scala.util.Random
+import scala.util.{Failure, Random, Success}
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SecurityManager, SparkConf}
@@ -66,13 +66,17 @@ private[deploy] class Worker(
   Utils.checkHost(host)
   assert (port > 0)
 
-  // If worker decommissioning is enabled register a handler on PWR to shutdown.
-  if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
-    logInfo("Registering SIGPWR handler to trigger decommissioning.")
-    SignalUtils.register("PWR", "Failed to register SIGPWR handler - " +
-      "disabling worker decommission feature.")(decommissionSelf)
+  // If worker decommissioning is enabled register a handler on the configured signal to shutdown.
+  if (conf.get(config.DECOMMISSION_ENABLED)) {
+    val signal = conf.get(config.Worker.WORKER_DECOMMISSION_SIGNAL)
+    logInfo(s"Registering SIG$signal handler to trigger decommissioning.")
+    SignalUtils.register(signal, s"Failed to register SIG$signal handler - " +
+      "disabling worker decommission feature.") {
+       self.send(WorkerDecommissionSigReceived)
+       true
+    }
   } else {
-    logInfo("Worker decommissioning not enabled, SIGPWR will result in exiting.")
+    logInfo("Worker decommissioning not enabled.")
   }
 
   // A scheduled executor used to send messages at the specified time.
@@ -137,7 +141,8 @@ private[deploy] class Worker(
   private var registered = false
   private var connected = false
   private var decommissioned = false
-  private val workerId = generateWorkerId()
+  // expose for test
+  private[spark] val workerId = generateWorkerId()
   private val sparkHome =
     if (sys.props.contains(IS_TESTING.key)) {
       assert(sys.props.contains("spark.test.home"), "spark.test.home is not set!")
@@ -153,6 +158,18 @@ private[deploy] class Worker(
   val finishedDrivers = new LinkedHashMap[String, DriverRunner]
   val appDirectories = new HashMap[String, Seq[String]]
   val finishedApps = new HashSet[String]
+
+  // Record the consecutive failure attempts of executor state change syncing with Master,
+  // so we don't try it endless. We will exit the Worker process at the end if the failure
+  // attempts reach the max attempts(5). In that case, it's highly possible the Worker
+  // suffers a severe network issue, and the Worker would exit finally either reaches max
+  // re-register attempts or max state syncing attempts.
+  // Map from executor fullId to its consecutive failure attempts number. It's supposed
+  // to be very small since it's only used for the temporary network drop, which doesn't
+  // happen frequently and recover soon.
+  private val executorStateSyncFailureAttempts = new HashMap[String, Int]()
+  lazy private val executorStateSyncFailureHandler = ExecutionContext.fromExecutor(
+    ThreadUtils.newDaemonSingleThreadExecutor("executor-state-sync-failure-handler"))
 
   val retainedExecutors = conf.get(WORKER_UI_RETAINED_EXECUTORS)
   val retainedDrivers = conf.get(WORKER_UI_RETAINED_DRIVERS)
@@ -173,7 +190,7 @@ private[deploy] class Worker(
   private var connectionAttemptCount = 0
 
   private val metricsSystem =
-    MetricsSystem.createMetricsSystem(MetricsSystemInstances.WORKER, conf, securityMgr)
+    MetricsSystem.createMetricsSystem(MetricsSystemInstances.WORKER, conf)
   private val workerSource = new WorkerSource(this)
 
   val reverseProxy = conf.get(UI_REVERSE_PROXY)
@@ -272,7 +289,14 @@ private[deploy] class Worker(
     master = Some(masterRef)
     connected = true
     if (reverseProxy) {
-      logInfo(s"WorkerWebUI is available at $activeMasterWebUiUrl/proxy/$workerId")
+      logInfo("WorkerWebUI is available at %s/proxy/%s".format(
+        activeMasterWebUiUrl.stripSuffix("/"), workerId))
+      // if reverseProxyUrl is not set, then we continue to generate relative URLs
+      // starting with "/" throughout the UI and do not use activeMasterWebUiUrl
+      val proxyUrl = conf.get(UI_REVERSE_PROXY_URL.key, "").stripSuffix("/")
+      // In the method `UIUtils.makeHref`, the URL segment "/proxy/$worker_id" will be appended
+      // after `proxyUrl`, so no need to set the worker ID in the `spark.ui.proxyBase` here.
+      System.setProperty("spark.ui.proxyBase", proxyUrl)
     }
     // Cancel any outstanding re-registration attempts because we found a new master
     cancelLastRegistrationRetry()
@@ -608,7 +632,7 @@ private[deploy] class Worker(
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
             }
-            sendToMaster(ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
+            syncExecutorStateWithMaster(ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
               Some(e.toString), None))
         }
       }
@@ -640,6 +664,7 @@ private[deploy] class Worker(
         driverDesc.copy(command = Worker.maybeUpdateSSLSettings(driverDesc.command, conf)),
         self,
         workerUri,
+        workerWebUiUrl,
         securityMgr,
         resources_)
       drivers(driverId) = driver
@@ -668,8 +693,14 @@ private[deploy] class Worker(
       finishedApps += id
       maybeCleanupApplication(id)
 
-    case DecommissionSelf =>
+    case DecommissionWorker =>
       decommissionSelf()
+
+    case WorkerDecommissionSigReceived =>
+      decommissionSelf()
+      // Tell the Master that we are starting decommissioning
+      // so it stops trying to launch executor/driver on us
+      sendToMaster(WorkerDecommissioning(workerId, self))
   }
 
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
@@ -731,6 +762,43 @@ private[deploy] class Worker(
     }
   }
 
+  /**
+   * Send `ExecutorStateChanged` to the current master. Unlike `sendToMaster`, we use `askSync`
+   * to send the message in order to ensure Master can receive the message.
+   */
+  private def syncExecutorStateWithMaster(newState: ExecutorStateChanged): Unit = {
+    master match {
+      case Some(masterRef) =>
+        val fullId = s"${newState.appId}/${newState.execId}"
+        // SPARK-34245: We used async `send` to send the state previously. In that case, the
+        // finished executor can be leaked if Worker fails to send `ExecutorStateChanged`
+        // message to Master due to some unexpected errors, e.g., temporary network error.
+        // In the worst case, the application can get hang if the leaked executor is the only
+        // or last executor for the application. Therefore, we switch to `ask` to ensure
+        // the state is handled by Master.
+        masterRef.ask[Boolean](newState).onComplete {
+          case Success(_) =>
+            executorStateSyncFailureAttempts.remove(fullId)
+
+          case Failure(t) =>
+            val failures = executorStateSyncFailureAttempts.getOrElse(fullId, 0) + 1
+            if (failures < 5) {
+              logError(s"Failed to send $newState to Master $masterRef, " +
+                s"will retry ($failures/5).", t)
+              executorStateSyncFailureAttempts(fullId) = failures
+              self.send(newState)
+            } else {
+              logError(s"Failed to send $newState to Master $masterRef for 5 times. Giving up.")
+              System.exit(1)
+            }
+        }(executorStateSyncFailureHandler)
+
+      case None =>
+        logWarning(
+          s"Dropping $newState because the connection to master has not yet been established")
+    }
+  }
+
   private def generateWorkerId(): String = {
     "worker-%s-%s-%d".format(createDateFormat.format(new Date), host, port)
   }
@@ -768,16 +836,15 @@ private[deploy] class Worker(
     }
   }
 
-  private[deploy] def decommissionSelf(): Boolean = {
-    if (conf.get(WORKER_DECOMMISSION_ENABLED)) {
-      logDebug("Decommissioning self")
+  private[deploy] def decommissionSelf(): Unit = {
+    if (conf.get(config.DECOMMISSION_ENABLED) && !decommissioned) {
       decommissioned = true
-      sendToMaster(WorkerDecommission(workerId, self))
+      logInfo(s"Decommission worker $workerId.")
+    } else if (decommissioned) {
+      logWarning(s"Worker $workerId already started decommissioning.")
     } else {
-      logWarning("Asked to decommission self, but decommissioning not enabled")
+      logWarning(s"Receive decommission request, but decommission feature is disabled.")
     }
-    // Return true since can be called as a signal handler
-    true
   }
 
   private[worker] def handleDriverStateChanged(driverStateChanged: DriverStateChanged): Unit = {
@@ -807,7 +874,7 @@ private[deploy] class Worker(
 
   private[worker] def handleExecutorStateChanged(executorStateChanged: ExecutorStateChanged):
     Unit = {
-    sendToMaster(executorStateChanged)
+    syncExecutorStateWithMaster(executorStateChanged)
     val state = executorStateChanged.state
     if (ExecutorState.isFinished(state)) {
       val appId = executorStateChanged.appId

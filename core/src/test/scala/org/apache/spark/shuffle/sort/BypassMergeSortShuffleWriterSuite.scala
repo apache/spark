@@ -59,7 +59,7 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
 
   override def beforeEach(): Unit = {
     super.beforeEach()
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     tempDir = Utils.createTempDir()
     outputFile = File.createTempFile("shuffle", null, tempDir)
     taskMetrics = new TaskMetrics

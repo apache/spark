@@ -179,7 +179,7 @@ object LinearDataGenerator {
     val data: RDD[LabeledPoint] = sc.parallelize(0 until nparts, nparts).flatMap { p =>
       val seed = 42 + p
       val examplesInPartition = nexamples / nparts
-      generateLinearInput(intercept, w.toArray, examplesInPartition, seed, eps)
+      generateLinearInput(intercept, w, examplesInPartition, seed, eps)
     }
     data
   }

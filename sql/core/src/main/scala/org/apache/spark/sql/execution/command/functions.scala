@@ -23,8 +23,9 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.util.StringUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
 
@@ -54,7 +55,7 @@ case class CreateFunctionCommand(
     isTemp: Boolean,
     ignoreIfExists: Boolean,
     replace: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   if (ignoreIfExists && replace) {
     throw new AnalysisException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE" +
@@ -77,6 +78,9 @@ case class CreateFunctionCommand(
     val catalog = sparkSession.sessionState.catalog
     val func = CatalogFunction(FunctionIdentifier(functionName, databaseName), className, resources)
     if (isTemp) {
+      if (!replace && catalog.isRegisteredFunction(func.identifier)) {
+        throw QueryCompilationErrors.functionAlreadyExistsError(func.identifier)
+      }
       // We first load resources and then put the builder in the function registry.
       catalog.loadFunctionResources(resources)
       catalog.registerFunction(func, overrideIfExists = replace)
@@ -88,7 +92,9 @@ case class CreateFunctionCommand(
       } else {
         // For a permanent, we will store the metadata into underlying external catalog.
         // This function will be loaded into the FunctionRegistry when a query uses it.
-        // We do not load it into FunctionRegistry right now.
+        // We do not load it into FunctionRegistry right now, to avoid loading the resource and
+        // UDF class immediately, as the Spark application to create the function may not have
+        // access to the resource and/or UDF class.
         catalog.createFunction(func, ignoreIfExists)
       }
     }
@@ -106,7 +112,7 @@ case class CreateFunctionCommand(
  */
 case class DescribeFunctionCommand(
     functionName: FunctionIdentifier,
-    isExtended: Boolean) extends RunnableCommand {
+    isExtended: Boolean) extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] = {
     val schema = StructType(StructField("function_desc", StringType, nullable = false) :: Nil)
@@ -114,7 +120,8 @@ case class DescribeFunctionCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
+    // Hard code "<>", "!=", "between", "case", and "||"
+    // for now as there is no corresponding functions.
     functionName.funcName.toLowerCase(Locale.ROOT) match {
       case "<>" =>
         Row(s"Function: $functionName") ::
@@ -134,6 +141,9 @@ case class DescribeFunctionCommand(
             "[WHEN expr4 THEN expr5]* [ELSE expr6] END - " +
             "When `expr1` = `expr2`, returns `expr3`; " +
             "when `expr1` = `expr4`, return `expr5`; else return `expr6`.") :: Nil
+      case "||" =>
+        Row("Function: ||") ::
+          Row("Usage: expr1 || expr2 - Returns the concatenation of `expr1` and `expr2`.") :: Nil
       case _ =>
         try {
           val info = sparkSession.sessionState.catalog.lookupFunctionInfo(functionName)
@@ -167,7 +177,7 @@ case class DropFunctionCommand(
     functionName: String,
     ifExists: Boolean,
     isTemp: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
@@ -205,12 +215,8 @@ case class ShowFunctionsCommand(
     db: Option[String],
     pattern: Option[String],
     showUserFunctions: Boolean,
-    showSystemFunctions: Boolean) extends RunnableCommand {
-
-  override val output: Seq[Attribute] = {
-    val schema = StructType(StructField("function", StringType, nullable = false) :: Nil)
-    schema.toAttributes
-  }
+    showSystemFunctions: Boolean,
+    override val output: Seq[Attribute]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val dbName = db.getOrElse(sparkSession.sessionState.catalog.getCurrentDatabase)
@@ -223,8 +229,10 @@ case class ShowFunctionsCommand(
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
         }
-    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
-    // "<>", "!=", "between", and "case" is SystemFunctions, only show when showSystemFunctions=true
+    // Hard code "<>", "!=", "between", "case", and "||"
+    // for now as there is no corresponding functions.
+    // "<>", "!=", "between", "case", and "||" is SystemFunctions,
+    // only show when showSystemFunctions=true
     if (showSystemFunctions) {
       (functionNames ++
         StringUtils.filterPattern(FunctionsCommand.virtualOperators, pattern.getOrElse("*")))
@@ -236,8 +244,47 @@ case class ShowFunctionsCommand(
   }
 }
 
+
+/**
+ * A command for users to refresh the persistent function.
+ * The syntax of using this command in SQL is:
+ * {{{
+ *    REFRESH FUNCTION functionName
+ * }}}
+ */
+case class RefreshFunctionCommand(
+    databaseName: Option[String],
+    functionName: String)
+  extends LeafRunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName, databaseName))) {
+      throw new AnalysisException(s"Cannot refresh built-in function $functionName")
+    }
+    if (catalog.isTemporaryFunction(FunctionIdentifier(functionName, databaseName))) {
+      throw new AnalysisException(s"Cannot refresh temporary function $functionName")
+    }
+
+    val identifier = FunctionIdentifier(
+      functionName, Some(databaseName.getOrElse(catalog.getCurrentDatabase)))
+    // we only refresh the permanent function.
+    if (catalog.isPersistentFunction(identifier)) {
+      // register overwrite function.
+      val func = catalog.getFunctionMetadata(identifier)
+      catalog.registerFunction(func, true)
+    } else {
+      // clear cached function and throw exception
+      catalog.unregisterFunction(identifier)
+      throw new NoSuchFunctionException(identifier.database.get, identifier.funcName)
+    }
+
+    Seq.empty[Row]
+  }
+}
+
 object FunctionsCommand {
   // operators that do not have corresponding functions.
   // They should be handled `DescribeFunctionCommand`, `ShowFunctionsCommand`
-  val virtualOperators = Seq("!=", "<>", "between", "case")
+  val virtualOperators = Seq("!=", "<>", "between", "case", "||")
 }

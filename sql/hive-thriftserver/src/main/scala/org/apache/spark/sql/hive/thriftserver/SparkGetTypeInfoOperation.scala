@@ -19,15 +19,15 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.util.UUID
 
-import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType
-import org.apache.hive.service.cli.{HiveSQLException, OperationState}
+import org.apache.hadoop.hive.serde2.thrift.Type
+import org.apache.hadoop.hive.serde2.thrift.Type._
+import org.apache.hive.service.cli.OperationState
 import org.apache.hive.service.cli.operation.GetTypeInfoOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.util.{Utils => SparkUtils}
 
 /**
  * Spark's own GetTypeInfoOperation
@@ -63,7 +63,7 @@ private[hive] class SparkGetTypeInfoOperation(
       parentSession.getUsername)
 
     try {
-      ThriftserverShimUtils.supportedType().foreach(typeInfo => {
+      SparkGetTypeInfoUtil.supportedType.foreach(typeInfo => {
         val rowData = Array[AnyRef](
           typeInfo.getName, // TYPE_NAME
           typeInfo.toJavaSQLType.asInstanceOf[AnyRef], // DATA_TYPE
@@ -87,22 +87,19 @@ private[hive] class SparkGetTypeInfoOperation(
         rowSet.addRow(rowData)
       })
       setState(OperationState.FINISHED)
-    } catch {
-      case e: Throwable =>
-        logError(s"Error executing get type info with $statementId", e)
-        setState(OperationState.ERROR)
-        e match {
-          case hiveException: HiveSQLException =>
-            HiveThriftServer2.eventManager.onStatementError(
-              statementId, hiveException.getMessage, SparkUtils.exceptionString(hiveException))
-            throw hiveException
-          case _ =>
-            val root = ExceptionUtils.getRootCause(e)
-            HiveThriftServer2.eventManager.onStatementError(
-              statementId, root.getMessage, SparkUtils.exceptionString(root))
-            throw new HiveSQLException("Error getting type info: " + root.toString, root)
-        }
-    }
+    } catch onError()
+
     HiveThriftServer2.eventManager.onStatementFinish(statementId)
+  }
+}
+
+private[hive] object SparkGetTypeInfoUtil {
+  val supportedType: Seq[Type] = {
+    Seq(NULL_TYPE, BOOLEAN_TYPE, STRING_TYPE, BINARY_TYPE,
+      TINYINT_TYPE, SMALLINT_TYPE, INT_TYPE, BIGINT_TYPE,
+      FLOAT_TYPE, DOUBLE_TYPE, DECIMAL_TYPE,
+      DATE_TYPE, TIMESTAMP_TYPE,
+      ARRAY_TYPE, MAP_TYPE, STRUCT_TYPE, CHAR_TYPE, VARCHAR_TYPE,
+      INTERVAL_YEAR_MONTH_TYPE, INTERVAL_DAY_TIME_TYPE)
   }
 }

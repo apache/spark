@@ -2,6 +2,22 @@
    Author's custom styles
    ========================================================================== */
 
+body {
+  font-size: 14px;
+}
+
+a {
+  color: #08c;
+}
+
+a:hover {
+  color: #05c;
+}
+
+img {
+  max-width: 100%;
+}
+
 table {
   margin: 15px 0;
   padding: 0;
@@ -33,10 +49,25 @@ table tr td {
   padding: 6px 13px;
 }
 
-.navbar .brand {
+.navbar {
+  background-color: #fafafa;
+  background-image: linear-gradient(to bottom, #ffffff, #e2f1f8);
+  background-repeat: repeat-x;
+  box-shadow: 0 1px 10px rgba(0,0,0,.1);
+  border-bottom-color: #d4d4d4;
+  border-bottom-style: solid;
+  border-bottom-width: 1px;
+  font-size: 15px;
+  line-height: 1;
+  margin-bottom: 15px;
+  padding: 0 1rem;
+}
+
+.navbar .navbar-brand {
   height: 50px;
   width: 110px;
   margin-left: 1px;
+  margin-right: 0;
   padding: 0;
 }
 
@@ -50,14 +81,66 @@ table tr td {
   color: #777;
 }
 
-.navbar-inner {
+.navbar .container {
+  padding-left: 0;
   padding-top: 2px;
-  height: 50px;
 }
 
-.navbar-inner .nav {
-  margin-top: 5px;
+.navbar .navbar-nav,
+.nav {
+  margin-left: 0;
+}
+
+.navbar .navbar-nav > .nav-item {
+  line-height: 20px;
+}
+
+.navbar .navbar-nav > .nav-item > .nav-link {
+  color: #555;
+  padding: 10px 15px 10px;
+}
+
+.navbar .dropdown-menu {
   font-size: 15px;
+  padding: 5px 0;
+  margin: 0;
+  border-radius: 6px;
+  box-shadow: 0 5px 10px rgba(0,0,0,0.2);
+}
+
+@media (min-width:768px) {
+  .navbar .dropdown-menu::before {
+    position: absolute;
+    top: -7px;
+    left: 9px;
+    display: inline-block;
+    border-right: 7px solid transparent;
+    border-bottom: 7px solid #ccc;
+    border-left: 7px solid transparent;
+    border-bottom-color: rgba(0,0,0,0.2);
+    content: '';
+  }
+
+  .navbar .dropdown-menu::after {
+    position: absolute;
+    top: -6px;
+    left: 10px;
+    display: inline-block;
+    border-right: 6px solid transparent;
+    border-bottom: 6px solid #fff;
+    border-left: 6px solid transparent;
+    content: '';
+  }
+}
+
+.navbar .dropdown-menu .dropdown-item:hover,
+.navbar .dropdown-menu .dropdown-item:focus,
+.navbar .dropdown-submenu:hover .dropdown-item {
+  color: #fff;
+  text-decoration: none;
+  background-color: #0088cc;
+  background-image: linear-gradient(to bottom,#0088cc,#0087b3);
+  background-repeat: repeat-x;
 }
 
 .navbar .divider-vertical {
@@ -79,10 +162,15 @@ body .container-wrapper {
   margin-right: auto;
   border-radius: 15px;
   position: relative;
+  min-height: 100vh;
 }
 
 .title {
   font-size: 32px;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: bold;
 }
 
 h1 {
@@ -100,8 +188,22 @@ h3 {
   margin-top: 10px;
 }
 
+h4 {
+  font-size: 18px;
+  line-height: 20px;
+}
+
 pre {
+  background-color: #f5f5f5;
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 4px;
   font-family: "Menlo", "Lucida Console", monospace;
+  padding: 9.5px;
+}
+
+ul, ol {
+  padding: 0;
+  margin: 0 0 10px 25px;
 }
 
 code {
@@ -110,6 +212,10 @@ code {
   border: none;
   padding: 0;
   color: #444444;
+}
+
+pre code {
+  background: transparent;
 }
 
 dt code {
@@ -148,7 +254,7 @@ a:hover code {
   position: relative;
   background-color: #FFF;
   max-width: 914px;
-  line-height: 1.6; /* Inspired by Github's wiki style */
+  line-height: 1.6; /* Inspired by GitHub's wiki style */
   padding-left: 15px;
 }
 
@@ -157,8 +263,9 @@ a:hover code {
   position: relative;
   background-color: #FFF;
   max-width: 914px;
-  line-height: 1.6; /* Inspired by Github's wiki style */
+  line-height: 1.6; /* Inspired by GitHub's wiki style */
   padding-left: 30px;
+  min-height: 100vh;
 }
 
 .dropdown-menu {
@@ -170,33 +277,10 @@ a:hover code {
 }
 
 /**
- * Make dropdown menus in nav bars show on hover instead of click
- * using solution at http://stackoverflow.com/questions/8878033/how-
- * to-make-twitter-bootstrap-menu-dropdown-on-hover-rather-than-click
- **/
-ul.nav li.dropdown:hover ul.dropdown-menu{
-  display: block;
-}
-
-a.menu:after, .dropdown-toggle:after {
-  content: none;
-}
-
-/** Make the submenus open on hover on the parent menu item */
-ul.nav li.dropdown ul.dropdown-menu li.dropdown-submenu:hover ul.dropdown-menu {
-  display: block;
-}
-
-/** Make the submenus be invisible until the parent menu item is hovered upon */
-ul.nav li.dropdown ul.dropdown-menu li.dropdown-submenu ul.dropdown-menu {
-  display: none;
-}
-
-/**
  * Made the navigation bar buttons not grey out when clicked.
  * Essentially making nav bar buttons not react to clicks, only hover events.
  */
-.navbar .nav li.dropdown.open > .dropdown-toggle {
+.navbar .navbar-nav .nav-item.dropdown.open > .dropdown-toggle {
   background-color: transparent;
 }
 
@@ -205,12 +289,16 @@ ul.nav li.dropdown ul.dropdown-menu li.dropdown-submenu ul.dropdown-menu {
  * That looks weird. Changed the colors to active - blue, inactive - black, and
  * no color change on hover.
  */
-.nav-tabs > .active > a, .nav-tabs > .active > a:hover {
+.nav-tabs .nav-link.active, .nav-tabs .nav-link.active:hover {
   color: #08c;
 }
 
-.nav-tabs > li > a, .nav-tabs > li > a:hover {
+.nav-tabs .nav-link, .nav-tabs .nav-link:hover {
   color: #333;
+}
+
+.nav-tabs .nav-link:not(.active):focus, .nav-tabs .nav-link:not(.active):hover {
+  background-color: #e9ecef;
 }
 
 /**
@@ -238,15 +326,11 @@ a.anchorjs-link:hover { text-decoration: none; }
   border-left-width: 0px;
   border-bottom-width: 0px;
   margin-top: 0px;
-  width: 210px;
+  width: 220px;
+  height: 80%;
   float: left;
   position: fixed;
   overflow-y: scroll;
-}
-
-.left-menu {
-  padding: 0px;
-  width: 399px;
 }
 
 .left-menu h3 {
@@ -280,6 +364,7 @@ label[for="nav-trigger"] {
   cursor: pointer;
   background-size: contain;
   background-color: #D4F0FF;
+  box-sizing: content-box;
 }
 
 label[for="nav-trigger"]:hover {

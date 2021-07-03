@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.metric.CustomMetric;
 import org.apache.spark.sql.connector.read.streaming.ContinuousStream;
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream;
 import org.apache.spark.sql.types.StructType;
@@ -64,6 +65,10 @@ public interface Scan {
    * exception, data sources must overwrite this method to provide an implementation, if the
    * {@link Table} that creates this scan returns {@link TableCapability#BATCH_READ} support in its
    * {@link Table#capabilities()}.
+   * <p>
+   * If the scan supports runtime filtering and implements {@link SupportsRuntimeFiltering},
+   * this method may be called multiple times. Therefore, implementations can cache some state
+   * to avoid planning the job twice.
    *
    * @throws UnsupportedOperationException
    */
@@ -101,5 +106,14 @@ public interface Scan {
    */
   default ContinuousStream toContinuousStream(String checkpointLocation) {
     throw new UnsupportedOperationException(description() + ": Continuous scan are not supported");
+  }
+
+  /**
+   * Returns an array of supported custom metrics with name and description.
+   * By default it returns empty array.
+   */
+  default CustomMetric[] supportedCustomMetrics() {
+    CustomMetric[] NO_METRICS = {};
+    return NO_METRICS;
   }
 }

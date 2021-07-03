@@ -17,30 +17,7 @@
 # limitations under the License.
 #
 
-# Starts a slave instance on each machine specified in the conf/slaves file.
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-if [ -z "${SPARK_HOME}" ]; then
-  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
-fi
-
-. "${SPARK_HOME}/sbin/spark-config.sh"
-. "${SPARK_HOME}/bin/load-spark-env.sh"
-
-# Find the port number for the master
-if [ "$SPARK_MASTER_PORT" = "" ]; then
-  SPARK_MASTER_PORT=7077
-fi
-
-if [ "$SPARK_MASTER_HOST" = "" ]; then
-  case `uname` in
-      (SunOS)
-	  SPARK_MASTER_HOST="`/usr/sbin/check-hostname | awk '{print $NF}'`"
-	  ;;
-      (*)
-	  SPARK_MASTER_HOST="`hostname -f`"
-	  ;;
-  esac
-fi
-
-# Launch the slaves
-"${SPARK_HOME}/sbin/slaves.sh" cd "${SPARK_HOME}" \; "${SPARK_HOME}/sbin/start-slave.sh" "spark://$SPARK_MASTER_HOST:$SPARK_MASTER_PORT"
+>&2 echo "This script is deprecated, use start-workers.sh"
+"${DIR}/start-workers.sh" "$@"

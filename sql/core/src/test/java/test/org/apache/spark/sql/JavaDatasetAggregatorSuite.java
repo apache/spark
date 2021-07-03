@@ -38,18 +38,18 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
   public void testTypedAggregationAnonClass() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
 
-    Dataset<Tuple2<String, Integer>> agged = grouped.agg(new IntSumOf().toColumn());
+    Dataset<Tuple2<String, Integer>> aggregated = grouped.agg(new IntSumOf().toColumn());
     Assert.assertEquals(
         Arrays.asList(new Tuple2<>("a", 3), new Tuple2<>("b", 3)),
-        agged.collectAsList());
+        aggregated.collectAsList());
 
-    Dataset<Tuple2<String, Integer>> agged2 = grouped.agg(new IntSumOf().toColumn())
+    Dataset<Tuple2<String, Integer>> aggregated2 = grouped.agg(new IntSumOf().toColumn())
       .as(Encoders.tuple(Encoders.STRING(), Encoders.INT()));
     Assert.assertEquals(
       Arrays.asList(
         new Tuple2<>("a", 3),
         new Tuple2<>("b", 3)),
-      agged2.collectAsList());
+      aggregated2.collectAsList());
   }
 
   static class IntSumOf extends Aggregator<Tuple2<String, Integer>, Integer, Integer> {
@@ -88,43 +88,43 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
   @Test
   public void testTypedAggregationAverage() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
-    Dataset<Tuple2<String, Double>> agged = grouped.agg(
+    Dataset<Tuple2<String, Double>> aggregated = grouped.agg(
       org.apache.spark.sql.expressions.javalang.typed.avg(value -> value._2() * 2.0));
     Assert.assertEquals(
         Arrays.asList(new Tuple2<>("a", 3.0), new Tuple2<>("b", 6.0)),
-        agged.collectAsList());
+        aggregated.collectAsList());
   }
 
   @SuppressWarnings("deprecation")
   @Test
   public void testTypedAggregationCount() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
-    Dataset<Tuple2<String, Long>> agged = grouped.agg(
+    Dataset<Tuple2<String, Long>> aggregated = grouped.agg(
       org.apache.spark.sql.expressions.javalang.typed.count(value -> value));
     Assert.assertEquals(
         Arrays.asList(new Tuple2<>("a", 2L), new Tuple2<>("b", 1L)),
-        agged.collectAsList());
+        aggregated.collectAsList());
   }
 
   @SuppressWarnings("deprecation")
   @Test
   public void testTypedAggregationSumDouble() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
-    Dataset<Tuple2<String, Double>> agged = grouped.agg(
+    Dataset<Tuple2<String, Double>> aggregated = grouped.agg(
       org.apache.spark.sql.expressions.javalang.typed.sum(value -> (double) value._2()));
     Assert.assertEquals(
         Arrays.asList(new Tuple2<>("a", 3.0), new Tuple2<>("b", 3.0)),
-        agged.collectAsList());
+        aggregated.collectAsList());
   }
 
   @SuppressWarnings("deprecation")
   @Test
   public void testTypedAggregationSumLong() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
-    Dataset<Tuple2<String, Long>> agged = grouped.agg(
+    Dataset<Tuple2<String, Long>> aggregated = grouped.agg(
       org.apache.spark.sql.expressions.javalang.typed.sumLong(value -> (long) value._2()));
     Assert.assertEquals(
         Arrays.asList(new Tuple2<>("a", 3L), new Tuple2<>("b", 3L)),
-        agged.collectAsList());
+        aggregated.collectAsList());
   }
 }

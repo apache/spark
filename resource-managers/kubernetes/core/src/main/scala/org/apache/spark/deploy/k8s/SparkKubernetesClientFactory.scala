@@ -83,6 +83,7 @@ private[spark] object SparkKubernetesClientFactory extends Logging {
       .withWebsocketPingInterval(0)
       .withRequestTimeout(clientType.requestTimeout(sparkConf))
       .withConnectionTimeout(clientType.connectionTimeout(sparkConf))
+      .withTrustCerts(sparkConf.get(KUBERNETES_TRUST_CERTIFICATES))
       .withOption(oauthTokenValue) {
         (token, configBuilder) => configBuilder.withOauthToken(token)
       }.withOption(oauthTokenFile) {

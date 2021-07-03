@@ -50,8 +50,8 @@ limitations under the License.
                 <th>Succeeded Tasks</th>
                 <th>
           <span data-toggle="tooltip" data-placement="top"
-                title="Shows if this executor has been blacklisted by the scheduler due to task failures.">
-            Blacklisted</span>
+                title="Shows if this executor has been excluded by the scheduler due to task failures.">
+            Excluded</span>
                 </th>
                 <th><span id="executor-summary-input">Input Size / Records</span></th>
                 <th><span id="executor-summary-output">Output Size / Records</span></th>
@@ -59,6 +59,10 @@ limitations under the License.
                 <th><span id="executor-summary-shuffle-write">Shuffle Write Size / Records</span></th>
                 <th>Spill (Memory) </th>
                 <th>Spill (Disk) </th>
+                <th>Peak JVM Memory OnHeap / OffHeap</th>
+                <th>Peak Execution Memory OnHeap / OffHeap</th>
+                <th>Peak Storage Memory OnHeap / OffHeap</th>
+                <th>Peak Pool Memory Direct / Mapped</th>
                 </tr>
             </thead>
             <tbody>

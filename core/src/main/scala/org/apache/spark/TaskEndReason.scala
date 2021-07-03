@@ -90,17 +90,19 @@ case class FetchFailed(
   extends TaskFailedReason {
   override def toErrorString: String = {
     val bmAddressString = if (bmAddress == null) "null" else bmAddress.toString
-    s"FetchFailed($bmAddressString, shuffleId=$shuffleId, mapIndex=$mapIndex, " +
+    val mapIndexString = if (mapIndex == Int.MinValue) "Unknown" else mapIndex.toString
+    s"FetchFailed($bmAddressString, shuffleId=$shuffleId, mapIndex=$mapIndexString, " +
       s"mapId=$mapId, reduceId=$reduceId, message=\n$message\n)"
   }
 
   /**
    * Fetch failures lead to a different failure handling path: (1) we don't abort the stage after
    * 4 task failures, instead we immediately go back to the stage which generated the map output,
-   * and regenerate the missing data.  (2) we don't count fetch failures for blacklisting, since
-   * presumably its not the fault of the executor where the task ran, but the executor which
-   * stored the data. This is especially important because we might rack up a bunch of
-   * fetch-failures in rapid succession, on all nodes of the cluster, due to one bad node.
+   * and regenerate the missing data. (2) we don't count fetch failures from executors excluded
+   * due to too many task failures, since presumably its not the fault of the executor where
+   * the task ran, but the executor which stored the data. This is especially important because
+   * we might rack up a bunch of fetch-failures in rapid succession, on all nodes of the cluster,
+   * due to one bad node.
    */
   override def countTowardsTaskFailures: Boolean = false
 }
@@ -141,12 +143,12 @@ case class ExceptionFailure(
   private[spark] def this(
       e: Throwable,
       accumUpdates: Seq[AccumulableInfo],
-      preserveCause: Boolean) {
+      preserveCause: Boolean) = {
     this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e),
       if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None, accumUpdates)
   }
 
-  private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulableInfo]) {
+  private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulableInfo]) = {
     this(e, accumUpdates, preserveCause = true)
   }
 

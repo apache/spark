@@ -129,7 +129,7 @@ class DecisionTreeClassifier @Since("1.4.0") (
     instr.logNumClasses(numClasses)
     instr.logParams(this, labelCol, featuresCol, predictionCol, rawPredictionCol,
       probabilityCol, leafCol, maxDepth, maxBins, minInstancesPerNode, minInfoGain,
-      maxMemoryInMB, cacheNodeIds, checkpointInterval, impurity, seed)
+      maxMemoryInMB, cacheNodeIds, checkpointInterval, impurity, seed, thresholds)
 
     val trees = RandomForest.run(instances, strategy, numTrees = 1, featureSubsetStrategy = "all",
       seed = $(seed), instr = Some(instr), parentUID = Some(uid))
@@ -288,7 +288,8 @@ object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassifica
       DefaultParamsWriter.saveMetadata(instance, path, sc, Some(extraMetadata))
       val (nodeData, _) = NodeData.build(instance.rootNode, 0)
       val dataPath = new Path(path, "data").toString
-      sparkSession.createDataFrame(nodeData).write.parquet(dataPath)
+      val numDataParts = NodeData.inferNumPartitions(instance.numNodes)
+      sparkSession.createDataFrame(nodeData).repartition(numDataParts).write.parquet(dataPath)
     }
   }
 

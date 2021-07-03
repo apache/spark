@@ -19,6 +19,7 @@ package org.apache.spark.util.kvstore;
 
 import java.io.File;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
@@ -276,6 +277,41 @@ public class LevelDBSuite {
     assertEquals(expected, results);
   }
 
+  @Test
+  public void testCloseLevelDBIterator() throws Exception {
+    // SPARK-31929: test when LevelDB.close() is called, related LevelDBIterators
+    // are closed. And files opened by iterators are also closed.
+    File dbPathForCloseTest = File
+      .createTempFile(
+        "test_db_close.",
+        ".ldb");
+    dbPathForCloseTest.delete();
+    LevelDB dbForCloseTest = new LevelDB(dbPathForCloseTest);
+    for (int i = 0; i < 8192; i++) {
+      dbForCloseTest.write(createCustomType1(i));
+    }
+    String key = dbForCloseTest
+      .view(CustomType1.class).iterator().next().key;
+    assertEquals("key0", key);
+    Iterator<CustomType1> it0 = dbForCloseTest
+      .view(CustomType1.class).max(1).iterator();
+    while (it0.hasNext()) {
+      it0.next();
+    }
+    System.gc();
+    Iterator<CustomType1> it1 = dbForCloseTest
+      .view(CustomType1.class).iterator();
+    assertEquals("key0", it1.next().key);
+    try (KVStoreIterator<CustomType1> it2 = dbForCloseTest
+      .view(CustomType1.class).closeableIterator()) {
+      assertEquals("key0", it2.next().key);
+    }
+    dbForCloseTest.close();
+    assertTrue(dbPathForCloseTest.exists());
+    FileUtils.deleteQuietly(dbPathForCloseTest);
+    assertTrue(!dbPathForCloseTest.exists());
+  }
+
   private CustomType1 createCustomType1(int i) {
     CustomType1 t = new CustomType1();
     t.key = "key" + i;
@@ -302,31 +338,4 @@ public class LevelDBSuite {
 
     return count;
   }
-
-  public static class IntKeyType {
-
-    @KVIndex
-    public int key;
-
-    @KVIndex("id")
-    public String id;
-
-    public List<String> values;
-
-    @Override
-    public boolean equals(Object o) {
-      if (o instanceof IntKeyType) {
-        IntKeyType other = (IntKeyType) o;
-        return key == other.key && id.equals(other.id) && values.equals(other.values);
-      }
-      return false;
-    }
-
-    @Override
-    public int hashCode() {
-      return id.hashCode();
-    }
-
-  }
-
 }

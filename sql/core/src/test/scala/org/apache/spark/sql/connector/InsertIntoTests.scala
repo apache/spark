@@ -446,21 +446,18 @@ trait InsertIntoSQLOnlyTests
       }
     }
 
-    test("InsertInto: overwrite - multiple static partitions - dynamic mode") {
-      // Since all partitions are provided statically, this should be supported by everyone
-      withSQLConf(PARTITION_OVERWRITE_MODE.key -> PartitionOverwriteMode.DYNAMIC.toString) {
-        val t1 = s"${catalogAndNamespace}tbl"
-        withTableAndData(t1) { view =>
-          sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
-            s"USING $v2Format PARTITIONED BY (id, p)")
-          sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
-          sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id = 2, p = 2) SELECT data FROM $view")
-          verifyTable(t1, Seq(
-            (2, "a", 2),
-            (2, "b", 2),
-            (2, "c", 2),
-            (4, "keep", 2)).toDF("id", "data", "p"))
-        }
+    dynamicOverwriteTest("InsertInto: overwrite - multiple static partitions - dynamic mode") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTableAndData(t1) { view =>
+        sql(s"CREATE TABLE $t1 (id bigint, data string, p int) " +
+          s"USING $v2Format PARTITIONED BY (id, p)")
+        sql(s"INSERT INTO $t1 VALUES (2L, 'dummy', 2), (4L, 'keep', 2)")
+        sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id = 2, p = 2) SELECT data FROM $view")
+        verifyTable(t1, Seq(
+          (2, "a", 2),
+          (2, "b", 2),
+          (2, "c", 2),
+          (4, "keep", 2)).toDF("id", "data", "p"))
       }
     }
 
@@ -478,6 +475,16 @@ trait InsertIntoSQLOnlyTests
         df.where("true").tail(5)
 
         verifyTable(t1, spark.table(view))
+      }
+    }
+
+    test("SPARK-34599: InsertInto: overwrite - dot in the partition column name - static mode") {
+      import testImplicits._
+      val t1 = "tbl"
+      withTable(t1) {
+        sql(s"CREATE TABLE $t1 (`a.b` string, `c.d` string) USING $v2Format PARTITIONED BY (`a.b`)")
+        sql(s"INSERT OVERWRITE $t1 PARTITION (`a.b` = 'a') (`c.d`) VALUES('b')")
+        verifyTable(t1, Seq("a" -> "b").toDF("id", "data"))
       }
     }
   }

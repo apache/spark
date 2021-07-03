@@ -25,6 +25,7 @@ import com.univocity.parsers.csv.{CsvParserSettings, CsvWriterSettings, Unescape
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 
@@ -65,7 +66,7 @@ class CSVOptions(
       case Some(null) => default
       case Some(value) if value.length == 0 => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
-      case _ => throw new RuntimeException(s"$paramName cannot be more than one character")
+      case _ => throw QueryExecutionErrors.paramExceedOneCharError(paramName)
     }
   }
 
@@ -78,7 +79,7 @@ class CSVOptions(
         value.toInt
       } catch {
         case e: NumberFormatException =>
-          throw new RuntimeException(s"$paramName should be an integer. Found $value")
+          throw QueryExecutionErrors.paramIsNotIntegerError(paramName, value)
       }
     }
   }
@@ -92,7 +93,7 @@ class CSVOptions(
     } else if (param.toLowerCase(Locale.ROOT) == "false") {
       false
     } else {
-      throw new Exception(s"$paramName flag can be true or false")
+      throw QueryExecutionErrors.paramIsNotBooleanValueError(paramName)
     }
   }
 
@@ -110,8 +111,7 @@ class CSVOptions(
     case Some(null) => None
     case Some(value) if value.length == 0 => None
     case Some(value) if value.length == 1 => Some(value.charAt(0))
-    case _ =>
-      throw new RuntimeException("charToEscapeQuoteEscaping cannot be more than one character")
+    case _ => throw QueryExecutionErrors.paramExceedOneCharError("charToEscapeQuoteEscaping")
   }
   val comment = getChar("comment", '\u0000')
 
@@ -166,8 +166,6 @@ class CSVOptions(
 
   val quoteAll = getBool("quoteAll", false)
 
-  val inputBufferSize = 128
-
   /**
    * The max error content length in CSV parser/writer exception message.
    */
@@ -213,6 +211,15 @@ class CSVOptions(
   }
   val lineSeparatorInWrite: Option[String] = lineSeparator
 
+  val inputBufferSize: Option[Int] = parameters.get("inputBufferSize").map(_.toInt)
+    .orElse(SQLConf.get.getConf(SQLConf.CSV_INPUT_BUFFER_SIZE))
+
+  /**
+   * The handling method to be used when unescaped quotes are found in the input.
+   */
+  val unescapedQuoteHandling: UnescapedQuoteHandling = UnescapedQuoteHandling.valueOf(parameters
+    .getOrElse("unescapedQuoteHandling", "STOP_AT_DELIMITER").toUpperCase(Locale.ROOT))
+
   def asWriterSettings: CsvWriterSettings = {
     val writerSettings = new CsvWriterSettings()
     val format = writerSettings.getFormat
@@ -220,7 +227,9 @@ class CSVOptions(
     format.setQuote(quote)
     format.setQuoteEscape(escape)
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
-    format.setComment(comment)
+    if (isCommentSet) {
+      format.setComment(comment)
+    }
     lineSeparatorInWrite.foreach(format.setLineSeparator)
 
     writerSettings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceFlagInWrite)
@@ -242,17 +251,21 @@ class CSVOptions(
     format.setQuoteEscape(escape)
     lineSeparator.foreach(format.setLineSeparator)
     charToEscapeQuoteEscaping.foreach(format.setCharToEscapeQuoteEscaping)
-    format.setComment(comment)
+    if (isCommentSet) {
+      format.setComment(comment)
+    } else {
+      settings.setCommentProcessingEnabled(false)
+    }
 
     settings.setIgnoreLeadingWhitespaces(ignoreLeadingWhiteSpaceInRead)
     settings.setIgnoreTrailingWhitespaces(ignoreTrailingWhiteSpaceInRead)
     settings.setReadInputOnSeparateThread(false)
-    settings.setInputBufferSize(inputBufferSize)
+    inputBufferSize.foreach(settings.setInputBufferSize)
     settings.setMaxColumns(maxColumns)
     settings.setNullValue(nullValue)
     settings.setEmptyValue(emptyValueInRead)
     settings.setMaxCharsPerColumn(maxCharsPerColumn)
-    settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
+    settings.setUnescapedQuoteHandling(unescapedQuoteHandling)
     settings.setLineSeparatorDetectionEnabled(lineSeparatorInRead.isEmpty && multiLine)
     lineSeparatorInRead.foreach { _ =>
       settings.setNormalizeLineEndingsWithinQuotes(!multiLine)

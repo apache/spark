@@ -19,9 +19,10 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, Attribute, Cast, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types.DataType
@@ -35,10 +36,7 @@ object TableOutputResolver {
       conf: SQLConf): LogicalPlan = {
 
     if (expected.size < query.output.size) {
-      throw new AnalysisException(
-        s"""Cannot write to '$tableName', too many data columns:
-           |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
-           |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}""".stripMargin)
+      throw QueryCompilationErrors.cannotWriteTooManyColumnsToTableError(tableName, expected, query)
     }
 
     val errors = new mutable.ArrayBuffer[String]()
@@ -55,11 +53,8 @@ object TableOutputResolver {
 
     } else {
       if (expected.size > query.output.size) {
-        throw new AnalysisException(
-          s"""Cannot write to '$tableName', not enough data columns:
-             |Table columns: ${expected.map(c => s"'${c.name}'").mkString(", ")}
-             |Data columns: ${query.output.map(c => s"'${c.name}'").mkString(", ")}"""
-            .stripMargin)
+        throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
+          tableName, expected, query)
       }
 
       query.output.zip(expected).flatMap {
@@ -69,8 +64,7 @@ object TableOutputResolver {
     }
 
     if (errors.nonEmpty) {
-      throw new AnalysisException(
-        s"Cannot write incompatible data to table '$tableName':\n- ${errors.mkString("\n- ")}")
+      throw QueryCompilationErrors.cannotWriteIncompatibleDataToTableError(tableName, errors.toSeq)
     }
 
     if (resolved == query.output) {
@@ -93,19 +87,21 @@ object TableOutputResolver {
       tableAttr.metadata == queryExpr.metadata) {
       Some(queryExpr)
     } else {
+      val casted = storeAssignmentPolicy match {
+        case StoreAssignmentPolicy.ANSI =>
+          AnsiCast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone))
+        case _ =>
+          Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone))
+      }
+      val exprWithStrLenCheck = if (conf.charVarcharAsString) {
+        casted
+      } else {
+        CharVarcharUtils.stringLengthCheck(casted, tableAttr)
+      }
       // Renaming is needed for handling the following cases like
       // 1) Column names/types do not match, e.g., INSERT INTO TABLE tab1 SELECT 1, 2
       // 2) Target tables have column metadata
-      storeAssignmentPolicy match {
-        case StoreAssignmentPolicy.ANSI =>
-          Some(Alias(
-            AnsiCast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone)),
-            tableAttr.name)(explicitMetadata = Option(tableAttr.metadata)))
-        case _ =>
-          Some(Alias(
-            Cast(queryExpr, tableAttr.dataType, Option(conf.sessionLocalTimeZone)),
-            tableAttr.name)(explicitMetadata = Option(tableAttr.metadata)))
-      }
+      Some(Alias(exprWithStrLenCheck, tableAttr.name)(explicitMetadata = Some(tableAttr.metadata)))
     }
 
     storeAssignmentPolicy match {

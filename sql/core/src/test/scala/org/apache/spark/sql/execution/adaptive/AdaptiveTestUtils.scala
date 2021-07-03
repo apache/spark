@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import java.io.{PrintWriter, StringWriter}
-
 import org.scalactic.source.Position
 import org.scalatest.Tag
 

@@ -33,6 +33,7 @@ import org.apache.spark.annotation.{Stable, Unstable}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -160,6 +161,7 @@ trait Row extends Serializable {
    *   ByteType -> java.lang.Byte
    *   ShortType -> java.lang.Short
    *   IntegerType -> java.lang.Integer
+   *   LongType -> java.lang.Long
    *   FloatType -> java.lang.Float
    *   DoubleType -> java.lang.Double
    *   StringType -> String
@@ -188,6 +190,7 @@ trait Row extends Serializable {
    *   ByteType -> java.lang.Byte
    *   ShortType -> java.lang.Short
    *   IntegerType -> java.lang.Integer
+   *   LongType -> java.lang.Long
    *   FloatType -> java.lang.Float
    *   DoubleType -> java.lang.Double
    *   StringType -> String
@@ -314,7 +317,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getSeq[T](i: Int): Seq[T] = getAs[Seq[T]](i)
+  def getSeq[T](i: Int): Seq[T] = getAs[scala.collection.Seq[T]](i).toSeq
 
   /**
    * Returns the value at position i of array type as `java.util.List`.
@@ -349,7 +352,7 @@ trait Row extends Serializable {
   /**
    * Returns the value at position i.
    * For primitive types if value is null it returns 'zero value' specific for primitive
-   * ie. 0 for Int - use isNullAt to ensure that value is not null
+   * i.e. 0 for Int - use isNullAt to ensure that value is not null
    *
    * @throws ClassCastException when data type does not match.
    */
@@ -358,7 +361,7 @@ trait Row extends Serializable {
   /**
    * Returns the value of a given fieldName.
    * For primitive types if value is null it returns 'zero value' specific for primitive
-   * ie. 0 for Int - use isNullAt to ensure that value is not null
+   * i.e. 0 for Int - use isNullAt to ensure that value is not null
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.
@@ -373,13 +376,13 @@ trait Row extends Serializable {
    * @throws IllegalArgumentException when a field `name` does not exist.
    */
   def fieldIndex(name: String): Int = {
-    throw new UnsupportedOperationException("fieldIndex on a Row without schema is undefined.")
+    throw QueryExecutionErrors.fieldIndexOnRowWithoutSchemaError()
   }
 
   /**
    * Returns a Map consisting of names and values for the requested fieldNames
    * For primitive types if value is null it returns 'zero value' specific for primitive
-   * ie. 0 for Int - use isNullAt to ensure that value is not null
+   * i.e. 0 for Int - use isNullAt to ensure that value is not null
    *
    * @throws UnsupportedOperationException when schema is not defined.
    * @throws IllegalArgumentException when fieldName do not exist.
@@ -518,7 +521,7 @@ trait Row extends Serializable {
    * @throws NullPointerException when value is null.
    */
   private def getAnyValAs[T <: AnyVal](i: Int): T =
-    if (isNullAt(i)) throw new NullPointerException(s"Value at index $i is null")
+    if (isNullAt(i)) throw QueryExecutionErrors.valueIsNullError(i)
     else getAs[T](i)
 
   /**
@@ -547,7 +550,7 @@ trait Row extends Serializable {
     require(schema != null, "JSON serialization requires a non-null schema.")
 
     lazy val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
-    lazy val dateFormatter = DateFormatter.apply(zoneId)
+    lazy val dateFormatter = DateFormatter()
     lazy val timestampFormatter = TimestampFormatter(zoneId)
 
     // Convert an iterator of values to a json array

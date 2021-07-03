@@ -87,7 +87,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/fpm/FPGrowth.html) for
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.fpm.FPGrowth) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.fpm.FPGrowth.html) for more details.
 
 {% include_example python/ml/fpgrowth_example.py %}
 </div>
@@ -140,7 +140,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/fpm/PrefixSpan.html) f
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.fpm.PrefixSpan) for more details.
+Refer to the [Python API docs](api/python/reference/api/pyspark.ml.fpm.PrefixSpan) for more details.
 
 {% include_example python/ml/prefixspan_example.py %}
 </div>

@@ -22,6 +22,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSeq, BindReferences, Expression, InterpretedMutableProjection, InterpretedUnsafeProjection, JoinedRow, MutableProjection, NamedExpression, Projection, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate, ImperativeAggregate, NoOp, TypedImperativeAggregate}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
 import org.apache.spark.util.AccumulatorV2
@@ -33,7 +34,7 @@ class AggregatingAccumulator private(
     bufferSchema: Seq[DataType],
     initialValues: Seq[Expression],
     updateExpressions: Seq[Expression],
-    @transient private val mergeExpressions: Seq[Expression],
+    mergeExpressions: Seq[Expression],
     @transient private val resultExpressions: Seq[Expression],
     imperatives: Array[ImperativeAggregate],
     typedImperatives: Array[TypedImperativeAggregate[_]],
@@ -95,13 +96,14 @@ class AggregatingAccumulator private(
 
   /**
    * Driver side operations like `merge` and `value` are executed in the DAGScheduler thread. This
-   * thread does not have a SQL configuration so we attach our own here. Note that we can't (and
-   * shouldn't) call `merge` or `value` on an accumulator originating from an executor so we just
-   * return a default value here.
+   * thread does not have a SQL configuration so we attach our own here.
    */
-  private[this] def withSQLConf[T](default: => T)(body: => T): T = {
+  private[this] def withSQLConf[T](canRunOnExecutor: Boolean, default: => T)(body: => T): T = {
     if (conf != null) {
+      // When we can reach here, we are on the driver side.
       SQLConf.withExistingConf(conf)(body)
+    } else if (canRunOnExecutor) {
+      body
     } else {
       default
     }
@@ -147,7 +149,8 @@ class AggregatingAccumulator private(
     }
   }
 
-  override def merge(other: AccumulatorV2[InternalRow, InternalRow]): Unit = withSQLConf(()) {
+  override def merge(
+      other: AccumulatorV2[InternalRow, InternalRow]): Unit = withSQLConf(true, ()) {
     if (!other.isZero) {
       other match {
         case agg: AggregatingAccumulator =>
@@ -165,13 +168,13 @@ class AggregatingAccumulator private(
             i += 1
           }
         case _ =>
-          throw new UnsupportedOperationException(
-            s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
+          throw QueryExecutionErrors.cannotMergeClassWithOtherClassError(
+            this.getClass.getName, other.getClass.getName)
       }
     }
   }
 
-  override def value: InternalRow = withSQLConf(InternalRow.empty) {
+  override def value: InternalRow = withSQLConf(false, InternalRow.empty) {
     // Either use the existing buffer or create a temporary one.
     val input = if (!isZero) {
       buffer
@@ -257,16 +260,16 @@ object AggregatingAccumulator {
         imperative
     })
 
-    val updateAttrSeq: AttributeSeq = aggBufferAttributes ++ inputAttributes
-    val mergeAttrSeq: AttributeSeq = aggBufferAttributes ++ inputAggBufferAttributes
-    val aggBufferAttributesSeq: AttributeSeq = aggBufferAttributes
+    val updateAttrSeq: AttributeSeq = (aggBufferAttributes ++ inputAttributes).toSeq
+    val mergeAttrSeq: AttributeSeq = (aggBufferAttributes ++ inputAggBufferAttributes).toSeq
+    val aggBufferAttributesSeq: AttributeSeq = aggBufferAttributes.toSeq
 
     // Create the accumulator.
     new AggregatingAccumulator(
-      aggBufferAttributes.map(_.dataType),
-      initialValues,
-      updateExpressions.map(BindReferences.bindReference(_, updateAttrSeq)),
-      mergeExpressions.map(BindReferences.bindReference(_, mergeAttrSeq)),
+      aggBufferAttributes.map(_.dataType).toSeq,
+      initialValues.toSeq,
+      updateExpressions.map(BindReferences.bindReference(_, updateAttrSeq)).toSeq,
+      mergeExpressions.map(BindReferences.bindReference(_, mergeAttrSeq)).toSeq,
       resultExpressions.map(BindReferences.bindReference(_, aggBufferAttributesSeq)),
       imperatives.toArray,
       typedImperatives.toArray,

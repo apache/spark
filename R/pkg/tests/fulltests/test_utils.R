@@ -64,7 +64,12 @@ test_that("cleanClosure on R functions", {
   actual <- get("y", envir = env, inherits = FALSE)
   expect_equal(actual, y)
   actual <- get("g", envir = env, inherits = FALSE)
-  expect_equal(actual, g)
+  if (as.numeric(R.Version()$major) >= 4 && !startsWith(R.Version()$minor, "0")) {
+    # 4.1+ checks environment in the function
+    expect_true(all.equal(actual, g, check.environment = FALSE))
+  } else {
+    expect_equal(actual, g)
+  }
 
   # Test for nested enclosures and package variables.
   env2 <- new.env()
@@ -77,7 +82,12 @@ test_that("cleanClosure on R functions", {
   actual <- get("y", envir = env, inherits = FALSE)
   expect_equal(actual, y)
   actual <- get("g", envir = env, inherits = FALSE)
-  expect_equal(actual, g)
+  if (as.numeric(R.Version()$major) >= 4 && !startsWith(R.Version()$minor, "0")) {
+    # 4.1+ checks environment in the function
+    expect_true(all.equal(actual, g, check.environment = FALSE))
+  } else {
+    expect_equal(actual, g)
+  }
 
   base <- c(1, 2, 3)
   l <- list(field = matrix(1))
@@ -116,7 +126,7 @@ test_that("cleanClosure on R functions", {
   actual <- get("y", envir = env, inherits = FALSE)
   expect_equal(actual, y)
 
-  # Test for combination for nested and sequenctial functions in a closure
+  # Test for combination for nested and sequential functions in a closure
   f1 <- function(x) x + 1
   f2 <- function(x) f1(x) + 2
   userFunc <- function(x) { f1(x); f2(x) }

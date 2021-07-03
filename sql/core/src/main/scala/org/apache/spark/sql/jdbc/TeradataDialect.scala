@@ -50,4 +50,9 @@ private case object TeradataDialect extends JdbcDialect {
       cascade: Option[Boolean] = isCascadingTruncateTable): String = {
     s"DELETE FROM $table ALL"
   }
+
+  // See https://docs.teradata.com/reader/scPHvjfglIlB8F70YliLAw/wysTNUMsP~0aGzksLCl1kg
+  override def renameTable(oldTable: String, newTable: String): String = {
+    s"RENAME TABLE $oldTable TO $newTable"
+  }
 }

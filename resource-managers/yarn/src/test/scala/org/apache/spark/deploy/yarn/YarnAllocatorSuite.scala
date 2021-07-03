@@ -22,13 +22,16 @@ import java.util.Collections
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+import org.apache.hadoop.net.{Node, NodeBase}
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.ArgumentCaptor
 import org.mockito.Mockito._
-import org.scalatest.{BeforeAndAfterEach, Matchers}
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -47,6 +50,9 @@ class MockResolver extends SparkRackResolver(SparkHadoopUtil.get.conf) {
   override def resolve(hostName: String): String = {
     if (hostName == "host3") "/rack2" else "/rack1"
   }
+
+  override def resolve(hostNames: Seq[String]): Seq[Node] =
+    hostNames.map(n => new NodeBase(n, resolve(n)))
 
 }
 
@@ -73,7 +79,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   // priority has to be 0 to match default profile id
   val RM_REQUEST_PRIORITY = Priority.newInstance(0)
   val defaultRPId = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
-  val defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
+  var defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConf)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -112,6 +118,9 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     for ((name, value) <- additionalConfigs) {
       sparkConfClone.set(name, value)
     }
+    // different spark confs means we need to reinit the default profile
+    ResourceProfile.clearDefaultProfile()
+    defaultRP = ResourceProfile.getOrCreateDefaultProfile(sparkConfClone)
 
     val allocator = new YarnAllocator(
       "not used",
@@ -266,12 +275,13 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       Map(s"${YARN_EXECUTOR_RESOURCE_TYPES_PREFIX}${GPU}.${AMOUNT}" -> "2G"))
 
     handler.updateResourceRequests()
-    val container = createContainer("host1", resource = handler.defaultResource)
+    val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+    val container = createContainer("host1", resource = defaultResource)
     handler.handleAllocatedContainers(Array(container))
 
     // get amount of memory and vcores from resource, so effectively skipping their validation
-    val expectedResources = Resource.newInstance(handler.defaultResource.getMemory(),
-      handler.defaultResource.getVirtualCores)
+    val expectedResources = Resource.newInstance(defaultResource.getMemory(),
+      defaultResource.getVirtualCores)
     setResourceRequests(Map("gpu" -> "2G"), expectedResources)
     val captor = ArgumentCaptor.forClass(classOf[ContainerRequest])
 
@@ -294,7 +304,8 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val (handler, _) = createAllocator(1, mockAmClient, sparkResources)
 
     handler.updateResourceRequests()
-    val yarnRInfo = ResourceRequestTestHelper.getResources(handler.defaultResource)
+    val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+    val yarnRInfo = ResourceRequestTestHelper.getResources(defaultResource)
     val allResourceInfo = yarnRInfo.map( rInfo => (rInfo.name -> rInfo.value) ).toMap
     assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).nonEmpty)
     assert(allResourceInfo.get(YARN_GPU_RESOURCE_CONFIG).get === 3)
@@ -521,9 +532,10 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getNumUnexpectedContainerRelease should be (2)
   }
 
-  test("blacklisted nodes reflected in amClient requests") {
-    // Internally we track the set of blacklisted nodes, but yarn wants us to send *changes*
-    // to the blacklist.  This makes sure we are sending the right updates.
+  test("excluded nodes reflected in amClient requests") {
+    // Internally we track the set of excluded nodes, but yarn wants us to send *changes*
+    // to it. Note the YARN api uses the term blacklist for excluded nodes.
+    // This makes sure we are sending the right updates.
     val mockAmClient = mock(classOf[AMRMClient[ContainerRequest]])
     val (handler, _) = createAllocator(4, mockAmClient)
     val resourceProfileToTotalExecs = mutable.HashMap(defaultRP -> 1)
@@ -532,14 +544,14 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       numLocalityAwareTasksPerResourceProfileId.toMap, Map(), Set("hostA"))
     verify(mockAmClient).updateBlacklist(Seq("hostA").asJava, Seq[String]().asJava)
 
-    val blacklistedNodes = Set(
+    val excludedNodes = Set(
       "hostA",
       "hostB"
     )
 
     resourceProfileToTotalExecs(defaultRP) = 2
     handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
-      numLocalityAwareTasksPerResourceProfileId.toMap, Map(), blacklistedNodes)
+      numLocalityAwareTasksPerResourceProfileId.toMap, Map(), excludedNodes)
     verify(mockAmClient).updateBlacklist(Seq("hostB").asJava, Seq[String]().asJava)
     resourceProfileToTotalExecs(defaultRP) = 3
     handler.requestTotalExecutorsWithPreferredLocalities(resourceProfileToTotalExecs.toMap,
@@ -590,7 +602,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.getNumExecutorsFailed should be (0)
   }
 
-  test("SPARK-26269: YarnAllocator should have same blacklist behaviour with YARN") {
+  test("SPARK-26269: YarnAllocator should have same excludeOnFailure behaviour with YARN") {
     val rmClientSpy = spy(rmClient)
     val maxExecutors = 11
 
@@ -598,7 +610,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       maxExecutors,
       rmClientSpy,
       Map(
-        YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED.key -> "true",
+        YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED.key -> "true",
         MAX_FAILED_EXEC_PER_NODE.key -> "0"))
     handler.updateResourceRequests()
 
@@ -606,7 +618,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val ids = 0 to maxExecutors
     val containers = createContainers(hosts, ids)
 
-    val nonBlacklistedStatuses = Seq(
+    val nonExcludedStatuses = Seq(
       ContainerExitStatus.SUCCESS,
       ContainerExitStatus.PREEMPTED,
       ContainerExitStatus.KILLED_EXCEEDED_VMEM,
@@ -617,24 +629,24 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       ContainerExitStatus.ABORTED,
       ContainerExitStatus.DISKS_FAILED)
 
-    val nonBlacklistedContainerStatuses = nonBlacklistedStatuses.zipWithIndex.map {
+    val nonExcludedContainerStatuses = nonExcludedStatuses.zipWithIndex.map {
       case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
     }
 
-    val BLACKLISTED_EXIT_CODE = 1
-    val blacklistedStatuses = Seq(ContainerExitStatus.INVALID, BLACKLISTED_EXIT_CODE)
+    val EXCLUDED_EXIT_CODE = 1
+    val excludedStatuses = Seq(ContainerExitStatus.INVALID, EXCLUDED_EXIT_CODE)
 
-    val blacklistedContainerStatuses = blacklistedStatuses.zip(9 until maxExecutors).map {
+    val excludedContainerStatuses = excludedStatuses.zip(9 until maxExecutors).map {
       case (exitStatus, idx) => createContainerStatus(containers(idx).getId, exitStatus)
     }
 
     handler.handleAllocatedContainers(containers.slice(0, 9))
-    handler.processCompletedContainers(nonBlacklistedContainerStatuses)
+    handler.processCompletedContainers(nonExcludedContainerStatuses)
     verify(rmClientSpy, never())
       .updateBlacklist(hosts.slice(0, 9).asJava, Collections.emptyList())
 
     handler.handleAllocatedContainers(containers.slice(9, 11))
-    handler.processCompletedContainers(blacklistedContainerStatuses)
+    handler.processCompletedContainers(excludedContainerStatuses)
     verify(rmClientSpy)
       .updateBlacklist(hosts.slice(9, 10).asJava, Collections.emptyList())
     verify(rmClientSpy)
@@ -653,9 +665,10 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
       sparkConf.set(MEMORY_OFFHEAP_SIZE, offHeapMemoryInByte)
       val (handler, _) = createAllocator(maxExecutors = 1,
         additionalConfigs = Map(EXECUTOR_MEMORY.key -> executorMemory.toString))
-      val memory = handler.defaultResource.getMemory
+      val defaultResource = handler.rpIdToYarnResource.get(defaultRPId)
+      val memory = defaultResource.getMemory
       assert(memory ==
-        executorMemory + offHeapMemoryInMB + YarnSparkHadoopUtil.MEMORY_OVERHEAD_MIN)
+        executorMemory + offHeapMemoryInMB + ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)
     } finally {
       sparkConf.set(MEMORY_OFFHEAP_ENABLED, originalOffHeapEnabled)
       sparkConf.set(MEMORY_OFFHEAP_SIZE, originalOffHeapSize)

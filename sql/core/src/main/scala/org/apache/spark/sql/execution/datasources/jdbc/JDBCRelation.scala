@@ -18,14 +18,16 @@
 package org.apache.spark.sql.execution.datasources.jdbc
 
 import scala.collection.mutable.ArrayBuffer
+import scala.math.BigDecimal.RoundingMode
 
 import org.apache.spark.Partition
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode, SparkSession, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources._
@@ -118,13 +120,28 @@ private[sql] object JDBCRelation extends Logging {
           s"Upper bound: ${boundValueToString(upperBound)}.")
         upperBound - lowerBound
       }
-    // Overflow and silliness can happen if you subtract then divide.
-    // Here we get a little roundoff, but that's (hopefully) OK.
-    val stride: Long = upperBound / numPartitions - lowerBound / numPartitions
+
+    // Overflow can happen if you subtract then divide. For example:
+    // (Long.MaxValue - Long.MinValue) / (numPartitions - 2).
+    // Also, using fixed-point decimals here to avoid possible inaccuracy from floating point.
+    val upperStride = (upperBound / BigDecimal(numPartitions))
+      .setScale(18, RoundingMode.HALF_EVEN)
+    val lowerStride = (lowerBound / BigDecimal(numPartitions))
+      .setScale(18, RoundingMode.HALF_EVEN)
+
+    val preciseStride = upperStride - lowerStride
+    val stride = preciseStride.toLong
+
+    // Determine the number of strides the last partition will fall short of compared to the
+    // supplied upper bound. Take half of those strides, and then add them to the lower bound
+    // for better distribution of the first and last partitions.
+    val lostNumOfStrides = (preciseStride - stride) * numPartitions / stride
+    val lowerBoundWithStrideAlignment = lowerBound +
+      ((lostNumOfStrides / 2) * stride).setScale(0, RoundingMode.HALF_UP).toLong
 
     var i: Int = 0
     val column = partitioning.column
-    var currentValue = lowerBound
+    var currentValue = lowerBoundWithStrideAlignment
     val ans = new ArrayBuffer[Partition]()
     while (i < numPartitions) {
       val lBoundValue = boundValueToString(currentValue)
@@ -160,16 +177,13 @@ private[sql] object JDBCRelation extends Logging {
       resolver(f.name, columnName) || resolver(dialect.quoteIdentifier(f.name), columnName)
     }.getOrElse {
       val maxNumToStringFields = SQLConf.get.maxToStringFields
-      throw new AnalysisException(s"User-defined partition column $columnName not " +
-        s"found in the JDBC relation: ${schema.simpleString(maxNumToStringFields)}")
+      throw QueryCompilationErrors.userDefinedPartitionNotFoundInJDBCRelationError(
+        columnName, schema.simpleString(maxNumToStringFields))
     }
     column.dataType match {
       case _: NumericType | DateType | TimestampType =>
       case _ =>
-        throw new AnalysisException(
-          s"Partition column type should be ${NumericType.simpleString}, " +
-            s"${DateType.catalogString}, or ${TimestampType.catalogString}, but " +
-            s"${column.dataType.catalogString} found.")
+        throw QueryCompilationErrors.invalidPartitionColumnTypeError(column)
     }
     (dialect.quoteIdentifier(column.name), column.dataType)
   }
@@ -186,7 +200,7 @@ private[sql] object JDBCRelation extends Logging {
     }
     columnType match {
       case _: NumericType => value.toLong
-      case DateType => parse(stringToDate(_, getZoneId(timeZoneId))).toLong
+      case DateType => parse(stringToDate).toLong
       case TimestampType => parse(stringToTimestamp(_, getZoneId(timeZoneId)))
     }
   }
@@ -198,12 +212,11 @@ private[sql] object JDBCRelation extends Logging {
     def dateTimeToString(): String = {
       val dateTimeStr = columnType match {
         case DateType =>
-          val dateFormatter = DateFormatter(DateTimeUtils.getZoneId(timeZoneId))
-          dateFormatter.format(value.toInt)
+          DateFormatter().format(value.toInt)
         case TimestampType =>
           val timestampFormatter = TimestampFormatter.getFractionFormatter(
             DateTimeUtils.getZoneId(timeZoneId))
-          DateTimeUtils.timestampToString(timestampFormatter, value)
+          timestampFormatter.format(value)
       }
       s"'$dateTimeStr'"
     }

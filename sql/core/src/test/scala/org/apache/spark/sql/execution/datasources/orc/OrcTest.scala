@@ -46,7 +46,6 @@ import org.apache.spark.sql.internal.SQLConf.ORC_IMPLEMENTATION
  *       -> OrcPartitionDiscoverySuite
  *       -> HiveOrcPartitionDiscoverySuite
  *   -> OrcFilterSuite
- *   -> HiveOrcFilterSuite
  */
 abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with BeforeAndAfterAll {
 
@@ -142,5 +141,27 @@ abstract class OrcTest extends QueryTest with FileBasedDataSourceTest with Befor
     file.deleteOnExit();
     FileUtils.copyURLToFile(url, file)
     spark.read.orc(file.getAbsolutePath)
+  }
+
+  /**
+   * Takes a sequence of products `data` to generate multi-level nested
+   * dataframes as new test data. It tests both non-nested and nested dataframes
+   * which are written and read back with Orc datasource.
+   *
+   * This is different from [[withOrcDataFrame]] which does not
+   * test nested cases.
+   */
+  protected def withNestedOrcDataFrame[T <: Product: ClassTag: TypeTag](data: Seq[T])
+      (runTest: (DataFrame, String, Any => Any) => Unit): Unit =
+    withNestedOrcDataFrame(spark.createDataFrame(data))(runTest)
+
+  protected def withNestedOrcDataFrame(inputDF: DataFrame)
+      (runTest: (DataFrame, String, Any => Any) => Unit): Unit = {
+    withNestedDataFrame(inputDF).foreach { case (newDF, colName, resultFun) =>
+      withTempPath { file =>
+        newDF.write.format(dataSourceName).save(file.getCanonicalPath)
+        readFile(file.getCanonicalPath, true) { df => runTest(df, colName, resultFun) }
+      }
+    }
   }
 }

@@ -23,10 +23,7 @@ import org.dmg.pmml.PMML
 import org.scalatest.Suite
 
 import org.apache.spark.SparkContext
-import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.Dataset
 
 trait PMMLReadWriteTest extends TempDirectory { self: Suite =>
   /**

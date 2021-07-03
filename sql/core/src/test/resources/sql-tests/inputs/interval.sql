@@ -20,6 +20,12 @@ select -interval '-1 month 1 day -1 second';
 select -interval -1 month 1 day -1 second;
 select +interval '-1 month 1 day -1 second';
 select +interval -1 month 1 day -1 second;
+select interval -'1-1' year to month;
+select interval -'-1-1' year to month;
+select interval +'-1-1' year to month;
+select interval - '1 2:3:4.001' day to second;
+select interval +'1 2:3:4.001' day to second;
+select interval -'-1 2:3:4.001' day to second;
 
 -- make intervals
 select make_interval(1);
@@ -29,6 +35,25 @@ select make_interval(1, 2, 3, 4);
 select make_interval(1, 2, 3, 4, 5);
 select make_interval(1, 2, 3, 4, 5, 6);
 select make_interval(1, 2, 3, 4, 5, 6, 7.008009);
+select make_interval(1, 2, 3, 4, 0, 0, 123456789012.123456);
+select make_interval(0, 0, 0, 0, 0, 0, 1234567890123456789);
+
+-- make_dt_interval
+select make_dt_interval(1);
+select make_dt_interval(1, 2);
+select make_dt_interval(1, 2, 3);
+select make_dt_interval(1, 2, 3, 4.005006);
+select make_dt_interval(1, 0, 0, 123456789012.123456);
+select make_dt_interval(2147483647);
+
+-- make_ym_interval
+select make_ym_interval(1);
+select make_ym_interval(1, 2);
+select make_ym_interval(0, 1);
+select make_ym_interval(178956970, 7);
+select make_ym_interval(178956970, 8);
+select make_ym_interval(-178956970, -8);
+select make_ym_interval(-178956970, -9);
 
 -- cast string to intervals
 select cast('1 second' as interval);
@@ -43,6 +68,8 @@ select cast('- +1 second' as interval);
 select interval 13.123456789 seconds, interval -13.123456789 second;
 select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond;
 select interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second;
+select interval '0-0' year to month;
+select interval '0 0:0:0' day to second;
 select interval '0 0:0:0.1' day to second;
 select interval '10-9' year to month;
 select interval '20 15' day to hour;
@@ -53,6 +80,7 @@ select interval '15:40:32.99899999' hour to second;
 select interval '40:32.99899999' minute to second;
 select interval '40:32' minute to second;
 select interval 30 day day;
+select interval 30 days days;
 
 -- invalid day-time string intervals
 select interval '20 15:40:32.99899999' day to hour;
@@ -88,6 +116,13 @@ select interval '12:11:10' hour to second '1' year;
 select interval (-30) day;
 select interval (a + 1) day;
 select interval 30 day day day;
+select interval (-30) days;
+select interval (a + 1) days;
+select interval 30 days days days;
+SELECT INTERVAL '178956970-7' YEAR TO MONTH;
+SELECT INTERVAL '178956970-8' YEAR TO MONTH;
+SELECT INTERVAL '-178956970-8' YEAR TO MONTH;
+SELECT INTERVAL -'178956970-8' YEAR TO MONTH;
 
 -- Interval year-month arithmetic
 
@@ -169,6 +204,10 @@ select interval '2-2\t' year to month;
 select interval '-\t2-2\t' year to month;
 select interval '\n0 12:34:46.789\t' day to second;
 select interval '\n-\t10\t 12:34:46.789\t' day to second;
+select interval '中文 interval 1 day';
+select interval 'interval中文 1 day';
+select interval 'interval 1中文day';
+
 
 -- interval overflow if (ansi) exception else NULL
 select -(a) from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
@@ -188,3 +227,29 @@ SELECT
   to_json(from_json('{"a":"1 days"}', 'a interval')),
   to_json(map('a', interval 25 month 100 day 130 minute)),
   from_json(to_json(map('a', interval 25 month 100 day 130 minute)), 'a interval');
+
+select interval '+';
+select interval '+.';
+select interval '1';
+select interval '1.2';
+select interval '- 2';
+select interval '1 day -';
+select interval '1 day 1';
+
+select interval '1 day 2' day;
+select interval 'interval 1' day;
+select interval '-\t 1' day;
+
+SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / 2;
+SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / 5;
+SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1;
+SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1L;
+SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0;
+SELECT (INTERVAL '-178956970-8' YEAR TO MONTH) / -1.0D;
+
+SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / 2;
+SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / 5;
+SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1;
+SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1L;
+SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0;
+SELECT (INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND) / -1.0D;

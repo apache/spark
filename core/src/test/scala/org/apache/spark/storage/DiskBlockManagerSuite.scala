@@ -18,11 +18,16 @@
 package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
+import java.nio.file.{Files, Paths}
+import java.nio.file.attribute.PosixFilePermissions
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config
 import org.apache.spark.util.Utils
+
 
 class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
   private val testConf = new SparkConf(false)
@@ -83,6 +88,40 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     val file = diskBlockManager.getFile("unmanaged_file")
     writeToFile(file, 10)
     assert(diskBlockManager.getAllBlocks().isEmpty)
+  }
+
+  test("should still create merge directories if one already exists under a local dir") {
+    val mergeDir0 = new File(rootDir0, DiskBlockManager.MERGE_MANAGER_DIR)
+    if (!mergeDir0.exists()) {
+      Files.createDirectories(mergeDir0.toPath)
+    }
+    val mergeDir1 = new File(rootDir1, DiskBlockManager.MERGE_MANAGER_DIR)
+    if (mergeDir1.exists()) {
+      Utils.deleteRecursively(mergeDir1)
+    }
+    testConf.set("spark.local.dir", rootDirs)
+    testConf.set("spark.shuffle.push.enabled", "true")
+    testConf.set(config.Tests.IS_TESTING, true)
+    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
+    assert(Utils.getConfiguredLocalDirs(testConf).map(
+      rootDir => new File(rootDir, DiskBlockManager.MERGE_MANAGER_DIR))
+      .filter(mergeDir => mergeDir.exists()).length === 2)
+    // mergeDir0 will be skipped as it already exists
+    assert(mergeDir0.list().length === 0)
+    // Sub directories get created under mergeDir1
+    assert(mergeDir1.list().length === testConf.get(config.DISKSTORE_SUB_DIRECTORIES))
+  }
+
+  test("Test dir creation with permission 770") {
+    val testDir = new File("target/testDir");
+    FileUtils.deleteQuietly(testDir)
+    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
+    diskBlockManager.createDirWithPermission770(testDir)
+    assert(testDir.exists && testDir.isDirectory)
+    val permission = PosixFilePermissions.toString(
+      Files.getPosixFilePermissions(Paths.get("target/testDir")))
+    assert(permission.equals("rwxrwx---"))
+    FileUtils.deleteQuietly(testDir)
   }
 
   def writeToFile(file: File, numBytes: Int): Unit = {

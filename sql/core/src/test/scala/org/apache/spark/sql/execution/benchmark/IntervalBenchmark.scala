@@ -39,11 +39,11 @@ import org.apache.spark.sql.internal.SQLConf
 object IntervalBenchmark extends SqlBasedBenchmark {
   import spark.implicits._
 
-  private def doBenchmark(cardinality: Long, exprs: Column*): Unit = {
+  private def doBenchmark(cardinality: Long, columns: Column*): Unit = {
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
       spark
         .range(0, cardinality, 1, 1)
-        .select(exprs: _*)
+        .select(columns: _*)
         .queryExecution
         .toRdd
         .foreach(_ => ())
@@ -59,6 +59,26 @@ object IntervalBenchmark extends SqlBasedBenchmark {
       doBenchmark(cardinality, exprs: _*)
     }
   }
+
+  private def doBenchmarkExpr(cardinality: Long, exprs: String*): Unit = {
+    withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true") {
+      spark
+        .range(0, cardinality, 1, 1)
+        .selectExpr(exprs: _*)
+        .queryExecution
+        .toRdd
+        .foreach(_ => ())
+    }
+  }
+
+  private def addCaseExpr(
+      benchmark: Benchmark,
+      cardinality: Long,
+      name: String,
+      exprs: String*): Unit = {
+    benchmark.addCase(name, numIters = 3) { _ => doBenchmarkExpr(cardinality, exprs: _*) }
+  }
+
 
   private def buildString(withPrefix: Boolean, units: Seq[String] = Seq.empty): Column = {
     val init = lit(if (withPrefix) "interval" else "") ::
@@ -78,25 +98,68 @@ object IntervalBenchmark extends SqlBasedBenchmark {
     }
   }
 
-  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
-    val N = 1000000
+  private def benchmarkIntervalStringParsing(cardinality: Long): Unit = {
     val timeUnits = Seq(
       "13 months", "                      1                     months",
       "100 weeks", "9 days", "12 hours", "-                    3 hours",
       "5 minutes", "45 seconds", "123 milliseconds", "567 microseconds")
     val intervalToTest = ListBuffer[String]()
 
-    val benchmark = new Benchmark("cast strings to intervals", N, output = output)
+    val benchmark = new Benchmark("cast strings to intervals", cardinality, output = output)
     // The first 2 cases are used to show the overhead of preparing the interval string.
-    addCase(benchmark, N, "prepare string w/ interval", buildString(true, timeUnits))
-    addCase(benchmark, N, "prepare string w/o interval", buildString(false, timeUnits))
-    addCase(benchmark, N, intervalToTest) // Only years
+    addCase(benchmark, cardinality, "prepare string w/ interval", buildString(true, timeUnits))
+    addCase(benchmark, cardinality, "prepare string w/o interval", buildString(false, timeUnits))
+    addCase(benchmark, cardinality, intervalToTest.toSeq) // Only years
 
     for (unit <- timeUnits) {
       intervalToTest.append(unit)
-      addCase(benchmark, N, intervalToTest)
+      addCase(benchmark, cardinality, intervalToTest.toSeq)
     }
 
     benchmark.run()
+  }
+
+  private def benchmarkMakeInterval(cardinality: Long): Unit = {
+    val benchmark = new Benchmark("make_interval()", cardinality, output = output)
+    val hmExprs = Seq("id % 24", "id % 60")
+    val hmsExprs = hmExprs ++ Seq("cast((id % 500000000) / 1000000.0 as decimal(18, 6))")
+    val ymExprs = Seq("(2000 + (id % 30))", "((id % 12) + 1)")
+    val wdExpr = Seq("((id % 54) + 1)", "((id % 1000) + 1)")
+    val args = ymExprs ++ wdExpr ++ hmsExprs
+
+    addCaseExpr(
+      benchmark,
+      cardinality,
+      "prepare make_interval()",
+      args: _*)
+    val foldableExpr = "make_interval(0, 1, 2, 3, 4, 5, 50.123456)"
+    addCaseExpr(benchmark, cardinality, foldableExpr, foldableExpr)
+    addCaseExpr(
+      benchmark,
+      cardinality,
+      "make_interval(*, *, 2, 3, 4, 5, 50.123456)",
+      s"make_interval(${ymExprs.mkString(",")}, 2, 3, 4, 5, 50.123456)")
+    addCaseExpr(
+      benchmark,
+      cardinality,
+      "make_interval(0, 1, *, *, 4, 5, 50.123456)",
+      s"make_interval(0, 1, ${wdExpr.mkString(",")}, 4, 5, 50.123456)")
+    addCaseExpr(
+      benchmark,
+      cardinality,
+      "make_interval(0, 1, 2, 3, *, *, *)",
+      s"make_interval(0, 1, 2, 3, ${hmsExprs.mkString(",")})")
+    addCaseExpr(
+      benchmark,
+      cardinality,
+      "make_interval(*, *, *, *, *, *, *)",
+      s"make_interval(${args.mkString(",")})")
+
+    benchmark.run()
+  }
+
+  override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
+    benchmarkIntervalStringParsing(1000000)
+    benchmarkMakeInterval(1000000)
   }
 }

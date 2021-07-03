@@ -1,0 +1,25 @@
+name: Report test results
+on:
+  workflow_run:
+    workflows: ["Build and test"]
+    types:
+      - completed
+
+jobs:
+  test_report:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download test results to report
+      uses: dawidd6/action-download-artifact@v2
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        workflow: ${{ github.event.workflow_run.workflow_id }}
+        commit: ${{ github.event.workflow_run.head_commit.id }}
+        workflow_conclusion: completed
+    - name: Publish test report
+      uses: scacap/action-surefire-report@v1
+      with:
+        check_name: Report test results
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        report_paths: "**/target/test-reports/*.xml"
+        commit: ${{ github.event.workflow_run.head_commit.id }}

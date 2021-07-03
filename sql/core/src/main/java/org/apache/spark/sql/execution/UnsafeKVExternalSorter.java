@@ -165,7 +165,8 @@ public final class UnsafeKVExternalSorter {
         (int) (long) SparkEnv.get().conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE()),
         pageSizeBytes,
         numElementsForSpillThreshold,
-        inMemSorter);
+        inMemSorter,
+        map.getTotalMemoryConsumption());
 
       // reset the map, so we can re-use it to insert new records. the inMemSorter will not used
       // anymore, so the underline array could be used by map again.

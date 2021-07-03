@@ -22,26 +22,33 @@ import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.annotation.{Evolving, Since}
 import org.apache.spark.resource.ResourceProfile._
 
 /**
  * A set of task resource requests. This is used in conjunction with the ResourceProfile to
  * programmatically specify the resources needed for an RDD that will be applied at the
  * stage level.
- *
- * This api is currently private until the rest of the pieces are in place and then it
- * will become public.
  */
-private[spark] class TaskResourceRequests() extends Serializable {
+@Evolving
+@Since("3.1.0")
+class TaskResourceRequests() extends Serializable {
 
   private val _taskResources = new ConcurrentHashMap[String, TaskResourceRequest]()
 
+  /**
+   * Returns all the resource requests for the task.
+   */
   def requests: Map[String, TaskResourceRequest] = _taskResources.asScala.toMap
 
+  /**
+   * (Java-specific) Returns all the resource requests for the task.
+   */
   def requestsJMap: JMap[String, TaskResourceRequest] = requests.asJava
 
   /**
    * Specify number of cpus per Task.
+   * This is a convenient API to add [[TaskResourceRequest]] for cpus.
    *
    * @param amount Number of cpus to allocate per Task.
    */
@@ -52,7 +59,8 @@ private[spark] class TaskResourceRequests() extends Serializable {
   }
 
   /**
-   *  Amount of a particular custom resource(GPU, FPGA, etc) to use.
+   * Amount of a particular custom resource(GPU, FPGA, etc) to use.
+   * This is a convenient API to add [[TaskResourceRequest]] for custom resources.
    *
    * @param resourceName Name of the resource.
    * @param amount Amount requesting as a Double to support fractional resource requests.
@@ -66,6 +74,9 @@ private[spark] class TaskResourceRequests() extends Serializable {
     this
   }
 
+  /**
+   * Add a certain [[TaskResourceRequest]] to the request set.
+   */
   def addRequest(treq: TaskResourceRequest): this.type = {
     _taskResources.put(treq.resourceName, treq)
     this

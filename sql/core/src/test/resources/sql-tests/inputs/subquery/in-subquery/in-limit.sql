@@ -1,6 +1,9 @@
 -- A test suite for IN LIMIT in parent side, subquery, and both predicate subquery
 -- It includes correlated cases.
 
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
+
 create temporary view t1 as select * from values
   ("val1a", 6S, 8, 10L, float(15.0), 20D, 20E2BD, timestamp '2014-04-04 01:00:00.000', date '2014-04-04'),
   ("val1b", 8S, 16, 19L, float(17.0), 25D, 26E2BD, timestamp '2014-05-04 01:01:00.000', date '2014-05-04'),
@@ -72,7 +75,7 @@ SELECT Count(DISTINCT( t1a )),
 FROM   t1
 WHERE  t1d IN (SELECT t2d
                FROM   t2
-               ORDER  BY t2c
+               ORDER  BY t2c, t2d
                LIMIT 2)
 GROUP  BY t1b
 ORDER  BY t1b DESC NULLS FIRST
@@ -93,7 +96,7 @@ SELECT Count(DISTINCT( t1a )),
 FROM   t1
 WHERE  t1d NOT IN (SELECT t2d
                    FROM   t2
-                   ORDER  BY t2b DESC nulls first
+                   ORDER  BY t2b DESC nulls first, t2d
                    LIMIT 1)
 GROUP  BY t1b
 ORDER BY t1b NULLS last

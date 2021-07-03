@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.Map
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{ScalaReflection, WalkedTypePath}
 import org.apache.spark.sql.catalyst.DeserializerBuildHelper._
@@ -29,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -52,6 +52,11 @@ import org.apache.spark.sql.types._
  *
  *   TimestampType -> java.sql.Timestamp if spark.sql.datetime.java8API.enabled is false
  *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
+ *
+ *   TimestampNTZType -> java.time.LocalDateTime
+ *
+ *   DayTimeIntervalType -> java.time.Duration
+ *   YearMonthIntervalType -> java.time.Period
  *
  *   BinaryType -> byte array
  *   ArrayType -> scala.collection.Seq or Array
@@ -84,8 +89,7 @@ object RowEncoder {
         annotation.udt()
       } else {
         UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
-          throw new SparkException(s"${udt.userClass.getName} is not annotated with " +
-            "SQLUserDefinedType nor registered with UDTRegistration.}")
+          throw QueryExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
         }
       }
       val obj = NewInstance(
@@ -101,12 +105,18 @@ object RowEncoder {
         createSerializerForSqlTimestamp(inputObject)
       }
 
+    case TimestampNTZType => createSerializerForLocalDateTime(inputObject)
+
     case DateType =>
       if (SQLConf.get.datetimeJava8ApiEnabled) {
         createSerializerForJavaLocalDate(inputObject)
       } else {
         createSerializerForSqlDate(inputObject)
       }
+
+    case _: DayTimeIntervalType => createSerializerForJavaDuration(inputObject)
+
+    case _: YearMonthIntervalType => createSerializerForJavaPeriod(inputObject)
 
     case d: DecimalType =>
       CheckOverflow(StaticInvoke(
@@ -220,12 +230,16 @@ object RowEncoder {
       } else {
         ObjectType(classOf[java.sql.Timestamp])
       }
+    case TimestampNTZType =>
+      ObjectType(classOf[java.time.LocalDateTime])
     case DateType =>
       if (SQLConf.get.datetimeJava8ApiEnabled) {
         ObjectType(classOf[java.time.LocalDate])
       } else {
         ObjectType(classOf[java.sql.Date])
       }
+    case _: DayTimeIntervalType => ObjectType(classOf[java.time.Duration])
+    case _: YearMonthIntervalType => ObjectType(classOf[java.time.Period])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
     case StringType => ObjectType(classOf[java.lang.String])
     case _: ArrayType => ObjectType(classOf[scala.collection.Seq[_]])
@@ -257,8 +271,7 @@ object RowEncoder {
         annotation.udt()
       } else {
         UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
-          throw new SparkException(s"${udt.userClass.getName} is not annotated with " +
-            "SQLUserDefinedType nor registered with UDTRegistration.}")
+          throw QueryExecutionErrors.userDefinedTypeNotAnnotatedAndRegisteredError(udt)
         }
       }
       val obj = NewInstance(
@@ -274,12 +287,19 @@ object RowEncoder {
         createDeserializerForSqlTimestamp(input)
       }
 
+    case TimestampNTZType =>
+      createDeserializerForLocalDateTime(input)
+
     case DateType =>
       if (SQLConf.get.datetimeJava8ApiEnabled) {
         createDeserializerForLocalDate(input)
       } else {
         createDeserializerForSqlDate(input)
       }
+
+    case _: DayTimeIntervalType => createDeserializerForDuration(input)
+
+    case _: YearMonthIntervalType => createDeserializerForPeriod(input)
 
     case _: DecimalType => createDeserializerForJavaBigDecimal(input, returnNullable = false)
 
@@ -291,9 +311,11 @@ object RowEncoder {
           MapObjects(deserializerFor(_), input, et),
           "array",
           ObjectType(classOf[Array[_]]), returnNullable = false)
+      // TODO should use `scala.collection.immutable.ArrayDeq.unsafeMake` method to create
+      //  `immutable.Seq` in Scala 2.13 when Scala version compatibility is no longer required.
       StaticInvoke(
         scala.collection.mutable.WrappedArray.getClass,
-        ObjectType(classOf[Seq[_]]),
+        ObjectType(classOf[scala.collection.Seq[_]]),
         "make",
         arrayData :: Nil,
         returnNullable = false)

@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import org.apache.hive.service.cli.OperationState
+import org.apache.hive.service.cli.{HiveSQLException, OperationState}
 import org.apache.hive.service.cli.operation.Operation
 
 import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType.{EXTERNAL, MANAGED, VIEW}
 import org.apache.spark.sql.internal.SQLConf
@@ -37,7 +38,7 @@ private[hive] trait SparkOperation extends Operation with Logging {
 
   protected var statementId = getHandle().getHandleIdentifier().getPublicId().toString()
 
-  protected def cleanup(): Unit = Unit // noop by default
+  protected def cleanup(): Unit = () // noop by default
 
   abstract override def run(): Unit = {
     withLocalProperties {
@@ -46,8 +47,8 @@ private[hive] trait SparkOperation extends Operation with Logging {
   }
 
   abstract override def close(): Unit = {
-    cleanup()
     super.close()
+    cleanup()
     logInfo(s"Close statement with $statementId")
     HiveThriftServer2.eventManager.onOperationClosed(statementId)
   }
@@ -73,10 +74,11 @@ private[hive] trait SparkOperation extends Operation with Logging {
           sqlContext.sparkContext.setLocalProperty(SparkContext.SPARK_SCHEDULER_POOL, pool)
         case None =>
       }
-
+      CURRENT_USER.set(getParentSession.getUserName)
       // run the body
       f
     } finally {
+      CURRENT_USER.remove()
       // reset local properties, will also reset SPARK_SCHEDULER_POOL
       sqlContext.sparkContext.setLocalProperties(originalProps)
 
@@ -92,5 +94,17 @@ private[hive] trait SparkOperation extends Operation with Logging {
     case VIEW => "VIEW"
     case t =>
       throw new IllegalArgumentException(s"Unknown table type is found: $t")
+  }
+
+  protected def onError(): PartialFunction[Throwable, Unit] = {
+    case e: Throwable =>
+      logError(s"Error operating $getType with $statementId", e)
+      super.setState(OperationState.ERROR)
+      HiveThriftServer2.eventManager.onStatementError(
+        statementId, e.getMessage, Utils.exceptionString(e))
+      e match {
+        case _: HiveSQLException => throw e
+        case _ => throw HiveThriftServerErrors.hiveOperatingError(getType, e)
+      }
   }
 }

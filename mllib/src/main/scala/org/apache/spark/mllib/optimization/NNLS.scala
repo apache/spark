@@ -19,7 +19,7 @@ package org.apache.spark.mllib.optimization
 
 import java.{util => ju}
 
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
+import org.apache.spark.ml.linalg.BLAS
 
 /**
  * Object used to solve nonnegative least squares problems using a modified
@@ -75,10 +75,10 @@ private[spark] object NNLS {
 
     // find the optimal unconstrained step
     def steplen(dir: Array[Double], res: Array[Double]): Double = {
-      val top = blas.ddot(n, dir, 1, res, 1)
-      blas.dgemv("N", n, n, 1.0, ata, n, dir, 1, 0.0, scratch, 1)
+      val top = BLAS.nativeBLAS.ddot(n, dir, 1, res, 1)
+      BLAS.nativeBLAS.dgemv("N", n, n, 1.0, ata, n, dir, 1, 0.0, scratch, 1)
       // Push the denominator upward very slightly to avoid infinities and silliness
-      top / (blas.ddot(n, scratch, 1, dir, 1) + 1e-20)
+      top / (BLAS.nativeBLAS.ddot(n, scratch, 1, dir, 1) + 1e-20)
     }
 
     // stopping condition
@@ -103,9 +103,9 @@ private[spark] object NNLS {
     var i = 0
     while (iterno < iterMax) {
       // find the residual
-      blas.dgemv("N", n, n, 1.0, ata, n, x, 1, 0.0, res, 1)
-      blas.daxpy(n, -1.0, atb, 1, res, 1)
-      blas.dcopy(n, res, 1, grad, 1)
+      BLAS.nativeBLAS.dgemv("N", n, n, 1.0, ata, n, x, 1, 0.0, res, 1)
+      BLAS.nativeBLAS.daxpy(n, -1.0, atb, 1, res, 1)
+      BLAS.nativeBLAS.dcopy(n, res, 1, grad, 1)
 
       // project the gradient
       i = 0
@@ -115,28 +115,28 @@ private[spark] object NNLS {
         }
         i = i + 1
       }
-      val ngrad = blas.ddot(n, grad, 1, grad, 1)
+      val ngrad = BLAS.nativeBLAS.ddot(n, grad, 1, grad, 1)
 
-      blas.dcopy(n, grad, 1, dir, 1)
+      BLAS.nativeBLAS.dcopy(n, grad, 1, dir, 1)
 
       // use a CG direction under certain conditions
       var step = steplen(grad, res)
       var ndir = 0.0
-      val nx = blas.ddot(n, x, 1, x, 1)
+      val nx = BLAS.nativeBLAS.ddot(n, x, 1, x, 1)
       if (iterno > lastWall + 1) {
         val alpha = ngrad / lastNorm
-        blas.daxpy(n, alpha, lastDir, 1, dir, 1)
+        BLAS.nativeBLAS.daxpy(n, alpha, lastDir, 1, dir, 1)
         val dstep = steplen(dir, res)
-        ndir = blas.ddot(n, dir, 1, dir, 1)
+        ndir = BLAS.nativeBLAS.ddot(n, dir, 1, dir, 1)
         if (stop(dstep, ndir, nx)) {
           // reject the CG step if it could lead to premature termination
-          blas.dcopy(n, grad, 1, dir, 1)
-          ndir = blas.ddot(n, dir, 1, dir, 1)
+          BLAS.nativeBLAS.dcopy(n, grad, 1, dir, 1)
+          ndir = BLAS.nativeBLAS.ddot(n, dir, 1, dir, 1)
         } else {
           step = dstep
         }
       } else {
-        ndir = blas.ddot(n, dir, 1, dir, 1)
+        ndir = BLAS.nativeBLAS.ddot(n, dir, 1, dir, 1)
       }
 
       // terminate?
@@ -166,7 +166,7 @@ private[spark] object NNLS {
       }
 
       iterno = iterno + 1
-      blas.dcopy(n, dir, 1, lastDir, 1)
+      BLAS.nativeBLAS.dcopy(n, dir, 1, lastDir, 1)
       lastNorm = ngrad
     }
     x.clone

@@ -20,8 +20,7 @@ import unittest
 
 from numpy import array
 
-from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector, \
-    DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
+from pyspark.mllib.linalg import Vectors, Matrices
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat import Statistics
@@ -178,10 +177,10 @@ class KolmogorovSmirnovTest(MLlibTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mllib.tests.test_stat import *
+    from pyspark.mllib.tests.test_stat import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

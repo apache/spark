@@ -19,7 +19,7 @@ import shutil
 import tempfile
 
 from pyspark.sql import Row
-from pyspark.sql.types import *
+from pyspark.sql.types import IntegerType, StructField, StructType, LongType, StringType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -107,7 +107,7 @@ class DataSourcesTests(ReusedSQLTestCase):
         df = self.spark.read.text(['python/test_support/sql/text-test.txt',
                                    'python/test_support/sql/text-test.txt'])
         count = df.count()
-        self.assertEquals(count, 4)
+        self.assertEqual(count, 4)
 
     def test_json_sampling_ratio(self):
         rdd = self.spark.sparkContext.range(0, 100, 1, 1) \
@@ -115,14 +115,14 @@ class DataSourcesTests(ReusedSQLTestCase):
         schema = self.spark.read.option('inferSchema', True) \
             .option('samplingRatio', 0.5) \
             .json(rdd).schema
-        self.assertEquals(schema, StructType([StructField("a", LongType(), True)]))
+        self.assertEqual(schema, StructType([StructField("a", LongType(), True)]))
 
     def test_csv_sampling_ratio(self):
         rdd = self.spark.sparkContext.range(0, 100, 1, 1) \
             .map(lambda x: '0.1' if x == 1 else str(x))
         schema = self.spark.read.option('inferSchema', True)\
             .csv(rdd, samplingRatio=0.5).schema
-        self.assertEquals(schema, StructType([StructField("_c0", IntegerType(), True)]))
+        self.assertEqual(schema, StructType([StructField("_c0", IntegerType(), True)]))
 
     def test_checking_csv_header(self):
         path = tempfile.mkdtemp()
@@ -135,7 +135,7 @@ class DataSourcesTests(ReusedSQLTestCase):
                 StructField('f1', IntegerType(), nullable=True)])
             df = self.spark.read.option('header', 'true').schema(schema)\
                 .csv(path, enforceSchema=False)
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 Exception,
                 "CSV header does not conform to the schema",
                 lambda: df.collect())
@@ -154,17 +154,17 @@ class DataSourcesTests(ReusedSQLTestCase):
                 StructField('b', LongType(), nullable=True),
                 StructField('c', StringType(), nullable=True)])
             readback = self.spark.read.json(path, dropFieldIfAllNull=True)
-            self.assertEquals(readback.schema, schema)
+            self.assertEqual(readback.schema, schema)
         finally:
             shutil.rmtree(path)
 
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.sql.tests.test_datasources import *
+    from pyspark.sql.tests.test_datasources import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

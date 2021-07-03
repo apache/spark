@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumnStat, CatalogStatistics, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -57,8 +57,11 @@ object CommandUtils extends Logging {
     if (sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
       val newTable = catalog.getTableMetadata(table.identifier)
       val newSize = CommandUtils.calculateTotalSize(sparkSession, newTable)
-      val newStats = CatalogStatistics(sizeInBytes = newSize)
-      catalog.alterTableStats(table.identifier, Some(newStats))
+      val isNewStats = newTable.stats.map(newSize != _.sizeInBytes).getOrElse(true)
+      if (isNewStats) {
+        val newStats = CatalogStatistics(sizeInBytes = newSize)
+        catalog.alterTableStats(table.identifier, Some(newStats))
+      }
     } else if (table.stats.nonEmpty) {
       catalog.alterTableStats(table.identifier, None)
     } else {
@@ -163,7 +166,7 @@ object CommandUtils extends Logging {
       .getConfString("hive.exec.stagingdir", ".hive-staging")
     val filter = new PathFilterIgnoreNonData(stagingDir)
     val sizes = InMemoryFileIndex.bulkListLeafFiles(paths.flatten,
-      sparkSession.sessionState.newHadoopConf(), filter, sparkSession, areRootPaths = true).map {
+      sparkSession.sessionState.newHadoopConf(), filter, sparkSession).map {
       case (_, files) => files.map(_.getLen).sum
     }
     // the size is 0 where paths(i) is not defined and sizes(i) where it is defined
@@ -194,6 +197,41 @@ object CommandUtils extends Logging {
       }
     }
     newStats
+  }
+
+  def analyzeTable(
+      sparkSession: SparkSession,
+      tableIdent: TableIdentifier,
+      noScan: Boolean): Unit = {
+    val sessionState = sparkSession.sessionState
+    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
+    val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
+    if (tableMeta.tableType == CatalogTableType.VIEW) {
+      // Analyzes a catalog view if the view is cached
+      val table = sparkSession.table(tableIdent.quotedString)
+      val cacheManager = sparkSession.sharedState.cacheManager
+      if (cacheManager.lookupCachedData(table.logicalPlan).isDefined) {
+        if (!noScan) {
+          // To collect table stats, materializes an underlying columnar RDD
+          table.count()
+        }
+      } else {
+        throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+      }
+    } else {
+      // Compute stats for the whole table
+      val newTotalSize = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val newRowCount =
+        if (noScan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
+
+      // Update the metastore if the above statistics of the table are different from those
+      // recorded in the metastore.
+      val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
+      if (newStats.isDefined) {
+        sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
+      }
+    }
   }
 
   /**
@@ -391,7 +429,7 @@ object CommandUtils extends Logging {
     try {
       sparkSession.catalog.uncacheTable(name)
     } catch {
-      case NonFatal(e) => logWarning("Exception when attempting to uncache $name", e)
+      case NonFatal(e) => logWarning(s"Exception when attempting to uncache $name", e)
     }
   }
 }
