@@ -76,6 +76,11 @@ class CastSuite extends CastSuiteBase {
     checkEvaluation(Cast(Literal("2015-031-8"), DateType), null)
   }
 
+  test("cast varchar to date") {
+    assert(Cast.canCast(VarcharType(10), DoubleType))
+    assert(Cast.canCast(CharType(10), DoubleType))
+  }
+
   test("casting to fixed-precision decimals") {
     assert(cast(123, DecimalType.USER_DEFAULT).nullable === false)
     assert(cast(10.03f, DecimalType.SYSTEM_DEFAULT).nullable)
