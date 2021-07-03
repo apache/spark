@@ -285,9 +285,10 @@ private[spark] object Utils extends Logging {
    */
   def createDirectory(dir: File): Boolean = {
     try {
-      // SPARK-35907
-      // This could throw more meaningful exception information if directory creation failed.
-      // To be on the safe side, try to create and then check if directory was created or not.
+      // SPARK-35907: The check was required by File#mkdirs() because it could sporadically
+      // fail silently. After switching to Files.createDirectories(), ideally, there should
+      // no longer be silent fails. But the check is kept for the safety concern. We can
+      // remove the check when we're sure that Files.createDirectories() would never fail silently.
       Files.createDirectories(dir.toPath)
       if ( !dir.exists() || !dir.isDirectory) {
         logError(s"Failed to create directory " + dir)
@@ -316,8 +317,8 @@ private[spark] object Utils extends Logging {
       }
       try {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
-        // SPARK-35907
-        // This could throw more meaningful exception information if directory creation failed.
+        // SPARK-35907: This could throw more meaningful exception information if directory
+        // creation failed.
         Files.createDirectories(dir.toPath)
       } catch {
         case e @ (_ : IOException | _ : SecurityException) =>
