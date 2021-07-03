@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.Matchers.the
+import org.scalatest.matchers.must.Matchers.the
 
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.optimizer.TransposeWindow
@@ -94,89 +94,187 @@ class DataFrameWindowFunctionsSuite extends QueryTest
   }
 
   test("corr, covar_pop, stddev_pop functions in specific window") {
-    val df = Seq(
-      ("a", "p1", 10.0, 20.0),
-      ("b", "p1", 20.0, 10.0),
-      ("c", "p2", 20.0, 20.0),
-      ("d", "p2", 20.0, 20.0),
-      ("e", "p3", 0.0, 0.0),
-      ("f", "p3", 6.0, 12.0),
-      ("g", "p3", 6.0, 12.0),
-      ("h", "p3", 8.0, 16.0),
-      ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
-    checkAnswer(
-      df.select(
-        $"key",
-        corr("value1", "value2").over(Window.partitionBy("partitionId")
-          .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        covar_pop("value1", "value2")
-          .over(Window.partitionBy("partitionId")
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
+      val df = Seq(
+        ("a", "p1", 10.0, 20.0),
+        ("b", "p1", 20.0, 10.0),
+        ("c", "p2", 20.0, 20.0),
+        ("d", "p2", 20.0, 20.0),
+        ("e", "p3", 0.0, 0.0),
+        ("f", "p3", 6.0, 12.0),
+        ("g", "p3", 6.0, 12.0),
+        ("h", "p3", 8.0, 16.0),
+        ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
+      checkAnswer(
+        df.select(
+          $"key",
+          corr("value1", "value2").over(Window.partitionBy("partitionId")
             .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        var_pop("value1")
-          .over(Window.partitionBy("partitionId")
-            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        stddev_pop("value1")
-          .over(Window.partitionBy("partitionId")
-            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        var_pop("value2")
-          .over(Window.partitionBy("partitionId")
-            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        stddev_pop("value2")
-          .over(Window.partitionBy("partitionId")
-            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
+          covar_pop("value1", "value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_pop("value1")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_pop("value1")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_pop("value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_pop("value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
 
-      // As stddev_pop(expr) = sqrt(var_pop(expr))
-      // the "stddev_pop" column can be calculated from the "var_pop" column.
-      //
-      // As corr(expr1, expr2) = covar_pop(expr1, expr2) / (stddev_pop(expr1) * stddev_pop(expr2))
-      // the "corr" column can be calculated from the "covar_pop" and the two "stddev_pop" columns.
-      Seq(
-        Row("a", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
-        Row("b", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
-        Row("c", null, 0.0, 0.0, 0.0, 0.0, 0.0),
-        Row("d", null, 0.0, 0.0, 0.0, 0.0, 0.0),
-        Row("e", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
-        Row("f", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
-        Row("g", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
-        Row("h", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
-        Row("i", Double.NaN, 0.0, 0.0, 0.0, 0.0, 0.0)))
+        // As stddev_pop(expr) = sqrt(var_pop(expr))
+        // the "stddev_pop" column can be calculated from the "var_pop" column.
+        //
+        // As corr(expr1, expr2) = covar_pop(expr1, expr2) / (stddev_pop(expr1) * stddev_pop(expr2))
+        // the "corr" column can be calculated from the "covar_pop" and the two "stddev_pop" columns
+        Seq(
+          Row("a", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("b", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("c", null, 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("d", null, 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("e", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("f", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("g", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("h", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("i", Double.NaN, 0.0, 0.0, 0.0, 0.0, 0.0)))
+    }
+  }
+
+  test("SPARK-13860: " +
+    "corr, covar_pop, stddev_pop functions in specific window " +
+    "LEGACY_STATISTICAL_AGGREGATE off") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false") {
+      val df = Seq(
+        ("a", "p1", 10.0, 20.0),
+        ("b", "p1", 20.0, 10.0),
+        ("c", "p2", 20.0, 20.0),
+        ("d", "p2", 20.0, 20.0),
+        ("e", "p3", 0.0, 0.0),
+        ("f", "p3", 6.0, 12.0),
+        ("g", "p3", 6.0, 12.0),
+        ("h", "p3", 8.0, 16.0),
+        ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
+      checkAnswer(
+        df.select(
+          $"key",
+          corr("value1", "value2").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          covar_pop("value1", "value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_pop("value1")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_pop("value1")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_pop("value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_pop("value2")
+            .over(Window.partitionBy("partitionId")
+              .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))),
+
+        // As stddev_pop(expr) = sqrt(var_pop(expr))
+        // the "stddev_pop" column can be calculated from the "var_pop" column.
+        //
+        // As corr(expr1, expr2) = covar_pop(expr1, expr2) / (stddev_pop(expr1) * stddev_pop(expr2))
+        // the "corr" column can be calculated from the "covar_pop" and the two "stddev_pop" columns
+        Seq(
+          Row("a", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("b", -1.0, -25.0, 25.0, 5.0, 25.0, 5.0),
+          Row("c", null, 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("d", null, 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("e", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("f", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("g", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("h", 1.0, 18.0, 9.0, 3.0, 36.0, 6.0),
+          Row("i", null, 0.0, 0.0, 0.0, 0.0, 0.0)))
+    }
   }
 
   test("covar_samp, var_samp (variance), stddev_samp (stddev) functions in specific window") {
-    val df = Seq(
-      ("a", "p1", 10.0, 20.0),
-      ("b", "p1", 20.0, 10.0),
-      ("c", "p2", 20.0, 20.0),
-      ("d", "p2", 20.0, 20.0),
-      ("e", "p3", 0.0, 0.0),
-      ("f", "p3", 6.0, 12.0),
-      ("g", "p3", 6.0, 12.0),
-      ("h", "p3", 8.0, 16.0),
-      ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
-    checkAnswer(
-      df.select(
-        $"key",
-        covar_samp("value1", "value2").over(Window.partitionBy("partitionId")
-          .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        var_samp("value1").over(Window.partitionBy("partitionId")
-          .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        variance("value1").over(Window.partitionBy("partitionId")
-          .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        stddev_samp("value1").over(Window.partitionBy("partitionId")
-          .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
-        stddev("value1").over(Window.partitionBy("partitionId")
-          .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))
-      ),
-      Seq(
-        Row("a", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
-        Row("b", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
-        Row("c", 0.0, 0.0, 0.0, 0.0, 0.0),
-        Row("d", 0.0, 0.0, 0.0, 0.0, 0.0),
-        Row("e", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
-        Row("f", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
-        Row("g", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
-        Row("h", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
-        Row("i", Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN)))
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "true") {
+      val df = Seq(
+        ("a", "p1", 10.0, 20.0),
+        ("b", "p1", 20.0, 10.0),
+        ("c", "p2", 20.0, 20.0),
+        ("d", "p2", 20.0, 20.0),
+        ("e", "p3", 0.0, 0.0),
+        ("f", "p3", 6.0, 12.0),
+        ("g", "p3", 6.0, 12.0),
+        ("h", "p3", 8.0, 16.0),
+        ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
+      checkAnswer(
+        df.select(
+          $"key",
+          covar_samp("value1", "value2").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_samp("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          variance("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_samp("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))
+        ),
+        Seq(
+          Row("a", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
+          Row("b", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
+          Row("c", 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("d", 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("e", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("f", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("g", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("h", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("i", Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN)))
+    }
+  }
+
+  test("SPARK-13860: " +
+    "covar_samp, var_samp (variance), stddev_samp (stddev) functions in specific window " +
+    "LEGACY_STATISTICAL_AGGREGATE off") {
+    withSQLConf(SQLConf.LEGACY_STATISTICAL_AGGREGATE.key -> "false") {
+      val df = Seq(
+        ("a", "p1", 10.0, 20.0),
+        ("b", "p1", 20.0, 10.0),
+        ("c", "p2", 20.0, 20.0),
+        ("d", "p2", 20.0, 20.0),
+        ("e", "p3", 0.0, 0.0),
+        ("f", "p3", 6.0, 12.0),
+        ("g", "p3", 6.0, 12.0),
+        ("h", "p3", 8.0, 16.0),
+        ("i", "p4", 5.0, 5.0)).toDF("key", "partitionId", "value1", "value2")
+      checkAnswer(
+        df.select(
+          $"key",
+          covar_samp("value1", "value2").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          var_samp("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          variance("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev_samp("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)),
+          stddev("value1").over(Window.partitionBy("partitionId")
+            .orderBy("key").rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing))
+        ),
+        Seq(
+          Row("a", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
+          Row("b", -50.0, 50.0, 50.0, 7.0710678118654755, 7.0710678118654755),
+          Row("c", 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("d", 0.0, 0.0, 0.0, 0.0, 0.0),
+          Row("e", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("f", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("g", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("h", 24.0, 12.0, 12.0, 3.4641016151377544, 3.4641016151377544),
+          Row("i", null, null, null, null, null)))
+    }
   }
 
   test("collect_list in ascending ordered window") {
@@ -301,7 +399,7 @@ class DataFrameWindowFunctionsSuite extends QueryTest
     val df = Seq((1, "1")).toDF("key", "value")
     val e = intercept[AnalysisException](
       df.select($"key", count("invalid").over()))
-    assert(e.message.contains("cannot resolve '`invalid`' given input columns: [key, value]"))
+    assert(e.message.contains("cannot resolve 'invalid' given input columns: [key, value]"))
   }
 
   test("numerical aggregate functions on string column") {
@@ -539,6 +637,157 @@ class DataFrameWindowFunctionsSuite extends QueryTest
         Row("b", 1, null, null, "l", "k", "k", "k"),
         Row("b", 2, null, null, "l", "l", "l", "l"),
         Row("b", 3, null, null, null, null, null, null)))
+  }
+
+  test("nth_value with ignoreNulls") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z"),
+      ("a", 4, nullStr),
+      ("b", 1, nullStr),
+      ("b", 2, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.partitionBy($"key").orderBy($"order")
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 2).over(window),
+        nth_value($"value", 2, ignoreNulls = false).over(window),
+        nth_value($"value", 2, ignoreNulls = true).over(window),
+        nth_value($"value", 3, ignoreNulls = false).over(window)),
+      Seq(
+        Row("a", 0, null, null, null, null),
+        Row("a", 1, "x", "x", null, null),
+        Row("a", 2, "x", "x", "y", "y"),
+        Row("a", 3, "x", "x", "y", "y"),
+        Row("a", 4, "x", "x", "y", "y"),
+        Row("b", 1, null, null, null, null),
+        Row("b", 2, null, null, null, null)))
+  }
+
+  test("nth_value with ignoreNulls over offset window frame") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z"),
+      ("a", 4, nullStr),
+      ("b", 1, nullStr),
+      ("b", 2, nullStr)).
+      toDF("key", "order", "value")
+    val window1 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+    val window2 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 2).over(window1),
+        nth_value($"value", 2, ignoreNulls = false).over(window1),
+        nth_value($"value", 2, ignoreNulls = true).over(window1),
+        nth_value($"value", 2).over(window2),
+        nth_value($"value", 2, ignoreNulls = false).over(window2),
+        nth_value($"value", 2, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 0, "x", "x", "y", null, null, null),
+        Row("a", 1, "x", "x", "y", "x", "x", null),
+        Row("a", 2, "x", "x", "y", "x", "x", "y"),
+        Row("a", 3, "x", "x", "y", "x", "x", "y"),
+        Row("a", 4, "x", "x", "y", "x", "x", "y"),
+        Row("b", 1, null, null, null, null, null, null),
+        Row("b", 2, null, null, null, null, null, null)))
+  }
+
+  test("nth_value on descending ordered window") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("a", 2, "y"),
+      ("a", 3, "z"),
+      ("a", 4, "v"),
+      ("b", 1, "k"),
+      ("b", 2, "l"),
+      ("b", 3, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.partitionBy($"key").orderBy($"order".desc)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 2).over(window),
+        nth_value($"value", 2, ignoreNulls = false).over(window),
+        nth_value($"value", 2, ignoreNulls = true).over(window)),
+      Seq(
+        Row("a", 0, "z", "z", "z"),
+        Row("a", 1, "z", "z", "z"),
+        Row("a", 2, "z", "z", "z"),
+        Row("a", 3, "z", "z", "z"),
+        Row("a", 4, null, null, null),
+        Row("b", 1, "l", "l", "k"),
+        Row("b", 2, "l", "l", null),
+        Row("b", 3, null, null, null)))
+  }
+
+  test("lead/lag with ignoreNulls") {
+    val nullStr: String = null
+    val df = Seq(
+      ("a", 0, nullStr),
+      ("a", 1, "x"),
+      ("b", 2, nullStr),
+      ("c", 3, nullStr),
+      ("a", 4, "y"),
+      ("b", 5, nullStr),
+      ("a", 6, "z"),
+      ("a", 7, "v"),
+      ("a", 8, nullStr)).
+      toDF("key", "order", "value")
+    val window = Window.orderBy($"order")
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        $"value",
+        lead($"value", 1).over(window),
+        lead($"value", 2).over(window),
+        lead($"value", 0, null, true).over(window),
+        lead($"value", 1, null, true).over(window),
+        lead($"value", 2, null, true).over(window),
+        lead($"value", 3, null, true).over(window),
+        lead(concat($"value", $"key"), 1, null, true).over(window),
+        lag($"value", 1).over(window),
+        lag($"value", 2).over(window),
+        lag($"value", 0, null, true).over(window),
+        lag($"value", 1, null, true).over(window),
+        lag($"value", 2, null, true).over(window),
+        lag($"value", 3, null, true).over(window),
+        lag(concat($"value", $"key"), 1, null, true).over(window))
+        .orderBy($"order"),
+      Seq(
+        Row("a", 0, null, "x", null, null, "x", "y", "z", "xa",
+          null, null, null, null, null, null, null),
+        Row("a", 1, "x", null, null, "x", "y", "z", "v", "ya",
+          null, null, "x", null, null, null, null),
+        Row("b", 2, null, null, "y", null, "y", "z", "v", "ya",
+          "x", null, null, "x", null, null, "xa"),
+        Row("c", 3, null, "y", null, null, "y", "z", "v", "ya",
+          null, "x", null, "x", null, null, "xa"),
+        Row("a", 4, "y", null, "z", "y", "z", "v", null, "za",
+          null, null, "y", "x", null, null, "xa"),
+        Row("b", 5, null, "z", "v", null, "z", "v", null, "za",
+          "y", null, null, "y", "x", null, "ya"),
+        Row("a", 6, "z", "v", null, "z", "v", null, null, "va",
+          null, "y", "z", "y", "x", null, "ya"),
+        Row("a", 7, "v", null, null, "v", null, null, null, null,
+          "z", null, "v", "z", "y", "x", "za"),
+        Row("a", 8, null, null, null, null, null, null, null, null,
+          "v", "z", null, "v", "z", "y", "va")))
   }
 
   test("SPARK-12989 ExtractWindowExpressions treats alias as regular attribute") {
@@ -794,5 +1043,31 @@ class DataFrameWindowFunctionsSuite extends QueryTest
       Seq(
         Row(Seq(-0.0f, 0.0f), Row(-0.0d, Double.NaN), Seq(Row(-0.0d, Double.NaN)), 2),
         Row(Seq(0.0f, -0.0f), Row(0.0d, Double.NaN), Seq(Row(0.0d, 0.0/0.0)), 2)))
+  }
+
+  test("SPARK-34227: WindowFunctionFrame should clear its states during preparation") {
+    // This creates a single partition dataframe with 3 records:
+    //   "a", 0, null
+    //   "a", 1, "x"
+    //   "b", 0, null
+    val df = spark.range(0, 3, 1, 1).select(
+      when($"id" < 2, lit("a")).otherwise(lit("b")).as("key"),
+      ($"id" % 2).cast("int").as("order"),
+      when($"id" % 2 === 0, lit(null)).otherwise(lit("x")).as("value"))
+
+    val window1 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing)
+    val window2 = Window.partitionBy($"key").orderBy($"order")
+      .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+    checkAnswer(
+      df.select(
+        $"key",
+        $"order",
+        nth_value($"value", 1, ignoreNulls = true).over(window1),
+        nth_value($"value", 1, ignoreNulls = true).over(window2)),
+      Seq(
+        Row("a", 0, "x", null),
+        Row("a", 1, "x", "x"),
+        Row("b", 0, null, null)))
   }
 }

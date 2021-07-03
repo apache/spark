@@ -17,7 +17,7 @@
 
 /**
  * These classes in this package are intentionally placed to the outer package of spark,
- * because IsolatedClientLoader leverages Spark classloader for shared classess including
+ * because IsolatedClientLoader leverages Spark classloader for shared classes including
  * spark package, and the test should fail if Spark initializes these listeners with
  * IsolatedClientLoader.
  */

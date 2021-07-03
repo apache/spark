@@ -327,7 +327,7 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Internal method to this RDD; will read from cache if applicable, or otherwise compute it.
-   * This should ''not'' be called by users directly, but is available for implementors of custom
+   * This should ''not'' be called by users directly, but is available for implementers of custom
    * subclasses of RDD.
    */
   final def iterator(split: Partition, context: TaskContext): Iterator[T] = {
@@ -1919,9 +1919,8 @@ abstract class RDD[T: ClassTag](
 
       val persistence = if (storageLevel != StorageLevel.NONE) storageLevel.description else ""
       val storageInfo = rdd.context.getRDDStorageInfo(_.id == rdd.id).map(info =>
-        "    CachedPartitions: %d; MemorySize: %s; ExternalBlockStoreSize: %s; DiskSize: %s".format(
-          info.numCachedPartitions, bytesToString(info.memSize),
-          bytesToString(info.externalBlockStoreSize), bytesToString(info.diskSize)))
+        "    CachedPartitions: %d; MemorySize: %s; DiskSize: %s".format(
+          info.numCachedPartitions, bytesToString(info.memSize), bytesToString(info.diskSize)))
 
       s"$rdd [$persistence]" +: storageInfo
     }
@@ -2010,6 +2009,9 @@ abstract class RDD[T: ClassTag](
   @transient protected lazy val isBarrier_ : Boolean =
     dependencies.filter(!_.isInstanceOf[ShuffleDependency[_, _, _]]).exists(_.rdd.isBarrier())
 
+  private final lazy val _outputDeterministicLevel: DeterministicLevel.Value =
+    getOutputDeterministicLevel
+
   /**
    * Returns the deterministic level of this RDD's output. Please refer to [[DeterministicLevel]]
    * for the definition.
@@ -2020,14 +2022,14 @@ abstract class RDD[T: ClassTag](
    * candidate that is deterministic least. Please override [[getOutputDeterministicLevel]] to
    * provide custom logic of calculating output deterministic level.
    */
-  // TODO: make it public so users can set deterministic level to their custom RDDs.
+  // TODO(SPARK-34612): make it public so users can set deterministic level to their custom RDDs.
   // TODO: this can be per-partition. e.g. UnionRDD can have different deterministic level for
   // different partitions.
-  private[spark] final lazy val outputDeterministicLevel: DeterministicLevel.Value = {
+  private[spark] final def outputDeterministicLevel: DeterministicLevel.Value = {
     if (isReliablyCheckpointed) {
       DeterministicLevel.DETERMINATE
     } else {
-      getOutputDeterministicLevel
+      _outputDeterministicLevel
     }
   }
 

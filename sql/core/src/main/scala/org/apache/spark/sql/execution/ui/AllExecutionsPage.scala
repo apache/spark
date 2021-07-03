@@ -26,6 +26,7 @@ import scala.xml.{Node, NodeSeq}
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.ui.{PagedDataSource, PagedTable, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -57,7 +58,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (running.nonEmpty) {
         val runningPageTable =
-          executionsTable(request, "running", running, currentTime, true, true, true)
+          executionsTable(request, "running", running.toSeq, currentTime, true, true, true)
 
         _content ++=
           <span id="running" class="collapse-aggregated-runningExecutions collapse-table"
@@ -75,7 +76,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (completed.nonEmpty) {
         val completedPageTable =
-          executionsTable(request, "completed", completed, currentTime, false, true, false)
+          executionsTable(request, "completed", completed.toSeq, currentTime, false, true, false)
 
         _content ++=
           <span id="completed" class="collapse-aggregated-completedExecutions collapse-table"
@@ -93,7 +94,7 @@ private[ui] class AllExecutionsPage(parent: SQLTab) extends WebUIPage("") with L
 
       if (failed.nonEmpty) {
         val failedPageTable =
-          executionsTable(request, "failed", failed, currentTime, false, true, true)
+          executionsTable(request, "failed", failed.toSeq, currentTime, false, true, true)
 
         _content ++=
           <span id="failed" class="collapse-aggregated-failedExecutions collapse-table"
@@ -408,7 +409,7 @@ private[ui] class ExecutionDataSource(
       case "Job IDs" | "Succeeded Job IDs" => Ordering by (_.completedJobData.headOption)
       case "Running Job IDs" => Ordering.by(_.runningJobData.headOption)
       case "Failed Job IDs" => Ordering.by(_.failedJobData.headOption)
-      case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
+      case unknownColumn => throw QueryExecutionErrors.unknownColumnError(unknownColumn)
     }
     if (desc) {
       ordering.reverse

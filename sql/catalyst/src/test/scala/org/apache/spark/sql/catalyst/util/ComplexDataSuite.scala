@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import scala.collection._
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInternalRow, SpecificInternalRow, UnsafeMapData, UnsafeProjection}

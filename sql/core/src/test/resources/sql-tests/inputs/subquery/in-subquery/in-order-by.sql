@@ -6,6 +6,9 @@
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM1 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
 
+--CONFIG_DIM2 spark.sql.optimizeNullAwareAntiJoin=true
+--CONFIG_DIM2 spark.sql.optimizeNullAwareAntiJoin=false
+
 create temporary view t1 as select * from values
   ("val1a", 6S, 8, 10L, float(15.0), 20D, 20E2BD, timestamp '2014-04-04 01:00:00.000', date '2014-04-04'),
   ("val1b", 8S, 16, 19L, float(17.0), 25D, 26E2BD, timestamp '2014-05-04 01:01:00.000', date '2014-05-04'),
@@ -102,7 +105,7 @@ WHERE  t1b IN (SELECT Min(t2b)
                FROM   t2
                WHERE  t1b = t2b
                ORDER  BY Min(t2b))
-ORDER BY t1c DESC nulls first;
+ORDER BY t1c DESC nulls first, t1a DESC, t1d DESC, t1h;
 
 -- TC 01.07
 SELECT t1a,

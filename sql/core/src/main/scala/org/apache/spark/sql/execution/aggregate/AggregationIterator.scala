@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 
 /**
- * The base class of [[SortBasedAggregationIterator]] and [[TungstenAggregationIterator]].
+ * The base class of [[SortBasedAggregationIterator]], [[TungstenAggregationIterator]] and
+ * [[ObjectAggregationIterator]].
  * It mainly contains two parts:
  * 1. It initializes aggregate functions.
  * 2. It creates two functions, `processRow` and `generateOutput` based on [[AggregateMode]] of

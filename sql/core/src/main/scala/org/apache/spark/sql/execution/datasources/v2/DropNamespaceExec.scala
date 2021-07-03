@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, SupportsNamespaces}
+import org.apache.spark.sql.connector.catalog.CatalogPlugin
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 
 /**
  * Physical plan node for dropping a namespace.
@@ -31,7 +30,7 @@ case class DropNamespaceExec(
     namespace: Seq[String],
     ifExists: Boolean,
     cascade: Boolean)
-  extends V2CommandExec {
+  extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -43,17 +42,15 @@ case class DropNamespaceExec(
       if (!cascade) {
         if (catalog.asTableCatalog.listTables(ns).nonEmpty
           || nsCatalog.listNamespaces(ns).nonEmpty) {
-          throw new SparkException(
-            s"Cannot drop a non-empty namespace: ${namespace.quoted}. " +
-              "Use CASCADE option to drop a non-empty namespace.")
+          throw QueryExecutionErrors.cannotDropNonemptyNamespaceError(namespace)
         }
       }
 
       if (!nsCatalog.dropNamespace(ns)) {
-        throw new SparkException(s"Failed to drop a namespace: ${namespace.quoted}.")
+        throw QueryExecutionErrors.cannotDropNonemptyNamespaceError(namespace)
       }
     } else if (!ifExists) {
-      throw new NoSuchNamespaceException(ns)
+      throw QueryCompilationErrors.noSuchNamespaceError(ns)
     }
 
     Seq.empty

@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.joins.{HashedRelation, HashJoin, LongHashedRelation}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.util.ThreadUtils
@@ -36,7 +37,8 @@ import org.apache.spark.util.ThreadUtils
  *
  * @param index the index of the join key in the list of keys from the build side
  * @param buildKeys the join keys from the build side of the join used
- * @param child the BroadcastExchange from the build side of the join
+ * @param child the BroadcastExchange or the AdaptiveSparkPlan with BroadcastQueryStageExec
+ *              from the build side of the join
  */
 case class SubqueryBroadcastExec(
     name: String,
@@ -44,12 +46,25 @@ case class SubqueryBroadcastExec(
     buildKeys: Seq[Expression],
     child: SparkPlan) extends BaseSubqueryExec with UnaryExecNode {
 
+  // `SubqueryBroadcastExec` is only used with `InSubqueryExec`. No one would reference this output,
+  // so the exprId doesn't matter here. But it's important to correctly report the output length, so
+  // that `InSubqueryExec` can know it's the single-column execution mode, not multi-column.
+  override def output: Seq[Attribute] = {
+    val key = buildKeys(index)
+    val name = key match {
+      case n: NamedExpression => n.name
+      case Cast(n: NamedExpression, _, _, _) => n.name
+      case _ => "key"
+    }
+    Seq(AttributeReference(name, key.dataType, key.nullable)())
+  }
+
   override lazy val metrics = Map(
     "dataSize" -> SQLMetrics.createMetric(sparkContext, "data size (bytes)"),
     "collectTime" -> SQLMetrics.createMetric(sparkContext, "time to collect (ms)"))
 
   override def doCanonicalize(): SparkPlan = {
-    val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, output))
+    val keys = buildKeys.map(k => QueryPlan.normalizeExpressions(k, child.output))
     SubqueryBroadcastExec("dpp", index, keys, child.canonicalized)
   }
 
@@ -60,7 +75,7 @@ case class SubqueryBroadcastExec(
     Future {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
-      SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
+      SQLExecution.withExecutionId(session, executionId) {
         val beforeCollect = System.nanoTime()
 
         val broadcastRelation = child.executeBroadcast[HashedRelation]().value
@@ -91,8 +106,7 @@ case class SubqueryBroadcastExec(
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    throw new UnsupportedOperationException(
-      "SubqueryBroadcastExec does not support the execute() code path.")
+    throw QueryExecutionErrors.executeCodePathUnsupportedError("SubqueryBroadcastExec")
   }
 
   override def executeCollect(): Array[InternalRow] = {
@@ -100,6 +114,9 @@ case class SubqueryBroadcastExec(
   }
 
   override def stringArgs: Iterator[Any] = super.stringArgs ++ Iterator(s"[id=#$id]")
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SubqueryBroadcastExec =
+    copy(child = newChild)
 }
 
 object SubqueryBroadcastExec {

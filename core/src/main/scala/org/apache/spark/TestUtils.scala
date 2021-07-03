@@ -18,26 +18,34 @@
 package org.apache.spark
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
-import java.net.{HttpURLConnection, URI, URL}
+import java.net.{HttpURLConnection, InetSocketAddress, URI, URL}
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files => JavaFiles}
+import java.nio.file.{Files => JavaFiles, Paths}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.{Arrays, EnumSet, Locale, Properties}
 import java.util.concurrent.{TimeoutException, TimeUnit}
 import java.util.jar.{JarEntry, JarOutputStream, Manifest}
+import java.util.regex.Pattern
 import javax.net.ssl._
 import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.{classTag, ClassTag}
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
 
 import com.google.common.io.{ByteStreams, Files}
+import org.apache.commons.lang3.StringUtils
 import org.apache.log4j.PropertyConfigurator
+import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.handler.DefaultHandler
+import org.eclipse.jetty.server.handler.HandlerList
+import org.eclipse.jetty.server.handler.ResourceHandler
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods.{compact, render}
 
@@ -179,11 +187,20 @@ private[spark] object TestUtils {
       destDir: File,
       toStringValue: String = "",
       baseClass: String = null,
-      classpathUrls: Seq[URL] = Seq.empty): File = {
+      classpathUrls: Seq[URL] = Seq.empty,
+      implementsClasses: Seq[String] = Seq.empty,
+      extraCodeBody: String = ""): File = {
     val extendsText = Option(baseClass).map { c => s" extends ${c}" }.getOrElse("")
+    val implementsText =
+      "implements " + (implementsClasses :+ "java.io.Serializable").mkString(", ")
     val sourceFile = new JavaSourceFromString(className,
-      "public class " + className + extendsText + " implements java.io.Serializable {" +
-      "  @Override public String toString() { return \"" + toStringValue + "\"; }}")
+      s"""
+         |public class $className $extendsText $implementsText {
+         |  @Override public String toString() { return "$toStringValue"; }
+         |
+         |  $extraCodeBody
+         |}
+        """.stripMargin)
     createCompiledClass(className, destDir, sourceFile, classpathUrls)
   }
 
@@ -212,32 +229,82 @@ private[spark] object TestUtils {
 
   /**
    * Asserts that exception message contains the message. Please note this checks all
-   * exceptions in the tree.
+   * exceptions in the tree. If a type parameter `E` is supplied, this will additionally confirm
+   * that the exception is a subtype of the exception provided in the type parameter.
    */
-  def assertExceptionMsg(exception: Throwable, msg: String, ignoreCase: Boolean = false): Unit = {
-    def contain(msg1: String, msg2: String): Boolean = {
+  def assertExceptionMsg[E <: Throwable : ClassTag](
+      exception: Throwable,
+      msg: String,
+      ignoreCase: Boolean = false): Unit = {
+
+    val (typeMsg, typeCheck) = if (classTag[E] == classTag[Nothing]) {
+      ("", (_: Throwable) => true)
+    } else {
+      val clazz = classTag[E].runtimeClass
+      (s"of type ${clazz.getName} ", (e: Throwable) => clazz.isAssignableFrom(e.getClass))
+    }
+
+    def contain(e: Throwable, msg: String): Boolean = {
       if (ignoreCase) {
-        msg1.toLowerCase(Locale.ROOT).contains(msg2.toLowerCase(Locale.ROOT))
+        e.getMessage.toLowerCase(Locale.ROOT).contains(msg.toLowerCase(Locale.ROOT))
       } else {
-        msg1.contains(msg2)
-      }
+        e.getMessage.contains(msg)
+      } && typeCheck(e)
     }
 
     var e = exception
-    var contains = contain(e.getMessage, msg)
+    var contains = contain(e, msg)
     while (e.getCause != null && !contains) {
       e = e.getCause
-      contains = contain(e.getMessage, msg)
+      contains = contain(e, msg)
     }
-    assert(contains, s"Exception tree doesn't contain the expected message: $msg")
+    assert(contains,
+      s"Exception tree doesn't contain the expected exception ${typeMsg}with message: $msg")
   }
 
   /**
    * Test if a command is available.
    */
   def testCommandAvailable(command: String): Boolean = {
-    val attempt = Try(Process(command).run(ProcessLogger(_ => ())).exitValue())
+    val attempt = if (Utils.isWindows) {
+      Try(Process(Seq(
+        "cmd.exe", "/C", s"where $command")).run(ProcessLogger(_ => ())).exitValue())
+    } else {
+      Try(Process(Seq(
+        "sh", "-c", s"command -v $command")).run(ProcessLogger(_ => ())).exitValue())
+    }
     attempt.isSuccess && attempt.get == 0
+  }
+
+  def isPythonVersionAtLeast38(): Boolean = {
+    val attempt = if (Utils.isWindows) {
+      Try(Process(Seq("cmd.exe", "/C", "python3 --version"))
+        .run(ProcessLogger(s => s.startsWith("Python 3.8") || s.startsWith("Python 3.9")))
+        .exitValue())
+    } else {
+      Try(Process(Seq("sh", "-c", "python3 --version"))
+        .run(ProcessLogger(s => s.startsWith("Python 3.8") || s.startsWith("Python 3.9")))
+        .exitValue())
+    }
+    attempt.isSuccess && attempt.get == 0
+  }
+
+  /**
+   * Get the absolute path from the executable. This implementation was borrowed from
+   * `spark/dev/sparktestsupport/shellutils.py`.
+   */
+  def getAbsolutePathFromExecutable(executable: String): Option[String] = {
+    val command = if (Utils.isWindows) s"$executable.exe" else executable
+    if (command.split(File.separator, 2).length == 1 &&
+        JavaFiles.isRegularFile(Paths.get(command)) &&
+        JavaFiles.isExecutable(Paths.get(command))) {
+      Some(Paths.get(command).toAbsolutePath.toString)
+    } else {
+      sys.env("PATH").split(Pattern.quote(File.pathSeparator))
+        .map(path => Paths.get(s"${StringUtils.strip(path, "\"")}${File.separator}$command"))
+        .find(p => JavaFiles.isRegularFile(p) && JavaFiles.isExecutable(p))
+        .map(_.toString)
+    }
   }
 
   /**
@@ -299,6 +366,22 @@ private[spark] object TestUtils {
     } finally {
       sc.listenerBus.waitUntilEmpty()
       sc.listenerBus.removeListener(listener)
+    }
+  }
+
+  def withHttpServer(resBaseDir: String = ".")(body: URL => Unit): Unit = {
+    // 0 as port means choosing randomly from the available ports
+    val server = new Server(new InetSocketAddress(Utils.localCanonicalHostName, 0))
+    val resHandler = new ResourceHandler()
+    resHandler.setResourceBase(resBaseDir)
+    val handlers = new HandlerList()
+    handlers.setHandlers(Array[Handler](resHandler, new DefaultHandler()))
+    server.setHandler(handlers)
+    server.start()
+    try {
+      body(server.getURI.toURL)
+    } finally {
+      server.stop()
     }
   }
 

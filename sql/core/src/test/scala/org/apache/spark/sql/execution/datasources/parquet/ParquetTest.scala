@@ -25,9 +25,11 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.parquet.HadoopReadOptions
 import org.apache.parquet.format.converter.ParquetMetadataConverter
 import org.apache.parquet.hadoop.{Footer, ParquetFileReader, ParquetFileWriter}
 import org.apache.parquet.hadoop.metadata.{BlockMetaData, FileMetaData, ParquetMetadata}
+import org.apache.parquet.hadoop.util.HadoopInputFile
 import org.apache.parquet.schema.MessageType
 
 import org.apache.spark.sql.DataFrame
@@ -63,18 +65,12 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
       (f: String => Unit): Unit = withDataSourceFile(data)(f)
 
   /**
-   * Writes `df` dataframe to a Parquet file and reads it back as a [[DataFrame]],
+   * Writes `data` to a Parquet file and reads it back as a [[DataFrame]],
    * which is then passed to `f`. The Parquet file will be deleted after `f` returns.
    */
-  protected def withParquetDataFrame(df: DataFrame, testVectorized: Boolean = true)
-      (f: DataFrame => Unit): Unit = {
-    withTempPath { file =>
-      withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
-        df.write.format(dataSourceName).save(file.getCanonicalPath)
-      }
-      readFile(file.getCanonicalPath, testVectorized)(f)
-    }
-  }
+  protected def withParquetDataFrame[T <: Product: ClassTag: TypeTag]
+      (data: Seq[T], testVectorized: Boolean = true)
+      (f: DataFrame => Unit): Unit = withDataSourceDataFrame(data, testVectorized)(f)
 
   /**
    * Writes `data` to a Parquet file, reads it back as a [[DataFrame]] and registers it as a
@@ -141,7 +137,7 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
   }
 
   protected def readFooter(path: Path, configuration: Configuration): ParquetMetadata = {
-    ParquetFileReader.readFooter(
+    ParquetFooterReader.readFooter(
       configuration,
       new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE),
       ParquetMetadataConverter.NO_FILTER)
@@ -170,5 +166,19 @@ private[sql] trait ParquetTest extends FileBasedDataSourceTest {
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false")(code)
     // test the vectorized reader
     withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true")(code)
+  }
+
+  def getMetaData(dir: java.io.File): Map[String, String] = {
+    val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0)
+    val conf = new Configuration()
+    val hadoopInputFile = HadoopInputFile.fromPath(new Path(file), conf)
+    val parquetReadOptions = HadoopReadOptions.builder(conf).build()
+    val m = ParquetFileReader.open(hadoopInputFile, parquetReadOptions)
+    val metadata = try {
+      m.getFileMetaData.getKeyValueMetaData
+    } finally {
+      m.close()
+    }
+    metadata.asScala.toMap
   }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
@@ -44,7 +45,9 @@ object FileStatusCache {
       session.sqlContext.conf.filesourcePartitionFileCacheSize > 0) {
       if (sharedCache == null) {
         sharedCache = new SharedInMemoryCache(
-          session.sqlContext.conf.filesourcePartitionFileCacheSize)
+          session.sqlContext.conf.filesourcePartitionFileCacheSize,
+          session.sqlContext.conf.metadataCacheTTL
+        )
       }
       sharedCache.createForNewClient()
     } else {
@@ -89,7 +92,7 @@ abstract class FileStatusCache {
  *
  * @param maxSizeInBytes max allowable cache size before entries start getting evicted
  */
-private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
+private class SharedInMemoryCache(maxSizeInBytes: Long, cacheTTL: Long) extends Logging {
 
   // Opaque object that uniquely identifies a shared cache user
   private type ClientId = Object
@@ -129,11 +132,17 @@ private class SharedInMemoryCache(maxSizeInBytes: Long) extends Logging {
         }
       }
     }
-    CacheBuilder.newBuilder()
+
+    var builder = CacheBuilder.newBuilder()
       .weigher(weigher)
       .removalListener(removalListener)
       .maximumWeight(maxSizeInBytes / weightScale)
-      .build[(ClientId, Path), Array[FileStatus]]()
+
+    if (cacheTTL > 0) {
+      builder = builder.expireAfterWrite(cacheTTL, TimeUnit.SECONDS)
+    }
+
+    builder.build[(ClientId, Path), Array[FileStatus]]()
   }
 
 

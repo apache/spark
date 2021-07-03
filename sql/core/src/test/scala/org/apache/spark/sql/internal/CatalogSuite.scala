@@ -22,8 +22,9 @@ import java.io.File
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.Range
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -33,7 +34,7 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Tests for the user-facing [[org.apache.spark.sql.catalog.Catalog]].
  */
-class CatalogSuite extends SharedSparkSession {
+class CatalogSuite extends SharedSparkSession with AnalysisTest {
   import testImplicits._
 
   private def sessionCatalog: SessionCatalog = spark.sessionState.catalog
@@ -58,7 +59,7 @@ class CatalogSuite extends SharedSparkSession {
   }
 
   private def createTempTable(name: String): Unit = {
-    sessionCatalog.createTempView(name, Range(1, 2, 3, 4), overrideIfExists = true)
+    createTempView(sessionCatalog, name, Range(1, 2, 3, 4), overrideIfExists = true)
   }
 
   private def dropTable(name: String, db: Option[String] = None): Unit = {
@@ -470,16 +471,20 @@ class CatalogSuite extends SharedSparkSession {
   }
 
   test("createTable with 'path' in options") {
+    val description = "this is a test table"
+
     withTable("t") {
       withTempDir { dir =>
         spark.catalog.createTable(
           tableName = "t",
           source = "json",
           schema = new StructType().add("i", "int"),
+          description = description,
           options = Map("path" -> dir.getAbsolutePath))
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t"))
         assert(table.tableType == CatalogTableType.EXTERNAL)
         assert(table.storage.locationUri.get == makeQualifiedPath(dir.getAbsolutePath))
+        assert(table.comment == Some(description))
 
         Seq((1)).toDF("i").write.insertInto("t")
         assert(dir.exists() && dir.listFiles().nonEmpty)
@@ -530,8 +535,8 @@ class CatalogSuite extends SharedSparkSession {
     dropTable("my_temp_table") // drop table in original session
     assert(spark.catalog.listTables().collect().map(_.name).toSet == Set())
     assert(forkedSession.catalog.listTables().collect().map(_.name).toSet == Set("my_temp_table"))
-    forkedSession.sessionState.catalog
-      .createTempView("fork_table", Range(1, 2, 3, 4), overrideIfExists = true)
+    createTempView(
+      forkedSession.sessionState.catalog, "fork_table", Range(1, 2, 3, 4), overrideIfExists = true)
     assert(spark.catalog.listTables().collect().map(_.name).toSet == Set())
   }
 
@@ -541,4 +546,11 @@ class CatalogSuite extends SharedSparkSession {
     assert(spark.table("my_temp_table").storageLevel == StorageLevel.DISK_ONLY)
   }
 
+  test("SPARK-34301: recover partitions of views is not supported") {
+    createTempTable("my_temp_table")
+    val errMsg = intercept[AnalysisException] {
+      spark.catalog.recoverPartitions("my_temp_table")
+    }.getMessage
+    assert(errMsg.contains("my_temp_table is a temp view. 'recoverPartitions()' expects a table"))
+  }
 }

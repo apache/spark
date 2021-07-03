@@ -5,7 +5,7 @@
 -- !query
 select udf(col1), udf(col2) from values ("one", 1)
 -- !query schema
-struct<CAST(udf(cast(col1 as string)) AS STRING):string,CAST(udf(cast(col2 as string)) AS INT):int>
+struct<udf(col1):string,udf(col2):int>
 -- !query output
 one	1
 
@@ -13,7 +13,7 @@ one	1
 -- !query
 select udf(col1), udf(udf(col2)) from values ("one", 1) as data
 -- !query schema
-struct<CAST(udf(cast(col1 as string)) AS STRING):string,CAST(udf(cast(cast(udf(cast(col2 as string)) as int) as string)) AS INT):int>
+struct<udf(col1):string,udf(udf(col2)):int>
 -- !query output
 one	1
 
@@ -21,7 +21,7 @@ one	1
 -- !query
 select udf(a), b from values ("one", 1) as data(a, b)
 -- !query schema
-struct<CAST(udf(cast(a as string)) AS STRING):string,b:int>
+struct<udf(a):string,b:int>
 -- !query output
 one	1
 
@@ -29,7 +29,7 @@ one	1
 -- !query
 select udf(a) from values 1, 2, 3 as data(a)
 -- !query schema
-struct<CAST(udf(cast(a as string)) AS INT):int>
+struct<udf(a):int>
 -- !query output
 1
 2
@@ -39,7 +39,7 @@ struct<CAST(udf(cast(a as string)) AS INT):int>
 -- !query
 select udf(a), b from values ("one", 1), ("two", 2), ("three", null) as data(a, b)
 -- !query schema
-struct<CAST(udf(cast(a as string)) AS STRING):string,b:int>
+struct<udf(a):string,b:int>
 -- !query output
 one	1
 three	NULL
@@ -49,7 +49,7 @@ two	2
 -- !query
 select udf(a), b from values ("one", null), ("two", null) as data(a, b)
 -- !query schema
-struct<CAST(udf(cast(a as string)) AS STRING):string,b:null>
+struct<udf(a):string,b:null>
 -- !query output
 one	NULL
 two	NULL
@@ -58,7 +58,7 @@ two	NULL
 -- !query
 select udf(a), b from values ("one", 1), ("two", 2L) as data(a, b)
 -- !query schema
-struct<CAST(udf(cast(a as string)) AS STRING):string,b:bigint>
+struct<udf(a):string,b:bigint>
 -- !query output
 one	1
 two	2
@@ -67,7 +67,7 @@ two	2
 -- !query
 select udf(udf(a)), udf(b) from values ("one", 1 + 0), ("two", 1 + 3L) as data(a, b)
 -- !query schema
-struct<CAST(udf(cast(cast(udf(cast(a as string)) as string) as string)) AS STRING):string,CAST(udf(cast(b as string)) AS BIGINT):bigint>
+struct<udf(udf(a)):string,udf(b):bigint>
 -- !query output
 one	1
 two	4
@@ -76,7 +76,7 @@ two	4
 -- !query
 select udf(a), b from values ("one", array(0, 1)), ("two", array(2, 3)) as data(a, b)
 -- !query schema
-struct<CAST(udf(cast(a as string)) AS STRING):string,b:array<int>>
+struct<udf(a):string,b:array<int>>
 -- !query output
 one	[0,1]
 two	[2,3]
@@ -85,7 +85,7 @@ two	[2,3]
 -- !query
 select udf(a), b from values ("one", 2.0), ("two", 3.0D) as data(a, b)
 -- !query schema
-struct<CAST(udf(cast(a as string)) AS STRING):string,b:double>
+struct<udf(a):string,b:double>
 -- !query output
 one	2.0
 two	3.0
@@ -148,6 +148,6 @@ cannot evaluate expression count(1) in inline table definition; line 1 pos 42
 -- !query
 select udf(a), b from values (timestamp('1991-12-06 00:00:00.0'), array(timestamp('1991-12-06 01:00:00.0'), timestamp('1991-12-06 12:00:00.0'))) as data(a, b)
 -- !query schema
-struct<CAST(udf(cast(a as string)) AS TIMESTAMP):timestamp,b:array<timestamp>>
+struct<udf(a):timestamp,b:array<timestamp>>
 -- !query output
 1991-12-06 00:00:00	[1991-12-06 01:00:00,1991-12-06 12:00:00]

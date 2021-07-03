@@ -20,7 +20,10 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.{DecimalPrecision, FunctionRegistry, TypeCheckResult}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AVERAGE, TreePattern}
+import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
@@ -34,30 +37,36 @@ import org.apache.spark.sql.types._
   """,
   group = "agg_funcs",
   since = "1.0.0")
-case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes {
+case class Average(child: Expression) extends DeclarativeAggregate with ImplicitCastInputTypes
+  with UnaryLike[Expression] {
 
   override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("avg")
 
-  override def children: Seq[Expression] = child :: Nil
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(NumericType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(TypeCollection(NumericType, YearMonthIntervalType, DayTimeIntervalType))
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForNumericExpr(child.dataType, "function average")
+    TypeUtils.checkForAnsiIntervalOrNumericType(child.dataType, "average")
 
   override def nullable: Boolean = true
 
   // Return data type.
   override def dataType: DataType = resultType
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(AVERAGE)
+
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       DecimalType.bounded(p + 4, s + 4)
+    case _: YearMonthIntervalType => YearMonthIntervalType()
+    case _: DayTimeIntervalType => DayTimeIntervalType()
     case _ => DoubleType
   }
 
   private lazy val sumDataType = child.dataType match {
     case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
+    case _: YearMonthIntervalType => YearMonthIntervalType()
+    case _: DayTimeIntervalType => DayTimeIntervalType()
     case _ => DoubleType
   }
 
@@ -77,11 +86,21 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   )
 
   // If all input are nulls, count will be 0 and we will get null after the division.
+  // We can't directly use `/` as it throws an exception under ansi mode.
   override lazy val evaluateExpression = child.dataType match {
-    case _: DecimalType =>
-      DecimalPrecision.decimalAndDecimal(sum / count.cast(DecimalType.LongDecimal)).cast(resultType)
+    case d: DecimalType =>
+      DecimalPrecision.decimalAndDecimal()(
+        Divide(
+          CheckOverflowInSum(sum, d, !SQLConf.get.ansiEnabled),
+          count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
+    case _: YearMonthIntervalType =>
+      If(EqualTo(count, Literal(0L)),
+        Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
+    case _: DayTimeIntervalType =>
+      If(EqualTo(count, Literal(0L)),
+        Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
     case _ =>
-      sum.cast(resultType) / count.cast(resultType)
+      Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
   }
 
   override lazy val updateExpressions: Seq[Expression] = Seq(
@@ -91,4 +110,7 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
       coalesce(child.cast(sumDataType), Literal.default(sumDataType))),
     /* count = */ If(child.isNull, count, count + 1L)
   )
+
+  override protected def withNewChildInternal(newChild: Expression): Average =
+    copy(child = newChild)
 }

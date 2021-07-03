@@ -136,7 +136,14 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
   }
 
   override def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
-    val (weights, _) = LBFGS.runLBFGS(
+    val (weights, _) = optimizeWithLossReturned(data, initialWeights)
+    weights
+  }
+
+  def optimizeWithLossReturned(
+      data: RDD[(Double, Vector)],
+      initialWeights: Vector): (Vector, Array[Double]) = {
+    LBFGS.runLBFGS(
       data,
       gradient,
       updater,
@@ -145,9 +152,7 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
       maxNumIterations,
       regParam,
       initialWeights)
-    weights
   }
-
 }
 
 /**

@@ -16,13 +16,14 @@
  */
 package org.apache.spark.deploy.k8s.features
 
-import java.io.{File, PrintWriter}
+import java.io.PrintWriter
 import java.nio.file.Files
 
 import io.fabric8.kubernetes.api.model.ConfigMap
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
+import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.util.Utils
 
 class PodTemplateConfigMapStepSuite extends SparkFunSuite {
@@ -56,8 +57,9 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite {
 
     assert(configuredPod.pod.getSpec.getVolumes.size() === 1)
     val volume = configuredPod.pod.getSpec.getVolumes.get(0)
+    val generatedResourceName = s"${kubernetesConf.resourceNamePrefix}-$POD_TEMPLATE_CONFIGMAP"
     assert(volume.getName === Constants.POD_TEMPLATE_VOLUME)
-    assert(volume.getConfigMap.getName === Constants.POD_TEMPLATE_CONFIGMAP)
+    assert(volume.getConfigMap.getName === generatedResourceName)
     assert(volume.getConfigMap.getItems.size() === 1)
     assert(volume.getConfigMap.getItems.get(0).getKey === Constants.POD_TEMPLATE_KEY)
     assert(volume.getConfigMap.getItems.get(0).getPath ===
@@ -70,10 +72,11 @@ class PodTemplateConfigMapStepSuite extends SparkFunSuite {
 
     val resources = step.getAdditionalKubernetesResources()
     assert(resources.size === 1)
-    assert(resources.head.getMetadata.getName === Constants.POD_TEMPLATE_CONFIGMAP)
+    assert(resources.head.getMetadata.getName === generatedResourceName)
     assert(resources.head.isInstanceOf[ConfigMap])
     val configMap = resources.head.asInstanceOf[ConfigMap]
     assert(configMap.getData.size() === 1)
+    assert(configMap.getImmutable())
     assert(configMap.getData.containsKey(Constants.POD_TEMPLATE_KEY))
     assert(configMap.getData.containsValue("pod-template-contents"))
 

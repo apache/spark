@@ -17,7 +17,6 @@
 #
 
 import inspect
-import sys
 import array as pyarray
 import unittest
 
@@ -31,12 +30,9 @@ from pyspark.ml.feature import Binarizer, Bucketizer, ElementwiseProduct, IndexT
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasMaxIter, HasSeed
+from pyspark.ml.regression import LinearRegressionModel, GeneralizedLinearRegressionModel
 from pyspark.ml.wrapper import JavaParams
 from pyspark.testing.mlutils import check_params, PySparkTestCase, SparkSessionTestCase
-
-
-if sys.version > '3':
-    xrange = range
 
 
 class ParamTypeConversionTests(PySparkTestCase):
@@ -67,14 +63,14 @@ class ParamTypeConversionTests(PySparkTestCase):
     def test_list(self):
         l = [0, 1]
         for lst_like in [l, np.array(l), DenseVector(l), SparseVector(len(l), range(len(l)), l),
-                         pyarray.array('l', l), xrange(2), tuple(l)]:
+                         pyarray.array('l', l), range(2), tuple(l)]:
             converted = TypeConverters.toList(lst_like)
             self.assertEqual(type(converted), list)
             self.assertListEqual(converted, l)
 
     def test_list_int(self):
         for indices in [[1.0, 2.0], np.array([1.0, 2.0]), DenseVector([1.0, 2.0]),
-                        SparseVector(2, {0: 1.0, 1: 2.0}), xrange(1, 3), (1.0, 2.0),
+                        SparseVector(2, {0: 1.0, 1: 2.0}), range(1, 3), (1.0, 2.0),
                         pyarray.array('d', [1.0, 2.0])]:
             vs = VectorSlicer(indices=indices)
             self.assertListEqual(vs.getIndices(), [1, 2])
@@ -200,12 +196,11 @@ class ParamTests(SparkSessionTestCase):
         self.assertEqual(testParams._resolveParam("maxIter"), testParams.maxIter)
 
         self.assertEqual(testParams._resolveParam(u"maxIter"), testParams.maxIter)
-        if sys.version_info[0] >= 3:
-            # In Python 3, it is allowed to get/set attributes with non-ascii characters.
-            e_cls = AttributeError
-        else:
-            e_cls = UnicodeEncodeError
-        self.assertRaises(e_cls, lambda: testParams._resolveParam(u"아"))
+        self.assertRaises(AttributeError, lambda: testParams._resolveParam(u"아"))
+
+        # Invalid type
+        invalid_type = 1
+        self.assertRaises(TypeError, testParams._resolveParam, invalid_type)
 
     def test_params(self):
         testParams = TestParams()
@@ -318,7 +313,7 @@ class ParamTests(SparkSessionTestCase):
             LogisticRegression
         )
 
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             ValueError,
             "Logistic Regression getThreshold found inconsistent.*$",
             LogisticRegression, threshold=0.42, thresholds=[0.5, 0.5]
@@ -341,6 +336,16 @@ class ParamTests(SparkSessionTestCase):
         result = binarizer.transform(dataset).select("my_default").collect()
         self.assertFalse(binarizer.isSet(binarizer.outputCol))
         self.assertEqual(result[0][0], 1.0)
+
+    def test_lr_evaluate_invaild_type(self):
+        lr = LinearRegressionModel()
+        invalid_type = ""
+        self.assertRaises(TypeError, lr.evaluate, invalid_type)
+
+    def test_glr_evaluate_invaild_type(self):
+        glr = GeneralizedLinearRegressionModel()
+        invalid_type = ""
+        self.assertRaises(TypeError, glr.evaluate, invalid_type)
 
 
 class DefaultValuesTests(PySparkTestCase):
@@ -368,23 +373,21 @@ class DefaultValuesTests(PySparkTestCase):
                         and issubclass(cls, JavaParams) and not inspect.isabstract(cls) \
                         and not re.match("_?Java", name) and name != '_LSH' \
                         and name != '_Selector':
-                    # NOTE: disable check_params_exist until there is parity with Scala API
-
-                    check_params(self, cls(), check_params_exist=False)
+                    check_params(self, cls(), check_params_exist=True)
 
         # Additional classes that need explicit construction
         from pyspark.ml.feature import CountVectorizerModel, StringIndexerModel
         check_params(self, CountVectorizerModel.from_vocabulary(['a'], 'input'),
-                     check_params_exist=False)
+                     check_params_exist=True)
         check_params(self, StringIndexerModel.from_labels(['a', 'b'], 'input'),
-                     check_params_exist=False)
+                     check_params_exist=True)
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_param import *
+    from pyspark.ml.tests.test_param import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

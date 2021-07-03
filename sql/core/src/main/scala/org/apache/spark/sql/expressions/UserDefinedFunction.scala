@@ -17,16 +17,13 @@
 
 package org.apache.spark.sql.expressions
 
-import scala.reflect.runtime.universe.TypeTag
-
-import org.apache.spark.annotation.{Experimental, Stable}
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.{Column, Encoder}
-import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete}
 import org.apache.spark.sql.execution.aggregate.ScalaAggregator
-import org.apache.spark.sql.types.{AnyDataType, DataType}
+import org.apache.spark.sql.types.DataType
 
 /**
  * A user-defined function. To create one, use the `udf` functions in `functions`.
@@ -94,6 +91,7 @@ private[spark] case class SparkUserDefinedFunction(
     f: AnyRef,
     dataType: DataType,
     inputEncoders: Seq[Option[ExpressionEncoder[_]]] = Nil,
+    outputEncoder: Option[ExpressionEncoder[_]] = None,
     name: Option[String] = None,
     nullable: Boolean = true,
     deterministic: Boolean = true) extends UserDefinedFunction {
@@ -109,6 +107,7 @@ private[spark] case class SparkUserDefinedFunction(
       dataType,
       exprs,
       inputEncoders,
+      outputEncoder,
       udfName = name,
       nullable = nullable,
       udfDeterministic = deterministic)
@@ -150,7 +149,9 @@ private[sql] case class UserDefinedAggregator[IN, BUF, OUT](
   // This is also used by udf.register(...) when it detects a UserDefinedAggregator
   def scalaAggregator(exprs: Seq[Expression]): ScalaAggregator[IN, BUF, OUT] = {
     val iEncoder = inputEncoder.asInstanceOf[ExpressionEncoder[IN]]
-    ScalaAggregator(exprs, aggregator, iEncoder, nullable, deterministic)
+    val bEncoder = aggregator.bufferEncoder.asInstanceOf[ExpressionEncoder[BUF]]
+    ScalaAggregator(
+      exprs, aggregator, iEncoder, bEncoder, nullable, deterministic, aggregatorName = name)
   }
 
   override def withName(name: String): UserDefinedAggregator[IN, BUF, OUT] = {

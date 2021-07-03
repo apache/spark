@@ -34,7 +34,7 @@ import org.apache.spark.util.Utils
  *
  * There's no secrecy, so this relies on the sockets being either local or somehow encrypted.
  */
-private[spark] class SocketAuthHelper(conf: SparkConf) {
+private[spark] class SocketAuthHelper(val conf: SparkConf) {
 
   val secret = Utils.createSecret(conf)
 

@@ -26,11 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.junit.*;
 
 import static org.junit.Assert.*;
 
@@ -38,9 +34,6 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   private static File dummyPropsFile;
   private static SparkSubmitOptionParser parser;
-
-  @Rule
-  public ExpectedException expectedException = ExpectedException.none();
 
   @BeforeClass
   public static void setUp() throws Exception {
@@ -216,15 +209,13 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   @Test
   public void testExamplesRunnerWithMasterNoMainClass() throws Exception {
-    expectedException.expect(IllegalArgumentException.class);
-    expectedException.expectMessage("Missing example class name.");
-
     List<String> sparkSubmitArgs = Arrays.asList(
       SparkSubmitCommandBuilder.RUN_EXAMPLE,
       parser.MASTER + "=foo"
     );
     Map<String, String> env = new HashMap<>();
-    buildCommand(sparkSubmitArgs, env);
+    Assert.assertThrows("Missing example class name.", IllegalArgumentException.class,
+      () -> buildCommand(sparkSubmitArgs, env));
   }
 
   @Test
@@ -243,6 +234,24 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertEquals(SparkSubmitCommandBuilder.EXAMPLE_CLASS_PREFIX + "SparkPi",
       findArgValue(cmd, parser.CLASS));
     assertEquals("42", cmd.get(cmd.size() - 1));
+  }
+
+  @Test
+  public void testExamplesRunnerPrimaryResource() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(
+            SparkSubmitCommandBuilder.RUN_EXAMPLE,
+            parser.MASTER + "=foo",
+            parser.DEPLOY_MODE + "=cluster",
+            "SparkPi",
+            "100");
+
+    List<String> cmd = newCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
+    assertEquals(SparkSubmitCommandBuilder.EXAMPLE_CLASS_PREFIX + "SparkPi",
+            findArgValue(cmd, parser.CLASS));
+    assertEquals("cluster", findArgValue(cmd, parser.DEPLOY_MODE));
+    String primaryResource = cmd.get(cmd.size() - 2);
+    assertTrue(primaryResource.equals(SparkLauncher.NO_RESOURCE)
+            || new File(primaryResource).getName().startsWith("spark-examples"));
   }
 
   @Test(expected = IllegalArgumentException.class)

@@ -15,11 +15,6 @@
 # limitations under the License.
 #
 
-import sys
-if sys.version >= '3':
-    long = int
-    unicode = str
-
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import JavaObject
@@ -79,7 +74,7 @@ def _py2java(sc, obj):
         obj = [_py2java(sc, x) for x in obj]
     elif isinstance(obj, JavaObject):
         pass
-    elif isinstance(obj, (int, long, float, bool, bytes, unicode)):
+    elif isinstance(obj, (int, float, bool, bytes, str)):
         pass
     else:
         data = bytearray(PickleSerializer().dumps(obj))

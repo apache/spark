@@ -21,6 +21,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
  * A non-concrete data type, reserved for internal uses.
@@ -82,7 +83,11 @@ private[sql] object TypeCollection {
    * Types that include numeric types and interval type. They are only used in unary_minus,
    * unary_positive, add and subtract operations.
    */
-  val NumericAndInterval = TypeCollection(NumericType, CalendarIntervalType)
+  val NumericAndInterval = TypeCollection(
+    NumericType,
+    CalendarIntervalType,
+    DayTimeIntervalType,
+    YearMonthIntervalType)
 
   def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 
@@ -100,7 +105,8 @@ protected[sql] object AnyDataType extends AbstractDataType with Serializable {
 
   // Note that since AnyDataType matches any concrete types, defaultConcreteType should never
   // be invoked.
-  override private[sql] def defaultConcreteType: DataType = throw new UnsupportedOperationException
+  override private[sql] def defaultConcreteType: DataType =
+    throw QueryExecutionErrors.unsupportedOperationExceptionError()
 
   override private[sql] def simpleString: String = "any"
 
@@ -204,4 +210,15 @@ private[sql] object FractionalType {
 private[sql] abstract class FractionalType extends NumericType {
   private[sql] val fractional: Fractional[InternalType]
   private[sql] val asIntegral: Integral[InternalType]
+}
+
+private[sql] object AnyTimestampType extends AbstractDataType with Serializable {
+  override private[sql] def defaultConcreteType: DataType = TimestampType
+
+  override private[sql] def acceptsType(other: DataType): Boolean =
+    other.isInstanceOf[TimestampType] || other.isInstanceOf[TimestampNTZType]
+
+  override private[sql] def simpleString = "(timestamp or timestamp without time zone)"
+
+  def unapply(e: Expression): Boolean = acceptsType(e.dataType)
 }

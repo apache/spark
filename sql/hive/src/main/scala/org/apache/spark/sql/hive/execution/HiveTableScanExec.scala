@@ -156,7 +156,7 @@ case class HiveTableScanExec(
 
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.
-        val row = InternalRow.fromSeq(castedValues)
+        val row = InternalRow.fromSeq(castedValues.toSeq)
         shouldKeep.eval(row).asInstanceOf[Boolean]
       }
     }
@@ -202,11 +202,11 @@ case class HiveTableScanExec(
     // Using dummyCallSite, as getCallSite can turn out to be expensive with
     // multiple partitions.
     val rdd = if (!relation.isPartitioned) {
-      Utils.withDummyCallSite(sqlContext.sparkContext) {
+      Utils.withDummyCallSite(sparkContext) {
         hadoopReader.makeRDDForTable(hiveQlTable)
       }
     } else {
-      Utils.withDummyCallSite(sqlContext.sparkContext) {
+      Utils.withDummyCallSite(sparkContext) {
         hadoopReader.makeRDDForPartitionedTable(prunedPartitions)
       }
     }

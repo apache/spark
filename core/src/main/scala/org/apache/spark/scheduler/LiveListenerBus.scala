@@ -232,7 +232,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
 
   // For testing only.
   private[spark] def findListenersByClass[T <: SparkListenerInterface : ClassTag](): Seq[T] = {
-    queues.asScala.flatMap { queue => queue.findListenersByClass[T]() }
+    queues.asScala.flatMap { queue => queue.findListenersByClass[T]() }.toSeq
   }
 
   // For testing only.

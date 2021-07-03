@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.catalog.{NamespaceChange, SupportsNamespac
 case class AlterNamespaceSetPropertiesExec(
     catalog: SupportsNamespaces,
     namespace: Seq[String],
-    props: Map[String, String]) extends V2CommandExec {
+    props: Map[String, String]) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val changes = props.map{ case (k, v) =>
       NamespaceChange.setProperty(k, v)

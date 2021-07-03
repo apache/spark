@@ -133,7 +133,13 @@ private[sql] class JSONOptions(
    * Enables inferring of TimestampType from strings matched to the timestamp pattern
    * defined by the timestampFormat option.
    */
-  val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(true)
+  val inferTimestamp: Boolean = parameters.get("inferTimestamp").map(_.toBoolean).getOrElse(false)
+
+  /**
+   * Generating \u0000 style codepoints for non-ASCII characters if the parameter is enabled.
+   */
+  val writeNonAsciiCharacterAsCodePoint: Boolean =
+    parameters.get("writeNonAsciiCharacterAsCodePoint").map(_.toBoolean).getOrElse(false)
 
   /** Build a Jackson [[JsonFactory]] using JSON options. */
   def buildJsonFactory(): JsonFactory = {
@@ -168,10 +174,10 @@ private[sql] class JSONOptionsInRead(
   }
 
   protected override def checkedEncoding(enc: String): String = {
-    val isBlacklisted = JSONOptionsInRead.blacklist.contains(Charset.forName(enc))
-    require(multiLine || !isBlacklisted,
-      s"""The ${enc} encoding must not be included in the blacklist when multiLine is disabled:
-         |Blacklist: ${JSONOptionsInRead.blacklist.mkString(", ")}""".stripMargin)
+    val isDenied = JSONOptionsInRead.denyList.contains(Charset.forName(enc))
+    require(multiLine || !isDenied,
+      s"""The $enc encoding must not be included in the denyList when multiLine is disabled:
+         |denylist: ${JSONOptionsInRead.denyList.mkString(", ")}""".stripMargin)
 
     val isLineSepRequired =
         multiLine || Charset.forName(enc) == StandardCharsets.UTF_8 || lineSeparator.nonEmpty
@@ -188,7 +194,7 @@ private[sql] object JSONOptionsInRead {
   // only the first lines will have the BOM which leads to impossibility for reading
   // the rest lines. Besides of that, the lineSep option must have the BOM in such
   // encodings which can never present between lines.
-  val blacklist = Seq(
+  val denyList = Seq(
     Charset.forName("UTF-16"),
     Charset.forName("UTF-32")
   )

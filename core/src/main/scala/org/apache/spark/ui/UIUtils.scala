@@ -231,7 +231,7 @@ private[spark] object UIUtils extends Logging {
     <link rel="stylesheet"
           href={prependBaseUri(request, "/static/timeline-view.css")} type="text/css"/>
     <script src={prependBaseUri(request, "/static/sorttable.js")} ></script>
-    <script src={prependBaseUri(request, "/static/jquery-3.4.1.min.js")}></script>
+    <script src={prependBaseUri(request, "/static/jquery-3.5.1.min.js")}></script>
     <script src={prependBaseUri(request, "/static/vis-timeline-graph2d.min.js")}></script>
     <script src={prependBaseUri(request, "/static/bootstrap.bundle.min.js")}></script>
     <script src={prependBaseUri(request, "/static/initialize-tooltips.js")}></script>
@@ -325,7 +325,8 @@ private[spark] object UIUtils extends Logging {
         <div class="container-fluid">
           <div class="row">
             <div class="col-12">
-              <h3 style="vertical-align: bottom; display: inline-block;">
+              <h3 style="vertical-align: bottom; white-space: nowrap; overflow: hidden;
+                text-overflow: ellipsis;">
                 {title}
                 {helpButton}
               </h3>
@@ -443,7 +444,7 @@ private[spark] object UIUtils extends Logging {
             </th>
           case None => <th width={colWidthAttr} class={getClass(x._2)}>{getHeaderContent(x._1)}</th>
         }
-      }
+      }.toSeq
     }
     <table class={listingTableClass} id={id.map(Text.apply)}>
       <thead>{headerRow}</thead>
@@ -460,13 +461,14 @@ private[spark] object UIUtils extends Logging {
       skipped: Int,
       reasonToNumKilled: Map[String, Int],
       total: Int): Seq[Node] = {
-    val ratio = if (total == 0) 100.0 else (completed.toDouble/total)*100
+    val ratio = if (total == 0) 100.0 else (completed.toDouble / total) * 100
     val completeWidth = "width: %s%%".format(ratio)
     // started + completed can be > total when there are speculative tasks
     val boundedStarted = math.min(started, total - completed)
-    val startWidth = "width: %s%%".format((boundedStarted.toDouble/total)*100)
+    val startRatio = if (total == 0) 0.0 else (boundedStarted.toDouble / total) * 100
+    val startWidth = "width: %s%%".format(startRatio)
 
-    <div class={ if (started > 0) s"progress progress-started" else s"progress" }>
+    <div class="progress">
       <span style="text-align:center; position:absolute; width:100%;">
         {completed}/{total}
         { if (failed == 0 && skipped == 0 && started > 0) s"($started running)" }
@@ -477,7 +479,8 @@ private[spark] object UIUtils extends Logging {
           }
         }
       </span>
-      <div class="progress-bar" style={completeWidth}></div>
+      <div class="progress-bar progress-completed" style={completeWidth}></div>
+      <div class="progress-bar progress-started" style={startWidth}></div>
     </div>
   }
 
@@ -524,6 +527,9 @@ private[spark] object UIUtils extends Logging {
                 } ++
                 g.rootCluster.getBarrierClusters.map { c =>
                   <div class="barrier-rdd">{c.id}</div>
+                } ++
+                g.rootCluster.getIndeterminateNodes.map { n =>
+                  <div class="indeterminate-rdd">{n.id}</div>
                 }
               }
             </div>
@@ -639,7 +645,8 @@ private[spark] object UIUtils extends Logging {
   */
   def makeHref(proxy: Boolean, id: String, origHref: String): String = {
     if (proxy) {
-      s"/proxy/$id"
+      val proxyPrefix = sys.props.getOrElse("spark.ui.proxyBase", "")
+      proxyPrefix + "/proxy/" + id
     } else {
       origHref
     }

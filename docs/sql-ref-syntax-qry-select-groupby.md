@@ -24,15 +24,16 @@ license: |
 The `GROUP BY` clause is used to group the rows based on a set of specified grouping expressions and compute aggregations on
 the group of rows based on one or more specified aggregate functions. Spark also supports advanced aggregations to do multiple
 aggregations for the same input record set via `GROUPING SETS`, `CUBE`, `ROLLUP` clauses.
-When a FILTER clause is attached to an aggregate function, only the matching rows are passed to that function.
+The grouping expressions and advanced aggregations can be mixed in the `GROUP BY` clause and nested in a `GROUPING SETS` clause.
+See more details in the `Mixed/Nested Grouping Analytics` section. When a FILTER clause is attached to
+an aggregate function, only the matching rows are passed to that function.
 
 ### Syntax
 
 ```sql
-GROUP BY group_expression [ , group_expression [ , ... ] ]
-    [ { WITH ROLLUP | WITH CUBE | GROUPING SETS (grouping_set [ , ...]) } ]
+GROUP BY group_expression [ , group_expression [ , ... ] ] [ WITH { ROLLUP | CUBE } ]
 
-GROUP BY GROUPING SETS (grouping_set [ , ...])
+GROUP BY { group_expression | { ROLLUP | CUBE | GROUPING SETS } (grouping_set [ , ...]) } [ , ... ]
 ```
 
 While aggregate functions are defined as
@@ -42,41 +43,83 @@ aggregate_name ( [ DISTINCT ] expression [ , ... ] ) [ FILTER ( WHERE boolean_ex
 
 ### Parameters
 
-* **GROUPING SETS**
+* **group_expression**
 
-    Groups the rows for each subset of the expressions specified in the grouping sets. For example,
-    `GROUP BY GROUPING SETS (warehouse, product)` is semantically equivalent
-    to union of results of `GROUP BY warehouse` and `GROUP BY product`. This clause
-    is a shorthand for a `UNION ALL` where each leg of the `UNION ALL`
-    operator performs aggregation of subset of the columns specified in the `GROUPING SETS` clause.
+    Specifies the criteria based on which the rows are grouped together. The grouping of rows is performed based on
+    result values of the grouping expressions. A grouping expression may be a column name like `GROUP BY a`, a column position like
+    `GROUP BY 0`, or an expression like `GROUP BY a + b`.
 
 * **grouping_set**
 
-    A grouping set is specified by zero or more comma-separated expressions in parentheses.
+    A grouping set is specified by zero or more comma-separated expressions in parentheses. When the
+    grouping set has only one element, parentheses can be omitted. For example, `GROUPING SETS ((a), (b))`
+    is the same as `GROUPING SETS (a, b)`.
 
-    **Syntax:** `( [ expression [ , ... ] ] )`
+    **Syntax:** `{ ( [ expression [ , ... ] ] ) | expression }`
 
-* **grouping_expression**
+* **GROUPING SETS**
 
-    Specifies the critieria based on which the rows are grouped together. The grouping of rows is performed based on
-    result values of the grouping expressions. A grouping expression may be a column alias, a column position
-    or an expression.
+    Groups the rows for each grouping set specified after GROUPING SETS. For example,
+    `GROUP BY GROUPING SETS ((warehouse), (product))` is semantically equivalent
+    to union of results of `GROUP BY warehouse` and `GROUP BY product`. This clause
+    is a shorthand for a `UNION ALL` where each leg of the `UNION ALL`
+    operator performs aggregation of each grouping set specified in the `GROUPING SETS` clause.
+    Similarly, `GROUP BY GROUPING SETS ((warehouse, product), (product), ())` is semantically
+    equivalent to the union of results of `GROUP BY warehouse, product`, `GROUP BY product`
+    and global aggregate.
+    
+    **Note:** For Hive compatibility Spark allows `GROUP BY ... GROUPING SETS (...)`. The GROUP BY
+    expressions are usually ignored, but if it contains extra expressions than the GROUPING SETS
+    expressions, the extra expressions will be included in the grouping expressions and the value
+    is always null. For example, `SELECT a, b, c FROM ... GROUP BY a, b, c GROUPING SETS (a, b)`,
+    the output of column `c` is always null.
 
 * **ROLLUP**
 
     Specifies multiple levels of aggregations in a single statement. This clause is used to compute aggregations
     based on multiple grouping sets. `ROLLUP` is a shorthand for `GROUPING SETS`. For example,
-    `GROUP BY warehouse, product WITH ROLLUP` is equivalent to `GROUP BY GROUPING SETS
-    ((warehouse, product), (warehouse), ())`.
+    `GROUP BY warehouse, product WITH ROLLUP` or `GROUP BY ROLLUP(warehouse, product)` is equivalent to
+    `GROUP BY GROUPING SETS((warehouse, product), (warehouse), ())`.
+    `GROUP BY ROLLUP(warehouse, product, (warehouse, location))` is equivalent to
+    `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse), ())`.
     The N elements of a `ROLLUP` specification results in N+1 `GROUPING SETS`.
 
 * **CUBE**
 
     `CUBE` clause is used to perform aggregations based on combination of grouping columns specified in the
     `GROUP BY` clause. `CUBE` is a shorthand for `GROUPING SETS`. For example,
-    `GROUP BY warehouse, product WITH CUBE` is equivalent to `GROUP BY GROUPING SETS
-    ((warehouse, product), (warehouse), (product), ())`.
+    `GROUP BY warehouse, product WITH CUBE` or `GROUP BY CUBE(warehouse, product)` is equivalent to 
+    `GROUP BY GROUPING SETS((warehouse, product), (warehouse), (product), ())`.
+    `GROUP BY CUBE(warehouse, product, (warehouse, location))` is equivalent to
+    `GROUP BY GROUPING SETS((warehouse, product, location), (warehouse, product), (warehouse, location),
+     (product, warehouse, location), (warehouse), (product), (warehouse, product), ())`.
     The N elements of a `CUBE` specification results in 2^N `GROUPING SETS`.
+
+* **Mixed/Nested Grouping Analytics**
+
+    A GROUP BY clause can include multiple `group_expression`s and multiple `CUBE|ROLLUP|GROUPING SETS`s.
+    `GROUPING SETS` can also have nested `CUBE|ROLLUP|GROUPING SETS` clauses, e.g.
+    `GROUPING SETS(ROLLUP(warehouse, location), CUBE(warehouse, location))`,
+    `GROUPING SETS(warehouse, GROUPING SETS(location, GROUPING SETS(ROLLUP(warehouse, location), CUBE(warehouse, location))))`.
+    `CUBE|ROLLUP` is just a syntax sugar for `GROUPING SETS`, please refer to the sections above for
+    how to translate `CUBE|ROLLUP` to `GROUPING SETS`. `group_expression` can be treated as a single-group
+    `GROUPING SETS` under this context. For multiple `GROUPING SETS` in the `GROUP BY` clause, we generate
+    a single `GROUPING SETS` by doing a cross-product of the original `GROUPING SETS`s. For nested `GROUPING SETS` in the `GROUPING SETS` clause,
+    we simply take its grouping sets and strip it. For example,
+    `GROUP BY warehouse, GROUPING SETS((product), ()), GROUPING SETS((location, size), (location), (size), ())`
+    and `GROUP BY warehouse, ROLLUP(product), CUBE(location, size)` is equivalent to 
+    `GROUP BY GROUPING SETS(
+        (warehouse, product, location, size), 
+        (warehouse, product, location),
+        (warehouse, product, size), 
+        (warehouse, product),
+        (warehouse, location, size),
+        (warehouse, location),
+        (warehouse, size),
+        (warehouse))`.
+    
+    `GROUP BY GROUPING SETS(GROUPING SETS(warehouse), GROUPING SETS((warehouse, product)))` is equivalent to 
+    `GROUP BY GROUPING SETS((warehouse), (warehouse, product))`.
 
 * **aggregate_name**
 
@@ -189,31 +232,6 @@ SELECT city, car_model, sum(quantity) AS sum FROM dealer
 | San Jose|  HondaCivic|  5|
 +---------+------------+---+
 
--- Alternate syntax for `GROUPING SETS` in which both `GROUP BY` and `GROUPING SETS`
--- specifications are present.
-SELECT city, car_model, sum(quantity) AS sum FROM dealer
-    GROUP BY city, car_model GROUPING SETS ((city, car_model), (city), (car_model), ())
-    ORDER BY city, car_model;
-+---------+------------+---+
-|     city|   car_model|sum|
-+---------+------------+---+
-|     null|        null| 78|
-|     null| HondaAccord| 33|
-|     null|    HondaCRV| 10|
-|     null|  HondaCivic| 35|
-|   Dublin|        null| 33|
-|   Dublin| HondaAccord| 10|
-|   Dublin|    HondaCRV|  3|
-|   Dublin|  HondaCivic| 20|
-|  Fremont|        null| 32|
-|  Fremont| HondaAccord| 15|
-|  Fremont|    HondaCRV|  7|
-|  Fremont|  HondaCivic| 10|
-| San Jose|        null| 13|
-| San Jose| HondaAccord|  8|
-| San Jose|  HondaCivic|  5|
-+---------+------------+---+
-
 -- Group by processing with `ROLLUP` clause.
 -- Equivalent GROUP BY GROUPING SETS ((city, car_model), (city), ())
 SELECT city, car_model, sum(quantity) AS sum FROM dealer
@@ -260,6 +278,30 @@ SELECT city, car_model, sum(quantity) AS sum FROM dealer
 | San Jose| HondaAccord|  8|
 | San Jose|  HondaCivic|  5|
 +---------+------------+---+
+
+--Prepare data for ignore nulls example
+CREATE TABLE person (id INT, name STRING, age INT);
+INSERT INTO person VALUES
+    (100, 'Mary', NULL),
+    (200, 'John', 30),
+    (300, 'Mike', 80),
+    (400, 'Dan', 50);
+
+--Select the first row in column age
+SELECT FIRST(age) FROM person;
++--------------------+
+| first(age, false)  |
++--------------------+
+| NULL               |
++--------------------+
+
+--Get the first row in column `age` ignore nulls,last row in column `id` and sum of column `id`.
+SELECT FIRST(age IGNORE NULLS), LAST(id), SUM(id) FROM person;
++-------------------+------------------+----------+
+| first(age, true)  | last(id, false)  | sum(id)  |
++-------------------+------------------+----------+
+| 30                | 400              | 1000     |
++-------------------+------------------+----------+
 ```
 
 ### Related Statements
@@ -272,3 +314,6 @@ SELECT city, car_model, sum(quantity) AS sum FROM dealer
 * [CLUSTER BY Clause](sql-ref-syntax-qry-select-clusterby.html)
 * [DISTRIBUTE BY Clause](sql-ref-syntax-qry-select-distribute-by.html)
 * [LIMIT Clause](sql-ref-syntax-qry-select-limit.html)
+* [CASE Clause](sql-ref-syntax-qry-select-case.html)
+* [PIVOT Clause](sql-ref-syntax-qry-select-pivot.html)
+* [LATERAL VIEW Clause](sql-ref-syntax-qry-select-lateral-view.html)

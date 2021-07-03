@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.benchmark
 
-import org.scalatest.Assertions._
-
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -29,7 +27,8 @@ import org.apache.spark.sql.types.IntegerType
  * To run this benchmark:
  * {{{
  *   1. without sbt:
- *      bin/spark-submit --class <this class> --jars <spark core test jar> <spark sql test jar>
+ *      bin/spark-submit --class <this class>
+ *        --jars <spark core test jar>,<spark catalyst test jar> <spark sql test jar>
  *   2. build/sbt "sql/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "sql/test:runMain <this class>"
@@ -166,6 +165,19 @@ object JoinBenchmark extends SqlBasedBenchmark {
     }
   }
 
+  def broadcastNestedLoopJoin(): Unit = {
+    val N = 20 << 20
+    val M = 1 << 4
+
+    val dim = broadcast(spark.range(M).selectExpr("id as k", "cast(id as string) as v"))
+    codegenBenchmark("broadcast nested loop join", N) {
+      val df = spark.range(N).join(dim)
+      assert(df.queryExecution.sparkPlan.find(
+        _.isInstanceOf[BroadcastNestedLoopJoinExec]).isDefined)
+      df.noop()
+    }
+  }
+
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     runBenchmark("Join Benchmark") {
       broadcastHashJoinLongKey()
@@ -178,6 +190,7 @@ object JoinBenchmark extends SqlBasedBenchmark {
       sortMergeJoin()
       sortMergeJoinWithDuplicates()
       shuffleHashJoin()
+      broadcastNestedLoopJoin()
     }
   }
 }

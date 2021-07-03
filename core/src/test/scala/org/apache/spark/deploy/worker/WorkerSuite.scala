@@ -29,8 +29,10 @@ import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.TestUtils.{createTempJsonFile, createTempScriptWithExpectedOutput}
@@ -80,7 +82,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
   }
 
   before {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
   }
 
   after {
@@ -340,7 +342,7 @@ class WorkerSuite extends SparkFunSuite with Matchers with BeforeAndAfter {
     testWorkDirCleanupAndRemoveMetadataWithConfig(true)
   }
 
-  test("WorkdDirCleanup cleans only app dirs when" +
+  test("WorkDirCleanup cleans only app dirs when" +
     "spark.shuffle.service.db.enabled=false") {
     testWorkDirCleanupAndRemoveMetadataWithConfig(false)
   }

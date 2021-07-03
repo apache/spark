@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.{Encoder, Encoders}
-import org.apache.spark.sql.catalyst.{OptionalData, PrimitiveData}
+import org.apache.spark.sql.catalyst.{FooClassWithEnum, FooEnum, OptionalData, PrimitiveData}
 import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
@@ -114,6 +114,7 @@ case class ReferenceValueClass(wrapped: ReferenceValueClass.Container) extends A
 object ReferenceValueClass {
   case class Container(data: Int)
 }
+case class IntAndString(i: Int, s: String)
 
 class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest {
   OuterScopes.addOuterScope(this)
@@ -174,6 +175,10 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Map(1 -> "a", 2 -> "b"), "map")
   encodeDecodeTest(Map(1 -> "a", 2 -> null), "map with null")
   encodeDecodeTest(Map(1 -> Map("a" -> 1), 2 -> Map("b" -> 2)), "map of map")
+  encodeDecodeTest(Map(1 -> IntAndString(1, "a")), "map with case class as value")
+  encodeDecodeTest(Map(IntAndString(1, "a") -> 1), "map with case class as key")
+  encodeDecodeTest(Map(IntAndString(1, "a") -> IntAndString(2, "b")),
+    "map with case class as key and value")
 
   encodeDecodeTest(Tuple1[Seq[Int]](null), "null seq in tuple")
   encodeDecodeTest(Tuple1[Map[String, String]](null), "null map in tuple")
@@ -195,8 +200,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     encoderFor(Encoders.javaSerialization[JavaSerializable]))
 
   // test product encoders
-  private def productTest[T <: Product : ExpressionEncoder](input: T): Unit = {
-    encodeDecodeTest(input, input.getClass.getSimpleName)
+  private def productTest[T <: Product : ExpressionEncoder](
+      input: T, useFallback: Boolean = false): Unit = {
+    encodeDecodeTest(input, input.getClass.getSimpleName, useFallback)
   }
 
   case class InnerClass(i: Int)
@@ -204,6 +210,90 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(Array(InnerClass(1)), "array of inner class")
 
   encodeDecodeTest(Array(Option(InnerClass(1))), "array of optional inner class")
+
+  // holder class to trigger Class.getSimpleName issue
+  object MalformedClassObject extends Serializable {
+    case class MalformedNameExample(x: Int)
+  }
+
+  {
+    OuterScopes.addOuterScope(MalformedClassObject)
+    encodeDecodeTest(
+      MalformedClassObject.MalformedNameExample(42),
+      "nested Scala class should work",
+      useFallback = true)
+  }
+
+  object OuterLevelWithVeryVeryVeryLongClassName1 {
+    object OuterLevelWithVeryVeryVeryLongClassName2 {
+      object OuterLevelWithVeryVeryVeryLongClassName3 {
+        object OuterLevelWithVeryVeryVeryLongClassName4 {
+          object OuterLevelWithVeryVeryVeryLongClassName5 {
+            object OuterLevelWithVeryVeryVeryLongClassName6 {
+              object OuterLevelWithVeryVeryVeryLongClassName7 {
+                object OuterLevelWithVeryVeryVeryLongClassName8 {
+                  object OuterLevelWithVeryVeryVeryLongClassName9 {
+                    object OuterLevelWithVeryVeryVeryLongClassName10 {
+                      object OuterLevelWithVeryVeryVeryLongClassName11 {
+                        object OuterLevelWithVeryVeryVeryLongClassName12 {
+                          object OuterLevelWithVeryVeryVeryLongClassName13 {
+                            object OuterLevelWithVeryVeryVeryLongClassName14 {
+                              object OuterLevelWithVeryVeryVeryLongClassName15 {
+                                object OuterLevelWithVeryVeryVeryLongClassName16 {
+                                  object OuterLevelWithVeryVeryVeryLongClassName17 {
+                                    object OuterLevelWithVeryVeryVeryLongClassName18 {
+                                      object OuterLevelWithVeryVeryVeryLongClassName19 {
+                                        object OuterLevelWithVeryVeryVeryLongClassName20 {
+                                          case class MalformedNameExample(x: Int)
+                                        }}}}}}}}}}}}}}}}}}}}
+
+  {
+    OuterScopes.addOuterScope(
+      OuterLevelWithVeryVeryVeryLongClassName1
+        .OuterLevelWithVeryVeryVeryLongClassName2
+        .OuterLevelWithVeryVeryVeryLongClassName3
+        .OuterLevelWithVeryVeryVeryLongClassName4
+        .OuterLevelWithVeryVeryVeryLongClassName5
+        .OuterLevelWithVeryVeryVeryLongClassName6
+        .OuterLevelWithVeryVeryVeryLongClassName7
+        .OuterLevelWithVeryVeryVeryLongClassName8
+        .OuterLevelWithVeryVeryVeryLongClassName9
+        .OuterLevelWithVeryVeryVeryLongClassName10
+        .OuterLevelWithVeryVeryVeryLongClassName11
+        .OuterLevelWithVeryVeryVeryLongClassName12
+        .OuterLevelWithVeryVeryVeryLongClassName13
+        .OuterLevelWithVeryVeryVeryLongClassName14
+        .OuterLevelWithVeryVeryVeryLongClassName15
+        .OuterLevelWithVeryVeryVeryLongClassName16
+        .OuterLevelWithVeryVeryVeryLongClassName17
+        .OuterLevelWithVeryVeryVeryLongClassName18
+        .OuterLevelWithVeryVeryVeryLongClassName19
+        .OuterLevelWithVeryVeryVeryLongClassName20)
+    encodeDecodeTest(
+      OuterLevelWithVeryVeryVeryLongClassName1
+        .OuterLevelWithVeryVeryVeryLongClassName2
+        .OuterLevelWithVeryVeryVeryLongClassName3
+        .OuterLevelWithVeryVeryVeryLongClassName4
+        .OuterLevelWithVeryVeryVeryLongClassName5
+        .OuterLevelWithVeryVeryVeryLongClassName6
+        .OuterLevelWithVeryVeryVeryLongClassName7
+        .OuterLevelWithVeryVeryVeryLongClassName8
+        .OuterLevelWithVeryVeryVeryLongClassName9
+        .OuterLevelWithVeryVeryVeryLongClassName10
+        .OuterLevelWithVeryVeryVeryLongClassName11
+        .OuterLevelWithVeryVeryVeryLongClassName12
+        .OuterLevelWithVeryVeryVeryLongClassName13
+        .OuterLevelWithVeryVeryVeryLongClassName14
+        .OuterLevelWithVeryVeryVeryLongClassName15
+        .OuterLevelWithVeryVeryVeryLongClassName16
+        .OuterLevelWithVeryVeryVeryLongClassName17
+        .OuterLevelWithVeryVeryVeryLongClassName18
+        .OuterLevelWithVeryVeryVeryLongClassName19
+        .OuterLevelWithVeryVeryVeryLongClassName20
+        .MalformedNameExample(42),
+      "deeply nested Scala class should work",
+      useFallback = true)
+  }
 
   productTest(PrimitiveData(1, 1, 1, 1, 1, 1, true))
 
@@ -214,7 +304,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   productTest(OptionalData(None, None, None, None, None, None, None, None, None))
 
   encodeDecodeTest(Seq(Some(1), None), "Option in array")
-  encodeDecodeTest(Map(1 -> Some(10L), 2 -> Some(20L), 3 -> None), "Option in map")
+  encodeDecodeTest(Map(1 -> Some(10L), 2 -> Some(20L), 3 -> None), "Option in map",
+    useFallback = true)
 
   productTest(BoxedData(1, 1L, 1.0, 1.0f, 1.toShort, 1.toByte, true))
 
@@ -232,7 +323,7 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       Map(1 -> null),
       PrimitiveData(1, 1, 1, 1, 1, 1, true)))
 
-  productTest(NestedArray(Array(Array(1, -2, 3), null, Array(4, 5, -6))))
+  productTest(NestedArray(Array(Array(1, -2, 3), null, Array(4, 5, -6))), useFallback = true)
 
   productTest(("Seq[(String, String)]",
     Seq(("a", "b"))))
@@ -389,6 +480,16 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     assert(e.getMessage.contains("tuple with more than 22 elements are not supported"))
   }
 
+  encodeDecodeTest((1, FooEnum.E1), "Tuple with Int and scala Enum")
+  encodeDecodeTest((null, FooEnum.E1, FooEnum.E2), "Tuple with Null and scala Enum")
+  encodeDecodeTest(Seq(FooEnum.E1, null), "Seq with scala Enum")
+  encodeDecodeTest(Map("key" -> FooEnum.E1), "Map with String key and scala Enum",
+    useFallback = true)
+  encodeDecodeTest(Map(FooEnum.E1 -> "value"), "Map with scala Enum key and String value",
+    useFallback = true)
+  encodeDecodeTest(FooClassWithEnum(1, FooEnum.E1), "case class with Int and scala Enum")
+  encodeDecodeTest(FooEnum.E1, "scala Enum")
+
   // Scala / Java big decimals ----------------------------------------------------------
 
   encodeDecodeTest(BigDecimal(("9" * 20) + "." + "9" * 18),
@@ -465,8 +566,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   private def encodeDecodeTest[T : ExpressionEncoder](
       input: T,
-      testName: String): Unit = {
-    testAndVerifyNotLeakingReflectionObjects(s"encode/decode for $testName: $input") {
+      testName: String,
+      useFallback: Boolean = false): Unit = {
+    testAndVerifyNotLeakingReflectionObjects(s"encode/decode for $testName: $input", useFallback) {
       val encoder = implicitly[ExpressionEncoder[T]]
 
       // Make sure encoder is serializable.
@@ -497,10 +599,8 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
       val isCorrect = (input, convertedBack) match {
         case (b1: Array[Byte], b2: Array[Byte]) => Arrays.equals(b1, b2)
         case (b1: Array[Int], b2: Array[Int]) => Arrays.equals(b1, b2)
-        case (b1: Array[Array[_]], b2: Array[Array[_]]) =>
-          Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
         case (b1: Array[_], b2: Array[_]) =>
-          Arrays.equals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
+          Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
         case (left: Comparable[_], right: Comparable[_]) =>
           left.asInstanceOf[Comparable[Any]].compareTo(right) == 0
         case _ => input == convertedBack
@@ -560,9 +660,16 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
     r
   }
 
-  private def testAndVerifyNotLeakingReflectionObjects(testName: String)(testFun: => Any): Unit = {
-    test(testName) {
-      verifyNotLeakingReflectionObjects(testFun)
+  private def testAndVerifyNotLeakingReflectionObjects(
+      testName: String, useFallback: Boolean = false)(testFun: => Any): Unit = {
+    if (useFallback) {
+      testFallback(testName) {
+        verifyNotLeakingReflectionObjects(testFun)
+      }
+    } else {
+      test(testName) {
+        verifyNotLeakingReflectionObjects(testFun)
+      }
     }
   }
 }

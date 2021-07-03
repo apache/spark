@@ -18,10 +18,21 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, Date, Timestamp}
+import java.time.{Instant, LocalDate}
+
+import scala.collection.mutable.ArrayBuilder
 
 import org.apache.commons.lang3.StringUtils
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.connector.catalog.TableChange._
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 /**
@@ -55,7 +66,7 @@ case class JdbcType(databaseTypeDefinition : String, jdbcNullType : Int)
  * for the given Catalyst type.
  */
 @DeveloperApi
-abstract class JdbcDialect extends Serializable {
+abstract class JdbcDialect extends Serializable with Logging{
   /**
    * Check if this dialect instance can handle a certain jdbc url.
    * @param url the jdbc url.
@@ -168,7 +179,12 @@ abstract class JdbcDialect extends Serializable {
   def compileValue(value: Any): Any = value match {
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "'" + timestampValue + "'"
+    case timestampValue: Instant =>
+      val timestampFormatter = TimestampFormatter.getFractionFormatter(
+        DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
+      s"'${timestampFormatter.format(timestampValue)}'"
     case dateValue: Date => "'" + dateValue + "'"
+    case dateValue: LocalDate => s"'${DateFormatter().format(dateValue)}'"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case _ => value
   }
@@ -180,6 +196,106 @@ abstract class JdbcDialect extends Serializable {
    * None: The behavior of TRUNCATE TABLE is unknown (default).
    */
   def isCascadingTruncateTable(): Option[Boolean] = None
+
+  /**
+   * Rename an existing table.
+   *
+   * @param oldTable The existing table.
+   * @param newTable New name of the table.
+   * @return The SQL statement to use for renaming the table.
+   */
+  def renameTable(oldTable: String, newTable: String): String = {
+    s"ALTER TABLE $oldTable RENAME TO $newTable"
+  }
+
+  /**
+   * Alter an existing table.
+   *
+   * @param tableName The name of the table to be altered.
+   * @param changes Changes to apply to the table.
+   * @return The SQL statements to use for altering the table.
+   */
+  def alterTable(
+      tableName: String,
+      changes: Seq[TableChange],
+      dbMajorVersion: Int): Array[String] = {
+    val updateClause = ArrayBuilder.make[String]
+    for (change <- changes) {
+      change match {
+        case add: AddColumn if add.fieldNames.length == 1 =>
+          val dataType = JdbcUtils.getJdbcType(add.dataType(), this).databaseTypeDefinition
+          val name = add.fieldNames
+          updateClause += getAddColumnQuery(tableName, name(0), dataType)
+        case rename: RenameColumn if rename.fieldNames.length == 1 =>
+          val name = rename.fieldNames
+          updateClause += getRenameColumnQuery(tableName, name(0), rename.newName, dbMajorVersion)
+        case delete: DeleteColumn if delete.fieldNames.length == 1 =>
+          val name = delete.fieldNames
+          updateClause += getDeleteColumnQuery(tableName, name(0))
+        case updateColumnType: UpdateColumnType if updateColumnType.fieldNames.length == 1 =>
+          val name = updateColumnType.fieldNames
+          val dataType = JdbcUtils.getJdbcType(updateColumnType.newDataType(), this)
+            .databaseTypeDefinition
+          updateClause += getUpdateColumnTypeQuery(tableName, name(0), dataType)
+        case updateNull: UpdateColumnNullability if updateNull.fieldNames.length == 1 =>
+          val name = updateNull.fieldNames
+          updateClause += getUpdateColumnNullabilityQuery(tableName, name(0), updateNull.nullable())
+        case _ =>
+          throw QueryCompilationErrors.unsupportedTableChangeInJDBCCatalogError(change)
+      }
+    }
+    updateClause.result()
+  }
+
+  def getAddColumnQuery(tableName: String, columnName: String, dataType: String): String =
+    s"ALTER TABLE $tableName ADD COLUMN ${quoteIdentifier(columnName)} $dataType"
+
+  def getRenameColumnQuery(
+      tableName: String,
+      columnName: String,
+      newName: String,
+      dbMajorVersion: Int): String =
+    s"ALTER TABLE $tableName RENAME COLUMN ${quoteIdentifier(columnName)} TO" +
+      s" ${quoteIdentifier(newName)}"
+
+  def getDeleteColumnQuery(tableName: String, columnName: String): String =
+    s"ALTER TABLE $tableName DROP COLUMN ${quoteIdentifier(columnName)}"
+
+  def getUpdateColumnTypeQuery(
+      tableName: String,
+      columnName: String,
+      newDataType: String): String =
+    s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} $newDataType"
+
+  def getUpdateColumnNullabilityQuery(
+      tableName: String,
+      columnName: String,
+      isNullable: Boolean): String = {
+    val nullable = if (isNullable) "NULL" else "NOT NULL"
+    s"ALTER TABLE $tableName ALTER COLUMN ${quoteIdentifier(columnName)} SET $nullable"
+  }
+
+  def getTableCommentQuery(table: String, comment: String): String = {
+    s"COMMENT ON TABLE $table IS '$comment'"
+  }
+
+  def getSchemaCommentQuery(schema: String, comment: String): String = {
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS '$comment'"
+  }
+
+  def removeSchemaCommentQuery(schema: String): String = {
+    s"COMMENT ON SCHEMA ${quoteIdentifier(schema)} IS NULL"
+  }
+
+  /**
+   * Gets a dialect exception, classifies it and wraps it by `AnalysisException`.
+   * @param message The error message to be placed to the returned exception.
+   * @param e The dialect specific exception.
+   * @return `AnalysisException` or its sub-class.
+   */
+  def classifyException(message: String, e: Throwable): AnalysisException = {
+    new AnalysisException(message, cause = Some(e))
+  }
 }
 
 /**
@@ -224,6 +340,7 @@ object JdbcDialects {
   registerDialect(DerbyDialect)
   registerDialect(OracleDialect)
   registerDialect(TeradataDialect)
+  registerDialect(H2Dialect)
 
   /**
    * Fetch the JdbcDialect class corresponding to a given database url.

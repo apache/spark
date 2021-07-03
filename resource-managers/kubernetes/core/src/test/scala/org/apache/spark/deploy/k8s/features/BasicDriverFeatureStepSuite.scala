@@ -28,7 +28,7 @@ import org.apache.spark.deploy.k8s.features.KubernetesFeaturesTestUtils.TestReso
 import org.apache.spark.deploy.k8s.submit._
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
-import org.apache.spark.resource.ResourceID
+import org.apache.spark.resource.{ResourceID, ResourceProfile}
 import org.apache.spark.resource.ResourceUtils._
 import org.apache.spark.util.Utils
 
@@ -191,7 +191,8 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
   ).foreach { case (name, resource, factor, expectedFactor) =>
     test(s"memory overhead factor: $name") {
       // Choose a driver memory where the default memory overhead is > MEMORY_OVERHEAD_MIN_MIB
-      val driverMem = MEMORY_OVERHEAD_MIN_MIB / MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
+      val driverMem =
+        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB / MEMORY_OVERHEAD_FACTOR.defaultValue.get * 2
 
       // main app resource, overhead factor
       val sparkConf = new SparkConf(false)
@@ -210,6 +211,25 @@ class BasicDriverFeatureStepSuite extends SparkFunSuite {
       val systemProperties = step.getAdditionalPodSystemProperties()
       assert(systemProperties(MEMORY_OVERHEAD_FACTOR.key) === expectedFactor.toString)
     }
+  }
+
+  test("SPARK-35493: make spark.blockManager.port be able to be fallen back to in driver pod") {
+    val initPod = SparkPod.initialPod()
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(BLOCK_MANAGER_PORT, 1234)
+    val driverConf1 = KubernetesTestConf.createDriverConf(sparkConf)
+    val pod1 = new BasicDriverFeatureStep(driverConf1).configurePod(initPod)
+    val portMap1 =
+      pod1.container.getPorts.asScala.map { cp => (cp.getName -> cp.getContainerPort) }.toMap
+    assert(portMap1(BLOCK_MANAGER_PORT_NAME) === 1234, s"fallback to $BLOCK_MANAGER_PORT.key")
+
+    val driverConf2 =
+      KubernetesTestConf.createDriverConf(sparkConf.set(DRIVER_BLOCK_MANAGER_PORT, 1235))
+    val pod2 = new BasicDriverFeatureStep(driverConf2).configurePod(initPod)
+    val portMap2 =
+      pod2.container.getPorts.asScala.map { cp => (cp.getName -> cp.getContainerPort) }.toMap
+    assert(portMap2(BLOCK_MANAGER_PORT_NAME) === 1235)
   }
 
   def containerPort(name: String, portNumber: Int): ContainerPort =

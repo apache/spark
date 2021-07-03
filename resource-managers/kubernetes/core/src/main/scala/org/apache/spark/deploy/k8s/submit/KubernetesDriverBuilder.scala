@@ -16,12 +16,11 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
-import java.io.File
-
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.features._
+import org.apache.spark.util.Utils
 
 private[spark] class KubernetesDriverBuilder {
 
@@ -32,10 +31,16 @@ private[spark] class KubernetesDriverBuilder {
       .map { file =>
         KubernetesUtils.loadPodFromTemplate(
           client,
-          new File(file),
-          conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME))
+          file,
+          conf.get(Config.KUBERNETES_DRIVER_PODTEMPLATE_CONTAINER_NAME),
+          conf.sparkConf)
       }
       .getOrElse(SparkPod.initialPod())
+
+    val userFeatures = conf.get(Config.KUBERNETES_DRIVER_POD_FEATURE_STEPS)
+      .map { className =>
+        Utils.classForName(className).newInstance().asInstanceOf[KubernetesFeatureConfigStep]
+      }
 
     val features = Seq(
       new BasicDriverFeatureStep(conf),
@@ -48,7 +53,7 @@ private[spark] class KubernetesDriverBuilder {
       new HadoopConfDriverFeatureStep(conf),
       new KerberosConfDriverFeatureStep(conf),
       new PodTemplateConfigMapStep(conf),
-      new LocalDirsFeatureStep(conf))
+      new LocalDirsFeatureStep(conf)) ++ userFeatures
 
     val spec = KubernetesDriverSpec(
       initialPod,

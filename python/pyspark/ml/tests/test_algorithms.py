@@ -25,7 +25,7 @@ from pyspark.ml.classification import FMClassifier, LogisticRegression, \
     MultilayerPerceptronClassifier, OneVsRest
 from pyspark.ml.clustering import DistributedLDAModel, KMeans, LocalLDAModel, LDA, LDAModel
 from pyspark.ml.fpm import FPGrowth
-from pyspark.ml.linalg import Matrices, Vectors
+from pyspark.ml.linalg import Matrices, Vectors, DenseVector
 from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import GeneralizedLinearRegression, LinearRegression
 from pyspark.sql import Row
@@ -86,7 +86,7 @@ class MultilayerPerceptronClassifierTest(SparkSessionTestCase):
         expected_rawPrediction = [-11.6081922998, -8.15827998691, 22.17757045]
         self.assertTrue(result.prediction, expected_prediction)
         self.assertTrue(np.allclose(result.probability, expected_probability, atol=1E-4))
-        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, atol=1))
+        self.assertTrue(np.allclose(result.rawPrediction, expected_rawPrediction, rtol=0.1))
 
 
 class OneVsRestTests(SparkSessionTestCase):
@@ -116,7 +116,19 @@ class OneVsRestTests(SparkSessionTestCase):
         output = model.transform(df)
         self.assertEqual(output.columns, ["label", "features", "rawPrediction", "prediction"])
 
-    def test_parallelism_doesnt_change_output(self):
+    def test_raw_prediction_column_is_of_vector_type(self):
+        # SPARK-35142: `OneVsRestModel` outputs raw prediction as a string column
+        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+                                         (1.0, Vectors.sparse(2, [], [])),
+                                         (2.0, Vectors.dense(0.5, 0.5))],
+                                        ["label", "features"])
+        lr = LogisticRegression(maxIter=5, regParam=0.01)
+        ovr = OneVsRest(classifier=lr, parallelism=1)
+        model = ovr.fit(df)
+        row = model.transform(df).head()
+        self.assertIsInstance(row["rawPrediction"], DenseVector)
+
+    def test_parallelism_does_not_change_output(self):
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
                                          (1.0, Vectors.sparse(2, [], [])),
                                          (2.0, Vectors.dense(0.5, 0.5))],
@@ -226,8 +238,8 @@ class FPGrowthTests(SparkSessionTestCase):
         fpm = fp.fit(self.data)
 
         expected_association_rules = self.spark.createDataFrame(
-            [([3], [1], 1.0, 1.0), ([2], [1], 1.0, 1.0)],
-            ["antecedent", "consequent", "confidence", "lift"]
+            [([3], [1], 1.0, 1.0, 0.5), ([2], [1], 1.0, 1.0, 0.75)],
+            ["antecedent", "consequent", "confidence", "lift", "support"]
         )
         actual_association_rules = fpm.associationRules
 
@@ -330,10 +342,10 @@ class LinearRegressionTest(SparkSessionTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.ml.tests.test_algorithms import *
+    from pyspark.ml.tests.test_algorithms import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

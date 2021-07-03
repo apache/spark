@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.vectorized;
 
-import io.netty.buffer.ArrowBuf;
 import org.apache.arrow.vector.*;
 import org.apache.arrow.vector.complex.*;
+import org.apache.arrow.vector.holders.NullableIntervalDayHolder;
 import org.apache.arrow.vector.holders.NullableVarCharHolder;
 
 import org.apache.spark.sql.util.ArrowUtils;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.types.UTF8String;
+
+import static org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY;
+import static org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MILLIS;
 
 /**
  * A column vector backed by Apache Arrow. Currently calendar interval type and map type are not
@@ -171,6 +174,12 @@ public final class ArrowColumnVector extends ColumnVector {
       for (int i = 0; i < childColumns.length; ++i) {
         childColumns[i] = new ArrowColumnVector(structVector.getVectorById(i));
       }
+    } else if (vector instanceof NullVector) {
+      accessor = new NullAccessor((NullVector) vector);
+    } else if (vector instanceof IntervalYearVector) {
+      accessor = new IntervalYearAccessor((IntervalYearVector) vector);
+    } else if (vector instanceof IntervalDayVector) {
+      accessor = new IntervalDayAccessor((IntervalDayVector) vector);
     } else {
       throw new UnsupportedOperationException();
     }
@@ -458,10 +467,8 @@ public final class ArrowColumnVector extends ColumnVector {
 
     @Override
     final ColumnarArray getArray(int rowId) {
-      ArrowBuf offsets = accessor.getOffsetBuffer();
-      int index = rowId * ListVector.OFFSET_WIDTH;
-      int start = offsets.getInt(index);
-      int end = offsets.getInt(index + ListVector.OFFSET_WIDTH);
+      int start = accessor.getElementStartIndex(rowId);
+      int end = accessor.getElementEndIndex(rowId);
       return new ColumnarArray(arrayData, start, end - start);
     }
   }
@@ -500,6 +507,46 @@ public final class ArrowColumnVector extends ColumnVector {
       int offset = accessor.getOffsetBuffer().getInt(index);
       int length = accessor.getInnerValueCountAt(rowId);
       return new ColumnarMap(keys, values, offset, length);
+    }
+  }
+
+  private static class NullAccessor extends ArrowVectorAccessor {
+
+    NullAccessor(NullVector vector) {
+      super(vector);
+    }
+  }
+
+  private static class IntervalYearAccessor extends ArrowVectorAccessor {
+
+    private final IntervalYearVector accessor;
+
+    IntervalYearAccessor(IntervalYearVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    int getInt(int rowId) {
+      return accessor.get(rowId);
+    }
+  }
+
+  private static class IntervalDayAccessor extends ArrowVectorAccessor {
+
+    private final IntervalDayVector accessor;
+    private final NullableIntervalDayHolder intervalDayHolder = new NullableIntervalDayHolder();
+
+    IntervalDayAccessor(IntervalDayVector vector) {
+      super(vector);
+      this.accessor = vector;
+    }
+
+    @Override
+    long getLong(int rowId) {
+      accessor.get(rowId, intervalDayHolder);
+      return Math.addExact(Math.multiplyExact(intervalDayHolder.days, MICROS_PER_DAY),
+                           intervalDayHolder.milliseconds * MICROS_PER_MILLIS);
     }
   }
 }

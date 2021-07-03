@@ -47,6 +47,11 @@ public interface TableCatalog extends CatalogPlugin {
   String PROP_LOCATION = "location";
 
   /**
+   * A reserved property to specify a table was created with EXTERNAL.
+   */
+  String PROP_EXTERNAL = "external";
+
+  /**
    * A reserved property to specify the description of the table.
    */
   String PROP_COMMENT = "comment";
@@ -60,6 +65,11 @@ public interface TableCatalog extends CatalogPlugin {
    * A reserved property to specify the owner of the table.
    */
   String PROP_OWNER = "owner";
+
+  /**
+   * A prefix used to pass OPTIONS in table properties
+   */
+  String OPTION_PREFIX = "option.";
 
   /**
    * List the tables in a namespace from the catalog.
@@ -163,6 +173,26 @@ public interface TableCatalog extends CatalogPlugin {
   boolean dropTable(Identifier ident);
 
   /**
+   * Drop a table in the catalog and completely remove its data by skipping a trash even if it is
+   * supported.
+   * <p>
+   * If the catalog supports views and contains a view for the identifier and not a table, this
+   * must not drop the view and must return false.
+   * <p>
+   * If the catalog supports to purge a table, this method should be overridden.
+   * The default implementation throws {@link UnsupportedOperationException}.
+   *
+   * @param ident a table identifier
+   * @return true if a table was deleted, false if no table exists for the identifier
+   * @throws UnsupportedOperationException If table purging is not supported
+   *
+   * @since 3.1.0
+   */
+  default boolean purgeTable(Identifier ident) throws UnsupportedOperationException {
+    throw new UnsupportedOperationException("Purge table is not supported.");
+  }
+
+  /**
    * Renames a table in the catalog.
    * <p>
    * If the catalog supports views and contains a view for the old identifier and not a table, this
@@ -176,7 +206,7 @@ public interface TableCatalog extends CatalogPlugin {
    * @param newIdent the new table identifier of the table
    * @throws NoSuchTableException If the table to rename doesn't exist or is a view
    * @throws TableAlreadyExistsException If the new table name already exists or is a view
-   * @throws UnsupportedOperationException If the namespaces of old and new identiers do not
+   * @throws UnsupportedOperationException If the namespaces of old and new identifiers do not
    *                                       match (optional)
    */
   void renameTable(Identifier oldIdent, Identifier newIdent)

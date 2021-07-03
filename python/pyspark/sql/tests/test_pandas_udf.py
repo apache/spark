@@ -18,7 +18,7 @@
 import unittest
 
 from pyspark.sql.functions import udf, pandas_udf, PandasUDFType
-from pyspark.sql.types import *
+from pyspark.sql.types import DoubleType, StructType, StructField, LongType
 from pyspark.sql.utils import ParseException, PythonException
 from pyspark.rdd import PythonEvalType
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
@@ -28,7 +28,7 @@ from pyspark.testing.utils import QuietTest
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class PandasUDFTests(ReusedSQLTestCase):
 
     def test_pandas_udf_basic(self):
@@ -114,31 +114,31 @@ class PandasUDFTests(ReusedSQLTestCase):
                 @pandas_udf('blah')
                 def foo(x):
                     return x
-            with self.assertRaisesRegexp(ValueError, 'Invalid return type.*None'):
+            with self.assertRaisesRegex(ValueError, 'Invalid return type.*None'):
                 @pandas_udf(functionType=PandasUDFType.SCALAR)
                 def foo(x):
                     return x
-            with self.assertRaisesRegexp(ValueError, 'Invalid function'):
+            with self.assertRaisesRegex(ValueError, 'Invalid function'):
                 @pandas_udf('double', 100)
                 def foo(x):
                     return x
 
-            with self.assertRaisesRegexp(ValueError, '0-arg pandas_udfs.*not.*supported'):
+            with self.assertRaisesRegex(ValueError, '0-arg pandas_udfs.*not.*supported'):
                 pandas_udf(lambda: 1, LongType(), PandasUDFType.SCALAR)
-            with self.assertRaisesRegexp(ValueError, '0-arg pandas_udfs.*not.*supported'):
+            with self.assertRaisesRegex(ValueError, '0-arg pandas_udfs.*not.*supported'):
                 @pandas_udf(LongType(), PandasUDFType.SCALAR)
                 def zero_with_type():
                     return 1
 
-            with self.assertRaisesRegexp(TypeError, 'Invalid return type'):
+            with self.assertRaisesRegex(TypeError, 'Invalid return type'):
                 @pandas_udf(returnType=PandasUDFType.GROUPED_MAP)
                 def foo(df):
                     return df
-            with self.assertRaisesRegexp(TypeError, 'Invalid return type'):
+            with self.assertRaisesRegex(TypeError, 'Invalid return type'):
                 @pandas_udf(returnType='double', functionType=PandasUDFType.GROUPED_MAP)
                 def foo(df):
                     return df
-            with self.assertRaisesRegexp(ValueError, 'Invalid function'):
+            with self.assertRaisesRegex(ValueError, 'Invalid function'):
                 @pandas_udf(returnType='k int, v double', functionType=PandasUDFType.GROUPED_MAP)
                 def foo(k, v, w):
                     return k
@@ -154,14 +154,14 @@ class PandasUDFTests(ReusedSQLTestCase):
         df = self.spark.range(0, 100)
 
         # plain udf (test for SPARK-23754)
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             PythonException,
             exc_message,
             df.withColumn('v', udf(foo)('id')).collect
         )
 
         # pandas scalar udf
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             PythonException,
             exc_message,
             df.withColumn(
@@ -170,7 +170,7 @@ class PandasUDFTests(ReusedSQLTestCase):
         )
 
         # pandas grouped map
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             PythonException,
             exc_message,
             df.groupBy('id').apply(
@@ -178,7 +178,7 @@ class PandasUDFTests(ReusedSQLTestCase):
             ).collect
         )
 
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             PythonException,
             exc_message,
             df.groupBy('id').apply(
@@ -187,7 +187,7 @@ class PandasUDFTests(ReusedSQLTestCase):
         )
 
         # pandas grouped agg
-        self.assertRaisesRegexp(
+        self.assertRaisesRegex(
             PythonException,
             exc_message,
             df.groupBy('id').agg(
@@ -210,8 +210,8 @@ class PandasUDFTests(ReusedSQLTestCase):
         # Since 0.11.0, PyArrow supports the feature to raise an error for unsafe cast.
         with self.sql_conf({
                 "spark.sql.execution.pandas.convertToArrowArraySafely": True}):
-            with self.assertRaisesRegexp(Exception,
-                                         "Exception thrown when converting pandas.Series"):
+            with self.assertRaisesRegex(Exception,
+                                        "Exception thrown when converting pandas.Series"):
                 df.select(['A']).withColumn('udf', udf('A')).collect()
 
         # Disabling Arrow safe type check.
@@ -231,8 +231,8 @@ class PandasUDFTests(ReusedSQLTestCase):
         # When enabling safe type check, Arrow 0.11.0+ disallows overflow cast.
         with self.sql_conf({
                 "spark.sql.execution.pandas.convertToArrowArraySafely": True}):
-            with self.assertRaisesRegexp(Exception,
-                                         "Exception thrown when converting pandas.Series"):
+            with self.assertRaisesRegex(Exception,
+                                        "Exception thrown when converting pandas.Series"):
                 df.withColumn('udf', udf('id')).collect()
 
         # Disabling safe type check, let Arrow do the cast anyway.
@@ -241,10 +241,10 @@ class PandasUDFTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf import *
+    from pyspark.sql.tests.test_pandas_udf import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

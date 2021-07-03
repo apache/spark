@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.time.{Instant, LocalDate}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.UnsafeArrayData
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.util.{DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.UTF8String
 
 class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
@@ -152,6 +154,13 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     assert(converter(chr) === expected)
   }
 
+  test("SPARK-33390: Make Literal support char array") {
+    val ac = Array('a', 'c')
+    val converter = CatalystTypeConverters.createToCatalystConverter(StringType)
+    val expected = UTF8String.fromString(String.valueOf(ac))
+    assert(converter(ac) === expected)
+  }
+
   test("converting java.time.Instant to TimestampType") {
     Seq(
       "0101-02-16T10:11:32Z",
@@ -182,6 +191,35 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("SPARK-35664: converting java.time.LocalDateTime to TimestampNTZType") {
+    Seq(
+      "0101-02-16T10:11:32",
+      "1582-10-02T01:02:03.04",
+      "1582-12-31T23:59:59.999999",
+      "1970-01-01T00:00:01.123",
+      "1972-12-31T23:59:59.123456",
+      "2019-02-16T18:12:30",
+      "2119-03-16T19:13:31").foreach { text =>
+      val input = LocalDateTime.parse(text)
+      val result = CatalystTypeConverters.convertToCatalyst(input)
+      val expected = DateTimeUtils.localDateTimeToMicros(input)
+      assert(result === expected)
+    }
+  }
+
+  test("SPARK-35664: converting TimestampNTZType to java.time.LocalDateTime") {
+    Seq(
+      -9463427405253013L,
+      -244000001L,
+      0L,
+      99628200102030L,
+      1543749753123456L).foreach { us =>
+      val localDateTime = DateTimeUtils.microsToLocalDateTime(us)
+      assert(CatalystTypeConverters.createToScalaConverter(TimestampNTZType)(us) ===
+        localDateTime)
+    }
+  }
+
   test("converting java.time.LocalDate to DateType") {
     Seq(
       "0101-02-16",
@@ -190,8 +228,8 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
       "1970-01-01",
       "1972-12-31",
       "2019-02-16",
-      "2119-03-16").foreach { timestamp =>
-      val input = LocalDate.parse(timestamp)
+      "2119-03-16").foreach { date =>
+      val input = LocalDate.parse(date)
       val result = CatalystTypeConverters.convertToCatalyst(input)
       val expected = DateTimeUtils.localDateToDays(input)
       assert(result === expected)
@@ -213,6 +251,146 @@ class CatalystTypeConvertersSuite extends SparkFunSuite with SQLHelper {
         1110657).foreach { days =>
         val localDate = DateTimeUtils.daysToLocalDate(days)
         assert(CatalystTypeConverters.createToScalaConverter(DateType)(days) === localDate)
+      }
+    }
+  }
+
+  test("SPARK-34605: converting java.time.Duration to DayTimeIntervalType") {
+    Seq(
+      Duration.ZERO,
+      Duration.ofNanos(1),
+      Duration.ofNanos(-1),
+      Duration.ofSeconds(0, Long.MaxValue),
+      Duration.ofSeconds(0, Long.MinValue),
+      Duration.ofDays(106751991),
+      Duration.ofDays(-106751991)).foreach { input =>
+      val result = CatalystTypeConverters.convertToCatalyst(input)
+      val expected = IntervalUtils.durationToMicros(input)
+      assert(result === expected)
+    }
+
+    val errMsg = intercept[ArithmeticException] {
+      IntervalUtils.durationToMicros(Duration.ofSeconds(Long.MaxValue, Long.MaxValue))
+    }.getMessage
+    assert(errMsg.contains("long overflow"))
+  }
+
+  test("SPARK-35726: Truncate java.time.Duration by fields of day-time interval type") {
+    val duration = Duration.ofSeconds(90061, 1000000023)
+    Seq((DayTimeIntervalType(DAY), 86400000000L, -86400000000L),
+      (DayTimeIntervalType(DAY, HOUR), 90000000000L, -90000000000L),
+      (DayTimeIntervalType(DAY, MINUTE), 90060000000L, -90060000000L),
+      (DayTimeIntervalType(DAY, SECOND), 90062000000L, -90062000001L),
+      (DayTimeIntervalType(HOUR), 90000000000L, -90000000000L),
+      (DayTimeIntervalType(HOUR, MINUTE), 90060000000L, -90060000000L),
+      (DayTimeIntervalType(HOUR, SECOND), 90062000000L, -90062000001L),
+      (DayTimeIntervalType(MINUTE), 90060000000L, -90060000000L),
+      (DayTimeIntervalType(MINUTE, SECOND), 90062000000L, -90062000001L),
+      (DayTimeIntervalType(SECOND), 90062000000L, -90062000001L))
+      .foreach { case (dt, positive, negative) =>
+        assert(CatalystTypeConverters.createToCatalystConverter(dt)(duration) == positive)
+        assert(
+          CatalystTypeConverters.createToCatalystConverter(dt)(duration.negated()) == negative)
+      }
+  }
+
+  test("SPARK-34605: converting DayTimeIntervalType to java.time.Duration") {
+    Seq(
+      0L,
+      1L,
+      999999,
+      -1000000,
+      Long.MaxValue).foreach { input =>
+      Seq(1L, -1L).foreach { sign =>
+        val us = sign * input
+        val duration = IntervalUtils.microsToDuration(us)
+        assert(CatalystTypeConverters.createToScalaConverter(DayTimeIntervalType())(us)
+          === duration)
+      }
+    }
+  }
+
+  test("SPARK-34615: converting java.time.Period to YearMonthIntervalType") {
+    Seq(
+      Period.ZERO,
+      Period.ofMonths(1),
+      Period.ofMonths(-1),
+      Period.ofMonths(Int.MaxValue).normalized(),
+      Period.ofMonths(Int.MinValue).normalized(),
+      Period.ofYears(106751991),
+      Period.ofYears(-106751991)).foreach { input =>
+      val result = CatalystTypeConverters.convertToCatalyst(input)
+      val expected = IntervalUtils.periodToMonths(input)
+      assert(result === expected)
+    }
+
+    val errMsg = intercept[ArithmeticException] {
+      IntervalUtils.periodToMonths(Period.of(Int.MaxValue, Int.MaxValue, Int.MaxValue))
+    }.getMessage
+    assert(errMsg.contains("integer overflow"))
+  }
+
+  test("SPARK-35769: Truncate java.time.Period by fields of year-month interval type") {
+    Seq(YearMonthIntervalType(YEAR) -> 12,
+      YearMonthIntervalType(YEAR, MONTH) -> 13,
+      YearMonthIntervalType(MONTH) -> 13)
+      .foreach { case (ym, value) =>
+        assert(CatalystTypeConverters.createToCatalystConverter(ym)(Period.of(1, 1, 0)) == value)
+      }
+  }
+
+  test("SPARK-34615: converting YearMonthIntervalType to java.time.Period") {
+    Seq(
+      0,
+      1,
+      999999,
+      1000000,
+      Int.MaxValue).foreach { input =>
+      Seq(1, -1).foreach { sign =>
+        val months = sign * input
+        val period = IntervalUtils.monthsToPeriod(months)
+        assert(
+          CatalystTypeConverters.createToScalaConverter(YearMonthIntervalType())(months) === period)
+      }
+    }
+  }
+
+  test("SPARK-35204: createToCatalystConverter for date") {
+    Seq(true, false).foreach { enable =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> enable.toString) {
+        Seq(-1234, 0, 1234).foreach { days =>
+          val converter = CatalystTypeConverters.createToCatalystConverter(DateType)
+
+          val ld = LocalDate.ofEpochDay(days)
+          val result1 = converter(ld)
+
+          val d = java.sql.Date.valueOf(ld)
+          val result2 = converter(d)
+
+          val expected = DateTimeUtils.localDateToDays(ld)
+          assert(result1 === expected)
+          assert(result2 === expected)
+        }
+      }
+    }
+  }
+
+  test("SPARK-35204: createToCatalystConverter for timestamp") {
+    Seq(true, false).foreach { enable =>
+      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> enable.toString) {
+        Seq(-1234, 0, 1234).foreach { seconds =>
+          val converter = CatalystTypeConverters.createToCatalystConverter(TimestampType)
+
+          val i = Instant.ofEpochSecond(seconds)
+          val result1 = converter(i)
+
+          val t = new java.sql.Timestamp(seconds * DateTimeConstants.MILLIS_PER_SECOND)
+          val result2 = converter(t)
+
+          val expected = seconds * DateTimeConstants.MICROS_PER_SECOND
+          assert(result1 === expected)
+          assert(result2 === expected)
+        }
       }
     }
   }

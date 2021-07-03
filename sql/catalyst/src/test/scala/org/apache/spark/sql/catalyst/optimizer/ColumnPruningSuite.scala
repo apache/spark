@@ -127,7 +127,7 @@ class ColumnPruningSuite extends PlanTest {
 
         val optimized = Optimize.execute(query)
 
-        val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized)
+        val aliases = NestedColumnAliasingSuite.collectGeneratedAliases(optimized).toSeq
 
         val selectedFields = UnresolvedAttribute("a") +: aliasedExprs(aliases)
         val finalSelectedExprs = Seq(UnresolvedAttribute("a"), $"${aliases(0)}".as("c.d")) ++
@@ -214,30 +214,6 @@ class ColumnPruningSuite extends PlanTest {
           Seq('c, 'aa.int, 'gid.int),
           Project(Seq('a, 'c),
             input))).analyze
-
-    comparePlans(optimized, expected)
-  }
-
-  test("Column pruning for ScriptTransformation") {
-    val input = LocalRelation('a.int, 'b.string, 'c.double)
-    val query =
-      ScriptTransformation(
-        Seq('a, 'b),
-        "func",
-        Seq.empty,
-        input,
-        null).analyze
-    val optimized = Optimize.execute(query)
-
-    val expected =
-      ScriptTransformation(
-        Seq('a, 'b),
-        "func",
-        Seq.empty,
-        Project(
-          Seq('a, 'b),
-          input),
-        null).analyze
 
     comparePlans(optimized, expected)
   }

@@ -29,7 +29,7 @@ turning on some experimental options.
 
 Spark SQL can cache tables using an in-memory columnar format by calling `spark.catalog.cacheTable("tableName")` or `dataFrame.cache()`.
 Then Spark SQL will scan only required columns and will automatically tune compression to minimize
-memory usage and GC pressure. You can call `spark.catalog.uncacheTable("tableName")` to remove the table from memory.
+memory usage and GC pressure. You can call `spark.catalog.uncacheTable("tableName")` or `dataFrame.unpersist()` to remove the table from memory.
 
 Configuration of in-memory caching can be done using the `setConf` method on `SparkSession` or by running
 `SET key=value` commands using SQL.
@@ -86,6 +86,16 @@ that these options will be deprecated in future release as more optimizations ar
     <td>2.0.0</td>
   </tr>
   <tr>
+    <td><code>spark.sql.files.minPartitionNum</code></td>
+    <td>Default Parallelism</td>
+    <td>
+      The suggested (not guaranteed) minimum number of split file partitions. If not set, the default
+      value is `spark.default.parallelism`. This configuration is effective only when using file-based
+      sources such as Parquet, JSON and ORC.
+    </td>
+    <td>3.1.0</td>
+  </tr>
+  <tr>
     <td><code>spark.sql.broadcastTimeout</code></td>
     <td>300</td>
     <td>
@@ -113,6 +123,28 @@ that these options will be deprecated in future release as more optimizations ar
       Configures the number of partitions to use when shuffling data for joins or aggregations.
     </td>
     <td>1.1.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.sources.parallelPartitionDiscovery.threshold</code></td>
+    <td>32</td>
+    <td>
+      Configures the threshold to enable parallel listing for job input paths. If the number of
+      input paths is larger than this threshold, Spark will list the files by using Spark distributed job.
+      Otherwise, it will fallback to sequential listing. This configuration is only effective when
+      using file-based data sources such as Parquet, ORC and JSON.
+    </td>
+    <td>1.5.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.sources.parallelPartitionDiscovery.parallelism</code></td>
+    <td>10000</td>
+    <td>
+      Configures the maximum listing parallelism for job input paths. In case the number of input
+      paths is larger than this value, it will be throttled down to use this value. Same as above,
+      this configuration is only effective when using file-based data sources such as Parquet, ORC
+      and JSON.
+    </td>
+    <td>2.1.1</td>
   </tr>
 </table>
 
@@ -186,15 +218,18 @@ For more details please refer to the documentation of [Join Hints](sql-ref-synta
 Coalesce hints allows the Spark SQL users to control the number of output files just like the
 `coalesce`, `repartition` and `repartitionByRange` in Dataset API, they can be used for performance
 tuning and reducing the number of output files. The "COALESCE" hint only has a partition number as a
-parameter. The "REPARTITION" hint has a partition number, columns, or both of them as parameters.
+parameter. The "REPARTITION" hint has a partition number, columns, or both/neither of them as parameters.
 The "REPARTITION_BY_RANGE" hint must have column names and a partition number is optional.
 
     SELECT /*+ COALESCE(3) */ * FROM t
     SELECT /*+ REPARTITION(3) */ * FROM t
     SELECT /*+ REPARTITION(c) */ * FROM t
     SELECT /*+ REPARTITION(3, c) */ * FROM t
+    SELECT /*+ REPARTITION */ * FROM t
     SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t
     SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t
+    SELECT /*+ REBALANCE */ * FROM t
+    SELECT /*+ REBALANCE(c) */ * FROM t
 
 For more details please refer to the documentation of [Partitioning Hints](sql-ref-syntax-qry-select-hints.html#partitioning-hints).
 
@@ -223,9 +258,9 @@ This feature coalesces the post shuffle partitions based on the map output stati
    </tr>
    <tr>
      <td><code>spark.sql.adaptive.coalescePartitions.initialPartitionNum</code></td>
-     <td>200</td>
+     <td>(none)</td>
      <td>
-       The initial number of shuffle partitions before coalescing. By default it equals to <code>spark.sql.shuffle.partitions</code>. This configuration only has an effect when <code>spark.sql.adaptive.enabled</code> and <code>spark.sql.adaptive.coalescePartitions.enabled</code> are both enabled.
+       The initial number of shuffle partitions before coalescing. If not set, it equals to <code>spark.sql.shuffle.partitions</code>. This configuration only has an effect when <code>spark.sql.adaptive.enabled</code> and <code>spark.sql.adaptive.coalescePartitions.enabled</code> are both enabled.
      </td>
      <td>3.0.0</td>
    </tr>
@@ -256,9 +291,9 @@ Data skew can severely downgrade the performance of join queries. This feature d
      </tr>
      <tr>
        <td><code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code></td>
-       <td>10</td>
+       <td>5</td>
        <td>
-         A partition is considered as skewed if its size is larger than this factor multiplying the median partition size and also larger than <code>spark.sql.adaptive.skewedPartitionThresholdInBytes</code>.
+         A partition is considered as skewed if its size is larger than this factor multiplying the median partition size and also larger than <code>spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes</code>.
        </td>
        <td>3.0.0</td>
      </tr>

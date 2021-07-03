@@ -17,10 +17,25 @@
 
 package org.apache.spark
 
-class SparkException(message: String, cause: Throwable)
-  extends Exception(message, cause) {
+class SparkException(
+    message: String,
+    cause: Throwable,
+    val errorClass: Option[String],
+    val messageParameters: Seq[String])
+  extends Exception(message, cause) with SparkError {
 
-  def this(message: String) = this(message, null)
+  def this(message: String, cause: Throwable) =
+    this(message = message, cause = cause, errorClass = None, messageParameters = Seq.empty)
+
+  def this(message: String) =
+    this(message = message, cause = null)
+
+  def this(errorClass: String, messageParameters: Seq[String], cause: Throwable) =
+    this(
+      message = SparkError.getMessage(errorClass, messageParameters),
+      cause = cause,
+      errorClass = Some(errorClass),
+      messageParameters = messageParameters)
 }
 
 /**
@@ -50,3 +65,16 @@ private[spark] case class ExecutorDeadException(message: String)
 private[spark] class SparkUpgradeException(version: String, message: String, cause: Throwable)
   extends RuntimeException("You may get a different result due to the upgrading of Spark" +
     s" $version: $message", cause)
+
+/**
+ * Arithmetic exception thrown from Spark with an error class.
+ */
+class SparkArithmeticException(
+    val errorClass: Option[String],
+    val messageParameters: Seq[String])
+  extends ArithmeticException(SparkError.getMessage(errorClass.get, messageParameters))
+    with SparkError {
+
+  def this(errorClass: String, messageParameters: Seq[String]) =
+    this(errorClass = Some(errorClass), messageParameters = messageParameters)
+}

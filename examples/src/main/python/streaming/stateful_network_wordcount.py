@@ -29,8 +29,6 @@ r"""
     `$ bin/spark-submit examples/src/main/python/streaming/stateful_network_wordcount.py \
         localhost 9999`
 """
-from __future__ import print_function
-
 import sys
 
 from pyspark import SparkContext

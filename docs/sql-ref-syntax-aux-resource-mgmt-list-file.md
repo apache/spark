@@ -26,7 +26,7 @@ license: |
 ### Syntax
 
 ```sql
-LIST FILE
+LIST { FILE | FILES } file_name [ ... ]
 ```
 
 ### Examples
@@ -48,5 +48,6 @@ file:/private/tmp/test
 
 * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
 * [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
+* [ADD ARCHIVE](sql-ref-syntax-aux-resource-mgmt-add-archive.html)
 * [LIST JAR](sql-ref-syntax-aux-resource-mgmt-list-jar.html)
-
+* [LIST ARCHIVE](sql-ref-syntax-aux-resource-mgmt-list-archive.html)

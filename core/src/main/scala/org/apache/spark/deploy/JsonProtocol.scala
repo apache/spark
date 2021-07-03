@@ -22,7 +22,6 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master._
-import org.apache.spark.deploy.master.RecoveryState.MasterState
 import org.apache.spark.deploy.worker.ExecutorRunner
 import org.apache.spark.resource.{ResourceInformation, ResourceRequirement}
 
@@ -81,7 +80,7 @@ private[deploy] object JsonProtocol {
   }
 
   /**
-   * Export the [[ApplicationInfo]] to a Json objec. An [[ApplicationInfo]] consists of the
+   * Export the [[ApplicationInfo]] to a Json object. An [[ApplicationInfo]] consists of the
    * information of an application.
    *
    * @return a Json object containing the following fields:
@@ -90,11 +89,12 @@ private[deploy] object JsonProtocol {
    *         `name` the description of the application
    *         `cores` total cores granted to the application
    *         `user` name of the user who submitted the application
-   *         `memoryperslave` minimal memory in MB required to each executor
-   *         `resourcesperslave` minimal resources required to each executor
+   *         `memoryperexecutor` minimal memory in MB required to each executor
+   *         `resourcesperexecutor` minimal resources required to each executor
    *         `submitdate` time in Date that the application is submitted
    *         `state` state of the application, see [[ApplicationState]]
    *         `duration` time in milliseconds that the application has been running
+   * For compatibility also returns the deprecated `memoryperslave` & `resourcesperslave` fields.
    */
   def writeApplicationInfo(obj: ApplicationInfo): JObject = {
     ("id" -> obj.id) ~
@@ -102,7 +102,10 @@ private[deploy] object JsonProtocol {
     ("name" -> obj.desc.name) ~
     ("cores" -> obj.coresGranted) ~
     ("user" -> obj.desc.user) ~
+    ("memoryperexecutor" -> obj.desc.memoryPerExecutorMB) ~
     ("memoryperslave" -> obj.desc.memoryPerExecutorMB) ~
+    ("resourcesperexecutor" -> obj.desc.resourceReqsPerExecutor
+      .toList.map(writeResourceRequirement)) ~
     ("resourcesperslave" -> obj.desc.resourceReqsPerExecutor
       .toList.map(writeResourceRequirement)) ~
     ("submitdate" -> obj.submitDate.toString) ~
@@ -117,14 +120,17 @@ private[deploy] object JsonProtocol {
    * @return a Json object containing the following fields:
    *         `name` the description of the application
    *         `cores` max cores that can be allocated to the application, 0 means unlimited
-   *         `memoryperslave` minimal memory in MB required to each executor
-   *         `resourcesperslave` minimal resources required to each executor
+   *         `memoryperexecutor` minimal memory in MB required to each executor
+   *         `resourcesperexecutor` minimal resources required to each executor
    *         `user` name of the user who submitted the application
    *         `command` the command string used to submit the application
+   * For compatibility also returns the deprecated `memoryperslave` & `resourcesperslave` fields.
    */
   def writeApplicationDescription(obj: ApplicationDescription): JObject = {
     ("name" -> obj.name) ~
     ("cores" -> obj.maxCores.getOrElse(0)) ~
+    ("memoryperexecutor" -> obj.memoryPerExecutorMB) ~
+    ("resourcesperexecutor" -> obj.resourceReqsPerExecutor.toList.map(writeResourceRequirement)) ~
     ("memoryperslave" -> obj.memoryPerExecutorMB) ~
     ("resourcesperslave" -> obj.resourceReqsPerExecutor.toList.map(writeResourceRequirement)) ~
     ("user" -> obj.user) ~
@@ -201,7 +207,8 @@ private[deploy] object JsonProtocol {
    *         master
    *         `completeddrivers` a list of Json objects of [[DriverInfo]] of the completed drivers
    *         of the master
-   *         `status` status of the master, see [[MasterState]]
+   *         `status` status of the master,
+   *         see [[org.apache.spark.deploy.master.RecoveryState.MasterState]]
    */
   def writeMasterState(obj: MasterStateResponse): JObject = {
     val aliveWorkers = obj.workers.filter(_.isAlive())

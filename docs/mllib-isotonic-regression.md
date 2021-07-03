@@ -94,7 +94,7 @@ i.e. 4710.28,500.00. The data are split to training and testing set.
 Model is created using the training set and a mean squared error is calculated from the predicted
 labels and real labels in the test set.
 
-Refer to the [`IsotonicRegression` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.IsotonicRegression) and [`IsotonicRegressionModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.regression.IsotonicRegressionModel) for more details on the API.
+Refer to the [`IsotonicRegression` Python docs](api/python/reference/api/pyspark.mllib.regression.IsotonicRegression.html) and [`IsotonicRegressionModel` Python docs](api/python/reference/api/pyspark.mllib.regression.IsotonicRegressionModel.html) for more details on the API.
 
 {% include_example python/mllib/isotonic_regression_example.py %}
 </div>

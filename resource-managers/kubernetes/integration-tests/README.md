@@ -17,11 +17,11 @@ To run tests with Java 11 instead of Java 8, use `--java-image-tag` to specify t
 
     ./dev/dev-run-integration-tests.sh --java-image-tag 11-jre-slim
 
-To run tests with Hadoop 3.2 instead of Hadoop 2.7, use `--hadoop-profile`.
+To run tests with Hadoop 2.7 instead of Hadoop 3.2, use `--hadoop-profile`.
 
-    ./dev/dev-run-integration-tests.sh --hadoop-profile hadoop-3.2
+    ./dev/dev-run-integration-tests.sh --hadoop-profile hadoop-2.7
 
-The minimum tested version of Minikube is 0.23.0. The kube-dns addon must be enabled. Minikube should
+The minimum tested version of Minikube is 1.7.3. The kube-dns addon must be enabled. Minikube should
 run with a minimum of 4 CPUs and 6G of memory:
 
     minikube start --cpus 4 --memory 6144
@@ -40,7 +40,7 @@ default this is set to `minikube`, the available backends are their prerequisite
 
 ### `minikube`
 
-Uses the local `minikube` cluster, this requires that `minikube` 0.23.0 or greater be installed and that it be allocated 
+Uses the local `minikube` cluster, this requires that `minikube` 1.7.3 or greater be installed and that it be allocated
 at least 4 CPUs and 6GB memory (some users have reported success with as few as 3 CPUs and 4GB memory).  The tests will 
 check if `minikube` is started and abort early if it isn't currently running.
 
@@ -126,7 +126,7 @@ If you prefer to run just the integration tests directly, then you can customise
 properties to Maven.  For example:
 
     mvn integration-test -am -pl :spark-kubernetes-integration-tests_2.12 \
-                            -Pkubernetes -Pkubernetes-integration-tests \ 
+                            -Pkubernetes -Pkubernetes-integration-tests \
                             -Phadoop-2.7 -Dhadoop.version=2.7.4 \
                             -Dspark.kubernetes.test.sparkTgz=spark-3.0.0-SNAPSHOT-bin-example.tgz \
                             -Dspark.kubernetes.test.imageTag=sometag \

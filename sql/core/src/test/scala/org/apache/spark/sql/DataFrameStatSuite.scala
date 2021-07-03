@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.util.Random
 
-import org.scalatest.Matchers._
+import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.stat.StatFunctions
@@ -204,7 +204,7 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     val e = intercept[IllegalArgumentException] {
       df.stat.approxQuantile(Array("singles", "doubles"), Array(q1, q2, -0.1), epsilons.head)
     }
-    assert(e.getMessage.contains("quantile should be in the range [0.0, 1.0]"))
+    assert(e.getMessage.contains("percentile should be in the range [0.0, 1.0]"))
 
     // relativeError should be non-negative
     val e2 = intercept[IllegalArgumentException] {
@@ -412,8 +412,8 @@ class DataFrameStatSuite extends QueryTest with SharedSparkSession {
     // Original bug was a NullPointerException exception caused by calling collect(), test for this
     val resultRow = result.collect()(0)
 
-    assert(resultRow.get(0).asInstanceOf[Seq[String]].toSet == Set("1", "2", "3"))
-    assert(resultRow.get(1).asInstanceOf[Seq[String]].toSet == Set("a", "b", null))
+    assert(resultRow.get(0).asInstanceOf[scala.collection.Seq[String]].toSet == Set("1", "2", "3"))
+    assert(resultRow.get(1).asInstanceOf[scala.collection.Seq[String]].toSet == Set("a", "b", null))
   }
 
   test("sampleBy") {

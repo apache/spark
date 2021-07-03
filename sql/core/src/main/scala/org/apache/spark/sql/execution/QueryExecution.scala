@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.io.{BufferedWriter, OutputStreamWriter}
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.hadoop.fs.Path
 
@@ -29,13 +30,15 @@ import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.catalyst.expressions.codegen.ByteCodeStats
 import org.apache.spark.sql.catalyst.plans.QueryPlan
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.plans.logical.{AppendData, Command, CommandResult, CreateTableAsSelect, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelect, ReturnAnswer}
+import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.util.StringUtils.PlanStringConcat
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.execution.adaptive.{AdaptiveExecutionContext, InsertAdaptiveSparkPlan}
+import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.dynamicpruning.PlanDynamicPruningFilters
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
+import org.apache.spark.sql.execution.exchange.EnsureRequirements
+import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.execution.streaming.{IncrementalExecution, OffsetSeqMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
@@ -51,7 +54,10 @@ import org.apache.spark.util.Utils
 class QueryExecution(
     val sparkSession: SparkSession,
     val logical: LogicalPlan,
-    val tracker: QueryPlanningTracker = new QueryPlanningTracker) extends Logging {
+    val tracker: QueryPlanningTracker = new QueryPlanningTracker,
+    val mode: CommandExecutionMode.Value = CommandExecutionMode.ALL) extends Logging {
+
+  val id: Long = QueryExecution.nextExecutionId
 
   // TODO: Move the planner an optimizer into here from SessionState.
   protected def planner = sparkSession.sessionState.planner
@@ -69,18 +75,61 @@ class QueryExecution(
     sparkSession.sessionState.analyzer.executeAndCheck(logical, tracker)
   }
 
+  lazy val commandExecuted: LogicalPlan = mode match {
+    case CommandExecutionMode.NON_ROOT => analyzed.mapChildren(eagerlyExecuteCommands)
+    case CommandExecutionMode.ALL => eagerlyExecuteCommands(analyzed)
+    case CommandExecutionMode.SKIP => analyzed
+  }
+
+  private def commandExecutionName(command: Command): String = command match {
+    case _: CreateTableAsSelect => "create"
+    case _: ReplaceTableAsSelect => "replace"
+    case _: AppendData => "append"
+    case _: OverwriteByExpression => "overwrite"
+    case _: OverwritePartitionsDynamic => "overwritePartitions"
+    case _ => "command"
+  }
+
+  private def eagerlyExecuteCommands(p: LogicalPlan) = p transformDown {
+    case c: Command =>
+      val qe = sparkSession.sessionState.executePlan(c, CommandExecutionMode.NON_ROOT)
+      val result = SQLExecution.withNewExecutionId(qe, Some(commandExecutionName(c))) {
+        qe.executedPlan.executeCollect()
+      }
+      CommandResult(
+        qe.analyzed.output,
+        qe.commandExecuted,
+        qe.executedPlan,
+        result)
+    case other => other
+  }
+
   lazy val withCachedData: LogicalPlan = sparkSession.withActive {
     assertAnalyzed()
     assertSupported()
     // clone the plan to avoid sharing the plan instance between different stages like analyzing,
     // optimizing and planning.
-    sparkSession.sharedState.cacheManager.useCachedData(analyzed.clone())
+    sparkSession.sharedState.cacheManager.useCachedData(commandExecuted.clone())
   }
 
-  lazy val optimizedPlan: LogicalPlan = executePhase(QueryPlanningTracker.OPTIMIZATION) {
-    // clone the plan to avoid sharing the plan instance between different stages like analyzing,
-    // optimizing and planning.
-    sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+  def assertCommandExecuted(): Unit = commandExecuted
+
+  lazy val optimizedPlan: LogicalPlan = {
+    // We need to materialize the commandExecuted here because optimizedPlan is also tracked under
+    // the optimizing phase
+    assertCommandExecuted()
+    executePhase(QueryPlanningTracker.OPTIMIZATION) {
+      // clone the plan to avoid sharing the plan instance between different stages like analyzing,
+      // optimizing and planning.
+      val plan =
+        sparkSession.sessionState.optimizer.executeAndTrack(withCachedData.clone(), tracker)
+      // We do not want optimized plans to be re-analyzed as literals that have been constant
+      // folded and such can cause issues during analysis. While `clone` should maintain the
+      // `analyzed` state of the LogicalPlan, we set the plan as analyzed here as well out of
+      // paranoia.
+      plan.setAnalyzed()
+      plan
+    }
   }
 
   private def assertOptimized(): Unit = optimizedPlan
@@ -127,10 +176,10 @@ class QueryExecution(
 
   protected def preparations: Seq[Rule[SparkPlan]] = {
     QueryExecution.preparations(sparkSession,
-      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))))
+      Option(InsertAdaptiveSparkPlan(AdaptiveExecutionContext(sparkSession, this))), false)
   }
 
-  private def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
+  protected def executePhase[T](phase: String)(block: => T): T = sparkSession.withActive {
     tracker.measurePhase(phase)(block)
   }
 
@@ -204,11 +253,13 @@ class QueryExecution(
     QueryPlan.append(logical, append, verbose, addSuffix, maxFields)
     append("\n== Analyzed Logical Plan ==\n")
     try {
-      append(
-        truncatedString(
-          analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
-      )
-      append("\n")
+      if (analyzed.output.nonEmpty) {
+        append(
+          truncatedString(
+            analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ", maxFields)
+        )
+        append("\n")
+      }
       QueryPlan.append(analyzed, append, verbose, addSuffix, maxFields)
       append("\n== Optimized Logical Plan ==\n")
       QueryPlan.append(optimizedPlan, append, verbose, addSuffix, maxFields)
@@ -244,7 +295,12 @@ class QueryExecution(
 
     // trigger to compute stats for logical plans
     try {
-      optimizedPlan.stats
+      // This will trigger to compute stats for all the nodes in the plan, including subqueries,
+      // if the stats doesn't exist in the statsCache and update the statsCache corresponding
+      // to the node.
+      optimizedPlan.collectWithSubqueries {
+        case plan => plan.stats
+      }
     } catch {
       case e: AnalysisException => append(e.toString + "\n")
     }
@@ -317,7 +373,24 @@ class QueryExecution(
   }
 }
 
+/**
+ * SPARK-35378: Commands should be executed eagerly so that something like `sql("INSERT ...")`
+ * can trigger the table insertion immediately without a `.collect()`. To avoid end-less recursion
+ * we should use `NON_ROOT` when recursively executing commands. Note that we can't execute
+ * a query plan with leaf command nodes, because many commands return `GenericInternalRow`
+ * and can't be put in a query plan directly, otherwise the query engine may cast
+ * `GenericInternalRow` to `UnsafeRow` and fail. When running EXPLAIN, or commands inside other
+ * command, we should use `SKIP` to not eagerly trigger the command execution.
+ */
+object CommandExecutionMode extends Enumeration {
+  val SKIP, NON_ROOT, ALL = Value
+}
+
 object QueryExecution {
+  private val _nextExecutionId = new AtomicLong(0)
+
+  private def nextExecutionId: Long = _nextExecutionId.getAndIncrement
+
   /**
    * Construct a sequence of rules that are used to prepare a planned [[SparkPlan]] for execution.
    * These rules will make sure subqueries are planned, make use the data partitioning and ordering
@@ -326,20 +399,28 @@ object QueryExecution {
    */
   private[execution] def preparations(
       sparkSession: SparkSession,
-      adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None): Seq[Rule[SparkPlan]] = {
+      adaptiveExecutionRule: Option[InsertAdaptiveSparkPlan] = None,
+      subquery: Boolean): Seq[Rule[SparkPlan]] = {
     // `AdaptiveSparkPlanExec` is a leaf node. If inserted, all the following rules will be no-op
     // as the original plan is hidden behind `AdaptiveSparkPlanExec`.
     adaptiveExecutionRule.toSeq ++
     Seq(
+      CoalesceBucketsInJoin,
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
-      EnsureRequirements(sparkSession.sessionState.conf),
-      ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.conf,
-        sparkSession.sessionState.columnarRules),
-      CollapseCodegenStages(sparkSession.sessionState.conf),
-      ReuseExchange(sparkSession.sessionState.conf),
-      ReuseSubquery(sparkSession.sessionState.conf)
-    )
+      RemoveRedundantProjects,
+      EnsureRequirements,
+      // `RemoveRedundantSorts` needs to be added after `EnsureRequirements` to guarantee the same
+      // number of partitions when instantiating PartitioningCollection.
+      RemoveRedundantSorts,
+      DisableUnnecessaryBucketedScan,
+      ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.columnarRules),
+      CollapseCodegenStages()) ++
+      (if (subquery) {
+        Nil
+      } else {
+        Seq(ReuseExchangeAndSubquery)
+      })
   }
 
   /**
@@ -349,7 +430,14 @@ object QueryExecution {
   private[execution] def prepareForExecution(
       preparations: Seq[Rule[SparkPlan]],
       plan: SparkPlan): SparkPlan = {
-    preparations.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+    val planChangeLogger = new PlanChangeLogger[SparkPlan]()
+    val preparedPlan = preparations.foldLeft(plan) { case (sp, rule) =>
+      val result = rule.apply(sp)
+      planChangeLogger.logRule(rule.ruleName, sp, result)
+      result
+    }
+    planChangeLogger.logBatch("Preparations", plan, preparedPlan)
+    preparedPlan
   }
 
   /**
@@ -370,7 +458,7 @@ object QueryExecution {
    * Prepare the [[SparkPlan]] for execution.
    */
   def prepareExecutedPlan(spark: SparkSession, plan: SparkPlan): SparkPlan = {
-    prepareForExecution(preparations(spark), plan)
+    prepareForExecution(preparations(spark, subquery = true), plan)
   }
 
   /**

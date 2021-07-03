@@ -880,7 +880,7 @@ setMethod("toJSON",
 
 #' Save the contents of SparkDataFrame as a JSON file
 #'
-#' Save the contents of a SparkDataFrame as a JSON file (\href{http://jsonlines.org/}{
+#' Save the contents of a SparkDataFrame as a JSON file (\href{https://jsonlines.org/}{
 #' JSON Lines text format or newline-delimited JSON}). Files written out
 #' with this method can be read back in as a SparkDataFrame using read.json().
 #'
@@ -889,6 +889,10 @@ setMethod("toJSON",
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
+#'            You can find the JSON-specific options for writing JSON files in
+#'            \url{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#'            Data Source Option} in the version you use.
 #'
 #' @family SparkDataFrame functions
 #' @rdname write.json
@@ -920,6 +924,10 @@ setMethod("write.json",
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
+#'            You can find the ORC-specific options for writing ORC files in
+#'            \url{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-orc.html#data-source-option}{
+#'            Data Source Option} in the version you use.
 #'
 #' @family SparkDataFrame functions
 #' @aliases write.orc,SparkDataFrame,character-method
@@ -951,6 +959,10 @@ setMethod("write.orc",
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
+#'            You can find the Parquet-specific options for writing Parquet files in
+#'            \url{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-parquet.html#data-source-option
+#'            }{Data Source Option} in the version you use.
 #'
 #' @family SparkDataFrame functions
 #' @rdname write.parquet
@@ -983,6 +995,10 @@ setMethod("write.parquet",
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
 #' @param ... additional argument(s) passed to the method.
+#'            You can find the text-specific options for writing text files in
+#'            \url{
+#'            https://spark.apache.org/docs/latest/sql-data-sources-text.html#data-source-option}{
+#'            Data Source Option} in the version you use.
 #'
 #' @family SparkDataFrame functions
 #' @aliases write.text,SparkDataFrame,character-method
@@ -1233,14 +1249,10 @@ setMethod("collect",
                   port = port, blocking = TRUE, open = "wb", timeout = connectionTimeout)
                 output <- tryCatch({
                   doServerAuth(conn, authSecret)
-                  arrowTable <- arrow::read_arrow(readRaw(conn))
-                  # Arrow drops `as_tibble` since 0.14.0, see ARROW-5190.
-                  if (exists("as_tibble", envir = asNamespace("arrow"))) {
-                    as.data.frame(arrow::as_tibble(arrowTable), stringsAsFactors = stringsAsFactors)
-                  } else {
-                    as.data.frame(arrowTable, stringsAsFactors = stringsAsFactors)
-                  }
-                }, finally = {
+                  arrowTable <- arrow::read_ipc_stream(readRaw(conn))
+                  as.data.frame(arrowTable, stringsAsFactors = stringsAsFactors)
+                },
+                finally = {
                   close(conn)
                 })
                 return(output)
@@ -2281,16 +2293,17 @@ setMethod("mutate",
 
             # For named arguments, use the names for arguments as the column names
             # For unnamed arguments, use the argument symbols as the column names
-            args <- sapply(substitute(list(...))[-1], deparse)
             ns <- names(cols)
-            if (!is.null(ns)) {
-              lapply(seq_along(args), function(i) {
-                if (ns[[i]] != "") {
-                  args[[i]] <<- ns[[i]]
-                }
+            if (is.null(ns)) ns <- rep("", length(cols))
+            named_idx <- nzchar(ns)
+            if (!all(named_idx)) {
+              # SPARK-31517: deparse uses width.cutoff on wide input and the
+              #   output is length>1, so need to collapse it to scalar
+              colsub <- substitute(list(...))[-1L]
+              ns[!named_idx] <- sapply(which(!named_idx), function(ii) {
+                paste(gsub("^\\s*|\\s*$", "", deparse(colsub[[ii]])), collapse = " ")
               })
             }
-            ns <- args
 
             # The last column of the same name in the specific columns takes effect
             deDupCols <- list()
@@ -2776,7 +2789,7 @@ setMethod("merge",
 #' Creates a list of columns by replacing the intersected ones with aliases
 #'
 #' Creates a list of columns by replacing the intersected ones with aliases.
-#' The name of the alias column is formed by concatanating the original column name and a suffix.
+#' The name of the alias column is formed by concatenating the original column name and a suffix.
 #'
 #' @param x a SparkDataFrame
 #' @param intersectedColNames a list of intersected column names of the SparkDataFrame
@@ -2867,11 +2880,18 @@ setMethod("unionAll",
 #' \code{UNION ALL} and \code{UNION DISTINCT} in SQL as column positions are not taken
 #' into account. Input SparkDataFrames can have different data types in the schema.
 #'
+#' When the parameter allowMissingColumns is `TRUE`, the set of column names
+#' in x and y can differ; missing columns will be filled as null.
+#' Further, the missing columns of x will be added at the end
+#' in the schema of the union result.
+#'
 #' Note: This does not remove duplicate rows across the two SparkDataFrames.
 #' This function resolves columns by name (not by position).
 #'
 #' @param x A SparkDataFrame
 #' @param y A SparkDataFrame
+#' @param allowMissingColumns logical
+#' @param ... further arguments to be passed to or from other methods.
 #' @return A SparkDataFrame containing the result of the union.
 #' @family SparkDataFrame functions
 #' @rdname unionByName
@@ -2884,12 +2904,15 @@ setMethod("unionAll",
 #' df1 <- select(createDataFrame(mtcars), "carb", "am", "gear")
 #' df2 <- select(createDataFrame(mtcars), "am", "gear", "carb")
 #' head(unionByName(df1, df2))
+#'
+#' df3 <- select(createDataFrame(mtcars), "carb")
+#' head(unionByName(df1, df3, allowMissingColumns = TRUE))
 #' }
 #' @note unionByName since 2.3.0
 setMethod("unionByName",
           signature(x = "SparkDataFrame", y = "SparkDataFrame"),
-          function(x, y) {
-            unioned <- callJMethod(x@sdf, "unionByName", y@sdf)
+          function(x, y, allowMissingColumns=FALSE) {
+            unioned <- callJMethod(x@sdf, "unionByName", y@sdf, allowMissingColumns)
             dataFrame(unioned)
           })
 
@@ -3225,7 +3248,7 @@ setMethod("describe",
 #' \item stddev
 #' \item min
 #' \item max
-#' \item arbitrary approximate percentiles specified as a percentage (eg, "75\%")
+#' \item arbitrary approximate percentiles specified as a percentage (e.g., "75\%")
 #' }
 #' If no statistics are given, this function computes count, mean, stddev, min,
 #' approximate quartiles (percentiles at 25\%, 50\%, and 75\%), and max.
@@ -3438,7 +3461,8 @@ setMethod("as.data.frame",
 #' @note attach since 1.6.0
 setMethod("attach",
           signature(what = "SparkDataFrame"),
-          function(what, pos = 2L, name = deparse(substitute(what), backtick = FALSE),
+          function(what, pos = 2L,
+                   name = paste(deparse(substitute(what), backtick = FALSE), collapse = " "),
                    warn.conflicts = TRUE) {
             args <- as.list(environment()) # capture all parameters - this must be the first line
             newEnv <- assignNewEnv(args$what)
@@ -3723,6 +3747,9 @@ setMethod("histogram",
 #'
 #' Save the content of the SparkDataFrame to an external database table via JDBC. Additional JDBC
 #' database connection properties can be set (...)
+#' You can find the JDBC-specific option and parameter documentation for writing tables via JDBC in
+#' \url{https://spark.apache.org/docs/latest/sql-data-sources-jdbc.html#data-source-option}{
+#' Data Source Option} in the version you use.
 #'
 #' Also, mode is used to specify the behavior of the save operation when
 #' data already exists in the data source. There are four modes:
@@ -3737,7 +3764,7 @@ setMethod("histogram",
 #'
 #' @param x a SparkDataFrame.
 #' @param url JDBC database url of the form \code{jdbc:subprotocol:subname}.
-#' @param tableName yhe name of the table in the external database.
+#' @param tableName the name of the table in the external database.
 #' @param mode one of 'append', 'overwrite', 'error', 'errorifexists', 'ignore'
 #'             save mode (it is 'error' by default)
 #' @param ... additional JDBC database connection properties.

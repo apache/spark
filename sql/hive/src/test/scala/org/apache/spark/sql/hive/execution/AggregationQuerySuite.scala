@@ -31,6 +31,8 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DataTypeTestUtils.dayTimeIntervalTypes
+import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.unsafe.UnsafeAlignedOffset
 
 
@@ -780,7 +782,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     assert(math.abs(corr6 + 1.0) < 1e-12)
 
     // Test for udaf_corr in HiveCompatibilitySuite
-    // udaf_corr has been blacklisted due to numerical errors
+    // udaf_corr has been excluded due to numerical errors
     // We test it here:
     // SELECT corr(b, c) FROM covar_tab WHERE a < 1; => NULL
     // SELECT corr(b, c) FROM covar_tab WHERE a < 3; => NULL
@@ -824,7 +826,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           """
             |SELECT corr(b, c) FROM covar_tab WHERE a = 3
           """.stripMargin),
-        Row(Double.NaN) :: Nil)
+        Row(null) :: Nil)
 
       checkAnswer(
         spark.sql(
@@ -833,10 +835,10 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           """.stripMargin),
         Row(1, null) ::
         Row(2, null) ::
-        Row(3, Double.NaN) ::
-        Row(4, Double.NaN) ::
-        Row(5, Double.NaN) ::
-        Row(6, Double.NaN) :: Nil)
+        Row(3, null) ::
+        Row(4, null) ::
+        Row(5, null) ::
+        Row(6, null) :: Nil)
 
       val corr7 = spark.sql("SELECT corr(b, c) FROM covar_tab").collect()(0).getDouble(0)
       assert(math.abs(corr7 - 0.6633880657639323) < 1e-12)
@@ -868,7 +870,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 
     // one row test
     val df3 = Seq.tabulate(1)(x => (1 * x, x * x * x - 2)).toDF("a", "b")
-    checkAnswer(df3.groupBy().agg(covar_samp("a", "b")), Row(Double.NaN))
+    checkAnswer(df3.groupBy().agg(covar_samp("a", "b")), Row(null))
     checkAnswer(df3.groupBy().agg(covar_pop("a", "b")), Row(0.0))
   }
 
@@ -889,7 +891,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
       DateType, TimestampType,
       ArrayType(IntegerType), MapType(StringType, LongType), struct,
-      new TestUDT.MyDenseVectorUDT())
+      new TestUDT.MyDenseVectorUDT()) ++ dayTimeIntervalTypes
     // Right now, we will use SortAggregate to handle UDAFs.
     // UnsafeRow.mutableFieldTypes.asScala.toSeq will trigger SortAggregate to use
     // UnsafeRow as the aggregation buffer. While, dataTypes will trigger
@@ -1054,6 +1056,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
 class HashAggregationQuerySuite extends AggregationQuerySuite
 
 
+@SlowHiveTest
 class HashAggregationQueryWithControlledFallbackSuite extends AggregationQuerySuite {
 
   override protected def checkAnswer(actual: => DataFrame, expectedAnswer: Seq[Row]): Unit = {

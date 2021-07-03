@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui
 
-import org.openqa.selenium.WebDriver
+import org.openqa.selenium.{JavascriptExecutor, WebDriver}
 import org.openqa.selenium.chrome.{ChromeDriver, ChromeOptions}
 
 import org.apache.spark.tags.ChromeUITest
@@ -28,7 +28,7 @@ import org.apache.spark.tags.ChromeUITest
 @ChromeUITest
 class ChromeUISeleniumSuite extends RealBrowserUISeleniumSuite("webdriver.chrome.driver") {
 
-  override var webDriver: WebDriver = _
+  override var webDriver: WebDriver with JavascriptExecutor = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()

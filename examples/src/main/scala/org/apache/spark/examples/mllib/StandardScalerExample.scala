@@ -49,10 +49,10 @@ object StandardScalerExample {
     // $example off$
 
     println("data1: ")
-    data1.foreach(x => println(x))
+    data1.collect.foreach(x => println(x))
 
     println("data2: ")
-    data2.foreach(x => println(x))
+    data2.collect.foreach(x => println(x))
 
     sc.stop()
   }

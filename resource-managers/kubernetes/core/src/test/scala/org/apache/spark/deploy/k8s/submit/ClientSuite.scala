@@ -16,6 +16,12 @@
  */
 package org.apache.spark.deploy.k8s.submit
 
+import java.io.File
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+
+import scala.collection.JavaConverters._
+
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
 import io.fabric8.kubernetes.client.dsl.PodResource
@@ -24,10 +30,11 @@ import org.mockito.Mockito.{verify, when}
 import org.scalatest.BeforeAndAfter
 import org.scalatestplus.mockito.MockitoSugar._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.k8s._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.Fabric8Aliases._
+import org.apache.spark.util.Utils
 
 class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -66,27 +73,36 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       .withValue(SPARK_CONF_DIR_INTERNAL)
       .endEnv()
     .addNewVolumeMount()
-      .withName(SPARK_CONF_VOLUME)
+      .withName(SPARK_CONF_VOLUME_DRIVER)
       .withMountPath(SPARK_CONF_DIR_INTERNAL)
       .endVolumeMount()
     .build()
-  private val FULL_EXPECTED_POD = new PodBuilder(BUILT_DRIVER_POD)
-    .editSpec()
-      .addToContainers(FULL_EXPECTED_CONTAINER)
-      .addNewVolume()
-        .withName(SPARK_CONF_VOLUME)
-        .withNewConfigMap().withName(s"$KUBERNETES_RESOURCE_PREFIX-driver-conf-map").endConfigMap()
-        .endVolume()
-      .endSpec()
-    .build()
 
-  private val POD_WITH_OWNER_REFERENCE = new PodBuilder(FULL_EXPECTED_POD)
-    .editMetadata()
-      .withUid(DRIVER_POD_UID)
-      .endMetadata()
-    .withApiVersion(DRIVER_POD_API_VERSION)
-    .withKind(DRIVER_POD_KIND)
-    .build()
+  private val KEY_TO_PATH =
+    new KeyToPath(SPARK_CONF_FILE_NAME, 420, SPARK_CONF_FILE_NAME)
+
+  private def fullExpectedPod(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
+    new PodBuilder(BUILT_DRIVER_POD)
+      .editSpec()
+        .addToContainers(FULL_EXPECTED_CONTAINER)
+        .addNewVolume()
+          .withName(SPARK_CONF_VOLUME_DRIVER)
+          .withNewConfigMap()
+            .withItems(keyToPaths.asJava)
+            .withName(KubernetesClientUtils.configMapNameDriver)
+            .endConfigMap()
+          .endVolume()
+        .endSpec()
+      .build()
+
+  private def podWithOwnerReference(keyToPaths: List[KeyToPath] = List(KEY_TO_PATH)) =
+    new PodBuilder(fullExpectedPod(keyToPaths))
+      .editMetadata()
+        .withUid(DRIVER_POD_UID)
+        .endMetadata()
+      .withApiVersion(DRIVER_POD_API_VERSION)
+      .withKind(DRIVER_POD_KIND)
+      .build()
 
   private val ADDITIONAL_RESOURCES_WITH_OWNER_REFERENCES = ADDITIONAL_RESOURCES.map { secret =>
     new SecretBuilder(secret)
@@ -109,7 +125,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private var podOperations: PODS = _
 
   @Mock
-  private var namedPods: PodResource[Pod, DoneablePod] = _
+  private var namedPods: PodResource[Pod] = _
 
   @Mock
   private var loggingPodStatusWatcher: LoggingPodStatusWatcher = _
@@ -125,7 +141,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
   private var createdResourcesArgumentCaptor: ArgumentCaptor[HasMetadata] = _
 
   before {
-    MockitoAnnotations.initMocks(this)
+    MockitoAnnotations.openMocks(this).close()
     kconf = KubernetesTestConf.createDriverConf(
       resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
     when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(BUILT_KUBERNETES_SPEC)
@@ -134,8 +150,9 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
 
     createdPodArgumentCaptor = ArgumentCaptor.forClass(classOf[Pod])
     createdResourcesArgumentCaptor = ArgumentCaptor.forClass(classOf[HasMetadata])
-    when(podOperations.create(FULL_EXPECTED_POD)).thenReturn(POD_WITH_OWNER_REFERENCE)
+    when(podOperations.create(fullExpectedPod())).thenReturn(podWithOwnerReference())
     when(namedPods.watch(loggingPodStatusWatcher)).thenReturn(mock[Watch])
+    when(loggingPodStatusWatcher.watchOrStop(kconf.namespace + ":" + POD_NAME)).thenReturn(true)
     doReturn(resourceList)
       .when(kubernetesClient)
       .resourceList(createdResourcesArgumentCaptor.capture())
@@ -148,7 +165,7 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
       kubernetesClient,
       loggingPodStatusWatcher)
     submissionClient.run()
-    verify(podOperations).create(FULL_EXPECTED_POD)
+    verify(podOperations).create(fullExpectedPod())
   }
 
   test("The client should create Kubernetes resources") {
@@ -168,10 +185,77 @@ class ClientSuite extends SparkFunSuite with BeforeAndAfter {
     assert(configMaps.nonEmpty)
     val configMap = configMaps.head
     assert(configMap.getMetadata.getName ===
-      s"$KUBERNETES_RESOURCE_PREFIX-driver-conf-map")
+      KubernetesClientUtils.configMapNameDriver)
+    assert(configMap.getImmutable())
     assert(configMap.getData.containsKey(SPARK_CONF_FILE_NAME))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf1key=conf1value"))
     assert(configMap.getData.get(SPARK_CONF_FILE_NAME).contains("conf2key=conf2value"))
+  }
+
+  test("All files from SPARK_CONF_DIR, " +
+    "except templates, spark config, binary files and are within size limit, " +
+    "should be populated to pod's configMap.") {
+    def testSetup: (SparkConf, Seq[String]) = {
+      val tempDir = Utils.createTempDir()
+      val sparkConf = new SparkConf(loadDefaults = false)
+        .setSparkHome(tempDir.getAbsolutePath)
+
+      val tempConfDir = new File(s"${tempDir.getAbsolutePath}/conf")
+      tempConfDir.mkdir()
+      // File names - which should not get mounted on the resultant config map.
+      val filteredConfFileNames =
+        Set("spark-env.sh.template", "spark.properties", "spark-defaults.conf",
+          "test.gz", "test2.jar", "non_utf8.txt")
+      val confFileNames = (for (i <- 1 to 5) yield s"testConf.$i") ++
+        List("spark-env.sh") ++ filteredConfFileNames
+
+      val testConfFiles = (for (i <- confFileNames) yield {
+        val file = new File(s"${tempConfDir.getAbsolutePath}/$i")
+        if (i.startsWith("non_utf8")) { // filling some non-utf-8 binary
+          Files.write(file.toPath, Array[Byte](0x00.toByte, 0xA1.toByte))
+        } else {
+          Files.write(file.toPath, "conf1key=conf1value".getBytes(StandardCharsets.UTF_8))
+        }
+        file.getName
+      })
+      assert(tempConfDir.listFiles().length == confFileNames.length)
+      val expectedConfFiles: Seq[String] = testConfFiles.filterNot(filteredConfFileNames.contains)
+      (sparkConf, expectedConfFiles)
+    }
+
+    val (sparkConf: SparkConf, expectedConfFiles: Seq[String]) = testSetup
+
+    val expectedKeyToPaths = (expectedConfFiles.map(x => new KeyToPath(x, 420, x)).toList ++
+      List(KEY_TO_PATH)).sortBy(x => x.getKey)
+
+    when(podOperations.create(fullExpectedPod(expectedKeyToPaths)))
+      .thenReturn(podWithOwnerReference(expectedKeyToPaths))
+
+    kconf = KubernetesTestConf.createDriverConf(sparkConf = sparkConf,
+      resourceNamePrefix = Some(KUBERNETES_RESOURCE_PREFIX))
+
+    assert(kconf.sparkConf.getOption("spark.home").isDefined)
+    when(driverBuilder.buildFromFeatures(kconf, kubernetesClient)).thenReturn(BUILT_KUBERNETES_SPEC)
+
+    val submissionClient = new Client(
+      kconf,
+      driverBuilder,
+      kubernetesClient,
+      loggingPodStatusWatcher)
+    submissionClient.run()
+    val otherCreatedResources = createdResourcesArgumentCaptor.getAllValues
+
+    val configMaps = otherCreatedResources.toArray
+      .filter(_.isInstanceOf[ConfigMap]).map(_.asInstanceOf[ConfigMap])
+    assert(configMaps.nonEmpty)
+    val configMapName = KubernetesClientUtils.configMapNameDriver
+    val configMap: ConfigMap = configMaps.head
+    assert(configMap.getMetadata.getName == configMapName)
+    val configMapLoadedFiles = configMap.getData.keySet().asScala.toSet
+    assert(configMapLoadedFiles === expectedConfFiles.toSet ++ Set(SPARK_CONF_FILE_NAME))
+    for (f <- configMapLoadedFiles) {
+      assert(configMap.getData.get(f).contains("conf1key=conf1value"))
+    }
   }
 
   test("Waiting for app completion should stall on the watcher") {

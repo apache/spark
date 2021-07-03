@@ -17,24 +17,29 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
-import java.sql.{Connection, Driver, DriverManager, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.sql.{Connection, Driver, JDBCType, PreparedStatement, ResultSet, ResultSetMetaData, SQLException}
+import java.time.{Instant, LocalDate}
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
-import scala.collection.JavaConverters._
 import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.spark.TaskContext
 import org.apache.spark.executor.InputMetrics
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
+import org.apache.spark.sql.connector.catalog.TableChange
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.jdbc.connection.ConnectionProvider
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, JdbcType}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
@@ -55,17 +60,10 @@ object JdbcUtils extends Logging {
     val driverClass: String = options.driverClass
     () => {
       DriverRegistry.register(driverClass)
-      val driver: Driver = DriverManager.getDrivers.asScala.collectFirst {
-        case d: DriverWrapper if d.wrapped.getClass.getCanonicalName == driverClass => d
-        case d if d.getClass.getCanonicalName == driverClass => d
-      }.getOrElse {
-        throw new IllegalStateException(
-          s"Did not find registered driver with class $driverClass")
-      }
-      val connection = ConnectionProvider.create(driver, options).getConnection()
+      val driver: Driver = DriverRegistry.get(driverClass)
+      val connection = ConnectionProvider.create(driver, options.parameters)
       require(connection != null,
         s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
-
       connection
     }
   }
@@ -94,13 +92,7 @@ object JdbcUtils extends Logging {
    * Drops a table from the JDBC database.
    */
   def dropTable(conn: Connection, table: String, options: JDBCOptions): Unit = {
-    val statement = conn.createStatement
-    try {
-      statement.setQueryTimeout(options.queryTimeout)
-      statement.executeUpdate(s"DROP TABLE $table")
-    } finally {
-      statement.close()
-    }
+    executeStatement(conn, options, s"DROP TABLE $table")
   }
 
   /**
@@ -150,7 +142,7 @@ object JdbcUtils extends Logging {
       val tableColumnNames = tableSchema.get.fieldNames
       rddSchema.fields.map { col =>
         val normalizedName = tableColumnNames.find(f => columnNameEquality(f, col.name)).getOrElse {
-          throw new AnalysisException(s"""Column "${col.name}" not found in schema $tableSchema""")
+          throw QueryCompilationErrors.columnNotFoundInSchemaError(col, tableSchema)
         }
         dialect.quoteIdentifier(normalizedName)
       }.mkString(",")
@@ -184,9 +176,9 @@ object JdbcUtils extends Logging {
     }
   }
 
-  private def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
+  def getJdbcType(dt: DataType, dialect: JdbcDialect): JdbcType = {
     dialect.getJDBCType(dt).orElse(getCommonJDBCType(dt)).getOrElse(
-      throw new IllegalArgumentException(s"Can't get JDBC type for ${dt.catalogString}"))
+      throw QueryExecutionErrors.cannotGetJdbcTypeError(dt))
   }
 
   /**
@@ -235,7 +227,7 @@ object JdbcUtils extends Logging {
       case java.sql.Types.REAL          => DoubleType
       case java.sql.Types.REF           => StringType
       case java.sql.Types.REF_CURSOR    => null
-      case java.sql.Types.ROWID         => LongType
+      case java.sql.Types.ROWID         => StringType
       case java.sql.Types.SMALLINT      => IntegerType
       case java.sql.Types.SQLXML        => StringType
       case java.sql.Types.STRUCT        => StringType
@@ -249,12 +241,12 @@ object JdbcUtils extends Logging {
       case java.sql.Types.VARBINARY     => BinaryType
       case java.sql.Types.VARCHAR       => StringType
       case _                            =>
-        throw new SQLException("Unrecognized SQL type " + sqlType)
+        throw QueryExecutionErrors.unrecognizedSqlTypeError(sqlType)
       // scalastyle:on
     }
 
     if (answer == null) {
-      throw new SQLException("Unsupported type " + JDBCType.valueOf(sqlType).getName)
+      throw QueryExecutionErrors.unsupportedJdbcTypeError(JDBCType.valueOf(sqlType).getName)
     }
     answer
   }
@@ -316,11 +308,24 @@ object JdbcUtils extends Logging {
       } else {
         rsmd.isNullable(i + 1) != ResultSetMetaData.columnNoNulls
       }
-      val metadata = new MetadataBuilder().putLong("scale", fieldScale)
+      val metadata = new MetadataBuilder()
+      metadata.putLong("scale", fieldScale)
+
+      dataType match {
+        case java.sql.Types.TIME =>
+          // SPARK-33888
+          // - include TIME type metadata
+          // - always build the metadata
+          metadata.putBoolean("logical_time_type", true)
+        case java.sql.Types.ROWID =>
+          metadata.putBoolean("rowid", true)
+        case _ =>
+      }
+
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, fieldSize, fieldScale, isSigned))
-      fields(i) = StructField(columnName, columnType, nullable)
+      fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
     }
     new StructType(fields)
@@ -448,10 +453,33 @@ object JdbcUtils extends Logging {
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         row.setByte(pos, rs.getByte(pos + 1))
 
+    case StringType if metadata.contains("rowid") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) =>
+        row.update(pos, UTF8String.fromString(rs.getRowId(pos + 1).toString))
+
     case StringType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
         // TODO(davies): use getBytes for better performance, if the encoding is UTF-8
         row.update(pos, UTF8String.fromString(rs.getString(pos + 1)))
+
+    // SPARK-34357 - sql TIME type represents as zero epoch timestamp.
+    // It is mapped as Spark TimestampType but fixed at 1970-01-01 for day,
+    // time portion is time of day, with no reference to a particular calendar,
+    // time zone or date, with a precision till microseconds.
+    // It stores the number of milliseconds after midnight, 00:00:00.000000
+    case TimestampType if metadata.contains("logical_time_type") =>
+      (rs: ResultSet, row: InternalRow, pos: Int) => {
+        val rawTime = rs.getTime(pos + 1)
+        if (rawTime != null) {
+          val localTimeMicro = TimeUnit.NANOSECONDS.toMicros(
+            rawTime.toLocalTime().toNanoOfDay())
+          val utcTimeMicro = DateTimeUtils.toUTCTime(
+            localTimeMicro, SQLConf.get.sessionLocalTimeZone)
+          row.setLong(pos, utcTimeMicro)
+        } else {
+          row.update(pos, null)
+        }
+      }
 
     case TimestampType =>
       (rs: ResultSet, row: InternalRow, pos: Int) =>
@@ -494,11 +522,10 @@ object JdbcUtils extends Logging {
             }
 
         case LongType if metadata.contains("binarylong") =>
-          throw new IllegalArgumentException(s"Unsupported array element " +
-            s"type ${dt.catalogString} based on binary")
+          throw QueryExecutionErrors.unsupportedArrayElementTypeBasedOnBinaryError(dt)
 
         case ArrayType(_, _) =>
-          throw new IllegalArgumentException("Nested arrays unsupported")
+          throw QueryExecutionErrors.nestedArraysUnsupportedError()
 
         case _ => (array: Object) => array.asInstanceOf[Array[Any]]
       }
@@ -509,7 +536,7 @@ object JdbcUtils extends Logging {
           array => new GenericArrayData(elementConversion.apply(array.getArray)))
         row.update(pos, array)
 
-    case _ => throw new IllegalArgumentException(s"Unsupported type ${dt.catalogString}")
+    case _ => throw QueryExecutionErrors.unsupportedJdbcTypeError(dt.catalogString)
   }
 
   private def nullSafeConvert[T](input: T, f: T => Any): Any = {
@@ -566,12 +593,22 @@ object JdbcUtils extends Logging {
         stmt.setBytes(pos + 1, row.getAs[Array[Byte]](pos))
 
     case TimestampType =>
-      (stmt: PreparedStatement, row: Row, pos: Int) =>
-        stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
+      if (SQLConf.get.datetimeJava8ApiEnabled) {
+        (stmt: PreparedStatement, row: Row, pos: Int) =>
+          stmt.setTimestamp(pos + 1, toJavaTimestamp(instantToMicros(row.getAs[Instant](pos))))
+      } else {
+        (stmt: PreparedStatement, row: Row, pos: Int) =>
+          stmt.setTimestamp(pos + 1, row.getAs[java.sql.Timestamp](pos))
+      }
 
     case DateType =>
-      (stmt: PreparedStatement, row: Row, pos: Int) =>
-        stmt.setDate(pos + 1, row.getAs[java.sql.Date](pos))
+      if (SQLConf.get.datetimeJava8ApiEnabled) {
+        (stmt: PreparedStatement, row: Row, pos: Int) =>
+          stmt.setDate(pos + 1, toJavaDate(localDateToDays(row.getAs[LocalDate](pos))))
+      } else {
+        (stmt: PreparedStatement, row: Row, pos: Int) =>
+          stmt.setDate(pos + 1, row.getAs[java.sql.Date](pos))
+      }
 
     case t: DecimalType =>
       (stmt: PreparedStatement, row: Row, pos: Int) =>
@@ -589,8 +626,7 @@ object JdbcUtils extends Logging {
 
     case _ =>
       (_: PreparedStatement, _: Row, pos: Int) =>
-        throw new IllegalArgumentException(
-          s"Can't translate non-null value for field $pos")
+        throw QueryExecutionErrors.cannotTranslateNonNullValueForFieldError(pos)
   }
 
   /**
@@ -746,15 +782,16 @@ object JdbcUtils extends Logging {
    * Compute the schema string for this RDD.
    */
   def schemaString(
-      df: DataFrame,
+      schema: StructType,
+      caseSensitive: Boolean,
       url: String,
       createTableColumnTypes: Option[String] = None): String = {
     val sb = new StringBuilder()
     val dialect = JdbcDialects.get(url)
     val userSpecifiedColTypesMap = createTableColumnTypes
-      .map(parseUserSpecifiedCreateTableColumnTypes(df, _))
+      .map(parseUserSpecifiedCreateTableColumnTypes(schema, caseSensitive, _))
       .getOrElse(Map.empty[String, String])
-    df.schema.fields.foreach { field =>
+    schema.fields.foreach { field =>
       val name = dialect.quoteIdentifier(field.name)
       val typ = userSpecifiedColTypesMap
         .getOrElse(field.name, getJdbcType(field.dataType, dialect).databaseTypeDefinition)
@@ -770,20 +807,15 @@ object JdbcUtils extends Logging {
    * use in-place of the default data type.
    */
   private def parseUserSpecifiedCreateTableColumnTypes(
-      df: DataFrame,
+      schema: StructType,
+      caseSensitive: Boolean,
       createTableColumnTypes: String): Map[String, String] = {
-    def typeName(f: StructField): String = {
-      // char/varchar gets translated to string type. Real data type specified by the user
-      // is available in the field metadata as HIVE_TYPE_STRING
-      if (f.metadata.contains(HIVE_TYPE_STRING)) {
-        f.metadata.getString(HIVE_TYPE_STRING)
-      } else {
-        f.dataType.catalogString
-      }
-    }
-
     val userSchema = CatalystSqlParser.parseTableSchema(createTableColumnTypes)
-    val nameEquality = df.sparkSession.sessionState.conf.resolver
+    val nameEquality = if (caseSensitive) {
+      org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
+    } else {
+      org.apache.spark.sql.catalyst.analysis.caseInsensitiveResolution
+    }
 
     // checks duplicate columns in the user specified column types.
     SchemaUtils.checkColumnNameDuplication(
@@ -791,16 +823,14 @@ object JdbcUtils extends Logging {
 
     // checks if user specified column names exist in the DataFrame schema
     userSchema.fieldNames.foreach { col =>
-      df.schema.find(f => nameEquality(f.name, col)).getOrElse {
-        throw new AnalysisException(
-          s"createTableColumnTypes option column $col not found in schema " +
-            df.schema.catalogString)
+      schema.find(f => nameEquality(f.name, col)).getOrElse {
+        throw QueryCompilationErrors.createTableColumnTypesOptionColumnNotFoundInSchemaError(
+          col, schema)
       }
     }
 
-    val userSchemaMap = userSchema.fields.map(f => f.name -> typeName(f)).toMap
-    val isCaseSensitive = df.sparkSession.sessionState.conf.caseSensitiveAnalysis
-    if (isCaseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
+    val userSchemaMap = userSchema.fields.map(f => f.name -> f.dataType.catalogString).toMap
+    if (caseSensitive) userSchemaMap else CaseInsensitiveMap(userSchemaMap)
   }
 
   /**
@@ -814,8 +844,10 @@ object JdbcUtils extends Logging {
     if (null != customSchema && customSchema.nonEmpty) {
       val userSchema = CatalystSqlParser.parseTableSchema(customSchema)
 
-      SchemaUtils.checkColumnNameDuplication(
-        userSchema.map(_.name), "in the customSchema option value", nameEquality)
+      SchemaUtils.checkSchemaColumnNameDuplication(
+        userSchema,
+        "in the customSchema option value",
+        nameEquality)
 
       // This is resolved by names, use the custom filed dataType to replace the default dataType.
       val newSchema = tableSchema.map { col =>
@@ -848,9 +880,8 @@ object JdbcUtils extends Logging {
 
     val insertStmt = getInsertStatement(table, rddSchema, tableSchema, isCaseSensitive, dialect)
     val repartitionedDF = options.numPartitions match {
-      case Some(n) if n <= 0 => throw new IllegalArgumentException(
-        s"Invalid value `$n` for parameter `${JDBCOptions.JDBC_NUM_PARTITIONS}` in table writing " +
-          "via JDBC. The minimum value is 1.")
+      case Some(n) if n <= 0 => throw QueryExecutionErrors.invalidJdbcNumPartitionsError(
+        n, JDBCOptions.JDBC_NUM_PARTITIONS)
       case Some(n) if n < df.rdd.getNumPartitions => df.coalesce(n)
       case _ => df
     }
@@ -865,17 +896,130 @@ object JdbcUtils extends Logging {
    */
   def createTable(
       conn: Connection,
-      df: DataFrame,
+      tableName: String,
+      schema: StructType,
+      caseSensitive: Boolean,
       options: JdbcOptionsInWrite): Unit = {
+    val dialect = JdbcDialects.get(options.url)
     val strSchema = schemaString(
-      df, options.url, options.createTableColumnTypes)
-    val table = options.table
+      schema, caseSensitive, options.url, options.createTableColumnTypes)
     val createTableOptions = options.createTableOptions
     // Create the table if the table does not exist.
     // To allow certain options to append when create a new table, which can be
     // table_options or partition_options.
     // E.g., "CREATE TABLE t (name string) ENGINE=InnoDB DEFAULT CHARSET=utf8"
-    val sql = s"CREATE TABLE $table ($strSchema) $createTableOptions"
+    val sql = s"CREATE TABLE $tableName ($strSchema) $createTableOptions"
+    executeStatement(conn, options, sql)
+    if (options.tableComment.nonEmpty) {
+      try {
+        executeStatement(
+          conn, options, dialect.getTableCommentQuery(tableName, options.tableComment))
+      } catch {
+        case e: Exception =>
+          logWarning("Cannot create JDBC table comment. The table comment will be ignored.")
+      }
+    }
+  }
+
+  /**
+   * Rename a table from the JDBC database.
+   */
+  def renameTable(
+      conn: Connection,
+      oldTable: String,
+      newTable: String,
+      options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, dialect.renameTable(oldTable, newTable))
+  }
+
+  /**
+   * Update a table from the JDBC database.
+   */
+  def alterTable(
+      conn: Connection,
+      tableName: String,
+      changes: Seq[TableChange],
+      options: JDBCOptions): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    val metaData = conn.getMetaData
+    if (changes.length == 1) {
+      executeStatement(conn, options, dialect.alterTable(tableName, changes,
+        metaData.getDatabaseMajorVersion)(0))
+    } else {
+      if (!metaData.supportsTransactions) {
+        throw QueryExecutionErrors.transactionUnsupportedByJdbcServerError()
+      } else {
+        conn.setAutoCommit(false)
+        val statement = conn.createStatement
+        try {
+          statement.setQueryTimeout(options.queryTimeout)
+          for (sql <- dialect.alterTable(tableName, changes, metaData.getDatabaseMajorVersion)) {
+            statement.executeUpdate(sql)
+          }
+          conn.commit()
+        } catch {
+          case e: Exception =>
+            if (conn != null) conn.rollback()
+            throw e
+        } finally {
+          statement.close()
+          conn.setAutoCommit(true)
+        }
+      }
+    }
+  }
+
+  /**
+   * Creates a namespace.
+   */
+  def createNamespace(
+      conn: Connection,
+      options: JDBCOptions,
+      namespace: String,
+      comment: String): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, s"CREATE SCHEMA ${dialect.quoteIdentifier(namespace)}")
+    if (!comment.isEmpty) createNamespaceComment(conn, options, namespace, comment)
+  }
+
+  def createNamespaceComment(
+      conn: Connection,
+      options: JDBCOptions,
+      namespace: String,
+      comment: String): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    try {
+      executeStatement(
+        conn, options, dialect.getSchemaCommentQuery(namespace, comment))
+    } catch {
+      case e: Exception =>
+        logWarning("Cannot create JDBC catalog comment. The catalog comment will be ignored.")
+    }
+  }
+
+  def removeNamespaceComment(
+      conn: Connection,
+      options: JDBCOptions,
+      namespace: String): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    try {
+      executeStatement(conn, options, dialect.removeSchemaCommentQuery(namespace))
+    } catch {
+      case e: Exception =>
+        logWarning("Cannot drop JDBC catalog comment.")
+    }
+  }
+
+  /**
+   * Drops a namespace from the JDBC database.
+   */
+  def dropNamespace(conn: Connection, options: JDBCOptions, namespace: String): Unit = {
+    val dialect = JdbcDialects.get(options.url)
+    executeStatement(conn, options, s"DROP SCHEMA ${dialect.quoteIdentifier(namespace)}")
+  }
+
+  private def executeStatement(conn: Connection, options: JDBCOptions, sql: String): Unit = {
     val statement = conn.createStatement
     try {
       statement.setQueryTimeout(options.queryTimeout)

@@ -24,10 +24,10 @@ class SparkPlanInfoSuite extends SharedSparkSession{
 
   import testImplicits._
 
-  def vaidateSparkPlanInfo(sparkPlanInfo: SparkPlanInfo): Unit = {
+  def validateSparkPlanInfo(sparkPlanInfo: SparkPlanInfo): Unit = {
     sparkPlanInfo.nodeName match {
       case "InMemoryTableScan" => assert(sparkPlanInfo.children.length == 1)
-      case _ => sparkPlanInfo.children.foreach(vaidateSparkPlanInfo)
+      case _ => sparkPlanInfo.children.foreach(validateSparkPlanInfo)
     }
   }
 
@@ -39,6 +39,6 @@ class SparkPlanInfoSuite extends SharedSparkSession{
 
     val planInfoResult = SparkPlanInfo.fromSparkPlan(dfWithCache.queryExecution.executedPlan)
 
-    vaidateSparkPlanInfo(planInfoResult)
+    validateSparkPlanInfo(planInfoResult)
   }
 }

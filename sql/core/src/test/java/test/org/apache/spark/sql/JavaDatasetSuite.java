@@ -21,11 +21,11 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
-import java.time.Instant;
-import java.time.LocalDate;
+import java.time.*;
 import java.util.*;
 import javax.annotation.Nonnull;
 
+import org.apache.spark.api.java.Optional;
 import org.apache.spark.sql.streaming.GroupStateTimeout;
 import org.apache.spark.sql.streaming.OutputMode;
 import scala.Tuple2;
@@ -34,8 +34,8 @@ import scala.Tuple4;
 import scala.Tuple5;
 
 import com.google.common.base.Objects;
+import org.apache.spark.sql.streaming.TestGroupState;
 import org.junit.*;
-import org.junit.rules.ExpectedException;
 
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -46,6 +46,7 @@ import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.LongAccumulator;
+
 import static org.apache.spark.sql.functions.col;
 import static org.apache.spark.sql.functions.expr;
 import static org.apache.spark.sql.types.DataTypes.*;
@@ -158,6 +159,161 @@ public class JavaDatasetSuite implements Serializable {
 
     int reduced = ds.reduce((ReduceFunction<Integer>) (v1, v2) -> v1 + v2);
     Assert.assertEquals(6, reduced);
+  }
+
+  @Test
+  public void testInitialStateFlatMapGroupsWithState() {
+    List<String> data = Arrays.asList("a", "foo", "bar");
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+    Dataset<Tuple2<Integer, Long>> initialStateDS = spark.createDataset(
+      Arrays.asList(new Tuple2<Integer, Long>(2, 2L)),
+      Encoders.tuple(Encoders.INT(), Encoders.LONG())
+    );
+
+    KeyValueGroupedDataset<Integer, Tuple2<Integer, Long>> kvInitStateDS =
+      initialStateDS.groupByKey(
+        (MapFunction<Tuple2<Integer, Long>, Integer>) f -> f._1, Encoders.INT());
+
+    KeyValueGroupedDataset<Integer, Long> kvInitStateMappedDS = kvInitStateDS.mapValues(
+      (MapFunction<Tuple2<Integer, Long>, Long>) f -> f._2,
+      Encoders.LONG()
+    );
+
+    KeyValueGroupedDataset<Integer, String> grouped =
+      ds.groupByKey((MapFunction<String, Integer>) String::length, Encoders.INT());
+
+    Dataset<String> flatMapped2 = grouped.flatMapGroupsWithState(
+      (FlatMapGroupsWithStateFunction<Integer, String, Long, String>) (key, values, s) -> {
+        StringBuilder sb = new StringBuilder(key.toString());
+        while (values.hasNext()) {
+          sb.append(values.next());
+        }
+        return Collections.singletonList(sb.toString()).iterator();
+      },
+      OutputMode.Append(),
+      Encoders.LONG(),
+      Encoders.STRING(),
+      GroupStateTimeout.NoTimeout(),
+      kvInitStateMappedDS);
+
+    Assert.assertThrows(
+      "Initial state is not supported in [flatMap|map]GroupsWithState " +
+              "operation on a batch DataFrame/Dataset",
+      AnalysisException.class,
+      () -> {
+        flatMapped2.collectAsList();
+      }
+    );
+    Dataset<String> mapped2 = grouped.mapGroupsWithState(
+      (MapGroupsWithStateFunction<Integer, String, Long, String>) (key, values, s) -> {
+        StringBuilder sb = new StringBuilder(key.toString());
+        while (values.hasNext()) {
+          sb.append(values.next());
+        }
+        return sb.toString();
+      },
+      Encoders.LONG(),
+      Encoders.STRING(),
+      GroupStateTimeout.NoTimeout(),
+      kvInitStateMappedDS);
+    Assert.assertThrows(
+      "Initial state is not supported in [flatMap|map]GroupsWithState " +
+              "operation on a batch DataFrame/Dataset",
+      AnalysisException.class,
+      () -> {
+        mapped2.collectAsList();
+      }
+    );
+  }
+
+  @Test
+  public void testIllegalTestGroupStateCreations() {
+    // SPARK-35800: test code throws upon illegal TestGroupState create() calls
+    Assert.assertThrows(
+      "eventTimeWatermarkMs must be 0 or positive if present",
+      IllegalArgumentException.class,
+      () -> {
+        TestGroupState.create(
+          Optional.of(5), GroupStateTimeout.EventTimeTimeout(), 0L, Optional.of(-1000L), false);
+      });
+
+    Assert.assertThrows(
+      "batchProcessingTimeMs must be 0 or positive",
+      IllegalArgumentException.class,
+      () -> {
+        TestGroupState.create(
+          Optional.of(5), GroupStateTimeout.EventTimeTimeout(), -100L, Optional.of(1000L), false);
+      });
+
+    Assert.assertThrows(
+      "hasTimedOut is true however there's no timeout configured",
+      UnsupportedOperationException.class,
+      () -> {
+        TestGroupState.create(
+          Optional.of(5), GroupStateTimeout.NoTimeout(), 100L, Optional.empty(), true);
+      });
+  }
+
+  @Test
+  public void testMappingFunctionWithTestGroupState() throws Exception {
+    // SPARK-35800: test the mapping function with injected TestGroupState instance
+    MapGroupsWithStateFunction<Integer, Integer, Integer, Integer> mappingFunction =
+      (MapGroupsWithStateFunction<Integer, Integer, Integer, Integer>) (key, values, state) -> {
+        if (state.hasTimedOut()) {
+          state.remove();
+          return 0;
+        }
+
+        int existingState = 0;
+        if (state.exists()) {
+          existingState = state.get();
+        } else {
+          // Set state timeout timestamp upon initialization
+          state.setTimeoutTimestamp(1500L);
+        }
+
+        while (values.hasNext()) {
+          existingState += values.next();
+        }
+        state.update(existingState);
+
+        return state.get();
+    };
+
+    TestGroupState<Integer> prevState = TestGroupState.create(
+      Optional.empty(), GroupStateTimeout.EventTimeTimeout(), 0L, Optional.of(1000L), false);
+
+    Assert.assertFalse(prevState.isUpdated());
+    Assert.assertFalse(prevState.isRemoved());
+    Assert.assertFalse(prevState.exists());
+    Assert.assertEquals(Optional.empty(), prevState.getTimeoutTimestampMs());
+
+    Integer[] values = {1, 3, 5};
+    mappingFunction.call(1, Arrays.asList(values).iterator(), prevState);
+
+    Assert.assertTrue(prevState.isUpdated());
+    Assert.assertFalse(prevState.isRemoved());
+    Assert.assertTrue(prevState.exists());
+    Assert.assertEquals(new Integer(9), prevState.get());
+    Assert.assertEquals(0L, prevState.getCurrentProcessingTimeMs());
+    Assert.assertEquals(1000L, prevState.getCurrentWatermarkMs());
+    Assert.assertEquals(Optional.of(1500L), prevState.getTimeoutTimestampMs());
+
+    mappingFunction.call(1, Arrays.asList(values).iterator(), prevState);
+
+    Assert.assertTrue(prevState.isUpdated());
+    Assert.assertFalse(prevState.isRemoved());
+    Assert.assertTrue(prevState.exists());
+    Assert.assertEquals(new Integer(18), prevState.get());
+
+    prevState = TestGroupState.create(
+      Optional.of(9), GroupStateTimeout.EventTimeTimeout(), 0L, Optional.of(1000L), true);
+
+    mappingFunction.call(1, Arrays.asList(values).iterator(), prevState);
+
+    Assert.assertFalse(prevState.isUpdated());
+    Assert.assertTrue(prevState.isRemoved());
+    Assert.assertFalse(prevState.exists());
   }
 
   @Test
@@ -409,6 +565,30 @@ public class JavaDatasetSuite implements Serializable {
     List<Tuple2<LocalDate, Instant>> data =
       Arrays.asList(new Tuple2<>(LocalDate.ofEpochDay(0), Instant.ofEpochSecond(0)));
     Dataset<Tuple2<LocalDate, Instant>> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testLocalDateTimeEncoder() {
+    Encoder<LocalDateTime> encoder = Encoders.LOCALDATETIME();
+    List<LocalDateTime> data = Arrays.asList(LocalDateTime.of(1, 1, 1, 1, 1));
+    Dataset<LocalDateTime> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testDurationEncoder() {
+    Encoder<Duration> encoder = Encoders.DURATION();
+    List<Duration> data = Arrays.asList(Duration.ofDays(0));
+    Dataset<Duration> ds = spark.createDataset(data, encoder);
+    Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testPeriodEncoder() {
+    Encoder<Period> encoder = Encoders.PERIOD();
+    List<Period> data = Arrays.asList(Period.ofYears(10));
+    Dataset<Period> ds = spark.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
   }
 
@@ -893,9 +1073,6 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  @Rule
-  public transient ExpectedException nullabilityCheck = ExpectedException.none();
-
   @Test
   public void testRuntimeNullabilityCheck() {
     OuterScopes.addOuterScope(this);
@@ -937,9 +1114,6 @@ public class JavaDatasetSuite implements Serializable {
       Assert.assertEquals(Collections.singletonList(nestedSmallBean), ds.collectAsList());
     }
 
-    nullabilityCheck.expect(RuntimeException.class);
-    nullabilityCheck.expectMessage("Null value appeared in non-nullable field");
-
     {
       Row row = new GenericRow(new Object[] {
           new GenericRow(new Object[] {
@@ -950,7 +1124,8 @@ public class JavaDatasetSuite implements Serializable {
       Dataset<Row> df = spark.createDataFrame(Collections.singletonList(row), schema);
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
-      ds.collect();
+      Assert.assertThrows("Null value appeared in non-nullable field", RuntimeException.class,
+        ds::collect);
     }
   }
 

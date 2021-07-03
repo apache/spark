@@ -44,8 +44,6 @@ object typed {
     override protected def _sqlContext: SQLContext = null
   }
 
-  import implicits._
-
   /**
    * Average aggregate function.
    *

@@ -26,7 +26,9 @@ test_that("Check masked functions", {
                      "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
                      "summary", "transform", "drop", "window", "as.data.frame", "union", "not")
   version <- packageVersion("base")
-  if (as.numeric(version$major) >= 3 && as.numeric(version$minor) >= 3) {
+  is33Above <- as.numeric(version$major) >= 3 && as.numeric(version$minor) >= 3
+  is40Above <- as.numeric(version$major) >= 4
+  if (is33Above || is40Above) {
     namesOfMasked <- c("endsWith", "startsWith", namesOfMasked)
   }
   masked <- conflicts(detail = TRUE)$`package:SparkR`
@@ -137,7 +139,7 @@ test_that("utility function can be called", {
   expect_true(TRUE)
 })
 
-test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whitelist", {
+test_that("getClientModeSparkSubmitOpts() returns spark-submit args from allowList", {
   e <- new.env()
   e[["spark.driver.memory"]] <- "512m"
   ops <- getClientModeSparkSubmitOpts("sparkrmain", e)

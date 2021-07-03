@@ -22,6 +22,8 @@ import java.util.Objects
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
+import org.apache.spark.annotation.DeveloperApi
+
 /**
  * The data type for User Defined Types (UDTs).
  *
@@ -34,11 +36,8 @@ import org.json4s.JsonDSL._
  *
  * The conversion via `serialize` occurs when instantiating a `DataFrame` from another RDD.
  * The conversion via `deserialize` occurs when reading from a `DataFrame`.
- *
- * Note: This was previously a developer API in Spark 1.x. We are making this private in Spark 2.0
- * because we will very likely create a new version of this that works better with Datasets.
  */
-private[spark]
+@DeveloperApi
 abstract class UserDefinedType[UserType >: Null] extends DataType with Serializable {
 
   /** Underlying storage type for this UDT */
@@ -78,8 +77,8 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
    */
   override private[spark] def asNullable: UserDefinedType[UserType] = this
 
-  override private[sql] def acceptsType(dataType: DataType) = dataType match {
-    case other: UserDefinedType[_] =>
+  override private[sql] def acceptsType(dataType: DataType): Boolean = dataType match {
+    case other: UserDefinedType[_] if this.userClass != null && other.userClass != null =>
       this.getClass == other.getClass ||
         this.userClass.isAssignableFrom(other.userClass)
     case _ => false
@@ -90,7 +89,7 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
   override def hashCode(): Int = getClass.hashCode()
 
   override def equals(other: Any): Boolean = other match {
-    case that: UserDefinedType[_] => this.acceptsType(that)
+    case that: UserDefinedType[_] => this.getClass == that.getClass
     case _ => false
   }
 
@@ -129,6 +128,11 @@ private[sql] class PythonUserDefinedType(
       ("pyClass" -> pyUDT) ~
       ("serializedClass" -> serializedPyClass) ~
       ("sqlType" -> sqlType.jsonValue)
+  }
+
+  override private[sql] def acceptsType(dataType: DataType): Boolean = dataType match {
+    case other: PythonUserDefinedType => pyUDT == other.pyUDT
+    case _ => false
   }
 
   override def equals(other: Any): Boolean = other match {

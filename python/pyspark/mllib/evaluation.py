@@ -30,8 +30,15 @@ class BinaryClassificationMetrics(JavaModelWrapper):
     """
     Evaluator for binary classification.
 
-    :param scoreAndLabels: an RDD of score, label and optional weight.
+    .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    scoreAndLabels : :py:class:`pyspark.RDD`
+        an RDD of score, label and optional weight.
+
+    Examples
+    --------
     >>> scoreAndLabels = sc.parallelize([
     ...     (0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)], 2)
     >>> metrics = BinaryClassificationMetrics(scoreAndLabels)
@@ -48,8 +55,6 @@ class BinaryClassificationMetrics(JavaModelWrapper):
     0.79...
     >>> metrics.areaUnderPR
     0.88...
-
-    .. versionadded:: 1.4.0
     """
 
     def __init__(self, scoreAndLabels):
@@ -95,8 +100,15 @@ class RegressionMetrics(JavaModelWrapper):
     """
     Evaluator for regression.
 
-    :param predictionAndObservations: an RDD of prediction, observation and optional weight.
+    .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    predictionAndObservations : :py:class:`pyspark.RDD`
+        an RDD of prediction, observation and optional weight.
+
+    Examples
+    --------
     >>> predictionAndObservations = sc.parallelize([
     ...     (2.5, 3.0), (0.0, -0.5), (2.0, 2.0), (8.0, 7.0)])
     >>> metrics = RegressionMetrics(predictionAndObservations)
@@ -115,8 +127,6 @@ class RegressionMetrics(JavaModelWrapper):
     >>> metrics = RegressionMetrics(predictionAndObservationsWithOptWeight)
     >>> metrics.rootMeanSquaredError
     0.68...
-
-    .. versionadded:: 1.4.0
     """
 
     def __init__(self, predictionAndObservations):
@@ -182,9 +192,15 @@ class MulticlassMetrics(JavaModelWrapper):
     """
     Evaluator for multiclass classification.
 
-    :param predictionAndLabels: an RDD of prediction, label, optional weight
-     and optional probability.
+    .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    predictionAndLabels : :py:class:`pyspark.RDD`
+        an RDD of prediction, label, optional weight and optional probability.
+
+    Examples
+    --------
     >>> predictionAndLabels = sc.parallelize([(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)])
     >>> metrics = MulticlassMetrics(predictionAndLabels)
@@ -246,8 +262,6 @@ class MulticlassMetrics(JavaModelWrapper):
     >>> metrics = MulticlassMetrics(predictionAndLabelsWithProbabilities)
     >>> metrics.logLoss()
     0.9682...
-
-    .. versionadded:: 1.4.0
     """
 
     def __init__(self, predictionAndLabels):
@@ -377,9 +391,15 @@ class RankingMetrics(JavaModelWrapper):
     """
     Evaluator for ranking algorithms.
 
-    :param predictionAndLabels: an RDD of (predicted ranking,
-                                ground truth set) pairs.
+    .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    predictionAndLabels : :py:class:`pyspark.RDD`
+        an RDD of (predicted ranking, ground truth set) pairs.
+
+    Examples
+    --------
     >>> predictionAndLabels = sc.parallelize([
     ...     ([1, 6, 2, 7, 8, 3, 9, 10, 4, 5], [1, 2, 3, 4, 5]),
     ...     ([4, 1, 5, 6, 2, 7, 3, 8, 9, 10], [1, 2, 3]),
@@ -407,8 +427,6 @@ class RankingMetrics(JavaModelWrapper):
     0.35...
     >>> metrics.recallAt(15)
     0.66...
-
-    .. versionadded:: 1.4.0
     """
 
     def __init__(self, predictionAndLabels):
@@ -439,7 +457,7 @@ class RankingMetrics(JavaModelWrapper):
         """
         Returns the mean average precision (MAP) of all the queries.
         If a query has an empty ground truth set, the average precision will be zero and
-        a log warining is generated.
+        a log warning is generated.
         """
         return self.call("meanAveragePrecision")
 
@@ -448,7 +466,7 @@ class RankingMetrics(JavaModelWrapper):
         """
         Returns the mean average precision (MAP) at first k ranking of all the queries.
         If a query has an empty ground truth set, the average precision will be zero and
-        a log warining is generated.
+        a log warning is generated.
         """
         return self.call("meanAveragePrecisionAt", int(k))
 
@@ -484,10 +502,16 @@ class MultilabelMetrics(JavaModelWrapper):
     """
     Evaluator for multilabel classification.
 
-    :param predictionAndLabels: an RDD of (predictions, labels) pairs,
-                                both are non-null Arrays, each with
-                                unique elements.
+    .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    predictionAndLabels : :py:class:`pyspark.RDD`
+        an RDD of (predictions, labels) pairs,
+        both are non-null Arrays, each with unique elements.
+
+    Examples
+    --------
     >>> predictionAndLabels = sc.parallelize([([0.0, 1.0], [0.0, 2.0]), ([0.0, 2.0], [0.0, 1.0]),
     ...     ([], [0.0]), ([2.0], [2.0]), ([2.0, 0.0], [2.0, 0.0]),
     ...     ([0.0, 1.0, 2.0], [0.0, 1.0]), ([1.0], [1.0, 2.0])])
@@ -516,8 +540,6 @@ class MultilabelMetrics(JavaModelWrapper):
     0.28...
     >>> metrics.accuracy
     0.54...
-
-    .. versionadded:: 1.4.0
     """
 
     def __init__(self, predictionAndLabels):

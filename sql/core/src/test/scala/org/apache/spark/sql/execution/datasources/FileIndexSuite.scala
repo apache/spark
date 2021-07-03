@@ -21,6 +21,7 @@ import java.io.{File, FileNotFoundException}
 import java.net.URI
 
 import scala.collection.mutable
+import scala.concurrent.duration._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path, RawLocalFileSystem, RemoteIterator}
@@ -33,7 +34,7 @@ import org.apache.spark.metrics.source.HiveCatalogMetrics
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.functions.col
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.util.KnownSizeEstimation
@@ -296,17 +297,6 @@ class FileIndexSuite extends SharedSparkSession {
     }
   }
 
-  test("InMemoryFileIndex - file filtering") {
-    assert(!InMemoryFileIndex.shouldFilterOut("abcd"))
-    assert(InMemoryFileIndex.shouldFilterOut(".ab"))
-    assert(InMemoryFileIndex.shouldFilterOut("_cd"))
-    assert(!InMemoryFileIndex.shouldFilterOut("_metadata"))
-    assert(!InMemoryFileIndex.shouldFilterOut("_common_metadata"))
-    assert(InMemoryFileIndex.shouldFilterOut("_ab_metadata"))
-    assert(InMemoryFileIndex.shouldFilterOut("_cd_common_metadata"))
-    assert(InMemoryFileIndex.shouldFilterOut("a._COPYING_"))
-  }
-
   test("SPARK-17613 - PartitioningAwareFileIndex: base path w/o '/' at end") {
     class MockCatalog(
       override val rootPaths: Seq[Path])
@@ -366,13 +356,15 @@ class FileIndexSuite extends SharedSparkSession {
       val wrongBasePath = new File(dir, "unknown")
       // basePath must be a directory
       wrongBasePath.mkdir()
-      val parameters = Map("basePath" -> wrongBasePath.getCanonicalPath)
-      val fileIndex = new InMemoryFileIndex(spark, Seq(path), parameters, None)
-      val msg = intercept[IllegalArgumentException] {
-        // trigger inferPartitioning()
-        fileIndex.partitionSpec()
-      }.getMessage
-      assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+      withClue("SPARK-32368: 'basePath' can be case insensitive") {
+        val parameters = Map("bAsepAtH" -> wrongBasePath.getCanonicalPath)
+        val fileIndex = new InMemoryFileIndex(spark, Seq(path), parameters, None)
+        val msg = intercept[IllegalArgumentException] {
+          // trigger inferPartitioning()
+          fileIndex.partitionSpec()
+        }.getMessage
+        assert(msg === s"Wrong basePath ${wrongBasePath.getCanonicalPath} for the root path: $path")
+      }
     }
   }
 
@@ -411,6 +403,21 @@ class FileIndexSuite extends SharedSparkSession {
     }
     val fileStatusCache = FileStatusCache.getOrCreate(spark)
     fileStatusCache.putLeafFiles(new Path("/tmp", "abc"), files.toArray)
+  }
+
+  test("SPARK-34075: InMemoryFileIndex filters out hidden file on partition inference") {
+    withTempPath { path =>
+      spark
+        .range(2)
+        .select(col("id").as("p"), col("id"))
+        .write
+        .partitionBy("p")
+        .parquet(path.getAbsolutePath)
+      val targetPath = new File(path, "p=1")
+      val hiddenPath = new File(path, "_hidden_path")
+      targetPath.renameTo(hiddenPath)
+      assert(spark.read.parquet(path.getAbsolutePath).count() == 1L)
+    }
   }
 
   test("SPARK-20367 - properly unescape column names in inferPartitioning") {
@@ -487,6 +494,31 @@ class FileIndexSuite extends SharedSparkSession {
     })
     val fileIndex = new TestInMemoryFileIndex(spark, path)
     assert(fileIndex.leafFileStatuses.toSeq == statuses)
+  }
+
+  test("expire FileStatusCache if TTL is configured") {
+    val previousValue = SQLConf.get.getConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS)
+    try {
+      // using 'SQLConf.get.setConf' instead of 'withSQLConf' to set a static config at runtime
+      SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, 1L)
+
+      val path = new Path("/dummy_tmp", "abc")
+      val files = (1 to 3).map(_ => new FileStatus())
+
+      FileStatusCache.resetForTesting()
+      val fileStatusCache = FileStatusCache.getOrCreate(spark)
+      fileStatusCache.putLeafFiles(path, files.toArray)
+
+      // Exactly 3 files are cached.
+      assert(fileStatusCache.getLeafFiles(path).get.length === 3)
+      // Wait until the cache expiration.
+      eventually(timeout(3.seconds)) {
+        // And the cache is gone.
+        assert(fileStatusCache.getLeafFiles(path).isEmpty === true)
+      }
+    } finally {
+      SQLConf.get.setConf(StaticSQLConf.METADATA_CACHE_TTL_SECONDS, previousValue)
+    }
   }
 }
 

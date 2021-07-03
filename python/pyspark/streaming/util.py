@@ -139,6 +139,8 @@ def rddToFileName(prefix, suffix, timestamp):
     """
     Return string prefix-time(.suffix)
 
+    Examples
+    --------
     >>> rddToFileName("spark", None, 12345678910)
     'spark-12345678910'
     >>> rddToFileName("spark", "tmp", 12345678910)

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.util
 
 import java.text.SimpleDateFormat
-import java.time.{LocalDate, ZoneId}
+import java.time.LocalDate
 import java.util.{Date, Locale}
 
 import org.apache.commons.lang3.time.FastDateFormat
@@ -39,31 +39,29 @@ sealed trait DateFormatter extends Serializable {
 
 class Iso8601DateFormatter(
     pattern: String,
-    zoneId: ZoneId,
     locale: Locale,
     legacyFormat: LegacyDateFormats.LegacyDateFormat,
     isParsing: Boolean)
   extends DateFormatter with DateTimeFormatterHelper {
 
   @transient
-  private lazy val formatter = getOrCreateFormatter(pattern, locale)
+  private lazy val formatter = getOrCreateFormatter(pattern, locale, isParsing)
 
   @transient
-  private lazy val legacyFormatter = DateFormatter.getLegacyFormatter(
-    pattern, zoneId, locale, legacyFormat)
+  private lazy val legacyFormatter = DateFormatter.getLegacyFormatter(pattern, locale, legacyFormat)
 
   override def parse(s: String): Int = {
-    val specialDate = convertSpecialDate(s.trim, zoneId)
-    specialDate.getOrElse {
-      try {
-        val localDate = toLocalDate(formatter.parse(s))
-        localDateToDays(localDate)
-      } catch checkDiffResult(s, legacyFormatter.parse)
-    }
+    try {
+      val localDate = toLocalDate(formatter.parse(s))
+      localDateToDays(localDate)
+    } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 
   override def format(localDate: LocalDate): String = {
-    localDate.format(formatter)
+    try {
+      localDate.format(formatter)
+    } catch checkFormattedDiff(toJavaDate(localDateToDays(localDate)),
+      (d: Date) => format(d))
   }
 
   override def format(days: Int): String = {
@@ -97,6 +95,17 @@ trait LegacyDateFormatter extends DateFormatter {
   }
 }
 
+/**
+ * The legacy formatter is based on Apache Commons FastDateFormat. The formatter uses the default
+ * JVM time zone intentionally for compatibility with Spark 2.4 and earlier versions.
+ *
+ * Note: Using of the default JVM time zone makes the formatter compatible with the legacy
+ *       `DateTimeUtils` methods `toJavaDate` and `fromJavaDate` that are based on the default
+ *       JVM time zone too.
+ *
+ * @param pattern `java.text.SimpleDateFormat` compatible pattern.
+ * @param locale The locale overrides the system locale and is used in parsing/formatting.
+ */
 class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
   @transient
   private lazy val fdf = FastDateFormat.getInstance(pattern, locale)
@@ -105,6 +114,22 @@ class LegacyFastDateFormatter(pattern: String, locale: Locale) extends LegacyDat
   override def validatePatternString(): Unit = fdf
 }
 
+// scalastyle:off line.size.limit
+/**
+ * The legacy formatter is based on `java.text.SimpleDateFormat`. The formatter uses the default
+ * JVM time zone intentionally for compatibility with Spark 2.4 and earlier versions.
+ *
+ * Note: Using of the default JVM time zone makes the formatter compatible with the legacy
+ *       `DateTimeUtils` methods `toJavaDate` and `fromJavaDate` that are based on the default
+ *       JVM time zone too.
+ *
+ * @param pattern The pattern describing the date and time format.
+ *                See <a href="https://docs.oracle.com/javase/7/docs/api/java/text/SimpleDateFormat.html">
+ *                Date and Time Patterns</a>
+ * @param locale  The locale whose date format symbols should be used. It overrides the system
+ *                locale in parsing/formatting.
+ */
+// scalastyle:on line.size.limit
 class LegacySimpleDateFormatter(pattern: String, locale: Locale) extends LegacyDateFormatter {
   @transient
   private lazy val sdf = new SimpleDateFormat(pattern, locale)
@@ -123,15 +148,14 @@ object DateFormatter {
 
   private def getFormatter(
       format: Option[String],
-      zoneId: ZoneId,
       locale: Locale = defaultLocale,
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
-      isParsing: Boolean = true): DateFormatter = {
+      isParsing: Boolean): DateFormatter = {
     val pattern = format.getOrElse(defaultPattern)
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
-      getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
+      getLegacyFormatter(pattern, locale, legacyFormat)
     } else {
-      val df = new Iso8601DateFormatter(pattern, zoneId, locale, legacyFormat, isParsing)
+      val df = new Iso8601DateFormatter(pattern, locale, legacyFormat, isParsing)
       df.validatePatternString()
       df
     }
@@ -139,7 +163,6 @@ object DateFormatter {
 
   def getLegacyFormatter(
       pattern: String,
-      zoneId: ZoneId,
       locale: Locale,
       legacyFormat: LegacyDateFormat): DateFormatter = {
     legacyFormat match {
@@ -152,18 +175,17 @@ object DateFormatter {
 
   def apply(
       format: String,
-      zoneId: ZoneId,
       locale: Locale,
       legacyFormat: LegacyDateFormat,
       isParsing: Boolean): DateFormatter = {
-    getFormatter(Some(format), zoneId, locale, legacyFormat, isParsing)
+    getFormatter(Some(format), locale, legacyFormat, isParsing)
   }
 
-  def apply(format: String, zoneId: ZoneId): DateFormatter = {
-    getFormatter(Some(format), zoneId)
+  def apply(format: String, isParsing: Boolean = false): DateFormatter = {
+    getFormatter(Some(format), isParsing = isParsing)
   }
 
-  def apply(zoneId: ZoneId): DateFormatter = {
-    getFormatter(None, zoneId)
+  def apply(): DateFormatter = {
+    getFormatter(None, isParsing = false)
   }
 }

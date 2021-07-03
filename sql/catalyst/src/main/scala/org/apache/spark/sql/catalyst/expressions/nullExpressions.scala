@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{NULL_CHECK, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -43,7 +44,8 @@ import org.apache.spark.sql.types._
       > SELECT _FUNC_(NULL, 1, NULL);
        1
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class Coalesce(children: Seq[Expression]) extends ComplexTypeMergingExpression {
 
@@ -119,6 +121,9 @@ case class Coalesce(children: Seq[Expression]) extends ComplexTypeMergingExpress
          |} while (false);
        """.stripMargin)
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Coalesce =
+    copy(children = newChildren)
 }
 
 
@@ -129,7 +134,8 @@ case class Coalesce(children: Seq[Expression]) extends ComplexTypeMergingExpress
       > SELECT _FUNC_(NULL, array('2'));
        ["2"]
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "conditional_funcs")
 case class IfNull(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable {
 
@@ -139,6 +145,8 @@ case class IfNull(left: Expression, right: Expression, child: Expression)
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): IfNull = copy(child = newChild)
 }
 
 
@@ -149,7 +157,8 @@ case class IfNull(left: Expression, right: Expression, child: Expression)
       > SELECT _FUNC_(2, 2);
        NULL
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "conditional_funcs")
 case class NullIf(left: Expression, right: Expression, child: Expression)
   extends RuntimeReplaceable {
 
@@ -159,6 +168,8 @@ case class NullIf(left: Expression, right: Expression, child: Expression)
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): NullIf = copy(child = newChild)
 }
 
 
@@ -169,7 +180,8 @@ case class NullIf(left: Expression, right: Expression, child: Expression)
       > SELECT _FUNC_(NULL, array('2'));
        ["2"]
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "conditional_funcs")
 case class Nvl(left: Expression, right: Expression, child: Expression) extends RuntimeReplaceable {
 
   def this(left: Expression, right: Expression) = {
@@ -178,6 +190,8 @@ case class Nvl(left: Expression, right: Expression, child: Expression) extends R
 
   override def flatArguments: Iterator[Any] = Iterator(left, right)
   override def exprsReplaced: Seq[Expression] = Seq(left, right)
+
+  override protected def withNewChildInternal(newChild: Expression): Nvl = copy(child = newChild)
 }
 
 
@@ -189,7 +203,8 @@ case class Nvl(left: Expression, right: Expression, child: Expression) extends R
       > SELECT _FUNC_(NULL, 2, 1);
        1
   """,
-  since = "2.0.0")
+  since = "2.0.0",
+  group = "conditional_funcs")
 // scalastyle:on line.size.limit
 case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: Expression)
   extends RuntimeReplaceable {
@@ -200,6 +215,8 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: 
 
   override def flatArguments: Iterator[Any] = Iterator(expr1, expr2, expr3)
   override def exprsReplaced: Seq[Expression] = Seq(expr1, expr2, expr3)
+
+  override protected def withNewChildInternal(newChild: Expression): Nvl2 = copy(child = newChild)
 }
 
 
@@ -213,7 +230,8 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression, child: 
       > SELECT _FUNC_(cast('NaN' as double));
        true
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "predicate_funcs")
 case class IsNaN(child: Expression) extends UnaryExpression
   with Predicate with ImplicitCastInputTypes {
 
@@ -243,6 +261,8 @@ case class IsNaN(child: Expression) extends UnaryExpression
           ${ev.value} = !${eval.isNull} && Double.isNaN(${eval.value});""", isNull = FalseLiteral)
     }
   }
+
+  override protected def withNewChildInternal(newChild: Expression): IsNaN = copy(child = newChild)
 }
 
 /**
@@ -256,7 +276,8 @@ case class IsNaN(child: Expression) extends UnaryExpression
       > SELECT _FUNC_(cast('NaN' as double), 123);
        123.0
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "conditional_funcs")
 case class NaNvl(left: Expression, right: Expression)
     extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -304,6 +325,9 @@ case class NaNvl(left: Expression, right: Expression)
           }""")
     }
   }
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): NaNvl =
+    copy(left = newLeft, right = newRight)
 }
 
 
@@ -317,9 +341,12 @@ case class NaNvl(left: Expression, right: Expression)
       > SELECT _FUNC_(1);
        false
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(NULL_CHECK)
 
   override def eval(input: InternalRow): Any = {
     child.eval(input) == null
@@ -331,6 +358,8 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
   }
 
   override def sql: String = s"(${child.sql} IS NULL)"
+
+  override protected def withNewChildInternal(newChild: Expression): IsNull = copy(child = newChild)
 }
 
 
@@ -344,9 +373,12 @@ case class IsNull(child: Expression) extends UnaryExpression with Predicate {
       > SELECT _FUNC_(1);
        true
   """,
-  since = "1.0.0")
+  since = "1.0.0",
+  group = "predicate_funcs")
 case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   override def nullable: Boolean = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(NULL_CHECK)
 
   override def eval(input: InternalRow): Any = {
     child.eval(input) != null
@@ -365,6 +397,9 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
   }
 
   override def sql: String = s"(${child.sql} IS NOT NULL)"
+
+  override protected def withNewChildInternal(newChild: Expression): IsNotNull =
+    copy(child = newChild)
 }
 
 
@@ -374,7 +409,6 @@ case class IsNotNull(child: Expression) extends UnaryExpression with Predicate {
 case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate {
   override def nullable: Boolean = false
   override def foldable: Boolean = children.forall(_.foldable)
-  override def toString: String = s"AtLeastNNulls(n, ${children.mkString(",")})"
 
   private[this] val childrenArray = children.toArray
 
@@ -458,4 +492,7 @@ case class AtLeastNNonNulls(n: Int, children: Seq[Expression]) extends Predicate
          |${CodeGenerator.JAVA_BOOLEAN} ${ev.value} = $nonnull >= $n;
        """.stripMargin, isNull = FalseLiteral)
   }
+
+  override protected def withNewChildrenInternal(
+    newChildren: IndexedSeq[Expression]): AtLeastNNonNulls = copy(children = newChildren)
 }

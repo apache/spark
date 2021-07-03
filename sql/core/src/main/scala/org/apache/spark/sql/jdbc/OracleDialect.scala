@@ -112,4 +112,26 @@ private case object OracleDialect extends JdbcDialect {
       case _ => s"TRUNCATE TABLE $table"
     }
   }
+
+  // see https://docs.oracle.com/cd/B28359_01/server.111/b28286/statements_3001.htm#SQLRF01001
+  override def getAddColumnQuery(
+      tableName: String,
+      columnName: String,
+      dataType: String): String =
+    s"ALTER TABLE $tableName ADD ${quoteIdentifier(columnName)} $dataType"
+
+  // see https://docs.oracle.com/cd/B28359_01/server.111/b28286/statements_3001.htm#SQLRF01001
+  override def getUpdateColumnTypeQuery(
+    tableName: String,
+    columnName: String,
+    newDataType: String): String =
+    s"ALTER TABLE $tableName MODIFY ${quoteIdentifier(columnName)} $newDataType"
+
+  override def getUpdateColumnNullabilityQuery(
+    tableName: String,
+    columnName: String,
+    isNullable: Boolean): String = {
+    val nullable = if (isNullable) "NULL" else "NOT NULL"
+    s"ALTER TABLE $tableName MODIFY ${quoteIdentifier(columnName)} $nullable"
+  }
 }

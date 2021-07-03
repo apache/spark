@@ -45,7 +45,7 @@ class UnionDStream[T: ClassTag](parents: Array[DStream[T]])
         s" time $validTime")
     }
     if (rdds.nonEmpty) {
-      Some(ssc.sc.union(rdds))
+      Some(ssc.sc.union(rdds.toSeq))
     } else {
       None
     }

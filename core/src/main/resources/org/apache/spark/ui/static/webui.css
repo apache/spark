@@ -80,6 +80,10 @@ a:not([href]):hover {
   padding: 0;
 }
 
+.navbar-brand a:hover {
+  text-decoration: none;
+}
+
 .navbar .navbar-nav .nav-link {
   height: 50px;
   padding: 10px 15px 10px;
@@ -109,7 +113,7 @@ table.sortable td {
   box-shadow: inset 1px 0 0 rgba(0,0,0,.15), inset 0 -1px 0 rgba(0,0,0,.15);
 }
 
-.progress.progress-started {
+.progress .progress-bar.progress-started {
   background-color: #A0DFFF;
   background-image: -moz-linear-gradient(top, #A4EDFF, #94DDFF);
   background-image: -webkit-gradient(linear, 0 0, 0 100%, from(#A4EDFF), to(#94DDFF));
@@ -120,7 +124,7 @@ table.sortable td {
   filter: progid:dximagetransform.microsoft.gradient(startColorstr='#FFA4EDFF', endColorstr='#FF94DDFF', GradientType=0);
 }
 
-.progress .progress-bar {
+.progress .progress-bar.progress-completed {
   background-color: #3EC0FF;
   background-image: -moz-linear-gradient(top, #44CBFF, #34B0EE);
   background-image: -webkit-gradient(linear, 0 0, 0 100%, from(#44CBFF), to(#34B0EE));
@@ -315,10 +319,6 @@ a.expandbutton {
 
 .table-dataTable {
   width: 100%;
-}
-
-.container-fluid-div {
-  width: 200px;
 }
 
 .select-all-div-checkbox-div {

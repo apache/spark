@@ -113,6 +113,16 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val DISPATCHER_QUEUE =
+    ConfigBuilder("spark.mesos.dispatcher.queue")
+      .doc("Set the name of the dispatcher queue to which the application is submitted. " +
+        "The specified queue must be added to the dispatcher " +
+        "with \"spark.mesos.dispatcher.queue.[QueueName]\". If no queue is specified, then " +
+        "the application is submitted to the \"default\" queue with 0.0 priority.")
+      .version("3.1.0")
+      .stringConf
+      .createWithDefaultString("default")
+
   private[spark] val DRIVER_LABELS =
     ConfigBuilder("spark.mesos.driver.labels")
       .doc("Mesos labels to add to the driver.  Labels are free-form key-value pairs. Key-value " +
@@ -173,6 +183,14 @@ package object config {
       .stringConf
       .createOptional
 
+  private[spark] val DRIVER_MEMORY_OVERHEAD =
+    ConfigBuilder("spark.mesos.driver.memoryOverhead")
+      .doc("The amount of additional memory, specified in MB, to be allocated to the driver. " +
+        "By default, the overhead will be larger of either 384 or 10% of spark.driver.memory. " +
+        "Only applies to cluster mode.")
+      .intConf
+      .createOptional
+
   private[spark] val EXECUTOR_URI =
     ConfigBuilder("spark.executor.uri").version("0.8.0").stringConf.createOptional
 
@@ -220,7 +238,7 @@ package object config {
     ConfigBuilder("spark.mesos.appJar.local.resolution.mode")
       .doc("Provides support for the `local:///` scheme to reference the app jar resource in " +
         "cluster mode. If user uses a local resource (`local:///path/to/jar`) and the config " +
-        "option is not used it defaults to `host` eg. the mesos fetcher tries to get the " +
+        "option is not used it defaults to `host` e.g. the mesos fetcher tries to get the " +
         "resource from the host's file system. If the value is unknown it prints a warning msg " +
         "in the dispatcher logs and defaults to `host`. If the value is `container` then spark " +
         "submit in the container will use the jar in the container's path: `/path/to/jar`.")
