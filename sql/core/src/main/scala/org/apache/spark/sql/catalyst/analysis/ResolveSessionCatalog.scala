@@ -48,7 +48,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
     case AlterTableAddColumns(ResolvedV1TableIdentifier(ident), cols) =>
       cols.foreach { c =>
-        assertTopLevelColumn(c.name.name, "AlterTableAddColumnsCommand")
+        assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
         if (!c.nullable) {
           throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
         }
@@ -634,7 +634,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   private def convertToStructField(col: QualifiedColType): StructField = {
     val builder = new MetadataBuilder
     col.comment.foreach(builder.putString("comment", _))
-    StructField(col.name.name.head, col.dataType, nullable = true, builder.build())
+    StructField(col.name.head, col.dataType, nullable = true, builder.build())
   }
 
   private def isV2Provider(provider: String): Boolean = {

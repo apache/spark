@@ -3519,7 +3519,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
     val name = typedVisit[Seq[String]](ctx.name)
     QualifiedColType(
-      name = UnresolvedFieldName(name),
+      fieldName = UnresolvedFieldName(name),
       dataType = typedVisit[DataType](ctx.dataType),
       nullable = ctx.NULL == null,
       comment = Option(ctx.commentSpec()).map(visitCommentSpec),

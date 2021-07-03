@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.Write
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
@@ -531,38 +530,6 @@ case class DropTable(
 case class NoopCommand(
     commandName: String,
     multipartIdentifier: Seq[String]) extends LeafCommand
-
-/**
- * The logical plan of the ALTER TABLE command.
- */
-case class AlterTable(
-    catalog: TableCatalog,
-    ident: Identifier,
-    table: NamedRelation,
-    changes: Seq[TableChange]) extends LeafCommand {
-
-  override lazy val resolved: Boolean = table.resolved && {
-    changes.forall {
-      case add: AddColumn =>
-        add.fieldNames match {
-          case Array(_) =>
-            // a top-level field can always be added
-            true
-          case _ =>
-            // the parent field must exist
-            table.schema.findNestedField(add.fieldNames.init, includeCollections = true).isDefined
-        }
-
-      case colChange: ColumnChange =>
-        // the column that will be changed must exist
-        table.schema.findNestedField(colChange.fieldNames, includeCollections = true).isDefined
-
-      case _ =>
-        // property changes require no resolution checks
-        true
-    }
-  }
-}
 
 /**
  * The logical plan of the ALTER [TABLE|VIEW] ... RENAME TO command.
@@ -1122,9 +1089,9 @@ case class AlterTableAddColumns(
 
   override def changes: Seq[TableChange] = {
     columnsToAdd.map { col =>
-      require(col.name.resolved)
+      require(col.fieldName.resolved)
       TableChange.addColumn(
-        col.name.name.toArray,
+        col.name.toArray,
         col.dataType,
         col.nullable,
         col.comment.orNull,
@@ -1151,15 +1118,22 @@ case class AlterTableReplaceColumns(
   override def operation: String = "replace"
 
   override def changes: Seq[TableChange] = {
-    columnsToAdd.map { col =>
-      require(col.name.resolved)
+    // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
+    require(table.resolved)
+    val deleteChanges = table.schema.fieldNames.map { name =>
+      TableChange.deleteColumn(Array(name))
+    }
+    val addChanges = columnsToAdd.map { col =>
+      require(col.fieldName.resolved)
+      assert(col.position.isEmpty)
       TableChange.addColumn(
-        col.name.name.toArray,
+        col.name.toArray,
         col.dataType,
         col.nullable,
         col.comment.orNull,
-        col.position.map(_.position).orNull)
+        null)
     }
+    deleteChanges ++ addChanges
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =

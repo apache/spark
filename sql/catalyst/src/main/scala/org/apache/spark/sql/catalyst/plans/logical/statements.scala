@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -228,11 +228,13 @@ case class ReplaceTableAsSelectStatement(
  * Column data as parsed by ALTER TABLE ... ADD COLUMNS.
  */
 case class QualifiedColType(
-    name: FieldName,
+    fieldName: FieldName,
     dataType: DataType,
     nullable: Boolean,
     comment: Option[String],
-    position: Option[FieldPosition]) extends LeafExpression with Unevaluable
+    position: Option[FieldPosition]) {
+  def name: Seq[String] = fieldName.name
+}
 
 /**
  * An INSERT INTO statement, as parsed from SQL.

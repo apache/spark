@@ -283,9 +283,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case _: NoopCommand =>
       LocalTableScanExec(Nil, Nil) :: Nil
 
-    case AlterTable(catalog, ident, _, changes) =>
-      AlterTableExec(catalog, ident, changes) :: Nil
-
     case RenameTable(r @ ResolvedTable(catalog, oldIdent, _, _), newIdent, isView) =>
       if (isView) {
         throw QueryCompilationErrors.cannotRenameTableWithAlterViewError()

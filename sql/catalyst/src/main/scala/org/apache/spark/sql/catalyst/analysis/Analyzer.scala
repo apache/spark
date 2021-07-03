@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn}
+import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, BoundFunction, ScalarFunction}
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
@@ -300,7 +300,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),
     Batch("Normalize Alter Table Commands", Once, ResolveAlterTableCommands),
-    Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints),
     Batch("Nondeterministic", Once,
@@ -1051,11 +1050,6 @@ class Analyzer(override val catalogManager: CatalogManager)
             }.getOrElse(write)
           case _ => write
         }
-
-      case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-          .map(rel => alter.copy(table = rel))
-          .getOrElse(alter)
 
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
@@ -3529,6 +3523,14 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveAlterTableCommands extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case a @ AlterTableReplaceColumns(_: ResolvedTable, cols) =>
+        val resolvedCols = cols.map { col =>
+          assert(col.position.isEmpty)
+          val resolvedFieldName = ResolvedFieldName(
+            col.name.init, StructField(col.name.last, col.dataType))
+          col.copy(fieldName = resolvedFieldName)
+        }
+        a.copy(columnsToAdd = resolvedCols)
       case a @ AlterTableAddColumns(r: ResolvedTable, cols) =>
         // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
         // normalized parent name of fields to field names that belong to the parent.
@@ -3557,15 +3559,15 @@ class Analyzer(override val catalogManager: CatalogManager)
             }
             case resolved => resolved
           }
-          val unresolvedField = col.name
-          colsToAdd(normalizedParentName) = fieldsAdded :+ unresolvedField.name.last
-          val resolvedField = ResolvedFieldName(
-            normalizedParentName, StructField(unresolvedField.name.last, col.dataType))
-          col.copy(name = resolvedField, position = resolvedPosition)
+          val fieldName = col.name.last
+          colsToAdd(normalizedParentName) = fieldsAdded :+ fieldName
+          val resolvedFieldName = ResolvedFieldName(
+            normalizedParentName, StructField(fieldName, col.dataType))
+          col.copy(fieldName = resolvedFieldName, position = resolvedPosition)
         }
 
         val resolvedCols = cols.map { col =>
-          val parent = col.name.name.init
+          val parent = col.name.init
           if (parent.nonEmpty) {
             // Adding a nested field, need to normalize the parent column and position.
             resolveFieldNames(schema, parent).map { resolved =>
@@ -3621,100 +3623,6 @@ class Analyzer(override val catalogManager: CatalogManager)
       val fieldOpt = schema.findNestedField(
         fieldNames, includeCollections = true, conf.resolver)
       fieldOpt.map { case (path, field) => ResolvedFieldName(path, field) }
-    }
-  }
-
-  /** Rule to mostly resolve, normalize and rewrite column names based on case sensitivity. */
-  object ResolveAlterTableChanges extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case a @ AlterTable(_, _, t: NamedRelation, changes) if t.resolved =>
-        // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
-        // normalized parent name of fields to field names that belong to the parent.
-        // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
-        // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
-        val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
-        val schema = t.schema
-        val normalizedChanges = changes.flatMap {
-          case add: AddColumn =>
-            def addColumn(
-                parentSchema: StructType,
-                parentName: String,
-                normalizedParentName: Seq[String]): TableChange = {
-              val fieldsAdded = colsToAdd.getOrElse(normalizedParentName, Nil)
-              val pos = findColumnPosition(add.position(), parentName, parentSchema, fieldsAdded)
-              val field = add.fieldNames().last
-              colsToAdd(normalizedParentName) = fieldsAdded :+ field
-              TableChange.addColumn(
-                (normalizedParentName :+ field).toArray,
-                add.dataType(),
-                add.isNullable,
-                add.comment,
-                pos)
-            }
-            val parent = add.fieldNames().init
-            if (parent.nonEmpty) {
-              // Adding a nested field, need to normalize the parent column and position
-              val target = schema.findNestedField(parent, includeCollections = true, conf.resolver)
-              if (target.isEmpty) {
-                // Leave unresolved. Throws error in CheckAnalysis
-                Some(add)
-              } else {
-                val (normalizedName, sf) = target.get
-                sf.dataType match {
-                  case struct: StructType =>
-                    Some(addColumn(struct, parent.quoted, normalizedName :+ sf.name))
-                  case other =>
-                    Some(add)
-                }
-              }
-            } else {
-              // Adding to the root. Just need to normalize position
-              Some(addColumn(schema, "root", Nil))
-            }
-
-          case delete: DeleteColumn =>
-            resolveFieldNames(schema, delete.fieldNames(), TableChange.deleteColumn)
-              .orElse(Some(delete))
-
-          case column: ColumnChange =>
-            // This is informational for future developers
-            throw QueryExecutionErrors.columnChangeUnsupportedError
-          case other => Some(other)
-        }
-
-        a.copy(changes = normalizedChanges)
-    }
-
-    /**
-     * Returns the table change if the field can be resolved, returns None if the column is not
-     * found. An error will be thrown in CheckAnalysis for columns that can't be resolved.
-     */
-    private def resolveFieldNames(
-        schema: StructType,
-        fieldNames: Array[String],
-        copy: Array[String] => TableChange): Option[TableChange] = {
-      val fieldOpt = schema.findNestedField(
-        fieldNames, includeCollections = true, conf.resolver)
-      fieldOpt.map { case (path, field) => copy((path :+ field.name).toArray) }
-    }
-
-    private def findColumnPosition(
-        position: ColumnPosition,
-        parentName: String,
-        struct: StructType,
-        fieldsAdded: Seq[String]): ColumnPosition = {
-      position match {
-        case null => null
-        case after: After =>
-          (struct.fieldNames ++ fieldsAdded).find(n => conf.resolver(n, after.column())) match {
-            case Some(colName) =>
-              ColumnPosition.after(colName)
-            case None =>
-              throw QueryCompilationErrors.referenceColNotFoundForAlterTableChangesError(after,
-                parentName)
-          }
-        case other => other
-      }
     }
   }
 
