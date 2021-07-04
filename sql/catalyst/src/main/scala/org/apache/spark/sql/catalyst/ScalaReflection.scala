@@ -156,6 +156,65 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
+   * [SPARK-20384] Determine params for a give constructor type, handling unwrapping param
+   * types for value class.
+   *
+   * From doc on value class: https://docs.scala-lang.org/overviews/core/value-classes.html
+   * Given: `class Wrapper(val underlying: Int) extends AnyVal`,
+   *
+   * 1) "The type at compile time is `Wrapper`, but at runtime, the representation is an `Int`"
+   * This implies that when our struct has a field of value class, the generated code
+   * should support the underlying type during runtime execution.
+   *
+   * 2) `Wrapper` "must be instantiated... when a value class is used as a type argument".
+   * This implies that scala.Tuple[Wrapper, ...], Seq[Wrapper], Map[String, Wrapper],
+   * Option[Wrapper] will still contain Wrapper` as-is in during runtime instead of `Int`.
+   *
+   * From 2), out of those generic types, only Tuple is considered a type with constructor, so
+   * no unwrapping is done.
+   *
+   * @param tpe          field type of this constructor
+   * @param isTupleType  whether the constructor is tuple
+   */
+  private def getConstructorUnwrappedParameters(tpe: Type, isTupleType: Boolean):
+  Seq[(String, Type)] = {
+    val params = getConstructorParameters(tpe)
+    if (isTupleType) {
+      params
+    } else {
+      params.map(unwrapValueClassParam)
+    }
+  }
+
+  /**
+   * [SPARK-20384] Determine params for a give constructor type, handling unwrapping param
+   * types for value class.
+   *
+   * @param tpe          field type of this constructor
+   * @param originalType  original type to check for tuple
+   * @return
+   */
+  private def getConstructorUnwrappedParameters(tpe: Type, originalType: Type):
+  Seq[(String, Type)] = {
+    getConstructorUnwrappedParameters(tpe, isTupleType(originalType))
+  }
+
+  private def isTupleType(tpe: Type) = {
+    val cls = ScalaReflection.getClassFromType(tpe)
+    cls.getName startsWith "scala.Tuple"
+  }
+
+  private def unwrapValueClassParam(param: (String, `Type`)): (String, `Type`) = {
+    val (name, tpe) = param
+    val unwrappedTpe = if (tpe.typeSymbol.asClass.isDerivedValueClass) {
+      getConstructorParameters(tpe.dealias).head._2
+    } else {
+      tpe
+    }
+    (name, unwrappedTpe)
+  }
+
+  /**
    * Returns an expression that can be used to deserialize a Spark SQL representation to an object
    * of type `T` with a compatible schema. The Spark SQL representation is located at ordinal 0 of
    * a row, i.e., `GetColumnByOrdinal(0, _)`. Nested classes will have their fields accessed using
@@ -358,9 +417,9 @@ object ScalaReflection extends ScalaReflection {
         Invoke(obj, "deserialize", ObjectType(udt.userClass), path :: Nil)
 
       case t if definedByConstructorParams(t) =>
-        val unwrappedParams = getConstructorParameters(t).map(unwrapValueClassParam)
-
-        val cls = getClassFromType(tpe)
+        val cls = ScalaReflection.getClassFromType(tpe)
+        val isTypeTuple = isTupleType(tpe)
+        val unwrappedParams = getConstructorUnwrappedParameters(t, isTypeTuple)
 
         val arguments = unwrappedParams.zipWithIndex.map { case ((fieldName, fieldType), i) =>
           val Schema(dataType, nullable) = schemaFor(fieldType)
@@ -368,7 +427,7 @@ object ScalaReflection extends ScalaReflection {
           val newTypePath = walkedTypePath.recordField(clsName, fieldName)
 
           // For tuples, we based grab the inner fields by ordinal instead of name.
-          val newPath = if (cls.getName startsWith "scala.Tuple") {
+          val newPath = if (isTypeTuple) {
             deserializerFor(
               fieldType,
               addToPathOrdinal(path, i, dataType, newTypePath),
@@ -584,7 +643,7 @@ object ScalaReflection extends ScalaReflection {
           throw QueryExecutionErrors.cannotHaveCircularReferencesInClassError(t.toString)
         }
 
-        val unwrappedParams = getConstructorParameters(t).map(unwrapValueClassParam)
+        val unwrappedParams = getConstructorUnwrappedParameters(t, tpe)
         val fields = unwrappedParams.map { case (fieldName, fieldType) =>
           if (SourceVersion.isKeyword(fieldName) ||
               !SourceVersion.isIdentifier(encodeFieldNameToIdentifier(fieldName))) {
@@ -788,7 +847,7 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, definitions.ByteTpe) => Schema(ByteType, nullable = false)
       case t if isSubtype(t, definitions.BooleanTpe) => Schema(BooleanType, nullable = false)
       case t if definedByConstructorParams(t) =>
-        val unwrappedParams = getConstructorParameters(t).map(unwrapValueClassParam)
+        val unwrappedParams = getConstructorUnwrappedParameters(t, tpe)
         Schema(StructType(
           unwrappedParams.map { case (fieldName, fieldType) =>
             val Schema(dataType, nullable) = schemaFor(fieldType)
@@ -845,24 +904,6 @@ object ScalaReflection extends ScalaReflection {
       case _ => isSubtype(tpe.dealias, localTypeOf[Product]) ||
         isSubtype(tpe.dealias, localTypeOf[DefinedByConstructorParams])
     }
-  }
-
-  /**
-   * [SPARK-20384] Create an underlying param for a given parameter of value class.
-   * When a member of case class is value class `extends AnyVal`, the member's parameter type
-   * for encoder should be the underlying type. This is to be consistent with the generated
-   * type of that member, and avoid compile error.
-   * @param param param (type is consistent with [[ScalaReflection.getConstructorParameters]])
-   * @return unwrapped param
-   */
-  private def unwrapValueClassParam(param: (String, `Type`)): (String, `Type`) = {
-    val (name, tpe) = param
-    val unwrappedTpe = if (tpe.typeSymbol.asClass.isDerivedValueClass) {
-      getConstructorParameters(tpe.dealias).head._2
-    } else {
-      tpe
-    }
-    (name, unwrappedTpe)
   }
 
   val typeJavaMapping = Map[DataType, Class[_]](

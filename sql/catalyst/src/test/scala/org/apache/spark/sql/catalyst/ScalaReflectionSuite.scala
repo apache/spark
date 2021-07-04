@@ -482,7 +482,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
         nullable = true))
   }
 
-  test("schema for array of value class") {
+  test("SPARK-20384: schema for array of value class") {
     val schema = schemaFor[Array[IntWrapper]]
     assert(
       schema === Schema(
@@ -490,7 +490,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
         nullable = true))
   }
 
-  test("schema for map of value class") {
+  test("SPARK-20384: schema for map of value class") {
     val schema = schemaFor[Map[IntWrapper, StrWrapper]]
     assert(
       schema === Schema(
@@ -498,6 +498,51 @@ class ScalaReflectionSuite extends SparkFunSuite {
           StructType(Seq(StructField("i", IntegerType, false))),
           StructType(Seq(StructField("s", StringType))),
           valueContainsNull = true),
+        nullable = true))
+  }
+
+  test("SPARK-20384: schema for tuple_2 of value class") {
+    val schema = schemaFor[(IntWrapper, StrWrapper)]
+    assert(
+      schema === Schema(
+        StructType(
+          Seq(
+            StructField("_1", StructType(Seq(StructField("i", IntegerType, false)))),
+            StructField("_2", StructType(Seq(StructField("s", StringType))))
+          )
+        ),
+        nullable = true))
+  }
+
+  test("SPARK-20384: schema for tuple_3 of value class") {
+    val schema = schemaFor[(IntWrapper, StrWrapper, StrWrapper)]
+    assert(
+      schema === Schema(
+        StructType(
+          Seq(
+            StructField("_1", StructType(Seq(StructField("i", IntegerType, false)))),
+            StructField("_2", StructType(Seq(StructField("s", StringType)))),
+            StructField("_3", StructType(Seq(StructField("s", StringType))))
+          )
+        ),
+        nullable = true))
+  }
+
+  test("SPARK-20384: schema for nested tuple of value class") {
+    val schema = schemaFor[(IntWrapper, (StrWrapper, StrWrapper))]
+    assert(
+      schema === Schema(
+        StructType(
+          Seq(
+            StructField("_1", StructType(Seq(StructField("i", IntegerType, false)))),
+            StructField("_2", StructType(
+              Seq(
+                StructField("_1", StructType(Seq(StructField("s", StringType)))),
+                StructField("_2", StructType(Seq(StructField("s", StringType)))))
+              )
+            )
+          )
+        ),
         nullable = true))
   }
 }
