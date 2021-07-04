@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import org.scalatest.Assertions.intercept
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
@@ -792,6 +794,20 @@ abstract class SQLViewSuite extends QueryTest with SQLTestUtils {
             }
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-36011: Disallow altering permanent views based on temporary views") {
+    withView("jtv1") {
+      withTempView("jtv2") {
+        sql(s"CREATE VIEW jtv1 AS SELECT * FROM jt WHERE id > 3")
+        sql(s"CREATE TEMPORARY VIEW jtv2 AS  SELECT * FROM jt where id < 3")
+        val e = intercept[AnalysisException] {
+          sql(s"ALTER VIEW jtv1 AS SELECT * FROM jtv2")
+        }.getMessage
+        assert(e.contains("Not allowed to create a permanent view `default`.`jtv1` by " +
+          "referencing a temporary view jtv2"))
       }
     }
   }

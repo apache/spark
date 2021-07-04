@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.scalatest.Assertions.intercept
+
 import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -134,6 +136,29 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
         checkAnswer(df, Row(1, 2))
         // Check the output schema.
         assert(df.schema.sameType(view.schema))
+      }
+    }
+  }
+
+  test("SPARK-36011: Disallow altering permanent views based on temporary UDFs") {
+    val tempFunctionName = "temp"
+    val functionClass =
+      classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDFUpper].getCanonicalName
+    withUserDefinedFunction(tempFunctionName -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION $tempFunctionName AS '$functionClass'")
+      withView("view1") {
+        withTempView("tempView1") {
+          withTable("tab1") {
+            (1 to 10).map(i => s"$i").toDF("id").write.saveAsTable("tab1")
+            sql("CREATE VIEW view1 AS SELECT id from tab1")
+
+            val e = intercept[AnalysisException] {
+              sql(s"ALTER VIEW view1 AS SELECT $tempFunctionName(id) from tab1")
+            }.getMessage
+            assert(e.contains("Not allowed to create a permanent view `default`.`view1` by " +
+              s"referencing a temporary function `$tempFunctionName`"))
+          }
+        }
       }
     }
   }

@@ -107,7 +107,7 @@ case class CreateViewCommand(
 
     // When creating a permanent view, not allowed to reference temporary objects.
     // This should be called after `qe.assertAnalyzed()` (i.e., `child` can be resolved)
-    verifyTemporaryObjectsNotExists(catalog)
+    verifyTemporaryObjectsNotExists(catalog, isTemporary, name, child)
 
     if (viewType == LocalTempView) {
       val aliasedPlan = aliasPlan(sparkSession, analyzedPlan)
@@ -161,39 +161,7 @@ case class CreateViewCommand(
     Seq.empty[Row]
   }
 
-  /**
-   * Permanent views are not allowed to reference temp objects, including temp function and views
-   */
-  private def verifyTemporaryObjectsNotExists(catalog: SessionCatalog): Unit = {
-    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-    if (!isTemporary) {
-      // This func traverses the unresolved plan `child`. Below are the reasons:
-      // 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
-      // logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
-      // added/generated from a temporary view.
-      // 2) The temp functions are represented by multiple classes. Most are inaccessible from this
-      // package (e.g., HiveGenericUDF).
-      def verify(child: LogicalPlan) {
-        child.collect {
-          // Disallow creating permanent views based on temporary views.
-          case UnresolvedRelation(nameParts) if catalog.isTempView(nameParts) =>
-            throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-              s"referencing a temporary view ${nameParts.quoted}. " +
-              "Please create a temp view instead by CREATE TEMP VIEW")
-          case w: With if !w.resolved => w.innerChildren.foreach(verify)
-          case other if !other.resolved => other.expressions.flatMap(_.collect {
-            // Traverse subquery plan for any unresolved relations.
-            case e: SubqueryExpression => verify(e.plan)
-            // Disallow creating permanent views based on temporary UDFs.
-            case e: UnresolvedFunction if catalog.isTemporaryFunction(e.name) =>
-              throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
-                s"referencing a temporary function `${e.name}`")
-          })
-        }
-      }
-      verify(child)
-    }
-  }
+
 
   /**
    * If `userSpecifiedColumns` is defined, alias the analyzed plan to the user specified columns,
@@ -266,7 +234,8 @@ case class AlterViewAsCommand(
     val qe = session.sessionState.executePlan(query)
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
-
+    val isTemporary = session.sessionState.catalog.isTemporaryTable(name)
+    verifyTemporaryObjectsNotExists(session.sessionState.catalog, isTemporary, name, query)
     if (session.sessionState.catalog.alterTempViewDefinition(name, analyzedPlan)) {
       // a local/global temp view has been altered, we are done.
     } else {
@@ -439,6 +408,43 @@ object ViewHelper {
           checkCyclicViewReference(s.plan, path, viewIdent)
         case _ => // Do nothing.
       }
+    }
+  }
+
+  /**
+   * Permanent views are not allowed to reference temp objects, including temp function and views
+   */
+  def verifyTemporaryObjectsNotExists(catalog: SessionCatalog,
+      isTemporary: Boolean,
+      name: TableIdentifier,
+      child: LogicalPlan): Unit = {
+    import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+    if (!isTemporary) {
+      // This func traverses the unresolved plan `child`. Below are the reasons:
+      // 1) Analyzer replaces unresolved temporary views by a SubqueryAlias with the corresponding
+      // logical plan. After replacement, it is impossible to detect whether the SubqueryAlias is
+      // added/generated from a temporary view.
+      // 2) The temp functions are represented by multiple classes. Most are inaccessible from this
+      // package (e.g., HiveGenericUDF).
+      def verify(child: LogicalPlan) {
+        child.collect {
+          // Disallow creating permanent views based on temporary views.
+          case UnresolvedRelation(nameParts) if catalog.isTempView(nameParts) =>
+            throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+              s"referencing a temporary view ${nameParts.quoted}. " +
+              "Please create a temp view instead by CREATE TEMP VIEW")
+          case w: With if !w.resolved => w.innerChildren.foreach(verify)
+          case other if !other.resolved => other.expressions.flatMap(_.collect {
+            // Traverse subquery plan for any unresolved relations.
+            case e: SubqueryExpression => verify(e.plan)
+            // Disallow creating permanent views based on temporary UDFs.
+            case e: UnresolvedFunction if catalog.isTemporaryFunction(e.name) =>
+              throw new AnalysisException(s"Not allowed to create a permanent view $name by " +
+                s"referencing a temporary function `${e.name}`")
+          })
+        }
+      }
+      verify(child)
     }
   }
 }
