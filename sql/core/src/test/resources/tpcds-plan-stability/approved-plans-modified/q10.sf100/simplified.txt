@@ -41,15 +41,15 @@ TakeOrderedAndProject [cd_gender,cd_marital_status,cd_education_status,cd_purcha
                                                             InputAdapter
                                                               Scan parquet default.web_sales [ws_bill_customer_sk,ws_sold_date_sk]
                                                                 SubqueryBroadcast [d_date_sk] #1
-                                                                  ReusedExchange [d_date_sk] #5
+                                                                  BroadcastExchange #5
+                                                                    WholeStageCodegen (1)
+                                                                      Project [d_date_sk]
+                                                                        Filter [d_year,d_moy,d_date_sk]
+                                                                          ColumnarToRow
+                                                                            InputAdapter
+                                                                              Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
                                                         InputAdapter
-                                                          BroadcastExchange #5
-                                                            WholeStageCodegen (3)
-                                                              Project [d_date_sk]
-                                                                Filter [d_year,d_moy,d_date_sk]
-                                                                  ColumnarToRow
-                                                                    InputAdapter
-                                                                      Scan parquet default.date_dim [d_date_sk,d_year,d_moy]
+                                                          ReusedExchange [d_date_sk] #5
                                                   WholeStageCodegen (6)
                                                     Project [cs_ship_customer_sk]
                                                       BroadcastHashJoin [cs_sold_date_sk,d_date_sk]

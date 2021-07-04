@@ -35,18 +35,6 @@ PySpark specific user guide is as follows:
    :maxdepth: 2
 
    python_packaging
-   arrow_pandas
+   sql/index
+   pandas_on_spark/index
 
-For pandas APIs on Spark:
-
-.. toctree::
-   :maxdepth: 2
-
-   ps_options
-   ps_pandas_pyspark
-   ps_transform_apply
-   ps_types
-   ps_typehints
-   ps_from_to_dbms
-   ps_best_practices
-   ps_faq

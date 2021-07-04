@@ -3586,24 +3586,28 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-32372: ResolveReferences.dedupRight should only rewrite attributes for ancestor " +
     "plans of the conflict plan") {
-    sql("SELECT name, avg(age) as avg_age FROM person GROUP BY name")
-      .createOrReplaceTempView("person_a")
-    sql("SELECT p1.name, p2.avg_age FROM person p1 JOIN person_a p2 ON p1.name = p2.name")
-      .createOrReplaceTempView("person_b")
-    sql("SELECT * FROM person_a UNION SELECT * FROM person_b")
-      .createOrReplaceTempView("person_c")
-    checkAnswer(
-      sql("SELECT p1.name, p2.avg_age FROM person_c p1 JOIN person_c p2 ON p1.name = p2.name"),
-      Row("jim", 20.0) :: Row("mike", 30.0) :: Nil)
+    withTempView("person_a", "person_b", "person_c") {
+      sql("SELECT name, avg(age) as avg_age FROM person GROUP BY name")
+        .createOrReplaceTempView("person_a")
+      sql("SELECT p1.name, p2.avg_age FROM person p1 JOIN person_a p2 ON p1.name = p2.name")
+        .createOrReplaceTempView("person_b")
+      sql("SELECT * FROM person_a UNION SELECT * FROM person_b")
+        .createOrReplaceTempView("person_c")
+      checkAnswer(
+        sql("SELECT p1.name, p2.avg_age FROM person_c p1 JOIN person_c p2 ON p1.name = p2.name"),
+        Row("jim", 20.0) :: Row("mike", 30.0) :: Nil)
+    }
   }
 
   test("SPARK-32280: Avoid duplicate rewrite attributes when there're multiple JOINs") {
-    sql("SELECT 1 AS id").createOrReplaceTempView("A")
-    sql("SELECT id, 'foo' AS kind FROM A").createOrReplaceTempView("B")
-    sql("SELECT l.id as id FROM B AS l LEFT SEMI JOIN B AS r ON l.kind = r.kind")
-      .createOrReplaceTempView("C")
-    checkAnswer(sql("SELECT 0 FROM ( SELECT * FROM B JOIN C USING (id)) " +
-      "JOIN ( SELECT * FROM B JOIN C USING (id)) USING (id)"), Row(0))
+    withTempView("A", "B", "C") {
+      sql("SELECT 1 AS id").createOrReplaceTempView("A")
+      sql("SELECT id, 'foo' AS kind FROM A").createOrReplaceTempView("B")
+      sql("SELECT l.id as id FROM B AS l LEFT SEMI JOIN B AS r ON l.kind = r.kind")
+        .createOrReplaceTempView("C")
+      checkAnswer(sql("SELECT 0 FROM ( SELECT * FROM B JOIN C USING (id)) " +
+        "JOIN ( SELECT * FROM B JOIN C USING (id)) USING (id)"), Row(0))
+    }
   }
 
   test("SPARK-32788: non-partitioned table scan should not have partition filter") {
@@ -3629,20 +3633,22 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-33338: GROUP BY using literal map should not fail") {
-    withTempDir { dir =>
-      sql(s"CREATE TABLE t USING ORC LOCATION '${dir.toURI}' AS SELECT map('k1', 'v1') m, 'k1' k")
-      Seq(
-        "SELECT map('k1', 'v1')[k] FROM t GROUP BY 1",
-        "SELECT map('k1', 'v1')[k] FROM t GROUP BY map('k1', 'v1')[k]",
-        "SELECT map('k1', 'v1')[k] a FROM t GROUP BY a").foreach { statement =>
-        checkAnswer(sql(statement), Row("v1"))
+    withTable("t") {
+      withTempDir { dir =>
+        sql(s"CREATE TABLE t USING ORC LOCATION '${dir.toURI}' AS SELECT map('k1', 'v1') m, 'k1' k")
+        Seq(
+          "SELECT map('k1', 'v1')[k] FROM t GROUP BY 1",
+          "SELECT map('k1', 'v1')[k] FROM t GROUP BY map('k1', 'v1')[k]",
+          "SELECT map('k1', 'v1')[k] a FROM t GROUP BY a").foreach { statement =>
+          checkAnswer(sql(statement), Row("v1"))
+        }
       }
     }
   }
 
   test("SPARK-33084: Add jar support Ivy URI in SQL") {
     val sc = spark.sparkContext
-    val hiveVersion = "2.3.8"
+    val hiveVersion = "2.3.9"
     // transitive=false, only download specified jar
     sql(s"ADD JAR ivy://org.apache.hive.hcatalog:hive-hcatalog-core:$hiveVersion?transitive=false")
     assert(sc.listJars()
@@ -4002,6 +4008,55 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
     checkAnswer(sql(s"select /*+ REPARTITION(3, a) */ a b from values('123') t(a)"), Row("123"))
+  }
+
+  test("SPARK-35737: Parse day-time interval literals to tightest types") {
+    val dayToSecDF = spark.sql("SELECT INTERVAL '13 02:02:10' DAY TO SECOND")
+    assert(dayToSecDF.schema.head.dataType === DayTimeIntervalType(0, 3))
+    val dayToMinuteDF = spark.sql("SELECT INTERVAL '-2 13:00' DAY TO MINUTE")
+    assert(dayToMinuteDF.schema.head.dataType === DayTimeIntervalType(0, 2))
+    val dayToHourDF = spark.sql("SELECT INTERVAL '0 15' DAY TO HOUR")
+    assert(dayToHourDF.schema.head.dataType === DayTimeIntervalType(0, 1))
+    val hourToSecDF = spark.sql("SELECT INTERVAL '00:21:02.03' HOUR TO SECOND")
+    assert(hourToSecDF.schema.head.dataType === DayTimeIntervalType(1, 3))
+    val hourToMinuteDF = spark.sql("SELECT INTERVAL '01:02' HOUR TO MINUTE")
+    assert(hourToMinuteDF.schema.head.dataType === DayTimeIntervalType(1, 2))
+    val minuteToSecDF = spark.sql("SELECT INTERVAL '10:03.775808000' MINUTE TO SECOND")
+    assert(minuteToSecDF.schema.head.dataType === DayTimeIntervalType(2, 3))
+  }
+
+  test("SPARK-35937: Extract date field from timestamp should work in ANSI mode") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      Seq("to_timestamp", "to_timestamp_ntz").foreach { func =>
+        checkAnswer(sql(s"select extract(year from $func('2021-01-02 03:04:05'))"), Row(2021))
+        checkAnswer(sql(s"select extract(month from $func('2021-01-02 03:04:05'))"), Row(1))
+        checkAnswer(sql(s"select extract(day from $func('2021-01-02 03:04:05'))"), Row(2))
+      }
+    }
+  }
+
+  test("SPARK-35545: split SubqueryExpression's children field into outer attributes and " +
+    "join conditions") {
+    withView("t") {
+      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
+      checkAnswer(sql(
+        s"""with
+           |start as (
+           |  select c1, c2 from t A where not exists (
+           |    select * from t B where A.c1 = B.c1 - 2
+           |  )
+           |),
+           |
+           |end as (
+           |  select c1, c2 from t A where not exists (
+           |    select * from t B where A.c1 < B.c1
+           |  )
+           |)
+           |
+           |select * from start S join end E on S.c1 = E.c1
+           |""".stripMargin),
+        Row(1, 2, 1, 2) :: Nil)
+    }
   }
 }
 

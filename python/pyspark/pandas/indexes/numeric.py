@@ -14,15 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, Optional, Tuple, Union, cast
+from typing import Any, Optional, Union, cast
 
 import pandas as pd
 from pandas.api.types import is_hashable
 
 from pyspark import pandas as ps
+from pyspark.pandas._typing import Dtype, Name
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.series import Series
-from pyspark.pandas.typedef.typehints import Dtype
 
 
 class NumericIndex(Index):
@@ -89,7 +89,7 @@ class Int64Index(IntegerIndex):
         data: Optional[Any] = None,
         dtype: Optional[Union[str, Dtype]] = None,
         copy: bool = False,
-        name: Optional[Union[Any, Tuple]] = None,
+        name: Optional[Name] = None,
     ) -> "Int64Index":
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")
@@ -151,7 +151,7 @@ class Float64Index(NumericIndex):
         data: Optional[Any] = None,
         dtype: Optional[Union[str, Dtype]] = None,
         copy: bool = False,
-        name: Optional[Union[Any, Tuple]] = None,
+        name: Optional[Name] = None,
     ) -> "Float64Index":
         if not is_hashable(name):
             raise TypeError("Index.name must be a hashable type")

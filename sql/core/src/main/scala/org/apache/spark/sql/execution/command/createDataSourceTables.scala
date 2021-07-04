@@ -23,7 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{CommandExecutionMode, SparkPlan}
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.StructType
@@ -195,7 +195,7 @@ case class CreateDataSourceTableAsSelectCommand(
           sessionState.executePlan(RepairTableCommand(
             table.identifier,
             enableAddPartitions = true,
-            enableDropPartitions = false)).toRdd
+            enableDropPartitions = false), CommandExecutionMode.SKIP).toRdd
         case _ =>
       }
     }

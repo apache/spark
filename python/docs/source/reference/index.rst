@@ -26,24 +26,10 @@ This page lists an overview of all public PySpark modules, classes, functions an
    :maxdepth: 2
 
    pyspark.sql
+   pyspark.pandas/index
    pyspark.ss
    pyspark.ml
    pyspark.streaming
    pyspark.mllib
    pyspark
    pyspark.resource
-
-For pandas APIs on Spark:
-
-.. toctree::
-   :maxdepth: 2
-
-   ps_io
-   ps_general_functions
-   ps_series
-   ps_frame
-   ps_indexing
-   ps_window
-   ps_groupby
-   ps_ml
-   ps_extensions

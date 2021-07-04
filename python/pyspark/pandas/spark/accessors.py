@@ -20,26 +20,28 @@ Spark related features. Usually, the features here are missing in pandas
 but Spark has it.
 """
 from abc import ABCMeta, abstractmethod
-from typing import TYPE_CHECKING, Callable, List, Optional, Union, cast
+from typing import TYPE_CHECKING, Callable, Generic, List, Optional, Union, cast
 
 from pyspark import StorageLevel
 from pyspark.sql import Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import DataType, StructType
+
+from pyspark.pandas._typing import IndexOpsLike
+from pyspark.pandas.internal import InternalField
 
 if TYPE_CHECKING:
     from pyspark.sql._typing import OptionalPrimitiveType  # noqa: F401 (SPARK-34943)
     from pyspark._typing import PrimitiveType  # noqa: F401 (SPARK-34943)
 
     import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.base import IndexOpsMixin  # noqa: F401 (SPARK-34943)
     from pyspark.pandas.frame import CachedDataFrame  # noqa: F401 (SPARK-34943)
 
 
-class SparkIndexOpsMethods(metaclass=ABCMeta):
+class SparkIndexOpsMethods(Generic[IndexOpsLike], metaclass=ABCMeta):
     """Spark related features. Usually, the features here are missing in pandas
     but Spark has it."""
 
-    def __init__(self, data: "IndexOpsMixin"):
+    def __init__(self, data: IndexOpsLike):
         self._data = data
 
     @property
@@ -62,7 +64,7 @@ class SparkIndexOpsMethods(metaclass=ABCMeta):
         """
         return self._data._internal.spark_column_for(self._data._column_label)
 
-    def transform(self, func: Callable[[Column], Column]) -> Union["ps.Series", "ps.Index"]:
+    def transform(self, func: Callable[[Column], Column]) -> IndexOpsLike:
         """
         Applies a function that takes and returns a Spark column. It allows to natively
         apply a Spark function and column APIs with the Spark column internally used
@@ -119,20 +121,21 @@ class SparkIndexOpsMethods(metaclass=ABCMeta):
                 "The output of the function [%s] should be of a "
                 "pyspark.sql.Column; however, got [%s]." % (func, type(output))
             )
-        new_ser = self._data._with_new_scol(scol=output)
         # Trigger the resolution so it throws an exception if anything does wrong
         # within the function, for example,
         # `df1.a.spark.transform(lambda _: F.col("non-existent"))`.
-        new_ser._internal.to_internal_spark_frame
-        return new_ser
+        field = InternalField.from_struct_field(
+            self._data._internal.spark_frame.select(output).schema.fields[0]
+        )
+        return self._data._with_new_scol(scol=output, field=field)
 
     @property
     @abstractmethod
-    def analyzed(self) -> Union["ps.Series", "ps.Index"]:
+    def analyzed(self) -> IndexOpsLike:
         pass
 
 
-class SparkSeriesMethods(SparkIndexOpsMethods):
+class SparkSeriesMethods(SparkIndexOpsMethods["ps.Series"]):
     def apply(self, func: Callable[[Column], Column]) -> "ps.Series":
         """
         Applies a function that takes and returns a Spark column. It allows to natively
@@ -253,7 +256,7 @@ class SparkSeriesMethods(SparkIndexOpsMethods):
         return first_series(DataFrame(self._data._internal.resolved_copy))
 
 
-class SparkIndexMethods(SparkIndexOpsMethods):
+class SparkIndexMethods(SparkIndexOpsMethods["ps.Index"]):
     @property
     def analyzed(self) -> "ps.Index":
         """

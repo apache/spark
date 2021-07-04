@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AVERAGE, TreePattern}
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
@@ -57,15 +58,15 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   private lazy val resultType = child.dataType match {
     case DecimalType.Fixed(p, s) =>
       DecimalType.bounded(p + 4, s + 4)
-    case _: YearMonthIntervalType => YearMonthIntervalType
-    case _: DayTimeIntervalType => DayTimeIntervalType
+    case _: YearMonthIntervalType => YearMonthIntervalType()
+    case _: DayTimeIntervalType => DayTimeIntervalType()
     case _ => DoubleType
   }
 
   private lazy val sumDataType = child.dataType match {
     case _ @ DecimalType.Fixed(p, s) => DecimalType.bounded(p + 10, s)
-    case _: YearMonthIntervalType => YearMonthIntervalType
-    case _: DayTimeIntervalType => DayTimeIntervalType
+    case _: YearMonthIntervalType => YearMonthIntervalType()
+    case _: DayTimeIntervalType => DayTimeIntervalType()
     case _ => DoubleType
   }
 
@@ -87,15 +88,17 @@ case class Average(child: Expression) extends DeclarativeAggregate with Implicit
   // If all input are nulls, count will be 0 and we will get null after the division.
   // We can't directly use `/` as it throws an exception under ansi mode.
   override lazy val evaluateExpression = child.dataType match {
-    case _: DecimalType =>
+    case d: DecimalType =>
       DecimalPrecision.decimalAndDecimal()(
-        Divide(sum, count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
+        Divide(
+          CheckOverflowInSum(sum, d, !SQLConf.get.ansiEnabled),
+          count.cast(DecimalType.LongDecimal), failOnError = false)).cast(resultType)
     case _: YearMonthIntervalType =>
       If(EqualTo(count, Literal(0L)),
-        Literal(null, YearMonthIntervalType), DivideYMInterval(sum, count))
+        Literal(null, YearMonthIntervalType()), DivideYMInterval(sum, count))
     case _: DayTimeIntervalType =>
       If(EqualTo(count, Literal(0L)),
-        Literal(null, DayTimeIntervalType), DivideDTInterval(sum, count))
+        Literal(null, DayTimeIntervalType()), DivideDTInterval(sum, count))
     case _ =>
       Divide(sum.cast(resultType), count.cast(resultType), failOnError = false)
   }

@@ -26,6 +26,7 @@ object TreePattern extends Enumeration  {
   val AGGREGATE_EXPRESSION = Value(0)
   val ALIAS: Value = Value
   val AND_OR: Value = Value
+  val ARRAYS_ZIP: Value = Value
   val ATTRIBUTE_REFERENCE: Value = Value
   val APPEND_COLUMNS: Value = Value
   val AVERAGE: Value = Value
@@ -57,6 +58,7 @@ object TreePattern extends Enumeration  {
   val JSON_TO_STRUCT: Value = Value
   val LAMBDA_FUNCTION: Value = Value
   val LAMBDA_VARIABLE: Value = Value
+  val LATERAL_SUBQUERY: Value = Value
   val LIKE_FAMLIY: Value = Value
   val LIST_SUBQUERY: Value = Value
   val LITERAL: Value = Value
@@ -95,9 +97,11 @@ object TreePattern extends Enumeration  {
   val FILTER: Value = Value
   val INNER_LIKE_JOIN: Value = Value
   val JOIN: Value = Value
+  val LATERAL_JOIN: Value = Value
   val LEFT_SEMI_OR_ANTI_JOIN: Value = Value
   val LIMIT: Value = Value
   val LOCAL_RELATION: Value = Value
+  val LOGICAL_QUERY_STAGE: Value = Value
   val NATURAL_LIKE_JOIN: Value = Value
   val OUTER_JOIN: Value = Value
   val PROJECT: Value = Value

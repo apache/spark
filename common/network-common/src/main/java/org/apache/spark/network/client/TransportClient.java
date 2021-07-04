@@ -201,6 +201,31 @@ public class TransportClient implements Closeable {
   }
 
   /**
+   * Sends a MergedBlockMetaRequest message to the server. The response of this message is
+   * either a {@link MergedBlockMetaSuccess} or {@link RpcFailure}.
+   *
+   * @param appId applicationId.
+   * @param shuffleId shuffle id.
+   * @param reduceId reduce id.
+   * @param callback callback the handle the reply.
+   */
+  public void sendMergedBlockMetaReq(
+      String appId,
+      int shuffleId,
+      int reduceId,
+      MergedBlockMetaResponseCallback callback) {
+    long requestId = requestId();
+    if (logger.isTraceEnabled()) {
+      logger.trace(
+        "Sending RPC {} to fetch merged block meta to {}", requestId, getRemoteAddress(channel));
+    }
+    handler.addRpcRequest(requestId, callback);
+    RpcChannelListener listener = new RpcChannelListener(requestId, callback);
+    channel.writeAndFlush(
+      new MergedBlockMetaRequest(requestId, appId, shuffleId, reduceId)).addListener(listener);
+  }
+
+  /**
    * Send data to the remote end as a stream.  This differs from stream() in that this is a request
    * to *send* data to the remote end, not to receive it from the remote.
    *
@@ -349,9 +374,9 @@ public class TransportClient implements Closeable {
 
   private class RpcChannelListener extends StdChannelListener {
     final long rpcRequestId;
-    final RpcResponseCallback callback;
+    final BaseResponseCallback callback;
 
-    RpcChannelListener(long rpcRequestId, RpcResponseCallback callback) {
+    RpcChannelListener(long rpcRequestId, BaseResponseCallback callback) {
       super("RPC " + rpcRequestId);
       this.rpcRequestId = rpcRequestId;
       this.callback = callback;

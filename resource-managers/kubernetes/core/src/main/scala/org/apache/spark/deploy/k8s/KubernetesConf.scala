@@ -230,9 +230,7 @@ private[spark] object KubernetesConf {
     s"$appName-$id"
       .trim
       .toLowerCase(Locale.ROOT)
-      .replaceAll("\\s+", "-")
-      .replaceAll("\\.", "-")
-      .replaceAll("[^a-z0-9\\-]", "")
+      .replaceAll("[^a-z0-9\\-]", "-")
       .replaceAll("-+", "-")
   }
 

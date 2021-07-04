@@ -34,6 +34,10 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 3.3.x
+  lazy val v33excludes = v32excludes ++ Seq(
+  )
+
   // Exclude rules for 3.2.x
   lazy val v32excludes = v31excludes ++ Seq(
     // [SPARK-33808][SQL] DataSource V2: Build logical writes in the optimizer
@@ -58,7 +62,10 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectAbstractMethodProblem]("org.apache.spark.sql.vectorized.ColumnVector.getChild"),
 
     // [SPARK-35135][CORE] Turn WritablePartitionedIterator from trait into a default implementation class
-    ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.util.collection.WritablePartitionedIterator")
+    ProblemFilters.exclude[IncompatibleTemplateDefProblem]("org.apache.spark.util.collection.WritablePartitionedIterator"),
+
+    // [SPARK-35757][CORE] Add bitwise AND operation and functionality for intersecting bloom filters
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.util.sketch.BloomFilter.intersectInPlace")
   )
 
   // Exclude rules for 3.1.x
@@ -1769,6 +1776,7 @@ object MimaExcludes {
   }
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("3.3") => v33excludes
     case v if v.startsWith("3.2") => v32excludes
     case v if v.startsWith("3.1") => v31excludes
     case v if v.startsWith("3.0") => v30excludes

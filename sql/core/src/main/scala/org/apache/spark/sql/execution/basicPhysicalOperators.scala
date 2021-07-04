@@ -21,6 +21,7 @@ import java.util.concurrent.{Future => JFuture}
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.Duration
 
@@ -72,7 +73,8 @@ case class ProjectExec(projectList: Seq[NamedExpression], child: SparkPlan)
       val genVars = ctx.withSubExprEliminationExprs(subExprs.states) {
         exprs.map(_.genCode(ctx))
       }
-      (subExprs.codes.mkString("\n"), genVars, subExprs.exprCodesNeedEvaluate)
+      (ctx.evaluateSubExprEliminationState(subExprs.states.values), genVars,
+        subExprs.exprCodesNeedEvaluate)
     } else {
       ("", exprs.map(_.genCode(ctx)), Seq.empty)
     }
@@ -128,7 +130,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
     val outputAttrs = outputWithNullability(inputAttrs, nonNullAttrExprIds)
     generatePredicateCode(
       ctx, inputAttrs, inputExprCode, outputAttrs, notNullPreds, otherPreds,
-      nonNullAttrExprIds)._3
+      nonNullAttrExprIds)
   }
 
   protected def generatePredicateCode(
@@ -139,7 +141,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
       notNullPreds: Seq[Expression],
       otherPreds: Seq[Expression],
       nonNullAttrExprIds: Seq[ExprId],
-      subexpressionEliminationEnabled: Boolean = false): (String, String, String) = {
+      subexpressionEliminationEnabled: Boolean = false): String = {
     /**
      * Generates code for `c`, using `in` for input attributes and `attrs` for nullability.
      */
@@ -148,7 +150,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
         required: AttributeSet,
         in: Seq[ExprCode],
         attrs: Seq[Attribute],
-        states: Map[Expression, SubExprEliminationState] = Map.empty): String = {
+        states: Map[ExpressionEquals, SubExprEliminationState] = Map.empty): String = {
       val bound = BindReferences.bindReference(c, attrs)
       val evaluated = evaluateRequiredVariables(inputAttrs, in, required)
 
@@ -209,26 +211,46 @@ trait GeneratePredicateHelper extends PredicateHelper {
       val boundPredsToGen =
         predsToGen.map(pred => (BindReferences.bindReference(pred, outputAttrs), pred.references))
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundPredsToGen.map(_._1))
-      println(s"subExprs.exprCodesNeedEvaluate: ${subExprs.exprCodesNeedEvaluate}")
-      val localInputs = evaluateVariables(subExprs.exprCodesNeedEvaluate)
+
       // Here we use *this* operator's output with this output's nullability since we already
       // enforced them with the IsNotNull checks above.
-      (subExprs.codes.mkString("\n"),
-        boundPredsToGen.map(pred =>
-          genPredicate(pred._1, pred._2, inputExprCode, outputAttrs, subExprs.states)),
-        localInputs)
+      val (selectedSubExprs, genPreds, selectedLocalInputs) = boundPredsToGen.map { pred =>
+        ctx.collectedSubExprEliminationExprs = ArrayBuffer.empty
+        val gen = genPredicate(pred._1, pred._2, inputExprCode, outputAttrs, subExprs.states)
+        val localInputs = CodeGenerator.getLocalInputVariableValues(ctx, pred._1)._2
+        // For subexpression elimination enabled case, we collect common subexpressions for each
+        // predicate, and its required local input variables (if subexpressions in split functions).
+        (ctx.evaluateSubExprEliminationState(ctx.collectedSubExprEliminationExprs.toIterable), gen,
+          evaluateVariables(localInputs.toSeq))
+      }.unzip3
+
+      (selectedSubExprs, genPreds, selectedLocalInputs)
     } else {
       // Here we use *this* operator's output with this output's nullability since we already
       // enforced them with the IsNotNull checks above.
-      ("",
+      (Seq.empty,
         predsToGen.map(pred => genPredicate(pred, pred.references, inputExprCode, outputAttrs)),
-        "")
+        Seq.empty)
     }
 
-    val generated = generatedNullChecks.zip(generatedPreds).map { case (nullChecks, genPred) =>
+    val generated = generatedNullChecks.zipWithIndex.map { case (nullChecks, index) =>
+      val localInputs = if (index < localValInputs.length) {
+        localValInputs(index)
+      } else {
+        ""
+      }
+      val subExpr = if (index < subExprsCode.length) {
+        subExprsCode(index)
+      } else {
+        ""
+      }
       s"""
          |$nullChecks
-         |$genPred
+         |// common subexpressions
+         |$localInputs
+         |$subExpr
+         |// end of common subexpressions
+         |${generatedPreds(index)}
        """.stripMargin.trim
     }.mkString("\n")
 
@@ -245,7 +267,7 @@ trait GeneratePredicateHelper extends PredicateHelper {
        |$nullChecks
      """.stripMargin
 
-    (localValInputs, subExprsCode, predicateCode)
+    predicateCode
   }
 }
 
@@ -282,7 +304,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
 
-    val (localValInputs, subExprsCode, predicateCode) = generatePredicateCode(
+    val predicateCode = generatePredicateCode(
       ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes,
       true)
 
@@ -297,10 +319,6 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
     // Note: wrap in "do { } while(false);", so the generated checks can jump out with "continue;"
     s"""
-       |// common sub-expressions
-       |$localValInputs
-       |// after local inputs
-       |$subExprsCode
        |do {
        |  $predicateCode
        |  $numOutput.add(1);
@@ -457,7 +475,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   val start: Long = range.start
   val end: Long = range.end
   val step: Long = range.step
-  val numSlices: Int = range.numSlices.getOrElse(sqlContext.sparkSession.leafNodeDefaultParallelism)
+  val numSlices: Int = range.numSlices.getOrElse(session.leafNodeDefaultParallelism)
   val numElements: BigInt = range.numElements
   val isEmptyRange: Boolean = start == end || (start < end ^ 0 < step)
 
@@ -486,9 +504,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     val rdd = if (isEmptyRange) {
-      new EmptyRDD[InternalRow](sqlContext.sparkContext)
+      new EmptyRDD[InternalRow](sparkContext)
     } else {
-      sqlContext.sparkContext.parallelize(0 until numSlices, numSlices).map(i => InternalRow(i))
+      sparkContext.parallelize(0 until numSlices, numSlices).map(i => InternalRow(i))
     }
     rdd :: Nil
   }
@@ -652,10 +670,9 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     if (isEmptyRange) {
-      new EmptyRDD[InternalRow](sqlContext.sparkContext)
+      new EmptyRDD[InternalRow](sparkContext)
     } else {
-      sqlContext
-        .sparkContext
+      sparkContext
         .parallelize(0 until numSlices, numSlices)
         .mapPartitionsWithIndex { (i, _) =>
           val partitionStart = (i * numElements) / numSlices * step + start
@@ -768,12 +785,13 @@ case class CoalesceExec(numPartitions: Int, child: SparkPlan) extends UnaryExecN
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    if (numPartitions == 1 && child.execute().getNumPartitions < 1) {
+    val rdd = child.execute()
+    if (numPartitions == 1 && rdd.getNumPartitions < 1) {
       // Make sure we don't output an RDD with 0 partitions, when claiming that we have a
       // `SinglePartition`.
       new CoalesceExec.EmptyRDDWithPartitions(sparkContext, numPartitions)
     } else {
-      child.execute().coalesce(numPartitions, shuffle = false)
+      rdd.coalesce(numPartitions, shuffle = false)
     }
   }
 
@@ -857,11 +875,11 @@ case class SubqueryExec(name: String, child: SparkPlan, maxNumRows: Option[Int] 
     // relationFuture is used in "doExecute". Therefore we can get the execution id correctly here.
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLExecution.withThreadLocalCaptured[Array[InternalRow]](
-      sqlContext.sparkSession,
+      session,
       SubqueryExec.executionContext) {
       // This will run in another thread. Set the execution id so that we can connect these jobs
       // with the correct execution.
-      SQLExecution.withExecutionId(sqlContext.sparkSession, executionId) {
+      SQLExecution.withExecutionId(session, executionId) {
         val beforeCollect = System.nanoTime()
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val rows: Array[InternalRow] = if (maxNumRows.isDefined) {

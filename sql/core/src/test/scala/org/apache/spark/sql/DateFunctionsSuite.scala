@@ -323,46 +323,6 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         Row(Timestamp.valueOf("2015-12-27 00:00:00"))))
   }
 
-  test("function make_interval") {
-    val t1 = Timestamp.valueOf("2015-10-01 00:00:01")
-    val t2 = Timestamp.valueOf("2016-02-29 00:00:02")
-    val df = Seq((t1), (t2)).toDF("t")
-    // adds two hours to times
-    checkAnswer(
-      df.select(col("t") + make_interval(hours = lit(2))),
-      Seq(Row(Timestamp.valueOf("2015-10-01 02:00:01")),
-        Row(Timestamp.valueOf("2016-02-29 02:00:02"))))
-    // adds four days and two hours to times
-    checkAnswer(
-      df.select(col("t") + make_interval(hours = lit(2), days = lit(4))),
-      Seq(Row(Timestamp.valueOf("2015-10-05 02:00:01")),
-        Row(Timestamp.valueOf("2016-03-04 02:00:02"))))
-    // subtracts two hours from times
-    checkAnswer(
-      df.select(col("t") + make_interval(hours = lit(-2))),
-      Seq(Row(Timestamp.valueOf("2015-09-30 22:00:01")),
-        Row(Timestamp.valueOf("2016-02-28 22:00:02"))))
-
-    val d1 = Date.valueOf("2015-08-31")
-    val d2 = Date.valueOf("2015-02-28")
-    val df2 = Seq((d1), (d2)).toDF("d")
-    // adding an hour to a date does nothing
-    checkAnswer(
-      df2.select(col("d") + make_interval(hours = lit(1))),
-      Seq(Row(Date.valueOf("2015-08-31")),
-        Row(Date.valueOf("2015-02-28"))))
-    // adds three years to date
-    checkAnswer(
-      df2.select(col("d") + make_interval(years = lit(3))),
-      Seq(Row(Date.valueOf("2018-08-31")),
-        Row(Date.valueOf("2018-02-28"))))
-    // subtracts 1 week, one day from date
-    checkAnswer(
-      df2.select(col("d") - make_interval(weeks = lit(1), days = lit(1))),
-      Seq(Row(Date.valueOf("2015-08-23")),
-        Row(Date.valueOf("2015-02-20"))))
-  }
-
   test("function add_months") {
     val d1 = Date.valueOf("2015-08-31")
     val d2 = Date.valueOf("2015-02-28")

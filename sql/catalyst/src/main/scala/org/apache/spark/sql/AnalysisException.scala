@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkError
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -32,11 +33,42 @@ class AnalysisException protected[sql] (
     val startPosition: Option[Int] = None,
     // Some plans fail to serialize due to bugs in scala collections.
     @transient val plan: Option[LogicalPlan] = None,
-    val cause: Option[Throwable] = None)
-  extends Exception(message, cause.orNull) with Serializable {
+    val cause: Option[Throwable] = None,
+    val errorClass: Option[String] = None,
+    val messageParameters: Seq[String] = Seq.empty)
+  extends Exception(message, cause.orNull) with SparkError with Serializable {
+
+  def this(errorClass: String, messageParameters: Seq[String], cause: Option[Throwable]) =
+    this(
+      SparkError.getMessage(errorClass, messageParameters),
+      errorClass = Some(errorClass),
+      messageParameters = messageParameters,
+      cause = cause)
+
+  def this(
+      errorClass: String,
+      messageParameters: Seq[String],
+      line: Option[Int],
+      startPosition: Option[Int]) =
+    this(
+      SparkError.getMessage(errorClass, messageParameters),
+      line = line,
+      startPosition = startPosition,
+      errorClass = Some(errorClass),
+      messageParameters = messageParameters)
+
+  def copy(
+      message: String = this.message,
+      line: Option[Int] = this.line,
+      startPosition: Option[Int] = this.startPosition,
+      plan: Option[LogicalPlan] = this.plan,
+      cause: Option[Throwable] = this.cause,
+      errorClass: Option[String] = this.errorClass,
+      messageParameters: Seq[String] = this.messageParameters): AnalysisException =
+    new AnalysisException(message, line, startPosition, plan, cause, errorClass, messageParameters)
 
   def withPosition(line: Option[Int], startPosition: Option[Int]): AnalysisException = {
-    val newException = new AnalysisException(message, line, startPosition)
+    val newException = this.copy(line = line, startPosition = startPosition)
     newException.setStackTrace(getStackTrace)
     newException
   }
