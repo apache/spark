@@ -144,7 +144,6 @@ class EnsureRequirementsSuite extends SharedSparkSession with AdaptiveSparkPlanH
         val df1 = Seq((1, 2)).toDF("c1", "c2")
         val df2 = Seq((1, 3)).toDF("c3", "c4")
         val res = df1.join(df2, $"c1" === $"c3").repartition(3, $"c1")
-        res.collect()
         val num = collect(res.queryExecution.executedPlan) {
           case shuffle: ShuffleExchangeExec if shuffle.shuffleOrigin == REPARTITION_BY_NUM =>
             shuffle
