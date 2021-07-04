@@ -683,7 +683,6 @@ object SQLConf {
       .doc("The custom cost evaluator class to be used for adaptive execution. If not being set," +
         " Spark will use its own SimpleCostEvaluator by default.")
       .version("3.2.0")
-      .internal()
       .stringConf
       .createOptional
 

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.SparkConf
+import org.apache.spark.annotation.Unstable
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -25,12 +26,18 @@ import org.apache.spark.util.Utils
 
 /**
  * An interface to represent the cost of a plan.
+ *
+ * @note This class is subject to be changed and/or moved in the near future.
  */
+@Unstable
 trait Cost extends Ordered[Cost]
 
 /**
  * An interface to evaluate the cost of a physical plan.
+ *
+ * @note This class is subject to be changed and/or moved in the near future.
  */
+@Unstable
 trait CostEvaluator {
   def evaluateCost(plan: SparkPlan): Cost
 }
