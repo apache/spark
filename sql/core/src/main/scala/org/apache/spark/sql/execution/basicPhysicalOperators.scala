@@ -306,7 +306,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
     val predicateCode = generatePredicateCode(
       ctx, child.output, input, output, notNullPreds, otherPreds, notNullAttributes,
-      true)
+      conf.subexpressionEliminationEnabled)
 
     // Reset the isNull to false for the not-null columns, then the followed operators could
     // generate better code (remove dead branches).
