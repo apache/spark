@@ -119,4 +119,7 @@ case class Average(
 
   override protected def withNewChildInternal(newChild: Expression): Average =
     copy(child = newChild)
+
+  // The flag `failOnError` won't be shown in the `toString` or `toAggString` methods
+  override def flatArguments: Iterator[Any] = Iterator(child)
 }
