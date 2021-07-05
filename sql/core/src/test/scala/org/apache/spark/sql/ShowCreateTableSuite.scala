@@ -182,6 +182,27 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
     }
   }
 
+  test("SPARK-36012: Add NULL flag when SHOW CREATE TABLE") {
+    val t = "SPARK_36012"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (
+           |  a bigint NOT NULL,
+           |  b bigint
+           |)
+           |USING org.apache.spark.sql.sources.SimpleInsertSource
+        """.stripMargin)
+      val showDDL = sql(s"SHOW CREATE TABLE $t").head().getString(0)
+        .split("\n").map(_.trim)
+      assert(showDDL === Array(
+        "CREATE TABLE `default`.`SPARK_36012` (",
+        "`a` BIGINT NOT NULL,",
+        "`b` BIGINT)",
+        "USING org.apache.spark.sql.sources.SimpleInsertSource"))
+    }
+  }
+
   protected def getShowDDL(showCreateTableSql: String): String = {
     val result = sql(showCreateTableSql)
       .head()

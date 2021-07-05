@@ -654,7 +654,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         Row(Row(3, 4, null), 0) :: Row(Row(1, 2, null), 1) :: Row(Row(2, 3, null), 2) :: Nil
     )
 
-    assert(unionDf.schema.toDDL == "`a` STRUCT<`_1`: INT, `_2`: INT, `_3`: INT>,`idx` INT")
+    assert(unionDf.schema.toDDL == "`a` STRUCT<`_1`: INT, `_2`: INT, `_3`: INT>,`idx` INT NOT NULL")
 
     unionDf = df1.unionByName(df2, true).unionByName(df3, true)
 
@@ -670,7 +670,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
         Row(Row(120, 121, 122, 123), 2) :: Nil // df3
     )
     assert(unionDf.schema.toDDL ==
-      "`a` STRUCT<`_1`: INT, `_2`: INT, `_3`: INT, `_4`: INT>,`idx` INT")
+      "`a` STRUCT<`_1`: INT, `_2`: INT, `_3`: INT, `_4`: INT>,`idx` INT NOT NULL")
   }
 
   test("SPARK-32376: Make unionByName null-filling behavior work with struct columns - nested") {
@@ -679,7 +679,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
     var unionDf = df1.unionByName(df2, true)
     assert(unionDf.schema.toDDL ==
-      "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+      "`id` INT NOT NULL,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
         "`nested`: STRUCT<`a`: INT, `c`: STRING, `b`: BIGINT>>")
     checkAnswer(unionDf,
       Row(0, Row(0, 1, Row(1, "2", null))) ::
@@ -687,7 +687,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
     unionDf = df2.unionByName(df1, true)
     assert(unionDf.schema.toDDL ==
-      "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+      "`id` INT NOT NULL,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
         "`nested`: STRUCT<`a`: INT, `b`: BIGINT, `c`: STRING>>")
     checkAnswer(unionDf,
       Row(1, Row(1, 2, Row(2, 3L, null))) ::
@@ -696,7 +696,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
     val df3 = Seq((2, UnionClass1b(2, 3L, null))).toDF("id", "a")
     unionDf = df1.unionByName(df3, true)
     assert(unionDf.schema.toDDL ==
-      "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+      "`id` INT NOT NULL,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
         "`nested`: STRUCT<`a`: INT, `c`: STRING, `b`: BIGINT>>")
     checkAnswer(unionDf,
       Row(0, Row(0, 1, Row(1, "2", null))) ::
@@ -711,7 +711,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
       var unionDf = df1.unionByName(df2, true)
       assert(unionDf.schema.toDDL ==
-        "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+        "`id` INT NOT NULL,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
           "`nested`: STRUCT<`a`: INT, `c`: STRING, `A`: INT, `b`: BIGINT>>")
       checkAnswer(unionDf,
         Row(0, Row(0, 1, Row(1, "2", null, null))) ::
@@ -719,7 +719,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
 
       unionDf = df2.unionByName(df1, true)
       assert(unionDf.schema.toDDL ==
-        "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+        "`id` INT NOT NULL,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
           "`nested`: STRUCT<`A`: INT, `b`: BIGINT, `a`: INT, `c`: STRING>>")
       checkAnswer(unionDf,
         Row(1, Row(1, 2, Row(2, 3L, null, null))) ::
@@ -728,7 +728,7 @@ class DataFrameSetOperationsSuite extends QueryTest with SharedSparkSession {
       val df3 = Seq((2, UnionClass1b(2, 3L, UnionClass3(4, 5L)))).toDF("id", "a")
       unionDf = df2.unionByName(df3, true)
       assert(unionDf.schema.toDDL ==
-        "`id` INT,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
+        "`id` INT NOT NULL,`a` STRUCT<`a`: INT, `b`: BIGINT, " +
           "`nested`: STRUCT<`A`: INT, `b`: BIGINT, `a`: INT>>")
       checkAnswer(unionDf,
         Row(1, Row(1, 2, Row(2, 3L, null))) ::
