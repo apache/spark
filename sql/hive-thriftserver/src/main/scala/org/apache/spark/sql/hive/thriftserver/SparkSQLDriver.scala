@@ -28,8 +28,7 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.SparkError
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{Column, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.{Cast, ToHiveString}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
@@ -66,14 +65,8 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
       }
       context.sparkContext.setJobDescription(substitutorCommand)
       val df = context.sql(command)
-      val castCols = df.logicalPlan.output.map { col =>
-        val expr = ToHiveString(col)
-        expr.setTagValue(Cast.USER_SPECIFIED_CAST, true)
-        new Column(expr)
-      }
-      val execution = context.sessionState.executePlan(df.select(castCols: _*).logicalPlan)
-      hiveResponse = SQLExecution.withNewExecutionId(execution) {
-        hiveResultString(context.sql(command))
+      hiveResponse = SQLExecution.withNewExecutionId(df.queryExecution) {
+        hiveResultString(df)
       }
       tableSchema = getResultSetSchema(df.queryExecution)
       new CommandProcessorResponse(0)
