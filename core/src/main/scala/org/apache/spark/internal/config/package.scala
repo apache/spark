@@ -1376,6 +1376,16 @@ package object config {
       .booleanConf
       .createWithDefault(true)
 
+  private[spark] val SHUFFLE_CHECKSUM_ALGORITHM =
+    ConfigBuilder("spark.shuffle.checksum.algorithm")
+      .doc("The algorithm used to calculate the checksum. Currently, it only supports" +
+        " built-in algorithms of JDK.")
+      .version("3.3.0")
+      .stringConf
+      .checkValue(Set("Adler32", "CRC32").contains, "Shuffle checksum algorithm " +
+        "should be either Adler32 or CRC32.")
+      .createWithDefault("Adler32")
+
   private[spark] val SHUFFLE_COMPRESS =
     ConfigBuilder("spark.shuffle.compress")
       .doc("Whether to compress shuffle output. Compression will use " +

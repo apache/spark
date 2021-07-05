@@ -23,10 +23,11 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 import java.util.Optional;
-import java.util.zip.Adler32;
 import java.util.zip.Checksum;
 import javax.annotation.Nullable;
 
+import org.apache.spark.SparkException;
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper;
 import scala.None$;
 import scala.Option;
 import scala.Product2;
@@ -44,6 +45,7 @@ import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper.*;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
@@ -111,7 +113,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       long mapId,
       SparkConf conf,
       ShuffleWriteMetricsReporter writeMetrics,
-      ShuffleExecutorComponents shuffleExecutorComponents) {
+      ShuffleExecutorComponents shuffleExecutorComponents) throws SparkException {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSize = (int) (long) conf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
     this.transferToEnabled = conf.getBoolean("spark.file.transferTo", true);
@@ -124,12 +126,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleExecutorComponents = shuffleExecutorComponents;
-    this.checksumEnabled = (boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ENABLED());
+    this.checksumEnabled = ShuffleChecksumHelper.isShuffleChecksumEnabled(conf);
     if (this.checksumEnabled) {
-      this.partitionChecksums = new Adler32[numPartitions];
-      for (int i = 0; i < numPartitions; i ++) {
-        this.partitionChecksums[i] = new Adler32();
-      }
+      this.partitionChecksums = ShuffleChecksumHelper.createPartitionChecksums(numPartitions, conf);
     }
   }
 

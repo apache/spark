@@ -24,6 +24,7 @@ import java.util.LinkedList;
 import java.util.zip.Adler32;
 import java.util.zip.Checksum;
 
+import org.apache.spark.SparkException;
 import scala.Tuple2;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -41,6 +42,7 @@ import org.apache.spark.memory.TooLargePageException;
 import org.apache.spark.serializer.DummySerializerInstance;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
 import org.apache.spark.storage.FileSegment;
@@ -123,7 +125,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       long mapId,
       int numPartitions,
       SparkConf conf,
-      ShuffleWriteMetricsReporter writeMetrics) {
+      ShuffleWriteMetricsReporter writeMetrics) throws SparkException {
     super(memoryManager,
       (int) Math.min(PackedRecordPointer.MAXIMUM_PAGE_SIZE_BYTES, memoryManager.pageSizeBytes()),
       memoryManager.getTungstenMemoryMode());
@@ -144,12 +146,9 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.peakMemoryUsedBytes = getMemoryUsage();
     this.diskWriteBufferSize =
         (int) (long) conf.get(package$.MODULE$.SHUFFLE_DISK_WRITE_BUFFER_SIZE());
-    this.checksumEnabled = (boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ENABLED());
+    this.checksumEnabled = ShuffleChecksumHelper.isShuffleChecksumEnabled(conf);
     if (this.checksumEnabled) {
-      this.partitionChecksums = new Adler32[numPartitions];
-      for (int i = 0; i < numPartitions; i ++) {
-        this.partitionChecksums[i] = new Adler32();
-      }
+      this.partitionChecksums = ShuffleChecksumHelper.createPartitionChecksums(numPartitions, conf);
     }
   }
 

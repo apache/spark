@@ -19,8 +19,6 @@ package org.apache.spark.util.collection
 
 import java.io._
 import java.util.Comparator
-import java.util.zip.Adler32
-import java.util.zip.Checksum
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -31,8 +29,9 @@ import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer._
-import org.apache.spark.shuffle.{ShufflePartitionPairsWriter}
+import org.apache.spark.shuffle.ShufflePartitionPairsWriter
 import org.apache.spark.shuffle.api.{ShuffleMapOutputWriter, ShufflePartitionWriter}
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter, ShuffleBlockId}
 import org.apache.spark.util.{CompletionIterator, Utils => TryUtils}
 
@@ -143,9 +142,9 @@ private[spark] class ExternalSorter[K, V, C](
   private val forceSpillFiles = new ArrayBuffer[SpilledFile]
   @volatile private var readingIterator: SpillableIterator = null
 
-  private val checksumEnabled = conf.get(config.SHUFFLE_CHECKSUM_ENABLED)
+  private val checksumEnabled = ShuffleChecksumHelper.isShuffleChecksumEnabled(conf)
   private val partitionChecksums = if (checksumEnabled) {
-    Array.fill[Checksum](numPartitions)(new Adler32())
+    ShuffleChecksumHelper.createPartitionChecksums(numPartitions, conf)
   } else {
     Array.empty
   }
