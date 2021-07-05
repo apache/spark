@@ -20,7 +20,10 @@ package org.apache.spark.storage
 import java.io.{File, FileWriter}
 import java.nio.file.{Files, Paths}
 import java.nio.file.attribute.PosixFilePermissions
+import java.util.HashMap
 
+import com.fasterxml.jackson.core.`type`.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
@@ -122,6 +125,20 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
       Files.getPosixFilePermissions(Paths.get("target/testDir")))
     assert(permission.equals("rwxrwx---"))
     FileUtils.deleteQuietly(testDir)
+  }
+
+  test("Encode merged directory name and attemptId in shuffleManager field") {
+    testConf.set(config.APP_ATTEMPT_ID, "1");
+    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
+    val mergedShuffleMeta = diskBlockManager.getMergeDirectoryAndAttemptIDJsonString();
+    val mapper: ObjectMapper = new ObjectMapper
+    val typeRef: TypeReference[HashMap[String, String]] =
+      new TypeReference[HashMap[String, String]]() {}
+    val metaMap: HashMap[String, String] = mapper.readValue(mergedShuffleMeta, typeRef)
+    val mergeDir = metaMap.get(DiskBlockManager.MERGE_DIR_KEY)
+    assert(mergeDir.equals(DiskBlockManager.MERGE_DIRECTORY + "_1"))
+    val attemptId = metaMap.get(DiskBlockManager.ATTEMPT_ID_KEY)
+    assert(attemptId.equals("1"))
   }
 
   def writeToFile(file: File, numBytes: Int): Unit = {

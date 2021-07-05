@@ -21,7 +21,10 @@ import java.io.{File, IOException}
 import java.nio.file.Files
 import java.util.UUID
 
-import org.json4s.JsonDSL._
+import scala.collection.mutable.HashMap
+
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.ExecutorExitCode
@@ -63,8 +66,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
 
   // Get merge directory name, append attemptId if there is any
   private val mergeDirName =
-    conf.getOption("spark.app.attempt.id")
-      .map(id => MERGE_DIRECTORY + "_" + id).getOrElse(MERGE_DIRECTORY)
+    s"$MERGE_DIRECTORY${conf.get(config.APP_ATTEMPT_ID).map(id => s"_$id").getOrElse("")}"
 
   // Create merge directories
   createLocalDirsForMergedShuffleBlocks()
@@ -274,10 +276,14 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
   }
 
   def getMergeDirectoryAndAttemptIDJsonString(): String = {
-    val attemptId = conf.getOption("spark.app.attempt.id")
-    ( (MERGE_DIR_KEY -> mergeDirName) ~
-      (ATTEMPT_ID_KEY -> attemptId)
-      ).toString
+    val mergedMetaMap: HashMap[String, String] = new HashMap[String, String]()
+    mergedMetaMap.put(MERGE_DIR_KEY, mergeDirName)
+    conf.get(config.APP_ATTEMPT_ID).foreach(
+      attemptId => mergedMetaMap.put(ATTEMPT_ID_KEY, attemptId))
+    val mapper = new ObjectMapper()
+    mapper.registerModule(DefaultScalaModule)
+    val jsonString = mapper.writeValueAsString(mergedMetaMap)
+    jsonString
   }
 
   private def addShutdownHook(): AnyRef = {

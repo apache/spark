@@ -2225,4 +2225,14 @@ package object config {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  private[spark] val APP_ATTEMPT_ID =
+    ConfigBuilder("spark.app.attempt.id")
+      .internal()
+      .doc("The application attempt Id assigned from Hadoop YARN. " +
+        "When the application runs in cluster mode on YARN, there can be " +
+        "multiple attempts before failing the application")
+      .version("1.3.0")
+      .stringConf
+      .createOptional
 }

@@ -529,11 +529,12 @@ public class RemoteBlockPushResolverSuite {
     Semaphore deleted = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf) {
       @Override
-      void deleteExecutorDirs(Path[] dirs) {
-        super.deleteExecutorDirs(dirs);
+      void deleteExecutorDirs(AppShuffleInfo appShuffleInfo) {
+        super.deleteExecutorDirs(appShuffleInfo);
         deleted.release();
       }
     };
+
     Path[] activeDirs = createLocalDirs(1);
     registerExecutor(testApp, prepareLocalDirs(activeDirs, MERGE_DIRECTORY), MERGE_DIRECTORY_META);
     PushBlock[] pushBlocks = new PushBlock[] {
