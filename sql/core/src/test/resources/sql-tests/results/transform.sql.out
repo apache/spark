@@ -202,9 +202,9 @@ FROM t
 -- !query schema
 struct<a:string,b:string,c:string,d:string>
 -- !query output
-1	true	Spark SQL	null
-2	false	Spark SQL	null
-3	true	Spark SQL	null
+1	true	Spark SQL	NULL
+2	false	Spark SQL	NULL
+3	true	Spark SQL	NULL
 
 
 -- !query
@@ -455,7 +455,7 @@ GROUP BY b
 -- !query schema
 struct<a:string,b:string,c:string>
 -- !query output
-2	null	3
+2	NULL	3
 5	4	6
 
 
