@@ -421,7 +421,6 @@ abstract class CastToStringBase extends UnaryExpression
       case BinaryType =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromBytes($c);"
       case _: DecimalType if toHiveString =>
-        println("xxxxxxxxxx")
         (c, evPrim, evNull) =>
           code"$evPrim = UTF8String.fromString($c.toJavaBigDecimal().toPlainString());"
       case DateType =>
