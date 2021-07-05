@@ -73,8 +73,8 @@ public interface ShuffleMapOutputWriter {
    * <p>
    * 2) An optional metadata blob that can be used by shuffle readers.
    *
-   * @param checksums The checksum values for each partition if shuffle checksum enabled.
-   *                  Otherwise, it's empty.
+   * @param checksums The checksum values for each partition (where checksum index is equivalent to
+   *                  partition id) if shuffle checksum enabled. Otherwise, it's empty.
    */
   MapOutputCommitMessage commitAllPartitions(long[] checksums) throws IOException;
 
