@@ -248,7 +248,7 @@ object DateTimeUtils {
    * @return timestamp segments, time zone id and whether the input is just time without a date. If
    *         the input string can't be parsed as timestamp, the result timestamp segments are empty.
    */
-  private[sql] def parseTimestampString(s: UTF8String): (Array[Int], Option[ZoneId], Boolean) = {
+  def parseTimestampString(s: UTF8String): (Array[Int], Option[ZoneId], Boolean) = {
     if (s == null) {
       return (Array.empty, None, false)
     }
