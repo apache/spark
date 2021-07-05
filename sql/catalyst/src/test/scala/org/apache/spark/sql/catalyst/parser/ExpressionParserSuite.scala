@@ -472,8 +472,8 @@ class ExpressionParserSuite extends AnalysisTest {
       intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
       // If the timestamp string contains time zone, return a timestamp with local time zone literal
-      assertEqual("tImEstAmp '2019-01-16 20:50:00.567000+01:00'",
-        Literal(1547668200567000L, TimestampType))
+      assertEqual("tImEstAmp '1970-01-01 00:00:00.000 +01:00'",
+        Literal(-3600000000L, TimestampType))
     }
     // Interval.
     val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
