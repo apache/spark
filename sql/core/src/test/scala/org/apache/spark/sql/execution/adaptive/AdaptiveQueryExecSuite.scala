@@ -1526,13 +1526,13 @@ class AdaptiveQueryExecSuite
         val dfRepartitionWithNum = df.repartition(5, 'b)
         dfRepartitionWithNum.collect()
         val planWithNum = dfRepartitionWithNum.queryExecution.executedPlan
-        // The top shuffle from repartition is optimized out.
-        assert(!hasRepartitionShuffle(planWithNum))
+        // The top shuffle from repartition is not optimized out.
+        assert(hasRepartitionShuffle(planWithNum))
         val bhjWithNum = findTopLevelBroadcastHashJoin(planWithNum)
         assert(bhjWithNum.length == 1)
         checkNumLocalShuffleReaders(planWithNum, 1)
-        // Probe side is not coalesced.
-        assert(bhjWithNum.head.right.find(_.isInstanceOf[CustomShuffleReaderExec]).isEmpty)
+        // Probe side is coalesced.
+        assert(bhjWithNum.head.right.find(_.isInstanceOf[CustomShuffleReaderExec]).nonEmpty)
 
         // Repartition with partition non-default num specified.
         val dfRepartitionWithNum2 = df.repartition(3, 'b)
@@ -1575,17 +1575,16 @@ class AdaptiveQueryExecSuite
         val dfRepartitionWithNum = df.repartition(5, 'b)
         dfRepartitionWithNum.collect()
         val planWithNum = dfRepartitionWithNum.queryExecution.executedPlan
-        // The top shuffle from repartition is optimized out.
-        assert(!hasRepartitionShuffle(planWithNum))
+        // The top shuffle from repartition is not optimized out.
+        assert(hasRepartitionShuffle(planWithNum))
         val smjWithNum = findTopLevelSortMergeJoin(planWithNum)
         assert(smjWithNum.length == 1)
-        // No skew join due to the repartition.
-        assert(!smjWithNum.head.isSkewJoin)
-        // No coalesce due to the num in repartition.
+        // Skew join can apply as the repartition is not optimized out.
+        assert(smjWithNum.head.isSkewJoin)
         val customReadersWithNum = collect(smjWithNum.head) {
           case c: CustomShuffleReaderExec if c.hasCoalescedPartition => c
         }
-        assert(customReadersWithNum.isEmpty)
+        assert(customReadersWithNum.nonEmpty)
 
         // Repartition with default non-partition num specified.
         val dfRepartitionWithNum2 = df.repartition(3, 'b)
