@@ -54,38 +54,38 @@ object Cast {
 
     case (NullType, _) => true
 
-    case (_, StringType) => true
+    case (_, StringType | CharType(_) | VarcharType(_)) => true
 
-    case (StringType, BinaryType) => true
+    case (StringType | CharType(_) | VarcharType(_), BinaryType) => true
     case (_: IntegralType, BinaryType) => true
 
-    case (StringType, BooleanType) => true
+    case (StringType | CharType(_) | VarcharType(_), BooleanType) => true
     case (DateType, BooleanType) => true
     case (TimestampType, BooleanType) => true
     case (_: NumericType, BooleanType) => true
 
-    case (StringType, TimestampType) => true
+    case (StringType | CharType(_) | VarcharType(_), TimestampType) => true
     case (BooleanType, TimestampType) => true
     case (DateType, TimestampType) => true
     case (_: NumericType, TimestampType) => true
     case (TimestampNTZType, TimestampType) => true
 
-    case (StringType, TimestampNTZType) => true
+    case (StringType | CharType(_) | VarcharType(_), TimestampNTZType) => true
     case (DateType, TimestampNTZType) => true
     case (TimestampType, TimestampNTZType) => true
 
-    case (StringType, DateType) => true
+    case (StringType | CharType(_) | VarcharType(_), DateType) => true
     case (TimestampType, DateType) => true
     case (TimestampNTZType, DateType) => true
 
-    case (StringType, CalendarIntervalType) => true
+    case (StringType | CharType(_) | VarcharType(_), CalendarIntervalType) => true
     case (StringType, _: DayTimeIntervalType) => true
     case (StringType, _: YearMonthIntervalType) => true
 
     case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
     case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
 
-    case (StringType, _: NumericType) => true
+    case (StringType | CharType(_) | VarcharType(_), _: NumericType) => true
     case (BooleanType, _: NumericType) => true
     case (DateType, _: NumericType) => true
     case (TimestampType, _: NumericType) => true
