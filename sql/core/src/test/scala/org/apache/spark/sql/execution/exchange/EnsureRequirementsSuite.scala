@@ -139,8 +139,8 @@ class EnsureRequirementsSuite extends SharedSparkSession with AdaptiveSparkPlanH
     import testImplicits._
     Seq(true, false).foreach { enableAqe =>
       withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> enableAqe.toString,
-        SQLConf.SHUFFLE_PARTITIONS.key -> "3",
-        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+          SQLConf.SHUFFLE_PARTITIONS.key -> "3",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         val df1 = Seq((1, 2)).toDF("c1", "c2")
         val df2 = Seq((1, 3)).toDF("c3", "c4")
         val res = df1.join(df2, $"c1" === $"c3").repartition(3, $"c1")
