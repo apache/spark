@@ -109,7 +109,7 @@ class RocksDB(
         numKeysOnWritingVersion = metadata.numKeys
         numKeysOnLoadedVersion = metadata.numKeys
         loadedVersion = version
-        fileManagerMetrics = fileManager.latestloadCheckpointMetrics
+        fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
       writeBatch.clear()
       logInfo(s"Loaded $version")
@@ -306,7 +306,7 @@ class RocksDB(
       numKeysOnWritingVersion,
       readerMemUsage + memTableMemUsage,
       totalSSTFilesBytes,
-      nativeOpsLatencyMicros,
+      nativeOpsLatencyMicros.toMap,
       commitLatencyMs,
       bytesCopied = fileManagerMetrics.bytesCopied,
       filesCopied = fileManagerMetrics.filesCopied,
@@ -478,16 +478,16 @@ object RocksDBConf {
 
 /** Class to represent stats from each commit. */
 case class RocksDBMetrics(
-  numCommittedKeys: Long,
-  numUncommittedKeys: Long,
-  memUsageBytes: Long,
-  totalSSTFilesBytes: Long,
-  nativeOpsLatencyMicros: Map[String, RocksDBNativeHistogram],
-  lastCommitLatencyMs: Map[String, Long],
-  filesCopied: Long,
-  bytesCopied: Long,
-  filesReused: Long,
-  zipFileBytesUncompressed: Option[Long]) {
+    numCommittedKeys: Long,
+    numUncommittedKeys: Long,
+    memUsageBytes: Long,
+    totalSSTFilesBytes: Long,
+    nativeOpsLatencyMicros: Map[String, RocksDBNativeHistogram],
+    lastCommitLatencyMs: Map[String, Long],
+    filesCopied: Long,
+    bytesCopied: Long,
+    filesReused: Long,
+    zipFileBytesUncompressed: Option[Long]) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
 
@@ -497,7 +497,7 @@ object RocksDBMetrics {
 
 /** Class to wrap RocksDB's native histogram */
 case class RocksDBNativeHistogram(
-  avg: Double, stddev: Double, median: Double, p95: Double, p99: Double) {
+    avg: Double, stddev: Double, median: Double, p95: Double, p99: Double) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
 

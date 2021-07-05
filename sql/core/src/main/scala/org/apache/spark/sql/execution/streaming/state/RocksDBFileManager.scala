@@ -147,7 +147,7 @@ class RocksDBFileManager(
    */
   @volatile private var saveCheckpointMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
-  def latestloadCheckpointMetrics: RocksDBFileManagerMetrics = loadCheckpointMetrics
+  def latestLoadCheckpointMetrics: RocksDBFileManagerMetrics = loadCheckpointMetrics
 
   def latestSaveCheckpointMetrics: RocksDBFileManagerMetrics = saveCheckpointMetrics
 
@@ -520,11 +520,11 @@ class RocksDBFileManager(
  * Metrics regarding RocksDB file sync between local and DFS.
  */
 case class RocksDBFileManagerMetrics(
-  filesCopied: Long,
-  bytesCopied: Long,
-  filesReused: Long,
-  @JsonDeserialize(contentAs = classOf[java.lang.Long])
-  zipFileBytesUncompressed: Option[Long] = None)
+    filesCopied: Long,
+    bytesCopied: Long,
+    filesReused: Long,
+    @JsonDeserialize(contentAs = classOf[java.lang.Long])
+    zipFileBytesUncompressed: Option[Long] = None)
 
 /**
  * Metrics to return when requested but no operation has been performed.
