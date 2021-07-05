@@ -3,7 +3,6 @@ package org.apache.spark.shuffle.checksum;
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkException;
 import org.apache.spark.internal.config.package$;
-import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.ShuffleChecksumBlockId;
 
 import java.util.zip.Adler32;
