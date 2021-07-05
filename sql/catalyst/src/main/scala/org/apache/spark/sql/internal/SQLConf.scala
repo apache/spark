@@ -3264,6 +3264,13 @@ object SQLConf {
     .intConf
     .createWithDefault(0)
 
+  val INFER_NESTED_STRUCT_BY_MAP = buildConf("spark.sql.inferNestedStructByMap")
+    .internal()
+    .doc("When set to false, inferring the nested struct by StructType. MapType is default.")
+    .version("3.2.0")
+    .booleanConf
+    .createWithDefault(true)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3963,6 +3970,8 @@ class SQLConf extends Serializable with Logging {
   def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
 
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
+
+  def inferNestedStructByMap: Boolean = getConf(SQLConf.INFER_NESTED_STRUCT_BY_MAP)
 
   /** ********************** SQLConf functionality methods ************ */
 
