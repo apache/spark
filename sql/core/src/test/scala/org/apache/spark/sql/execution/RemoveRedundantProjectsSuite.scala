@@ -216,8 +216,23 @@ abstract class RemoveRedundantProjectsSuiteBase
         |ORDER BY t1.key, t2.key, s1, s2
         |LIMIT 10
         |""".stripMargin
-    assertProjectExec(query, 0, 3)
+    // The Project above the Expand is not removed due to SPARK-36020.
+    assertProjectExec(query, 1, 3)
+  }
 
+  test("SPARK-36020: Project should not be removed when child's logical link is different") {
+    val query =
+      """
+        |WITH t AS (
+        | SELECT key, a, b, c, explode(d) AS d FROM testView
+        |)
+        |SELECT t1.key, t1.d, t2.key
+        |FROM (SELECT d, key FROM t) t1
+        |JOIN testView t2 ON t1.key = t2.key
+        |""".stripMargin
+    // The ProjectExec above the GenerateExec should not be removed because
+    // they have different logical links.
+    assertProjectExec(query, enabled = 2, disabled = 3)
   }
 
   Seq("true", "false").foreach { codegenEnabled =>
