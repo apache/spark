@@ -225,7 +225,7 @@ object DateTimeBenchmark extends SqlBasedBenchmark {
             }
           }
           def toHiveString(df: Dataset[_]): Unit = {
-            HiveResult.hiveResultString(df.queryExecution.executedPlan)
+            HiveResult.hiveResultString(df)
           }
           benchmark.addCase("java.sql.Date to Hive string", numIters) { _ =>
             toHiveString(dates)

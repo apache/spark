@@ -344,16 +344,11 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          val query = new TestHiveQueryExecution(queryString.replace("../../data", testDataPath))
+          val sql = queryString.replace("../../data", testDataPath)
+          val query = new TestHiveQueryExecution(sql)
           def getResult(): Seq[String] = {
-            val castCols = query.optimizedPlan.output.map { col =>
-              val expr = ToHiveString(col)
-              expr.setTagValue(Cast.USER_SPECIFIED_CAST, true)
-              Alias(expr, col.name)()
-            }
-            val newPlan = Project(castCols, query.optimizedPlan)
-            SQLExecution.withNewExecutionId(query)(hiveResultString(
-              query.sparkSession.sessionState.executePlan(newPlan).executedPlan))
+            val df = TestHive.sparkSession.sql(sql)
+            SQLExecution.withNewExecutionId(query)(hiveResultString(df))
           }
           try { (query, prepareAnswer(query, getResult())) } catch {
             case e: Throwable =>

@@ -603,8 +603,8 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
     }
   }
 
-  test("SPARK-35220: DayTimeIntervalType/YearMonthIntervalType show different " +
-    "between hive serde and row format delimited\t") {
+  test("SPARK-35220, SPARK-35228: DayTimeIntervalType/YearMonthIntervalType show same " +
+    "between hive serde and row format delimited") {
     assume(TestUtils.testCommandAvailable("/bin/bash"))
     withTempView("v") {
       val df = Seq(
@@ -612,25 +612,14 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       ).toDF("a", "b")
       df.createTempView("v")
 
-      if (defaultSerDe == "hive-serde") {
-        checkAnswer(sql(
-          """
-            |SELECT TRANSFORM(a, b)
-            |  USING 'cat' AS (a, b)
-            |FROM v
-            |""".stripMargin),
-          identity,
-          Row("1 00:00:00.000000000", "0-10") :: Nil)
-      } else {
-        checkAnswer(sql(
-          """
-            |SELECT TRANSFORM(a, b)
-            |  USING 'cat' AS (a, b)
-            |FROM v
-            |""".stripMargin),
-          identity,
-          Row("INTERVAL '1 00:00:00' DAY TO SECOND", "INTERVAL '0-10' YEAR TO MONTH") :: Nil)
-      }
+      checkAnswer(sql(
+        """
+          |SELECT TRANSFORM(a, b)
+          |  USING 'cat' AS (a, b)
+          |FROM v
+          |""".stripMargin),
+        identity,
+        Row("1 00:00:00.000000000", "0-10") :: Nil)
     }
   }
 }

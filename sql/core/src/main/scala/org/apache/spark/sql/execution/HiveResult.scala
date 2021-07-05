@@ -21,7 +21,8 @@ import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
-import org.apache.spark.sql.Row
+import org.apache.spark.sql.{Column, Dataset, Row}
+import org.apache.spark.sql.catalyst.expressions.{Cast, ToHiveString}
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
@@ -35,6 +36,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * Runs a query returning the result in Hive compatible form.
  */
 object HiveResult {
+
   case class TimeFormatters(date: DateFormatter, timestamp: TimestampFormatter)
 
   def getTimeFormatters: TimeFormatters = {
@@ -53,7 +55,8 @@ object HiveResult {
    * Returns the result as a hive compatible sequence of strings. This is used in tests and
    * `SparkSQLDriver` for CLI applications.
    */
-  def hiveResultString(executedPlan: SparkPlan): Seq[String] =
+  def hiveResultString(df: Dataset[_]): Seq[String] = {
+    val executedPlan = df.queryExecution.executedPlan
     stripRootCommandResult(executedPlan) match {
       case ExecutedCommandExec(_: DescribeCommandBase) =>
         formatDescribeTableOutput(executedPlan.executeCollectPublic())
@@ -65,16 +68,23 @@ object HiveResult {
         executedPlan.executeCollect().map(_.getString(1))
       // SHOW TABLES in Hive only output table names while our v2 command outputs
       // namespace and table name.
-      case _ : ShowTablesExec =>
+      case _: ShowTablesExec =>
         executedPlan.executeCollect().map(_.getString(1))
       // SHOW VIEWS in Hive only outputs view names while our v1 command outputs
       // namespace, viewName, and isTemporary.
       case ExecutedCommandExec(_: ShowViewsCommand) =>
         executedPlan.executeCollect().map(_.getString(1))
-      case other =>
-        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
+      case _ =>
+        val castCols = df.logicalPlan.output.map { col =>
+          val expr = ToHiveString(col)
+          expr.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+          new Column(expr)
+        }
+        val result: Seq[Seq[Any]] = df.select(castCols: _*).queryExecution.executedPlan
+          .executeCollectPublic().map(_.toSeq).toSeq
         result.map(_.mkString("\t"))
     }
+  }
 
   private def formatDescribeTableOutput(rows: Array[Row]): Seq[String] = {
     rows.map {
