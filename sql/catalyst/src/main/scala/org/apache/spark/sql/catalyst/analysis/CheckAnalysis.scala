@@ -450,43 +450,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
           case alter: AlterTableCommand if alter.table.resolved =>
-            val table = alter.table.asInstanceOf[ResolvedTable]
-            def findField(fieldName: Seq[String]): StructField = {
-              // Include collections because structs nested in maps and arrays may be altered.
-              val field = table.schema.findNestedField(fieldName, includeCollections = true)
-              if (field.isEmpty) {
-                alter.failAnalysis(s"Cannot ${alter.operation} missing field ${fieldName.quoted} " +
-                  s"in ${table.name} schema: ${table.schema.treeString}")
-              }
-              field.get._2
-            }
-            def findParentStruct(fieldNames: Seq[String]): StructType = {
-              val parent = fieldNames.init
-              val field = if (parent.nonEmpty) {
-                findField(parent).dataType
-              } else {
-                table.schema
-              }
-              field match {
-                case s: StructType => s
-                case o => alter.failAnalysis(s"Cannot ${alter.operation} ${fieldNames.quoted}, " +
-                  s"because its parent is not a StructType. Found $o")
-              }
-            }
-            alter.transformExpressions {
-              case UnresolvedFieldName(name) =>
-                alter.failAnalysis(s"Cannot ${alter.operation} missing field ${name.quoted} in " +
-                  s"${table.name} schema: ${table.schema.treeString}")
-              case UnresolvedFieldPosition(fieldName, position: After) =>
-                val parent = findParentStruct(fieldName)
-                val allFields = parent match {
-                  case s: StructType => s.fieldNames
-                  case o => alter.failAnalysis(s"Cannot ${alter.operation} ${fieldName.quoted}, " +
-                    s"because its parent is not a StructType. Found $o")
-                }
-                alter.failAnalysis(s"Couldn't resolve positional argument $position amongst " +
-                  s"${allFields.mkString("[", ", ", "]")}")
-            }
             checkAlterTableCommand(alter)
 
           case alter: AlterTable if alter.table.resolved =>

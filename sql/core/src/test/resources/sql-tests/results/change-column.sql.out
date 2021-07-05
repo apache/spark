@@ -176,7 +176,12 @@ ALTER TABLE test_change CHANGE invalid_col TYPE INT
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Can't find column `invalid_col` given table data columns [`a`, `b`, `c`]
+Missing field invalid_col in table spark_catalog.default.test_change with schema:
+root
+ |-- a: integer (nullable = true)
+ |-- b: string (nullable = true)
+ |-- c: integer (nullable = true)
+; line 1 pos 0
 
 
 -- !query
