@@ -34,6 +34,10 @@ import com.typesafe.tools.mima.core.ProblemFilters._
  */
 object MimaExcludes {
 
+  // Exclude rules for 3.3.x
+  lazy val v33excludes = v32excludes ++ Seq(
+  )
+
   // Exclude rules for 3.2.x
   lazy val v32excludes = v31excludes ++ Seq(
     // [SPARK-33808][SQL] DataSource V2: Build logical writes in the optimizer
@@ -1772,6 +1776,7 @@ object MimaExcludes {
   }
 
   def excludes(version: String) = version match {
+    case v if v.startsWith("3.3") => v33excludes
     case v if v.startsWith("3.2") => v32excludes
     case v if v.startsWith("3.1") => v31excludes
     case v if v.startsWith("3.0") => v30excludes

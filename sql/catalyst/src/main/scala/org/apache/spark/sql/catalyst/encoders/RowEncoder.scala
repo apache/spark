@@ -53,7 +53,7 @@ import org.apache.spark.sql.types._
  *   TimestampType -> java.sql.Timestamp if spark.sql.datetime.java8API.enabled is false
  *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
  *
- *   TimestampWithoutTZType -> java.time.LocalDateTime
+ *   TimestampNTZType -> java.time.LocalDateTime
  *
  *   DayTimeIntervalType -> java.time.Duration
  *   YearMonthIntervalType -> java.time.Period
@@ -105,7 +105,7 @@ object RowEncoder {
         createSerializerForSqlTimestamp(inputObject)
       }
 
-    case TimestampWithoutTZType => createSerializerForLocalDateTime(inputObject)
+    case TimestampNTZType => createSerializerForLocalDateTime(inputObject)
 
     case DateType =>
       if (SQLConf.get.datetimeJava8ApiEnabled) {
@@ -230,7 +230,7 @@ object RowEncoder {
       } else {
         ObjectType(classOf[java.sql.Timestamp])
       }
-    case TimestampWithoutTZType =>
+    case TimestampNTZType =>
       ObjectType(classOf[java.time.LocalDateTime])
     case DateType =>
       if (SQLConf.get.datetimeJava8ApiEnabled) {
@@ -287,7 +287,7 @@ object RowEncoder {
         createDeserializerForSqlTimestamp(input)
       }
 
-    case TimestampWithoutTZType =>
+    case TimestampNTZType =>
       createDeserializerForLocalDateTime(input)
 
     case DateType =>

@@ -1885,4 +1885,17 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-35968: AQE coalescing should not produce too small partitions by default") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val (_, adaptive) =
+        runAdaptiveAndVerifyResult("SELECT sum(id) FROM RANGE(10) GROUP BY id % 3")
+      val coalesceReader = collect(adaptive) {
+        case r: CustomShuffleReaderExec if r.hasCoalescedPartition => r
+      }
+      assert(coalesceReader.length == 1)
+      // RANGE(10) is a very small dataset and AQE coalescing should produce one partition.
+      assert(coalesceReader.head.partitionSpecs.length == 1)
+    }
+  }
 }

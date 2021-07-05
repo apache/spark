@@ -316,7 +316,7 @@ class DataTypeSuite extends SparkFunSuite {
   checkDefaultSize(DecimalType.SYSTEM_DEFAULT, 16)
   checkDefaultSize(DateType, 4)
   checkDefaultSize(TimestampType, 8)
-  checkDefaultSize(TimestampWithoutTZType, 8)
+  checkDefaultSize(TimestampNTZType, 8)
   checkDefaultSize(StringType, 20)
   checkDefaultSize(BinaryType, 100)
   checkDefaultSize(ArrayType(DoubleType, true), 8)

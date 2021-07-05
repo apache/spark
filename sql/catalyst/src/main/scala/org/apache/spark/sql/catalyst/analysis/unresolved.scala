@@ -605,11 +605,15 @@ case class GetViewColumnByNameAndOrdinal(
     viewName: String,
     colName: String,
     ordinal: Int,
-    expectedNumCandidates: Int)
+    expectedNumCandidates: Int,
+    // viewDDL is used to help user fix incompatible schema issue for permanent views
+    // it will be None for temp views.
+    viewDDL: Option[String])
   extends LeafExpression with Unevaluable with NonSQLExpression {
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
   override lazy val resolved = false
+  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).toIterator
 }
 
 /**

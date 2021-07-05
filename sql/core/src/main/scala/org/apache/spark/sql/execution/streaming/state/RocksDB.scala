@@ -253,6 +253,13 @@ class RocksDB(
     logInfo(s"Rolled back to $loadedVersion")
   }
 
+  def cleanup(): Unit = {
+    val cleanupTime = timeTakenMs {
+      fileManager.deleteOldVersions(conf.minVersionsToRetain)
+    }
+    logInfo(s"Cleaned old data, time taken: $cleanupTime ms")
+  }
+
   /** Release all resources */
   def close(): Unit = {
     try {

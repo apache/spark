@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.Repartition
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
 /**
  * A base suite contains a set of view related test cases for different kind of views
@@ -81,7 +82,8 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("change SQLConf should not change view behavior - groupByOrdinal") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      val viewName = createView("v1", "SELECT c1, count(c1) FROM t GROUP BY 1", Seq("c1", "count"))
+      val viewName =
+        createView("v1", "SELECT c1, count(c1) AS cnt FROM t GROUP BY 1", Seq("c1", "count"))
       withView(viewName) {
         Seq("true", "false").foreach { flag =>
           withSQLConf(GROUP_BY_ORDINAL.key -> flag) {
@@ -96,7 +98,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
       val viewName = createView(
-        "v1", "SELECT c1 as a, count(c1) FROM t GROUP BY a", Seq("a", "count"))
+        "v1", "SELECT c1 as a, count(c1) AS cnt FROM t GROUP BY a", Seq("a", "count"))
       withView(viewName) {
         Seq("true", "false").foreach { flag =>
           withSQLConf(GROUP_BY_ALIASES.key -> flag) {
@@ -110,7 +112,7 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
   test("change SQLConf should not change view behavior - ansiEnabled") {
     withTable("t") {
       Seq(2, 3, 1).toDF("c1").write.format("parquet").saveAsTable("t")
-      val viewName = createView("v1", "SELECT 1/0", Seq("c1"))
+      val viewName = createView("v1", "SELECT 1/0 AS invalid", Seq("c1"))
       withView(viewName) {
         Seq("true", "false").foreach { flag =>
           withSQLConf(ANSI_ENABLED.key -> flag) {
@@ -239,7 +241,8 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
         sql("USE DEFAULT")
         sql(s"CREATE FUNCTION $functionName AS '$avgFuncClass'")
         // create a view using a function in 'default' database
-        val viewName = createView("v1", s"SELECT $functionName(col1) FROM VALUES (1), (2), (3)")
+        val viewName = createView(
+          "v1", s"SELECT $functionName(col1) AS func FROM VALUES (1), (2), (3)")
         // create function in another database with the same function name
         sql(s"USE $dbName")
         sql(s"CREATE FUNCTION $functionName AS '$sumFuncClass'")
@@ -363,13 +366,8 @@ abstract class SQLViewTestSuite extends QueryTest with SQLTestUtils {
 
             // One less duplicated column if caseSensitive=false.
             sql("CREATE OR REPLACE VIEW v1 AS SELECT 1 a, 2 b")
-            if (caseSensitive) {
-              val e = intercept[AnalysisException](spark.table(viewName2).collect())
-              assert(e.message.contains("cannot resolve 'COL'"))
-            } else {
-              val e = intercept[AnalysisException](spark.table(viewName2).collect())
-              assert(e.message.contains("incompatible schema change"))
-            }
+            val e = intercept[AnalysisException](spark.table(viewName2).collect())
+            assert(e.message.contains("incompatible schema change"))
           }
         }
       }
@@ -402,5 +400,69 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   override protected def formattedViewName(viewName: String): String = s"$db.$viewName"
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
     TableIdentifier(viewName, Some(db))
+  }
+
+  test("SPARK-35686: error out for creating view with auto gen alias") {
+    withView("v") {
+      val e = intercept[AnalysisException] {
+        sql("CREATE VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
+      }
+      assert(e.getMessage.contains("without explicitly assigning an alias"))
+      sql("CREATE VIEW v AS SELECT count(*) AS cnt FROM VALUES (1), (2), (3) t(a)")
+      checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
+    }
+  }
+
+  test("SPARK-35686: error out for creating view with auto gen alias in subquery") {
+    withView("v") {
+      val e = intercept[AnalysisException] {
+        sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b FROM VALUES (1, 2) t(a, b))")
+      }
+      assert(e.getMessage.contains("without explicitly assigning an alias"))
+      sql("CREATE VIEW v AS SELECT * FROM (SELECT a + b AS col FROM VALUES (1, 2) t(a, b))")
+      checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
+    }
+  }
+
+  test("SPARK-35686: error out for alter view with auto gen alias") {
+    withView("v") {
+      sql("CREATE VIEW v AS SELECT 1 AS a")
+      val e = intercept[AnalysisException] {
+        sql("ALTER VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
+      }
+      assert(e.getMessage.contains("without explicitly assigning an alias"))
+    }
+  }
+
+  test("SPARK-35686: legacy config to allow auto generated alias for view") {
+    withSQLConf(ALLOW_AUTO_GENERATED_ALIAS_FOR_VEW.key -> "true") {
+      withView("v") {
+        sql("CREATE VIEW v AS SELECT count(*) FROM VALUES (1), (2), (3) t(a)")
+        checkAnswer(sql("SELECT * FROM v"), Seq(Row(3)))
+      }
+    }
+  }
+
+  test("SPARK-35685: Prompt recreating view message for schema mismatch") {
+    withTable("t") {
+      sql("CREATE TABLE t USING json AS SELECT 1 AS col_i")
+      val catalog = spark.sessionState.catalog
+      withView("test_view") {
+        sql("CREATE VIEW test_view AS SELECT * FROM t")
+        val meta = catalog.getTableRawMetadata(TableIdentifier("test_view", Some("default")))
+        // simulate a view meta with incompatible schema change
+        val newProp = meta.properties
+          .mapValues(_.replace("col_i", "col_j")).toMap
+        val newSchema = StructType(Seq(StructField("col_j", IntegerType)))
+        catalog.alterTable(meta.copy(properties = newProp, schema = newSchema))
+        val e = intercept[AnalysisException] {
+          sql(s"SELECT * FROM test_view")
+        }
+        assert(e.getMessage.contains("re-create the view by running: CREATE OR REPLACE"))
+        val ddl = e.getMessage.split(": ").last
+        sql(ddl)
+        checkAnswer(sql("select * FROM test_view"), Row(1))
+      }
+    }
   }
 }
