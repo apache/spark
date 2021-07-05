@@ -19,24 +19,24 @@ package org.apache.spark.sql.catalyst.json
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.sources.{EqualTo, Filter, StringStartsWith}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.sources.{EqualTo, Filter, IsNotNull, IsNull, StringStartsWith}
+import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class JacksonParserSuite extends SparkFunSuite {
-  test("skipping rows using pushdown filters") {
-    def check(
+  private def check(
       input: String = """{"i":1, "s": "a"}""",
       schema: StructType = StructType.fromDDL("i INTEGER"),
       filters: Seq[Filter],
       expected: Seq[InternalRow]): Unit = {
-      val options = new JSONOptions(Map.empty[String, String], "GMT", "")
-      val parser = new JacksonParser(schema, options, false, filters)
-      val createParser = CreateJacksonParser.string _
-      val actual = parser.parse(input, createParser, UTF8String.fromString)
-      assert(actual === expected)
-    }
+    val options = new JSONOptions(Map.empty[String, String], "GMT", "")
+    val parser = new JacksonParser(schema, options, false, filters)
+    val createParser = CreateJacksonParser.string _
+    val actual = parser.parse(input, createParser, UTF8String.fromString)
+    assert(actual === expected)
+  }
 
+  test("skipping rows using pushdown filters") {
     check(filters = Seq(), expected = Seq(InternalRow(1)))
     check(filters = Seq(EqualTo("i", 1)), expected = Seq(InternalRow(1)))
     check(filters = Seq(EqualTo("i", 2)), expected = Seq.empty)
@@ -53,5 +53,74 @@ class JacksonParserSuite extends SparkFunSuite {
       schema = StructType.fromDDL("i INTEGER, d DOUBLE"),
       filters = Seq(EqualTo("d", 3.14)),
       expected = Seq(InternalRow(1, 3.14)))
+  }
+
+  test("35912: nullability with different schema nullable setting") {
+    // primitive type default value.
+    val defaultValue: Map[DataType, Any] = Map(
+      BooleanType -> false,
+      ByteType -> 0.toByte,
+      ShortType -> 0.toShort,
+      IntegerType -> 0,
+      LongType -> 0.toLong,
+      FloatType -> 0.0F,
+      DoubleType -> 0.0D)
+    val metadata = new MetadataBuilder()
+      .putString("name", "age")
+      .build()
+    val structType = StructType(Seq(
+      StructField("a", IntegerType, nullable = true),
+      StructField("b", ArrayType(DoubleType), nullable = false),
+      StructField("c", DoubleType, nullable = false, metadata)))
+    val a1 = ArrayType(DoubleType, true)
+    val a2 = ArrayType(StringType, false)
+    val m1 = MapType(IntegerType, StringType, true)
+    val m2 = MapType(IntegerType, ArrayType(DoubleType), false)
+    val dataTypeSet: Set[DataType] = Set(
+      BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, NullType,
+      StringType, CalendarIntervalType, DecimalType.SYSTEM_DEFAULT, structType, a1, a2, m1, m2
+    )
+    dataTypeSet.foreach { dt =>
+      Seq(true, false).foreach { nullable =>
+        val schema = StructType(Seq(
+          StructField("i", IntegerType),
+          StructField("not_exist_col", dt, nullable = nullable)
+        ))
+        val expected = if (nullable) {
+          Seq(InternalRow(1, null))
+        } else {
+          Seq(InternalRow(1, defaultValue.getOrElse(dt, null)))
+        }
+        check(schema = schema, filters = Seq(EqualTo("i", 1)), expected = expected)
+      }
+    }
+
+    val schema = (nullable: Boolean) => StructType(Seq(
+      StructField("i", IntegerType),
+      StructField("not_exist_col", IntegerType, nullable = nullable)
+    ))
+    // filter by not exist column
+    Seq(true, false).foreach { nullable =>
+      val s = schema(nullable)
+      check(schema = s, filters = Seq(EqualTo("not_exist_col", 1)), expected = Seq.empty)
+
+      val expected1 = if (nullable) Seq.empty else Seq(InternalRow(1, 0))
+      check(schema = s, filters = Seq(EqualTo("not_exist_col", 0)), expected = expected1)
+
+      val expected2 = if (nullable) Seq.empty else Seq(InternalRow(1, 0))
+      check(schema = s, filters = Seq(IsNotNull("not_exist_col")), expected = expected2)
+
+      val expected3 = if (nullable) Seq(InternalRow(1, null)) else Seq.empty
+      check(schema = s, filters = Seq(IsNull("not_exist_col")), expected = expected3)
+
+      val input = """{"a": 1, "b": null}"""
+      val s2 = StructType(Seq(
+        StructField("a", IntegerType),
+        StructField("b", IntegerType, nullable = nullable)))
+      val expected4 = if (nullable) Seq.empty else Seq(InternalRow(1, 0))
+      check(input = input, schema = s2, filters = Seq(IsNotNull("b")), expected = expected4)
+      val expected5 = if (nullable) Seq(InternalRow(1, null)) else Seq.empty
+      check(input = input, schema = s2, filters = Seq(IsNull("b")), expected = expected5)
+    }
   }
 }

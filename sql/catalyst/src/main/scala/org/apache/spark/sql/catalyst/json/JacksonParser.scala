@@ -29,6 +29,7 @@ import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator.isPrimitiveType
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -399,6 +400,7 @@ class JacksonParser(
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
     var skipRow = false
+    var checkedIndexSet = Set.empty[Int]
 
     structFilters.reset()
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
@@ -407,6 +409,7 @@ class JacksonParser(
           try {
             row.update(index, fieldConverters(index).apply(parser))
             skipRow = structFilters.skipRow(row, index)
+            checkedIndexSet += index
           } catch {
             case e: SparkUpgradeException => throw e
             case NonFatal(e) if isRoot =>
@@ -416,6 +419,22 @@ class JacksonParser(
         case None =>
           parser.skipChildren()
       }
+    }
+
+    // When the input schema is setting to `nullable = false`, make sure the primitive type has a
+    // default value rather than setting a null value. this is because Spark uses
+    // `InternalRow.isNullAt(index)` to guarantees the actual value is null or not.
+    var index = 0
+    while (!skipRow && index < schema.length) {
+      val sf = schema(index)
+      if (!sf.nullable && isPrimitiveType(sf.dataType) && row.isNullAt(index)) {
+        val writer = InternalRow.getWriter(index, schema(index).dataType)
+        writer(row, null)
+      }
+      if (!checkedIndexSet.contains(index)) {
+        skipRow = structFilters.skipRow(row, index)
+      }
+      index += 1
     }
 
     if (skipRow) {
