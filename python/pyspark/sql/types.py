@@ -1021,8 +1021,8 @@ def _infer_type(obj):
 
     if isinstance(obj, dict):
         from pyspark.sql.session import SparkSession
-        if (SparkSession._activeSession.conf.get("spark.sql.inferNestedStructByMap").lower()
-                == "true"):
+        if (SparkSession._activeSession.conf.get(
+                "spark.sql.pyspark.inferNestedStructByMap").lower() == "true"):
             for key, value in obj.items():
                 if key is not None and value is not None:
                     return MapType(_infer_type(key), _infer_type(value), True)

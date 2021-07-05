@@ -196,7 +196,7 @@ class TypesTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(nestedRdd2)
         self.assertEqual(Row(f1=[[1, 2], [2, 3]], f2=[1, 2]), df.collect()[0])
 
-        with self.sql_conf({"spark.sql.inferNestedStructByMap": False}):
+        with self.sql_conf({"spark.sql.pyspark.inferNestedStructByMap": False}):
             nestedRdd3 = self.sc.parallelize([NestedRow([{"payment": 200.5, "name": "A"}], [1, 2]),
                                               NestedRow([{"payment": 100.5, "name": "B"}], [2, 3])])
             df = self.spark.createDataFrame(nestedRdd3)

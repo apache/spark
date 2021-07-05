@@ -3327,7 +3327,7 @@ object SQLConf {
     .intConf
     .createWithDefault(0)
 
-  val INFER_NESTED_STRUCT_BY_MAP = buildConf("spark.sql.inferNestedStructByMap")
+  val INFER_NESTED_STRUCT_BY_MAP = buildConf("spark.sql.pyspark.inferNestedStructByMap")
     .internal()
     .doc("When set to false, inferring the nested struct by StructType. MapType is default.")
     .version("3.2.0")
