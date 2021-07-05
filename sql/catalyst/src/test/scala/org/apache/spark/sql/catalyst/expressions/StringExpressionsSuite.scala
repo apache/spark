@@ -1044,11 +1044,16 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(Period.ofMonths(100), YearMonthIntervalType()) -> "8-4",
       Literal.create(Duration.ofDays(100), DayTimeIntervalType()) -> "100 00:00:00.000000000",
       Literal.create(Array(1, 2, null), ArrayType(IntegerType)) -> "[1,2,null]",
-      Literal.create(Map(1 -> 2, 2 -> 2), MapType(IntegerType, IntegerType)) -> "{1:2,2:2}",
-      Literal.create(Row(1, 2.0d, 3.0f),
+      Literal.create(Array("1", "2", null), ArrayType(StringType)) -> "[\"1\",\"2\",null]",
+      Literal.create(Map(1 -> "2", 2 -> "2", 3 -> null),
+        MapType(IntegerType, StringType)) -> "{1:\"2\",2:\"2\",3:null}",
+      Literal.create(Row(1, 2.0d, 3.0f, "aaaaa", null),
         StructType(StructField("c1", IntegerType) ::
           StructField("c2", DoubleType) ::
-          StructField("c3", FloatType) :: Nil)) -> "{\"c1\":1,\"c2\":2.0,\"c3\":3.0}")
+          StructField("c3", FloatType) ::
+          StructField("c4", StringType) ::
+          StructField("c5", StringType) :: Nil)) ->
+        "{\"c1\":1,\"c2\":2.0,\"c3\":3.0,\"c4\":\"aaaaa\",\"c5\":null}")
       .foreach { case (literal: Literal, result: String) =>
         val expression = ToHiveString(literal, Option(SQLConf.get.sessionLocalTimeZone))
         checkEvaluation(expression, result)
