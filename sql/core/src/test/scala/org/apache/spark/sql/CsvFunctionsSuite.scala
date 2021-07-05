@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.text.SimpleDateFormat
+import java.time.Period
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -27,6 +28,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
 class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -276,6 +278,33 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
           .selectExpr("parsed._corrupt_record")
 
         checkAnswer(df, Seq(Row("a,b,c,d")))
+      }
+    }
+  }
+
+  test("SPARK-35998: Make from_csv/to_csv to handle year-month intervals properly") {
+    val ymDF = Seq(Period.of(1, 2, 0)).toDF
+    Seq(
+      (YearMonthIntervalType(), "INTERVAL '1-2' YEAR TO MONTH", Period.of(1, 2, 0)),
+      (YearMonthIntervalType(YEAR), "INTERVAL '1' YEAR", Period.of(1, 0, 0)),
+      (YearMonthIntervalType(MONTH), "INTERVAL '14' MONTH", Period.of(1, 2, 0))
+    ).foreach { case (toCsvDtype, toCsvExpected, fromCsvExpected) =>
+      val toCsvDF = ymDF.select(to_csv(struct($"value" cast toCsvDtype)) as "csv")
+      checkAnswer(toCsvDF, Row(toCsvExpected))
+
+      DataTypeTestUtils.yearMonthIntervalTypes.foreach { fromCsvDtype =>
+        val fromCsvDF = toCsvDF
+          .select(
+            from_csv(
+              $"csv",
+              StructType(StructField("a", fromCsvDtype) :: Nil),
+              Map.empty[String, String]) as "value")
+          .selectExpr("value.a")
+        if (toCsvDtype == fromCsvDtype) {
+          checkAnswer(fromCsvDF, Row(fromCsvExpected))
+        } else {
+          checkAnswer(fromCsvDF, Row(null))
+        }
       }
     }
   }
