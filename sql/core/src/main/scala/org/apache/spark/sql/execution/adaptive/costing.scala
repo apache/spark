@@ -17,16 +17,42 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import org.apache.spark.SparkConf
+import org.apache.spark.annotation.Unstable
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
- * Represents the cost of a plan.
+ * An interface to represent the cost of a plan.
+ *
+ * @note This class is subject to be changed and/or moved in the near future.
  */
+@Unstable
 trait Cost extends Ordered[Cost]
 
 /**
- * Evaluates the cost of a physical plan.
+ * An interface to evaluate the cost of a physical plan.
+ *
+ * @note This class is subject to be changed and/or moved in the near future.
  */
+@Unstable
 trait CostEvaluator {
   def evaluateCost(plan: SparkPlan): Cost
+}
+
+object CostEvaluator extends Logging {
+
+  /**
+   * Instantiates a [[CostEvaluator]] using the given className.
+   */
+  def instantiate(className: String, conf: SparkConf): CostEvaluator = {
+    logDebug(s"Creating CostEvaluator $className")
+    val evaluators = Utils.loadExtensions(classOf[CostEvaluator], Seq(className), conf)
+    require(evaluators.nonEmpty, "A valid AQE cost evaluator must be specified by config " +
+      s"${SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS.key}, but $className resulted in zero " +
+      "valid evaluator.")
+    evaluators.head
+  }
 }

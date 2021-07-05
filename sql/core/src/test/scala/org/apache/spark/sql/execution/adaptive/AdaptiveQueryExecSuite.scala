@@ -1898,4 +1898,54 @@ class AdaptiveQueryExecSuite
       assert(coalesceReader.head.partitionSpecs.length == 1)
     }
   }
+
+  test("SPARK-35794: Allow custom plugin for cost evaluator") {
+    CostEvaluator.instantiate(
+      classOf[SimpleShuffleSortCostEvaluator].getCanonicalName, spark.sparkContext.getConf)
+    intercept[IllegalArgumentException] {
+      CostEvaluator.instantiate(
+        classOf[InvalidCostEvaluator].getCanonicalName, spark.sparkContext.getConf)
+    }
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+      val query = "SELECT * FROM testData join testData2 ON key = a where value = '1'"
+
+      withSQLConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS.key ->
+        "org.apache.spark.sql.execution.adaptive.SimpleShuffleSortCostEvaluator") {
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.size == 1)
+        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+        assert(bhj.size == 1)
+        checkNumLocalShuffleReaders(adaptivePlan)
+      }
+
+      withSQLConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS.key ->
+        "org.apache.spark.sql.execution.adaptive.InvalidCostEvaluator") {
+        intercept[IllegalArgumentException] {
+          runAdaptiveAndVerifyResult(query)
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Invalid implementation class for [[CostEvaluator]].
+ */
+private class InvalidCostEvaluator() {}
+
+/**
+ * A simple [[CostEvaluator]] to count number of [[ShuffleExchangeLike]] and [[SortExec]].
+ */
+private case class SimpleShuffleSortCostEvaluator() extends CostEvaluator {
+  override def evaluateCost(plan: SparkPlan): Cost = {
+    val cost = plan.collect {
+      case s: ShuffleExchangeLike => s
+      case s: SortExec => s
+    }.size
+    SimpleCost(cost)
+  }
 }
