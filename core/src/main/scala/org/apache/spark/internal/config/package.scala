@@ -1372,7 +1372,7 @@ package object config {
     ConfigBuilder("spark.shuffle.checksum.enabled")
       .doc("Whether to calculate the checksum of shuffle output. If enabled, Spark will try " +
         "its best to tell if shuffle data corruption is caused by network or disk or others.")
-      .version("3.2.0")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(true)
 
