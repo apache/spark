@@ -352,7 +352,6 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
               Alias(expr, col.name)()
             }
             val newPlan = Project(castCols, query.optimizedPlan)
-            println(newPlan)
             SQLExecution.withNewExecutionId(query)(hiveResultString(
               query.sparkSession.sessionState.executePlan(newPlan).executedPlan))
           }
