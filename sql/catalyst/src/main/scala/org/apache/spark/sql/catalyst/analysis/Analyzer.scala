@@ -269,6 +269,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRelations ::
       ResolveTables ::
       ResolvePartitionSpec ::
+      ResolveAlterTableCommands ::
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveReferences ::
@@ -310,7 +311,6 @@ class Analyzer(override val catalogManager: CatalogManager)
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),
-    Batch("Normalize Alter Table Commands", Once, ResolveAlterTableCommands),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints),
@@ -3577,34 +3577,32 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveAlterTableCommands extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case a: AlterTableCommand if a.table.resolved =>
+      case a: AlterTableCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
         val table = a.table.asInstanceOf[ResolvedTable]
-        val transformed = a.transformExpressions {
-          case u: UnresolvedFieldName =>
-            resolveFieldNames(table.schema, u.name).getOrElse(u)
-          case u: UnresolvedFieldPosition => u.position match {
-            case after: After =>
-              resolveFieldNames(table.schema, u.fieldName.init :+ after.column())
-                .map { resolved =>
-                  ResolvedFieldPosition(ColumnPosition.after(resolved.field.name))
-                }.getOrElse(u)
-            case _ => ResolvedFieldPosition(u.position)
-          }
+        a.transformExpressions {
+          case u: UnresolvedFieldName => resolveFieldNames(table, u.name, u)
         }
 
-        transformed match {
-          case alter @ AlterTableAlterColumn(
-              _: ResolvedTable, ResolvedFieldName(_, field), Some(dataType), _, _, _) =>
-            // Hive style syntax provides the column type, even if it may not have changed.
-            val dt = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
-            if (dt == dataType) {
-              // The user didn't want the field to change, so remove this change.
-              alter.copy(dataType = None)
-            } else {
-              alter
-            }
+      case a @ AlterTableAlterColumn(
+          table: ResolvedTable, ResolvedFieldName(path, field), dataType, _, _, position) =>
+        val newDataType = dataType.flatMap { dt =>
+          // Hive style syntax provides the column type, even if it may not have changed.
+          val existing = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
+          if (existing == dt) None else Some(dt)
+        }
+        val newPosition = position map {
+          case u @ UnresolvedFieldPosition(after: After) =>
+            // TODO: since the field name is already resolved, it's more efficient if
+            //       `ResolvedFieldName` carries the parent struct and we resolve column position
+            //       based on the parent struct, instead of re-resolving the entire column path.
+            val resolved = resolveFieldNames(table, path :+ after.column(), u)
+            ResolvedFieldPosition(ColumnPosition.after(resolved.field.name))
+          case u: UnresolvedFieldPosition => ResolvedFieldPosition(u.position)
           case other => other
         }
+        val resolved = a.copy(dataType = newDataType, position = newPosition)
+        resolved.copyTagsFrom(a)
+        resolved
     }
 
     /**
@@ -3612,11 +3610,16 @@ class Analyzer(override val catalogManager: CatalogManager)
      * not found. An error will be thrown in CheckAnalysis for columns that can't be resolved.
      */
     private def resolveFieldNames(
-        schema: StructType,
-        fieldNames: Seq[String]): Option[ResolvedFieldName] = {
-      val fieldOpt = schema.findNestedField(
-        fieldNames, includeCollections = true, conf.resolver)
-      fieldOpt.map { case (path, field) => ResolvedFieldName(path, field) }
+        table: ResolvedTable,
+        fieldName: Seq[String],
+        context: Expression): ResolvedFieldName = {
+      table.schema.findNestedField(fieldName, includeCollections = true, conf.resolver).map {
+        case (path, field) => ResolvedFieldName(path, field)
+      }.getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context))
+    }
+
+    private def hasUnresolvedFieldName(a: AlterTableCommand): Boolean = {
+      a.expressions.exists(_.find(_.isInstanceOf[UnresolvedFieldName]).isDefined)
     }
   }
 

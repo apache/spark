@@ -372,7 +372,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
               findField(struct, names, normalizedPath ++ Seq(field.name, "element"))
 
             case _ =>
-              None
+              throw QueryCompilationErrors.invalidFieldName(fieldNames, normalizedPath)
           }
         }
       }
