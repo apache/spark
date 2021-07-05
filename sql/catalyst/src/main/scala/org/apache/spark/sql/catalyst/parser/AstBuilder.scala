@@ -2125,6 +2125,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           val zoneId = getZoneId(conf.sessionLocalTimeZone)
           val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
           specialDate.getOrElse(toLiteral(stringToDate, DateType))
+        case "TIMESTAMP_NTZ" =>
+          val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
+          specialTs.getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
         case "TIMESTAMP" =>
           def constructTimestampLTZLiteral(value: String): Literal = {
             val zoneId = getZoneId(conf.sessionLocalTimeZone)
@@ -2525,6 +2528,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case ("double", Nil) => DoubleType
       case ("date", Nil) => DateType
       case ("timestamp", Nil) => SQLConf.get.timestampType
+      case ("timestamp_ntz", Nil) => TimestampNTZType
       case ("string", Nil) => StringType
       case ("character" | "char", length :: Nil) => CharType(length.getText.toInt)
       case ("varchar", length :: Nil) => VarcharType(length.getText.toInt)
