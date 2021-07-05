@@ -248,7 +248,7 @@ object DateTimeUtils {
    * @return timestamp segments, time zone id and whether the input is just time without a date. If
    *         the input string can't be parsed as timestamp, the result timestamp segments are empty.
    */
-  private def parseTimestampString(s: UTF8String): (Array[Int], Option[ZoneId], Boolean) = {
+  private[sql] def parseTimestampString(s: UTF8String): (Array[Int], Option[ZoneId], Boolean) = {
     if (s == null) {
       return (Array.empty, None, false)
     }
@@ -983,10 +983,9 @@ object DateTimeUtils {
    * Extracts special values from an input string ignoring case.
    *
    * @param input A trimmed string
-   * @param zoneId Zone identifier used to get the current date.
    * @return Some special value in lower case or None.
    */
-  private def extractSpecialValue(input: String, zoneId: ZoneId): Option[String] = {
+  private def extractSpecialValue(input: String): Option[String] = {
     def isValid(value: String, timeZoneId: String): Boolean = {
       // Special value can be without any time zone
       if (timeZoneId.isEmpty) return true
@@ -1018,12 +1017,33 @@ object DateTimeUtils {
    *         successfully otherwise None.
    */
   def convertSpecialTimestamp(input: String, zoneId: ZoneId): Option[Long] = {
-    extractSpecialValue(input.trim, zoneId).flatMap {
+    extractSpecialValue(input.trim).flatMap {
       case "epoch" => Some(0)
       case "now" => Some(currentTimestamp())
       case "today" => Some(instantToMicros(today(zoneId).toInstant))
       case "tomorrow" => Some(instantToMicros(today(zoneId).plusDays(1).toInstant))
       case "yesterday" => Some(instantToMicros(today(zoneId).minusDays(1).toInstant))
+      case _ => None
+    }
+  }
+
+
+  /**
+   * Converts notational shorthands that are converted to ordinary timestamps without time zone.
+   *
+   * @param input A string to parse. It can contain trailing or leading whitespaces.
+   * @return Some of microseconds since the epoch if the conversion completed
+   *         successfully otherwise None.
+   */
+  def convertSpecialTimestampNTZ(input: String): Option[LocalDateTime] = {
+    extractSpecialValue(input.trim).flatMap {
+      case "epoch" => Some(LocalDateTime.of(0, 0, 0, 0, 0))
+      case "now" => Some(LocalDateTime.now())
+      case "today" => Some(LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0))
+      case "tomorrow" =>
+        Some(LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0).plusDays(1))
+      case "yesterday" =>
+        Some(LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0).minusDays(1))
       case _ => None
     }
   }
