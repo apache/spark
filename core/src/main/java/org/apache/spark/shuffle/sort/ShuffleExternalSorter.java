@@ -144,7 +144,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.peakMemoryUsedBytes = getMemoryUsage();
     this.diskWriteBufferSize =
         (int) (long) conf.get(package$.MODULE$.SHUFFLE_DISK_WRITE_BUFFER_SIZE());
-    this.checksumEnabled = (boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM());
+    this.checksumEnabled = (boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ENABLED());
     if (this.checksumEnabled) {
       this.partitionChecksums = new Adler32[numPartitions];
       for (int i = 0; i < numPartitions; i ++) {

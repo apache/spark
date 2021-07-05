@@ -143,7 +143,7 @@ private[spark] class ExternalSorter[K, V, C](
   private val forceSpillFiles = new ArrayBuffer[SpilledFile]
   @volatile private var readingIterator: SpillableIterator = null
 
-  private val checksumEnabled = conf.get(config.SHUFFLE_CHECKSUM)
+  private val checksumEnabled = conf.get(config.SHUFFLE_CHECKSUM_ENABLED)
   private val partitionChecksums = if (checksumEnabled) {
     Array.fill[Checksum](numPartitions)(new Adler32())
   } else {

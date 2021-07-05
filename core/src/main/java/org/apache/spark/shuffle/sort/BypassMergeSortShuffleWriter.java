@@ -124,7 +124,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleExecutorComponents = shuffleExecutorComponents;
-    this.checksumEnabled = (boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM());
+    this.checksumEnabled = (boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ENABLED());
     if (this.checksumEnabled) {
       this.partitionChecksums = new Adler32[numPartitions];
       for (int i = 0; i < numPartitions; i ++) {
