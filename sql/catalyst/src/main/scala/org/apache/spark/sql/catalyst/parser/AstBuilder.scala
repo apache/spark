@@ -38,8 +38,8 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, IntervalUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, getZoneId, stringToDate, stringToTimestamp}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -2126,9 +2126,31 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
           specialDate.getOrElse(toLiteral(stringToDate, DateType))
         case "TIMESTAMP" =>
-          val zoneId = getZoneId(conf.sessionLocalTimeZone)
-          val specialTs = convertSpecialTimestamp(value, zoneId).map(Literal(_, TimestampType))
-          specialTs.getOrElse(toLiteral(stringToTimestamp(_, zoneId), TimestampType))
+          def constructTimestampLTZLiteral(value: String): Literal = {
+            val zoneId = getZoneId(conf.sessionLocalTimeZone)
+            val specialTs = convertSpecialTimestamp(value, zoneId).map(Literal(_, TimestampType))
+            specialTs.getOrElse(toLiteral(stringToTimestamp(_, zoneId), TimestampType))
+          }
+
+          SQLConf.get.timestampType match {
+            case TimestampNTZType =>
+              val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
+              specialTs.getOrElse {
+                val containsTimeZonePart =
+                  DateTimeUtils.parseTimestampString(UTF8String.fromString(value))._2.isDefined
+                // If the input string contains time zone part, return a timestamp with local time
+                // zone literal.
+                if (containsTimeZonePart) {
+                  constructTimestampLTZLiteral(value)
+                } else {
+                  toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
+                }
+              }
+
+            case TimestampType =>
+              constructTimestampLTZLiteral(value)
+          }
+
         case "INTERVAL" =>
           val interval = try {
             IntervalUtils.stringToInterval(UTF8String.fromString(value))
