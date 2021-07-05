@@ -373,7 +373,7 @@ class RocksDBSuite extends SparkFunSuite {
               }
             }
           } catch {
-            case e: Exception =>
+            case e: Exception if !e.isInstanceOf[InterruptedException] =>
               val newException = new Exception(s"ThreadId ${this.getId} failed", e)
               exception = newException
               throw e
