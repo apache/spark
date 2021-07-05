@@ -293,7 +293,7 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       checkAnswer(toCsvDF, Row(toCsvExpected))
 
       DataTypeTestUtils.yearMonthIntervalTypes.foreach { fromCsvDtype =>
-        val fromJsonDF = toCsvDF
+        val fromCsvDF = toCsvDF
           .select(
             from_csv(
               $"csv",
@@ -301,9 +301,9 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
               Map.empty[String, String]) as "value")
           .selectExpr("value.a")
         if (toCsvDtype == fromCsvDtype) {
-          checkAnswer(fromJsonDF, Row(fromCsvExpected))
+          checkAnswer(fromCsvDF, Row(fromCsvExpected))
         } else {
-          checkAnswer(fromJsonDF, Row(null))
+          checkAnswer(fromCsvDF, Row(null))
         }
       }
     }
