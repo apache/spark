@@ -274,7 +274,7 @@ object Cast {
 }
 
 abstract class CastToStringBase extends UnaryExpression
-  with TimeZoneAwareExpression with NullIntolerant {
+  with TimeZoneAwareExpression {
 
   protected lazy val dateFormatter = DateFormatter()
   protected lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
@@ -1998,7 +1998,7 @@ case class Cast(
     dataType: DataType,
     timeZoneId: Option[String] = None,
     override val ansiEnabled: Boolean = SQLConf.get.ansiEnabled)
-  extends CastBase {
+  extends CastBase with NullIntolerant {
 
   def this(child: Expression, dataType: DataType, timeZoneId: Option[String]) =
     this(child, dataType, timeZoneId, ansiEnabled = SQLConf.get.ansiEnabled)
@@ -2033,7 +2033,7 @@ case class Cast(
  * session local timezone by an analyzer [[ResolveTimeZone]].
  */
 case class AnsiCast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
-  extends CastBase {
+  extends CastBase with NullIntolerant {
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

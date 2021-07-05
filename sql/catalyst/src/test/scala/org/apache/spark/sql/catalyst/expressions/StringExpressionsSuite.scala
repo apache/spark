@@ -1027,6 +1027,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-35228: Add ToPrettyString for keep consistent between hive/spark string format") {
     Seq(
+      Literal.create(null, StringType) -> "NULL",
       Literal.create("aaa", StringType) -> "aaa",
       Literal.create(true, BooleanType) -> "true",
       Literal.create(Date.valueOf("2020-01-01")) -> "2020-01-01",

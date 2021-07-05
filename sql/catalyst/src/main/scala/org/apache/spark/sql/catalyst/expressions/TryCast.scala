@@ -46,7 +46,7 @@ import org.apache.spark.sql.types.DataType
   since = "3.2.0",
   group = "conversion_funcs")
 case class TryCast(child: Expression, dataType: DataType, timeZoneId: Option[String] = None)
-  extends CastBase {
+  extends CastBase with NullIntolerant {
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
