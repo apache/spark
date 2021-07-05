@@ -1369,7 +1369,7 @@ package object config {
       .createWithDefault(4096)
 
   private[spark] val SHUFFLE_CHECKSUM =
-    ConfigBuilder("spark.shuffle.checksum")
+    ConfigBuilder("spark.shuffle.checksum.enabled")
       .doc("Whether to calculate the checksum of shuffle output. If enabled, Spark will try " +
         "its best to tell if shuffle data corruption is caused by network or disk or others.")
       .version("3.2.0")
