@@ -22,8 +22,10 @@ import org.scalatest.GivenWhenThen
 import org.apache.spark.sql.catalyst.expressions.{DynamicPruningExpression, Expression}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode._
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
+import org.apache.spark.sql.connector.catalog.InMemoryTableCatalog
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive._
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeLike, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StreamingQueryWrapper}
@@ -44,8 +46,13 @@ abstract class DynamicPartitionPruningSuiteBase
 
   import testImplicits._
 
+  protected def initState(): Unit = {}
+  protected def runAnalyzeColumnCommands: Boolean = true
+
   override def beforeAll(): Unit = {
     super.beforeAll()
+
+    initState()
 
     val factData = Seq[(Int, Int, Int, Int)](
       (1000, 1, 1, 10),
@@ -140,9 +147,11 @@ abstract class DynamicPartitionPruningSuiteBase
       .format(tableFormat)
       .saveAsTable("code_stats")
 
-    sql("ANALYZE TABLE fact_stats COMPUTE STATISTICS FOR COLUMNS store_id")
-    sql("ANALYZE TABLE dim_stats COMPUTE STATISTICS FOR COLUMNS store_id")
-    sql("ANALYZE TABLE code_stats COMPUTE STATISTICS FOR COLUMNS store_id")
+    if (runAnalyzeColumnCommands) {
+      sql("ANALYZE TABLE fact_stats COMPUTE STATISTICS FOR COLUMNS store_id")
+      sql("ANALYZE TABLE dim_stats COMPUTE STATISTICS FOR COLUMNS store_id")
+      sql("ANALYZE TABLE code_stats COMPUTE STATISTICS FOR COLUMNS store_id")
+    }
   }
 
   override def afterAll(): Unit = {
@@ -244,6 +253,9 @@ abstract class DynamicPartitionPruningSuiteBase
       case s: FileSourceScanExec => s.partitionFilters.collect {
         case d: DynamicPruningExpression => d.child
       }
+      case s: BatchScanExec => s.runtimeFilters.collect {
+        case d: DynamicPruningExpression => d.child
+      }
       case _ => Nil
     }
   }
@@ -310,86 +322,6 @@ abstract class DynamicPartitionPruningSuiteBase
           """.stripMargin)
 
         checkPartitionPruningPredicate(df, false, false)
-      }
-    }
-  }
-
-  /**
-   * Check the static scan metrics with and without DPP
-   */
-  test("static scan metrics",
-    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
-    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
-      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
-      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
-      withTable("fact", "dim") {
-        val numPartitions = 10
-
-        spark.range(10)
-          .map { x => Tuple3(x, x + 1, 0) }
-          .toDF("did", "d1", "d2")
-          .write
-          .format(tableFormat)
-          .mode("overwrite")
-          .saveAsTable("dim")
-
-        spark.range(100)
-          .map { x => Tuple2(x, x % numPartitions) }
-          .toDF("f1", "fid")
-          .write.partitionBy("fid")
-          .format(tableFormat)
-          .mode("overwrite")
-          .saveAsTable("fact")
-
-        def getFactScan(plan: SparkPlan): SparkPlan = {
-          val scanOption =
-            find(plan) {
-              case s: FileSourceScanExec =>
-                s.output.exists(_.find(_.argString(maxFields = 100).contains("fid")).isDefined)
-              case _ => false
-            }
-          assert(scanOption.isDefined)
-          scanOption.get
-        }
-
-        // No dynamic partition pruning, so no static metrics
-        // All files in fact table are scanned
-        val df1 = sql("SELECT sum(f1) FROM fact")
-        df1.collect()
-        val scan1 = getFactScan(df1.queryExecution.executedPlan)
-        assert(!scan1.metrics.contains("staticFilesNum"))
-        assert(!scan1.metrics.contains("staticFilesSize"))
-        val allFilesNum = scan1.metrics("numFiles").value
-        val allFilesSize = scan1.metrics("filesSize").value
-        assert(scan1.metrics("numPartitions").value === numPartitions)
-        assert(scan1.metrics("pruningTime").value === -1)
-
-        // No dynamic partition pruning, so no static metrics
-        // Only files from fid = 5 partition are scanned
-        val df2 = sql("SELECT sum(f1) FROM fact WHERE fid = 5")
-        df2.collect()
-        val scan2 = getFactScan(df2.queryExecution.executedPlan)
-        assert(!scan2.metrics.contains("staticFilesNum"))
-        assert(!scan2.metrics.contains("staticFilesSize"))
-        val partFilesNum = scan2.metrics("numFiles").value
-        val partFilesSize = scan2.metrics("filesSize").value
-        assert(0 < partFilesNum && partFilesNum < allFilesNum)
-        assert(0 < partFilesSize && partFilesSize < allFilesSize)
-        assert(scan2.metrics("numPartitions").value === 1)
-        assert(scan2.metrics("pruningTime").value === -1)
-
-        // Dynamic partition pruning is used
-        // Static metrics are as-if reading the whole fact table
-        // "Regular" metrics are as-if reading only the "fid = 5" partition
-        val df3 = sql("SELECT sum(f1) FROM fact, dim WHERE fid = did AND d1 = 6")
-        df3.collect()
-        val scan3 = getFactScan(df3.queryExecution.executedPlan)
-        assert(scan3.metrics("staticFilesNum").value == allFilesNum)
-        assert(scan3.metrics("staticFilesSize").value == allFilesSize)
-        assert(scan3.metrics("numFiles").value == partFilesNum)
-        assert(scan3.metrics("filesSize").value == partFilesSize)
-        assert(scan3.metrics("numPartitions").value === 1)
-        assert(scan3.metrics("pruningTime").value !== -1)
       }
     }
   }
@@ -1567,8 +1499,111 @@ abstract class DynamicPartitionPruningSuiteBase
   }
 }
 
-class DynamicPartitionPruningSuiteAEOff extends DynamicPartitionPruningSuiteBase
+abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningSuiteBase {
+
+  import testImplicits._
+
+  /**
+   * Check the static scan metrics with and without DPP
+   */
+  test("static scan metrics",
+    DisableAdaptiveExecution("DPP in AQE must reuse broadcast")) {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+      SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+      SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      withTable("fact", "dim") {
+        val numPartitions = 10
+
+        spark.range(10)
+          .map { x => Tuple3(x, x + 1, 0) }
+          .toDF("did", "d1", "d2")
+          .write
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("dim")
+
+        spark.range(100)
+          .map { x => Tuple2(x, x % numPartitions) }
+          .toDF("f1", "fid")
+          .write.partitionBy("fid")
+          .format(tableFormat)
+          .mode("overwrite")
+          .saveAsTable("fact")
+
+        def getFactScan(plan: SparkPlan): SparkPlan = {
+          val scanOption =
+            find(plan) {
+              case s: FileSourceScanExec =>
+                s.output.exists(_.find(_.argString(maxFields = 100).contains("fid")).isDefined)
+              case s: BatchScanExec =>
+                // we use f1 col for v2 tables due to schema pruning
+                s.output.exists(_.find(_.argString(maxFields = 100).contains("f1")).isDefined)
+              case _ => false
+            }
+          assert(scanOption.isDefined)
+          scanOption.get
+        }
+
+        // No dynamic partition pruning, so no static metrics
+        // All files in fact table are scanned
+        val df1 = sql("SELECT sum(f1) FROM fact")
+        df1.collect()
+        val scan1 = getFactScan(df1.queryExecution.executedPlan)
+        assert(!scan1.metrics.contains("staticFilesNum"))
+        assert(!scan1.metrics.contains("staticFilesSize"))
+        val allFilesNum = scan1.metrics("numFiles").value
+        val allFilesSize = scan1.metrics("filesSize").value
+        assert(scan1.metrics("numPartitions").value === numPartitions)
+        assert(scan1.metrics("pruningTime").value === -1)
+
+        // No dynamic partition pruning, so no static metrics
+        // Only files from fid = 5 partition are scanned
+        val df2 = sql("SELECT sum(f1) FROM fact WHERE fid = 5")
+        df2.collect()
+        val scan2 = getFactScan(df2.queryExecution.executedPlan)
+        assert(!scan2.metrics.contains("staticFilesNum"))
+        assert(!scan2.metrics.contains("staticFilesSize"))
+        val partFilesNum = scan2.metrics("numFiles").value
+        val partFilesSize = scan2.metrics("filesSize").value
+        assert(0 < partFilesNum && partFilesNum < allFilesNum)
+        assert(0 < partFilesSize && partFilesSize < allFilesSize)
+        assert(scan2.metrics("numPartitions").value === 1)
+        assert(scan2.metrics("pruningTime").value === -1)
+
+        // Dynamic partition pruning is used
+        // Static metrics are as-if reading the whole fact table
+        // "Regular" metrics are as-if reading only the "fid = 5" partition
+        val df3 = sql("SELECT sum(f1) FROM fact, dim WHERE fid = did AND d1 = 6")
+        df3.collect()
+        val scan3 = getFactScan(df3.queryExecution.executedPlan)
+        assert(scan3.metrics("staticFilesNum").value == allFilesNum)
+        assert(scan3.metrics("staticFilesSize").value == allFilesSize)
+        assert(scan3.metrics("numFiles").value == partFilesNum)
+        assert(scan3.metrics("filesSize").value == partFilesSize)
+        assert(scan3.metrics("numPartitions").value === 1)
+        assert(scan3.metrics("pruningTime").value !== -1)
+      }
+    }
+  }
+}
+
+class DynamicPartitionPruningV1SuiteAEOff extends DynamicPartitionPruningV1Suite
   with DisableAdaptiveExecutionSuite
 
-class DynamicPartitionPruningSuiteAEOn extends DynamicPartitionPruningSuiteBase
+class DynamicPartitionPruningV1SuiteAEOn extends DynamicPartitionPruningV1Suite
+  with EnableAdaptiveExecutionSuite
+
+abstract class DynamicPartitionPruningV2Suite extends DynamicPartitionPruningSuiteBase {
+  override protected def runAnalyzeColumnCommands: Boolean = false
+
+  override protected def initState(): Unit = {
+    spark.conf.set("spark.sql.catalog.testcat", classOf[InMemoryTableCatalog].getName)
+    spark.conf.set("spark.sql.defaultCatalog", "testcat")
+  }
+}
+
+class DynamicPartitionPruningV2SuiteAEOff extends DynamicPartitionPruningV2Suite
+  with DisableAdaptiveExecutionSuite
+
+class DynamicPartitionPruningV2SuiteAEOn extends DynamicPartitionPruningV2Suite
   with EnableAdaptiveExecutionSuite

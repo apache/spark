@@ -675,7 +675,15 @@ case class RepairTableCommand(
     // This is always the case for Hive format tables, but is not true for Datasource tables created
     // before Spark 2.1 unless they are converted via `msck repair table`.
     spark.sessionState.catalog.alterTable(table.copy(tracksPartitionsInCatalog = true))
-    spark.catalog.refreshTable(tableIdentWithDB)
+    try {
+      spark.catalog.refreshTable(tableIdentWithDB)
+    } catch {
+      case NonFatal(e) =>
+        logError(s"Cannot refresh the table '$tableIdentWithDB'. A query of the table " +
+          "might return wrong result if the table was cached. To avoid such issue, you should " +
+          "uncache the table manually via the UNCACHE TABLE command after table recovering will " +
+          "complete fully.", e)
+    }
     logInfo(s"Recovered all partitions: added ($addedAmount), dropped ($droppedAmount).")
     Seq.empty[Row]
   }

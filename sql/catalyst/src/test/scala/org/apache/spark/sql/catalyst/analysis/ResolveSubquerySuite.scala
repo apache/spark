@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField, InSubquery, LateralSubquery, ListQuery, OuterReference}
+import org.apache.spark.sql.catalyst.expressions.{CreateArray, Expression, GetStructField, InSubquery, LateralSubquery, ListQuery, OuterReference}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -176,5 +177,67 @@ class ResolveSubquerySuite extends AnalysisTest {
     val plan = lateralJoin(t1, t0.select(('a + 'b).as("c")),
       condition = Some(sum('a) === sum('c)))
     assertAnalysisError(plan, Seq("Invalid expressions: [sum(a), sum(c)]"))
+  }
+
+  test("SPARK-35618: lateral join with star expansion") {
+    val outerA = OuterReference(a.withQualifier(Seq("t1"))).as(a.name)
+    val outerB = OuterReference(b.withQualifier(Seq("t1"))).as(b.name)
+    // SELECT * FROM t1, LATERAL (SELECT *)
+    checkAnalysis(
+      lateralJoin(t1.as("t1"), t0.select(star())),
+      LateralJoin(t1, LateralSubquery(Project(Nil, t0)), Inner, None)
+    )
+    // SELECT * FROM t1, LATERAL (SELECT t1.*)
+    checkAnalysis(
+      lateralJoin(t1.as("t1"), t0.select(star("t1"))),
+      LateralJoin(t1, LateralSubquery(Project(Seq(outerA, outerB), t0), Seq(a, b)), Inner, None)
+    )
+    // SELECT * FROM t1, LATERAL (SELECT * FROM t2)
+    checkAnalysis(
+      lateralJoin(t1.as("t1"), t2.select(star())),
+      LateralJoin(t1, LateralSubquery(Project(Seq(b, c), t2)), Inner, None)
+    )
+    // SELECT * FROM t1, LATERAL (SELECT t1.*, t2.* FROM t2)
+    checkAnalysis(
+      lateralJoin(t1.as("t1"), t2.as("t2").select(star("t1"), star("t2"))),
+      LateralJoin(t1,
+        LateralSubquery(Project(Seq(outerA, outerB, b, c), t2.as("t2")), Seq(a, b)), Inner, None)
+    )
+    // SELECT * FROM t1, LATERAL (SELECT t2.*)
+    assertAnalysisError(
+      lateralJoin(t1.as("t1"), t0.select(star("t2"))),
+      Seq("cannot resolve 't2.*' given input columns ''")
+    )
+    // Check case sensitivities.
+    // SELECT * FROM t1, LATERAL (SELECT T1.*)
+    val plan = lateralJoin(t1.as("t1"), t0.select(star("T1")))
+    assertAnalysisError(plan, "cannot resolve 'T1.*' given input columns ''" :: Nil)
+    assertAnalysisSuccess(plan, caseSensitive = false)
+  }
+
+  test("SPARK-35618: lateral join with star expansion in functions") {
+    val outerA = OuterReference(a.withQualifier(Seq("t1")))
+    val outerB = OuterReference(b.withQualifier(Seq("t1")))
+    val array = CreateArray(Seq(star("t1")))
+    val newArray = CreateArray(Seq(outerA, outerB))
+    checkAnalysis(
+      lateralJoin(t1.as("t1"), t0.select(array)),
+      LateralJoin(t1,
+        LateralSubquery(t0.select(newArray.as(newArray.sql)), Seq(a, b)), Inner, None)
+    )
+    assertAnalysisError(
+      lateralJoin(t1.as("t1"), t0.select(Count(star("t1")))),
+      Seq("Invalid usage of '*' in expression 'count'")
+    )
+  }
+
+  test("SPARK-35618: lateral join with struct type star expansion") {
+    // SELECT * FROM t4, LATERAL (SELECT x.*)
+    checkAnalysis(
+      lateralJoin(t4, t0.select(star("x"))),
+      LateralJoin(t4, LateralSubquery(
+        Project(Seq(GetStructField(OuterReference(x), 0).as(a.name)), t0), Seq(x)),
+        Inner, None)
+    )
   }
 }

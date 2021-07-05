@@ -89,14 +89,6 @@ private[sql] object TypeCollection {
     DayTimeIntervalType,
     YearMonthIntervalType)
 
-  /**
-   * All the supported timestamp data types
-   */
-  val AllTimestampTypes = TypeCollection(
-    TimestampType,
-    TimestampWithoutTZType
-  )
-
   def apply(types: AbstractDataType*): TypeCollection = new TypeCollection(types)
 
   def unapply(typ: AbstractDataType): Option[Seq[AbstractDataType]] = typ match {
@@ -221,10 +213,10 @@ private[sql] abstract class FractionalType extends NumericType {
 }
 
 private[sql] object AnyTimestampType extends AbstractDataType with Serializable {
-  override private[sql] def defaultConcreteType: DataType = TimestampWithoutTZType
+  override private[sql] def defaultConcreteType: DataType = TimestampType
 
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[TimestampType] || other.isInstanceOf[TimestampWithoutTZType]
+    other.isInstanceOf[TimestampType] || other.isInstanceOf[TimestampNTZType]
 
   override private[sql] def simpleString = "(timestamp or timestamp without time zone)"
 

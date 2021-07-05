@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableExceptio
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Bucket, Days, Hours, Literal, Months, Years}
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, CreateTableAsSelectStatement, LogicalPlan, OverwriteByExpression, OverwritePartitionsDynamic, ReplaceTableAsSelectStatement}
 import org.apache.spark.sql.connector.expressions.{LogicalExpressions, NamedReference, Transform}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.IntegerType
 
 /**
@@ -98,7 +99,7 @@ final class DataFrameWriterV2[T] private[sql](table: String, ds: Dataset[T])
       case attr: Attribute =>
         LogicalExpressions.identity(ref(attr.name))
       case expr =>
-        throw new AnalysisException(s"Invalid partition transformation: ${expr.sql}")
+        throw QueryCompilationErrors.invalidPartitionTransformationError(expr)
     }
 
     this.partitioning = Some(asTransforms)

@@ -235,7 +235,7 @@ class DataFrameSuite extends QueryTest
     }
   }
 
-  test("SPARK-28067: Aggregate sum should not return wrong results for decimal overflow") {
+  def checkAggResultsForDecimalOverflow(aggFn: Column => Column): Unit = {
     Seq("true", "false").foreach { wholeStageEnabled =>
       withSQLConf((SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, wholeStageEnabled)) {
         Seq(true, false).foreach { ansiEnabled =>
@@ -256,22 +256,22 @@ class DataFrameSuite extends QueryTest
               (BigDecimal("10000000000000000000"), 2)).toDF("decNum", "intNum")
             val df = df0.union(df1)
             val df2 = df.withColumnRenamed("decNum", "decNum2").
-              join(df, "intNum").agg(sum("decNum"))
+              join(df, "intNum").agg(aggFn($"decNum"))
 
             val expectedAnswer = Row(null)
             assertDecimalSumOverflow(df2, ansiEnabled, expectedAnswer)
 
             val decStr = "1" + "0" * 19
             val d1 = spark.range(0, 12, 1, 1)
-            val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(sum($"d"))
+            val d2 = d1.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
             assertDecimalSumOverflow(d2, ansiEnabled, expectedAnswer)
 
             val d3 = spark.range(0, 1, 1, 1).union(spark.range(0, 11, 1, 1))
-            val d4 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(sum($"d"))
+            val d4 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d")).agg(aggFn($"d"))
             assertDecimalSumOverflow(d4, ansiEnabled, expectedAnswer)
 
             val d5 = d3.select(expr(s"cast('$decStr' as decimal (38, 18)) as d"),
-              lit(1).as("key")).groupBy("key").agg(sum($"d").alias("sumd")).select($"sumd")
+              lit(1).as("key")).groupBy("key").agg(aggFn($"d").alias("aggd")).select($"aggd")
             assertDecimalSumOverflow(d5, ansiEnabled, expectedAnswer)
 
             val nullsDf = spark.range(1, 4, 1).select(expr(s"cast(null as decimal(38,18)) as d"))
@@ -279,7 +279,7 @@ class DataFrameSuite extends QueryTest
             val largeDecimals = Seq(BigDecimal("1"* 20 + ".123"), BigDecimal("9"* 20 + ".123")).
               toDF("d")
             assertDecimalSumOverflow(
-              nullsDf.union(largeDecimals).agg(sum($"d")), ansiEnabled, expectedAnswer)
+              nullsDf.union(largeDecimals).agg(aggFn($"d")), ansiEnabled, expectedAnswer)
 
             val df3 = Seq(
               (BigDecimal("10000000000000000000"), 1),
@@ -304,6 +304,14 @@ class DataFrameSuite extends QueryTest
         }
       }
     }
+  }
+
+  test("SPARK-28067: Aggregate sum should not return wrong results for decimal overflow") {
+    checkAggResultsForDecimalOverflow(c => sum(c))
+  }
+
+  test("SPARK-35955: Aggregate avg should not return wrong results for decimal overflow") {
+    checkAggResultsForDecimalOverflow(c => avg(c))
   }
 
   test("Star Expansion - ds.explode should fail with a meaningful message if it takes a star") {
@@ -1813,7 +1821,7 @@ class DataFrameSuite extends QueryTest
       (1 to 100).map(i => TestData2(i % 10, i))).toDF()
 
     // Distribute and order by.
-    val df4 = data.repartition($"a").sortWithinPartitions($"b".desc)
+    val df4 = data.repartition(5, $"a").sortWithinPartitions($"b".desc)
     // Walk each partition and verify that it is sorted descending and does not contain all
     // the values.
     df4.rdd.foreachPartition { p =>

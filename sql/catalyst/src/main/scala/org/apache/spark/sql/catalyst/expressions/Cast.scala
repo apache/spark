@@ -68,15 +68,15 @@ object Cast {
     case (BooleanType, TimestampType) => true
     case (DateType, TimestampType) => true
     case (_: NumericType, TimestampType) => true
-    case (TimestampWithoutTZType, TimestampType) => true
+    case (TimestampNTZType, TimestampType) => true
 
-    case (StringType, TimestampWithoutTZType) => true
-    case (DateType, TimestampWithoutTZType) => true
-    case (TimestampType, TimestampWithoutTZType) => true
+    case (StringType, TimestampNTZType) => true
+    case (DateType, TimestampNTZType) => true
+    case (TimestampType, TimestampNTZType) => true
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
-    case (TimestampWithoutTZType, DateType) => true
+    case (TimestampNTZType, DateType) => true
 
     case (StringType, CalendarIntervalType) => true
     case (StringType, _: DayTimeIntervalType) => true
@@ -318,7 +318,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private lazy val dateFormatter = DateFormatter()
   private lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
-  private lazy val timestampWithoutTZFormatter =
+  private lazy val timestampNTZFormatter =
     TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
 
   private val legacyCastToStr = SQLConf.get.getConf(SQLConf.LEGACY_COMPLEX_TYPES_TO_STRING)
@@ -336,8 +336,8 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case DateType => buildCast[Int](_, d => UTF8String.fromString(dateFormatter.format(d)))
     case TimestampType => buildCast[Long](_,
       t => UTF8String.fromString(timestampFormatter.format(t)))
-    case TimestampWithoutTZType => buildCast[Long](_,
-      t => UTF8String.fromString(timestampWithoutTZFormatter.format(t)))
+    case TimestampNTZType => buildCast[Long](_,
+      t => UTF8String.fromString(timestampNTZFormatter.format(t)))
     case ArrayType(et, _) =>
       buildCast[ArrayData](_, array => {
         val builder = new UTF8StringBuilder
@@ -506,7 +506,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[Byte](_, b => longToTimestamp(b.toLong))
     case DateType =>
       buildCast[Int](_, d => daysToMicros(d, zoneId))
-    case TimestampWithoutTZType =>
+    case TimestampNTZType =>
       buildCast[Long](_, ts => convertTz(ts, zoneId, ZoneOffset.UTC))
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
@@ -519,7 +519,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       buildCast[Float](_, f => doubleToTimestamp(f.toDouble))
   }
 
-  private[this] def castToTimestampWithoutTZ(from: DataType): Any => Any = from match {
+  private[this] def castToTimestampNTZ(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[UTF8String](_, utfs => {
         if (ansiEnabled) {
@@ -564,7 +564,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
       buildCast[Long](_, t => microsToDays(t, zoneId))
-    case TimestampWithoutTZType =>
+    case TimestampNTZType =>
       buildCast[Long](_, t => microsToDays(t, ZoneOffset.UTC))
   }
 
@@ -895,7 +895,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         case DateType => castToDate(from)
         case decimal: DecimalType => castToDecimal(from, decimal)
         case TimestampType => castToTimestamp(from)
-        case TimestampWithoutTZType => castToTimestampWithoutTZ(from)
+        case TimestampNTZType => castToTimestampNTZ(from)
         case CalendarIntervalType => castToInterval(from)
         case it: DayTimeIntervalType => castToDayTimeInterval(from, it)
         case it: YearMonthIntervalType => castToYearMonthInterval(from, it)
@@ -956,7 +956,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case DateType => castToDateCode(from, ctx)
     case decimal: DecimalType => castToDecimalCode(from, decimal, ctx)
     case TimestampType => castToTimestampCode(from, ctx)
-    case TimestampWithoutTZType => castToTimestampWithoutTZCode(from, ctx)
+    case TimestampNTZType => castToTimestampNTZCode(from, ctx)
     case CalendarIntervalType => castToIntervalCode(from)
     case it: DayTimeIntervalType => castToDayTimeIntervalCode(from, it)
     case it: YearMonthIntervalType => castToYearMonthIntervalCode(from, it)
@@ -1150,10 +1150,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           ctx.addReferenceObj("timestampFormatter", timestampFormatter),
           timestampFormatter.getClass)
         (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
-      case TimestampWithoutTZType =>
+      case TimestampNTZType =>
         val tf = JavaCode.global(
-          ctx.addReferenceObj("timestampWithoutTZFormatter", timestampWithoutTZFormatter),
-          timestampWithoutTZFormatter.getClass)
+          ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
+          timestampNTZFormatter.getClass)
         (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
       case CalendarIntervalType =>
         (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($c.toString());"""
@@ -1259,7 +1259,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         (c, evPrim, evNull) =>
           code"""$evPrim =
             org.apache.spark.sql.catalyst.util.DateTimeUtils.microsToDays($c, $zid);"""
-      case TimestampWithoutTZType =>
+      case TimestampNTZType =>
         (c, evPrim, evNull) =>
           code"$evPrim = $dateTimeUtilsCls.microsToDays($c, java.time.ZoneOffset.UTC);"
       case _ =>
@@ -1397,7 +1397,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
       (c, evPrim, evNull) =>
         code"""$evPrim =
           org.apache.spark.sql.catalyst.util.DateTimeUtils.daysToMicros($c, $zid);"""
-    case TimestampWithoutTZType =>
+    case TimestampNTZType =>
       val zoneIdClass = classOf[ZoneId]
       val zid = JavaCode.global(
         ctx.addReferenceObj("zoneId", zoneId, zoneIdClass.getName),
@@ -1426,7 +1426,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         """
   }
 
-  private[this] def castToTimestampWithoutTZCode(
+  private[this] def castToTimestampNTZCode(
       from: DataType,
       ctx: CodegenContext): CastFunction = from match {
     case StringType =>
@@ -2068,11 +2068,11 @@ object AnsiCast {
 
     case (StringType, TimestampType) => true
     case (DateType, TimestampType) => true
-    case (TimestampWithoutTZType, TimestampType) => true
+    case (TimestampNTZType, TimestampType) => true
 
-    case (StringType, TimestampWithoutTZType) => true
-    case (DateType, TimestampWithoutTZType) => true
-    case (TimestampType, TimestampWithoutTZType) => true
+    case (StringType, TimestampNTZType) => true
+    case (DateType, TimestampNTZType) => true
+    case (TimestampType, TimestampNTZType) => true
 
     case (StringType, _: CalendarIntervalType) => true
     case (StringType, _: DayTimeIntervalType) => true
@@ -2083,7 +2083,7 @@ object AnsiCast {
 
     case (StringType, DateType) => true
     case (TimestampType, DateType) => true
-    case (TimestampWithoutTZType, DateType) => true
+    case (TimestampNTZType, DateType) => true
 
     case (_: NumericType, _: NumericType) => true
     case (StringType, _: NumericType) => true

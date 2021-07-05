@@ -89,7 +89,7 @@ object SerializerBuildHelper {
   def createSerializerForLocalDateTime(inputObject: Expression): Expression = {
     StaticInvoke(
       DateTimeUtils.getClass,
-      TimestampWithoutTZType,
+      TimestampNTZType,
       "localDateTimeToMicros",
       inputObject :: Nil,
       returnNullable = false)

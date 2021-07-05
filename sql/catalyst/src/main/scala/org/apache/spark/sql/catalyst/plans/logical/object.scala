@@ -440,7 +440,7 @@ object FlatMapGroupsWithState {
       isMapGroupsWithState: Boolean,
       timeout: GroupStateTimeout,
       child: LogicalPlan): LogicalPlan = {
-    val encoder = encoderFor[S]
+    val stateEncoder = encoderFor[S]
 
     val mapped = new FlatMapGroupsWithState(
       func,
@@ -449,10 +449,49 @@ object FlatMapGroupsWithState {
       groupingAttributes,
       dataAttributes,
       CatalystSerde.generateObjAttr[U],
-      encoder.asInstanceOf[ExpressionEncoder[Any]],
+      stateEncoder.asInstanceOf[ExpressionEncoder[Any]],
       outputMode,
       isMapGroupsWithState,
       timeout,
+      hasInitialState = false,
+      groupingAttributes,
+      dataAttributes,
+      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
+      LocalRelation(stateEncoder.schema.toAttributes), // empty data set
+      child
+    )
+    CatalystSerde.serialize[U](mapped)
+  }
+
+  def apply[K: Encoder, V: Encoder, S: Encoder, U: Encoder](
+      func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      outputMode: OutputMode,
+      isMapGroupsWithState: Boolean,
+      timeout: GroupStateTimeout,
+      child: LogicalPlan,
+      initialStateGroupAttrs: Seq[Attribute],
+      initialStateDataAttrs: Seq[Attribute],
+      initialState: LogicalPlan): LogicalPlan = {
+    val stateEncoder = encoderFor[S]
+
+    val mapped = new FlatMapGroupsWithState(
+      func,
+      UnresolvedDeserializer(encoderFor[K].deserializer, groupingAttributes),
+      UnresolvedDeserializer(encoderFor[V].deserializer, dataAttributes),
+      groupingAttributes,
+      dataAttributes,
+      CatalystSerde.generateObjAttr[U],
+      stateEncoder.asInstanceOf[ExpressionEncoder[Any]],
+      outputMode,
+      isMapGroupsWithState,
+      timeout,
+      hasInitialState = true,
+      initialStateGroupAttrs,
+      initialStateDataAttrs,
+      UnresolvedDeserializer(encoderFor[S].deserializer, initialStateDataAttrs),
+      initialState,
       child)
     CatalystSerde.serialize[U](mapped)
   }
@@ -474,6 +513,12 @@ object FlatMapGroupsWithState {
  * @param outputMode the output mode of `func`
  * @param isMapGroupsWithState whether it is created by the `mapGroupsWithState` method
  * @param timeout used to timeout groups that have not received data in a while
+ * @param hasInitialState Indicates whether initial state needs to be applied or not.
+ * @param initialStateGroupAttrs grouping attributes for the initial state
+ * @param initialStateDataAttrs used to read the initial state
+ * @param initialStateDeserializer used to extract the initial state objects.
+ * @param initialState user defined initial state that is applied in the first batch.
+ * @param child logical plan of the underlying data
  */
 case class FlatMapGroupsWithState(
     func: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
@@ -486,14 +531,24 @@ case class FlatMapGroupsWithState(
     outputMode: OutputMode,
     isMapGroupsWithState: Boolean = false,
     timeout: GroupStateTimeout,
-    child: LogicalPlan) extends UnaryNode with ObjectProducer {
+    hasInitialState: Boolean = false,
+    initialStateGroupAttrs: Seq[Attribute],
+    initialStateDataAttrs: Seq[Attribute],
+    initialStateDeserializer: Expression,
+    initialState: LogicalPlan,
+    child: LogicalPlan) extends BinaryNode with ObjectProducer {
 
   if (isMapGroupsWithState) {
     assert(outputMode == OutputMode.Update)
   }
 
-  override protected def withNewChildInternal(newChild: LogicalPlan): FlatMapGroupsWithState =
-    copy(child = newChild)
+  override def left: LogicalPlan = child
+
+  override def right: LogicalPlan = initialState
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): FlatMapGroupsWithState =
+    copy(child = newLeft, initialState = newRight)
 }
 
 /** Factory for constructing new `FlatMapGroupsInR` nodes. */

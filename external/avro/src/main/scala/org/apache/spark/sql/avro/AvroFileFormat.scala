@@ -138,6 +138,7 @@ private[sql] class AvroFileFormat extends FileFormat
           override val deserializer = new AvroDeserializer(
             userProvidedSchema.getOrElse(reader.getSchema),
             requiredSchema,
+            parsedOptions.positionalFieldMatching,
             datetimeRebaseMode,
             avroFilters)
           override val stopPosition = file.start + file.length
