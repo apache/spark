@@ -38,7 +38,7 @@ public class ExecutorShuffleInfo implements Encodable {
   /**
    * Shuffle manager (SortShuffleManager) that the executor is using.
    * If this string contains semicolon, it will also include the meta information
-   * for push based shuffle in JSON format. Example of the string with semiColon would be:
+   * for push based shuffle in JSON format. Example of the string with semicolon would be:
    * SortShuffleManager:{"mergeDir": "mergeDirectory_1", "attemptId": 1}
    */
   public final String shuffleManager;

@@ -2232,7 +2232,7 @@ package object config {
       .doc("The application attempt Id assigned from Hadoop YARN. " +
         "When the application runs in cluster mode on YARN, there can be " +
         "multiple attempts before failing the application")
-      .version("1.3.0")
+      .version("3.2.0")
       .stringConf
       .createOptional
 }

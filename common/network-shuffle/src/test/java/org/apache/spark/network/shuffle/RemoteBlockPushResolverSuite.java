@@ -487,7 +487,7 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test(expected = NullPointerException.class)
-  public void testUpdateLocalDirsTwiceWithTwoAttempts() throws IOException {
+  public void testExecutorRegistrationFromTwoAppAttempts() throws IOException {
     String testApp = "updateLocalDirsTwiceWithTwoAttempts";
     Path[] attempt1LocalDirs = createLocalDirs(1);
     registerExecutor(testApp,

@@ -120,9 +120,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   }
 
   /**
-   * Given the appShuffleId and reduceId that uniquely identifies a given shuffle partition of an
-   * application, retrieves the associated metadata. If not present and the corresponding merged
-   * shuffle does not exist, initializes the metadata.
+   * Given the appShuffleInfo, shuffleId and reduceId that uniquely identifies a given shuffle
+   * partition of an application, retrieves the associated metadata. If not present and the
+   * corresponding merged shuffle does not exist, initializes the metadata.
    */
   private AppShufflePartitionInfo getOrCreateAppShufflePartitionInfo(
       AppShuffleInfo appShuffleInfo,
@@ -134,8 +134,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     Map<Integer, AppShufflePartitionInfo> shufflePartitions =
       partitions.compute(shuffleId, (id, map) -> {
         if (map == null) {
-          // If this partition is already finalized then the partitions map will not contain
-          // the appShuffleId but the data file would exist. In that case the block is considered late.
+          // If this partition is already finalized then the partitions map will not contain the
+          // shuffleId but the data file would exist. In that case the block is considered late.
           if (dataFile.exists()) {
             return null;
           }
@@ -252,7 +252,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     AppShuffleInfo appShuffleInfo = appsShuffleInfo.remove(appId);
     if (null != appShuffleInfo) {
       mergedShuffleCleanerExecutor.execute(
-        () -> cleanupMergedShuffle(appShuffleInfo, cleanupLocalDirs));
+        () -> closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs));
     }
   }
 
@@ -262,7 +262,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * If cleanupLocalDirs is true, the merged shuffle files will also be deleted.
    * The cleanup will be executed in a separate thread.
    */
-  private void cleanupMergedShuffle(
+  private void closeAndDeletePartitionFilesIfNeeded(
       AppShuffleInfo appShuffleInfo,
       boolean cleanupLocalDirs) {
     for (Map<Integer, AppShufflePartitionInfo> partitionMap : appShuffleInfo.partitions.values()) {
@@ -296,25 +296,20 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
   }
 
-  @VisibleForTesting
-  AppShuffleInfo getAppShuffleInfo(String appId) {
-    return appsShuffleInfo.get(appId);
-  }
-
   @Override
   public StreamCallbackWithID receiveBlockDataAsStream(PushBlockStream msg) {
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(msg.appId);
     final String streamId = String.format("%s_%d_%d_%d",
       OneForOneBlockPusher.SHUFFLE_PUSH_BLOCK_PREFIX, msg.shuffleId, msg.mapIndex,
       msg.reduceId);
-    if (appShuffleInfo.attemptId != msg.attemptId) {
+    if (appShuffleInfo.attemptId != msg.appAttemptId) {
       // If this Block belongs to a former application attempt, it is considered late,
       // as only the blocks from the current application attempt will be merged
       // TODO: [SPARK-35548] Client should be updated to handle this error.
       throw new IllegalArgumentException(
         String.format("The attempt id %s in this PushBlockStream message does not match "
           + "with the current attempt id %s stored in shuffle service for application %s",
-          msg.attemptId, appShuffleInfo.attemptId, msg.appId));
+          msg.appAttemptId, appShuffleInfo.attemptId, msg.appId));
     }
     // Retrieve merged shuffle file metadata
     AppShufflePartitionInfo partitionInfoBeforeCheck =
@@ -400,16 +395,16 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public MergeStatuses finalizeShuffleMerge(FinalizeShuffleMerge msg) throws IOException {
     logger.info("Finalizing shuffle {} from Application {}_{}.",
-      msg.shuffleId, msg.appId, msg.attemptId);
+      msg.shuffleId, msg.appId, msg.appAttemptId);
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(msg.appId);
-    if (appShuffleInfo.attemptId != msg.attemptId) {
+    if (appShuffleInfo.attemptId != msg.appAttemptId) {
       // If this Block belongs to a former application attempt, it is considered late,
       // as only the blocks from the current application attempt will be merged
       // TODO: [SPARK-35548] Client should be updated to handle this error.
       throw new IllegalArgumentException(
         String.format("The attempt id %s in this FinalizeShuffleMerge message does not match "
           + "with the current attempt id %s stored in shuffle service for application %s",
-          msg.attemptId, appShuffleInfo.attemptId, msg.appId));
+          msg.appAttemptId, appShuffleInfo.attemptId, msg.appId));
     }
     Map<Integer, AppShufflePartitionInfo> shufflePartitions =
       appShuffleInfo.partitions.remove(msg.shuffleId);
@@ -431,7 +426,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             sizes.add(partition.getLastChunkOffset());
           } catch (IOException ioe) {
             logger.warn("Exception while finalizing shuffle partition {}_{} {} {}", msg.appId,
-              msg.attemptId, msg.shuffleId, partition.reduceId, ioe);
+              msg.appAttemptId, msg.shuffleId, partition.reduceId, ioe);
           } finally {
             partition.closeAllFiles();
           }
@@ -442,7 +437,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         Longs.toArray(sizes));
     }
     logger.info("Finalized shuffle {} from Application {}_{}.",
-      msg.shuffleId, msg.appId, msg.attemptId);
+      msg.shuffleId, msg.appId, msg.appAttemptId);
     return mergeStatuses;
   }
 
@@ -463,7 +458,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           = new TypeReference<HashMap<String, String>>(){};
         Map<String, String> metaMap = mapper.readValue(mergeDirInfo, typeRef);
         String mergeDir = metaMap.get(MERGE_DIR_KEY);
-        int attemptId = Integer.getInteger(
+        int attemptId = Integer.valueOf(
           metaMap.getOrDefault(ATTEMPT_ID_KEY, String.valueOf(UNDEFINED_ATTEMPT_ID)));
         if (mergeDir == null) {
           throw new IllegalArgumentException(
@@ -503,10 +498,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             logger.warn("Cleanup shuffle info and merged shuffle files for {}_{} as new " +
                 "application attempt registered", appId, appShuffleInfo.attemptId);
             mergedShuffleCleanerExecutor.execute(
-              () -> cleanupMergedShuffle(appShuffleInfo, true));
+              () -> closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, true));
           }
         }
-      } catch (JsonProcessingException e ) {
+      } catch (JsonProcessingException e) {
         logger.warn("Failed to get the merge directory information from ExecutorShuffleInfo: ", e);
       }
     } else {

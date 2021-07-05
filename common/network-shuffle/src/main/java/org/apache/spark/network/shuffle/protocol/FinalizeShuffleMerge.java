@@ -32,15 +32,15 @@ import org.apache.spark.network.protocol.Encoders;
  */
 public class FinalizeShuffleMerge extends BlockTransferMessage {
   public final String appId;
-  public final int attemptId;
+  public final int appAttemptId;
   public final int shuffleId;
 
   public FinalizeShuffleMerge(
       String appId,
-      int attemptId,
+      int appAttemptId,
       int shuffleId) {
     this.appId = appId;
-    this.attemptId = attemptId;
+    this.appAttemptId = appAttemptId;
     this.shuffleId = shuffleId;
   }
 
@@ -51,14 +51,14 @@ public class FinalizeShuffleMerge extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, attemptId, shuffleId);
+    return Objects.hashCode(appId, appAttemptId, shuffleId);
   }
 
   @Override
   public String toString() {
     return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
       .append("appId", appId)
-      .append("attemptId", attemptId)
+      .append("attemptId", appAttemptId)
       .append("shuffleId", shuffleId)
       .toString();
   }
@@ -68,7 +68,7 @@ public class FinalizeShuffleMerge extends BlockTransferMessage {
     if (other != null && other instanceof FinalizeShuffleMerge) {
       FinalizeShuffleMerge o = (FinalizeShuffleMerge) other;
       return Objects.equal(appId, o.appId)
-        && attemptId == attemptId
+        && appAttemptId == appAttemptId
         && shuffleId == o.shuffleId;
     }
     return false;
@@ -82,7 +82,7 @@ public class FinalizeShuffleMerge extends BlockTransferMessage {
   @Override
   public void encode(ByteBuf buf) {
     Encoders.Strings.encode(buf, appId);
-    buf.writeInt(attemptId);
+    buf.writeInt(appAttemptId);
     buf.writeInt(shuffleId);
   }
 

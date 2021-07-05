@@ -34,7 +34,7 @@ import org.apache.spark.network.protocol.Encoders;
  */
 public class PushBlockStream extends BlockTransferMessage {
   public final String appId;
-  public final int attemptId;
+  public final int appAttemptId;
   public final int shuffleId;
   public final int mapIndex;
   public final int reduceId;
@@ -44,13 +44,13 @@ public class PushBlockStream extends BlockTransferMessage {
 
   public PushBlockStream(
       String appId,
-      int attemptId,
+      int appAttemptId,
       int shuffleId,
       int mapIndex,
       int reduceId,
       int index) {
     this.appId = appId;
-    this.attemptId = attemptId;
+    this.appAttemptId = appAttemptId;
     this.shuffleId = shuffleId;
     this.mapIndex = mapIndex;
     this.reduceId = reduceId;
@@ -64,14 +64,14 @@ public class PushBlockStream extends BlockTransferMessage {
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(appId, attemptId, shuffleId, mapIndex , reduceId, index);
+    return Objects.hashCode(appId, appAttemptId, shuffleId, mapIndex , reduceId, index);
   }
 
   @Override
   public String toString() {
     return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
       .append("appId", appId)
-      .append("attemptId", attemptId)
+      .append("attemptId", appAttemptId)
       .append("shuffleId", shuffleId)
       .append("mapIndex", mapIndex)
       .append("reduceId", reduceId)
@@ -84,7 +84,7 @@ public class PushBlockStream extends BlockTransferMessage {
     if (other != null && other instanceof PushBlockStream) {
       PushBlockStream o = (PushBlockStream) other;
       return Objects.equal(appId, o.appId)
-        && attemptId == o.attemptId
+        && appAttemptId == o.appAttemptId
         && shuffleId == o.shuffleId
         && mapIndex == o.mapIndex
         && reduceId == o.reduceId
@@ -101,7 +101,7 @@ public class PushBlockStream extends BlockTransferMessage {
   @Override
   public void encode(ByteBuf buf) {
     Encoders.Strings.encode(buf, appId);
-    buf.writeInt(attemptId);
+    buf.writeInt(appAttemptId);
     buf.writeInt(shuffleId);
     buf.writeInt(mapIndex);
     buf.writeInt(reduceId);

@@ -45,7 +45,7 @@ public class OneForOneBlockPusher {
 
   private final TransportClient client;
   private final String appId;
-  private final int attemptId;
+  private final int appAttemptId;
   private final String[] blockIds;
   private final BlockFetchingListener listener;
   private final Map<String, ManagedBuffer> buffers;
@@ -53,13 +53,13 @@ public class OneForOneBlockPusher {
   public OneForOneBlockPusher(
       TransportClient client,
       String appId,
-      int attemptId,
+      int appAttemptId,
       String[] blockIds,
       BlockFetchingListener listener,
       Map<String, ManagedBuffer> buffers) {
     this.client = client;
     this.appId = appId;
-    this.attemptId = attemptId;
+    this.appAttemptId = appAttemptId;
     this.blockIds = blockIds;
     this.listener = listener;
     this.buffers = buffers;
@@ -126,7 +126,7 @@ public class OneForOneBlockPusher {
         throw new IllegalArgumentException(
           "Unexpected shuffle push block id format: " + blockIds[i]);
       }
-      ByteBuffer header = new PushBlockStream(appId, attemptId, Integer.parseInt(blockIdParts[1]),
+      ByteBuffer header = new PushBlockStream(appId, appAttemptId, Integer.parseInt(blockIdParts[1]),
         Integer.parseInt(blockIdParts[2]), Integer.parseInt(blockIdParts[3]) , i).toByteBuffer();
       client.uploadStream(new NioManagedBuffer(header), buffers.get(blockIds[i]),
         new BlockPushCallback(i, blockIds[i]));
