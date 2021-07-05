@@ -36,7 +36,6 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * Runs a query returning the result in Hive compatible form.
  */
 object HiveResult {
-
   case class TimeFormatters(date: DateFormatter, timestamp: TimestampFormatter)
 
   def getTimeFormatters: TimeFormatters = {
