@@ -2686,6 +2686,10 @@ case class ToHiveString(child: Expression, timeZoneId: Option[String] = None)
     """
   }
 
+  override def toString: String = {
+    s"to_hive_string($child)"
+  }
+
   override def prettyName: String = "to_hive_string"
 
   override protected def withNewChildInternal(newChild: Expression): ToHiveString =
