@@ -21,21 +21,27 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.NamespaceHelper
 
 /**
  * Physical plan node for showing all catalogs.
  */
 case class ShowCatalogsExec(
     output: Seq[Attribute],
-    catalogManager: CatalogManager)
+    catalogManager: CatalogManager,
+    pattern: Option[String])
   extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
-    catalogManager.listCatalogs().foreach { case (key, value) =>
-      rows += toCatalystRow(key, value.defaultNamespace().quoted)
+    val catalogs = catalogManager.listCatalogs.map(_._1).map(escapeSingleQuotedString(_))
+
+    catalogs.map { name =>
+      if (pattern.map(StringUtils.filterPattern(Seq(name), _).nonEmpty).getOrElse(true)) {
+        rows += toCatalystRow(name)
+      }
     }
+
     rows.toSeq
   }
 }

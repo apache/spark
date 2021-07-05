@@ -294,7 +294,7 @@ case class ShowCurrentNamespaceStatement() extends LeafParsedStatement
 /**
  * A SHOW ALL CATALOGS statement, as parsed from SQL
  */
-case class ShowCatalogsStatement() extends LeafParsedStatement
+case class ShowCatalogsStatement(pattern: Option[String]) extends LeafParsedStatement
 
 /**
  *  CREATE FUNCTION statement, as parsed from SQL

@@ -2107,10 +2107,19 @@ class DDLParserSuite extends AnalysisTest {
       ShowCurrentNamespaceStatement())
   }
 
-  test("show catalogs") {
+  test("SPARK-35973: show all catalogs") {
     comparePlans(
       parsePlan("SHOW CATALOGS"),
-      ShowCatalogsStatement())
+      ShowCatalogsStatement(None))
+  }
+
+  test("SPARK-35973: show catalogs with pattern") {
+    comparePlans(
+      parsePlan("SHOW CATALOGS LIKE 'defau*'"),
+      ShowCatalogsStatement(Some("defau*")))
+    comparePlans(
+      parsePlan("SHOW CATALOGS LIKE '*defau*'"),
+      ShowCatalogsStatement(Some("*defau*")))
   }
 
   test("alter table: SerDe properties") {

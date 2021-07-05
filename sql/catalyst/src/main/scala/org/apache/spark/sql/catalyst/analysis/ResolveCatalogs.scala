@@ -93,8 +93,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
     case ShowCurrentNamespaceStatement() =>
       ShowCurrentNamespace(catalogManager)
 
-    case ShowCatalogsStatement() =>
-      ShowCatalogs(catalogManager)
+    case ShowCatalogsStatement(pattern) =>
+      ShowCatalogs(catalogManager, pattern)
   }
 
   object NonSessionCatalogAndTable {

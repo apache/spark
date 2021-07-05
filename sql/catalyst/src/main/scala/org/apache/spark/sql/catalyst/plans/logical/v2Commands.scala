@@ -645,10 +645,11 @@ case class ShowCurrentNamespace(catalogManager: CatalogManager) extends LeafComm
 /**
  * The logical plan of the SHOW CATALOGS command.
  */
-case class ShowCatalogs(catalogManager: CatalogManager) extends LeafCommand {
+case class ShowCatalogs(
+    catalogManager: CatalogManager,
+    pattern: Option[String]) extends LeafCommand {
   override val output: Seq[Attribute] = Seq(
-    AttributeReference("catalog", StringType, nullable = false)(),
-    AttributeReference("default-namespace", StringType, nullable = false)())
+    AttributeReference("catalog", StringType, nullable = false)())
 }
 
 /**

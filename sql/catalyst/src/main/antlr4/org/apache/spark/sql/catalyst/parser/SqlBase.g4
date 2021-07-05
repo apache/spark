@@ -212,7 +212,7 @@ statement
         (LIKE? (multipartIdentifier | pattern=STRING))?                #showFunctions
     | SHOW CREATE TABLE multipartIdentifier (AS SERDE)?                #showCreateTable
     | SHOW CURRENT NAMESPACE                                           #showCurrentNamespace
-    | SHOW CATALOGS                                                    #showCatalogs
+    | SHOW CATALOGS (LIKE? pattern=STRING)?                            #showCatalogs
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) namespace EXTENDED?
         multipartIdentifier                                            #describeNamespace
