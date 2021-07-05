@@ -469,7 +469,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
       schema === Schema(StructType(Seq(StructField("i", IntegerType, false))), nullable = true))
   }
 
-  test("schema for case class that contains value class fields") {
+  test("SPARK-20384: schema for case class that contains value class fields") {
     val schema = schemaFor[ValueClassData]
     assert(
       schema === Schema(

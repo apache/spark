@@ -442,6 +442,14 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(
     OptionOfValueClassValue(Some(StringWrapper("a"))),
     "case class with option of class value")
+  encodeDecodeTest((StringWrapper("a_1"), StringWrapper("a_2")),
+    "tuple2 of class value")
+  encodeDecodeTest((StringWrapper("a_1"), StringWrapper("a_2"), StringWrapper("a_3")),
+    "tuple3 of class value")
+  encodeDecodeTest(((StringWrapper("a_1"), StringWrapper("a_2")), StringWrapper("b_2")),
+    "nested tuple._1 of class value")
+  encodeDecodeTest((StringWrapper("a_1"), (StringWrapper("b_1"), StringWrapper("b_2"))),
+    "nested tuple._2 of class value")
 
   encodeDecodeTest(Option(31), "option of int")
   encodeDecodeTest(Option.empty[Int], "empty option of int")
