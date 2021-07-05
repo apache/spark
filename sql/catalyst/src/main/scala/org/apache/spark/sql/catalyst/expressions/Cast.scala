@@ -276,10 +276,6 @@ object Cast {
 abstract class CastToStringBase extends UnaryExpression
   with TimeZoneAwareExpression with NullIntolerant {
 
-  // The function arguments are: `input`, `result` and `resultIsNull`. We don't need `inputIsNull`
-  // in parameter list, because the returned code will be put in null safe evaluation region.
-  protected[this] type CastFunction = (ExprValue, ExprValue, ExprValue) => Block
-
   protected lazy val dateFormatter = DateFormatter()
   protected lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
   protected lazy val timestampNTZFormatter =
@@ -296,6 +292,10 @@ abstract class CastToStringBase extends UnaryExpression
 
   // [[func]] assumes the input is no longer null because eval already does the null check.
   @inline protected[this] def buildCast[T](a: Any, func: T => Any): Any = func(a.asInstanceOf[T])
+
+  // The function arguments are: `input`, `result` and `resultIsNull`. We don't need `inputIsNull`
+  // in parameter list, because the returned code will be put in null safe evaluation region.
+  protected[this] type CastFunction = (ExprValue, ExprValue, ExprValue) => Block
 
   // UDFToString
   protected[this] def castToString(from: DataType): Any => Any = from match {
@@ -421,7 +421,8 @@ abstract class CastToStringBase extends UnaryExpression
       case BinaryType =>
         (c, evPrim, evNull) => code"$evPrim = UTF8String.fromBytes($c);"
       case _: DecimalType if toHiveString =>
-        (c, evPrim, _) =>
+        println("xxxxxxxxxx")
+        (c, evPrim, evNull) =>
           code"$evPrim = UTF8String.fromString($c.toJavaBigDecimal().toPlainString());"
       case DateType =>
         val df = JavaCode.global(
@@ -1254,91 +1255,6 @@ abstract class CastBase extends CastToStringBase {
         ${cast(input, result, resultIsNull)}
       }
     """
-  }
-
-  private[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
-    from match {
-      case BinaryType =>
-        (c, evPrim, evNull) => code"$evPrim = UTF8String.fromBytes($c);"
-      case DateType =>
-        val df = JavaCode.global(
-          ctx.addReferenceObj("dateFormatter", dateFormatter),
-          dateFormatter.getClass)
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString(${df}.format($c));"""
-      case TimestampType =>
-        val tf = JavaCode.global(
-          ctx.addReferenceObj("timestampFormatter", timestampFormatter),
-          timestampFormatter.getClass)
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
-      case TimestampNTZType =>
-        val tf = JavaCode.global(
-          ctx.addReferenceObj("timestampNTZFormatter", timestampNTZFormatter),
-          timestampNTZFormatter.getClass)
-        (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
-      case CalendarIntervalType =>
-        (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($c.toString());"""
-      case ArrayType(et, _) =>
-        (c, evPrim, evNull) => {
-          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeArrayElemCode = writeArrayToStringBuilder(et, c, buffer, ctx)
-          code"""
-             |$bufferClass $buffer = new $bufferClass();
-             |$writeArrayElemCode;
-             |$evPrim = $buffer.build();
-           """.stripMargin
-        }
-      case MapType(kt, vt, _) =>
-        (c, evPrim, evNull) => {
-          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeMapElemCode = writeMapToStringBuilder(kt, vt, c, buffer, ctx)
-          code"""
-             |$bufferClass $buffer = new $bufferClass();
-             |$writeMapElemCode;
-             |$evPrim = $buffer.build();
-           """.stripMargin
-        }
-      case StructType(fields) =>
-        (c, evPrim, evNull) => {
-          val row = ctx.freshVariable("row", classOf[InternalRow])
-          val buffer = ctx.freshVariable("buffer", classOf[UTF8StringBuilder])
-          val bufferClass = JavaCode.javaType(classOf[UTF8StringBuilder])
-          val writeStructCode = writeStructToStringBuilder(fields.map(_.dataType), row, buffer, ctx)
-          code"""
-             |InternalRow $row = $c;
-             |$bufferClass $buffer = new $bufferClass();
-             |$writeStructCode
-             |$evPrim = $buffer.build();
-           """.stripMargin
-        }
-      case pudt: PythonUserDefinedType => castToStringCode(pudt.sqlType, ctx)
-      case udt: UserDefinedType[_] =>
-        val udtRef = JavaCode.global(ctx.addReferenceObj("udt", udt), udt.sqlType)
-        (c, evPrim, evNull) => {
-          code"$evPrim = UTF8String.fromString($udtRef.deserialize($c).toString());"
-        }
-      case i: YearMonthIntervalType =>
-        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
-        val style = s"$iss$$.MODULE$$.ANSI_STYLE()"
-        (c, evPrim, _) =>
-          code"""
-            $evPrim = UTF8String.fromString($iu.toYearMonthIntervalString($c, $style,
-              (byte)${i.startField}, (byte)${i.endField}));
-          """
-      case i: DayTimeIntervalType =>
-        val iu = IntervalUtils.getClass.getName.stripSuffix("$")
-        val iss = IntervalStringStyles.getClass.getName.stripSuffix("$")
-        val style = s"$iss$$.MODULE$$.ANSI_STYLE()"
-        (c, evPrim, _) =>
-          code"""
-            $evPrim = UTF8String.fromString($iu.toDayTimeIntervalString($c, $style,
-              (byte)${i.startField}, (byte)${i.endField}));
-          """
-      case _ =>
-        (c, evPrim, evNull) => code"$evPrim = UTF8String.fromString(String.valueOf($c));"
-    }
   }
 
   private[this] def castToBinaryCode(from: DataType): CastFunction = from match {
