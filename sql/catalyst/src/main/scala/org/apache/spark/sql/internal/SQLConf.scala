@@ -678,6 +678,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS =
+    buildConf("spark.sql.adaptive.customCostEvaluatorClass")
+      .doc("The custom cost evaluator class to be used for adaptive execution. If not being set," +
+        " Spark will use its own SimpleCostEvaluator by default.")
+      .version("3.2.0")
+      .stringConf
+      .createOptional
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()
