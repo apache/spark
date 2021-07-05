@@ -41,7 +41,7 @@ Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS), and it sh
 
 Spark runs on Java 8/11, Scala 2.12, Python 3.6+ and R 3.5+.
 Python 3.6 support is deprecated as of Spark 3.2.0.
-Java 8 prior to version 8u92 support is deprecated as of Spark 3.2.0.
+Java 8 prior to version 8u201 support is deprecated as of Spark 3.2.0.
 For the Scala API, Spark {{site.SPARK_VERSION}}
 uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version
 ({{site.SCALA_BINARY_VERSION}}.x).

@@ -27,6 +27,9 @@ from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
 from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
+if extension_object_dtypes_available:
+    from pandas import StringDtype
+
 
 class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
@@ -216,6 +219,20 @@ class StringExtensionOpsTest(StringOpsTest, PandasOnSparkTestCase, TestCasesUtil
 
     def test_isnull(self):
         self.assert_eq(self.pser.isnull(), self.psser.isnull())
+
+    def test_astype(self):
+        pser = self.pser
+        psser = self.psser
+
+        # TODO(SPARK-35976): [x, y, z, <NA>] is returned in pandas
+        self.assert_eq(["x", "y", "z", "None"], self.psser.astype(str).tolist())
+
+        self.assert_eq(pser.astype("category"), psser.astype("category"))
+        cat_type = CategoricalDtype(categories=["x", "y"])
+        self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+        for dtype in self.object_extension_dtypes:
+            if dtype in ["string", StringDtype()]:
+                self.check_extension(pser.astype(dtype), psser.astype(dtype))
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ package org.apache.spark.sql.connector.catalog
 import java.time.{Instant, ZoneId}
 import java.time.temporal.ChronoUnit
 import java.util
+import java.util.OptionalLong
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -245,20 +246,57 @@ class InMemoryTable(
     }
   }
 
-  class InMemoryBatchScan(
-      data: Array[InputPartition],
+  case class InMemoryStats(sizeInBytes: OptionalLong, numRows: OptionalLong) extends Statistics
+
+  case class InMemoryBatchScan(
+      var data: Seq[InputPartition],
       readSchema: StructType,
-      tableSchema: StructType) extends Scan with Batch {
-    override def readSchema(): StructType = readSchema
+      tableSchema: StructType)
+    extends Scan with Batch with SupportsRuntimeFiltering with SupportsReportStatistics {
 
     override def toBatch: Batch = this
 
-    override def planInputPartitions(): Array[InputPartition] = data
+    override def estimateStatistics(): Statistics = {
+      if (data.isEmpty) {
+        return InMemoryStats(OptionalLong.of(0L), OptionalLong.of(0L))
+      }
+
+      val inputPartitions = data.map(_.asInstanceOf[BufferedRows])
+      val numRows = inputPartitions.map(_.rows.size).sum
+      // we assume an average object header is 12 bytes
+      val objectHeaderSizeInBytes = 12L
+      val rowSizeInBytes = objectHeaderSizeInBytes + schema.defaultSize
+      val sizeInBytes = numRows * rowSizeInBytes
+      InMemoryStats(OptionalLong.of(sizeInBytes), OptionalLong.of(numRows))
+    }
+
+    override def planInputPartitions(): Array[InputPartition] = data.toArray
 
     override def createReaderFactory(): PartitionReaderFactory = {
       val metadataColumns = readSchema.map(_.name).filter(metadataColumnNames.contains)
       val nonMetadataColumns = readSchema.filterNot(f => metadataColumns.contains(f.name))
       new BufferedRowsReaderFactory(metadataColumns, nonMetadataColumns, tableSchema)
+    }
+
+    override def filterAttributes(): Array[NamedReference] = {
+      val scanFields = readSchema.fields.map(_.name).toSet
+      partitioning.flatMap(_.references)
+        .filter(ref => scanFields.contains(ref.fieldNames.mkString(".")))
+    }
+
+    override def filter(filters: Array[Filter]): Unit = {
+      if (partitioning.length == 1) {
+        filters.foreach {
+          case In(attrName, values) if attrName == partitioning.head.name =>
+            val matchingKeys = values.map(_.toString).toSet
+            data = data.filter(partition => {
+              val key = partition.asInstanceOf[BufferedRows].key
+              matchingKeys.contains(key)
+            })
+
+          case _ => // skip
+        }
+      }
     }
   }
 

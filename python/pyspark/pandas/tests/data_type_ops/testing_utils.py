@@ -25,6 +25,21 @@ import pandas as pd
 import pyspark.pandas as ps
 from pyspark.pandas.typedef import extension_dtypes
 
+from pyspark.pandas.typedef.typehints import (
+    extension_dtypes_available,
+    extension_float_dtypes_available,
+    extension_object_dtypes_available,
+)
+
+if extension_dtypes_available:
+    from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
+
+if extension_float_dtypes_available:
+    from pandas import Float32Dtype, Float64Dtype
+
+if extension_object_dtypes_available:
+    from pandas import BooleanDtype, StringDtype
+
 
 class TestCasesUtils(object):
     """A utility holding common test cases for arithmetic operations of different data types."""
@@ -80,6 +95,47 @@ class TestCasesUtils(object):
     @property
     def pser_psser_pairs(self):
         return zip(self.psers, self.pssers)
+
+    @property
+    def object_extension_dtypes(self):
+        return (
+            ["boolean", "string", BooleanDtype(), StringDtype()]
+            if extension_object_dtypes_available
+            else []
+        )
+
+    @property
+    def fractional_extension_dtypes(self):
+        return (
+            ["Float32", "Float64", Float32Dtype(), Float64Dtype()]
+            if extension_float_dtypes_available
+            else []
+        )
+
+    @property
+    def integral_extension_dtypes(self):
+        return (
+            [
+                "Int8",
+                "Int16",
+                "Int32",
+                "Int64",
+                Int8Dtype(),
+                Int16Dtype(),
+                Int32Dtype(),
+                Int64Dtype(),
+            ]
+            if extension_dtypes_available
+            else []
+        )
+
+    @property
+    def extension_dtypes(self):
+        return (
+            self.object_extension_dtypes
+            + self.fractional_extension_dtypes
+            + self.integral_extension_dtypes
+        )
 
     def check_extension(self, psser, pser):
         """

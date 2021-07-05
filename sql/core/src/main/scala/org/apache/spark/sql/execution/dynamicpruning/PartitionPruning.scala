@@ -23,17 +23,19 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.read.SupportsRuntimeFiltering
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 
 /**
  * Dynamic partition pruning optimization is performed based on the type and
  * selectivity of the join operation. During query optimization, we insert a
- * predicate on the partitioned table using the filter from the other side of
+ * predicate on the filterable table using the filter from the other side of
  * the join and a custom wrapper called DynamicPruning.
  *
  * The basic mechanism for DPP inserts a duplicated subquery with the filter from the other side,
  * when the following conditions are met:
- *    (1) the table to prune is partitioned by the JOIN key
+ *    (1) the table to prune is filterable by the JOIN key
  *    (2) the join operation is one of the following types: INNER, LEFT SEMI,
  *    LEFT OUTER (partitioned on right), or RIGHT OUTER (partitioned on left)
  *
@@ -49,9 +51,12 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRela
 object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with JoinSelectionHelper {
 
   /**
-   * Search the partitioned table scan for a given partition column in a logical plan
+   * Searches for a table scan that can be filtered for a given column in a logical plan.
+   *
+   * This methods tries to find either a v1 partitioned scan for a given partition column or
+   * a v2 scan that support runtime filtering on a given attribute.
    */
-  def getPartitionTableScan(a: Expression, plan: LogicalPlan): Option[LogicalRelation] = {
+  def getFilterableTableScan(a: Expression, plan: LogicalPlan): Option[LogicalPlan] = {
     val srcInfo: Option[(Expression, LogicalPlan)] = findExpressionAndTrackLineageDown(a, plan)
     srcInfo.flatMap {
       case (resExp, l: LogicalRelation) =>
@@ -65,6 +70,13 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
               None
             }
           case _ => None
+        }
+      case (resExp, r @ DataSourceV2ScanRelation(_, scan: SupportsRuntimeFiltering, _)) =>
+        val filterAttrs = V2ExpressionUtils.resolveRefs[Attribute](scan.filterAttributes, r)
+        if (resExp.references.subsetOf(AttributeSet(filterAttrs))) {
+          Some(r)
+        } else {
+          None
         }
       case _ => None
     }
@@ -85,7 +97,7 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
       filteringKey: Expression,
       filteringPlan: LogicalPlan,
       joinKeys: Seq[Expression],
-      partScan: LogicalRelation,
+      partScan: LogicalPlan,
       canBuildBroadcast: Boolean): LogicalPlan = {
     val reuseEnabled = conf.exchangeReuseEnabled
     val index = joinKeys.indexOf(filteringKey)
@@ -245,16 +257,16 @@ object PartitionPruning extends Rule[LogicalPlan] with PredicateHelper with Join
 
             // there should be a partitioned table and a filter on the dimension table,
             // otherwise the pruning will not trigger
-            var partScan = getPartitionTableScan(l, left)
-            if (partScan.isDefined && canPruneLeft(joinType) &&
+            var filterableScan = getFilterableTableScan(l, left)
+            if (filterableScan.isDefined && canPruneLeft(joinType) &&
                 hasPartitionPruningFilter(right)) {
-              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, partScan.get,
+              newLeft = insertPredicate(l, newLeft, r, right, rightKeys, filterableScan.get,
                 canBuildBroadcastRight(joinType))
             } else {
-              partScan = getPartitionTableScan(r, right)
-              if (partScan.isDefined && canPruneRight(joinType) &&
+              filterableScan = getFilterableTableScan(r, right)
+              if (filterableScan.isDefined && canPruneRight(joinType) &&
                   hasPartitionPruningFilter(left) ) {
-                newRight = insertPredicate(r, newRight, l, left, leftKeys, partScan.get,
+                newRight = insertPredicate(r, newRight, l, left, leftKeys, filterableScan.get,
                   canBuildBroadcastLeft(joinType))
               }
             }
