@@ -28,6 +28,7 @@ import org.roaringbitmap.RoaringBitmap
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{MapOutputTracker, SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -48,6 +49,8 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
 
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
     when(diskBlockManager.getFile(any[BlockId])).thenAnswer(
+      (invocation: InvocationOnMock) => new File(tempDir, invocation.getArguments.head.toString))
+    when(diskBlockManager.getFile(any[String])).thenAnswer(
       (invocation: InvocationOnMock) => new File(tempDir, invocation.getArguments.head.toString))
     when(diskBlockManager.getMergedShuffleFile(
       any[BlockId], any[Option[Array[String]]])).thenAnswer(
@@ -257,6 +260,9 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     resolver.writeMetadataFileAndCommit(0, 0, indexInMemory, checksumsInMemory, dataTmp)
     val checksumFile = resolver.getChecksumFile(0, 0)
     assert(checksumFile.exists())
+    val checksumFileName = checksumFile.toString
+    val checksumAlgo = checksumFileName.substring(checksumFileName.lastIndexOf(".") + 1)
+    assert(checksumAlgo === conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
     val checksumsFromFile = resolver.getChecksums(checksumFile, 10)
     assert(checksumsInMemory === checksumsFromFile)
   }

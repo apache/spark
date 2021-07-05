@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.*;
 
+import org.apache.spark.*;
 import org.apache.spark.shuffle.ShuffleChecksumTester;
 import org.mockito.stubbing.Answer;
 import scala.*;
@@ -34,10 +35,6 @@ import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-import org.apache.spark.HashPartitioner;
-import org.apache.spark.ShuffleDependency;
-import org.apache.spark.SparkConf;
-import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.io.CompressionCodec$;
@@ -171,13 +168,14 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTester {
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager);
   }
 
-  private UnsafeShuffleWriter<Object, Object> createWriter(boolean transferToEnabled) {
+  private UnsafeShuffleWriter<Object, Object> createWriter(boolean transferToEnabled)
+    throws SparkException {
     return createWriter(transferToEnabled, shuffleBlockResolver);
   }
 
   private UnsafeShuffleWriter<Object, Object> createWriter(
     boolean transferToEnabled,
-    IndexShuffleBlockResolver blockResolver) {
+    IndexShuffleBlockResolver blockResolver) throws SparkException {
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
     return new UnsafeShuffleWriter<>(
       blockManager,
@@ -225,12 +223,12 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTester {
   }
 
   @Test(expected=IllegalStateException.class)
-  public void mustCallWriteBeforeSuccessfulStop() throws IOException {
+  public void mustCallWriteBeforeSuccessfulStop() throws IOException, SparkException {
     createWriter(false).stop(true);
   }
 
   @Test
-  public void doNotNeedToCallWriteBeforeUnsuccessfulStop() throws IOException {
+  public void doNotNeedToCallWriteBeforeUnsuccessfulStop() throws IOException, SparkException {
     createWriter(false).stop(false);
   }
 
@@ -380,7 +378,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTester {
 
   private void testMergingSpills(
       boolean transferToEnabled,
-      boolean encrypted) throws IOException {
+      boolean encrypted) throws IOException, SparkException {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(transferToEnabled);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
     for (int i : new int[] { 1, 2, 3, 4, 4, 2 }) {
@@ -578,7 +576,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTester {
   }
 
   @Test
-  public void spillFilesAreDeletedWhenStoppingAfterError() throws IOException {
+  public void spillFilesAreDeletedWhenStoppingAfterError() throws IOException, SparkException {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     writer.insertRecordIntoSorter(new Tuple2<>(1, 1));
     writer.insertRecordIntoSorter(new Tuple2<>(2, 2));

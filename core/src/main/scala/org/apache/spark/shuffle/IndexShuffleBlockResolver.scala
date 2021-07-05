@@ -33,6 +33,7 @@ import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.{ExecutorDiskUtils, MergedBlockMeta}
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
@@ -498,10 +499,11 @@ private[spark] class IndexShuffleBlockResolver(
       mapId: Long,
       dirs: Option[Array[String]] = None): File = {
     val blockId = ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
+    val fileName = ShuffleChecksumHelper.getChecksumFileName(blockId, conf)
     dirs
-      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, blockId.name))
+      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, fileName))
       .getOrElse {
-        blockManager.diskBlockManager.getFile(blockId)
+        blockManager.diskBlockManager.getFile(fileName)
       }
   }
 
