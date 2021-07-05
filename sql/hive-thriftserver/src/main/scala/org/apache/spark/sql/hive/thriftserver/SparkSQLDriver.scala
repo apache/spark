@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
 import org.apache.spark.SparkError
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Column, SQLContext}
+import org.apache.spark.sql.{Column, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.{Cast, ToHiveString}
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
