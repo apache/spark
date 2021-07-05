@@ -502,11 +502,11 @@ class ExecutorSuite extends SparkFunSuite
         depthToCheck) == (depthToCheck >= 3 && isFatal))
     }
 
-    for (depthToCheck <- 1 to 5) {
+    for (depthToCheck <- 0 to 5) {
       testThrowable(new OutOfMemoryError(), depthToCheck, isFatal = true)
-       testThrowable(new InterruptedException(), depthToCheck, isFatal = false)
-       testThrowable(new RuntimeException("test"), depthToCheck, isFatal = false)
-       testThrowable(new SparkOutOfMemoryError("test"), depthToCheck, isFatal = false)
+      testThrowable(new InterruptedException(), depthToCheck, isFatal = false)
+      testThrowable(new RuntimeException("test"), depthToCheck, isFatal = false)
+      testThrowable(new SparkOutOfMemoryError("test"), depthToCheck, isFatal = false)
     }
 
     // Verify we can handle the cycle in the exception chain
