@@ -465,6 +465,9 @@ class ExpressionParserSuite extends AnalysisTest {
     intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
     // Timestamp without time zone
+    assertEqual("tImEstAmp_Ntz '2016-03-11 20:54:00.000'",
+      Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
+    intercept("tImEstAmp_Ntz '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP_NTZ value")
     withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
       assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
         Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
