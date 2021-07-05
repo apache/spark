@@ -39,11 +39,11 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, microsToLocalDateTime, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
-import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform, Expression => V2Expression}
+import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
 import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -2134,7 +2134,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
 
           SQLConf.get.timestampType match {
             case TimestampNTZType =>
-              val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampType))
+              val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
               specialTs.getOrElse {
                 val containsTimeZonePart =
                   DateTimeUtils.parseTimestampString(UTF8String.fromString(value))._2.isDefined
@@ -2143,8 +2143,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
                 if (containsTimeZonePart) {
                   constructTimestampLTZLiteral(value)
                 } else {
-                  toLiteral(stringToTimestampWithoutTimeZone(_).map(microsToLocalDateTime),
-                    TimestampNTZType)
+                  toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType)
                 }
               }
 

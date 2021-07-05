@@ -1035,17 +1035,18 @@ object DateTimeUtils {
    * @return Some of microseconds since the epoch if the conversion completed
    *         successfully otherwise None.
    */
-  def convertSpecialTimestampNTZ(input: String): Option[LocalDateTime] = {
-    extractSpecialValue(input.trim).flatMap {
-      case "epoch" => Some(LocalDateTime.of(0, 0, 0, 0, 0))
+  def convertSpecialTimestampNTZ(input: String): Option[Long] = {
+    val localDateTime = extractSpecialValue(input.trim).flatMap {
+      case "epoch" => Some(LocalDateTime.of(1970, 1, 1, 0, 0))
       case "now" => Some(LocalDateTime.now())
-      case "today" => Some(LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0))
+      case "today" => Some(LocalDateTime.now().`with`(LocalTime.MIDNIGHT))
       case "tomorrow" =>
-        Some(LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0).plusDays(1))
+        Some(LocalDateTime.now().`with`(LocalTime.MIDNIGHT).plusDays(1))
       case "yesterday" =>
-        Some(LocalDateTime.now().withHour(0).withMinute(0).withSecond(0).withNano(0).minusDays(1))
+        Some(LocalDateTime.now().`with`(LocalTime.MIDNIGHT).minusDays(1))
       case _ => None
     }
+    localDateTime.map(localDateTimeToMicros)
   }
 
   /**
@@ -1056,7 +1057,7 @@ object DateTimeUtils {
    * @return Some of days since the epoch if the conversion completed successfully otherwise None.
    */
   def convertSpecialDate(input: String, zoneId: ZoneId): Option[Int] = {
-    extractSpecialValue(input.trim, zoneId).flatMap {
+    extractSpecialValue(input.trim).flatMap {
       case "epoch" => Some(0)
       case "now" | "today" => Some(currentDate(zoneId))
       case "tomorrow" => Some(Math.addExact(currentDate(zoneId), 1))
