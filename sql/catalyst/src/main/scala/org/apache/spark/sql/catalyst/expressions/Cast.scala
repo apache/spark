@@ -282,7 +282,7 @@ abstract class CastToStringBase extends UnaryExpression
 
   protected lazy val dateFormatter = DateFormatter()
   protected lazy val timestampFormatter = TimestampFormatter.getFractionFormatter(zoneId)
-  private lazy val timestampNTZFormatter =
+  protected lazy val timestampNTZFormatter =
     TimestampFormatter.getFractionFormatter(ZoneOffset.UTC)
 
   protected def toHiveString = false
@@ -433,10 +433,10 @@ abstract class CastToStringBase extends UnaryExpression
           ctx.addReferenceObj("timestampFormatter", timestampFormatter),
           timestampFormatter.getClass)
         (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
-      case TimestampWithoutTZType =>
+      case TimestampNTZType =>
         val tf = JavaCode.global(
-          ctx.addReferenceObj("timestampWithoutTZFormatter", timestampWithoutTZFormatter),
-          timestampWithoutTZFormatter.getClass)
+          ctx.addReferenceObj("timestampWithoutTZFormatter", timestampNTZFormatter),
+          timestampNTZFormatter.getClass)
         (c, evPrim, evNull) => code"""$evPrim = UTF8String.fromString($tf.format($c));"""
       case CalendarIntervalType =>
         (c, evPrim, _) => code"""$evPrim = UTF8String.fromString($c.toString());"""
@@ -1254,150 +1254,6 @@ abstract class CastBase extends CastToStringBase {
         ${cast(input, result, resultIsNull)}
       }
     """
-  }
-
-  private def appendIfNotLegacyCastToStr(buffer: ExprValue, s: String): Block = {
-    if (!legacyCastToStr) code"""$buffer.append("$s");""" else EmptyBlock
-  }
-
-  private def writeArrayToStringBuilder(
-      et: DataType,
-      array: ExprValue,
-      buffer: ExprValue,
-      ctx: CodegenContext): Block = {
-    val elementToStringCode = castToStringCode(et, ctx)
-    val funcName = ctx.freshName("elementToString")
-    val element = JavaCode.variable("element", et)
-    val elementStr = JavaCode.variable("elementStr", StringType)
-    val elementToStringFunc = inline"${ctx.addNewFunction(funcName,
-      s"""
-         |private UTF8String $funcName(${CodeGenerator.javaType(et)} $element) {
-         |  UTF8String $elementStr = null;
-         |  ${elementToStringCode(element, elementStr, null /* resultIsNull won't be used */)}
-         |  return elementStr;
-         |}
-       """.stripMargin)}"
-
-    val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
-    code"""
-       |$buffer.append("[");
-       |if ($array.numElements() > 0) {
-       |  if ($array.isNullAt(0)) {
-       |    ${appendIfNotLegacyCastToStr(buffer, "null")}
-       |  } else {
-       |    $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, "0")}));
-       |  }
-       |  for (int $loopIndex = 1; $loopIndex < $array.numElements(); $loopIndex++) {
-       |    $buffer.append(",");
-       |    if ($array.isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
-       |    } else {
-       |      $buffer.append(" ");
-       |      $buffer.append($elementToStringFunc(${CodeGenerator.getValue(array, et, loopIndex)}));
-       |    }
-       |  }
-       |}
-       |$buffer.append("]");
-     """.stripMargin
-  }
-
-  private def writeMapToStringBuilder(
-      kt: DataType,
-      vt: DataType,
-      map: ExprValue,
-      buffer: ExprValue,
-      ctx: CodegenContext): Block = {
-
-    def dataToStringFunc(func: String, dataType: DataType) = {
-      val funcName = ctx.freshName(func)
-      val dataToStringCode = castToStringCode(dataType, ctx)
-      val data = JavaCode.variable("data", dataType)
-      val dataStr = JavaCode.variable("dataStr", StringType)
-      val functionCall = ctx.addNewFunction(funcName,
-        s"""
-           |private UTF8String $funcName(${CodeGenerator.javaType(dataType)} $data) {
-           |  UTF8String $dataStr = null;
-           |  ${dataToStringCode(data, dataStr, null /* resultIsNull won't be used */)}
-           |  return dataStr;
-           |}
-         """.stripMargin)
-      inline"$functionCall"
-    }
-
-    val keyToStringFunc = dataToStringFunc("keyToString", kt)
-    val valueToStringFunc = dataToStringFunc("valueToString", vt)
-    val loopIndex = ctx.freshVariable("loopIndex", IntegerType)
-    val mapKeyArray = JavaCode.expression(s"$map.keyArray()", classOf[ArrayData])
-    val mapValueArray = JavaCode.expression(s"$map.valueArray()", classOf[ArrayData])
-    val getMapFirstKey = CodeGenerator.getValue(mapKeyArray, kt, JavaCode.literal("0", IntegerType))
-    val getMapFirstValue = CodeGenerator.getValue(mapValueArray, vt,
-      JavaCode.literal("0", IntegerType))
-    val getMapKeyArray = CodeGenerator.getValue(mapKeyArray, kt, loopIndex)
-    val getMapValueArray = CodeGenerator.getValue(mapValueArray, vt, loopIndex)
-    code"""
-       |$buffer.append("$leftBracket");
-       |if ($map.numElements() > 0) {
-       |  $buffer.append($keyToStringFunc($getMapFirstKey));
-       |  $buffer.append(" ->");
-       |  if ($map.valueArray().isNullAt(0)) {
-       |    ${appendIfNotLegacyCastToStr(buffer, " null")}
-       |  } else {
-       |    $buffer.append(" ");
-       |    $buffer.append($valueToStringFunc($getMapFirstValue));
-       |  }
-       |  for (int $loopIndex = 1; $loopIndex < $map.numElements(); $loopIndex++) {
-       |    $buffer.append(", ");
-       |    $buffer.append($keyToStringFunc($getMapKeyArray));
-       |    $buffer.append(" ->");
-       |    if ($map.valueArray().isNullAt($loopIndex)) {
-       |      ${appendIfNotLegacyCastToStr(buffer, " null")}
-       |    } else {
-       |      $buffer.append(" ");
-       |      $buffer.append($valueToStringFunc($getMapValueArray));
-       |    }
-       |  }
-       |}
-       |$buffer.append("$rightBracket");
-     """.stripMargin
-  }
-
-  private def writeStructToStringBuilder(
-      st: Seq[DataType],
-      row: ExprValue,
-      buffer: ExprValue,
-      ctx: CodegenContext): Block = {
-    val structToStringCode = st.zipWithIndex.map { case (ft, i) =>
-      val fieldToStringCode = castToStringCode(ft, ctx)
-      val field = ctx.freshVariable("field", ft)
-      val fieldStr = ctx.freshVariable("fieldStr", StringType)
-      val javaType = JavaCode.javaType(ft)
-      code"""
-         |${if (i != 0) code"""$buffer.append(",");""" else EmptyBlock}
-         |if ($row.isNullAt($i)) {
-         |  ${appendIfNotLegacyCastToStr(buffer, if (i == 0) "null" else " null")}
-         |} else {
-         |  ${if (i != 0) code"""$buffer.append(" ");""" else EmptyBlock}
-         |
-         |  // Append $i field into the string buffer
-         |  $javaType $field = ${CodeGenerator.getValue(row, ft, s"$i")};
-         |  UTF8String $fieldStr = null;
-         |  ${fieldToStringCode(field, fieldStr, null /* resultIsNull won't be used */)}
-         |  $buffer.append($fieldStr);
-         |}
-       """.stripMargin
-    }
-
-    val writeStructCode = ctx.splitExpressions(
-      expressions = structToStringCode.map(_.code),
-      funcName = "fieldToString",
-      arguments = ("InternalRow", row.code) ::
-        (classOf[UTF8StringBuilder].getName, buffer.code) :: Nil)
-
-    code"""
-       |$buffer.append("$leftBracket");
-       |$writeStructCode
-       |$buffer.append("$rightBracket");
-     """.stripMargin
   }
 
   private[this] def castToStringCode(from: DataType, ctx: CodegenContext): CastFunction = {
