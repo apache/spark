@@ -82,7 +82,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var submissionToKill: String = null
   var submissionToRequestStatusFor: String = null
   var useRest: Boolean = false // used internally
-  var isServer: Boolean = false // whether start as server
+  var keepSparkContextAlive: Boolean = false // keep spark context alive after invoking main
 
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
@@ -446,8 +446,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       case USAGE_ERROR =>
         printUsageAndExit(1)
 
-      case IS_SERVER =>
-        isServer = value.toBoolean
+      case KEEP_SPARK_CONTEXT_ALIVE =>
+        keepSparkContextAlive = value.toBoolean
 
       case _ =>
         error(s"Unexpected argument '$opt'.")
@@ -538,6 +538,11 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |
         |  --proxy-user NAME           User to impersonate when submitting the application.
         |                              This argument does not work with --principal / --keytab.
+        |
+        |  --keep-spark-context-alive  Ture or False. Whether to keep the spark context alive after
+        |                              invoking main method. Default is false. If value is true, spark
+        |                              context will not close after invoking main method. Instead the
+        |                              spark context will close in shut down hook.
         |
         |  --help, -h                  Show this help message and exit.
         |  --verbose, -v               Print additional debug output.

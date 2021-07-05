@@ -1526,16 +1526,16 @@ class SparkSubmitSuite
     }
   }
 
-  test("handles arguments with --is-server") {
+  test("handles arguments with --keep-spark-context-alive") {
     val clArgs = Seq(
       "--name=myApp",
       "--class=org.FooBar",
-      "--is-server", "true",
+      "--keep-spark-context-alive", "true",
       "test.jar"
     )
     val appArgs = new SparkSubmitArguments(clArgs)
     appArgs.name should be ("myApp")
-    appArgs.isServer should be (true)
+    appArgs.keepSparkContextAlive should be (true)
   }
 }
 

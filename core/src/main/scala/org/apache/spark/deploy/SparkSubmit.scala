@@ -958,7 +958,7 @@ private[spark] class SparkSubmit extends Logging {
         throw findCause(t)
     } finally {
       if (!isShell(args.primaryResource) && !isSqlShell(args.mainClass) &&
-        !isThriftServer(args.mainClass) && !args.isServer) {
+        !isThriftServer(args.mainClass) && !args.keepSparkContextAlive) {
         try {
           SparkContext.getActive.foreach(_.stop())
         } catch {
