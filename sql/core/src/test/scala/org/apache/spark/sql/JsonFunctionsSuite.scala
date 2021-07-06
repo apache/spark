@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.text.SimpleDateFormat
-import java.time.Period
+import java.time.{Duration, Period}
 import java.util.Locale
 
 import collection.JavaConverters._
@@ -28,6 +28,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
 class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
@@ -835,6 +836,47 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       checkAnswer(toJsonDF, Row(toJsonExpected))
 
       DataTypeTestUtils.yearMonthIntervalTypes.foreach { fromJsonDtype =>
+        val fromJsonDF = toJsonDF
+          .select(
+            from_json($"json", StructType(StructField("key", fromJsonDtype) :: Nil)) as "value")
+          .selectExpr("value['key']")
+        if (toJsonDtype == fromJsonDtype) {
+          checkAnswer(fromJsonDF, Row(fromJsonExpected))
+        } else {
+          checkAnswer(fromJsonDF, Row(null))
+        }
+      }
+    }
+  }
+
+  test("SPARK-35983: from_json/to_json for map types where value types are day-time intervals") {
+    val dtDF = Seq(Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)).toDF
+    Seq(
+      (DayTimeIntervalType(), """{"key":"INTERVAL '1 02:03:04' DAY TO SECOND"}""",
+        Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)),
+      (DayTimeIntervalType(DAY, MINUTE), """{"key":"INTERVAL '1 02:03' DAY TO MINUTE"}""",
+        Duration.ofDays(1).plusHours(2).plusMinutes(3)),
+      (DayTimeIntervalType(DAY, HOUR), """{"key":"INTERVAL '1 02' DAY TO HOUR"}""",
+        Duration.ofDays(1).plusHours(2)),
+      (DayTimeIntervalType(DAY), """{"key":"INTERVAL '1' DAY"}""",
+        Duration.ofDays(1)),
+      (DayTimeIntervalType(HOUR, SECOND), """{"key":"INTERVAL '26:03:04' HOUR TO SECOND"}""",
+        Duration.ofHours(26).plusMinutes(3).plusSeconds(4)),
+      (DayTimeIntervalType(HOUR, MINUTE), """{"key":"INTERVAL '26:03' HOUR TO MINUTE"}""",
+        Duration.ofHours(26).plusMinutes(3)),
+      (DayTimeIntervalType(HOUR), """{"key":"INTERVAL '26' HOUR"}""",
+        Duration.ofHours(26)),
+      (DayTimeIntervalType(MINUTE, SECOND), """{"key":"INTERVAL '1563:04' MINUTE TO SECOND"}""",
+        Duration.ofMinutes(1563).plusSeconds(4)),
+      (DayTimeIntervalType(MINUTE), """{"key":"INTERVAL '1563' MINUTE"}""",
+        Duration.ofMinutes(1563)),
+      (DayTimeIntervalType(SECOND), """{"key":"INTERVAL '93784' SECOND"}""",
+        Duration.ofSeconds(93784))
+    ).foreach { case (toJsonDtype, toJsonExpected, fromJsonExpected) =>
+      val toJsonDF = dtDF.select(to_json(map(lit("key"), $"value" cast toJsonDtype)) as "json")
+      checkAnswer(toJsonDF, Row(toJsonExpected))
+
+      DataTypeTestUtils.dayTimeIntervalTypes.foreach { fromJsonDtype =>
         val fromJsonDF = toJsonDF
           .select(
             from_json($"json", StructType(StructField("key", fromJsonDtype) :: Nil)) as "value")
