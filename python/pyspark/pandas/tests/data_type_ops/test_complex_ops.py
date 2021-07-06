@@ -266,6 +266,10 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.pser != self.other_pser, (self.psser != self.other_psser).sort_index()
             )
             self.assert_eq(self.pser != self.pser, (self.psser != self.psser).sort_index())
+            self.assert_eq(
+                self.struct_pser != self.struct_pser,
+                (self.struct_psser != self.struct_psser).sort_index(),
+            )
 
     def test_lt(self):
         with option_context("compute.ops_on_diff_frames", True):
@@ -273,6 +277,10 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.pser < self.other_pser, (self.psser < self.other_psser).sort_index()
             )
             self.assert_eq(self.pser < self.pser, (self.psser < self.psser).sort_index())
+            self.assert_eq(
+                self.struct_pser < self.struct_pser,
+                (self.struct_psser < self.struct_psser).sort_index(),
+            )
 
     def test_le(self):
         with option_context("compute.ops_on_diff_frames", True):
@@ -280,6 +288,10 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.pser <= self.other_pser, (self.psser <= self.other_psser).sort_index()
             )
             self.assert_eq(self.pser <= self.pser, (self.psser <= self.psser).sort_index())
+            self.assert_eq(
+                self.struct_pser <= self.struct_pser,
+                (self.struct_psser <= self.struct_psser).sort_index(),
+            )
 
     def test_gt(self):
         with option_context("compute.ops_on_diff_frames", True):
@@ -287,6 +299,10 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.pser > self.other_pser, (self.psser > self.other_psser).sort_index()
             )
             self.assert_eq(self.pser > self.pser, (self.psser > self.psser).sort_index())
+            self.assert_eq(
+                self.struct_pser > self.struct_pser,
+                (self.struct_psser > self.struct_psser).sort_index(),
+            )
 
     def test_ge(self):
         with option_context("compute.ops_on_diff_frames", True):
@@ -294,6 +310,10 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.pser >= self.other_pser, (self.psser >= self.other_psser).sort_index()
             )
             self.assert_eq(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
+            self.assert_eq(
+                self.struct_pser >= self.struct_pser,
+                (self.struct_psser >= self.struct_psser).sort_index(),
+            )
 
 
 if __name__ == "__main__":
