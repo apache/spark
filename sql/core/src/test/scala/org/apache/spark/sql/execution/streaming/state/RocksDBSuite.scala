@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.streaming.state
 import java.io._
 import java.nio.charset.Charset
 
+import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 
 import org.apache.commons.io.FileUtils
@@ -342,7 +343,7 @@ class RocksDBSuite extends SparkFunSuite {
       val numThreads = 20
       val numUpdatesInEachThread = 20
       val remoteDir = Utils.createTempDir().toString
-      @volatile var exception: Exception = null
+      @volatile val exception: ArrayBuffer[Exception] = _
       val updatingThreads = Array.fill(numThreads) {
         new Thread() {
           override def run(): Unit = {
@@ -357,8 +358,9 @@ class RocksDBSuite extends SparkFunSuite {
                 }
               }
             } catch {
-              case _: Exception =>
+              case e: Exception =>
                 // ignore all the exceptions for concurrent update
+                exception.append(e)
             }
           }
         }
@@ -375,7 +377,7 @@ class RocksDBSuite extends SparkFunSuite {
           } catch {
             case e: Exception if !e.isInstanceOf[InterruptedException] =>
               val newException = new Exception(s"ThreadId ${this.getId} failed", e)
-              exception = newException
+              exception.append(newException)
               throw e
           }
         }
@@ -385,9 +387,10 @@ class RocksDBSuite extends SparkFunSuite {
       updatingThreads.foreach(_.join())
       cleaningThread.interrupt()
       cleaningThread.join()
-      if (exception != null) {
-        fail(exception)
-      }
+      // if (exception != null) {
+      //   fail(exception.last)
+      // }
+      exception.foreach(e => logError(s"THREAD ERROR MESSAGES: ${e.getMessage}"))
       withDB(remoteDir, numUpdatesInEachThread) { db =>
         assert(toStr(db.get("a")) === numUpdatesInEachThread.toString)
       }
