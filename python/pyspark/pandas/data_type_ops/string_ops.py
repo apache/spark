@@ -74,10 +74,10 @@ class StringOps(DataTypeOps):
         raise TypeError("division can not be applied to %s." % self.pretty_name)
 
     def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("modulo can not be applied on string series or literals.")
+        raise TypeError("modulo can not be applied to %s." % self.pretty_name)
 
     def pow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("exponentiation can not be applied on string series or literals.")
+        raise TypeError("exponentiation can not be applied to %s." % self.pretty_name)
 
     def radd(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
