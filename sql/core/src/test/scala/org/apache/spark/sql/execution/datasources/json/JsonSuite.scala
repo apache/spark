@@ -2919,6 +2919,50 @@ abstract class JsonSuite
       }
     }
   }
+
+  test("SPARK-35912: nullability with different parse mode -- struct") {
+    val input =
+      """
+        |{
+        |  "c1": {
+        |    "c2": 1
+        |  }
+        |}
+        |""".stripMargin
+    val json = spark.createDataset(spark.sparkContext.parallelize(input :: Nil))(Encoders.STRING)
+
+    val load = (mode: String, schema: StructType) => {
+      spark.read
+        .option("mode", mode)
+        .schema(schema)
+        .json(json)
+    }
+
+    Seq(true, false).foreach { nullable =>
+      val schema = StructType(Seq(
+        StructField("c1",
+          StructType(Seq(
+            StructField("c2", IntegerType, nullable = false),
+            StructField("not_exist_col", IntegerType, nullable = false)
+          )),
+          nullable = nullable))
+      )
+
+      checkAnswer(load("DROPMALFORMED", schema), Seq.empty)
+
+      val exception = intercept[SparkException] {
+        load("FAILFAST", schema).collect
+      }.getMessage
+      assert(exception.contains(
+        "the null value found when parsing non-nullable field not_exist_col."))
+
+      val e = intercept[SparkException] {
+        load("PERMISSIVE", schema).collect()
+      }
+      assert(e.getMessage.contains(
+        "the null value found when parsing non-nullable field not_exist_col."))
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {

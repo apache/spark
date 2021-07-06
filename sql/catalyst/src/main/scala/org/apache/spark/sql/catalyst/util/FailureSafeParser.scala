@@ -67,6 +67,8 @@ class FailureSafeParser[IN](
         case FailFastMode =>
           throw QueryExecutionErrors.malformedRecordsDetectedInRecordParsingError(e)
       }
+      case _ if (mode == DropMalformedMode) =>
+        Iterator.empty
     }
   }
 }

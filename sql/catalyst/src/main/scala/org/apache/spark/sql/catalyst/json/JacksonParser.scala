@@ -29,7 +29,6 @@ import org.apache.spark.SparkUpgradeException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator.isPrimitiveType
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -412,6 +411,7 @@ class JacksonParser(
             checkedIndexSet += index
           } catch {
             case e: SparkUpgradeException => throw e
+            case e: IllegalArgumentException => throw e
             case NonFatal(e) if isRoot =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
@@ -421,15 +421,12 @@ class JacksonParser(
       }
     }
 
-    // When the input schema is setting to `nullable = false`, make sure the primitive type has a
-    // default value rather than setting a null value. this is because Spark uses
-    // `InternalRow.isNullAt(index)` to guarantees the actual value is null or not.
+    // When the input schema is setting to `nullable = false`, make sure the field is not null.
     var index = 0
-    while (!skipRow && index < schema.length) {
-      val sf = schema(index)
-      if (!sf.nullable && isPrimitiveType(sf.dataType) && row.isNullAt(index)) {
-        val writer = InternalRow.getWriter(index, schema(index).dataType)
-        writer(row, null)
+    while (badRecordException.isEmpty && !skipRow && index < schema.length) {
+      if (!schema(index).nullable && row.isNullAt(index)) {
+        throw new IllegalArgumentException(
+          s"the null value found when parsing non-nullable field ${schema(index).name}.")
       }
       if (!checkedIndexSet.contains(index)) {
         skipRow = structFilters.skipRow(row, index)
@@ -502,6 +499,7 @@ class JacksonParser(
       }
     } catch {
       case e: SparkUpgradeException => throw e
+      case e: IllegalArgumentException => throw e
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by

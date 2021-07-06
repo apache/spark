@@ -56,41 +56,22 @@ class JacksonParserSuite extends SparkFunSuite {
   }
 
   test("35912: nullability with different schema nullable setting") {
-    // primitive type default value.
-    val defaultValue: Map[DataType, Any] = Map(
-      BooleanType -> false,
-      ByteType -> 0.toByte,
-      ShortType -> 0.toShort,
-      IntegerType -> 0,
-      LongType -> 0.toLong,
-      FloatType -> 0.0F,
-      DoubleType -> 0.0D)
-    val metadata = new MetadataBuilder()
-      .putString("name", "age")
-      .build()
-    val structType = StructType(Seq(
-      StructField("a", IntegerType, nullable = true),
-      StructField("b", ArrayType(DoubleType), nullable = false),
-      StructField("c", DoubleType, nullable = false, metadata)))
-    val a1 = ArrayType(DoubleType, true)
-    val a2 = ArrayType(StringType, false)
-    val m1 = MapType(IntegerType, StringType, true)
-    val m2 = MapType(IntegerType, ArrayType(DoubleType), false)
-    val dataTypeSet: Set[DataType] = Set(
-      BooleanType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, NullType,
-      StringType, CalendarIntervalType, DecimalType.SYSTEM_DEFAULT, structType, a1, a2, m1, m2
-    )
-    dataTypeSet.foreach { dt =>
-      Seq(true, false).foreach { nullable =>
-        val schema = StructType(Seq(
-          StructField("i", IntegerType),
-          StructField("not_exist_col", dt, nullable = nullable)
-        ))
-        val expected = if (nullable) {
-          Seq(InternalRow(1, null))
-        } else {
-          Seq(InternalRow(1, defaultValue.getOrElse(dt, null)))
+    def assertAction(nullable: Boolean)(action: => Unit): Unit = {
+      if (nullable) {
+        action
+      } else {
+        assertThrows[IllegalArgumentException] {
+          action
         }
+      }
+    }
+    Seq(true, false).foreach { nullable =>
+      val schema = StructType(Seq(
+        StructField("i", IntegerType),
+        StructField("not_exist_col", IntegerType, nullable = nullable)
+      ))
+      val expected = Seq(InternalRow(1, null))
+      assertAction(nullable) {
         check(schema = schema, filters = Seq(EqualTo("i", 1)), expected = expected)
       }
     }
@@ -102,23 +83,31 @@ class JacksonParserSuite extends SparkFunSuite {
     // filter by not exist column
     Seq(true, false).foreach { nullable =>
       val s = schema(nullable)
-      check(schema = s, filters = Seq(EqualTo("not_exist_col", 1)), expected = Seq.empty)
+      assertAction(nullable) {
+        check(schema = s, filters = Seq(EqualTo("not_exist_col", 1)), expected = Seq.empty)
+      }
+      assertAction(nullable) {
+        check(schema = s, filters = Seq(EqualTo("not_exist_col", 0)), expected = Seq.empty)
+      }
+      assertAction(nullable) {
+        check(schema = s, filters = Seq(IsNotNull("not_exist_col")), expected = Seq.empty)
+      }
+      assertAction(nullable) {
+        check(schema = s, filters = Seq(IsNull("not_exist_col")),
+          expected = Seq(InternalRow(1, null)))
+      }
 
-      val expected1 = if (nullable) Seq.empty else Seq(InternalRow(1, 0))
-      check(schema = s, filters = Seq(EqualTo("not_exist_col", 0)), expected = expected1)
+    }
 
-      val expected2 = if (nullable) Seq.empty else Seq(InternalRow(1, 0))
-      check(schema = s, filters = Seq(IsNotNull("not_exist_col")), expected = expected2)
-
-      val expected3 = if (nullable) Seq(InternalRow(1, null)) else Seq.empty
-      check(schema = s, filters = Seq(IsNull("not_exist_col")), expected = expected3)
-
-      val input = """{"a": 1, "b": null}"""
+    val input = """{"a": 1, "b": null}"""
+    // filter by null value column
+    Seq(true, false).foreach { nullable =>
       val s2 = StructType(Seq(
         StructField("a", IntegerType),
         StructField("b", IntegerType, nullable = nullable)))
-      val expected4 = if (nullable) Seq.empty else Seq(InternalRow(1, 0))
-      check(input = input, schema = s2, filters = Seq(IsNotNull("b")), expected = expected4)
+      assertAction(nullable) {
+        check(input = input, schema = s2, filters = Seq(IsNotNull("b")), expected = Seq.empty)
+      }
       val expected5 = if (nullable) Seq(InternalRow(1, null)) else Seq.empty
       check(input = input, schema = s2, filters = Seq(IsNull("b")), expected = expected5)
     }
