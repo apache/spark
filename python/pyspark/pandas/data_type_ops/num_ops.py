@@ -151,11 +151,6 @@ class IntegralOps(NumericOps):
         return column_op(Column.__mul__)(left, right)
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if (
-            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
-        ) or isinstance(right, str):
-            raise TypeError("division can not be applied on string series or literals.")
-
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("division can not be applied to given types.")
 
@@ -169,11 +164,6 @@ class IntegralOps(NumericOps):
         return numpy_column_op(truediv)(left, right)
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if (
-            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
-        ) or isinstance(right, str):
-            raise TypeError("division can not be applied on string series or literals.")
-
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("division can not be applied to given types.")
 
@@ -189,8 +179,6 @@ class IntegralOps(NumericOps):
         return numpy_column_op(floordiv)(left, right)
 
     def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("division can not be applied to given types.")
 
@@ -203,8 +191,6 @@ class IntegralOps(NumericOps):
         return numpy_column_op(rtruediv)(left, right)
 
     def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("division can not be applied to given types.")
 
@@ -248,11 +234,6 @@ class FractionalOps(NumericOps):
         return column_op(Column.__mul__)(left, right)
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if (
-            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
-        ) or isinstance(right, str):
-            raise TypeError("division can not be applied on string series or literals.")
-
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("division can not be applied to given types.")
 
@@ -270,11 +251,6 @@ class FractionalOps(NumericOps):
         return numpy_column_op(truediv)(left, right)
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if (
-            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
-        ) or isinstance(right, str):
-            raise TypeError("division can not be applied on string series or literals.")
-
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("division can not be applied to given types.")
 
@@ -294,8 +270,6 @@ class FractionalOps(NumericOps):
         return numpy_column_op(floordiv)(left, right)
 
     def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("division can not be applied to given types.")
 
@@ -308,8 +282,6 @@ class FractionalOps(NumericOps):
         return numpy_column_op(rtruediv)(left, right)
 
     def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("division can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("division can not be applied to given types.")
 

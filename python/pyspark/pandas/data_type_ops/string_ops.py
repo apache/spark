@@ -55,7 +55,7 @@ class StringOps(DataTypeOps):
             raise TypeError("addition can not be applied to given types.")
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("subtraction can not be applied to string series or literals.")
+        raise TypeError("subtraction can not be applied to %s." % self.pretty_name)
 
     def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if (
@@ -68,10 +68,10 @@ class StringOps(DataTypeOps):
             raise TypeError("multiplication can not be applied to given types.")
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("division can not be applied on string series or literals.")
+        raise TypeError("division can not be applied to %s." % self.pretty_name)
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("division can not be applied on string series or literals.")
+        raise TypeError("division can not be applied to %s." % self.pretty_name)
 
     def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("modulo can not be applied on string series or literals.")
@@ -89,7 +89,7 @@ class StringOps(DataTypeOps):
             raise TypeError("addition can not be applied to given types.")
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("subtraction can not be applied to string series or literals.")
+        raise TypeError("subtraction can not be applied to %s." % self.pretty_name)
 
     def rmul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, int):
@@ -98,16 +98,16 @@ class StringOps(DataTypeOps):
             raise TypeError("multiplication can not be applied to given types.")
 
     def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("division can not be applied on string series or literals.")
+        raise TypeError("division can not be applied to %s." % self.pretty_name)
 
     def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("division can not be applied on string series or literals.")
+        raise TypeError("division can not be applied to %s." % self.pretty_name)
 
     def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("exponentiation can not be applied on string series or literals.")
+        raise TypeError("exponentiation can not be applied to %s." % self.pretty_name)
 
     def rmod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("modulo can not be applied on string series or literals.")
+        raise TypeError("modulo can not be applied to %s." % self.pretty_name)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)

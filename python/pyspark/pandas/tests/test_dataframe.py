@@ -2386,23 +2386,27 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})
-        ks_err_msg = "division can not be applied on string series or literals"
 
-        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] / psdf["b"])
+        ks_err_msg = "division can not be applied to given types"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] / psdf["a"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] / "literal")
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: "literal" / psdf["b"])
+
+        ks_err_msg = "division can not be applied to strings"
+        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] / psdf["b"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 1 / psdf["a"])
 
     def test_binary_operator_floordiv(self):
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})
-        ks_err_msg = "division can not be applied on string series or literals"
 
+        ks_err_msg = "division can not be applied to strings"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] // psdf["b"])
+        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 1 // psdf["a"])
+
+        ks_err_msg = "division can not be applied to given types"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] // psdf["a"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] // "literal")
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: "literal" // psdf["b"])
-        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 1 // psdf["a"])
 
     def test_binary_operator_mod(self):
         # Positive
