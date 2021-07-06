@@ -54,7 +54,7 @@ class NumericOps(DataTypeOps):
 
     def add(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
-            raise TypeError("addition can not be applied to given types.")
+            raise TypeError("Addition can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
@@ -62,7 +62,7 @@ class NumericOps(DataTypeOps):
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
-            raise TypeError("subtraction can not be applied to given types.")
+            raise TypeError("Subtraction can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
@@ -70,7 +70,7 @@ class NumericOps(DataTypeOps):
 
     def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
-            raise TypeError("modulo can not be applied to given types.")
+            raise TypeError("Modulo can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
@@ -81,7 +81,7 @@ class NumericOps(DataTypeOps):
 
     def pow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
-            raise TypeError("exponentiation can not be applied to given types.")
+            raise TypeError("Exponentiation can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
@@ -92,25 +92,25 @@ class NumericOps(DataTypeOps):
 
     def radd(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not isinstance(right, numbers.Number):
-            raise TypeError("addition can not be applied to given types.")
+            raise TypeError("Addition can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__radd__)(left, right)
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not isinstance(right, numbers.Number):
-            raise TypeError("subtraction can not be applied to given types.")
+            raise TypeError("Subtraction can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__rsub__)(left, right)
 
     def rmul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not isinstance(right, numbers.Number):
-            raise TypeError("multiplication can not be applied to given types.")
+            raise TypeError("Multiplication can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__rmul__)(left, right)
 
     def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not isinstance(right, numbers.Number):
-            raise TypeError("exponentiation can not be applied to given types.")
+            raise TypeError("Exponentiation can not be applied to given types.")
 
         def rpow_func(left: Column, right: Any) -> Column:
             return F.when(SF.lit(right == 1), right).otherwise(Column.__rpow__(left, right))
@@ -120,7 +120,7 @@ class NumericOps(DataTypeOps):
 
     def rmod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not isinstance(right, numbers.Number):
-            raise TypeError("modulo can not be applied to given types.")
+            raise TypeError("Modulo can not be applied to given types.")
 
         def rmod(left: Column, right: Any) -> Column:
             return ((right % left) + left) % left
@@ -144,7 +144,7 @@ class IntegralOps(NumericOps):
             return column_op(SF.repeat)(right, left)
 
         if not is_valid_operand_for_numeric_arithmetic(right):
-            raise TypeError("multiplication can not be applied to given types.")
+            raise TypeError("Multiplication can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
@@ -152,7 +152,7 @@ class IntegralOps(NumericOps):
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
-            raise TypeError("division can not be applied to given types.")
+            raise TypeError("Division can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
@@ -165,7 +165,7 @@ class IntegralOps(NumericOps):
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
-            raise TypeError("division can not be applied to given types.")
+            raise TypeError("Division can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
@@ -180,7 +180,7 @@ class IntegralOps(NumericOps):
 
     def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not isinstance(right, numbers.Number):
-            raise TypeError("division can not be applied to given types.")
+            raise TypeError("Division can not be applied to given types.")
 
         def rtruediv(left: Column, right: Any) -> Column:
             return F.when(left == 0, SF.lit(np.inf).__div__(right)).otherwise(
@@ -192,7 +192,7 @@ class IntegralOps(NumericOps):
 
     def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not isinstance(right, numbers.Number):
-            raise TypeError("division can not be applied to given types.")
+            raise TypeError("Division can not be applied to given types.")
 
         def rfloordiv(left: Column, right: Any) -> Column:
             return F.when(SF.lit(left == 0), SF.lit(np.inf).__div__(right)).otherwise(
@@ -227,7 +227,7 @@ class FractionalOps(NumericOps):
 
     def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
-            raise TypeError("multiplication can not be applied to given types.")
+            raise TypeError("Multiplication can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
@@ -235,7 +235,7 @@ class FractionalOps(NumericOps):
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
-            raise TypeError("division can not be applied to given types.")
+            raise TypeError("Division can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
@@ -252,7 +252,7 @@ class FractionalOps(NumericOps):
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
-            raise TypeError("division can not be applied to given types.")
+            raise TypeError("Division can not be applied to given types.")
 
         right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
@@ -271,7 +271,7 @@ class FractionalOps(NumericOps):
 
     def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not isinstance(right, numbers.Number):
-            raise TypeError("division can not be applied to given types.")
+            raise TypeError("Division can not be applied to given types.")
 
         def rtruediv(left: Column, right: Any) -> Column:
             return F.when(left == 0, SF.lit(np.inf).__div__(right)).otherwise(
@@ -283,7 +283,7 @@ class FractionalOps(NumericOps):
 
     def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not isinstance(right, numbers.Number):
-            raise TypeError("division can not be applied to given types.")
+            raise TypeError("Division can not be applied to given types.")
 
         def rfloordiv(left: Column, right: Any) -> Column:
             return F.when(SF.lit(left == 0), SF.lit(np.inf).__div__(right)).otherwise(
