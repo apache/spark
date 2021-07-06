@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1113,10 +1114,14 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
     if (!isTryCast) {
       Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH").foreach { interval =>
+        val dataType = YearMonthIntervalType()
         val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), YearMonthIntervalType()).eval()
+          cast(Literal.create(interval), dataType).eval()
         }.getMessage
-        assert(e.contains("Interval string does not match year-month format"))
+        assert(e.contains(s"Interval string does not match year-month format of " +
+          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+            .map(format => s"`$format`").mkString(", ")} " +
+          s"when cast to ${dataType.typeName}: $interval"))
       }
       Seq(("1", YearMonthIntervalType(YEAR, MONTH)),
         ("1", YearMonthIntervalType(YEAR, MONTH)),
@@ -1132,7 +1137,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           val e = intercept[IllegalArgumentException] {
             cast(Literal.create(interval), dataType).eval()
           }.getMessage
-          assert(e.contains("Interval string does not match year-month format"))
+          assert(e.contains(s"Interval string does not match year-month format of " +
+            s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+              .map(format => s"`$format`").mkString(", ")} " +
+            s"when cast to ${dataType.typeName}: $interval"))
         }
     }
   }
@@ -1249,7 +1257,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           val e = intercept[IllegalArgumentException] {
             cast(Literal.create(interval), dataType).eval()
           }.getMessage
-          assert(e.contains("Interval string does not match day-time format"))
+          assert(e.contains(s"Interval string does not match day-time format of " +
+            s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+              .map(format => s"`$format`").mkString(", ")} " +
+            s"when cast to ${dataType.typeName}: $interval, " +
+            s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
+            "to restore the behavior before Spark 3.0."))
         }
 
       // Check first field outof bound
@@ -1267,7 +1280,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           val e = intercept[IllegalArgumentException] {
             cast(Literal.create(interval), dataType).eval()
           }.getMessage
-          assert(e.contains("Interval string does not match day-time format"))
+          assert(e.contains(s"Interval string does not match day-time format of " +
+            s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+              .map(format => s"`$format`").mkString(", ")} " +
+            s"when cast to ${dataType.typeName}: $interval, " +
+            s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
+            "to restore the behavior before Spark 3.0."))
         }
     }
   }
