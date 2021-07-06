@@ -276,15 +276,16 @@ trait JoinSelectionHelper {
       hintToPreferShuffleHashJoinLeft(hint) ||
         (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(left, conf) &&
           muchSmaller(left, right)) ||
-        (Utils.isTesting && conf.forceApplyShuffledHashJoin)
+        (Utils.isTesting && forceApplyShuffledHashJoin(conf))
     }
     val buildRight = if (hintOnly) {
       hintToShuffleHashJoinRight(hint)
     } else {
-      hintToPreferShuffleHashJoinRight(hint) || conf.forceApplyShuffledHashJoin ||
+      hintToPreferShuffleHashJoinRight(hint) ||
         (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(right, conf) &&
           muchSmaller(right, left)) ||
-        (Utils.isTesting && conf.forceApplyShuffledHashJoin)
+        (Utils.isTesting && forceApplyShuffledHashJoin(conf))
+
     }
     getBuildSide(
       canBuildShuffledHashJoinLeft(joinType) && buildLeft,
@@ -426,6 +427,14 @@ trait JoinSelectionHelper {
    */
   private def muchSmaller(a: LogicalPlan, b: LogicalPlan): Boolean = {
     a.stats.sizeInBytes * 3 <= b.stats.sizeInBytes
+  }
+
+  /**
+   * Returns whether a shuffled hash join should be force applied.
+   * The config key is hard-coded because it's testing only and should not be exposed.
+   */
+  private def forceApplyShuffledHashJoin(conf: SQLConf): Boolean = {
+    conf.getConfString("spark.sql.join.forceApplyShuffledHashJoin", "false") == "true"
   }
 }
 

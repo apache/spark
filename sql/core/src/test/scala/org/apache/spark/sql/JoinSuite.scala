@@ -1398,7 +1398,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
   test("SPARK-35984: Config to force applying shuffled hash join") {
     val sql = "SELECT * FROM testData JOIN testData2 ON key = a"
     assertJoin(sql, classOf[SortMergeJoinExec])
-    withSQLConf(SQLConf.FORCE_APPLY_SHUFFLEDHASHJOIN.key -> "true") {
+    withSQLConf("spark.sql.join.forceApplyShuffledHashJoin" -> "true") {
       assertJoin(sql, classOf[ShuffledHashJoinExec])
     }
   }

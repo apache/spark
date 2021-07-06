@@ -419,15 +419,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val FORCE_APPLY_SHUFFLEDHASHJOIN = buildConf("spark.sql.join.forceApplyShuffledHashJoin")
-    .internal()
-    .doc("When true, force applying shuffled hash join even if the table sizes exceed the " +
-      "threshold. This is for testing/benchmarking only. If this config is set to true, the " +
-      s"value ${PREFER_SORTMERGEJOIN.key} will be ignored.")
-    .version("3.3.0")
-    .booleanConf
-    .createWithDefault(false)
-
   val RADIX_SORT_ENABLED = buildConf("spark.sql.sort.enableRadixSort")
     .internal()
     .doc("When true, enable use of radix sort when possible. Radix sort is much faster but " +
@@ -3726,8 +3717,6 @@ class SQLConf extends Serializable with Logging {
     getConf(ADVANCED_PARTITION_PREDICATE_PUSHDOWN)
 
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
-
-  def forceApplyShuffledHashJoin: Boolean = getConf(FORCE_APPLY_SHUFFLEDHASHJOIN)
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
