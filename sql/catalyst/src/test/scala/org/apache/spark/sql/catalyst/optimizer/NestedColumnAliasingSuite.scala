@@ -708,6 +708,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         $"_extract_search_params.col1".as("col1"),
         $"_extract_search_params.col2".as("col2")).analyze
     comparePlans(optimized, query)
+  }
 }
 
 object NestedColumnAliasingSuite {
