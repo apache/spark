@@ -19,6 +19,7 @@ from typing import Any
 
 from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import DataTypeOps
+from pyspark.sql import Column
 
 
 class UDTOps(DataTypeOps):
@@ -31,23 +32,12 @@ class UDTOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "user defined types"
 
-    def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
-        raise TypeError("Unary - can not be applied to %s." % self.pretty_name)
+    def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
 
-    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
-        raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
+        return column_op(Column.__eq__)(left, right)
 
-    def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
-        raise TypeError("abs() can not be applied to %s." % self.pretty_name)
+    def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
 
-    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("< can not be applied to %s." % self.pretty_name)
-
-    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("<= can not be applied to %s." % self.pretty_name)
-
-    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("> can not be applied to %s." % self.pretty_name)
-
-    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError(">= can not be applied to %s." % self.pretty_name)
+        return column_op(Column.__ne__)(left, right)

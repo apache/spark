@@ -25,7 +25,7 @@ from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column
 
 
 class CategoricalOps(DataTypeOps):
@@ -66,15 +66,6 @@ class CategoricalOps(DataTypeOps):
             scol.alias(index_ops._internal.data_spark_column_names[0])
         ).astype(dtype)
 
-    def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
-        raise TypeError("Unary - can not be applied to %s." % self.pretty_name)
-
-    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
-        raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
-
-    def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
-        raise TypeError("abs() can not be applied to %s." % self.pretty_name)
-
     # TODO(SPARK-35997): Implement comparison operators below
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise NotImplementedError("< can not be applied to %s." % self.pretty_name)
@@ -87,3 +78,13 @@ class CategoricalOps(DataTypeOps):
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise NotImplementedError(">= can not be applied to %s." % self.pretty_name)
+
+    def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__eq__)(left, right)
+
+    def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__ne__)(left, right)

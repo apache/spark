@@ -18,13 +18,13 @@
 import numbers
 from abc import ABCMeta
 from itertools import chain
-from typing import Any, cast, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -319,49 +319,31 @@ class DataTypeOps(object, metaclass=ABCMeta):
         return left.__or__(right)
 
     def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
-        from pyspark.pandas.base import column_op
-
-        return cast(IndexOpsLike, column_op(Column.__neg__)(operand))
+        raise TypeError("Unary - can not be applied to %s." % self.pretty_name)
 
     def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
-        from pyspark.pandas.base import column_op
-
-        return cast(IndexOpsLike, column_op(F.abs)(operand))
+        raise TypeError("abs() can not be applied to %s." % self.pretty_name)
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__lt__)(left, right)
+        raise TypeError("< can not be applied to %s." % self.pretty_name)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__le__)(left, right)
+        raise TypeError("<= can not be applied to %s." % self.pretty_name)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__ge__)(left, right)
+        raise TypeError("> can not be applied to %s." % self.pretty_name)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__gt__)(left, right)
+        raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__eq__)(left, right)
+        raise TypeError("== can not be applied to %s." % self.pretty_name)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__ne__)(left, right)
+        raise TypeError("!= can not be applied to %s." % self.pretty_name)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
-        from pyspark.pandas.base import column_op
-
-        return cast(IndexOpsLike, column_op(Column.__invert__)(operand))
+        raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
 
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""
