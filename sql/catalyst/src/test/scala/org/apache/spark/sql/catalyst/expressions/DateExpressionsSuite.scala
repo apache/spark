@@ -331,7 +331,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Hour(Literal(ts), UTC_OPT), 13)
 
     val c = Calendar.getInstance()
-    for (zid <- outstandingZoneIdSample) {
+    for (zid <- outstandingZoneIds) {
       val timeZoneId = Option(zid.getId)
       c.setTimeZone(TimeZone.getTimeZone(zid))
       (0 to 24 by 5).foreach { h =>
@@ -362,7 +362,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Minute(Literal(ts), UTC_OPT), 10)
 
     val c = Calendar.getInstance()
-    for (zid <- outstandingZoneIdSample) {
+    for (zid <- outstandingZoneIds) {
       val timeZoneId = Option(zid.getId)
       c.setTimeZone(TimeZone.getTimeZone(zid))
       (0 to 59 by 5).foreach { m =>
@@ -1754,7 +1754,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-34761,SPARK-35889: add a day-time interval to a timestamp") {
     val sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS", Locale.US)
     Seq(TimestampType, TimestampNTZType).foreach { dt =>
-      for (zid <- outstandingZoneIdSample) {
+      for (zid <- outstandingZoneIds) {
         val timeZoneId = Option(zid.getId)
         sdf.setTimeZone(TimeZone.getTimeZone(zid))
         checkEvaluation(
