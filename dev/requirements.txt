@@ -15,6 +15,7 @@ xmlrunner
 
 # Linter
 mypy
+types-tabulate
 flake8
 
 # Documentation (SQL)
