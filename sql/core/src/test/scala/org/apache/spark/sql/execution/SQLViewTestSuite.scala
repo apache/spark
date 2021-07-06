@@ -472,10 +472,10 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
       (1 to 10).toDF("id").write.saveAsTable("t")
       withView("v1") {
         withTempView("v2") {
-          sql(s"CREATE VIEW v1 AS SELECT * FROM t")
-          sql(s"CREATE TEMPORARY VIEW v2 AS  SELECT * FROM t")
+          sql("CREATE VIEW v1 AS SELECT * FROM t")
+          sql("CREATE TEMPORARY VIEW v2 AS  SELECT * FROM t")
           var e = intercept[AnalysisException] {
-            sql(s"ALTER VIEW v1 AS SELECT * FROM v2")
+            sql("ALTER VIEW v1 AS SELECT * FROM v2")
           }.getMessage
           assert(e.contains("Not allowed to create a permanent view `default`.`v1` by " +
             "referencing a temporary view v2"))
