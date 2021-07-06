@@ -156,6 +156,15 @@ private[sql] class JacksonGenerator(
           end)
         gen.writeString(ymString)
 
+    case DayTimeIntervalType(start, end) =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        val dtString = IntervalUtils.toDayTimeIntervalString(
+          row.getLong(ordinal),
+          IntervalStringStyles.ANSI_STYLE,
+          start,
+          end)
+        gen.writeString(dtString)
+
     case BinaryType =>
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeBinary(row.getBinary(ordinal))
