@@ -343,7 +343,7 @@ class RocksDBSuite extends SparkFunSuite {
       val numThreads = 20
       val numUpdatesInEachThread = 20
       val remoteDir = Utils.createTempDir().toString
-      @volatile val exception: ArrayBuffer[Exception] = _
+      val exception: ArrayBuffer[Exception] = ArrayBuffer.empty
       val updatingThreads = Array.fill(numThreads) {
         new Thread() {
           override def run(): Unit = {
