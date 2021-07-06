@@ -142,11 +142,11 @@ class UDTOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
     def test_eq(self):
         with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(self.pser == self.pser, self.psser == self.psser)
+            self.assert_eq(self.pser == self.pser, (self.psser == self.psser).sort_index())
 
     def test_ne(self):
         with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(self.pser != self.pser, self.psser != self.psser)
+            self.assert_eq(self.pser != self.pser, (self.psser != self.psser).sort_index())
 
     def test_lt(self):
         self.assertRaises(TypeError, lambda: self.psser < self.psser)
