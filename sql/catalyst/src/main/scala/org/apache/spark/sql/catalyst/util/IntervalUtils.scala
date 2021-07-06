@@ -128,26 +128,26 @@ object IntervalUtils {
       fallBackNotice: Option[String] = None) = {
     throw new IllegalArgumentException(
       s"Interval string does not match $intervalStr format of " +
-        s"${supportedFormat((startFiled, endField))
-          .map(format => s"`$format`").mkString(", ")} " +
+        s"${supportedFormat((startFiled, endField)).map(format => s"`$format`").mkString(", ")} " +
         s"when cast to $typeName: ${input.toString}" +
         s"${fallBackNotice.map(s => s", $s").getOrElse("")}")
   }
 
   private def checkStringIntervalType(
       input: UTF8String,
-      startField: Byte,
-      endField: Byte,
-      targetInterval: DataType): Unit = {
-    val (intervalStr, typeName, targetStartField, targetEndField) = targetInterval match {
+      targetStartField: Byte,
+      targetEndField: Byte,
+      inputIntervalType: DataType,
+      fallBackNotice: Option[String] = None): Unit = {
+    val (intervalStr, typeName, inputStartField, inputEndField) = inputIntervalType match {
       case DT(startField, endField) =>
-        ("day-time", targetInterval.typeName, startField, endField)
+        ("day-time", DT(targetStartField, targetEndField).typeName, startField, endField)
       case YM(startField, endField) =>
-        ("year-month", targetInterval.typeName, startField, endField)
+        ("year-month", YM(targetStartField, targetEndField).typeName, startField, endField)
     }
-    if (startField != targetStartField || endField != targetEndField) {
+    if (targetStartField != inputStartField || targetEndField != inputEndField) {
       throwIllegalIntervalFormatException(
-        input, targetStartField, targetEndField, intervalStr, typeName)
+        input, targetStartField, targetEndField, intervalStr, typeName, fallBackNotice)
     }
   }
 
@@ -203,8 +203,8 @@ object IntervalUtils {
             Math.toIntExact(sign * value.toLong)
           }
         }
-      case _ => throwIllegalIntervalFormatException(
-        input, startField, endField, "year-month", YM(startField, endField).typeName)
+      case _ => throwIllegalIntervalFormatException(input, startField, endField,
+        "year-month", YM(startField, endField).typeName)
     }
   }
 
@@ -302,43 +302,55 @@ object IntervalUtils {
 
     input.trimAll().toString match {
       case dayHourRegex(sign, day, hour) =>
-        checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.HOUR))
+        checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.HOUR),
+          Some(fallbackNotice))
         toDTInterval(day, hour, "0", "0", finalSign(sign))
       case dayHourLiteralRegex(firstSign, secondSign, day, hour) =>
-        checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.HOUR))
+        checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.HOUR),
+          Some(fallbackNotice))
         toDTInterval(day, hour, "0", "0", finalSign(firstSign, secondSign))
       case dayMinuteRegex(sign, day, hour, minute) =>
-        checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.MINUTE))
+        checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.MINUTE),
+          Some(fallbackNotice))
         toDTInterval(day, hour, minute, "0", finalSign(sign))
       case dayMinuteLiteralRegex(firstSign, secondSign, day, hour, minute) =>
-        checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.MINUTE))
+        checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.MINUTE),
+          Some(fallbackNotice))
         toDTInterval(day, hour, minute, "0", finalSign(firstSign, secondSign))
       case daySecondRegex(sign, day, hour, minute, second, micro) =>
-        checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.SECOND))
+        checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.SECOND),
+          Some(fallbackNotice))
         toDTInterval(day, hour, minute, secondAndMicro(second, micro), finalSign(sign))
       case daySecondLiteralRegex(firstSign, secondSign, day, hour, minute, second, micro) =>
-        checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.SECOND))
+        checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.SECOND),
+          Some(fallbackNotice))
         toDTInterval(day, hour, minute, secondAndMicro(second, micro),
           finalSign(firstSign, secondSign))
 
       case hourMinuteRegex(sign, hour, minute) =>
-        checkStringIntervalType(input, startField, endField, DT(DT.HOUR, DT.MINUTE))
+        checkStringIntervalType(input, startField, endField, DT(DT.HOUR, DT.MINUTE),
+          Some(fallbackNotice))
         toDTInterval(hour, minute, "0", finalSign(sign))
       case hourMinuteLiteralRegex(firstSign, secondSign, hour, minute) =>
-        checkStringIntervalType(input, startField, endField, DT(DT.HOUR, DT.MINUTE))
+        checkStringIntervalType(input, startField, endField, DT(DT.HOUR, DT.MINUTE),
+          Some(fallbackNotice))
         toDTInterval(hour, minute, "0", finalSign(firstSign, secondSign))
       case hourSecondRegex(sign, hour, minute, second, micro) =>
-        checkStringIntervalType(input, startField, endField, DT(DT.HOUR, DT.SECOND))
+        checkStringIntervalType(input, startField, endField, DT(DT.HOUR, DT.SECOND),
+          Some(fallbackNotice))
         toDTInterval(hour, minute, secondAndMicro(second, micro), finalSign(sign))
       case hourSecondLiteralRegex(firstSign, secondSign, hour, minute, second, micro) =>
-        checkStringIntervalType(input, startField, endField, DT(DT.HOUR, DT.SECOND))
+        checkStringIntervalType(input, startField, endField, DT(DT.HOUR, DT.SECOND),
+          Some(fallbackNotice))
         toDTInterval(hour, minute, secondAndMicro(second, micro), finalSign(firstSign, secondSign))
 
       case minuteSecondRegex(sign, minute, second, micro) =>
-        checkStringIntervalType(input, startField, endField, DT(DT.MINUTE, DT.SECOND))
+        checkStringIntervalType(input, startField, endField, DT(DT.MINUTE, DT.SECOND),
+          Some(fallbackNotice))
         toDTInterval(minute, secondAndMicro(second, micro), finalSign(sign))
       case minuteSecondLiteralRegex(firstSign, secondSign, minute, second, micro) =>
-        checkStringIntervalType(input, startField, endField, DT(DT.MINUTE, DT.SECOND))
+        checkStringIntervalType(input, startField, endField, DT(DT.MINUTE, DT.SECOND),
+          Some(fallbackNotice))
         toDTInterval(minute, secondAndMicro(second, micro), finalSign(firstSign, secondSign))
 
       case dayTimeIndividualRegex(firstSign, value, suffix) =>
@@ -365,16 +377,20 @@ object IntervalUtils {
           val sign = finalSign(firstSign, secondSign)
           unit match {
             case "DAY" if suffix == null && value.length <= 9 =>
-              checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.DAY))
+              checkStringIntervalType(input, startField, endField, DT(DT.DAY, DT.DAY),
+                Some(fallbackNotice))
               sign * value.toLong * MICROS_PER_DAY
             case "HOUR" if suffix == null && value.length <= 10 =>
-              checkStringIntervalType(input, startField, endField, DT(DT.HOUR, DT.HOUR))
+              checkStringIntervalType(input, startField, endField, DT(DT.HOUR, DT.HOUR),
+                Some(fallbackNotice))
               sign * value.toLong * MICROS_PER_HOUR
             case "MINUTE" if suffix == null && value.length <= 12 =>
-              checkStringIntervalType(input, startField, endField, DT(DT.MINUTE, DT.MINUTE))
+              checkStringIntervalType(input, startField, endField, DT(DT.MINUTE, DT.MINUTE),
+                Some(fallbackNotice))
               sign * value.toLong * MICROS_PER_MINUTE
             case "SECOND" if value.length <= 13 =>
-              checkStringIntervalType(input, startField, endField, DT(DT.SECOND, DT.SECOND))
+              checkStringIntervalType(input, startField, endField, DT(DT.SECOND, DT.SECOND),
+                Some(fallbackNotice))
               sign match {
                 case 1 => parseSecondNano(secondAndMicro(value, suffix))
                 case -1 => parseSecondNano(s"-${secondAndMicro(value, suffix)}")
