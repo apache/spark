@@ -1442,6 +1442,12 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       pushDownPredicate(filter, u.child) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
+
+    // Push down filter predicates in case filter having child as TypedFilter.
+    // In this scenario inorder to push the filter predicates there is need to
+    // to push Filter beneath the TypedFilter.
+    case Filter(condition, typeFilter @ TypedFilter(_, _, _, _, _)) =>
+      typeFilter.copy(child = Filter(condition, typeFilter.child))
   }
 
   def canPushThrough(p: UnaryNode): Boolean = p match {

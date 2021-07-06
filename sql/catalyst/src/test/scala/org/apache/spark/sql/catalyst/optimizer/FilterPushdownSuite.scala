@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -45,6 +48,8 @@ class FilterPushdownSuite extends PlanTest {
         PushExtraPredicateThroughJoin,
         PushDownPredicates) :: Nil
   }
+
+  implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
 
   val attrA = 'a.int
   val attrB = 'b.int
@@ -1383,5 +1388,26 @@ class FilterPushdownSuite extends PlanTest {
       condition = Some("x.b".attr === "y.b".attr && simpleDisjunctivePredicate)),
       condition = Some("x.a".attr === "z.a".attr)).analyze
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("push down filter predicate having typedFilter as child") {
+
+    val f1 = (i: (Int, Int, Int)) => i._1 > 0
+    val f2 = (i: (Int, Int, Int)) => i._1 < 100
+
+    var query = testRelation.filter(f1).where(attrB<=5).analyze
+    var optimized = Optimize.execute(query)
+
+    query = testRelation.where(attrB<=5).filter(f1).analyze
+    var expected = Optimize.execute(query)
+    comparePlans(optimized, expected)
+
+    query = testRelation.filter(f1).filter(f2).where(attrB <= 5).analyze
+    optimized = Optimize.execute(query)
+
+    query = testRelation.where(attrB <= 5).filter(f1).filter(f2).analyze
+    expected = Optimize.execute(query)
+    comparePlans(optimized, expected)
+
   }
 }
