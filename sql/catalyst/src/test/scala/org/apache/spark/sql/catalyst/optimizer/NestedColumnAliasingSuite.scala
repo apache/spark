@@ -739,7 +739,7 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     comparePlans(optimized, query)
   }
 
-  test("SPARK-35972: When replace ExtractValue we should use semanticEquals") {
+  test("SPARK-35972: NestedColumnAliasing should consider semantic equality") {
     val dataType = new StructType()
       .add(StructField("itemid", StringType))
       .add(StructField("search_params", StructType(Seq(
