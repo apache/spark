@@ -124,8 +124,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     (2000 to 2002).foreach { y =>
       (0 to 11 by 11).foreach { m =>
         c.set(y, m, 28)
-        (0 to 5 * 24).foreach { i =>
-          c.add(Calendar.HOUR_OF_DAY, 1)
+        (0 to 12).foreach { i =>
+          c.add(Calendar.HOUR_OF_DAY, 10)
           checkEvaluation(Year(Literal(new Date(c.getTimeInMillis))),
             c.get(Calendar.YEAR))
         }
