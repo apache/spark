@@ -68,7 +68,7 @@ object NestedColumnAliasing {
    */
   private def replaceToAliases(
       plan: LogicalPlan,
-      nestedFieldToAlias: Map[ExtractValue, Alias],
+      nestedFieldToAlias: Map[Expression, Alias],
       attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = plan match {
     case Project(projectList, child) =>
       Project(
@@ -85,10 +85,10 @@ object NestedColumnAliasing {
    */
   def getNewProjectList(
       projectList: Seq[NamedExpression],
-      nestedFieldToAlias: Map[ExtractValue, Alias]): Seq[NamedExpression] = {
+      nestedFieldToAlias: Map[Expression, Alias]): Seq[NamedExpression] = {
     projectList.map(_.transform {
-      case f: ExtractValue if nestedFieldToAlias.contains(f) =>
-        nestedFieldToAlias(f).toAttribute
+      case f: ExtractValue if nestedFieldToAlias.contains(f.canonicalized) =>
+        nestedFieldToAlias(f.canonicalized).toAttribute
     }.asInstanceOf[NamedExpression])
   }
 
@@ -98,13 +98,13 @@ object NestedColumnAliasing {
    */
   def replaceWithAliases(
       plan: LogicalPlan,
-      nestedFieldToAlias: Map[ExtractValue, Alias],
+      nestedFieldToAlias: Map[Expression, Alias],
       attrToAliases: Map[ExprId, Seq[Alias]]): LogicalPlan = {
     plan.withNewChildren(plan.children.map { plan =>
       Project(plan.output.flatMap(a => attrToAliases.getOrElse(a.exprId, Seq(a))), plan)
     }).transformExpressions {
-      case f: ExtractValue if nestedFieldToAlias.contains(f) =>
-        nestedFieldToAlias(f).toAttribute
+      case f: ExtractValue if nestedFieldToAlias.contains(f.canonicalized) =>
+        nestedFieldToAlias(f.canonicalized).toAttribute
     }
   }
 
@@ -158,7 +158,7 @@ object NestedColumnAliasing {
    * 2. ExprId -> Seq[Alias]: A reference attribute has multiple aliases pointing it.
    */
   def getAliasSubMap(exprList: Seq[Expression], exclusiveAttrs: Seq[Attribute] = Seq.empty)
-    : Option[(Map[ExtractValue, Alias], Map[ExprId, Seq[Alias]])] = {
+    : Option[(Map[Expression, Alias], Map[ExprId, Seq[Alias]])] = {
     val (nestedFieldReferences, otherRootReferences) =
       exprList.flatMap(collectRootReferenceAndExtractValue).partition {
         case _: ExtractValue => true
@@ -208,7 +208,9 @@ object NestedColumnAliasing {
     if (aliasSub.isEmpty) {
       None
     } else {
-      Some((aliasSub.values.flatten.toMap, aliasSub.map(x => (x._1, x._2.map(_._2)))))
+      Some((aliasSub.values.flatten.map {
+        case (field, alias) => field.canonicalized -> alias
+      }.toMap, aliasSub.map(x => (x._1, x._2.map(_._2)))))
     }
   }
 
