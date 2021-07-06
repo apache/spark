@@ -21,6 +21,8 @@ You can find the latest Spark documentation, including a programming
 guide, on the [project web page](https://spark.apache.org/documentation.html).
 This README file only contains basic setup instructions.
 
+### Instructions for installing Apache Spark on Linux [See here](https://github.com/drakelam/Apache-Spark-Tutorial/blob/main/Apache-Spark-Tutorial/Apache-Spark-Installation.md "See here")
+
 ## Building Spark
 
 Spark is built using [Apache Maven](https://maven.apache.org/).
