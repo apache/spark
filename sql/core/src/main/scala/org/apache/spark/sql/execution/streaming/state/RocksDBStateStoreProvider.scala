@@ -32,7 +32,7 @@ private[state] class RocksDBStateStoreProvider
   extends StateStoreProvider with Logging with Closeable {
   import RocksDBStateStoreProvider._
 
-  class RocksDBStateStore(val lastVersion: Long) extends StateStore {
+  class RocksDBStateStore(lastVersion: Long) extends StateStore {
     /** Trait and classes representing the internal state of the store */
     trait STATE
     case object UPDATING extends STATE
@@ -316,7 +316,6 @@ object RocksDBStateStoreProvider {
   // Total SST file size
   val CUSTOM_METRIC_SST_FILE_SIZE = StateStoreCustomSizeMetric(
     "rocksdbSstFileSize", "RocksDB: size of all SST files")
-
 
   val ALL_CUSTOM_METRICS = Seq(
     CUSTOM_METRIC_SST_FILE_SIZE, CUSTOM_METRIC_GET_TIME, CUSTOM_METRIC_PUT_TIME,
