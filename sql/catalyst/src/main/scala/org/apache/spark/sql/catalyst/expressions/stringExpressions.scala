@@ -2651,7 +2651,7 @@ case class Sentences(
 }
 
 case class ToHiveString(child: Expression, timeZoneId: Option[String] = None)
-  extends CastBase {
+  extends CastToStringBase {
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
@@ -2665,13 +2665,21 @@ case class ToHiveString(child: Expression, timeZoneId: Option[String] = None)
     if (value == null) {
       UTF8String.fromString("NULL")
     } else {
-      nullSafeEval(value)
+      castToString(child.dataType)(value)
     }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val eval = child.genCode(ctx)
+    val nullSafeCast = castToStringCode(child.dataType, ctx)
+
+    ev.copy(code = eval.code +
+      castCode(ctx, eval.value, eval.isNull, ev.value, ev.isNull, dataType, nullSafeCast))
   }
 
   // Since we need to cast input expressions recursively inside ComplexTypes, such as Map's
   // Key and Value, Struct's field, we need to name out all the variable names involved in a cast.
-  override def castCode(ctx: CodegenContext, input: ExprValue, inputIsNull: ExprValue,
+  def castCode(ctx: CodegenContext, input: ExprValue, inputIsNull: ExprValue,
     result: ExprValue, resultIsNull: ExprValue, resultType: DataType, cast: CastFunction): Block = {
     val javaType = JavaCode.javaType(resultType)
     code"""
@@ -2694,10 +2702,4 @@ case class ToHiveString(child: Expression, timeZoneId: Option[String] = None)
 
   override protected def withNewChildInternal(newChild: Expression): ToHiveString =
     copy(child = newChild)
-
-  override def canCast(from: DataType, to: DataType): Boolean = true
-
-  override def typeCheckFailureMessage: String = "Not need"
-
-  override protected def ansiEnabled: Boolean = false
 }

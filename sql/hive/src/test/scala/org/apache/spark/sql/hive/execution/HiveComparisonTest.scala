@@ -345,9 +345,6 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
           val sql = queryString.replace("../../data", testDataPath)
           val df = wrappedHiveResultPlan(TestHive.sparkSession.sql(sql))
-          println(sql)
-          TestHive.sparkSession.sql(sql).schema.foreach(println)
-          df.explain(true)
           val query = new TestHiveQueryExecution(TestHive.sparkSession, df.logicalPlan)
           def getResult(): Seq[String] = {
             SQLExecution.withNewExecutionId(df.queryExecution)(hiveResultString(df))
