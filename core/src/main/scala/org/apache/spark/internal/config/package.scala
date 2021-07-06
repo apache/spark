@@ -1382,7 +1382,8 @@ package object config {
         " built-in algorithms of JDK.")
       .version("3.3.0")
       .stringConf
-      .checkValue(Set("Adler32", "CRC32").contains, "Shuffle checksum algorithm " +
+      .transform(_.toLowerCase(Locale.ROOT))
+      .checkValue(Set("adler32", "crc32").contains, "Shuffle checksum algorithm " +
         "should be either Adler32 or CRC32.")
       .createWithDefault("Adler32")
 

@@ -1,13 +1,14 @@
 package org.apache.spark.shuffle.checksum;
 
+import java.util.Locale;
+import java.util.zip.Adler32;
+import java.util.zip.CRC32;
+import java.util.zip.Checksum;
+
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkException;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.storage.ShuffleChecksumBlockId;
-
-import java.util.zip.Adler32;
-import java.util.zip.CRC32;
-import java.util.zip.Checksum;
 
 public class ShuffleChecksumHelper {
 
@@ -24,16 +25,16 @@ public class ShuffleChecksumHelper {
       return partitionChecksums;
     }
 
-    String checksumAlgo = shuffleChecksumAlgorithm(conf);
+    String checksumAlgo = shuffleChecksumAlgorithm(conf).toLowerCase(Locale.ROOT);
     switch (checksumAlgo) {
-      case "Adler32":
+      case "adler32":
         partitionChecksums = new Adler32[numPartitions];
         for (int i = 0; i < numPartitions; i ++) {
           partitionChecksums[i] = new Adler32();
         }
         return partitionChecksums;
 
-      case "CRC32":
+      case "crc32":
         partitionChecksums = new CRC32[numPartitions];
         for (int i = 0; i < numPartitions; i ++) {
           partitionChecksums[i] = new CRC32();
