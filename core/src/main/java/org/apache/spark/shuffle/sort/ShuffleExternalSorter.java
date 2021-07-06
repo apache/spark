@@ -75,8 +75,6 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   @VisibleForTesting
   static final int DISK_WRITE_BUFFER_SIZE = 1024 * 1024;
 
-  private final int shuffleId;
-  private final long mapId;
   private final int numPartitions;
   private final TaskMemoryManager taskMemoryManager;
   private final BlockManager blockManager;
@@ -131,8 +129,6 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.taskMemoryManager = memoryManager;
     this.blockManager = blockManager;
     this.taskContext = taskContext;
-    this.shuffleId = shuffleId;
-    this.mapId = mapId;
     this.numPartitions = numPartitions;
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSizeBytes =
