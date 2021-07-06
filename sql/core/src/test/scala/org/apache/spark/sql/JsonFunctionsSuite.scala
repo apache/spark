@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.text.SimpleDateFormat
+import java.time.Period
 import java.util.Locale
 
 import collection.JavaConverters._
@@ -27,6 +28,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
 class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -818,6 +820,30 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
           .selectExpr("parsed._corrupt_record")
 
         checkAnswer(df, Seq(Row("""{"a" 1, "b": 11}"""), Row(null)))
+      }
+    }
+  }
+
+  test("SPARK-35982: from_json/to_json for map types where value types are year-month intervals") {
+    val ymDF = Seq(Period.of(1, 2, 0)).toDF
+    Seq(
+      (YearMonthIntervalType(), """{"key":"INTERVAL '1-2' YEAR TO MONTH"}""", Period.of(1, 2, 0)),
+      (YearMonthIntervalType(YEAR), """{"key":"INTERVAL '1' YEAR"}""", Period.of(1, 0, 0)),
+      (YearMonthIntervalType(MONTH), """{"key":"INTERVAL '14' MONTH"}""", Period.of(1, 2, 0))
+    ).foreach { case (toJsonDtype, toJsonExpected, fromJsonExpected) =>
+      val toJsonDF = ymDF.select(to_json(map(lit("key"), $"value" cast toJsonDtype)) as "json")
+      checkAnswer(toJsonDF, Row(toJsonExpected))
+
+      DataTypeTestUtils.yearMonthIntervalTypes.foreach { fromJsonDtype =>
+        val fromJsonDF = toJsonDF
+          .select(
+            from_json($"json", StructType(StructField("key", fromJsonDtype) :: Nil)) as "value")
+          .selectExpr("value['key']")
+        if (toJsonDtype == fromJsonDtype) {
+          checkAnswer(fromJsonDF, Row(fromJsonExpected))
+        } else {
+          checkAnswer(fromJsonDF, Row(null))
+        }
       }
     }
   }

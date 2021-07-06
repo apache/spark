@@ -322,8 +322,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
     def intergral_extension_psers(self):
-        dtypes = ["Int8", "Int16", "Int32", "Int64"]
-        return [pd.Series([1, 2, 3, None], dtype=dtype) for dtype in dtypes]
+        return [pd.Series([1, 2, 3, None], dtype=dtype) for dtype in self.integral_extension_dtypes]
 
     @property
     def intergral_extension_pssers(self):
@@ -342,6 +341,11 @@ class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
             self.assert_eq(pser.isnull(), psser.isnull())
 
+    def test_astype(self):
+        for pser, psser in self.intergral_extension_pser_psser_pairs:
+            for dtype in self.extension_dtypes:
+                self.check_extension(pser.astype(dtype), psser.astype(dtype))
+
 
 @unittest.skipIf(
     not extension_float_dtypes_available, "pandas extension float dtypes are not available"
@@ -349,8 +353,10 @@ class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 class FractionalExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
     def fractional_extension_psers(self):
-        dtypes = ["Float32", "Float64"]
-        return [pd.Series([0.1, 0.2, 0.3, None], dtype=dtype) for dtype in dtypes]
+        return [
+            pd.Series([0.1, 0.2, 0.3, None], dtype=dtype)
+            for dtype in self.fractional_extension_dtypes
+        ]
 
     @property
     def fractional_extension_pssers(self):
@@ -368,6 +374,11 @@ class FractionalExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_isnull(self):
         for pser, psser in self.fractional_extension_pser_psser_pairs:
             self.assert_eq(pser.isnull(), psser.isnull())
+
+    def test_astype(self):
+        for pser, psser in self.fractional_extension_pser_psser_pairs:
+            for dtype in self.extension_dtypes:
+                self.check_extension(pser.astype(dtype), psser.astype(dtype))
 
 
 if __name__ == "__main__":

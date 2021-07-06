@@ -236,7 +236,7 @@ select next_day("xx", "Mon");
 select next_day(null, "Mon");
 select next_day(null, "xx");
 
--- TimestampWithoutTZ + Intervals
+-- TimestampNTZ + Intervals
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval 2 day;
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval '0-0' year to month;
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval '1-2' year to month;
@@ -247,7 +247,7 @@ select to_timestamp_ntz('2021-06-25 10:11:12') + interval '20 15' day to hour;
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval '20 15:40' day to minute;
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval '20 15:40:32.99899999' day to second;
 
--- TimestampWithoutTZ - Intervals
+-- TimestampNTZ - Intervals
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval 2 day;
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval '0-0' year to month;
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval '1-2' year to month;

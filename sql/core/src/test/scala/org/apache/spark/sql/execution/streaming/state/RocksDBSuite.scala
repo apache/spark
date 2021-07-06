@@ -29,7 +29,7 @@ import org.apache.spark._
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.streaming.CreateAtomicTestManager
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 class RocksDBSuite extends SparkFunSuite {
 
@@ -99,6 +99,72 @@ class RocksDBSuite extends SparkFunSuite {
       withClue(s"compactOnCommit = $compactOnCommit") {
         testOps(compactOnCommit)
       }
+    }
+  }
+
+  test("RocksDB: cleanup old files") {
+    val remoteDir = Utils.createTempDir().toString
+    val conf = RocksDBConf().copy(compactOnCommit = true, minVersionsToRetain = 10)
+
+    def versionsPresent: Seq[Long] = {
+      remoteDir.listFiles.filter(_.getName.endsWith(".zip"))
+        .map(_.getName.stripSuffix(".zip"))
+        .map(_.toLong)
+        .sorted
+    }
+
+    withDB(remoteDir, conf = conf) { db =>
+      // Generate versions without cleaning up
+      for (version <- 1 to 50) {
+        db.put(version.toString, version.toString)  // update "1" -> "1", "2" -> "2", ...
+        db.commit()
+      }
+
+      // Clean up and verify version files and SST files were deleted
+      require(versionsPresent === (1L to 50L))
+      val sstDir = new File(remoteDir, "SSTs")
+      val numSstFiles = listFiles(sstDir).length
+      db.cleanup()
+      assert(versionsPresent === (41L to 50L))
+      assert(listFiles(sstDir).length < numSstFiles)
+
+      // Verify data in retained vesions.
+      versionsPresent.foreach { version =>
+        db.load(version)
+        val data = db.iterator().map(toStr).toSet
+        assert(data === (1L to version).map(_.toString).map(x => x -> x).toSet)
+      }
+    }
+  }
+
+  test("RocksDB: handle commit failures and aborts") {
+    val hadoopConf = new Configuration()
+    hadoopConf.set(
+      SQLConf.STREAMING_CHECKPOINT_FILE_MANAGER_CLASS.parent.key,
+      classOf[CreateAtomicTestManager].getName)
+    val remoteDir = Utils.createTempDir().getAbsolutePath
+    val conf = RocksDBConf().copy(compactOnCommit = true)
+    withDB(remoteDir, conf = conf, hadoopConf = hadoopConf) { db =>
+      // Disable failure of output stream and generate versions
+      CreateAtomicTestManager.shouldFailInCreateAtomic = false
+      for (version <- 1 to 10) {
+        db.put(version.toString, version.toString) // update "1" -> "1", "2" -> "2", ...
+        db.commit()
+      }
+      val version10Data = (1L to 10).map(_.toString).map(x => x -> x).toSet
+
+      // Fail commit for next version and verify that reloading resets the files
+      CreateAtomicTestManager.shouldFailInCreateAtomic = true
+      db.put("11", "11")
+      intercept[IOException] { quietly { db.commit() } }
+      assert(db.load(10).iterator().map(toStr).toSet === version10Data)
+      CreateAtomicTestManager.shouldFailInCreateAtomic = false
+
+      // Abort commit for next version and verify that reloading resets the files
+      db.load(10)
+      db.put("11", "11")
+      db.rollback()
+      assert(db.load(10).iterator().map(toStr).toSet === version10Data)
     }
   }
 
@@ -207,6 +273,133 @@ class RocksDBSuite extends SparkFunSuite {
     }
   }
 
+  test("disallow concurrent updates to the same RocksDB instance") {
+    quietly {
+      withDB(
+        Utils.createTempDir().toString,
+        conf = RocksDBConf().copy(lockAcquireTimeoutMs = 20)) { db =>
+        // DB has been loaded so current thread has alread acquired the lock on the RocksDB instance
+
+        db.load(0)  // Current thread should be able to load again
+
+        // Another thread should not be able to load while current thread is using it
+        val ex = intercept[IllegalStateException] {
+          ThreadUtils.runInNewThread("concurrent-test-thread-1") { db.load(0) }
+        }
+        // Assert that the error message contains the stack trace
+        assert(ex.getMessage.contains("Thread holding the lock has trace:"))
+        assert(ex.getMessage.contains("runInNewThread"))
+
+        // Commit should release the instance allowing other threads to load new version
+        db.commit()
+        ThreadUtils.runInNewThread("concurrent-test-thread-2") {
+          db.load(1)
+          db.commit()
+        }
+
+        // Another thread should not be able to load while current thread is using it
+        db.load(2)
+        intercept[IllegalStateException] {
+          ThreadUtils.runInNewThread("concurrent-test-thread-2") { db.load(2) }
+        }
+
+        // Rollback should release the instance allowing other threads to load new version
+        db.rollback()
+        ThreadUtils.runInNewThread("concurrent-test-thread-3") {
+          db.load(1)
+          db.commit()
+        }
+      }
+    }
+  }
+
+  test("ensure concurrent access lock is released after Spark task completes") {
+    val conf = new SparkConf().setAppName("test").setMaster("local")
+    val sc = new SparkContext(conf)
+
+    try {
+      RocksDBSuite.withSingletonDB {
+        // Load a RocksDB instance, that is, get a lock inside a task and then fail
+        quietly {
+          intercept[Exception] {
+            sc.makeRDD[Int](1 to 1, 1).map { i =>
+              RocksDBSuite.singleton.load(0)
+              throw new Exception("fail this task to test lock release")
+            }.count()
+          }
+        }
+
+        // Test whether you can load again, that is, will it successfully lock again
+        RocksDBSuite.singleton.load(0)
+      }
+    } finally {
+      sc.stop()
+    }
+  }
+
+  ignore("ensure that concurrent update and cleanup consistent versions") {
+    quietly {
+      val numThreads = 20
+      val numUpdatesInEachThread = 20
+      val remoteDir = Utils.createTempDir().toString
+      @volatile var exception: Exception = null
+      val updatingThreads = Array.fill(numThreads) {
+        new Thread() {
+          override def run(): Unit = {
+            try {
+              for (version <- 0 to numUpdatesInEachThread) {
+                withDB(
+                  remoteDir,
+                  version = version) { db =>
+                  val prevValue = Option(toStr(db.get("a"))).getOrElse("0").toInt
+                  db.put("a", (prevValue + 1).toString)
+                  db.commit()
+                }
+              }
+            } catch {
+              case e: Exception =>
+                val newException = new Exception(s"ThreadId ${this.getId} failed", e)
+                if (exception != null) {
+                  exception = newException
+                }
+                throw e
+            }
+          }
+        }
+      }
+      val cleaningThread = new Thread() {
+        override def run(): Unit = {
+          try {
+            withDB(remoteDir, conf = RocksDBConf().copy(compactOnCommit = true)) { db =>
+              while (!this.isInterrupted) {
+                db.cleanup()
+                Thread.sleep(1)
+              }
+            }
+          } catch {
+            case e: Exception =>
+              val newException = new Exception(s"ThreadId ${this.getId} failed", e)
+              if (exception != null) {
+                exception = newException
+              }
+              throw e
+          }
+        }
+      }
+      updatingThreads.foreach(_.start())
+      cleaningThread.start()
+      updatingThreads.foreach(_.join())
+      cleaningThread.interrupt()
+      cleaningThread.join()
+      if (exception != null) {
+        fail(exception)
+      }
+      withDB(remoteDir, numUpdatesInEachThread) { db =>
+        assert(toStr(db.get("a")) === numUpdatesInEachThread.toString)
+      }
+    }
+  }
+
   test("checkpoint metadata serde roundtrip") {
     def checkJsonRoundtrip(metadata: RocksDBCheckpointMetadata, json: String): Unit = {
       assert(metadata.json == json)
@@ -303,4 +496,25 @@ class RocksDBSuite extends SparkFunSuite {
   }
 
   def listFiles(file: String): Seq[File] = listFiles(new File(file))
+}
+
+object RocksDBSuite {
+  @volatile var singleton: RocksDB = _
+
+  def withSingletonDB[T](func: => T): T = {
+    try {
+      singleton = new RocksDB(
+        dfsRootDir = Utils.createTempDir().getAbsolutePath,
+        conf = RocksDBConf().copy(compactOnCommit = false, minVersionsToRetain = 100),
+        hadoopConf = new Configuration(),
+        loggingId = s"[Thread-${Thread.currentThread.getId}]")
+
+      func
+    } finally {
+      if (singleton != null) {
+        singleton.close()
+        singleton = null
+      }
+    }
+  }
 }
