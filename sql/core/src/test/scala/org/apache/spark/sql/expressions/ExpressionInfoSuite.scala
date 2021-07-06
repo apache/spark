@@ -22,7 +22,7 @@ import scala.collection.parallel.immutable.ParVector
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.execution.HiveResult.{hiveResultString, wrappedHiveResultPlan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
@@ -209,7 +209,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
             case exampleRe(sql, output) =>
               val df = clonedSpark.sql(sql)
               val actual = unindentAndTrim(
-                hiveResultString(df).mkString("\n"))
+                hiveResultString(wrappedHiveResultPlan(df)).mkString("\n"))
               val expected = unindentAndTrim(output)
               assert(actual === expected)
             case _ =>

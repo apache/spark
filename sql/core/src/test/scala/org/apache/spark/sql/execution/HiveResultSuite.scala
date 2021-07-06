@@ -33,9 +33,9 @@ class HiveResultSuite extends SharedSparkSession {
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zoneId) {
         val dates = Seq("2018-12-28", "1582-10-03", "1582-10-04", "1582-10-15")
         val df = dates.toDF("a").selectExpr("cast(a as date) as b")
-        val result = hiveResultString(df)
+        val result = hiveResultString(wrappedHiveResultPlan(df))
         assert(result == dates)
-        val result2 = hiveResultString(df.selectExpr("array(b)"))
+        val result2 = hiveResultString(wrappedHiveResultPlan(df.selectExpr("array(b)")))
         assert(result2 == dates.map(x => s"[$x]"))
       }
     }
@@ -48,9 +48,9 @@ class HiveResultSuite extends SharedSparkSession {
       "1582-10-04 01:02:03",
       "1582-10-15 01:02:03")
     val df = timestamps.toDF("a").selectExpr("cast(a as timestamp) as b")
-    val result = hiveResultString(df)
+    val result = hiveResultString(wrappedHiveResultPlan((df)))
     assert(result == timestamps)
-    val result2 = hiveResultString(df.selectExpr("array(b)"))
+    val result2 = hiveResultString(wrappedHiveResultPlan(df.selectExpr("array(b)")))
     assert(result2 == timestamps.map(x => s"[$x]"))
   }
 
@@ -63,12 +63,13 @@ class HiveResultSuite extends SharedSparkSession {
   test("decimal formatting in hive result") {
     val df = Seq(new java.math.BigDecimal("1")).toDS()
     Seq(2, 6, 18).foreach { scala =>
-      val result = hiveResultString(df.selectExpr(s"CAST(value AS decimal(38, $scala))"))
+      val result = hiveResultString(wrappedHiveResultPlan(
+        df.selectExpr(s"CAST(value AS decimal(38, $scala))")))
       assert(result.head.split("\\.").last.length === scala)
     }
 
-    val result = hiveResultString(Seq(java.math.BigDecimal.ZERO).toDS()
-      .selectExpr(s"CAST(value AS decimal(38, 8))"))
+    val result = hiveResultString(wrappedHiveResultPlan(
+      Seq(java.math.BigDecimal.ZERO).toDS().selectExpr(s"CAST(value AS decimal(38, 8))")))
     assert(result.head === "0.00000000")
   }
 
@@ -79,7 +80,7 @@ class HiveResultSuite extends SharedSparkSession {
           withTable(s"$ns.$tbl") {
             spark.sql(s"CREATE TABLE $ns.$tbl (id bigint) USING $source")
             val df = spark.sql(s"SHOW TABLES FROM $ns")
-            assert(hiveResultString(df).head == tbl)
+            assert(hiveResultString(wrappedHiveResultPlan(df)).head == tbl)
           }
       }
     }
@@ -95,7 +96,7 @@ class HiveResultSuite extends SharedSparkSession {
             val expected = "id                  " +
               "\tbigint              " +
               "\tcol1                "
-            assert(hiveResultString(df).head == expected)
+            assert(hiveResultString(wrappedHiveResultPlan(df)).head == expected)
           }
       }
     }
@@ -103,13 +104,14 @@ class HiveResultSuite extends SharedSparkSession {
 
   test("SPARK-34984, SPARK-35016: year-month interval formatting in hive result") {
     val df = Seq(Period.ofYears(-10).minusMonths(1)).toDF("i")
-    assert(hiveResultString(df) === Seq("-10-1"))
-    assert(hiveResultString( df.selectExpr("array(i)")) === Seq("[-10-1]"))
+    assert(hiveResultString(wrappedHiveResultPlan(df)) === Seq("-10-1"))
+    assert(hiveResultString(wrappedHiveResultPlan(df.selectExpr("array(i)"))) === Seq("[-10-1]"))
   }
 
   test("SPARK-34984, SPARK-35016: day-time interval formatting in hive result") {
     val df = Seq(Duration.ofDays(5).plusMillis(10)).toDF("i")
-    assert(hiveResultString(df) === Seq("5 00:00:00.010000000"))
-    assert(hiveResultString(df.selectExpr("array(i)")) === Seq("[5 00:00:00.010000000]"))
+    assert(hiveResultString(wrappedHiveResultPlan(df)) === Seq("5 00:00:00.010000000"))
+    assert(hiveResultString(wrappedHiveResultPlan(df.selectExpr("array(i)")))
+      === Seq("[5 00:00:00.010000000]"))
   }
 }

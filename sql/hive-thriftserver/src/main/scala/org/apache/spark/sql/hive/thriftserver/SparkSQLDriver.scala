@@ -30,7 +30,7 @@ import org.apache.spark.SparkError
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.execution.HiveResult.{hiveResultString, wrappedHiveResultPlan}
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
 
 
@@ -64,7 +64,7 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
         new VariableSubstitution().substitute(command)
       }
       context.sparkContext.setJobDescription(substitutorCommand)
-      val df = context.sql(command)
+      val df = wrappedHiveResultPlan(context.sql(command))
       hiveResponse = SQLExecution.withNewExecutionId(df.queryExecution) {
         hiveResultString(df)
       }

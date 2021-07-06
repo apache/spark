@@ -22,7 +22,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.execution.HiveResult.{hiveResultString, wrappedHiveResultPlan}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
 import org.apache.spark.sql.types.StructType
@@ -59,7 +59,7 @@ trait SQLQueryTestHelper {
       case _ => plan.children.iterator.exists(isSorted)
     }
 
-    val df = session.sql(sql)
+    val df = wrappedHiveResultPlan(session.sql(sql))
     val schema = df.schema.catalogString
     // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
     val answer = SQLExecution.withNewExecutionId(df.queryExecution, Some(sql)) {

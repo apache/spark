@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
 
 import org.apache.spark.sql.{Column, Dataset, Row}
-import org.apache.spark.sql.catalyst.expressions.{Cast, ToHiveString}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, ToHiveString}
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
@@ -43,6 +43,19 @@ object HiveResult {
     val timestampFormatter = TimestampFormatter.getFractionFormatter(
       DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone))
     TimeFormatters(dateFormatter, timestampFormatter)
+  }
+
+  def wrappedHiveResultPlan(df: Dataset[_]): Dataset[_] = {
+    df.queryExecution.executedPlan match {
+      case _: CommandResultExec => df
+      case _ =>
+        val castCols = df.logicalPlan.output.map { col =>
+          val expr = Alias(ToHiveString(col), col.name)()
+          expr.setTagValue(Cast.USER_SPECIFIED_CAST, true)
+          new Column(expr)
+        }
+        df.select(castCols: _*)
+    }
   }
 
   private def stripRootCommandResult(executedPlan: SparkPlan): SparkPlan = executedPlan match {
@@ -73,14 +86,8 @@ object HiveResult {
       // namespace, viewName, and isTemporary.
       case ExecutedCommandExec(_: ShowViewsCommand) =>
         executedPlan.executeCollect().map(_.getString(1))
-      case _ =>
-        val castCols = df.logicalPlan.output.map { col =>
-          val expr = ToHiveString(col)
-          expr.setTagValue(Cast.USER_SPECIFIED_CAST, true)
-          new Column(expr)
-        }
-        val result: Seq[Seq[Any]] = df.select(castCols: _*).queryExecution.executedPlan
-          .executeCollectPublic().map(_.toSeq).toSeq
+      case other =>
+        val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
         result.map(_.mkString("\t"))
     }
   }

@@ -31,7 +31,7 @@ import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.HiveResult.hiveResultString
+import org.apache.spark.sql.execution.HiveResult.{hiveResultString, wrappedHiveResultPlan}
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
@@ -344,10 +344,13 @@ abstract class HiveComparisonTest extends SparkFunSuite with BeforeAndAfterAll {
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
           val sql = queryString.replace("../../data", testDataPath)
-          val query = new TestHiveQueryExecution(sql)
+          val df = wrappedHiveResultPlan(TestHive.sparkSession.sql(sql))
+          println(sql)
+          TestHive.sparkSession.sql(sql).schema.foreach(println)
+          df.explain(true)
+          val query = new TestHiveQueryExecution(TestHive.sparkSession, df.logicalPlan)
           def getResult(): Seq[String] = {
-            val df = TestHive.sparkSession.sql(sql)
-            SQLExecution.withNewExecutionId(query)(hiveResultString(df))
+            SQLExecution.withNewExecutionId(df.queryExecution)(hiveResultString(df))
           }
           try { (query, prepareAnswer(query, getResult())) } catch {
             case e: Throwable =>
