@@ -204,7 +204,7 @@ class TypesTests(ReusedSQLTestCase):
         df = self.spark.createDataFrame(rdd)
         self.assertEqual(Row(field1=1, field2=u'row1'), df.first())
 
-    def test_infer_nested_dict(self):
+    def test_infer_nested_dict_as_struct(self):
         # SPARK-35929: Test inferring nested dict as a struct type.
         NestedRow = Row("f1", "f2")
 
@@ -212,7 +212,12 @@ class TypesTests(ReusedSQLTestCase):
             nestedRdd = self.sc.parallelize([NestedRow([{"payment": 200.5, "name": "A"}], [1, 2]),
                                              NestedRow([{"payment": 100.5, "name": "B"}], [2, 3])])
             df = self.spark.createDataFrame(nestedRdd)
-            self.assertEqual(Row(f1=[Row(payment=200.5, name='A')], f2=[1, 2]), df.collect()[0])
+            self.assertEqual(Row(f1=[Row(payment=200.5, name='A')], f2=[1, 2]), df.first())
+
+            data = [NestedRow([{"payment": 200.5, "name": "A"}], [1, 2]),
+                    NestedRow([{"payment": 100.5, "name": "B"}], [2, 3])]
+            df = self.spark.createDataFrame(data)
+            self.assertEqual(Row(f1=[Row(payment=200.5, name='A')], f2=[1, 2]), df.first())
 
     def test_create_dataframe_from_dict_respects_schema(self):
         df = self.spark.createDataFrame([{'a': 1}], ["b"])
