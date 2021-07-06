@@ -53,11 +53,6 @@ class NumericOps(DataTypeOps):
         return "numerics"
 
     def add(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if (
-            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
-        ) or isinstance(right, str):
-            raise TypeError("string addition can only be applied to string series or literals.")
-
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("addition can not be applied to given types.")
 
@@ -66,11 +61,6 @@ class NumericOps(DataTypeOps):
         return column_op(Column.__add__)(left, right)
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if (
-            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
-        ) or isinstance(right, str):
-            raise TypeError("subtraction can not be applied to string series or literals.")
-
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("subtraction can not be applied to given types.")
 
@@ -79,11 +69,6 @@ class NumericOps(DataTypeOps):
         return column_op(Column.__sub__)(left, right)
 
     def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if (
-            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
-        ) or isinstance(right, str):
-            raise TypeError("modulo can not be applied on string series or literals.")
-
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("modulo can not be applied to given types.")
 
@@ -95,11 +80,6 @@ class NumericOps(DataTypeOps):
         return column_op(mod)(left, right)
 
     def pow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if (
-            isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType)
-        ) or isinstance(right, str):
-            raise TypeError("exponentiation can not be applied on string series or literals.")
-
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("exponentiation can not be applied to given types.")
 
@@ -111,32 +91,24 @@ class NumericOps(DataTypeOps):
         return column_op(pow_func)(left, right)
 
     def radd(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("string addition can only be applied to string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("addition can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__radd__)(left, right)
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("subtraction can not be applied to string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("subtraction can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__rsub__)(left, right)
 
     def rmul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("multiplication can not be applied to a string literal.")
         if not isinstance(right, numbers.Number):
             raise TypeError("multiplication can not be applied to given types.")
         right = transform_boolean_operand_to_numeric(right)
         return column_op(Column.__rmul__)(left, right)
 
     def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("exponentiation can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("exponentiation can not be applied to given types.")
 
@@ -147,8 +119,6 @@ class NumericOps(DataTypeOps):
         return column_op(rpow_func)(left, right)
 
     def rmod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("modulo can not be applied on string series or literals.")
         if not isinstance(right, numbers.Number):
             raise TypeError("modulo can not be applied to given types.")
 

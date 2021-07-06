@@ -2347,7 +2347,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf["c"] + psdf["d"], pdf["c"] + pdf["d"])
 
         # Negative
-        ks_err_msg = "string addition can only be applied to string series or literals"
+        ks_err_msg = "addition can not be applied to given types"
 
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] + psdf["c"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["c"] + psdf["a"])

@@ -52,7 +52,7 @@ class StringOps(DataTypeOps):
         elif isinstance(right, str):
             return column_op(F.concat)(left, SF.lit(right))
         else:
-            raise TypeError("string addition can only be applied to string series or literals.")
+            raise TypeError("addition can not be applied to given types.")
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("subtraction can not be applied to string series or literals.")
@@ -89,7 +89,7 @@ class StringOps(DataTypeOps):
                 left._with_new_scol(F.concat(SF.lit(right), left.spark.column)),  # TODO: dtype?
             )
         else:
-            raise TypeError("string addition can only be applied to string series or literals.")
+            raise TypeError("addition can not be applied to given types.")
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("subtraction can not be applied to string series or literals.")
