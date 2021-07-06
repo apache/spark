@@ -407,29 +407,8 @@ object DateTimeUtils {
 
   /**
    * Trims and parses a given UTF8 timestamp string to the corresponding a corresponding [[Long]]
-   * value. The return type is [[Option]] in order to distinguish between 0L and null. The following
-   * formats are allowed:
-   *
-   * `[+-]y*`
-   * `[+-]y*-[m]m`
-   * `[+-]y*-[m]m-[d]d`
-   * `[+-]y*-[m]m-[d]d `
-   * `[+-]y*-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
-   * `[+-]y*-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
-   * `[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
-   * `T[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
-   *
-   * where `zone_id` should have one of the forms:
-   *   - Z - Zulu time zone UTC+0
-   *   - +|-[h]h:[m]m
-   *   - A short id, see https://docs.oracle.com/javase/8/docs/api/java/time/ZoneId.html#SHORT_IDS
-   *   - An id with one of the prefixes UTC+, UTC-, GMT+, GMT-, UT+ or UT-,
-   *     and a suffix in the formats:
-   *     - +|-h[h]
-   *     - +|-hh[:]mm
-   *     - +|-hh:mm:ss
-   *     - +|-hhmmss
-   *  - Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
+   * value. The return type is [[Option]] in order to distinguish between 0L and null. Please
+   * refer to `parseTimestampString` for the allowed formats
    */
   def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[Long] = {
     try {
@@ -464,30 +443,8 @@ object DateTimeUtils {
    * Trims and parses a given UTF8 string to a corresponding [[Long]] value which representing the
    * number of microseconds since the epoch. The result is independent of time zones,
    * which means that zone ID in the input string will be ignored.
-   * The return type is [[Option]] in order to distinguish between 0L and null. The following
-   * formats are allowed:
-   *
-   * `[+-]y*`
-   * `[+-]y*-[m]m`
-   * `[+-]y*-[m]m-[d]d`
-   * `[+-]y*-[m]m-[d]d `
-   * `[+-]y*-[m]m-[d]d [h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
-   * `[+-]y*-[m]m-[d]dT[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][zone_id]`
-   *
-   * where `zone_id` should have one of the forms:
-   *   - Z - Zulu time zone UTC+0
-   *   - +|-[h]h:[m]m
-   *   - A short id, see https://docs.oracle.com/javase/8/docs/api/java/time/ZoneId.html#SHORT_IDS
-   *   - An id with one of the prefixes UTC+, UTC-, GMT+, GMT-, UT+ or UT-,
-   *     and a suffix in the formats:
-   *     - +|-h[h]
-   *     - +|-hh[:]mm
-   *     - +|-hh:mm:ss
-   *     - +|-hhmmss
-   *  - Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
-   *
-   * Note: The input string has to contains year/month/day fields, otherwise Spark can't determine
-   *       the value of timestamp without time zone.
+   * The return type is [[Option]] in order to distinguish between 0L and null. Please
+   * refer to `parseTimestampString` for the allowed formats.
    */
   def stringToTimestampWithoutTimeZone(s: UTF8String): Option[Long] = {
     try {
