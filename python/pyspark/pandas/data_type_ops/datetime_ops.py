@@ -67,7 +67,7 @@ class DatetimeOps(DataTypeOps):
                 ),
             )
         else:
-            raise TypeError("datetime subtraction can only be applied to datetime series.")
+            raise TypeError("Datetime subtraction can only be applied to datetime series.")
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
@@ -86,7 +86,7 @@ class DatetimeOps(DataTypeOps):
                 ),
             )
         else:
-            raise TypeError("datetime subtraction can only be applied to datetime series.")
+            raise TypeError("Datetime subtraction can only be applied to datetime series.")
 
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
