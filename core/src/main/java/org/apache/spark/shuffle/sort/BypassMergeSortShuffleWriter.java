@@ -26,8 +26,6 @@ import java.util.Optional;
 import java.util.zip.Checksum;
 import javax.annotation.Nullable;
 
-import org.apache.spark.SparkException;
-import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper;
 import scala.None$;
 import scala.Option;
 import scala.Product2;
@@ -41,11 +39,11 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.Partitioner;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
+import org.apache.spark.SparkException;
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
-import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper.*;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.scheduler.MapStatus;
 import org.apache.spark.scheduler.MapStatus$;
@@ -53,6 +51,7 @@ import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.shuffle.ShuffleWriter;
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;
 
@@ -97,8 +96,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private FileSegment[] partitionWriterSegments;
   @Nullable private MapStatus mapStatus;
   private long[] partitionLengths;
-  private Checksum[] partitionChecksums;
-  private final boolean checksumEnabled;
+  /** Checksum calculator for each partition. Empty when shuffle checksum disabled. */
+  private final Checksum[] partitionChecksums;
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
@@ -126,10 +125,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleExecutorComponents = shuffleExecutorComponents;
-    this.checksumEnabled = ShuffleChecksumHelper.isShuffleChecksumEnabled(conf);
-    if (this.checksumEnabled) {
-      this.partitionChecksums = ShuffleChecksumHelper.createPartitionChecksums(numPartitions, conf);
-    }
+    this.partitionChecksums = ShuffleChecksumHelper.createPartitionChecksumsIfEnabled(numPartitions, conf);
   }
 
   @Override
@@ -155,7 +151,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         final BlockId blockId = tempShuffleBlockIdPlusFile._1();
         DiskBlockObjectWriter writer =
           blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics);
-        if (checksumEnabled) {
+        if (partitionChecksums.length > 0) {
           writer.setChecksum(partitionChecksums[i]);
         }
         partitionWriters[i] = writer;
@@ -232,16 +228,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       partitionWriters = null;
     }
-    long[] checksums;
-    if (checksumEnabled) {
-      checksums = new long[numPartitions];
-      for (int i = 0; i < numPartitions; i ++) {
-        checksums[i] = partitionChecksums[i].getValue();
-      }
-    } else {
-      checksums = new long[0];
-    }
-    return mapOutputWriter.commitAllPartitions(checksums).getPartitionLengths();
+    return mapOutputWriter.commitAllPartitions(
+      ShuffleChecksumHelper.getChecksumValues(partitionChecksums)
+    ).getPartitionLengths();
   }
 
   private void writePartitionedDataWithChannel(

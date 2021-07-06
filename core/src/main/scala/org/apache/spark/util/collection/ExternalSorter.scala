@@ -142,16 +142,10 @@ private[spark] class ExternalSorter[K, V, C](
   private val forceSpillFiles = new ArrayBuffer[SpilledFile]
   @volatile private var readingIterator: SpillableIterator = null
 
-  private val checksumEnabled = ShuffleChecksumHelper.isShuffleChecksumEnabled(conf)
-  private val partitionChecksums = if (checksumEnabled) {
-    ShuffleChecksumHelper.createPartitionChecksums(numPartitions, conf)
-  } else {
-    Array.empty
-  }
+  private val partitionChecksums =
+    ShuffleChecksumHelper.createPartitionChecksumsIfEnabled(numPartitions, conf)
 
-  def getChecksums: Array[Long] = {
-    partitionChecksums.map(_.getValue)
-  }
+  def getChecksums: Array[Long] = ShuffleChecksumHelper.getChecksumValues(partitionChecksums)
 
   // A comparator for keys K that orders them within a partition to allow aggregation or sorting.
   // Can be a partial ordering by hash code if a total ordering is not provided through by the

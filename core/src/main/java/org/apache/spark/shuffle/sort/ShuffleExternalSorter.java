@@ -112,8 +112,8 @@ final class ShuffleExternalSorter extends MemoryConsumer {
   @Nullable private MemoryBlock currentPage = null;
   private long pageCursor = -1;
 
-  private final boolean checksumEnabled;
-  private Checksum[] partitionChecksums;
+  // Checksum calculator for each partition. Empty when shuffle checksum disabled.
+  private final Checksum[] partitionChecksums;
 
   ShuffleExternalSorter(
       TaskMemoryManager memoryManager,
@@ -145,23 +145,12 @@ final class ShuffleExternalSorter extends MemoryConsumer {
     this.peakMemoryUsedBytes = getMemoryUsage();
     this.diskWriteBufferSize =
         (int) (long) conf.get(package$.MODULE$.SHUFFLE_DISK_WRITE_BUFFER_SIZE());
-    this.checksumEnabled = ShuffleChecksumHelper.isShuffleChecksumEnabled(conf);
-    if (this.checksumEnabled) {
-      this.partitionChecksums = ShuffleChecksumHelper.createPartitionChecksums(numPartitions, conf);
-    }
+    this.partitionChecksums =
+      ShuffleChecksumHelper.createPartitionChecksumsIfEnabled(numPartitions, conf);
   }
 
   public long[] getChecksums() {
-    long[] checksums;
-    if (checksumEnabled) {
-      checksums = new long[numPartitions];
-      for (int i = 0; i < numPartitions; i ++) {
-        checksums[i] = partitionChecksums[i].getValue();
-      }
-    } else {
-      checksums = new long[0];
-    }
-    return checksums;
+    return ShuffleChecksumHelper.getChecksumValues(partitionChecksums);
   }
 
   /**
@@ -233,7 +222,7 @@ final class ShuffleExternalSorter extends MemoryConsumer {
             spillInfo.partitionLengths[currentPartition] = fileSegment.length();
           }
           currentPartition = partition;
-          if (checksumEnabled) {
+          if (partitionChecksums.length > 0) {
             writer.setChecksum(partitionChecksums[currentPartition]);
           }
         }

@@ -15,9 +15,15 @@ public class ShuffleChecksumHelper {
     return (boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ENABLED());
   }
 
-  public static Checksum[] createPartitionChecksums(int numPartitions, SparkConf conf)
+  public static Checksum[] createPartitionChecksumsIfEnabled(int numPartitions, SparkConf conf)
     throws SparkException {
     Checksum[] partitionChecksums;
+
+    if (!isShuffleChecksumEnabled(conf)) {
+      partitionChecksums = new Checksum[0];
+      return partitionChecksums;
+    }
+
     String checksumAlgo = shuffleChecksumAlgorithm(conf);
     switch (checksumAlgo) {
       case "Adler32":
@@ -37,6 +43,15 @@ public class ShuffleChecksumHelper {
       default:
         throw new SparkException("Unsupported shuffle checksum algorithm: " + checksumAlgo);
     }
+  }
+
+  public static long[] getChecksumValues(Checksum[] partitionChecksums) {
+    int numPartitions = partitionChecksums.length;
+    long[] checksumValues = new long[numPartitions];
+    for (int i = 0; i < numPartitions; i ++) {
+      checksumValues[i] = partitionChecksums[i].getValue();
+    }
+    return checksumValues;
   }
 
   public static String shuffleChecksumAlgorithm(SparkConf conf) {
