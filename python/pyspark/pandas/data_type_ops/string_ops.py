@@ -58,9 +58,6 @@ class StringOps(DataTypeOps):
         raise TypeError("subtraction can not be applied to string series or literals.")
 
     def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("multiplication can not be applied to a string literal.")
-
         if (
             isinstance(right, IndexOpsMixin)
             and isinstance(right.spark.data_type, IntegralType)
@@ -68,7 +65,7 @@ class StringOps(DataTypeOps):
         ) or isinstance(right, int):
             return column_op(SF.repeat)(left, right)
         else:
-            raise TypeError("a string series can only be multiplied to an int series or literal")
+            raise TypeError("multiplication can not be applied to given types.")
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("division can not be applied on string series or literals.")
@@ -98,7 +95,7 @@ class StringOps(DataTypeOps):
         if isinstance(right, int):
             return column_op(SF.repeat)(left, right)
         else:
-            raise TypeError("a string series can only be multiplied to an int series or literal")
+            raise TypeError("multiplication can not be applied to given types.")
 
     def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("division can not be applied on string series or literals.")

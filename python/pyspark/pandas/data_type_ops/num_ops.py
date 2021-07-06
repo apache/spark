@@ -140,12 +140,6 @@ class IntegralOps(NumericOps):
         return "integrals"
 
     def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("multiplication can not be applied to a string literal.")
-
-        if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, TimestampType):
-            raise TypeError("multiplication can not be applied to date times.")
-
         if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, StringType):
             return column_op(SF.repeat)(right, left)
 
@@ -246,12 +240,6 @@ class FractionalOps(NumericOps):
         return "fractions"
 
     def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("multiplication can not be applied to a string literal.")
-
-        if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, TimestampType):
-            raise TypeError("multiplication can not be applied to date times.")
-
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("multiplication can not be applied to given types.")
 

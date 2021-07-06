@@ -2436,12 +2436,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [2]})
-        ks_err_msg = "multiplication can not be applied to a string literal"
+        ks_err_msg = "multiplication can not be applied to given types"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] * "literal")
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: "literal" * psdf["b"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] * "literal")
 
-        ks_err_msg = "a string series can only be multiplied to an int series or literal"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] * psdf["a"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] * 0.1)
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 0.1 * psdf["a"])
