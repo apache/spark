@@ -541,15 +541,17 @@ object IntervalUtils {
   }
 
   private val signRe = "(?<sign>[+|-])"
-  private val dayRe = "(?<day>\\d+)"
+  private val dayRe = "(?<day>\\d{1,9})"
   private val hourRe = "(?<hour>\\d{1,2})"
   private val minuteRe = "(?<minute>\\d{1,2})"
   private val secondRe = "(?<second>(\\d{1,2})(\\.(\\d{1,9}))?)"
+  private val hourBoundRe = "(?<hour>\\d{1,10})"
+  private val minuteBoundRe = "(?<minute>\\d{1,12})"
 
   private val dayTimePattern = Map(
-    (MINUTE, SECOND) -> s"^$signRe?$minuteRe:$secondRe$$".r,
-    (HOUR, MINUTE) -> s"^$signRe?$hourRe:$minuteRe$$".r,
-    (HOUR, SECOND) -> s"^$signRe?$hourRe:$minuteRe:$secondRe$$".r,
+    (MINUTE, SECOND) -> s"^$signRe?$minuteBoundRe:$secondRe$$".r,
+    (HOUR, MINUTE) -> s"^$signRe?$hourBoundRe:$minuteRe$$".r,
+    (HOUR, SECOND) -> s"^$signRe?$hourBoundRe:$minuteRe:$secondRe$$".r,
     (DAY, HOUR) -> s"^$signRe?$dayRe $hourRe$$".r,
     (DAY, MINUTE) -> s"^$signRe?$dayRe $hourRe:$minuteRe$$".r,
     (DAY, SECOND) -> s"^$signRe?$dayRe $hourRe:$minuteRe:$secondRe$$".r
@@ -594,23 +596,29 @@ object IntervalUtils {
       s"$fallbackNotice")
     var micros: Long = 0L
     var days: Int = 0
+    val sign = if (m.group("sign") != null && m.group("sign") == "-") -1 else 1
     unitsRange(to, from).foreach {
       case unit @ DAY =>
-        days = toLongWithRange(unit, m.group(unit.toString), 0, Int.MaxValue).toInt
+        days = sign * toLongWithRange(unit, m.group(unit.toString), 0, Int.MaxValue).toInt
       case unit @ HOUR =>
-        val parsed = toLongWithRange(unit, m.group(unit.toString), 0, 23)
-        micros = Math.addExact(micros, parsed * MICROS_PER_HOUR)
+        val parsed = toLongWithRange(unit, m.group(unit.toString), 0,
+          if (from == HOUR) 2562047788L else 23)
+        micros = Math.addExact(micros, sign * parsed * MICROS_PER_HOUR)
       case unit @ MINUTE =>
-        val parsed = toLongWithRange(unit, m.group(unit.toString), 0, 59)
-        micros = Math.addExact(micros, parsed * MICROS_PER_MINUTE)
+        val parsed = toLongWithRange(unit, m.group(unit.toString), 0,
+          if (from == MINUTE) 153722867280L else 59)
+        micros = Math.addExact(micros, sign * parsed * MICROS_PER_MINUTE)
       case unit @ SECOND =>
-        micros = Math.addExact(micros, parseSecondNano(m.group(unit.toString)))
+        val seconds = sign match {
+          case 1 => parseSecondNano(m.group(unit.toString))
+          case -1 => parseSecondNano(s"-${m.group(unit.toString)}")
+        }
+        micros = Math.addExact(micros, seconds)
       case _ =>
         throw new IllegalArgumentException(
           s"Cannot support (interval '$input' $from to $to) expression")
     }
-    val sign = if (m.group("sign") != null && m.group("sign") == "-") -1 else 1
-    new CalendarInterval(0, sign * days, sign * micros)
+    new CalendarInterval(0, days, micros)
   }
 
   // Parses a string with nanoseconds, truncates the result and returns microseconds
