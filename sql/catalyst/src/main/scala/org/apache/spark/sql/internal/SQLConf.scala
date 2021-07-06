@@ -3327,12 +3327,11 @@ object SQLConf {
     .intConf
     .createWithDefault(0)
 
-  val INFER_NESTED_STRUCT_BY_MAP = buildConf("spark.sql.pyspark.inferNestedStructByMap")
-    .internal()
-    .doc("When set to false, inferring the nested struct by StructType. MapType is default.")
+  val INFER_NESTED_DICT_AS_STRUCT = buildConf("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
+    .doc("When set to true, infers the nested dict as a struct. By default, it infers it as a map")
     .version("3.2.0")
     .booleanConf
-    .createWithDefault(true)
+    .createWithDefault(false)
 
   /**
    * Holds information about keys that have been deprecated.
@@ -4047,7 +4046,7 @@ class SQLConf extends Serializable with Logging {
 
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
-  def inferNestedStructByMap: Boolean = getConf(SQLConf.INFER_NESTED_STRUCT_BY_MAP)
+  def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
 
   /** ********************** SQLConf functionality methods ************ */
 
