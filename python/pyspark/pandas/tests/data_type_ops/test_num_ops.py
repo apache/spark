@@ -30,7 +30,7 @@ from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
 )
-from pyspark.sql.types import DecimalType, LongType
+from pyspark.sql.types import DecimalType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
