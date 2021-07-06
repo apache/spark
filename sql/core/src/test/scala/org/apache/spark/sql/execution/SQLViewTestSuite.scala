@@ -468,17 +468,14 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
 
   test("SPARK-36011: Disallow altering permanent views based on temporary views or UDFs") {
     import testImplicits._
-    val table = "t"
-    withTable(table) {
-      (1 to 10).toDF("id").write.saveAsTable(table)
-      val view = "v1"
-      val tView = "v2"
-      withView(view) {
-        withTempView(tView) {
-          sql(s"CREATE VIEW $view AS SELECT * FROM $table")
-          sql(s"CREATE TEMPORARY VIEW $tView AS  SELECT * FROM $table")
+    withTable("t") {
+      (1 to 10).toDF("id").write.saveAsTable("t")
+      withView("v1") {
+        withTempView("v2") {
+          sql(s"CREATE VIEW v1 AS SELECT * FROM t")
+          sql(s"CREATE TEMPORARY VIEW v2 AS  SELECT * FROM t")
           var e = intercept[AnalysisException] {
-            sql(s"ALTER VIEW $view AS SELECT * FROM $tView")
+            sql(s"ALTER VIEW v1 AS SELECT * FROM v2")
           }.getMessage
           assert(e.contains("Not allowed to create a permanent view `default`.`v1` by " +
             "referencing a temporary view v2"))
@@ -487,7 +484,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
           withUserDefinedFunction(tempFunctionName -> true) {
             sql(s"CREATE TEMPORARY FUNCTION $tempFunctionName AS '$functionClass'")
             e = intercept[AnalysisException] {
-              sql(s"ALTER VIEW $view AS SELECT $tempFunctionName(id) from $table")
+              sql(s"ALTER VIEW v1 AS SELECT $tempFunctionName(id) from t")
             }.getMessage
             assert(e.contains("Not allowed to create a permanent view `default`.`v1` by " +
               s"referencing a temporary function `$tempFunctionName`"))
