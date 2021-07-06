@@ -768,10 +768,8 @@ private[spark] class ExternalSorter[K, V, C](
             serializerManager,
             serInstance,
             blockId,
-            context.taskMetrics().shuffleWriteMetrics)
-          if (partitionChecksums.nonEmpty) {
-            partitionPairsWriter.setChecksum(partitionChecksums(partitionId))
-          }
+            context.taskMetrics().shuffleWriteMetrics,
+            if (partitionChecksums.nonEmpty) partitionChecksums(partitionId) else null)
           while (it.hasNext && it.nextPartition() == partitionId) {
             it.writeNext(partitionPairsWriter)
           }
@@ -795,10 +793,8 @@ private[spark] class ExternalSorter[K, V, C](
             serializerManager,
             serInstance,
             blockId,
-            context.taskMetrics().shuffleWriteMetrics)
-          if (partitionChecksums.nonEmpty) {
-            partitionPairsWriter.setChecksum(partitionChecksums(id))
-          }
+            context.taskMetrics().shuffleWriteMetrics,
+            if (partitionChecksums.nonEmpty) partitionChecksums(id) else null)
           if (elements.hasNext) {
             for (elem <- elements) {
               partitionPairsWriter.write(elem._1, elem._2)

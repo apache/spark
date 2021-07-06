@@ -36,7 +36,8 @@ private[spark] class ShufflePartitionPairsWriter(
     serializerManager: SerializerManager,
     serializerInstance: SerializerInstance,
     blockId: BlockId,
-    writeMetrics: ShuffleWriteMetricsReporter)
+    writeMetrics: ShuffleWriteMetricsReporter,
+    checksum: Checksum)
   extends PairsWriter with Closeable {
 
   private var isClosed = false
@@ -46,23 +47,9 @@ private[spark] class ShufflePartitionPairsWriter(
   private var objOut: SerializationStream = _
   private var numRecordsWritten = 0
   private var curNumBytesWritten = 0L
-
-  // checksum related
-  private var checksumEnabled = false
+  // this would be only initialized when checksum != null,
+  // which indicates shuffle checksum is enabled.
   private var checksumOutputStream: MutableCheckedOutputStream = _
-  private var checksum: Checksum = _
-
-  /**
-   * Set the checksum that the checksumOutputStream should use
-   */
-  def setChecksum(checksum: Checksum): Unit = {
-    if (checksumOutputStream == null) {
-      this.checksumEnabled = true
-      this.checksum = checksum
-    } else {
-      checksumOutputStream.setChecksum(checksum)
-    }
-  }
 
   override def write(key: Any, value: Any): Unit = {
     if (isClosed) {
@@ -80,13 +67,12 @@ private[spark] class ShufflePartitionPairsWriter(
     try {
       partitionStream = partitionWriter.openStream
       timeTrackingStream = new TimeTrackingOutputStream(writeMetrics, partitionStream)
-      if (checksumEnabled) {
-        assert(this.checksum != null, "Checksum is not set")
+      if (checksum != null) {
         checksumOutputStream = new MutableCheckedOutputStream(timeTrackingStream)
         checksumOutputStream.setChecksum(checksum)
       }
       wrappedStream = serializerManager.wrapStream(blockId,
-        if (checksumEnabled) checksumOutputStream else timeTrackingStream)
+        if (checksumOutputStream != null) checksumOutputStream else timeTrackingStream)
       objOut = serializerInstance.serializeStream(wrappedStream)
     } catch {
       case e: Exception =>
