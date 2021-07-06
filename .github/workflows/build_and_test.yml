@@ -366,9 +366,7 @@ jobs:
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
         # Jinja2 3.0.0+ causes error when building with Sphinx.
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
-        # TODO(SPARK-35684, SPARK-35683): Bump up the mypy version. This is blocked by
-        #   Index.difference logic issue.
-        python3.6 -m pip install flake8 pydata_sphinx_theme 'mypy==0.812' numpydoc 'jinja2<3.0.0' 'black==21.5b2'
+        python3.6 -m pip install flake8 pydata_sphinx_theme 'mypy==0.910' numpydoc 'jinja2<3.0.0' 'black==21.5b2'
     - name: Install R linter dependencies and SparkR
       run: |
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
