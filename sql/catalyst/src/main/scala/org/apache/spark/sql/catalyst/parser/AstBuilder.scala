@@ -2119,6 +2119,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         throw QueryParsingErrors.cannotParseValueTypeError(valueType, value, ctx)
       }
     }
+
+    def constructTimestampLTZLiteral(value: String): Literal = {
+      val zoneId = getZoneId(conf.sessionLocalTimeZone)
+      val specialTs = convertSpecialTimestamp(value, zoneId).map(Literal(_, TimestampType))
+      specialTs.getOrElse(toLiteral(stringToTimestamp(_, zoneId), TimestampType))
+    }
+
     try {
       valueType match {
         case "DATE" =>
@@ -2128,13 +2135,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         case "TIMESTAMP_NTZ" =>
           val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
           specialTs.getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
+        case "TIMESTAMP_LTZ" =>
+          constructTimestampLTZLiteral(value)
         case "TIMESTAMP" =>
-          def constructTimestampLTZLiteral(value: String): Literal = {
-            val zoneId = getZoneId(conf.sessionLocalTimeZone)
-            val specialTs = convertSpecialTimestamp(value, zoneId).map(Literal(_, TimestampType))
-            specialTs.getOrElse(toLiteral(stringToTimestamp(_, zoneId), TimestampType))
-          }
-
           SQLConf.get.timestampType match {
             case TimestampNTZType =>
               val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
@@ -2529,6 +2532,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case ("date", Nil) => DateType
       case ("timestamp", Nil) => SQLConf.get.timestampType
       case ("timestamp_ntz", Nil) => TimestampNTZType
+      case ("timestamp_ltz", Nil) => TimestampType
       case ("string", Nil) => StringType
       case ("character" | "char", length :: Nil) => CharType(length.getText.toInt)
       case ("varchar", length :: Nil) => VarcharType(length.getText.toInt)
