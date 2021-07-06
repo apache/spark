@@ -762,9 +762,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 s"Filter/Aggregate/Project and a few commands: $plan")
           }
         }
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan, isScalarOrLateral = true)
 
       case _: LateralSubquery =>
         assert(plan.isInstanceOf[LateralJoin])
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan, isScalarOrLateral = true)
 
       case inSubqueryOrExistsSubquery =>
         plan match {
@@ -773,11 +779,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
                 s" Filter/Join and a few commands: $plan")
         }
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan)
     }
-
-    // Validate to make sure the correlations appearing in the query are valid and
-    // allowed by spark.
-    checkCorrelationsInSubquery(expr.plan, isLateral = plan.isInstanceOf[LateralJoin])
   }
 
   /**
@@ -816,7 +821,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates to make sure the outer references appearing inside the subquery
    * are allowed.
    */
-  private def checkCorrelationsInSubquery(sub: LogicalPlan, isLateral: Boolean = false): Unit = {
+  private def checkCorrelationsInSubquery(
+      sub: LogicalPlan,
+      isScalarOrLateral: Boolean = false): Unit = {
     // Validate that correlated aggregate expression do not contain a mixture
     // of outer and local references.
     def checkMixedReferencesInsideAggregateExpr(expr: Expression): Unit = {
@@ -837,11 +844,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
 
     // Check whether the logical plan node can host outer references.
-    // A `Project` can host outer references if it is inside a lateral subquery.
-    // Otherwise, only Filter can only outer references.
+    // A `Project` can host outer references if it is inside a scalar or a lateral subquery and
+    // DecorrelateInnerQuery is enabled. Otherwise, only Filter can only outer references.
     def canHostOuter(plan: LogicalPlan): Boolean = plan match {
       case _: Filter => true
-      case _: Project => isLateral
+      case _: Project => isScalarOrLateral && SQLConf.get.decorrelateInnerQueryEnabled
       case _ => false
     }
 
