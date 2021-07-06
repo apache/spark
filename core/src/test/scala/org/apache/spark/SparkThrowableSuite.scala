@@ -20,6 +20,7 @@ package org.apache.spark
 import java.io.File
 import java.util.IllegalFormatException
 
+import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.SerializationFeature
@@ -65,6 +66,7 @@ class SparkThrowableSuite extends SparkFunSuite {
       .enable(SerializationFeature.INDENT_OUTPUT)
       .build()
     val rewrittenString = mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
+      .setSerializationInclusion(Include.NON_ABSENT)
       .writeValueAsString(errorClassToInfoMap)
     assert(rewrittenString == errorClassFileContents)
   }
@@ -119,7 +121,21 @@ class SparkThrowableSuite extends SparkFunSuite {
       "cannot resolve 'foo' given input columns: [bar]")
   }
 
-  test("Try catching SparkError") {
+  test("Try catching legacy SparkError") {
+    try {
+      throw new SparkException("Arbitrary legacy message")
+    } catch {
+      case e: SparkThrowable =>
+        assert(e.getErrorClass == null)
+        assert(e.getMessageParameters.isEmpty)
+        assert(e.getSqlState == null)
+      case _: Throwable =>
+        // Should not end up here
+        assert(false)
+    }
+  }
+
+  test("Try catching SparkError with error class") {
     try {
       throw new SparkException(
         errorClass = "WRITING_JOB_ABORTED",
