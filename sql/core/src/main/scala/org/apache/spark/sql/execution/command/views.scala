@@ -264,8 +264,9 @@ case class AlterViewAsCommand(
     val qe = session.sessionState.executePlan(query)
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
-
-    if (session.sessionState.catalog.isTemporaryTable(name)) {
+    val isTemporary = session.sessionState.catalog.isTemporaryTable(name)
+    verifyTemporaryObjectsNotExists(session.sessionState.catalog, isTemporary, name, query)
+    if (isTemporary) {
       alterTemporaryView(session, analyzedPlan)
     } else {
       alterPermanentView(session, analyzedPlan)
