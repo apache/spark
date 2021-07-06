@@ -22,6 +22,7 @@ import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
+import scala.util.Random
 
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.getZoneId
@@ -53,6 +54,13 @@ object DateTimeTestUtils {
     "Asia/Hong_Kong",
     "Europe/Amsterdam")
   val outstandingZoneIds: Seq[ZoneId] = outstandingTimezonesIds.map(getZoneId)
+
+  private val random = new Random(System.nanoTime())
+
+  // Take 2 samples from the `outstandingZoneIds`. This is useful when the test case is slow.
+  def outstandingZoneIdSample: Seq[ZoneId] = {
+    random.shuffle(outstandingZoneIds).take(2)
+  }
 
   def withDefaultTimeZone[T](newDefaultTimeZone: ZoneId)(block: => T): T = {
     val originalDefaultTimeZone = ZoneId.systemDefault()
