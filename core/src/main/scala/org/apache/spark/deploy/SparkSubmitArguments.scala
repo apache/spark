@@ -539,10 +539,10 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --proxy-user NAME           User to impersonate when submitting the application.
         |                              This argument does not work with --principal / --keytab.
         |
-        |  --keep-spark-context-alive  Ture or False. Whether to keep the spark context alive after
+        |  --keep-spark-context-alive  True or False. Whether to keep the spark context alive after
         |                              invoking main method. Default is false. If value is true, spark
-        |                              context will not close after invoking main method. Instead the
-        |                              spark context will close in shut down hook.
+        |                              context will not close after invoking main method. Otherwise
+        |                              the spark context will close in shut down hook.
         |
         |  --help, -h                  Show this help message and exit.
         |  --verbose, -v               Print additional debug output.
