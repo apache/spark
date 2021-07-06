@@ -81,6 +81,14 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def other_psser(self):
         return ps.from_pandas(self.other_pser)
 
+    @property
+    def struct_pser(self):
+        return pd.Series([("x", 1)])
+
+    @property
+    def struct_psser(self):
+        return ps.Index([("x", 1)]).to_series().reset_index(drop=True)
+
     def test_add(self):
         for pser, psser in zip(self.psers, self.pssers):
             self.assert_eq(pser + pser, psser + psser)
@@ -247,6 +255,10 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.pser == self.other_pser, (self.psser == self.other_psser).sort_index()
             )
             self.assert_eq(self.pser == self.pser, (self.psser == self.psser).sort_index())
+            self.assert_eq(
+                self.struct_pser == self.struct_pser,
+                (self.struct_psser == self.struct_psser).sort_index(),
+            )
 
     def test_ne(self):
         with option_context("compute.ops_on_diff_frames", True):
