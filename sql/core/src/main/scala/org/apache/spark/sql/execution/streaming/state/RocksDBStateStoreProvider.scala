@@ -60,7 +60,7 @@ private[state] class RocksDBStateStoreProvider
     override def put(key: UnsafeRow, value: UnsafeRow): Unit = {
       verify(state == UPDATING, "Cannot put after already committed or aborted")
       verify(key != null, "Key cannot be null")
-      verify(value != null, "Value cannot be null")
+      require(value != null, "Cannot put a null value")
       logDebug(s"Storing $key => $value")
       rocksDB.put(encoder.encode(key), encoder.encode(value))
     }
