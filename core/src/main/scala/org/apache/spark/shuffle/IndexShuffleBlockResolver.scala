@@ -348,13 +348,16 @@ private[spark] class IndexShuffleBlockResolver(
       // the following check and rename are atomic.
       this.synchronized {
         val existingLengths = checkIndexAndDataFile(indexFile, dataFile, lengths.length)
-        val existingChecksums =
-          checksumFileOpt.map(getChecksums(_, checksums.length)).getOrElse(checksums)
-        if (existingLengths != null && existingChecksums != null) {
+        // `existingChecksums` could be null either because we're the first task attempt
+        // reaches here or shuffle checksum is disabled.
+        val existingChecksums = getChecksums(checksumFileOpt.get, checksums.length)
+        if (existingLengths != null && (!checksumEnabled || existingChecksums != null)) {
           // Another attempt for the same task has already written our map outputs successfully,
           // so just use the existing partition lengths and delete our temporary map outputs.
           System.arraycopy(existingLengths, 0, lengths, 0, lengths.length)
-          System.arraycopy(existingChecksums, 0, checksums, 0, lengths.length)
+          if (checksumEnabled) {
+            System.arraycopy(existingChecksums, 0, checksums, 0, lengths.length)
+          }
           if (dataTmp != null && dataTmp.exists()) {
             dataTmp.delete()
           }
