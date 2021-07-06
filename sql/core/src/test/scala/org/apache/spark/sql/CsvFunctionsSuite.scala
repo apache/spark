@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.text.SimpleDateFormat
-import java.time.Period
+import java.time.{Duration, Period}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -28,6 +28,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
 import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 
 class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
@@ -293,6 +294,50 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
       checkAnswer(toCsvDF, Row(toCsvExpected))
 
       DataTypeTestUtils.yearMonthIntervalTypes.foreach { fromCsvDtype =>
+        val fromCsvDF = toCsvDF
+          .select(
+            from_csv(
+              $"csv",
+              StructType(StructField("a", fromCsvDtype) :: Nil),
+              Map.empty[String, String]) as "value")
+          .selectExpr("value.a")
+        if (toCsvDtype == fromCsvDtype) {
+          checkAnswer(fromCsvDF, Row(fromCsvExpected))
+        } else {
+          checkAnswer(fromCsvDF, Row(null))
+        }
+      }
+    }
+  }
+
+  test("SPARK-35999: Make from_csv/to_csv to handle day-time intervals properly") {
+    val dtDF = Seq(Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)).toDF
+    Seq(
+      (DayTimeIntervalType(), "INTERVAL '1 02:03:04' DAY TO SECOND",
+        Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4)),
+      (DayTimeIntervalType(DAY, MINUTE), "INTERVAL '1 02:03' DAY TO MINUTE",
+        Duration.ofDays(1).plusHours(2).plusMinutes(3)),
+      (DayTimeIntervalType(DAY, HOUR), "INTERVAL '1 02' DAY TO HOUR",
+        Duration.ofDays(1).plusHours(2)),
+      (DayTimeIntervalType(DAY), "INTERVAL '1' DAY",
+        Duration.ofDays(1)),
+      (DayTimeIntervalType(HOUR, SECOND), "INTERVAL '26:03:04' HOUR TO SECOND",
+        Duration.ofHours(26).plusMinutes(3).plusSeconds(4)),
+      (DayTimeIntervalType(HOUR, MINUTE), "INTERVAL '26:03' HOUR TO MINUTE",
+        Duration.ofHours(26).plusMinutes(3)),
+      (DayTimeIntervalType(HOUR), "INTERVAL '26' HOUR",
+        Duration.ofHours(26)),
+      (DayTimeIntervalType(MINUTE, SECOND), "INTERVAL '1563:04' MINUTE TO SECOND",
+        Duration.ofMinutes(1563).plusSeconds(4)),
+      (DayTimeIntervalType(MINUTE), "INTERVAL '1563' MINUTE",
+        Duration.ofMinutes(1563)),
+      (DayTimeIntervalType(SECOND), "INTERVAL '93784' SECOND",
+        Duration.ofSeconds(93784))
+    ).foreach { case (toCsvDtype, toCsvExpected, fromCsvExpected) =>
+      val toCsvDF = dtDF.select(to_csv(struct($"value" cast toCsvDtype)) as "csv")
+      checkAnswer(toCsvDF, Row(toCsvExpected))
+
+      DataTypeTestUtils.dayTimeIntervalTypes.foreach { fromCsvDtype =>
         val fromCsvDF = toCsvDF
           .select(
             from_csv(
