@@ -1390,7 +1390,7 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("push down filter predicate having typedFilter as child") {
+  test("SPARK-36027: push down filter predicate having typedFilter as child") {
 
     val f1 = (i: (Int, Int, Int)) => i._1 > 0
     val f2 = (i: (Int, Int, Int)) => i._1 < 100
@@ -1408,6 +1408,5 @@ class FilterPushdownSuite extends PlanTest {
     query = testRelation.where(attrB <= 5).filter(f1).filter(f2).analyze
     expected = Optimize.execute(query)
     comparePlans(optimized, expected)
-
   }
 }
