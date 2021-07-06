@@ -209,8 +209,6 @@ class TypesTests(ReusedSQLTestCase):
         NestedRow = Row("f1", "f2")
 
         with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
-            test = self.spark._wrapped._conf.inferDictAsStruct()
-            test1 = self.spark.conf.get("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
             nestedRdd = self.sc.parallelize([NestedRow([{"payment": 200.5, "name": "A"}], [1, 2]),
                                              NestedRow([{"payment": 100.5, "name": "B"}], [2, 3])])
             df = self.spark.createDataFrame(nestedRdd)

@@ -3329,7 +3329,7 @@ object SQLConf {
 
   val INFER_NESTED_DICT_AS_STRUCT = buildConf("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
     .doc("When set to true, infers the nested dict as a struct. By default, it infers it as a map")
-    .version("3.2.0")
+    .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
 
