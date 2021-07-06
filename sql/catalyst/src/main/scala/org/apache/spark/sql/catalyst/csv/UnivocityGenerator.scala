@@ -66,6 +66,11 @@ class UnivocityGenerator(
         IntervalUtils.toYearMonthIntervalString(
           row.getInt(ordinal), IntervalStringStyles.ANSI_STYLE, start, end)
 
+    case DayTimeIntervalType(start, end) =>
+      (row: InternalRow, ordinal: Int) =>
+      IntervalUtils.toDayTimeIntervalString(
+        row.getLong(ordinal), IntervalStringStyles.ANSI_STYLE, start, end)
+
     case udt: UserDefinedType[_] => makeConverter(udt.sqlType)
 
     case dt: DataType =>
