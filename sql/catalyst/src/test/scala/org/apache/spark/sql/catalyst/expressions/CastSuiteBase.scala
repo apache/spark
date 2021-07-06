@@ -1261,7 +1261,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
             s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
               .map(format => s"`$format`").mkString(", ")} " +
             s"when cast to ${dataType.typeName}: $interval, " +
-            s"set spark.sql.legacy.fromDayTimeString.enabled to true " +
+            s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
             "to restore the behavior before Spark 3.0."))
         }
 
@@ -1284,7 +1284,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
             s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
               .map(format => s"`$format`").mkString(", ")} " +
             s"when cast to ${dataType.typeName}: $interval, " +
-            s"set spark.sql.legacy.fromDayTimeString.enabled to true " +
+            s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
             "to restore the behavior before Spark 3.0."))
         }
     }
