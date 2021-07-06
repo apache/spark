@@ -26,6 +26,8 @@ import scala.ref.WeakReference
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
+import org.json4s.NoTypeHints
+import org.json4s.jackson.Serialization
 import org.rocksdb.{RocksDB => NativeRocksDB, _}
 
 import org.apache.spark.TaskContext
@@ -72,6 +74,7 @@ class RocksDB(
   dbOptions.setTableFormatConfig(tableFormatConfig)
   private val dbLogger = createLogger() // for forwarding RocksDB native logs to log4j
   dbOptions.setStatistics(new Statistics())
+  private val nativeStats = dbOptions.statistics()
 
   private val workingDir = createTempDir("workingDir")
   private val fileManager = new RocksDBFileManager(
@@ -84,6 +87,7 @@ class RocksDB(
   @volatile private var loadedVersion = -1L   // -1 = nothing valid is loaded
   @volatile private var numKeysOnLoadedVersion = 0L
   @volatile private var numKeysOnWritingVersion = 0L
+  @volatile private var fileManagerMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
 
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
@@ -105,6 +109,7 @@ class RocksDB(
         numKeysOnWritingVersion = metadata.numKeys
         numKeysOnLoadedVersion = metadata.numKeys
         loadedVersion = version
+        fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
       }
       writeBatch.clear()
       logInfo(s"Loaded $version")
@@ -223,6 +228,7 @@ class RocksDB(
       }
       numKeysOnLoadedVersion = numKeysOnWritingVersion
       loadedVersion = newVersion
+      fileManagerMetrics = fileManager.latestSaveCheckpointMetrics
       commitLatencyMs ++= Map(
         "writeBatch" -> writeTimeMs,
         "flush" -> flushTimeMs,
@@ -231,6 +237,7 @@ class RocksDB(
         "checkpoint" -> checkpointTimeMs,
         "fileSync" -> fileSyncTimeMs
       )
+      logInfo(s"Committed $newVersion, stats = ${metrics.json}")
       loadedVersion
     } catch {
       case t: Throwable =>
@@ -283,6 +290,30 @@ class RocksDB(
   /** Get the latest version available in the DFS */
   def getLatestVersion(): Long = fileManager.getLatestVersion()
 
+  /** Get current instantaneous statistics */
+  def metrics: RocksDBMetrics = {
+    import HistogramType._
+    val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
+    val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
+    val memTableMemUsage = getDBProperty("rocksdb.size-all-mem-tables")
+    val nativeOps = Seq("get" -> DB_GET, "put" -> DB_WRITE).toMap
+    val nativeOpsLatencyMicros = nativeOps.mapValues { typ =>
+      RocksDBNativeHistogram(nativeStats.getHistogramData(typ))
+    }
+
+    RocksDBMetrics(
+      numKeysOnLoadedVersion,
+      numKeysOnWritingVersion,
+      readerMemUsage + memTableMemUsage,
+      totalSSTFilesBytes,
+      nativeOpsLatencyMicros.toMap,
+      commitLatencyMs,
+      bytesCopied = fileManagerMetrics.bytesCopied,
+      filesCopied = fileManagerMetrics.filesCopied,
+      filesReused = fileManagerMetrics.filesReused,
+      zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed)
+  }
+
   private def acquire(): Unit = acquireLock.synchronized {
     val newAcquiredThreadInfo = AcquiredThreadInfo()
     val waitStartTime = System.currentTimeMillis
@@ -312,6 +343,10 @@ class RocksDB(
   private def release(): Unit = acquireLock.synchronized {
     acquiredThreadInfo = null
     acquireLock.notifyAll()
+  }
+
+  private def getDBProperty(property: String): Long = {
+    db.getProperty(property).toLong
   }
 
   private def openDB(): Unit = {
@@ -388,7 +423,6 @@ class ByteArrayPair(var key: Array[Byte] = null, var value: Array[Byte] = null) 
 
 /**
  * Configurations for optimizing RocksDB
- *
  * @param compactOnCommit Whether to compact RocksDB data before commit / checkpointing
  */
 case class RocksDBConf(
@@ -440,6 +474,42 @@ object RocksDBConf {
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())
+}
+
+/** Class to represent stats from each commit. */
+case class RocksDBMetrics(
+    numCommittedKeys: Long,
+    numUncommittedKeys: Long,
+    memUsageBytes: Long,
+    totalSSTFilesBytes: Long,
+    nativeOpsLatencyMicros: Map[String, RocksDBNativeHistogram],
+    lastCommitLatencyMs: Map[String, Long],
+    filesCopied: Long,
+    bytesCopied: Long,
+    filesReused: Long,
+    zipFileBytesUncompressed: Option[Long]) {
+  def json: String = Serialization.write(this)(RocksDBMetrics.format)
+}
+
+object RocksDBMetrics {
+  val format = Serialization.formats(NoTypeHints)
+}
+
+/** Class to wrap RocksDB's native histogram */
+case class RocksDBNativeHistogram(
+    avg: Double, stddev: Double, median: Double, p95: Double, p99: Double) {
+  def json: String = Serialization.write(this)(RocksDBMetrics.format)
+}
+
+object RocksDBNativeHistogram {
+  def apply(nativeHist: HistogramData): RocksDBNativeHistogram = {
+    RocksDBNativeHistogram(
+      nativeHist.getAverage,
+      nativeHist.getStandardDeviation,
+      nativeHist.getMedian,
+      nativeHist.getPercentile95,
+      nativeHist.getPercentile99)
+  }
 }
 
 case class AcquiredThreadInfo() {

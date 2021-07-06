@@ -678,6 +678,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS =
+    buildConf("spark.sql.adaptive.customCostEvaluatorClass")
+      .doc("The custom cost evaluator class to be used for adaptive execution. If not being set," +
+        " Spark will use its own SimpleCostEvaluator by default.")
+      .version("3.2.0")
+      .stringConf
+      .createOptional
+
   val SUBEXPRESSION_ELIMINATION_ENABLED =
     buildConf("spark.sql.subexpressionElimination.enabled")
       .internal()
@@ -2852,10 +2860,10 @@ object SQLConf {
 
   val TIMESTAMP_TYPE =
     buildConf("spark.sql.timestampType")
-      .doc("Configures the default timestamp type of Spark SQL, including SQL DDL and Cast " +
-        s"clause. Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ.toString} will " +
+      .doc("Configures the default timestamp type of Spark SQL, including SQL DDL, Cast clause " +
+        s"and type literal. Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ} will " +
         "use TIMESTAMP WITHOUT TIME ZONE as the default type while putting it as " +
-        s"${TimestampTypes.TIMESTAMP_LTZ.toString} will use TIMESTAMP WITH LOCAL TIME ZONE. " +
+        s"${TimestampTypes.TIMESTAMP_LTZ} will use TIMESTAMP WITH LOCAL TIME ZONE. " +
         "Before the 3.2.0 release, Spark only supports the TIMESTAMP WITH " +
         "LOCAL TIME ZONE type.")
       .version("3.2.0")

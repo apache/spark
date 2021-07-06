@@ -1526,13 +1526,13 @@ class AdaptiveQueryExecSuite
         val dfRepartitionWithNum = df.repartition(5, 'b)
         dfRepartitionWithNum.collect()
         val planWithNum = dfRepartitionWithNum.queryExecution.executedPlan
-        // The top shuffle from repartition is optimized out.
-        assert(!hasRepartitionShuffle(planWithNum))
+        // The top shuffle from repartition is not optimized out.
+        assert(hasRepartitionShuffle(planWithNum))
         val bhjWithNum = findTopLevelBroadcastHashJoin(planWithNum)
         assert(bhjWithNum.length == 1)
         checkNumLocalShuffleReaders(planWithNum, 1)
-        // Probe side is not coalesced.
-        assert(bhjWithNum.head.right.find(_.isInstanceOf[CustomShuffleReaderExec]).isEmpty)
+        // Probe side is coalesced.
+        assert(bhjWithNum.head.right.find(_.isInstanceOf[CustomShuffleReaderExec]).nonEmpty)
 
         // Repartition with partition non-default num specified.
         val dfRepartitionWithNum2 = df.repartition(3, 'b)
@@ -1575,17 +1575,16 @@ class AdaptiveQueryExecSuite
         val dfRepartitionWithNum = df.repartition(5, 'b)
         dfRepartitionWithNum.collect()
         val planWithNum = dfRepartitionWithNum.queryExecution.executedPlan
-        // The top shuffle from repartition is optimized out.
-        assert(!hasRepartitionShuffle(planWithNum))
+        // The top shuffle from repartition is not optimized out.
+        assert(hasRepartitionShuffle(planWithNum))
         val smjWithNum = findTopLevelSortMergeJoin(planWithNum)
         assert(smjWithNum.length == 1)
-        // No skew join due to the repartition.
-        assert(!smjWithNum.head.isSkewJoin)
-        // No coalesce due to the num in repartition.
+        // Skew join can apply as the repartition is not optimized out.
+        assert(smjWithNum.head.isSkewJoin)
         val customReadersWithNum = collect(smjWithNum.head) {
           case c: CustomShuffleReaderExec if c.hasCoalescedPartition => c
         }
-        assert(customReadersWithNum.isEmpty)
+        assert(customReadersWithNum.nonEmpty)
 
         // Repartition with default non-partition num specified.
         val dfRepartitionWithNum2 = df.repartition(3, 'b)
@@ -1897,5 +1896,55 @@ class AdaptiveQueryExecSuite
       // RANGE(10) is a very small dataset and AQE coalescing should produce one partition.
       assert(coalesceReader.head.partitionSpecs.length == 1)
     }
+  }
+
+  test("SPARK-35794: Allow custom plugin for cost evaluator") {
+    CostEvaluator.instantiate(
+      classOf[SimpleShuffleSortCostEvaluator].getCanonicalName, spark.sparkContext.getConf)
+    intercept[IllegalArgumentException] {
+      CostEvaluator.instantiate(
+        classOf[InvalidCostEvaluator].getCanonicalName, spark.sparkContext.getConf)
+    }
+
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+      val query = "SELECT * FROM testData join testData2 ON key = a where value = '1'"
+
+      withSQLConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS.key ->
+        "org.apache.spark.sql.execution.adaptive.SimpleShuffleSortCostEvaluator") {
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        val smj = findTopLevelSortMergeJoin(plan)
+        assert(smj.size == 1)
+        val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
+        assert(bhj.size == 1)
+        checkNumLocalShuffleReaders(adaptivePlan)
+      }
+
+      withSQLConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS.key ->
+        "org.apache.spark.sql.execution.adaptive.InvalidCostEvaluator") {
+        intercept[IllegalArgumentException] {
+          runAdaptiveAndVerifyResult(query)
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Invalid implementation class for [[CostEvaluator]].
+ */
+private class InvalidCostEvaluator() {}
+
+/**
+ * A simple [[CostEvaluator]] to count number of [[ShuffleExchangeLike]] and [[SortExec]].
+ */
+private case class SimpleShuffleSortCostEvaluator() extends CostEvaluator {
+  override def evaluateCost(plan: SparkPlan): Cost = {
+    val cost = plan.collect {
+      case s: ShuffleExchangeLike => s
+      case s: SortExec => s
+    }.size
+    SimpleCost(cost)
   }
 }
