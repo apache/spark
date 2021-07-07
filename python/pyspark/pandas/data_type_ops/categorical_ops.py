@@ -25,7 +25,7 @@ from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as F
 
 
 class CategoricalOps(DataTypeOps):
@@ -78,13 +78,3 @@ class CategoricalOps(DataTypeOps):
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise NotImplementedError(">= can not be applied to %s." % self.pretty_name)
-
-    def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__eq__)(left, right)
-
-    def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__ne__)(left, right)

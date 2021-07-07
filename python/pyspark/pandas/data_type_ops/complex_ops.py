@@ -82,16 +82,6 @@ class ArrayOps(DataTypeOps):
 
         return column_op(Column.__gt__)(left, right)
 
-    def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__eq__)(left, right)
-
-    def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__ne__)(left, right)
-
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
@@ -123,16 +113,6 @@ class StructOps(DataTypeOps):
     @property
     def pretty_name(self) -> str:
         return "structs"
-
-    def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__eq__)(left, right)
-
-    def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__ne__)(left, right)
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op

@@ -298,16 +298,6 @@ class BooleanOps(DataTypeOps):
 
         return column_op(Column.__gt__)(left, right)
 
-    def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__eq__)(left, right)
-
-    def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__ne__)(left, right)
-
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         from pyspark.pandas.base import column_op
 

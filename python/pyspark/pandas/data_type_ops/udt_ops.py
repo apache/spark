@@ -15,11 +15,7 @@
 # limitations under the License.
 #
 
-from typing import Any
-
-from pyspark.pandas._typing import IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import DataTypeOps
-from pyspark.sql import Column
 
 
 class UDTOps(DataTypeOps):
@@ -31,13 +27,3 @@ class UDTOps(DataTypeOps):
     @property
     def pretty_name(self) -> str:
         return "user defined types"
-
-    def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__eq__)(left, right)
-
-    def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
-        return column_op(Column.__ne__)(left, right)

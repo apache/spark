@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column
 from pyspark.sql.types import (
     ArrayType,
     BinaryType,
@@ -337,10 +337,14 @@ class DataTypeOps(object, metaclass=ABCMeta):
         raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("== can not be applied to %s." % self.pretty_name)
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("!= can not be applied to %s." % self.pretty_name)
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__ne__)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
         raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
