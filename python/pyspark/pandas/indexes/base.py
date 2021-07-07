@@ -2014,7 +2014,7 @@ class Index(IndexOpsMixin):
                 [isinstance(item, tuple) for item in other]
             )
             if is_other_list_of_tuples:
-                other = MultiIndex.from_tuples(other)
+                other = MultiIndex.from_tuples(other)  # type: ignore
             elif isinstance(other, Series):
                 other = Index(other)
             else:
