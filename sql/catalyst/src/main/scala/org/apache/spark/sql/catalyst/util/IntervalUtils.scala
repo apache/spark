@@ -327,8 +327,8 @@ object IntervalUtils {
         toDTInterval(day, hour, minute, secondAndMicro(second, micro),
           finalSign(firstSign, secondSign))
 
-      case hourMinuteRegex(sign, hour, minute) =>
-        checkDTIntervalStringDataType(DT(DT.HOUR, DT.MINUTE))
+      case hourMinuteRegex(sign, hour, minute)
+        if startField == DT.HOUR && endField == DT.MINUTE =>
         toDTInterval(hour, minute, "0", finalSign(sign))
       case hourMinuteLiteralRegex(firstSign, secondSign, hour, minute) =>
         checkDTIntervalStringDataType(DT(DT.HOUR, DT.MINUTE))
@@ -340,8 +340,8 @@ object IntervalUtils {
         checkDTIntervalStringDataType(DT(DT.HOUR, DT.SECOND))
         toDTInterval(hour, minute, secondAndMicro(second, micro), finalSign(firstSign, secondSign))
 
-      case minuteSecondRegex(sign, minute, second, micro) =>
-        checkDTIntervalStringDataType(DT(DT.MINUTE, DT.SECOND))
+      case minuteSecondRegex(sign, minute, second, micro)
+        if startField == DT.MINUTE && endField == DT.SECOND =>
         toDTInterval(minute, secondAndMicro(second, micro), finalSign(sign))
       case minuteSecondLiteralRegex(firstSign, secondSign, minute, second, micro) =>
         checkDTIntervalStringDataType(DT(DT.MINUTE, DT.SECOND))

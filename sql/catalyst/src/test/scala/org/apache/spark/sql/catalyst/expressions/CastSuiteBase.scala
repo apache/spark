@@ -1177,6 +1177,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
       ("01", DayTimeIntervalType(MINUTE, MINUTE), (60) * MICROS_PER_SECOND),
       ("-01", DayTimeIntervalType(MINUTE, MINUTE), -(60) * MICROS_PER_SECOND),
+      ("01:01", DayTimeIntervalType(MINUTE, SECOND), ((60 + 1) * MICROS_PER_SECOND)),
       ("01:01.12345", DayTimeIntervalType(MINUTE, SECOND),
         ((60 + 1.12345) * MICROS_PER_SECOND).toLong),
       ("-01:01.12345", DayTimeIntervalType(MINUTE, SECOND),
