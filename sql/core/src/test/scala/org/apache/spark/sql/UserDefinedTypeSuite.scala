@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql
 
-import java.time.{LocalDateTime, ZoneOffset}
+import java.time.Year
 import java.util.Arrays
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, GenericInternalRow, Literal}
+import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.apache.spark.sql.catalyst.expressions.{Cast, ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetTest
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -33,93 +33,22 @@ private[sql] case class MyLabeledPoint(label: Double, features: TestUDT.MyDenseV
   def getFeatures: TestUDT.MyDenseVector = features
 }
 
-// object and classes to test SPARK-19311
+private[sql] case class FooWithDate(year: Year, s: String, i: Int)
 
-// Trait/Interface for base type
-sealed trait IExampleBaseType extends Serializable {
-  def field: Int
-}
+private[sql] class YearUDT extends UserDefinedType[Year] {
+  override def sqlType: DataType = IntegerType
 
-// Trait/Interface for derived type
-sealed trait IExampleSubType extends IExampleBaseType
-
-// a base class
-class ExampleBaseClass(override val field: Int) extends IExampleBaseType
-
-// a derived class
-class ExampleSubClass(override val field: Int)
-  extends ExampleBaseClass(field) with IExampleSubType
-
-// UDT for base class
-class ExampleBaseTypeUDT extends UserDefinedType[IExampleBaseType] {
-
-  override def sqlType: StructType = {
-    StructType(Seq(
-      StructField("intfield", IntegerType, nullable = false)))
+  override def serialize(obj: Year): Int = {
+    obj.getValue
   }
 
-  override def serialize(obj: IExampleBaseType): InternalRow = {
-    val row = new GenericInternalRow(1)
-    row.setInt(0, obj.field)
-    row
+  def deserialize(datum: Any): Year = datum match {
+    case value: Int => Year.of(value)
   }
 
-  override def deserialize(datum: Any): IExampleBaseType = {
-    datum match {
-      case row: InternalRow =>
-        require(row.numFields == 1,
-          "ExampleBaseTypeUDT requires row with length == 1")
-        val field = row.getInt(0)
-        new ExampleBaseClass(field)
-    }
-  }
+  override def userClass: Class[Year] = classOf[Year]
 
-  override def userClass: Class[IExampleBaseType] = classOf[IExampleBaseType]
-}
-
-// UDT for derived class
-private[spark] class ExampleSubTypeUDT extends UserDefinedType[IExampleSubType] {
-
-  override def sqlType: StructType = {
-    StructType(Seq(
-      StructField("intfield", IntegerType, nullable = false)))
-  }
-
-  override def serialize(obj: IExampleSubType): InternalRow = {
-    val row = new GenericInternalRow(1)
-    row.setInt(0, obj.field)
-    row
-  }
-
-  override def deserialize(datum: Any): IExampleSubType = {
-    datum match {
-      case row: InternalRow =>
-        require(row.numFields == 1,
-          "ExampleSubTypeUDT requires row with length == 1")
-        val field = row.getInt(0)
-        new ExampleSubClass(field)
-    }
-  }
-
-  override def userClass: Class[IExampleSubType] = classOf[IExampleSubType]
-}
-
-private[sql] case class FooWithDate(date: LocalDateTime, s: String, i: Int)
-
-private[sql] class LocalDateTimeUDT extends UserDefinedType[LocalDateTime] {
-  override def sqlType: DataType = LongType
-
-  override def serialize(obj: LocalDateTime): Long = {
-    obj.toEpochSecond(ZoneOffset.UTC)
-  }
-
-  def deserialize(datum: Any): LocalDateTime = datum match {
-    case value: Long => LocalDateTime.ofEpochSecond(value, 0, ZoneOffset.UTC)
-  }
-
-  override def userClass: Class[LocalDateTime] = classOf[LocalDateTime]
-
-  private[spark] override def asNullable: LocalDateTimeUDT = this
+  private[spark] override def asNullable: YearUDT = this
 }
 
 class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with ParquetTest
@@ -329,19 +258,17 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
 
   test("SPARK-30993: UserDefinedType matched to fixed length SQL type shouldn't be corrupted") {
     def concatFoo(a: FooWithDate, b: FooWithDate): FooWithDate = {
-      FooWithDate(b.date, a.s + b.s, a.i)
+      FooWithDate(b.year, a.s + b.s, a.i)
     }
 
-    UDTRegistration.register(classOf[LocalDateTime].getName, classOf[LocalDateTimeUDT].getName)
+    UDTRegistration.register(classOf[Year].getName, classOf[YearUDT].getName)
 
-    // remove sub-millisecond part as we only use millis based timestamp while serde
-    val date = LocalDateTime.ofEpochSecond(LocalDateTime.now().toEpochSecond(ZoneOffset.UTC),
-      0, ZoneOffset.UTC)
-    val inputDS = List(FooWithDate(date, "Foo", 1), FooWithDate(date, "Foo", 3),
-      FooWithDate(date, "Foo", 3)).toDS()
+    val year = Year.now()
+    val inputDS = List(FooWithDate(year, "Foo", 1), FooWithDate(year, "Foo", 3),
+      FooWithDate(year, "Foo", 3)).toDS()
     val agg = inputDS.groupByKey(x => x.i).mapGroups((_, iter) => iter.reduce(concatFoo))
     val result = agg.collect()
 
-    assert(result.toSet === Set(FooWithDate(date, "FooFoo", 3), FooWithDate(date, "Foo", 1)))
+    assert(result.toSet === Set(FooWithDate(year, "FooFoo", 3), FooWithDate(year, "Foo", 1)))
   }
 }

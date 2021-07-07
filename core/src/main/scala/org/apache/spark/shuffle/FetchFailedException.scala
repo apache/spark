@@ -48,7 +48,7 @@ private[spark] class FetchFailedException(
       mapTaskId: Long,
       mapIndex: Int,
       reduceId: Int,
-      cause: Throwable) {
+      cause: Throwable) = {
     this(bmAddress, shuffleId, mapTaskId, mapIndex, reduceId, cause.getMessage, cause)
   }
 

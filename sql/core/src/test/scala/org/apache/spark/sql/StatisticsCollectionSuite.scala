@@ -25,7 +25,6 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
@@ -175,6 +174,15 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-33812: column stats round trip serialization with splitting histogram property") {
+    withSQLConf(SQLConf.HIVE_TABLE_PROPERTY_LENGTH_THRESHOLD.key -> "10") {
+      statsWithHgms.foreach { case (k, v) =>
+        val roundtrip = CatalogColumnStat.fromMap("t", k, v.toMap(k))
+        assert(roundtrip == Some(v))
+      }
+    }
+  }
+
   test("analyze column command - result verification") {
     // (data.head.productArity - 1) because the last column does not support stats collection.
     assert(stats.size == data.head.productArity - 1)
@@ -246,24 +254,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       val stats = Statistics(sizeInBytes = input, rowCount = Some(input))
       val expectedString = s"sizeInBytes=$expectedSize, rowCount=$expectedRows"
       assert(stats.simpleString == expectedString)
-    }
-  }
-
-  test("change stats after truncate command") {
-    val table = "change_stats_truncate_table"
-    withTable(table) {
-      spark.range(100).select($"id", $"id" % 5 as "value").write.saveAsTable(table)
-      // analyze to get initial stats
-      sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR COLUMNS id, value")
-      val fetched1 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(100))
-      assert(fetched1.get.sizeInBytes > 0)
-      assert(fetched1.get.colStats.size == 2)
-
-      // truncate table command
-      sql(s"TRUNCATE TABLE $table")
-      val fetched2 = checkTableStats(table, hasSizeInBytes = true, expectedRowCounts = Some(0))
-      assert(fetched2.get.sizeInBytes == 0)
-      assert(fetched2.get.colStats.isEmpty)
     }
   }
 
@@ -372,22 +362,6 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           spark.range(100).write.mode(SaveMode.Append).saveAsTable(table)
           spark.table(table)
           assert(getTableFromCatalogCache(table).stats.sizeInBytes == 2 * initialSizeInBytes)
-        }
-      }
-    }
-  }
-
-  test("invalidation of tableRelationCache after table truncation") {
-    val table = "invalidate_catalog_cache_table"
-    Seq(false, true).foreach { autoUpdate =>
-      withSQLConf(SQLConf.AUTO_SIZE_UPDATE_ENABLED.key -> autoUpdate.toString) {
-        withTable(table) {
-          spark.range(100).write.saveAsTable(table)
-          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS")
-          spark.table(table)
-          sql(s"TRUNCATE TABLE $table")
-          spark.table(table)
-          assert(getTableFromCatalogCache(table).stats.sizeInBytes == 0)
         }
       }
     }
@@ -523,11 +497,11 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("analyzes column statistics in cached local temporary view") {
     withTempView("tempView") {
       // Analyzes in a temporary view
-      sql("CREATE TEMPORARY VIEW tempView AS SELECT * FROM range(1, 30)")
+      sql("CREATE TEMPORARY VIEW tempView AS SELECT 1 id")
       val errMsg = intercept[AnalysisException] {
         sql("ANALYZE TABLE tempView COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
-      assert(errMsg.contains(s"Table or view 'tempView' not found in database 'default'"))
+      assert(errMsg.contains("Temporary view `tempView` is not cached for analyzing columns"))
 
       // Cache the view then analyze it
       sql("CACHE TABLE tempView")
@@ -540,16 +514,18 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
   test("analyzes column statistics in cached global temporary view") {
     withGlobalTempView("gTempView") {
       val globalTempDB = spark.sharedState.globalTempViewManager.database
-      val errMsg1 = intercept[NoSuchTableException] {
+      val errMsg1 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
-      assert(errMsg1.contains(s"Table or view 'gTempView' not found in database '$globalTempDB'"))
+      assert(errMsg1.contains("Table or view not found: " +
+        s"$globalTempDB.gTempView"))
       // Analyzes in a global temporary view
-      sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT * FROM range(1, 30)")
+      sql("CREATE GLOBAL TEMP VIEW gTempView AS SELECT 1 id")
       val errMsg2 = intercept[AnalysisException] {
         sql(s"ANALYZE TABLE $globalTempDB.gTempView COMPUTE STATISTICS FOR COLUMNS id")
       }.getMessage
-      assert(errMsg2.contains(s"Table or view 'gTempView' not found in database '$globalTempDB'"))
+      assert(errMsg2.contains(
+        s"Temporary view `$globalTempDB`.`gTempView` is not cached for analyzing columns"))
 
       // Cache the view then analyze it
       sql(s"CACHE TABLE $globalTempDB.gTempView")
@@ -669,5 +645,74 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         }
       }
     }
+  }
+
+  test("SPARK-34119: Keep necessary stats after PruneFileSourcePartitions") {
+    withTable("SPARK_34119") {
+      withSQLConf(SQLConf.CBO_ENABLED.key -> "true") {
+        sql(s"CREATE TABLE SPARK_34119 using parquet PARTITIONED BY (p) AS " +
+          "(SELECT id, CAST(id % 5 AS STRING) AS p FROM range(10))")
+        sql(s"ANALYZE TABLE SPARK_34119 COMPUTE STATISTICS FOR ALL COLUMNS")
+
+        checkOptimizedPlanStats(sql(s"SELECT id FROM SPARK_34119"),
+          160L,
+          Some(10),
+          Seq(ColumnStat(
+            distinctCount = Some(10),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
+
+        checkOptimizedPlanStats(sql("SELECT id FROM SPARK_34119 WHERE p = '2'"),
+          32L,
+          Some(2),
+          Seq(ColumnStat(
+            distinctCount = Some(2),
+            min = Some(0),
+            max = Some(9),
+            nullCount = Some(0),
+            avgLen = Some(LongType.defaultSize),
+            maxLen = Some(LongType.defaultSize))))
+      }
+    }
+  }
+
+  test("SPARK-33687: analyze all tables in a specific database") {
+    withTempDatabase { database =>
+      spark.catalog.setCurrentDatabase(database)
+      withTempDir { dir =>
+        withTable("t1", "t2") {
+          spark.range(10).write.saveAsTable("t1")
+          sql(s"CREATE EXTERNAL TABLE t2 USING parquet LOCATION '${dir.toURI}' " +
+            "AS SELECT * FROM range(20)")
+          withView("v1", "v2") {
+            sql("CREATE VIEW v1 AS SELECT 1 c1")
+            sql("CREATE VIEW v2 AS SELECT 2 c2")
+            sql("CACHE TABLE v1")
+            sql("CACHE LAZY TABLE v2")
+
+            sql(s"ANALYZE TABLES IN $database COMPUTE STATISTICS NOSCAN")
+            checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = None)
+            checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = None)
+            assert(getCatalogTable("v1").stats.isEmpty)
+            checkOptimizedPlanStats(spark.table("v1"), 4, Some(1), Seq.empty)
+            checkOptimizedPlanStats(spark.table("v2"), 1, None, Seq.empty)
+
+            sql("ANALYZE TABLES COMPUTE STATISTICS")
+            checkTableStats("t1", hasSizeInBytes = true, expectedRowCounts = Some(10))
+            checkTableStats("t2", hasSizeInBytes = true, expectedRowCounts = Some(20))
+            checkOptimizedPlanStats(spark.table("v1"), 4, Some(1), Seq.empty)
+            checkOptimizedPlanStats(spark.table("v2"), 4, Some(1), Seq.empty)
+          }
+        }
+      }
+    }
+
+    val errMsg = intercept[AnalysisException] {
+      sql(s"ANALYZE TABLES IN db_not_exists COMPUTE STATISTICS")
+    }.getMessage
+    assert(errMsg.contains("Database 'db_not_exists' not found"))
   }
 }

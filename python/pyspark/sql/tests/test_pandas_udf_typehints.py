@@ -29,12 +29,12 @@ from pyspark.sql import Row
 if have_pandas:
     import pandas as pd
     import numpy as np
-    from pandas.util.testing import assert_frame_equal
+    from pandas.testing import assert_frame_equal
 
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class PandasUDFTypeHintsTests(ReusedSQLTestCase):
     def test_type_annotation_scalar(self):
         def func(col: pd.Series) -> pd.Series:
@@ -243,10 +243,10 @@ class PandasUDFTypeHintsTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf_typehints import *
+    from pyspark.sql.tests.test_pandas_udf_typehints import *  # noqa: #401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

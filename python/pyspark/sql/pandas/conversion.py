@@ -18,11 +18,11 @@ import sys
 import warnings
 from collections import Counter
 
-from pyspark import since
 from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import IntegralType
-from pyspark.sql.types import *
+from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
+    DoubleType, BooleanType, MapType, TimestampType, StructType, DataType
 from pyspark.traceback_utils import SCCallSiteSync
 
 
@@ -32,18 +32,23 @@ class PandasConversionMixin(object):
     can use this class.
     """
 
-    @since(1.3)
     def toPandas(self):
         """
         Returns the contents of this :class:`DataFrame` as Pandas ``pandas.DataFrame``.
 
         This is only available if Pandas is installed and available.
 
-        .. note:: This method should only be used if the resulting Pandas's :class:`DataFrame` is
-            expected to be small, as all the data is loaded into the driver's memory.
+        .. versionadded:: 1.3.0
 
-        .. note:: Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
+        Notes
+        -----
+        This method should only be used if the resulting Pandas's :class:`DataFrame` is
+        expected to be small, as all the data is loaded into the driver's memory.
 
+        Usage with spark.sql.execution.arrow.pyspark.enabled=True is experimental.
+
+        Examples
+        --------
         >>> df.toPandas()  # doctest: +SKIP
            age   name
         0    2  Alice
@@ -95,23 +100,43 @@ class PandasConversionMixin(object):
             # of PyArrow is found, if 'spark.sql.execution.arrow.pyspark.enabled' is enabled.
             if use_arrow:
                 try:
-                    from pyspark.sql.pandas.types import _check_series_localize_timestamps
+                    from pyspark.sql.pandas.types import _check_series_localize_timestamps, \
+                        _convert_map_items_to_dict
                     import pyarrow
                     # Rename columns to avoid duplicated column names.
                     tmp_column_names = ['col_{}'.format(i) for i in range(len(self.columns))]
-                    batches = self.toDF(*tmp_column_names)._collect_as_arrow()
+                    self_destruct = self.sql_ctx._conf.arrowPySparkSelfDestructEnabled()
+                    batches = self.toDF(*tmp_column_names)._collect_as_arrow(
+                        split_batches=self_destruct)
                     if len(batches) > 0:
                         table = pyarrow.Table.from_batches(batches)
+                        # Ensure only the table has a reference to the batches, so that
+                        # self_destruct (if enabled) is effective
+                        del batches
                         # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
                         # values, but we should use datetime.date to match the behavior with when
                         # Arrow optimization is disabled.
-                        pdf = table.to_pandas(date_as_object=True)
+                        pandas_options = {'date_as_object': True}
+                        if self_destruct:
+                            # Configure PyArrow to use as little memory as possible:
+                            # self_destruct - free columns as they are converted
+                            # split_blocks - create a separate Pandas block for each column
+                            # use_threads - convert one column at a time
+                            pandas_options.update({
+                                'self_destruct': True,
+                                'split_blocks': True,
+                                'use_threads': False,
+                            })
+                        pdf = table.to_pandas(**pandas_options)
                         # Rename back to the original column names.
                         pdf.columns = self.columns
                         for field in self.schema:
                             if isinstance(field.dataType, TimestampType):
                                 pdf[field.name] = \
                                     _check_series_localize_timestamps(pdf[field.name], timezone)
+                            elif isinstance(field.dataType, MapType):
+                                pdf[field.name] = \
+                                    _convert_map_items_to_dict(pdf[field.name])
                         return pdf
                     else:
                         return pd.DataFrame.from_records([], columns=self.columns)
@@ -216,10 +241,14 @@ class PandasConversionMixin(object):
         else:
             return None
 
-    def _collect_as_arrow(self):
+    def _collect_as_arrow(self, split_batches=False):
         """
         Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
         and available on driver and worker Python environments.
+        This is an experimental feature.
+
+        :param split_batches: split batches such that each column is in its own allocation, so
+            that the selfDestruct optimization is effective; default False.
 
         .. note:: Experimental.
         """
@@ -232,7 +261,26 @@ class PandasConversionMixin(object):
 
         # Collect list of un-ordered batches where last element is a list of correct order indices
         try:
-            results = list(_load_from_socket((port, auth_secret), ArrowCollectSerializer()))
+            batch_stream = _load_from_socket((port, auth_secret), ArrowCollectSerializer())
+            if split_batches:
+                # When spark.sql.execution.arrow.pyspark.selfDestruct.enabled, ensure
+                # each column in each record batch is contained in its own allocation.
+                # Otherwise, selfDestruct does nothing; it frees each column as its
+                # converted, but each column will actually be a list of slices of record
+                # batches, and so no memory is actually freed until all columns are
+                # converted.
+                import pyarrow as pa
+                results = []
+                for batch_or_indices in batch_stream:
+                    if isinstance(batch_or_indices, pa.RecordBatch):
+                        batch_or_indices = pa.RecordBatch.from_arrays([
+                            # This call actually reallocates the array
+                            pa.concat_arrays([array])
+                            for array in batch_or_indices
+                        ], schema=batch_or_indices.schema)
+                    results.append(batch_or_indices)
+            else:
+                results = list(batch_stream)
         finally:
             # Join serving thread and raise any exceptions from collectAsArrowToPython
             jsocket_auth_server.getResult()
@@ -294,7 +342,11 @@ class SparkConversionMixin(object):
     def _convert_from_pandas(self, pdf, schema, timezone):
         """
          Convert a pandas.DataFrame to list of records that can be used to make a DataFrame
-         :return list of records
+
+         Returns
+         -------
+         list
+             list of records
         """
         from pyspark.sql import SparkSession
 
@@ -342,8 +394,16 @@ class SparkConversionMixin(object):
         """
         Used when converting a pandas.DataFrame to Spark using to_records(), this will correct
         the dtypes of fields in a record so they can be properly loaded into Spark.
-        :param rec: a numpy record to check field dtypes
-        :return corrected dtype for a numpy.record or None if no correction needed
+
+        Parameters
+        ----------
+        rec : numpy.record
+            a numpy record to check field dtypes
+
+        Returns
+        -------
+        numpy.dtype
+            corrected dtype for a numpy.record or None if no correction needed
         """
         import numpy as np
         cur_dtypes = rec.dtype

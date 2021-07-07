@@ -35,8 +35,10 @@ import org.json4s.jackson.JsonMethods._
 import org.mockito.Mockito._
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
-import org.scalatest.{BeforeAndAfter, Matchers}
+import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
 import org.scalatestplus.selenium.WebBrowser
 
@@ -136,7 +138,11 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "complete stage list json" -> "applications/local-1422981780767/stages?status=complete",
     "failed stage list json" -> "applications/local-1422981780767/stages?status=failed",
     "one stage json" -> "applications/local-1422981780767/stages/1",
+    "one stage json with details" ->
+      "applications/local-1422981780767/stages/1?details=true&taskStatus=success",
     "one stage attempt json" -> "applications/local-1422981780767/stages/1/0",
+    "one stage attempt json details with failed task" ->
+      "applications/local-1422981780767/stages/1/0?details=true&taskStatus=failed",
 
     "stage task summary w shuffle write"
       -> "applications/local-1430917381534/stages/0/0/taskSummary",
@@ -154,6 +160,12 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       "applications/local-1430917381534/stages/0/0/taskList?sortBy=-runtime",
     "stage task list w/ sortBy short names: runtime" ->
       "applications/local-1430917381534/stages/0/0/taskList?sortBy=runtime",
+    "stage task list w/ status" ->
+      "applications/app-20161115172038-0000/stages/0/0/taskList?status=failed",
+    "stage task list w/ status & offset & length" ->
+      "applications/local-1430917381534/stages/0/0/taskList?status=success&offset=1&length=2",
+    "stage task list w/ status & sortBy short names: runtime" ->
+      "applications/local-1430917381534/stages/0/0/taskList?status=success&sortBy=runtime",
 
     "stage list with accumulable json" -> "applications/local-1426533911241/1/stages",
     "stage with accumulable json" -> "applications/local-1426533911241/1/stages/0/0",
@@ -161,21 +173,26 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       "applications/local-1426533911241/1/stages/0/0/taskList",
     "stage task list from multi-attempt app json(2)" ->
       "applications/local-1426533911241/2/stages/0/0/taskList",
-    "blacklisting for stage" -> "applications/app-20180109111548-0000/stages/0/0",
-    "blacklisting node for stage" -> "applications/application_1516285256255_0012/stages/0/0",
+    "excludeOnFailure for stage" -> "applications/app-20180109111548-0000/stages/0/0",
+    "excludeOnFailure node for stage" -> "applications/application_1516285256255_0012/stages/0/0",
 
     "rdd list storage json" -> "applications/local-1422981780767/storage/rdd",
-    "executor node blacklisting" -> "applications/app-20161116163331-0000/executors",
-    "executor node blacklisting unblacklisting" -> "applications/app-20161115172038-0000/executors",
+    "executor node excludeOnFailure" -> "applications/app-20161116163331-0000/executors",
+    "executor node excludeOnFailure unexcluding" ->
+      "applications/app-20161115172038-0000/executors",
     "executor memory usage" -> "applications/app-20161116163331-0000/executors",
     "executor resource information" -> "applications/application_1555004656427_0144/executors",
     "multiple resource profiles" -> "applications/application_1578436911597_0052/environment",
+    "stage list with peak metrics" -> "applications/app-20200706201101-0003/stages",
+    "stage with peak metrics" -> "applications/app-20200706201101-0003/stages/2/0",
+    "stage with summaries" -> "applications/app-20200706201101-0003/stages/2/0?withSummaries=true",
 
     "app environment" -> "applications/app-20161116163331-0000/environment",
 
     // Enable "spark.eventLog.logBlockUpdates.enabled", to get the storage information
     // in the history server.
-    "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0"
+    "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0",
+    "miscellaneous process" -> "applications/application_1555004656427_0144/allmiscellaneousprocess"
   )
 
   // run a bunch of characterization tests -- just verify the behavior is the same as what is saved
@@ -188,9 +205,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       errOpt should be (None)
 
       val exp = IOUtils.toString(new FileInputStream(
-        new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")))
+        new File(expRoot, HistoryServerSuite.sanitizePath(name) + "_expectation.json")),
+        StandardCharsets.UTF_8)
       // compare the ASTs so formatting differences don't cause failures
-      import org.json4s._
       import org.json4s.jackson.JsonMethods._
       val jsonAst = parse(clearLastUpdated(jsonOpt.get))
       val expAst = parse(exp)
@@ -303,14 +320,18 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
 
     val urlsThroughKnox = responseThroughKnox \\ "@href" map (_.toString)
     val siteRelativeLinksThroughKnox = urlsThroughKnox filter (_.startsWith("/"))
-    all (siteRelativeLinksThroughKnox) should startWith (knoxBaseUrl)
+    for (link <- siteRelativeLinksThroughKnox) {
+      link should startWith (knoxBaseUrl)
+    }
 
     val directRequest = mock[HttpServletRequest]
     val directResponse = page.render(directRequest)
 
     val directUrls = directResponse \\ "@href" map (_.toString)
     val directSiteRelativeLinks = directUrls filter (_.startsWith("/"))
-    all (directSiteRelativeLinks) should not startWith (knoxBaseUrl)
+    for (link <- directSiteRelativeLinks) {
+      link should not startWith (knoxBaseUrl)
+    }
   }
 
   test("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
@@ -325,7 +346,9 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     // then
     val urls = response \\ "@href" map (_.toString)
     val siteRelativeLinks = urls filter (_.startsWith("/"))
-    all (siteRelativeLinks) should startWith (uiRoot)
+    for (link <- siteRelativeLinks) {
+      link should startWith (uiRoot)
+    }
   }
 
   test("/version api endpoint") {
@@ -568,6 +591,24 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     }
   }
 
+  test("SPARK-33215: speed up event log download by skipping UI rebuild") {
+    val appId = "local-1430917381535"
+
+    stop()
+    init()
+
+    val port = server.boundPort
+    val testUrls = Seq(
+      s"http://localhost:$port/api/v1/applications/$appId/logs",
+      s"http://localhost:$port/api/v1/applications/$appId/1/logs",
+      s"http://localhost:$port/api/v1/applications/$appId/2/logs")
+
+    testUrls.foreach { url =>
+      TestUtils.httpResponseCode(new URL(url))
+    }
+    assert(server.cacheMetrics.loadCount.getCount === 0, "downloading event log shouldn't load ui")
+  }
+
   test("access history application defaults to the last attempt id") {
 
     def getRedirectUrl(url: URL): (Int, String) = {
@@ -678,7 +719,7 @@ object HistoryServerSuite {
 
   def getContentAndCode(url: URL): (Int, Option[String], Option[String]) = {
     val (code, in, errString) = connectAndGetInputStream(url)
-    val inString = in.map(IOUtils.toString)
+    val inString = in.map(IOUtils.toString(_, StandardCharsets.UTF_8))
     (code, inString, errString)
   }
 
@@ -694,7 +735,7 @@ object HistoryServerSuite {
     }
     val errString = try {
       val err = Option(connection.getErrorStream())
-      err.map(IOUtils.toString)
+      err.map(IOUtils.toString(_, StandardCharsets.UTF_8))
     } catch {
       case io: IOException => None
     }

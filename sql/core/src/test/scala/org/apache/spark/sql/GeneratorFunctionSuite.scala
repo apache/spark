@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Generator}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -304,7 +305,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
 
   test("outer generator()") {
     spark.sessionState.functionRegistry
-      .createOrReplaceTempFunction("empty_gen", _ => EmptyGenerator())
+      .createOrReplaceTempFunction("empty_gen", _ => EmptyGenerator(), "scala_udf")
     checkAnswer(
       sql("select * from values 1, 2 lateral view outer empty_gen() a as b"),
       Row(1, null) :: Row(2, null) :: Nil)
@@ -358,8 +359,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
   }
 }
 
-case class EmptyGenerator() extends Generator {
-  override def children: Seq[Expression] = Nil
+case class EmptyGenerator() extends Generator with LeafLike[Expression] {
   override def elementSchema: StructType = new StructType().add("id", IntegerType)
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = Seq.empty
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

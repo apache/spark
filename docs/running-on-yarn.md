@@ -26,7 +26,9 @@ was added to Spark in version 0.6.0, and improved in subsequent releases.
 
 # Security
 
-Security in Spark is OFF by default. This could mean you are vulnerable to attack by default.
+Security features like authentication are not enabled by default. When deploying a cluster that is open to the internet
+or an untrusted network, it's important to secure access to the cluster to prevent unauthorized applications
+from running on the cluster.
 Please see [Spark Security](security.html) and the specific security sections in this doc before running Spark.
 
 # Launching Spark on YARN
@@ -60,7 +62,7 @@ For example:
         examples/jars/spark-examples*.jar \
         10
 
-The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the "Debugging your Application" section below for how to see driver and executor logs.
+The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the [Debugging your Application](#debugging-your-application) section below for how to see driver and executor logs.
 
 To launch a Spark application in `client` mode, do the same, but replace `cluster` with `client`. The following shows how you can run `spark-shell` in `client` mode:
 
@@ -96,7 +98,7 @@ in your application jar.
 
 To build Spark yourself, refer to [Building Spark](building-spark.html).
 
-To make Spark runtime jars accessible from YARN side, you can specify `spark.yarn.archive` or `spark.yarn.jars`. For details please refer to [Spark Properties](running-on-yarn.html#spark-properties). If neither `spark.yarn.archive` nor `spark.yarn.jars` is specified, Spark will create a zip file with all jars under `$SPARK_HOME/jars` and upload it to the distributed cache.
+To make Spark runtime jars accessible from YARN side, you can specify `spark.yarn.archive` or `spark.yarn.jars`. For details please refer to [Spark Properties](#spark-properties). If neither `spark.yarn.archive` nor `spark.yarn.jars` is specified, Spark will create a zip file with all jars under `$SPARK_HOME/jars` and upload it to the distributed cache.
 
 # Configuration
 
@@ -551,12 +553,12 @@ To use a custom metrics.properties for the application master and executors, upd
   <td>2.0.0</td>
 </tr>
 <tr>
-  <td><code>spark.yarn.blacklist.executor.launch.blacklisting.enabled</code></td>
+  <td><code>spark.yarn.executor.launch.excludeOnFailure.enabled</code></td>
   <td>false</td>
   <td>
-  Flag to enable blacklisting of nodes having YARN resource allocation problems.
-  The error limit for blacklisting can be configured by
-  <code>spark.blacklist.application.maxFailedExecutorsPerNode</code>.
+  Flag to enable exclusion of nodes having YARN resource allocation problems.
+  The error limit for excluding can be configured by
+  <code>spark.excludeOnFailure.application.maxFailedExecutorsPerNode</code>.
   </td>
   <td>2.4.0</td>
 </tr>
@@ -584,48 +586,48 @@ To use a custom metrics.properties for the application master and executors, upd
 <table class="table">
     <tr><th>Pattern</th><th>Meaning</th></tr>
     <tr>
-      <td>{{HTTP_SCHEME}}</td>
-      <td>`http://` or `https://` according to YARN HTTP policy. (Configured via `yarn.http.policy`)</td>
+      <td>&#123;&#123;HTTP_SCHEME&#125;&#125;</td>
+      <td><code>http://</code> or <code>https://</code> according to YARN HTTP policy. (Configured via <code>yarn.http.policy</code>)</td>
     </tr>
     <tr>
-      <td>{{NM_HOST}}</td>
+      <td>&#123;&#123;NM_HOST&#125;&#125;</td>
       <td>The "host" of node where container was run.</td>
     </tr>
     <tr>
-      <td>{{NM_PORT}}</td>
+      <td>&#123;&#123;NM_PORT&#125;&#125;</td>
       <td>The "port" of node manager where container was run.</td>
     </tr>
     <tr>
-      <td>{{NM_HTTP_PORT}}</td>
+      <td>&#123;&#123;NM_HTTP_PORT&#125;&#125;</td>
       <td>The "port" of node manager's http server where container was run.</td>
     </tr>
     <tr>
-      <td>{{NM_HTTP_ADDRESS}}</td>
+      <td>&#123;&#123;NM_HTTP_ADDRESS&#125;&#125;</td>
       <td>Http URI of the node on which the container is allocated.</td>
     </tr>
     <tr>
-      <td>{{CLUSTER_ID}}</td>
-      <td>The cluster ID of Resource Manager. (Configured via `yarn.resourcemanager.cluster-id`)</td>
+      <td>&#123;&#123;CLUSTER_ID&#125;&#125;</td>
+      <td>The cluster ID of Resource Manager. (Configured via <code>yarn.resourcemanager.cluster-id</code>)</td>
     </tr>
     <tr>
-      <td>{{CONTAINER_ID}}</td>
+      <td>&#123;&#123;CONTAINER_ID&#125;&#125;</td>
       <td>The ID of container.</td>
     </tr>
     <tr>
-      <td>{{USER}}</td>
-      <td>'SPARK_USER' on system environment.</td>
+      <td>&#123;&#123;USER&#125;&#125;</td>
+      <td><code>SPARK_USER</code> on system environment.</td>
     </tr>
     <tr>
-      <td>{{FILE_NAME}}</td>
-      <td>`stdout`, `stderr`.</td>
+      <td>&#123;&#123;FILE_NAME&#125;&#125;</td>
+      <td><code>stdout</code>, <code>stderr</code>.</td>
     </tr>
 </table>
 
 For example, suppose you would like to point log url link to Job History Server directly instead of let NodeManager http server redirects it, you can configure `spark.history.custom.executor.log.url` as below:
 
- `{{HTTP_SCHEME}}<JHS_HOST>:<JHS_PORT>/jobhistory/logs/{{NM_HOST}}:{{NM_PORT}}/{{CONTAINER_ID}}/{{CONTAINER_ID}}/{{USER}}/{{FILE_NAME}}?start=-4096`
+<code>&#123;&#123;HTTP_SCHEME&#125;&#125;&lt;JHS_HOST&gt;:&lt;JHS_PORT&gt;/jobhistory/logs/&#123;&#123;NM_HOST&#125;&#125;:&#123;&#123;NM_PORT&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;CONTAINER_ID&#125;&#125;/&#123;&#123;USER&#125;&#125;/&#123;&#123;FILE_NAME&#125;&#125;?start=-4096</code>
 
- NOTE: you need to replace `<JHS_POST>` and `<JHS_PORT>` with actual value.
+NOTE: you need to replace `<JHS_POST>` and `<JHS_PORT>` with actual value.
 
 # Resource Allocation and Configuration Overview
 
@@ -640,6 +642,11 @@ For example, the user wants to request 2 GPUs for each executor. The user can ju
 If the user has a user defined YARN resource, lets call it `acceleratorX` then the user must specify <code>spark.yarn.executor.resource.acceleratorX.amount=2</code> and <code>spark.executor.resource.acceleratorX.amount=2</code>.
 
 YARN does not tell Spark the addresses of the resources allocated to each container. For that reason, the user must specify a discovery script that gets run by the executor on startup to discover what resources are available to that executor. You can find an example scripts in `examples/src/main/scripts/getGpusResources.sh`. The script must have execute permissions set and the user should setup permissions to not allow malicious users to modify it. The script should write to STDOUT a JSON string in the format of the ResourceInformation class. This has the resource name and an array of resource addresses available to just that executor.
+
+# Stage Level Scheduling Overview
+
+Stage level scheduling is supported on YARN when dynamic allocation is enabled. One thing to note that is YARN specific is that each ResourceProfile requires a different container priority on YARN. The mapping is simply the ResourceProfile id becomes the priority, on YARN lower numbers are higher priority. This means that profiles created earlier will have a higher priority in YARN. Normally this won't matter as Spark finishes one stage before starting another one, the only case this might have an affect is in a job server type scenario, so its something to keep in mind.
+Note there is a difference in the way custom resources are handled between the base default profile and custom ResourceProfiles. To allow for the user to request YARN containers with extra resources without Spark scheduling on them, the user can specify resources via the <code>spark.yarn.executor.resource.</code> config. Those configs are only used in the base default profile though and do not get propagated into any other custom ResourceProfiles. This is because there would be no way to remove them if you wanted a stage to not have them. This results in your default profile getting custom resources defined in <code>spark.yarn.executor.resource.</code> plus spark defined resources of GPU or FPGA. Spark converts GPU and FPGA resources into the YARN built in types <code>yarn.io/gpu</code>) and <code>yarn.io/fpga</code>, but does not know the mapping of any other resources. Any other Spark custom resources are not propagated to YARN for the default profile. So if you want Spark to schedule based off a custom resource and have it requested from YARN, you must specify it in both YARN (<code>spark.yarn.{driver/executor}.resource.</code>) and Spark (<code>spark.{driver/executor}.resource.</code>) configs. Leave the Spark config off if you only want YARN containers with the extra resources but Spark not to schedule using them. Now for custom ResourceProfiles, it doesn't currently have a way to only specify YARN resources without Spark scheduling off of them. This means for custom ResourceProfiles we propagate all the resources defined in the ResourceProfile to YARN. We still convert GPU and FPGA to the YARN build in types as well. This requires that the name of any custom resources you specify match what they are defined as in YARN.
 
 # Important notes
 
@@ -693,6 +700,18 @@ staging directory of the Spark application.
   The default value should be enough for most deployments.
   </td>
   <td>2.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems</code></td>
+  <td>(none)</td>
+  <td>
+    A comma-separated list of Hadoop filesystems for whose hosts will be excluded from from delegation
+    token renewal at resource scheduler. For example, <code>spark.yarn.kerberos.renewal.excludeHadoopFileSystems=hdfs://nn1.com:8032,
+    hdfs://nn2.com:8032</code>. This is known to work under YARN for now, so YARN Resource Manager won't renew tokens for the application.
+    Note that as resource scheduler does not renew token, so any application running longer than the original token expiration that tries
+    to use that token will likely fail.
+  </td>
+  <td>3.2.0</td>
 </tr>
 </table>
 
@@ -756,7 +775,27 @@ The following extra configuration options are available when the shuffle service
     NodeManagers where the Spark Shuffle Service is not running.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.shuffle.service.metrics.namespace</code></td>
+  <td><code>sparkShuffleService</code></td>
+  <td>
+    The namespace to use when emitting shuffle service metrics into Hadoop metrics2 system of the
+    NodeManager.
+  </td>
+</tr>
 </table>
+
+Please note that the instructions above assume that the default shuffle service name,
+`spark_shuffle`, has been used. It is possible to use any name here, but the values used in the
+YARN NodeManager configurations must match the value of `spark.shuffle.service.name` in the
+Spark application.
+
+The shuffle service will, by default, take all of its configurations from the Hadoop Configuration
+used by the NodeManager (e.g. `yarn-site.xml`). However, it is also possible to configure the
+shuffle service independently using a file named `spark-shuffle-site.xml` which should be placed
+onto the classpath of the shuffle service (which is, by default, shared with the classpath of the
+NodeManager). The shuffle service will treat this as a standard Hadoop Configuration resource and
+overlay it on top of the NodeManager's configuration.
 
 # Launching your application with Apache Oozie
 
@@ -806,3 +845,54 @@ do the following:
   to the list of filters in the <code>spark.ui.filters</code> configuration.
 
 Be aware that the history server information may not be up-to-date with the application's state.
+
+# Running multiple versions of the Spark Shuffle Service
+
+Please note that this section only applies when running on YARN versions >= 2.9.0.
+
+In some cases it may be desirable to run multiple instances of the Spark Shuffle Service which are
+using different versions of Spark. This can be helpful, for example, when running a YARN cluster
+with a mixed workload of applications running multiple Spark versions, since a given version of
+the shuffle service is not always compatible with other versions of Spark. YARN versions since 2.9.0
+support the ability to run shuffle services within an isolated classloader
+(see [YARN-4577](https://issues.apache.org/jira/browse/YARN-4577)), meaning multiple Spark versions
+can coexist within a single NodeManager. The
+`yarn.nodemanager.aux-services.<service-name>.classpath` and, starting from YARN 2.10.2/3.1.1/3.2.0,
+`yarn.nodemanager.aux-services.<service-name>.remote-classpath` options can be used to configure
+this. In addition to setting up separate classpaths, it's necessary to ensure the two versions
+advertise to different ports. This can be achieved using the `spark-shuffle-site.xml` file described
+above. For example, you may have configuration like:
+
+```properties
+  yarn.nodemanager.aux-services = spark_shuffle_x,spark_shuffle_y
+  yarn.nodemanager.aux-services.spark_shuffle_x.classpath = /path/to/spark-x-yarn-shuffle.jar,/path/to/spark-x-config
+  yarn.nodemanager.aux-services.spark_shuffle_y.classpath = /path/to/spark-y-yarn-shuffle.jar,/path/to/spark-y-config
+```
+
+The two `spark-*-config` directories each contain one file, `spark-shuffle-site.xml`. These are XML
+files in the [Hadoop Configuration format](https://hadoop.apache.org/docs/r3.2.2/api/org/apache/hadoop/conf/Configuration.html)
+which each contain a few configurations to adjust the port number and metrics name prefix used:
+```xml
+<configuration>
+  <property>
+    <name>spark.shuffle.service.port</name>
+    <value>7001</value>
+  </property>
+  <property>
+    <name>spark.yarn.shuffle.service.metrics.namespace</name>
+    <value>sparkShuffleServiceX</value>
+  </property>
+</configuration>
+```
+The values should both be different for the two different services.
+
+Then, in the configuration of the Spark applications, one should be configured with:
+```properties
+  spark.shuffle.service.name = spark_shuffle_x
+  spark.shuffle.service.port = 7001
+```
+and one should be configured with:
+```properties
+  spark.shuffle.service.name = spark_shuffle_y
+  spark.shuffle.service.port = <other value>
+```

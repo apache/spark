@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui
 
-import java.net.{URI, URL}
+import java.net.{URI, URL, URLDecoder}
 import java.util.EnumSet
 import javax.servlet.DispatcherType
 import javax.servlet.http._
@@ -243,10 +243,11 @@ private[spark] object JettyUtils extends Logging {
       port: Int,
       sslOptions: SSLOptions,
       conf: SparkConf,
-      serverName: String = ""): ServerInfo = {
+      serverName: String = "",
+      poolSize: Int = 200): ServerInfo = {
 
     // Start the server first, with no connectors.
-    val pool = new QueuedThreadPool
+    val pool = new QueuedThreadPool(poolSize)
     if (serverName.nonEmpty) {
       pool.setName(serverName)
     }
@@ -377,8 +378,7 @@ private[spark] object JettyUtils extends Logging {
         if (baseRequest.isSecure) {
           return
         }
-        val httpsURI = createRedirectURI(scheme, baseRequest.getServerName, securePort,
-          baseRequest.getRequestURI, baseRequest.getQueryString)
+        val httpsURI = createRedirectURI(scheme, securePort, baseRequest)
         response.setContentLength(0)
         response.sendRedirect(response.encodeRedirectURL(httpsURI))
         baseRequest.setHandled(true)
@@ -402,17 +402,13 @@ private[spark] object JettyUtils extends Logging {
       uri.append(rest)
     }
 
-    val rewrittenURI = URI.create(uri.toString())
-    if (query != null) {
-      return new URI(
-          rewrittenURI.getScheme(),
-          rewrittenURI.getAuthority(),
-          rewrittenURI.getPath(),
-          query,
-          rewrittenURI.getFragment()
-        ).normalize()
+    val queryString = if (query == null) {
+      ""
+    } else {
+      s"?$query"
     }
-    rewrittenURI.normalize()
+    // SPARK-33611: use method `URI.create` to avoid percent-encoding twice on the query string.
+    URI.create(uri.toString() + queryString).normalize()
   }
 
   def createProxyLocationHeader(
@@ -440,16 +436,34 @@ private[spark] object JettyUtils extends Logging {
     handler.addFilter(holder, "/*", EnumSet.allOf(classOf[DispatcherType]))
   }
 
+  private def decodeURL(url: String, encoding: String): String = {
+    if (url == null) {
+      null
+    } else {
+      URLDecoder.decode(url, encoding)
+    }
+  }
+
   // Create a new URI from the arguments, handling IPv6 host encoding and default ports.
-  private def createRedirectURI(
-      scheme: String, server: String, port: Int, path: String, query: String) = {
+  private def createRedirectURI(scheme: String, port: Int, request: Request): String = {
+    val server = request.getServerName
     val redirectServer = if (server.contains(":") && !server.startsWith("[")) {
       s"[${server}]"
     } else {
       server
     }
     val authority = s"$redirectServer:$port"
-    new URI(scheme, authority, path, query, null).toString
+    val queryEncoding = if (request.getQueryEncoding != null) {
+      request.getQueryEncoding
+    } else {
+      // By default decoding the URI as "UTF-8" should be enough for SparkUI
+      "UTF-8"
+    }
+    // The request URL can be raw or encoded here. To avoid the request URL being
+    // encoded twice, let's decode it here.
+    val requestURI = decodeURL(request.getRequestURI, queryEncoding)
+    val queryString = decodeURL(request.getQueryString, queryEncoding)
+    new URI(scheme, authority, requestURI, queryString, null).toString
   }
 
   def toVirtualHosts(connectors: String*): Array[String] = connectors.map("@" + _).toArray

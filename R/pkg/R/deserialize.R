@@ -233,24 +233,13 @@ readMultipleObjectsWithKeys <- function(inputCon) {
 
 readDeserializeInArrow <- function(inputCon) {
   if (requireNamespace("arrow", quietly = TRUE)) {
-    # Arrow drops `as_tibble` since 0.14.0, see ARROW-5190.
-    useAsTibble <- exists("as_tibble", envir = asNamespace("arrow"))
-
-
     # Currently, there looks no way to read batch by batch by socket connection in R side,
     # See ARROW-4512. Therefore, it reads the whole Arrow streaming-formatted binary at once
     # for now.
     dataLen <- readInt(inputCon)
     arrowData <- readBin(inputCon, raw(), as.integer(dataLen), endian = "big")
     batches <- arrow::RecordBatchStreamReader$create(arrowData)$batches()
-
-    if (useAsTibble) {
-      as_tibble <- get("as_tibble", envir = asNamespace("arrow"))
-      # Read all groupped batches. Tibble -> data.frame is cheap.
-      lapply(batches, function(batch) as.data.frame(as_tibble(batch)))
-    } else {
-      lapply(batches, function(batch) as.data.frame(batch))
-    }
+    lapply(batches, function(batch) as.data.frame(batch))
   } else {
     stop("'arrow' package should be installed.")
   }
@@ -261,7 +250,7 @@ readDeserializeWithKeysInArrow <- function(inputCon) {
 
   keys <- readMultipleObjects(inputCon)
 
-  # Read keys to map with each groupped batch later.
+  # Read keys to map with each grouped batch later.
   list(keys = keys, data = data)
 }
 

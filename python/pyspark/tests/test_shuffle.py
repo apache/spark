@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 import random
-import sys
 import unittest
 
 from py4j.protocol import Py4JJavaError
@@ -168,10 +167,10 @@ class SorterTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_shuffle import *
+    from pyspark.tests.test_shuffle import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

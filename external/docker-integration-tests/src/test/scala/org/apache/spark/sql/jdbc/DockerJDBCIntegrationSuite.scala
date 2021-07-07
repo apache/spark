@@ -25,6 +25,7 @@ import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
 import com.spotify.docker.client._
+import com.spotify.docker.client.DockerClient.{ListContainersParam, LogsParam}
 import com.spotify.docker.client.exceptions.ImageNotFoundException
 import com.spotify.docker.client.messages.{ContainerConfig, HostConfig, PortBinding}
 import org.scalatest.concurrent.Eventually
@@ -45,7 +46,7 @@ abstract class DatabaseOnDocker {
   val env: Map[String, String]
 
   /**
-   * Wheather or not to use ipc mode for shared memory when starting docker image
+   * Whether or not to use ipc mode for shared memory when starting docker image
    */
   val usesIpc: Boolean
 
@@ -91,18 +92,30 @@ abstract class DatabaseOnDocker {
       containerConfigBuilder: ContainerConfig.Builder): Unit = {}
 }
 
-abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventually {
+abstract class DockerJDBCIntegrationSuite
+  extends SharedSparkSession with Eventually with DockerIntegrationFunSuite {
 
   protected val dockerIp = DockerUtils.getDockerIp()
   val db: DatabaseOnDocker
-  val connectionTimeout = timeout(2.minutes)
+  val connectionTimeout = timeout(5.minutes)
+  val keepContainer =
+    sys.props.getOrElse("spark.test.docker.keepContainer", "false").toBoolean
+  val removePulledImage =
+    sys.props.getOrElse("spark.test.docker.removePulledImage", "true").toBoolean
 
   private var docker: DockerClient = _
-  protected var externalPort: Int = _
+  // Configure networking (necessary for boot2docker / Docker Machine)
+  protected lazy val externalPort: Int = {
+    val sock = new ServerSocket(0)
+    val port = sock.getLocalPort
+    sock.close()
+    port
+  }
   private var containerId: String = _
+  private var pulled: Boolean = false
   protected var jdbcUrl: String = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = runIfTestsEnabled(s"Prepare for ${this.getClass.getName}") {
     super.beforeAll()
     try {
       docker = DefaultDockerClient.fromEnv.build()
@@ -121,13 +134,7 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
         case e: ImageNotFoundException =>
           log.warn(s"Docker image ${db.imageName} not found; pulling image from registry")
           docker.pull(db.imageName)
-      }
-      // Configure networking (necessary for boot2docker / Docker Machine)
-      externalPort = {
-        val sock = new ServerSocket(0)
-        val port = sock.getLocalPort
-        sock.close()
-        port
+          pulled = true
       }
       val hostConfigBuilder = HostConfig.builder()
         .privileged(db.privileged)
@@ -175,22 +182,13 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
     }
   }
 
-  override def afterAll() {
+  override def afterAll(): Unit = {
     try {
-      if (docker != null) {
-        try {
-          if (containerId != null) {
-            docker.killContainer(containerId)
-            docker.removeContainer(containerId)
-          }
-        } catch {
-          case NonFatal(e) =>
-            logWarning(s"Could not stop container $containerId", e)
-        } finally {
-          docker.close()
-        }
-      }
+      cleanupContainer()
     } finally {
+      if (docker != null) {
+        docker.close()
+      }
       super.afterAll()
     }
   }
@@ -206,4 +204,38 @@ abstract class DockerJDBCIntegrationSuite extends SharedSparkSession with Eventu
    * Prepare databases and tables for testing.
    */
   def dataPreparation(connection: Connection): Unit
+
+  private def cleanupContainer(): Unit = {
+    if (docker != null && containerId != null && !keepContainer) {
+      try {
+        docker.killContainer(containerId)
+      } catch {
+        case NonFatal(e) =>
+          val exitContainerIds =
+            docker.listContainers(ListContainersParam.withStatusExited()).asScala.map(_.id())
+          if (exitContainerIds.contains(containerId)) {
+            logWarning(s"Container $containerId already stopped")
+          } else {
+            logWarning(s"Could not stop container $containerId", e)
+          }
+      } finally {
+        logContainerOutput()
+        docker.removeContainer(containerId)
+        if (removePulledImage && pulled) {
+          docker.removeImage(db.imageName)
+        }
+      }
+    }
+  }
+
+  private def logContainerOutput(): Unit = {
+    val logStream = docker.logs(containerId, LogsParam.stdout(), LogsParam.stderr())
+    try {
+      logInfo("\n\n===== CONTAINER LOGS FOR container Id: " + containerId + " =====")
+      logInfo(logStream.readFully())
+      logInfo("\n\n===== END OF CONTAINER LOGS FOR container Id: " + containerId + " =====")
+    } finally {
+      logStream.close()
+    }
+  }
 }

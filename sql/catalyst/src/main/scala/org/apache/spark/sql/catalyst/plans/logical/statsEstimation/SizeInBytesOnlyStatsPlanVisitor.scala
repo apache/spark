@@ -53,7 +53,8 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
    */
   override def default(p: LogicalPlan): Statistics = p match {
     case p: LeafNode => p.computeStats()
-    case _: LogicalPlan => Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).product)
+    case _: LogicalPlan =>
+      Statistics(sizeInBytes = p.children.map(_.stats.sizeInBytes).filter(_ > 0L).product)
   }
 
   override def visitAggregate(p: Aggregate): Statistics = {
@@ -66,7 +67,7 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
     }
   }
 
-  override def visitDistinct(p: Distinct): Statistics = default(p)
+  override def visitDistinct(p: Distinct): Statistics = visitUnaryNode(p)
 
   override def visitExcept(p: Except): Statistics = p.left.stats.copy()
 
@@ -127,9 +128,9 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
 
   override def visitProject(p: Project): Statistics = visitUnaryNode(p)
 
-  override def visitRepartition(p: Repartition): Statistics = default(p)
+  override def visitRepartition(p: Repartition): Statistics = p.child.stats
 
-  override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = default(p)
+  override def visitRepartitionByExpr(p: RepartitionByExpression): Statistics = p.child.stats
 
   override def visitSample(p: Sample): Statistics = {
     val ratio = p.upperBound - p.lowerBound
@@ -149,4 +150,15 @@ object SizeInBytesOnlyStatsPlanVisitor extends LogicalPlanVisitor[Statistics] {
   }
 
   override def visitWindow(p: Window): Statistics = visitUnaryNode(p)
+
+  override def visitSort(p: Sort): Statistics = default(p)
+
+  override def visitTail(p: Tail): Statistics = {
+    val limit = p.limitExpr.eval().asInstanceOf[Int]
+    val childStats = p.child.stats
+    val rowCount: BigInt = childStats.rowCount.map(_.min(limit)).getOrElse(limit)
+    Statistics(
+      sizeInBytes = EstimationUtils.getOutputSize(p.output, rowCount, childStats.attributeStats),
+      rowCount = Some(rowCount))
+  }
 }

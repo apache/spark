@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from time import time, sleep
 import unittest
 
 from numpy import array, random, exp, dot, all, mean, abs
@@ -190,7 +189,7 @@ class StreamingLogisticRegressionWithSGDTests(MLLibStreamingTestCase):
         Generate 1 / (1 + exp(-x * scale + offset))
 
         where,
-        x is randomnly distributed and the threshold
+        x is randomly distributed and the threshold
         and labels for each sample in x is obtained from a random uniform
         distribution.
         """
@@ -434,9 +433,9 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         slr = StreamingLinearRegressionWithSGD(stepSize=0.2, numIterations=25)
         slr.setInitialWeights([0.0])
 
-        # Create ten batches with 100 sample points in each.
+        # Create fifteen batches with 100 sample points in each.
         batches = []
-        for i in range(10):
+        for i in range(15):
             batch = LinearDataGenerator.generateLinearInput(
                 0.0, [10.0], [0.0], [1.0 / 3.0], 100, 42 + i, 0.1)
             batches.append(self.sc.parallelize(batch))
@@ -467,10 +466,10 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.mllib.tests.test_streaming_algorithms import *
+    from pyspark.mllib.tests.test_streaming_algorithms import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

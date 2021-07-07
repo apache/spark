@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
 import java.util.TimeZone
 
 import scala.language.implicitConversions
@@ -28,7 +29,6 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
-import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.internal.SQLConf
@@ -932,14 +932,187 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Literal(Date.valueOf("1970-02-01")),
           Literal(negateExact(stringToInterval("interval 1 month")))),
         EmptyRow,
-        s"sequence boundaries: 0 to 2678400000000 by -${28 * MICROS_PER_DAY}")
+        s"sequence boundaries: 0 to 2678400000000 by -1 months")
 
       // SPARK-32133: Sequence step must be a day interval if start and end values are dates
       checkExceptionInExpression[IllegalArgumentException](Sequence(
         Cast(Literal("2011-03-01"), DateType),
         Cast(Literal("2011-04-01"), DateType),
         Option(Literal(stringToInterval("interval 1 hour")))), null,
-        "sequence step must be a day interval if start and end values are dates")
+        "sequence step must be an interval of day granularity if start and end values are dates")
+    }
+  }
+
+  test("SPARK-35088: Accept ANSI intervals by the Sequence expression") {
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
+      Literal(Duration.ofHours(12))),
+      Seq(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Timestamp.valueOf("2018-01-02 00:00:01")),
+      Literal(Duration.ofHours(12))),
+      Seq(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-02 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Duration.ofHours(-12))),
+      Seq(
+        Timestamp.valueOf("2018-01-02 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-01 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-02 00:00:00")),
+      Literal(Timestamp.valueOf("2017-12-31 23:59:59")),
+      Literal(Duration.ofHours(-12))),
+      Seq(
+        Timestamp.valueOf("2018-01-02 00:00:00"),
+        Timestamp.valueOf("2018-01-01 12:00:00"),
+        Timestamp.valueOf("2018-01-01 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
+      Literal(Period.ofMonths(1))),
+      Seq(
+        Timestamp.valueOf("2018-01-01 00:00:00"),
+        Timestamp.valueOf("2018-02-01 00:00:00"),
+        Timestamp.valueOf("2018-03-01 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-03-01 00:00:00")),
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Period.ofMonths(-1))),
+      Seq(
+        Timestamp.valueOf("2018-03-01 00:00:00"),
+        Timestamp.valueOf("2018-02-01 00:00:00"),
+        Timestamp.valueOf("2018-01-01 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-31 00:00:00")),
+      Literal(Timestamp.valueOf("2018-04-30 00:00:00")),
+      Literal(Period.ofMonths(1))),
+      Seq(
+        Timestamp.valueOf("2018-01-31 00:00:00"),
+        Timestamp.valueOf("2018-02-28 00:00:00"),
+        Timestamp.valueOf("2018-03-31 00:00:00"),
+        Timestamp.valueOf("2018-04-30 00:00:00")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Timestamp.valueOf("2023-01-01 00:00:00")),
+      Literal(Period.of(1, 5, 0))),
+      Seq(
+        Timestamp.valueOf("2018-01-01 00:00:00.000"),
+        Timestamp.valueOf("2019-06-01 00:00:00.000"),
+        Timestamp.valueOf("2020-11-01 00:00:00.000"),
+        Timestamp.valueOf("2022-04-01 00:00:00.000")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2022-04-01 00:00:00")),
+      Literal(Timestamp.valueOf("2017-01-01 00:00:00")),
+      Literal(Period.of(-1, -5, 0))),
+      Seq(
+        Timestamp.valueOf("2022-04-01 00:00:00.000"),
+        Timestamp.valueOf("2020-11-01 00:00:00.000"),
+        Timestamp.valueOf("2019-06-01 00:00:00.000"),
+        Timestamp.valueOf("2018-01-01 00:00:00.000")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Timestamp.valueOf("2018-01-04 00:00:00")),
+      Literal(Duration.ofDays(1))),
+      Seq(
+        Timestamp.valueOf("2018-01-01 00:00:00.000"),
+        Timestamp.valueOf("2018-01-02 00:00:00.000"),
+        Timestamp.valueOf("2018-01-03 00:00:00.000"),
+        Timestamp.valueOf("2018-01-04 00:00:00.000")))
+
+    checkEvaluation(new Sequence(
+      Literal(Timestamp.valueOf("2018-01-04 00:00:00")),
+      Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+      Literal(Duration.ofDays(-1))),
+      Seq(
+        Timestamp.valueOf("2018-01-04 00:00:00.000"),
+        Timestamp.valueOf("2018-01-03 00:00:00.000"),
+        Timestamp.valueOf("2018-01-02 00:00:00.000"),
+        Timestamp.valueOf("2018-01-01 00:00:00.000")))
+
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-04 00:00:00")),
+        Literal(Period.ofDays(1))),
+      EmptyRow, s"sequence boundaries: 1514793600000000 to 1515052800000000 by 0")
+
+    checkExceptionInExpression[IllegalArgumentException](
+      new Sequence(
+        Literal(Timestamp.valueOf("2018-01-04 00:00:00")),
+        Literal(Timestamp.valueOf("2018-01-01 00:00:00")),
+        Literal(Period.ofDays(-1))),
+      EmptyRow, s"sequence boundaries: 1515052800000000 to 1514793600000000 by 0")
+
+    DateTimeTestUtils.withDefaultTimeZone(UTC) {
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(Date.valueOf("2018-03-01")),
+        Literal(Period.ofMonths(1))),
+        Seq(
+          Date.valueOf("2018-01-01"),
+          Date.valueOf("2018-02-01"),
+          Date.valueOf("2018-03-01")))
+
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2018-01-31")),
+        Literal(Date.valueOf("2018-04-30")),
+        Literal(Period.ofMonths(1))),
+        Seq(
+          Date.valueOf("2018-01-31"),
+          Date.valueOf("2018-02-28"),
+          Date.valueOf("2018-03-31"),
+          Date.valueOf("2018-04-30")))
+
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2018-01-01")),
+        Literal(Date.valueOf("2023-01-01")),
+        Literal(Period.of(1, 5, 0))),
+        Seq(
+          Date.valueOf("2018-01-01"),
+          Date.valueOf("2019-06-01"),
+          Date.valueOf("2020-11-01"),
+          Date.valueOf("2022-04-01")))
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("2018-01-01")),
+          Literal(Date.valueOf("2018-01-05")),
+          Literal(Period.ofDays(2))),
+        EmptyRow,
+        "sequence step must be an interval year to month of day granularity" +
+          " if start and end values are dates")
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("1970-01-01")),
+          Literal(Date.valueOf("1970-02-01")),
+          Literal(Period.ofMonths(-1))),
+        EmptyRow,
+        s"sequence boundaries: 0 to 2678400000000 by -1")
+
+      assert(Sequence(
+        Cast(Literal("2011-03-01"), DateType),
+        Cast(Literal("2011-04-01"), DateType),
+        Option(Literal(Duration.ofHours(1)))).checkInputDataTypes().isFailure)
     }
   }
 
@@ -1118,36 +1291,62 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
   }
 
   test("correctly handles ElementAt nullability for arrays") {
-    // CreateArray case
-    val a = AttributeReference("a", IntegerType, nullable = false)()
-    val b = AttributeReference("b", IntegerType, nullable = true)()
-    val array = CreateArray(a :: b :: Nil)
-    assert(!ElementAt(array, Literal(0)).nullable)
-    assert(ElementAt(array, Literal(1)).nullable)
-    assert(!ElementAt(array, Subtract(Literal(2), Literal(2))).nullable)
-    assert(ElementAt(array, AttributeReference("ordinal", IntegerType)()).nullable)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        // CreateArray case
+        val a = AttributeReference("a", IntegerType, nullable = false)()
+        val b = AttributeReference("b", IntegerType, nullable = true)()
+        val array = CreateArray(a :: b :: Nil)
+        assert(!ElementAt(array, Literal(1)).nullable)
+        assert(!ElementAt(array, Literal(-2)).nullable)
+        assert(ElementAt(array, Literal(2)).nullable)
+        assert(ElementAt(array, Literal(-1)).nullable)
+        assert(!ElementAt(array, Subtract(Literal(2), Literal(1))).nullable)
+        assert(ElementAt(array, AttributeReference("ordinal", IntegerType)()).nullable)
 
-    // GetArrayStructFields case
-    val f1 = StructField("a", IntegerType, nullable = false)
-    val f2 = StructField("b", IntegerType, nullable = true)
-    val structType = StructType(f1 :: f2 :: Nil)
-    val c = AttributeReference("c", structType, nullable = false)()
-    val inputArray1 = CreateArray(c :: Nil)
-    val inputArray1ContainsNull = c.nullable
-    val stArray1 = GetArrayStructFields(inputArray1, f1, 0, 2, inputArray1ContainsNull)
-    assert(!ElementAt(stArray1, Literal(0)).nullable)
-    val stArray2 = GetArrayStructFields(inputArray1, f2, 1, 2, inputArray1ContainsNull)
-    assert(ElementAt(stArray2, Literal(0)).nullable)
+        // CreateArray case invalid indices
+        assert(!ElementAt(array, Literal(0)).nullable)
+        assert(ElementAt(array, Literal(4)).nullable == !ansiEnabled)
+        assert(ElementAt(array, Literal(-4)).nullable == !ansiEnabled)
 
-    val d = AttributeReference("d", structType, nullable = true)()
-    val inputArray2 = CreateArray(c :: d :: Nil)
-    val inputArray2ContainsNull = c.nullable || d.nullable
-    val stArray3 = GetArrayStructFields(inputArray2, f1, 0, 2, inputArray2ContainsNull)
-    assert(!ElementAt(stArray3, Literal(0)).nullable)
-    assert(ElementAt(stArray3, Literal(1)).nullable)
-    val stArray4 = GetArrayStructFields(inputArray2, f2, 1, 2, inputArray2ContainsNull)
-    assert(ElementAt(stArray4, Literal(0)).nullable)
-    assert(ElementAt(stArray4, Literal(1)).nullable)
+        // GetArrayStructFields case
+        val f1 = StructField("a", IntegerType, nullable = false)
+        val f2 = StructField("b", IntegerType, nullable = true)
+        val structType = StructType(f1 :: f2 :: Nil)
+        val c = AttributeReference("c", structType, nullable = false)()
+        val inputArray1 = CreateArray(c :: Nil)
+        val inputArray1ContainsNull = c.nullable
+        val stArray1 = GetArrayStructFields(inputArray1, f1, 0, 2, inputArray1ContainsNull)
+        assert(!ElementAt(stArray1, Literal(1)).nullable)
+        assert(!ElementAt(stArray1, Literal(-1)).nullable)
+        val stArray2 = GetArrayStructFields(inputArray1, f2, 1, 2, inputArray1ContainsNull)
+        assert(ElementAt(stArray2, Literal(1)).nullable)
+        assert(ElementAt(stArray2, Literal(-1)).nullable)
+
+        val d = AttributeReference("d", structType, nullable = true)()
+        val inputArray2 = CreateArray(c :: d :: Nil)
+        val inputArray2ContainsNull = c.nullable || d.nullable
+        val stArray3 = GetArrayStructFields(inputArray2, f1, 0, 2, inputArray2ContainsNull)
+        assert(!ElementAt(stArray3, Literal(1)).nullable)
+        assert(!ElementAt(stArray3, Literal(-2)).nullable)
+        assert(ElementAt(stArray3, Literal(2)).nullable)
+        assert(ElementAt(stArray3, Literal(-1)).nullable)
+        val stArray4 = GetArrayStructFields(inputArray2, f2, 1, 2, inputArray2ContainsNull)
+        assert(ElementAt(stArray4, Literal(1)).nullable)
+        assert(ElementAt(stArray4, Literal(-2)).nullable)
+        assert(ElementAt(stArray4, Literal(2)).nullable)
+        assert(ElementAt(stArray4, Literal(-1)).nullable)
+
+        // GetArrayStructFields case invalid indices
+        assert(!ElementAt(stArray3, Literal(0)).nullable)
+        assert(ElementAt(stArray3, Literal(4)).nullable == !ansiEnabled)
+        assert(ElementAt(stArray3, Literal(-4)).nullable == !ansiEnabled)
+
+        assert(ElementAt(stArray4, Literal(0)).nullable)
+        assert(ElementAt(stArray4, Literal(4)).nullable)
+        assert(ElementAt(stArray4, Literal(-4)).nullable)
+      }
+    }
   }
 
   test("Concat") {
@@ -1860,5 +2059,48 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
       Literal(Date.valueOf("2018-01-01")),
       Literal(stringToInterval("interval 1 year"))),
       Seq(Date.valueOf("2018-01-01")))
+  }
+
+  test("SPARK-33386: element_at ArrayIndexOutOfBoundsException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val array = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType))
+        var expr: Expression = ElementAt(array, Literal(5))
+        if (ansiEnabled) {
+          val errMsg = "Invalid index: 5, numElements: 3"
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+
+        expr = ElementAt(array, Literal(-5))
+        if (ansiEnabled) {
+          val errMsg = "Invalid index: -5, numElements: 3"
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+
+        // SQL array indices start at 1 exception throws for both mode.
+        expr = ElementAt(array, Literal(0))
+        val errMsg = "SQL array indices start at 1"
+        checkExceptionInExpression[Exception](expr, errMsg)
+      }
+    }
+  }
+
+  test("SPARK-33460: element_at NoSuchElementException") {
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val map = Literal.create(Map(1 -> "a", 2 -> "b"), MapType(IntegerType, StringType))
+        val expr: Expression = ElementAt(map, Literal(5))
+        if (ansiEnabled) {
+          val errMsg = "Key 5 does not exist."
+          checkExceptionInExpression[Exception](expr, errMsg)
+        } else {
+          checkEvaluation(expr, null)
+        }
+      }
+    }
   }
 }

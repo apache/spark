@@ -18,8 +18,8 @@
 package org.apache.spark
 
 import org.scalatest.Assertions._
-import org.scalatest.Matchers
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
+import org.scalatest.matchers.must.Matchers
 import org.scalatest.time.{Millis, Span}
 
 import org.apache.spark.internal.config
@@ -38,7 +38,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
-  val clusterUrl = "local-cluster[2,1,1024]"
+  val clusterUrl = "local-cluster[3,1,1024]"
 
   test("task throws not serializable exception") {
     // Ensures that executors do not crash when an exn is not serializable. If executors crash,
@@ -174,7 +174,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
 
   private def testCaching(conf: SparkConf, storageLevel: StorageLevel): Unit = {
     sc = new SparkContext(conf.setMaster(clusterUrl).setAppName("test"))
-    TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
+    TestUtils.waitUntilExecutorsUp(sc, 3, 60000)
     val data = sc.parallelize(1 to 1000, 10)
     val cachedData = data.persist(storageLevel)
     assert(cachedData.count === 1000)
@@ -206,7 +206,8 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
     "caching on disk" -> StorageLevel.DISK_ONLY,
     "caching in memory, replicated" -> StorageLevel.MEMORY_ONLY_2,
     "caching in memory, serialized, replicated" -> StorageLevel.MEMORY_ONLY_SER_2,
-    "caching on disk, replicated" -> StorageLevel.DISK_ONLY_2,
+    "caching on disk, replicated 2" -> StorageLevel.DISK_ONLY_2,
+    "caching on disk, replicated 3" -> StorageLevel.DISK_ONLY_3,
     "caching in memory and disk, replicated" -> StorageLevel.MEMORY_AND_DISK_2,
     "caching in memory and disk, serialized, replicated" -> StorageLevel.MEMORY_AND_DISK_SER_2
   ).foreach { case (testName, storageLevel) =>

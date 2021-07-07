@@ -21,7 +21,7 @@ Run with:
   ./bin/spark-submit examples/src/main/python/sql/hive.py
 """
 # $example on:spark_hive$
-from os.path import join, abspath
+from os.path import abspath
 
 from pyspark.sql import SparkSession
 from pyspark.sql import Row

@@ -16,11 +16,10 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
-import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{SQLKeywordUtils, TableIdentifier}
 import org.apache.spark.sql.internal.SQLConf
 
-class TableIdentifierParserSuite extends SparkFunSuite with SQLKeywordUtils {
+class TableIdentifierParserSuite extends SQLKeywordUtils {
   import CatalystSqlParser._
 
   // Add "$elem$", "$value$" & "$key$"
@@ -355,7 +354,7 @@ class TableIdentifierParserSuite extends SparkFunSuite with SQLKeywordUtils {
     assert(complexName === parseTableIdentifier("```d``b``1`.```weird``table``name`"))
     assert(complexName === parseTableIdentifier(complexName.quotedString))
     intercept[ParseException](parseTableIdentifier(complexName.unquotedString))
-    // Table identifier contains countious backticks should be treated correctly.
+    // Table identifier contains continuous backticks should be treated correctly.
     val complexName2 = TableIdentifier("x``y", Some("d``b"))
     assert(complexName2 === parseTableIdentifier(complexName2.quotedString))
   }

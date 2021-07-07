@@ -19,7 +19,6 @@ package org.apache.spark.ml.util
 
 import java.io.{File, IOException}
 
-import org.json4s.JNothing
 import org.scalatest.Suite
 
 import org.apache.spark.{SparkException, SparkFunSuite}
@@ -63,6 +62,9 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
           (instance.getOrDefault(p), newInstance.getOrDefault(p)) match {
             case (Array(values), Array(newValues)) =>
               assert(values === newValues, s"Values do not match on param ${p.name}.")
+            case (value: Double, newValue: Double) =>
+              assert(value.isNaN && newValue.isNaN || value == newValue,
+                s"Values do not match on param ${p.name}.")
             case (value, newValue) =>
               assert(value === newValue, s"Values do not match on param ${p.name}.")
           }

@@ -24,15 +24,14 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project, Union}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
 class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
-  private val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry, conf)
-  private val analyzer = new Analyzer(catalog, conf)
+  private val catalog = new SessionCatalog(new InMemoryCatalog, EmptyFunctionRegistry)
+  private val analyzer = new Analyzer(catalog)
 
   private val relation = LocalRelation(
     AttributeReference("i", IntegerType)(),
@@ -49,10 +48,6 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
   private val u: Expression = UnresolvedAttribute("u")
   private val f: Expression = UnresolvedAttribute("f")
   private val b: Expression = UnresolvedAttribute("b")
-
-  before {
-    catalog.createTempView("table", relation, overrideIfExists = true)
-  }
 
   private def checkType(expression: Expression, expectedType: DataType): Unit = {
     val plan = Project(Seq(Alias(expression, "c")()), relation)
@@ -73,7 +68,7 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
       Union(Project(Seq(Alias(left, "l")()), relation),
         Project(Seq(Alias(right, "r")()), relation))
     val (l, r) = analyzer.execute(plan).collect {
-      case Union(Seq(child1, child2)) => (child1.output.head, child2.output.head)
+      case Union(Seq(child1, child2), _, _) => (child1.output.head, child2.output.head)
     }.head
     assert(l.dataType === expectedType)
     assert(r.dataType === expectedType)

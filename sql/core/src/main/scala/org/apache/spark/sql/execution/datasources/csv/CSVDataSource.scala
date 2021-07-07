@@ -23,8 +23,6 @@ import java.nio.charset.{Charset, StandardCharsets}
 import com.univocity.parsers.csv.CsvParser
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
-import org.apache.hadoop.io.{LongWritable, Text}
-import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 
@@ -155,7 +153,7 @@ object TextInputCSVDataSource extends CSVDataSource {
         sparkSession,
         paths = paths,
         className = classOf[TextFileFormat].getName,
-        options = options.parameters
+        options = options.parameters ++ Map(DataSource.GLOB_PATHS_KEY -> "false")
       ).resolveRelation(checkFilesExist = false))
       .select("value").as[String](Encoders.STRING)
 

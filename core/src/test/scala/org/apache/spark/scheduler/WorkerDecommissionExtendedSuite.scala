@@ -23,8 +23,7 @@ import org.scalatest.concurrent.Eventually.{eventually, interval, timeout}
 
 import org.apache.spark.{LocalSparkContext, SparkContext, SparkFunSuite, TestUtils}
 import org.apache.spark.LocalSparkContext.withSpark
-import org.apache.spark.internal.config.{DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT, DYN_ALLOCATION_INITIAL_EXECUTORS, DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED}
-import org.apache.spark.internal.config.Worker.WORKER_DECOMMISSION_ENABLED
+import org.apache.spark.internal.config.{DECOMMISSION_ENABLED, DYN_ALLOCATION_ENABLED, DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT, DYN_ALLOCATION_INITIAL_EXECUTORS, DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED}
 import org.apache.spark.launcher.SparkLauncher.{EXECUTOR_MEMORY, SPARK_MASTER}
 import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 
@@ -37,7 +36,7 @@ class WorkerDecommissionExtendedSuite extends SparkFunSuite with LocalSparkConte
     .set(DYN_ALLOCATION_ENABLED, true)
     .set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true)
     .set(DYN_ALLOCATION_INITIAL_EXECUTORS, 5)
-    .set(WORKER_DECOMMISSION_ENABLED, true)
+    .set(DECOMMISSION_ENABLED, true)
 
   test("Worker decommission and executor idle timeout") {
     sc = new SparkContext(conf.set(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, "10s"))
@@ -65,7 +64,8 @@ class WorkerDecommissionExtendedSuite extends SparkFunSuite with LocalSparkConte
 
       val sched = sc.schedulerBackend.asInstanceOf[StandaloneSchedulerBackend]
       sc.getExecutorIds().tail.foreach { id =>
-        sched.decommissionExecutor(id)
+        sched.decommissionExecutor(id, ExecutorDecommissionInfo("", None),
+          adjustTargetNumExecutors = false)
         assert(rdd3.sortByKey().collect().length === 100)
       }
     }

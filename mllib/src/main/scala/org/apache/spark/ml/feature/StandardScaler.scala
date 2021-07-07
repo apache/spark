@@ -314,6 +314,8 @@ object StandardScalerModel extends MLReadable[StandardScalerModel] {
             case SparseVector(size, indices, values) =>
               val newValues = transformSparseWithScale(scale, indices, values.clone())
               Vectors.sparse(size, indices, newValues)
+            case v =>
+              throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
           }
 
       case (false, false) =>

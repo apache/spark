@@ -19,6 +19,9 @@ license: |
   limitations under the License.
 ---
 
+* This will become a table of contents (this text will be scraped).
+{:toc}
+
 There are several ways to monitor Spark applications: web UIs, metrics, and external instrumentation.
 
 # Web Interfaces
@@ -421,7 +424,7 @@ to handle the Spark Context setup and tear down.
 
 In addition to viewing the metrics in the UI, they are also available as JSON.  This gives developers
 an easy way to create new visualizations and monitoring tools for Spark.  The JSON is available for
-both running applications, and in the history server.  The endpoints are mounted at `/api/v1`.  Eg.,
+both running applications, and in the history server.  The endpoints are mounted at `/api/v1`.  For example,
 for the history server, they would typically be accessible at `http://<server-url>:18080/api/v1`, and
 for a running application, at `http://localhost:4040/api/v1`.
 
@@ -472,18 +475,42 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td><code>/applications/[app-id]/stages</code></td>
     <td>
       A list of all stages for a given application.
-      <br><code>?status=[active|complete|pending|failed]</code> list only stages in the state.
+        <br><code>?status=[active|complete|pending|failed]</code> list only stages in the given state.
+        <br><code>?details=true</code> lists all stages with the task data.
+        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists stages only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>.
+        <br><code>?withSummaries=true</code> lists stages with task metrics distribution and executor metrics distribution.
+        <br><code>?quantiles=0.0,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
     </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]</code></td>
     <td>
       A list of all attempts for the given stage.
+        <br><code>?details=true</code> lists all attempts with the task data for the given stage.
+        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>.
+        <br><code>?withSummaries=true</code> lists task metrics distribution and executor metrics distribution of each attempt.
+        <br><code>?quantiles=0.0,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
+      <br>Example:
+        <br><code>?details=true</code>
+        <br><code>?details=true&taskStatus=RUNNING</code>
+        <br><code>?withSummaries=true</code>
+        <br><code>?details=true&withSummaries=true&quantiles=0.01,0.5,0.99</code>
     </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]</code></td>
-    <td>Details for the given stage attempt.</td>
+    <td>
+      Details for the given stage attempt.
+        <br><code>?details=true</code> lists all task data for the given stage attempt.
+        <br><code>?taskStatus=[RUNNING|SUCCESS|FAILED|KILLED|PENDING]</code> lists only those tasks with the specified task status. Query parameter taskStatus takes effect only when <code>details=true</code>.
+        <br><code>?withSummaries=true</code> lists task metrics distribution and executor metrics distribution for the given stage attempt.
+        <br><code>?quantiles=0.0,0.25,0.5,0.75,1.0</code> summarize the metrics with the given quantiles. Query parameter quantiles takes effect only when <code>withSummaries=true</code>. Default value is <code>0.0,0.25,0.5,0.75,1.0</code>. 
+      <br>Example:
+        <br><code>?details=true</code>
+        <br><code>?details=true&taskStatus=RUNNING</code>
+        <br><code>?withSummaries=true</code>
+        <br><code>?details=true&withSummaries=true&quantiles=0.01,0.5,0.99</code>
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/stages/[stage-id]/[stage-attempt-id]/taskSummary</code></td>
@@ -499,7 +526,8 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
        A list of all tasks for the given stage attempt.
       <br><code>?offset=[offset]&amp;length=[len]</code> list tasks in the given range.
       <br><code>?sortBy=[runtime|-runtime]</code> sort the tasks.
-      <br>Example: <code>?offset=10&amp;length=50&amp;sortBy=runtime</code>
+      <br><code>?status=[running|success|killed|failed|unknown]</code> list only tasks in the state.
+      <br>Example: <code>?offset=10&amp;length=50&amp;sortBy=runtime&amp;status=running</code>
     </td>
   </tr>
   <tr>
@@ -572,6 +600,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand when Physical Plan size is high.
     <br>
     <code>?offset=[offset]&length=[len]</code> lists queries in the given range.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/sql/[execution-id]</code></td>
@@ -580,6 +609,7 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <code>?details=[true (default) | false]</code> lists/hides metric details in addition to given query details.
     <br>
     <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand for the given query when Physical Plan size is high.
+    </td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/environment</code></td>
@@ -752,10 +782,10 @@ A list of the available metrics, with a short description:
 Executor-level metrics are sent from each executor to the driver as part of the Heartbeat to describe the performance metrics of Executor itself like JVM heap memory, GC information.
 Executor metric values and their measured memory peak values per executor are exposed via the REST API in JSON format and in Prometheus format.
 The JSON end point is exposed at: `/applications/[app-id]/executors`, and the Prometheus endpoint at: `/metrics/executors/prometheus`.
-The Prometheus endpoint is experimental and conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
+The Prometheus endpoint is conditional to a configuration parameter: `spark.ui.prometheus.enabled=true` (the default is `false`).
 In addition, aggregated per-stage peak values of the executor memory metrics are written to the event log if
 `spark.eventLog.logStageExecutorMetrics` is true.  
-Executor memory metrics are also exposed via the Spark metrics system based on the Dropwizard metrics library.
+Executor memory metrics are also exposed via the Spark metrics system based on the [Dropwizard metrics library](http://metrics.dropwizard.io/4.2.0).
 A list of the available metrics, with a short description:
 
 <table class="table">
@@ -948,18 +978,18 @@ These endpoints have been strongly versioned to make it easier to develop applic
 * Individual fields will never be removed for any given endpoint
 * New endpoints may be added
 * New fields may be added to existing endpoints
-* New versions of the api may be added in the future as a separate endpoint (eg., `api/v2`).  New versions are *not* required to be backwards compatible.
+* New versions of the api may be added in the future as a separate endpoint (e.g., `api/v2`).  New versions are *not* required to be backwards compatible.
 * Api versions may be dropped, but only after at least one minor release of co-existing with a new api version.
 
 Note that even when examining the UI of running applications, the `applications/[app-id]` portion is
-still required, though there is only one application available.  Eg. to see the list of jobs for the
+still required, though there is only one application available.  E.g. to see the list of jobs for the
 running app, you would go to `http://localhost:4040/api/v1/applications/[app-id]/jobs`.  This is to
 keep the paths consistent in both modes.
 
 # Metrics
 
 Spark has a configurable metrics system based on the
-[Dropwizard Metrics Library](http://metrics.dropwizard.io/).
+[Dropwizard Metrics Library](http://metrics.dropwizard.io/4.2.0).
 This allows users to report Spark metrics to a variety of sinks including HTTP, JMX, and CSV
 files. The metrics are generated by sources embedded in the Spark code base. They
 provide instrumentation for specific activities and Spark components.
@@ -1053,7 +1083,7 @@ activates the JVM source:
 ## List of available metrics providers 
 
 Metrics used by Spark are of multiple types: gauge, counter, histogram, meter and timer, 
-see [Dropwizard library documentation for details](https://metrics.dropwizard.io/3.1.0/getting-started/).
+see [Dropwizard library documentation for details](https://metrics.dropwizard.io/4.2.0/getting-started.html).
 The following list of components and metrics reports the name and some details about the available metrics,
 grouped per component instance and source namespace.
 The most common time of metrics used in Spark instrumentation are gauges and counters. 
@@ -1079,7 +1109,7 @@ This is the component with the largest amount of instrumented metrics
   - memory.remainingOnHeapMem_MB
 
 - namespace=HiveExternalCatalog
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
@@ -1088,7 +1118,7 @@ This is the component with the largest amount of instrumented metrics
   - partitionsFetched.count
 
 - namespace=CodeGenerator
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
@@ -1122,12 +1152,14 @@ This is the component with the largest amount of instrumented metrics
   - stages.failedStages.count
   - stages.skippedStages.count
   - stages.completedStages.count
-  - tasks.blackListedExecutors.count
+  - tasks.blackListedExecutors.count // deprecated use excludedExecutors instead
+  - tasks.excludedExecutors.count
   - tasks.completedTasks.count
   - tasks.failedTasks.count
   - tasks.killedTasks.count
   - tasks.skippedTasks.count
-  - tasks.unblackListedExecutors.count
+  - tasks.unblackListedExecutors.count // deprecated use unexcludedExecutors instead
+  - tasks.unexcludedExecutors.count
   - jobs.succeededJobs
   - jobs.failedJobs
   - jobDuration
@@ -1150,22 +1182,41 @@ This is the component with the largest amount of instrumented metrics
 - namespace=JVMCPU
   - jvmCpuTime
 
+- namespace=executor
+  - **note:** These metrics are available in the driver in local mode only.
+  - A full list of available metrics in this 
+    namespace can be found in the corresponding entry for the Executor component instance.
+    
 - namespace=ExecutorMetrics
   - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.executorMetricsSource.enabled` (default is true) 
   - This source contains memory-related metrics. A full list of available metrics in this 
     namespace can be found in the corresponding entry for the Executor component instance.
- 
+
+- namespace=ExecutorAllocationManager
+  - **note:** these metrics are only emitted when using dynamic allocation. Conditional to a configuration
+    parameter `spark.dynamicAllocation.enabled` (default is false)
+  - executors.numberExecutorsToAdd  
+  - executors.numberExecutorsPendingToRemove
+  - executors.numberAllExecutors
+  - executors.numberTargetExecutors
+  - executors.numberMaxNeededExecutors
+  - executors.numberExecutorsGracefullyDecommissioned.count
+  - executors.numberExecutorsDecommissionUnfinished.count
+  - executors.numberExecutorsExitedUnexpectedly.count
+  - executors.numberExecutorsKilledByDriver.count
+
 - namespace=plugin.\<Plugin Class Name>
   - Optional namespace(s). Metrics in this namespace are defined by user-supplied code, and
   configured using the Spark plugin API. See "Advanced Instrumentation" below for how to load
   custom plugins into Spark.
 
 ### Component instance = Executor
-These metrics are exposed by Spark executors. Note, currently they are not available
-when running in local mode.
+These metrics are exposed by Spark executors. 
  
 - namespace=executor (metrics are of type counter or gauge)
+  - **notes:**
+    - `spark.executor.metrics.fileSystemSchemes` (default: `file,hdfs`) determines the exposed file system metrics.
   - bytesRead.count
   - bytesWritten.count
   - cpuTime.count
@@ -1251,7 +1302,7 @@ when running in local mode.
   - shuffle-server.usedHeapMemory
 
 - namespace=HiveExternalCatalog
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - fileCacheHits.count
   - filesDiscovered.count
@@ -1260,12 +1311,11 @@ when running in local mode.
   - partitionsFetched.count
 
 - namespace=CodeGenerator
-  - **note:**: these metrics are conditional to a configuration parameter:
+  - **note:** these metrics are conditional to a configuration parameter:
     `spark.metrics.staticSources.enabled` (default is true) 
   - compilationTime (histogram)
   - generatedClassSize (histogram)
   - generatedMethodSize (histogram)
-  - hiveClientCalls.count
   - sourceCodeSize (histogram)
 
 - namespace=plugin.\<Plugin Class Name>
@@ -1277,9 +1327,11 @@ when running in local mode.
 Notes: 
   - Activate this source by setting the relevant `metrics.properties` file entry or the 
   configuration parameter:`spark.metrics.conf.*.source.jvm.class=org.apache.spark.metrics.source.JvmSource`  
+  - These metrics are conditional to a configuration parameter:
+    `spark.metrics.staticSources.enabled` (default is true)
   - This source is available for driver and executor instances and is also available for other instances.  
   - This source provides information on JVM metrics using the 
-  [Dropwizard/Codahale Metric Sets for JVM instrumentation](https://metrics.dropwizard.io/3.1.0/manual/jvm/)
+  [Dropwizard/Codahale Metric Sets for JVM instrumentation](https://metrics.dropwizard.io/4.2.0/manual/jvm.html)
    and in particular the metric sets BufferPoolMetricSet, GarbageCollectorMetricSet and MemoryUsageGaugeSet. 
 
 ### Component instance = applicationMaster
@@ -1325,7 +1377,11 @@ Note: applies when running in Spark standalone as worker
 ### Component instance = shuffleService
 Note: applies to the shuffle service
 
+- blockTransferRate (meter) - rate of blocks being transferred
+- blockTransferMessageRate (meter) - rate of block transfer messages,
+  i.e. if batch fetches are enabled, this represents number of batches rather than number of blocks
 - blockTransferRateBytes (meter)
+- blockTransferAvgTime_1min (gauge - 1-minute moving average)
 - numActiveConnections.count
 - numRegisteredConnections.count
 - numCaughtExceptions.count
@@ -1361,9 +1417,3 @@ Both take a comma-separated list of class names that implement the
 possible for one list to be placed in the Spark default config file, allowing users to
 easily add other plugins from the command line without overwriting the config file's list. Duplicate
 plugins are ignored.
-
-Distribution of the jar files containing the plugin code is currently not done by Spark. The user
-or admin should make sure that the jar files are available to Spark applications, for example, by
-including the plugin jar with the Spark distribution. The exception to this rule is the YARN
-backend, where the <code>--jars</code> command line option (or equivalent config entry) can be
-used to make the plugin code available to both executors and cluster-mode drivers.

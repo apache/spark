@@ -22,11 +22,13 @@ import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
+import org.apache.spark.sql.connector.read.PartitionReader
 import org.apache.spark.sql.connector.read.streaming.{ContinuousPartitionReader, PartitionOffset}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.ThreadUtils
 
@@ -46,6 +48,8 @@ class ContinuousQueuedDataReader(
     epochPollIntervalMs: Long) extends Closeable {
   // Important sequencing - we must get our starting point before the provider threads start running
   private var currentOffset: PartitionOffset = reader.getOffset
+
+  def getPartitionReader(): PartitionReader[InternalRow] = reader
 
   /**
    * The record types in the read buffer.
@@ -99,12 +103,11 @@ class ContinuousQueuedDataReader(
         currentEntry = EpochMarker
       } else {
         if (dataReaderThread.failureReason != null) {
-          throw new SparkException("Data read failed", dataReaderThread.failureReason)
+          throw QueryExecutionErrors.failedToReadDataError(dataReaderThread.failureReason)
         }
         if (epochMarkerGenerator.failureReason != null) {
-          throw new SparkException(
-            "Epoch marker generation failed",
-            epochMarkerGenerator.failureReason)
+          throw QueryExecutionErrors.failedToGenerateEpochMarkerError(
+            dataReaderThread.failureReason)
         }
         currentEntry = queue.poll(POLL_TIMEOUT_MS, TimeUnit.MILLISECONDS)
       }

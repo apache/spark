@@ -635,12 +635,12 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       // Verify that RDD is checkpointed
       assert(rdd.firstParent.isInstanceOf[ReliableCheckpointRDD[_]])
       val checkpointedRDD = rdd.firstParent.asInstanceOf[ReliableCheckpointRDD[_]]
-      val partiton = checkpointedRDD.partitions(0)
-      assert(!checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partiton))
+      val partition = checkpointedRDD.partitions(0)
+      assert(!checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partition))
 
-      val preferredLoc = checkpointedRDD.preferredLocations(partiton)
-      assert(checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partiton))
-      assert(preferredLoc == checkpointedRDD.cachedPreferredLocations.get(partiton))
+      val preferredLoc = checkpointedRDD.preferredLocations(partition)
+      assert(checkpointedRDD.cachedPreferredLocations.asMap.containsKey(partition))
+      assert(preferredLoc == checkpointedRDD.cachedPreferredLocations.get(partition))
     }
   }
 
@@ -653,7 +653,7 @@ class CheckpointStorageSuite extends SparkFunSuite with LocalSparkContext {
       val rdd = sc.makeRDD(1 to 200, numSlices = 4).repartition(1).mapPartitions { iter =>
         iter.map { i =>
           if (i > 100 && TaskContext.get().stageAttemptNumber() == 0) {
-            // throw new SparkException("Make first attemp failed.")
+            // throw new SparkException("Make first attempt failed.")
             // Throw FetchFailedException to explicitly trigger stage resubmission.
             // A normal exception will only trigger task resubmission in the same stage.
             throw new FetchFailedException(null, 0, 0L, 0, 0, "Fake")

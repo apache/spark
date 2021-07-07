@@ -19,12 +19,14 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicLong, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicLong, AtomicReference}
 
 import scala.annotation.meta.param
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.util.control.NonFatal
 
+import org.mockito.Mockito._
+import org.roaringbitmap.RoaringBitmap
 import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.time.SpanSugar._
@@ -37,9 +39,10 @@ import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.scheduler.local.LocalSchedulerBackend
 import org.apache.spark.shuffle.{FetchFailedException, MetadataFetchFailedException}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, LongAccumulator, ThreadUtils, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, Clock, LongAccumulator, SystemClock, Utils}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -122,14 +125,14 @@ class MyRDD(
 
 class DAGSchedulerSuiteDummyException extends Exception
 
-class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLimits {
+class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with TimeLimits {
 
   import DAGSchedulerSuite._
 
   // Necessary to make ScalaTest 3.x interrupt a thread on the JVM like ScalaTest 2.2.x
   implicit val defaultSignaler: Signaler = ThreadSignaler
 
-  val conf = new SparkConf
+  private var firstInit: Boolean = _
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
 
@@ -169,10 +172,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     }
     override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
     override def defaultParallelism() = 2
-    override def executorDecommission(executorId: String) = {}
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
     override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
     override def applicationAttemptId(): Option[String] = None
+    override def executorDecommission(
+      executorId: String,
+      decommissionInfo: ExecutorDecommissionInfo): Unit = {}
+    override def getExecutorDecommissionState(
+      executorId: String): Option[ExecutorDecommissionState] = None
   }
 
   /**
@@ -235,6 +242,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
   var sparkListener: EventInfoRecordingListener = null
 
+  var blockManagerMaster: BlockManagerMaster = null
   var mapOutputTracker: MapOutputTrackerMaster = null
   var broadcastManager: BroadcastManager = null
   var securityMgr: SecurityManager = null
@@ -248,17 +256,18 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    */
   val cacheLocations = new HashMap[(Int, Int), Seq[BlockManagerId]]
   // stub out BlockManagerMaster.getLocations to use our cacheLocations
-  val blockManagerMaster = new BlockManagerMaster(null, null, conf, true) {
-      override def getLocations(blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
-        blockIds.map {
-          _.asRDDId.map(id => (id.rddId -> id.splitIndex)).flatMap(key => cacheLocations.get(key)).
-            getOrElse(Seq())
-        }.toIndexedSeq
-      }
-      override def removeExecutor(execId: String): Unit = {
-        // don't need to propagate to the driver, which we don't have
-      }
+  class MyBlockManagerMaster(conf: SparkConf) extends BlockManagerMaster(null, null, conf, true) {
+    override def getLocations(blockIds: Array[BlockId]): IndexedSeq[Seq[BlockManagerId]] = {
+      blockIds.map {
+        _.asRDDId.map { id => (id.rddId -> id.splitIndex)
+        }.flatMap { key => cacheLocations.get(key)
+        }.getOrElse(Seq())
+      }.toIndexedSeq
     }
+    override def removeExecutor(execId: String): Unit = {
+      // don't need to propagate to the driver, which we don't have
+    }
+  }
 
   /** The list of results that DAGScheduler has collected. */
   val results = new HashMap[Int, Any]()
@@ -276,13 +285,60 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     override def jobFailed(exception: Exception): Unit = { failure = exception }
   }
 
-  override def beforeEach(): Unit = {
-    super.beforeEach()
-    init(new SparkConf())
+  class MyMapOutputTrackerMaster(
+      conf: SparkConf,
+      broadcastManager: BroadcastManager)
+    extends MapOutputTrackerMaster(conf, broadcastManager, true) {
+
+    override def sendTracker(message: Any): Unit = {
+      // no-op, just so we can stop this to avoid leaking threads
+    }
   }
 
-  private def init(testConf: SparkConf): Unit = {
-    sc = new SparkContext("local[2]", "DAGSchedulerSuite", testConf)
+  class MyDAGScheduler(
+      sc: SparkContext,
+      taskScheduler: TaskScheduler,
+      listenerBus: LiveListenerBus,
+      mapOutputTracker: MapOutputTrackerMaster,
+      blockManagerMaster: BlockManagerMaster,
+      env: SparkEnv,
+      clock: Clock = new SystemClock(),
+      shuffleMergeFinalize: Boolean = true,
+      shuffleMergeRegister: Boolean = true
+  ) extends DAGScheduler(
+      sc, taskScheduler, listenerBus, mapOutputTracker, blockManagerMaster, env, clock) {
+    /**
+     * Schedules shuffle merge finalize.
+     */
+    override private[scheduler] def scheduleShuffleMergeFinalize(
+        shuffleMapStage: ShuffleMapStage): Unit = {
+      if (shuffleMergeRegister) {
+        for (part <- 0 until shuffleMapStage.shuffleDep.partitioner.numPartitions) {
+          val mergeStatuses = Seq((part, makeMergeStatus("")))
+          handleRegisterMergeStatuses(shuffleMapStage, mergeStatuses)
+        }
+        if (shuffleMergeFinalize) {
+          handleShuffleMergeFinalized(shuffleMapStage)
+        }
+      }
+    }
+  }
+
+  override def beforeEach(): Unit = {
+    super.beforeEach()
+    firstInit = true
+  }
+
+  override def sc: SparkContext = {
+    val sc = super.sc
+    if (firstInit) {
+      init(sc)
+      firstInit = false
+    }
+    sc
+  }
+
+  private def init(sc: SparkContext): Unit = {
     sparkListener = new EventInfoRecordingListener
     failure = null
     sc.addSparkListener(sparkListener)
@@ -291,20 +347,18 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     cancelledStages.clear()
     cacheLocations.clear()
     results.clear()
-    securityMgr = new SecurityManager(conf)
-    broadcastManager = new BroadcastManager(true, conf, securityMgr)
-    mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true) {
-      override def sendTracker(message: Any): Unit = {
-        // no-op, just so we can stop this to avoid leaking threads
-      }
-    }
-    scheduler = new DAGScheduler(
+    securityMgr = new SecurityManager(sc.getConf)
+    broadcastManager = new BroadcastManager(true, sc.getConf)
+    mapOutputTracker = spy(new MyMapOutputTrackerMaster(sc.getConf, broadcastManager))
+    blockManagerMaster = spy(new MyBlockManagerMaster(sc.getConf))
+    scheduler = new MyDAGScheduler(
       sc,
       taskScheduler,
       sc.listenerBus,
       mapOutputTracker,
       blockManagerMaster,
       sc.env)
+
     dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
   }
 
@@ -337,6 +391,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
    * DAGScheduler event loop.
    */
   private def runEvent(event: DAGSchedulerEvent): Unit = {
+    // Ensure the initialization of various components
+    sc
     dagEventProcessLoopTester.post(event)
   }
 
@@ -475,12 +531,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("All shuffle files on the storage endpoint should be cleaned up when it is lost") {
-    // reset the test context with the right shuffle service config
-    afterEach()
-    val conf = new SparkConf()
     conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
     conf.set("spark.files.fetchFailure.unRegisterOutputOnHost", "true")
-    init(conf)
     runEvent(ExecutorAdded("hostA-exec1", "hostA"))
     runEvent(ExecutorAdded("hostA-exec2", "hostA"))
     runEvent(ExecutorAdded("hostB-exec", "hostB"))
@@ -546,6 +598,52 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mapStatus2.count(_ != null) === 1)
     assert(mapStatus2(2).location.executorId === "hostB-exec")
     assert(mapStatus2(2).location.host === "hostB")
+  }
+
+  test("SPARK-32003: All shuffle files for executor should be cleaned up on fetch failure") {
+    conf.set(config.SHUFFLE_SERVICE_ENABLED.key, "true")
+
+    val shuffleMapRdd = new MyRDD(sc, 3, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 3, List(shuffleDep), tracker = mapOutputTracker)
+
+    submit(reduceRdd, Array(0, 1, 2))
+    // Map stage completes successfully,
+    // two tasks are run on an executor on hostA and one on an executor on hostB
+    completeShuffleMapStageSuccessfully(0, 0, 3, Seq("hostA", "hostA", "hostB"))
+    // Now the executor on hostA is lost
+    runEvent(ExecutorLost("hostA-exec", ExecutorExited(-100, false, "Container marked as failed")))
+    // Executor is removed but shuffle files are not unregistered
+    verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
+    verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec")
+
+    // The MapOutputTracker has all the shuffle files
+    val mapStatuses = mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses
+    assert(mapStatuses.count(_ != null) === 3)
+    assert(mapStatuses.count(s => s != null && s.location.executorId == "hostA-exec") === 2)
+    assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
+
+    // Now a fetch failure from the lost executor occurs
+    complete(taskSets(1), Seq(
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"), null)
+    ))
+    // blockManagerMaster.removeExecutor is not called again
+    // but shuffle files are unregistered
+    verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
+
+    // Shuffle files for hostA-exec should be lost
+    assert(mapStatuses.count(_ != null) === 1)
+    assert(mapStatuses.count(s => s != null && s.location.executorId == "hostA-exec") === 0)
+    assert(mapStatuses.count(s => s != null && s.location.executorId == "hostB-exec") === 1)
+
+    // Additional fetch failure from the executor does not result in further call to
+    // mapOutputTracker.removeOutputsOnExecutor
+    complete(taskSets(1), Seq(
+      (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 1, 0, "ignored"), null)
+    ))
+    verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
   }
 
   test("zero split job") {
@@ -715,10 +813,14 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
           accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
           blockManagerId: BlockManagerId,
           executorUpdates: Map[(Int, Int), ExecutorMetrics]): Boolean = true
-      override def executorDecommission(executorId: String): Unit = {}
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
       override def workerRemoved(workerId: String, host: String, message: String): Unit = {}
       override def applicationAttemptId(): Option[String] = None
+      override def executorDecommission(
+        executorId: String,
+        decommissionInfo: ExecutorDecommissionInfo): Unit = {}
+      override def getExecutorDecommissionState(
+        executorId: String): Option[ExecutorDecommissionState] = None
     }
     val noKillScheduler = new DAGScheduler(
       sc,
@@ -765,8 +867,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     complete(taskSets(1), Seq(
       (Success, 42),
       (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0L, 0, 0, "ignored"), null)))
-    // this will get called
-    // blockManagerMaster.removeExecutor("hostA-exec")
+    verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
     // ask the scheduler to try it again
     scheduler.resubmitFailedStages()
     // have the 2nd attempt pass
@@ -779,9 +880,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   private val shuffleFileLossTests = Seq(
-    ("executor process lost with shuffle service", ExecutorProcessLost("", false), true, false),
-    ("worker lost with shuffle service", ExecutorProcessLost("", true), true, true),
-    ("worker lost without shuffle service", ExecutorProcessLost("", true), false, true),
+    ("executor process lost with shuffle service", ExecutorProcessLost("", None), true, false),
+    ("worker lost with shuffle service", ExecutorProcessLost("", Some("hostA")), true, true),
+    ("worker lost without shuffle service", ExecutorProcessLost("", Some("hostA")), false, true),
     ("executor failure with shuffle service", ExecutorKilled, true, false),
     ("executor failure without shuffle service", ExecutorKilled, false, true))
 
@@ -792,11 +893,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       "not lost"
     }
     test(s"shuffle files $maybeLost when $eventDescription") {
-      // reset the test context with the right shuffle service config
-      afterEach()
-      val conf = new SparkConf()
       conf.set(config.SHUFFLE_SERVICE_ENABLED.key, shuffleServiceOn.toString)
-      init(conf)
       assert(sc.env.blockManager.externalShuffleServiceEnabled == shuffleServiceOn)
 
       val shuffleMapRdd = new MyRDD(sc, 2, Nil)
@@ -805,12 +902,23 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       val reduceRdd = new MyRDD(sc, 1, List(shuffleDep), tracker = mapOutputTracker)
       submit(reduceRdd, Array(0))
       completeShuffleMapStageSuccessfully(0, 0, 1)
+      val expectHostFileLoss = event match {
+        case ExecutorProcessLost(_, workerHost, _) => workerHost.isDefined
+        case _ => false
+      }
       runEvent(ExecutorLost("hostA-exec", event))
+      verify(blockManagerMaster, times(1)).removeExecutor("hostA-exec")
       if (expectFileLoss) {
+        if (expectHostFileLoss) {
+          verify(mapOutputTracker, times(1)).removeOutputsOnHost("hostA")
+        } else {
+          verify(mapOutputTracker, times(1)).removeOutputsOnExecutor("hostA-exec")
+        }
         intercept[MetadataFetchFailedException] {
           mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0)
         }
       } else {
+        verify(mapOutputTracker, times(0)).removeOutputsOnExecutor("hostA-exec")
         assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
           HashSet(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
       }
@@ -2213,7 +2321,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(stackTraceString.contains("org.apache.spark.rdd.RDD.count"))
 
     // should include the FunSuite setup:
-    assert(stackTraceString.contains("org.scalatest.FunSuite"))
+    assert(stackTraceString.contains("org.scalatest.funsuite.AnyFunSuite"))
   }
 
   test("catch errors in event loop") {
@@ -2491,7 +2599,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val newTaskSet = taskSets(1)
     // 2 tasks should have been re-submitted, for tasks 0 and 1 (which ran on hostA).
     assert(newTaskSet.tasks.size === 2)
-    // Complete task 0 from the original task set (i.e., not hte one that's currently active).
+    // Complete task 0 from the original task set (i.e., not the one that's currently active).
     // This should still be counted towards the job being complete (but there's still one
     // outstanding task).
     runEvent(makeCompletionEvent(newTaskSet.tasks(0), Success, makeMapStatus("hostB", 2)))
@@ -2808,11 +2916,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("SPARK-25341: abort stage while using old fetch protocol") {
-    // reset the test context with using old fetch protocol
-    afterEach()
-    val conf = new SparkConf()
     conf.set(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL.key, "true")
-    init(conf)
     // Construct the scenario of indeterminate stage fetch failed.
     constructIndeterminateStageFetchFailed()
     // The job should fail because Spark can't rollback the shuffle map stage while
@@ -2983,7 +3087,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assertResultStageFailToRollback(shuffleMapRdd)
   }
 
-  private def assertResultStageNotRollbacked(mapRdd: MyRDD): Unit = {
+  private def assertResultStageNotRolledBack(mapRdd: MyRDD): Unit = {
     val shuffleDep = new ShuffleDependency(mapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
     val finalRdd = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
@@ -3023,7 +3127,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
       val shuffleMapRdd = new MyCheckpointRDD(sc, 2, Nil, indeterminate = true)
       shuffleMapRdd.checkpoint()
       shuffleMapRdd.doCheckpoint()
-      assertResultStageNotRollbacked(shuffleMapRdd)
+      assertResultStageNotRolledBack(shuffleMapRdd)
     }
   }
 
@@ -3140,10 +3244,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("test 2 resource profile with merge conflict config true") {
-    afterEach()
-    val conf = new SparkConf()
     conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
-    init(conf)
 
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
@@ -3161,10 +3262,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("test multiple resource profiles created from merging use same rp") {
-    afterEach()
-    val conf = new SparkConf()
     conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
-    init(conf)
 
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
@@ -3218,7 +3316,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mergedRp.taskResources.get(GPU).get.amount == 1)
 
     val ereqs5 = new ExecutorResourceRequests().cores(1).memory("3g")
-      .memoryOverhead("1g").pysparkMemory("2g").resource(GPU, 1, "disc")
+      .memoryOverhead("1g").pysparkMemory("2g").offHeapMemory("4g").resource(GPU, 1, "disc")
     val treqs5 = new TaskResourceRequests().cpus(1).resource(GPU, 1)
     val rp5 = new ResourceProfile(ereqs5.requests, treqs5.requests)
     val ereqs6 = new ExecutorResourceRequests().cores(8).resource(FPGA, 2, "fdisc")
@@ -3228,7 +3326,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 
     assert(mergedRp.getTaskCpus.get == 2)
     assert(mergedRp.getExecutorCores.get == 8)
-    assert(mergedRp.executorResources.size == 6)
+    assert(mergedRp.executorResources.size == 7)
     assert(mergedRp.taskResources.size == 3)
     assert(mergedRp.executorResources.get(GPU).get.amount == 1)
     assert(mergedRp.executorResources.get(GPU).get.discoveryScript == "disc")
@@ -3239,6 +3337,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     assert(mergedRp.executorResources.get(ResourceProfile.MEMORY).get.amount == 3072)
     assert(mergedRp.executorResources.get(ResourceProfile.PYSPARK_MEM).get.amount == 2048)
     assert(mergedRp.executorResources.get(ResourceProfile.OVERHEAD_MEM).get.amount == 1024)
+    assert(mergedRp.executorResources.get(ResourceProfile.OFFHEAP_MEM).get.amount == 4096)
 
     val ereqs7 = new ExecutorResourceRequests().cores(1).memory("3g")
       .resource(GPU, 4, "disc")
@@ -3257,10 +3356,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
   }
 
   test("test merge 3 resource profiles") {
-    afterEach()
-    val conf = new SparkConf()
     conf.set(config.RESOURCE_PROFILE_MERGE_CONFLICTS.key, "true")
-    init(conf)
     val ereqs = new ExecutorResourceRequests().cores(4)
     val treqs = new TaskResourceRequests().cpus(1)
     val rp1 = new ResourceProfile(ereqs.requests, treqs.requests)
@@ -3270,7 +3366,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val ereqs3 = new ExecutorResourceRequests().cores(3)
     val treqs3 = new TaskResourceRequests().cpus(2)
     val rp3 = new ResourceProfile(ereqs3.requests, treqs3.requests)
-    var mergedRp = scheduler.mergeResourceProfilesForStage(HashSet(rp1, rp2, rp3))
+    val mergedRp = scheduler.mergeResourceProfilesForStage(HashSet(rp1, rp2, rp3))
 
     assert(mergedRp.getTaskCpus.get == 2)
     assert(mergedRp.getExecutorCores.get == 4)
@@ -3325,6 +3421,359 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
     val (shuffleDepsE, rprofsE) = scheduler.getShuffleDependenciesAndResourceProfiles(rddE)
     assert(shuffleDepsE === Set(shuffleDepA, shuffleDepC))
     assert(rprofsE === Set())
+  }
+
+  private def initPushBasedShuffleConfs(conf: SparkConf) = {
+    conf.set(config.SHUFFLE_SERVICE_ENABLED, true)
+    conf.set(config.PUSH_BASED_SHUFFLE_ENABLED, true)
+    conf.set("spark.master", "pushbasedshuffleclustermanager")
+  }
+
+  test("SPARK-32920: shuffle merge finalization") {
+    initPushBasedShuffleConfs(conf)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+    val parts = 2
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+    completeShuffleMapStageSuccessfully(0, 0, parts)
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == parts)
+    completeNextResultStageWithSuccess(1, 0)
+    assert(results === Map(0 -> 42, 1 -> 42))
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-32920: merger locations not empty") {
+    initPushBasedShuffleConfs(conf)
+    conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 3)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+    val parts = 2
+
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+    completeShuffleMapStageSuccessfully(0, 0, parts)
+    val shuffleStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    assert(shuffleStage.shuffleDep.getMergerLocs.nonEmpty)
+
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == parts)
+    completeNextResultStageWithSuccess(1, 0)
+    assert(results === Map(0 -> 42, 1 -> 42))
+
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-32920: merger locations reuse from shuffle dependency") {
+    initPushBasedShuffleConfs(conf)
+    conf.set(config.SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS, 3)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+    val parts = 2
+
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, Array(0, 1))
+
+    completeShuffleMapStageSuccessfully(0, 0, parts)
+    assert(shuffleDep.getMergerLocs.nonEmpty)
+    val mergerLocs = shuffleDep.getMergerLocs
+    completeNextResultStageWithSuccess(1, 0 )
+
+    // submit another job w/ the shared dependency, and have a fetch failure
+    val reduce2 = new MyRDD(sc, 2, List(shuffleDep))
+    submit(reduce2, Array(0, 1))
+    // Note that the stage numbering here is only b/c the shared dependency produces a new, skipped
+    // stage.  If instead it reused the existing stage, then this would be stage 2
+    completeNextStageWithFetchFailure(3, 0, shuffleDep)
+    scheduler.resubmitFailedStages()
+
+    assert(scheduler.runningStages.nonEmpty)
+    assert(scheduler.stageIdToStage(2)
+      .asInstanceOf[ShuffleMapStage].shuffleDep.getMergerLocs.nonEmpty)
+    val newMergerLocs = scheduler.stageIdToStage(2)
+      .asInstanceOf[ShuffleMapStage].shuffleDep.getMergerLocs
+
+    // Check if same merger locs is reused for the new stage with shared shuffle dependency
+    assert(mergerLocs.zip(newMergerLocs).forall(x => x._1.host == x._2.host))
+    completeShuffleMapStageSuccessfully(2, 0, 2)
+    completeNextResultStageWithSuccess(3, 1, idx => idx + 1234)
+    assert(results === Map(0 -> 1234, 1 -> 1235))
+
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-32920: Disable shuffle merge due to not enough mergers available") {
+    initPushBasedShuffleConfs(conf)
+    conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 6)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+    val parts = 7
+
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+    completeShuffleMapStageSuccessfully(0, 0, parts)
+    val shuffleStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    assert(!shuffleStage.shuffleDep.shuffleMergeEnabled)
+
+    completeNextResultStageWithSuccess(1, 0)
+    assert(results === Map(2 -> 42, 5 -> 42, 4 -> 42, 1 -> 42, 3 -> 42, 6 -> 42, 0 -> 42))
+
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-32920: Ensure child stage should not start before all the" +
+      " parent stages are completed with shuffle merge finalized for all the parent stages") {
+    initPushBasedShuffleConfs(conf)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+    val parts = 1
+    val shuffleMapRdd1 = new MyRDD(sc, parts, Nil)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, new HashPartitioner(parts))
+
+    val shuffleMapRdd2 = new MyRDD(sc, parts, Nil)
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, new HashPartitioner(parts))
+
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep1, shuffleDep2), tracker = mapOutputTracker)
+
+    // Submit a reduce job
+    submit(reduceRdd, (0 until parts).toArray)
+
+    complete(taskSets(0), Seq((Success, makeMapStatus("hostA", 1))))
+    val shuffleStage1 = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    assert(shuffleStage1.shuffleDep.getMergerLocs.nonEmpty)
+
+    complete(taskSets(1), Seq((Success, makeMapStatus("hostA", 1))))
+    val shuffleStage2 = scheduler.stageIdToStage(1).asInstanceOf[ShuffleMapStage]
+    assert(shuffleStage2.shuffleDep.getMergerLocs.nonEmpty)
+
+    assert(shuffleStage2.shuffleDep.shuffleMergeFinalized)
+    assert(shuffleStage1.shuffleDep.shuffleMergeFinalized)
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep1.shuffleId) == parts)
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep2.shuffleId) == parts)
+
+    completeNextResultStageWithSuccess(2, 0)
+    assert(results === Map(0 -> 42))
+    results.clear()
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-32920: Reused ShuffleDependency with Shuffle Merge disabled for the corresponding" +
+      " ShuffleDependency should not cause DAGScheduler to hang") {
+    initPushBasedShuffleConfs(conf)
+    conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 10)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+    val parts = 20
+
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+    val partitions = (0 until parts).toArray
+    submit(reduceRdd, partitions)
+
+    completeShuffleMapStageSuccessfully(0, 0, parts)
+    val shuffleStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    assert(!shuffleStage.shuffleDep.shuffleMergeEnabled)
+
+    completeNextResultStageWithSuccess(1, 0)
+    val reduce2 = new MyRDD(sc, parts, List(shuffleDep))
+    submit(reduce2, partitions)
+    // Stage 2 should not be executed as it should reuse the already computed shuffle output
+    assert(scheduler.stageIdToStage(2).latestInfo.taskMetrics == null)
+    completeNextResultStageWithSuccess(3, 0, idx => idx + 1234)
+
+    val expected = (0 until parts).map(idx => (idx, idx + 1234))
+    assert(results === expected.toMap)
+
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-32920: Reused ShuffleDependency with Shuffle Merge disabled for the corresponding" +
+      " ShuffleDependency with shuffle data loss should recompute missing partitions") {
+    initPushBasedShuffleConfs(conf)
+    conf.set(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD, 10)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+    val parts = 20
+
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+    val partitions = (0 until parts).toArray
+    submit(reduceRdd, partitions)
+
+    completeShuffleMapStageSuccessfully(0, 0, parts)
+    val shuffleStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    assert(!shuffleStage.shuffleDep.shuffleMergeEnabled)
+
+    completeNextResultStageWithSuccess(1, 0)
+
+    DAGSchedulerSuite.clearMergerLocs
+    val hosts = (6 to parts).map {x => s"Host$x" }
+    DAGSchedulerSuite.addMergerLocs(hosts)
+
+    val reduce2 = new MyRDD(sc, parts, List(shuffleDep))
+    submit(reduce2, partitions)
+    // Note that the stage numbering here is only b/c the shared dependency produces a new, skipped
+    // stage. If instead it reused the existing stage, then this would be stage 2
+    completeNextStageWithFetchFailure(3, 0, shuffleDep)
+    scheduler.resubmitFailedStages()
+
+    // Make sure shuffle merge is disabled for the retry
+    val stage2 = scheduler.stageIdToStage(2).asInstanceOf[ShuffleMapStage]
+    assert(!stage2.shuffleDep.shuffleMergeEnabled)
+
+    // the scheduler now creates a new task set to regenerate the missing map output, but this time
+    // using a different stage, the "skipped" one
+    assert(scheduler.stageIdToStage(2).latestInfo.taskMetrics != null)
+    completeShuffleMapStageSuccessfully(2, 0, 2)
+    completeNextResultStageWithSuccess(3, 1, idx => idx + 1234)
+
+    val expected = (0 until parts).map(idx => (idx, idx + 1234))
+    assert(results === expected.toMap)
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-32920: Empty RDD should not be computed") {
+    initPushBasedShuffleConfs(conf)
+    val data = sc.emptyRDD[Int]
+    data.sortBy(x => x).collect()
+    assert(taskSets.isEmpty)
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-32920: Merge results should be unregistered if the running stage is cancelled" +
+    " before shuffle merge is finalized") {
+    initPushBasedShuffleConfs(conf)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+    scheduler = new MyDAGScheduler(
+      sc,
+      taskScheduler,
+      sc.listenerBus,
+      mapOutputTracker,
+      blockManagerMaster,
+      sc.env,
+      shuffleMergeFinalize = false)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
+
+    val parts = 2
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+    // Complete shuffle map stage successfully on hostA
+    complete(taskSets(0), taskSets(0).tasks.zipWithIndex.map {
+      case (task, _) =>
+        (Success, makeMapStatus("hostA", parts))
+    }.toSeq)
+
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == parts)
+    val shuffleMapStageToCancel = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    runEvent(StageCancelled(0, Option("Explicit cancel check")))
+    scheduler.handleShuffleMergeFinalized(shuffleMapStageToCancel)
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 0)
+  }
+
+  test("SPARK-32920: SPARK-35549: Merge results should not get registered" +
+    " after shuffle merge finalization") {
+    initPushBasedShuffleConfs(conf)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+
+    scheduler = new MyDAGScheduler(
+      sc,
+      taskScheduler,
+      sc.listenerBus,
+      mapOutputTracker,
+      blockManagerMaster,
+      sc.env,
+      shuffleMergeFinalize = false,
+      shuffleMergeRegister = false)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
+
+    val parts = 2
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+    // Complete shuffle map stage successfully on hostA
+    complete(taskSets(0), taskSets(0).tasks.zipWithIndex.map {
+      case (task, _) =>
+        (Success, makeMapStatus("hostA", parts))
+    }.toSeq)
+    val shuffleMapStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((0, makeMergeStatus("hostA"))))
+    scheduler.handleShuffleMergeFinalized(shuffleMapStage)
+    scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((1, makeMergeStatus("hostA"))))
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 1)
+  }
+
+  test("SPARK-32920: Disable push based shuffle in the case of a barrier stage") {
+    initPushBasedShuffleConfs(conf)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+
+    val parts = 2
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil).barrier().mapPartitions(iter => iter)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+
+    // Submit a reduce job that depends which will create a map stage
+    submit(reduceRdd, (0 until parts).toArray)
+    completeShuffleMapStageSuccessfully(0, 0, reduceRdd.partitions.length)
+    val shuffleMapStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
+    assert(!shuffleMapStage.shuffleDep.shuffleMergeEnabled)
+  }
+
+  test("SPARK-32920: metadata fetch failure should not unregister map status") {
+    initPushBasedShuffleConfs(conf)
+    val parts = 2
+    val shuffleMapRdd = new MyRDD(sc, parts, Nil)
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(parts))
+
+    val reduceRdd = new MyRDD(sc, parts, List(shuffleDep), tracker = mapOutputTracker)
+    submit(reduceRdd, (0 until parts).toArray)
+    assert(taskSets.length == 1)
+
+    // Complete shuffle map stage successfully on hostA
+    complete(taskSets(0), taskSets(0).tasks.zipWithIndex.map {
+      case (task, _) =>
+        (Success, makeMapStatus("hostA", parts))
+    }.toSeq)
+
+    assert(mapOutputTracker.getNumAvailableOutputs(shuffleDep.shuffleId) == parts)
+
+    // Finish the first task
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0), Success, makeMapStatus("hostA", parts)))
+
+    // The second task fails with Metadata Failed exception.
+    val metadataFetchFailedEx = new MetadataFetchFailedException(
+      shuffleDep.shuffleId, 1, "metadata failure");
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1), metadataFetchFailedEx.toTaskFailedReason, null))
+    assert(mapOutputTracker.getNumAvailableOutputs(shuffleDep.shuffleId) == parts)
   }
 
   /**
@@ -3382,14 +3831,69 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with TimeLi
 }
 
 object DAGSchedulerSuite {
+  val mergerLocs = ArrayBuffer[BlockManagerId]()
+
   def makeMapStatus(host: String, reduces: Int, sizes: Byte = 2, mapTaskId: Long = -1): MapStatus =
     MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(sizes), mapTaskId)
 
   def makeBlockManagerId(host: String): BlockManagerId = {
     BlockManagerId(host + "-exec", host, 12345)
   }
+
+  def makeMergeStatus(host: String, size: Long = 1000): MergeStatus =
+    MergeStatus(makeBlockManagerId(host), mock(classOf[RoaringBitmap]), size)
+
+  def addMergerLocs(locs: Seq[String]): Unit = {
+    locs.foreach { loc => mergerLocs.append(makeBlockManagerId(loc)) }
+  }
+
+  def clearMergerLocs: Unit = mergerLocs.clear()
+
 }
 
 object FailThisAttempt {
   val _fail = new AtomicBoolean(true)
+}
+
+private class PushBasedSchedulerBackend(
+    conf: SparkConf,
+    scheduler: TaskSchedulerImpl,
+    cores: Int) extends LocalSchedulerBackend(conf, scheduler, cores) {
+
+  override def getShufflePushMergerLocations(
+      numPartitions: Int,
+      resourceProfileId: Int): Seq[BlockManagerId] = {
+    val mergerLocations = Utils.randomize(DAGSchedulerSuite.mergerLocs).take(numPartitions)
+    if (mergerLocations.size < numPartitions && mergerLocations.size <
+      conf.getInt(config.SHUFFLE_MERGER_LOCATIONS_MIN_STATIC_THRESHOLD.key, 5)) {
+      Seq.empty[BlockManagerId]
+    } else {
+      mergerLocations
+    }
+  }
+
+  // Currently this is only used in tests specifically for Push based shuffle
+  override def maxNumConcurrentTasks(rp: ResourceProfile): Int = {
+    2
+  }
+}
+
+private class PushBasedClusterManager extends ExternalClusterManager {
+  def canCreate(masterURL: String): Boolean = masterURL == "pushbasedshuffleclustermanager"
+
+  override def createSchedulerBackend(
+      sc: SparkContext,
+      masterURL: String,
+      scheduler: TaskScheduler): SchedulerBackend = {
+    new PushBasedSchedulerBackend(sc.conf, scheduler.asInstanceOf[TaskSchedulerImpl], 1)
+  }
+
+  override def createTaskScheduler(
+      sc: SparkContext,
+      masterURL: String): TaskScheduler = new TaskSchedulerImpl(sc, 1, isLocal = true)
+
+  override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {
+    val sc = scheduler.asInstanceOf[TaskSchedulerImpl]
+    sc.initialize(backend)
+  }
 }

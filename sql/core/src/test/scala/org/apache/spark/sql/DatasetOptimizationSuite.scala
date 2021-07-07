@@ -18,12 +18,13 @@
 package org.apache.spark.sql
 
 import org.apache.spark.metrics.source.CodegenMetrics
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, Expression}
-import org.apache.spark.sql.catalyst.expressions.objects.ExternalMapToCatalyst
 import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
-import org.apache.spark.sql.functions.expr
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.StructType
 
 class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -194,5 +195,13 @@ class DatasetOptimizationSuite extends QueryTest with SharedSparkSession {
     withClue("array of map") {
       checkCodegenCache(() => Seq(Seq(Map("abc" -> 1))).toDS())
     }
+  }
+
+  test("SPARK-32652: Pruned nested serializers: RowEncoder") {
+    val df = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("i", "j")
+    val encoder = RowEncoder(new StructType().add("s", df.schema))
+    val query = df.map(row => Row(row))(encoder).select("s.i")
+    testSerializer(query, Seq(Seq("i")))
+    checkAnswer(query, Seq(Row("a"), Row("b"), Row("c")))
   }
 }

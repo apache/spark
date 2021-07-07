@@ -20,12 +20,15 @@ Type-specific codes between pandas and PyArrow. Also contains some utils to corr
 pandas instances during the type conversion.
 """
 
-from pyspark.sql.types import *
+from pyspark.sql.types import BooleanType, ByteType, ShortType, IntegerType, LongType, \
+    FloatType, DoubleType, DecimalType, StringType, BinaryType, DateType, TimestampType, \
+    ArrayType, MapType, StructType, StructField, NullType
 
 
 def to_arrow_type(dt):
     """ Convert Spark data type to pyarrow type
     """
+    from distutils.version import LooseVersion
     import pyarrow as pa
     if type(dt) == BooleanType:
         arrow_type = pa.bool_()
@@ -56,12 +59,21 @@ def to_arrow_type(dt):
         if type(dt.elementType) in [StructType, TimestampType]:
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
         arrow_type = pa.list_(to_arrow_type(dt.elementType))
+    elif type(dt) == MapType:
+        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+            raise TypeError("MapType is only supported with pyarrow 2.0.0 and above")
+        if type(dt.keyType) in [StructType, TimestampType] or \
+                type(dt.valueType) in [StructType, TimestampType]:
+            raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
+        arrow_type = pa.map_(to_arrow_type(dt.keyType), to_arrow_type(dt.valueType))
     elif type(dt) == StructType:
         if any(type(field.dataType) == StructType for field in dt):
             raise TypeError("Nested StructType not supported in conversion to Arrow")
         fields = [pa.field(field.name, to_arrow_type(field.dataType), nullable=field.nullable)
                   for field in dt]
         arrow_type = pa.struct(fields)
+    elif type(dt) == NullType:
+        arrow_type = pa.null()
     else:
         raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
     return arrow_type
@@ -79,6 +91,8 @@ def to_arrow_schema(schema):
 def from_arrow_type(at):
     """ Convert pyarrow type to Spark data type.
     """
+    from distutils.version import LooseVersion
+    import pyarrow as pa
     import pyarrow.types as types
     if types.is_boolean(at):
         spark_type = BooleanType()
@@ -108,6 +122,12 @@ def from_arrow_type(at):
         if types.is_timestamp(at.value_type):
             raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
         spark_type = ArrayType(from_arrow_type(at.value_type))
+    elif types.is_map(at):
+        if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+            raise TypeError("MapType is only supported with pyarrow 2.0.0 and above")
+        if types.is_timestamp(at.key_type) or types.is_timestamp(at.item_type):
+            raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
+        spark_type = MapType(from_arrow_type(at.key_type), from_arrow_type(at.item_type))
     elif types.is_struct(at):
         if any(types.is_struct(field.type) for field in at):
             raise TypeError("Nested StructType not supported in conversion from Arrow: " + str(at))
@@ -116,6 +136,8 @@ def from_arrow_type(at):
              for field in at])
     elif types.is_dictionary(at):
         spark_type = from_arrow_type(at.value_type)
+    elif types.is_null(at):
+        spark_type = NullType()
     else:
         raise TypeError("Unsupported type in conversion from Arrow: " + str(at))
     return spark_type
@@ -151,9 +173,16 @@ def _check_series_localize_timestamps(s, timezone):
     If the input series is not a timestamp series, then the same series is returned. If the input
     series is a timestamp series, then a converted series is returned.
 
-    :param s: pandas.Series
-    :param timezone: the timezone to convert. if None then use local timezone
-    :return pandas.Series that have been converted to tz-naive
+    Parameters
+    ----------
+    s : pandas.Series
+    timezone : str
+        the timezone to convert. if None then use local timezone
+
+    Returns
+    -------
+    pandas.Series
+        `pandas.Series` that have been converted to tz-naive
     """
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
     require_minimum_pandas_version()
@@ -172,9 +201,16 @@ def _check_series_convert_timestamps_internal(s, timezone):
     Convert a tz-naive timestamp in the specified timezone or local timezone to UTC normalized for
     Spark internal storage
 
-    :param s: a pandas.Series
-    :param timezone: the timezone to convert. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been UTC normalized without a time zone
+    Parameters
+    ----------
+    s : pandas.Series
+    timezone : str
+        the timezone to convert. if None then use local timezone
+
+    Returns
+    -------
+    pandas.Series
+        `pandas.Series` where if it is a timestamp, has been UTC normalized without a time zone
     """
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
     require_minimum_pandas_version()
@@ -224,10 +260,18 @@ def _check_series_convert_timestamps_localize(s, from_timezone, to_timezone):
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
-    :param s: a pandas.Series
-    :param from_timezone: the timezone to convert from. if None then use local timezone
-    :param to_timezone: the timezone to convert to. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    Parameters
+    ----------
+    s : pandas.Series
+    from_timezone : str
+        the timezone to convert from. if None then use local timezone
+    to_timezone : str
+        the timezone to convert to. if None then use local timezone
+
+    Returns
+    -------
+    pandas.Series
+        `pandas.Series` where if it is a timestamp, has been converted to tz-naive
     """
     from pyspark.sql.pandas.utils import require_minimum_pandas_version
     require_minimum_pandas_version()
@@ -252,9 +296,16 @@ def _check_series_convert_timestamps_local_tz(s, timezone):
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
-    :param s: a pandas.Series
-    :param timezone: the timezone to convert to. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    Parameters
+    ----------
+    s : pandas.Series
+    timezone : str
+        the timezone to convert to. if None then use local timezone
+
+    Returns
+    -------
+    pandas.Series
+        `pandas.Series` where if it is a timestamp, has been converted to tz-naive
     """
     return _check_series_convert_timestamps_localize(s, None, timezone)
 
@@ -263,8 +314,35 @@ def _check_series_convert_timestamps_tz_local(s, timezone):
     """
     Convert timestamp to timezone-naive in the specified timezone or local timezone
 
-    :param s: a pandas.Series
-    :param timezone: the timezone to convert from. if None then use local timezone
-    :return pandas.Series where if it is a timestamp, has been converted to tz-naive
+    Parameters
+    ----------
+    s : pandas.Series
+    timezone : str
+        the timezone to convert from. if None then use local timezone
+
+    Returns
+    -------
+    pandas.Series
+        `pandas.Series` where if it is a timestamp, has been converted to tz-naive
     """
     return _check_series_convert_timestamps_localize(s, timezone, None)
+
+
+def _convert_map_items_to_dict(s):
+    """
+    Convert a series with items as list of (key, value), as made from an Arrow column of map type,
+    to dict for compatibility with non-arrow MapType columns.
+    :param s: pandas.Series of lists of (key, value) pairs
+    :return: pandas.Series of dictionaries
+    """
+    return s.apply(lambda m: None if m is None else {k: v for k, v in m})
+
+
+def _convert_dict_to_map_items(s):
+    """
+    Convert a series of dictionaries to list of (key, value) pairs to match expected data
+    for Arrow column of map type.
+    :param s: pandas.Series of dictionaries
+    :return: pandas.Series of lists of (key, value) pairs
+    """
+    return s.apply(lambda d: list(d.items()) if d is not None else None)

@@ -26,7 +26,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QualifiedTableName}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, QualifiedTableName, SQLConfHelper}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog._
@@ -36,12 +36,17 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{RowDataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.connector.catalog.SupportsRead
+import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -51,7 +56,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * Note that, this rule must be run after `PreprocessTableCreation` and
  * `PreprocessTableInsertion`.
  */
-case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with CastSupport {
+object DataSourceAnalysis extends Rule[LogicalPlan] with CastSupport {
 
   def resolver: Resolver = conf.resolver
 
@@ -72,28 +77,19 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
     // The sum of the number of static partition columns and columns provided in the SELECT
     // clause needs to match the number of columns of the target table.
     if (staticPartitions.size + sourceAttributes.size != targetAttributes.size) {
-      throw new AnalysisException(
-        s"The data to be inserted needs to have the same number of " +
-          s"columns as the target table: target table has ${targetAttributes.size} " +
-          s"column(s) but the inserted data has ${sourceAttributes.size + staticPartitions.size} " +
-          s"column(s), which contain ${staticPartitions.size} partition column(s) having " +
-          s"assigned constant values.")
+      throw QueryCompilationErrors.insertMismatchedColumnNumberError(
+        targetAttributes, sourceAttributes, staticPartitions.size)
     }
 
     if (providedPartitions.size != targetPartitionSchema.fields.size) {
-      throw new AnalysisException(
-        s"The data to be inserted needs to have the same number of " +
-          s"partition columns as the target table: target table " +
-          s"has ${targetPartitionSchema.fields.size} partition column(s) but the inserted " +
-          s"data has ${providedPartitions.size} partition columns specified.")
+      throw QueryCompilationErrors.insertMismatchedPartitionNumberError(
+        targetPartitionSchema, providedPartitions.size)
     }
 
     staticPartitions.foreach {
-      case (partKey, partValue) =>
+      case (partKey, _) =>
         if (!targetPartitionSchema.fields.exists(field => resolver(field.name, partKey))) {
-          throw new AnalysisException(
-            s"$partKey is not a partition column. Partition columns are " +
-              s"${targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")}")
+          throw QueryCompilationErrors.invalidPartitionColumnError(partKey, targetPartitionSchema)
         }
     }
 
@@ -117,9 +113,8 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
             Some(Alias(cast(Literal(partValue), field.dataType), field.name)())
         }
       } else {
-        throw new AnalysisException(
-          s"Partition column ${field.name} have multiple values specified, " +
-            s"${potentialSpecs.mkString("[", ", ", "]")}. Please only specify a single value.")
+        throw QueryCompilationErrors.multiplePartitionColumnValuesSpecifiedError(
+          field, potentialSpecs)
       }
     }
 
@@ -127,11 +122,8 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
     // any static partition appear after dynamic partitions.
     partitionList.dropWhile(_.isDefined).collectFirst {
       case Some(_) =>
-        throw new AnalysisException(
-          s"The ordering of partition columns is " +
-            s"${targetPartitionSchema.fields.map(_.name).mkString("[", ",", "]")}. " +
-            "All partition columns having constant values need to appear before other " +
-            "partition columns that do not have an assigned constant value.")
+        throw QueryCompilationErrors.invalidOrderingForConstantValuePartitionColumnError(
+          targetPartitionSchema)
     }
 
     assert(partitionList.take(staticPartitions.size).forall(_.isDefined))
@@ -152,19 +144,19 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
       CreateDataSourceTableAsSelectCommand(tableDesc, mode, query, query.output.map(_.name))
 
     case InsertIntoStatement(l @ LogicalRelation(_: InsertableRelation, _, _, _),
-        parts, query, overwrite, false) if parts.isEmpty =>
+        parts, _, query, overwrite, false) if parts.isEmpty =>
       InsertIntoDataSourceCommand(l, query, overwrite)
 
     case InsertIntoDir(_, storage, provider, query, overwrite)
-      if provider.isDefined && provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>
-
+      if query.resolved && provider.isDefined &&
+        provider.get.toLowerCase(Locale.ROOT) != DDLUtils.HIVE_PROVIDER =>
       val outputPath = new Path(storage.locationUri.get)
       if (overwrite) DDLUtils.verifyNotReadPath(query, outputPath)
 
       InsertIntoDataSourceDirCommand(storage, provider.get, query, overwrite)
 
     case i @ InsertIntoStatement(
-        l @ LogicalRelation(t: HadoopFsRelation, _, table, _), parts, query, overwrite, _) =>
+        l @ LogicalRelation(t: HadoopFsRelation, _, table, _), parts, _, query, overwrite, _) =>
       // If the InsertIntoTable command is for a partitioned HadoopFsRelation and
       // the user has specified static partitions, we add a Project operator on top of the query
       // to include those constant column values in the query result.
@@ -195,7 +187,7 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
 
       // Sanity check
       if (t.location.rootPaths.size != 1) {
-        throw new AnalysisException("Can only write data to relations with a single path.")
+        throw QueryCompilationErrors.cannotWriteDataToRelationsWithMultiplePathsError()
       }
 
       val outputPath = t.location.rootPaths.head
@@ -237,11 +229,12 @@ case class DataSourceAnalysis(conf: SQLConf) extends Rule[LogicalPlan] with Cast
  * data source.
  */
 class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
-  private def readDataSourceTable(table: CatalogTable): LogicalPlan = {
+  private def readDataSourceTable(
+      table: CatalogTable, extraOptions: CaseInsensitiveStringMap): LogicalPlan = {
     val qualifiedTableName = QualifiedTableName(table.database, table.identifier.table)
     val catalog = sparkSession.sessionState.catalog
+    val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
     catalog.getCachedPlan(qualifiedTableName, () => {
-      val pathOption = table.storage.locationUri.map("path" -> CatalogUtils.URIToString(_))
       val dataSource =
         DataSource(
           sparkSession,
@@ -251,25 +244,54 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
           partitionColumns = table.partitionColumnNames,
           bucketSpec = table.bucketSpec,
           className = table.provider.get,
-          options = table.storage.properties ++ pathOption,
+          options = dsOptions,
           catalogTable = Some(table))
       LogicalRelation(dataSource.resolveRelation(checkFilesExist = false), table)
     })
   }
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta), _, _, _, _)
-        if DDLUtils.isDatasourceTable(tableMeta) =>
-      i.copy(table = readDataSourceTable(tableMeta))
+  private def getStreamingRelation(
+      table: CatalogTable,
+      extraOptions: CaseInsensitiveStringMap): StreamingRelation = {
+    val dsOptions = DataSourceUtils.generateDatasourceOptions(extraOptions, table)
+    val dataSource = DataSource(
+      SparkSession.active,
+      className = table.provider.get,
+      userSpecifiedSchema = Some(table.schema),
+      options = dsOptions)
+    StreamingRelation(dataSource)
+  }
 
-    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta), _, _, _, _) =>
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, options, false),
+        _, _, _, _, _) if DDLUtils.isDatasourceTable(tableMeta) =>
+      i.copy(table = readDataSourceTable(tableMeta, options))
+
+    case i @ InsertIntoStatement(UnresolvedCatalogRelation(tableMeta, _, false), _, _, _, _, _) =>
       i.copy(table = DDLUtils.readHiveTable(tableMeta))
 
-    case UnresolvedCatalogRelation(tableMeta) if DDLUtils.isDatasourceTable(tableMeta) =>
-      readDataSourceTable(tableMeta)
+    case UnresolvedCatalogRelation(tableMeta, options, false)
+        if DDLUtils.isDatasourceTable(tableMeta) =>
+      readDataSourceTable(tableMeta, options)
 
-    case UnresolvedCatalogRelation(tableMeta) =>
+    case UnresolvedCatalogRelation(tableMeta, _, false) =>
       DDLUtils.readHiveTable(tableMeta)
+
+    case UnresolvedCatalogRelation(tableMeta, extraOptions, true) =>
+      getStreamingRelation(tableMeta, extraOptions)
+
+    case s @ StreamingRelationV2(
+        _, _, table, extraOptions, _, _, _, Some(UnresolvedCatalogRelation(tableMeta, _, true))) =>
+      import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
+      val v1Relation = getStreamingRelation(tableMeta, extraOptions)
+      if (table.isInstanceOf[SupportsRead]
+          && table.supportsAny(MICRO_BATCH_READ, CONTINUOUS_READ)) {
+        s.copy(v1Relation = Some(v1Relation))
+      } else {
+        // Fallback to V1 relation
+        v1Relation
+      }
   }
 }
 
@@ -277,8 +299,8 @@ class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
-case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with CastSupport {
-  import DataSourceStrategy._
+object DataSourceStrategy
+  extends Strategy with Logging with CastSupport with PredicateHelper with SQLConfHelper {
 
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
     case ScanOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _, _)) =>
@@ -307,7 +329,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
     case l @ LogicalRelation(baseRelation: TableScan, _, _, _) =>
       RowDataSourceScanExec(
         l.output,
-        l.output.indices,
+        l.output.toStructType,
         Set.empty,
         Set.empty,
         toCatalystRDD(l, baseRelation.buildScan()),
@@ -379,8 +401,8 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
         .map(relation.attributeMap)
 
       val scan = RowDataSourceScanExec(
-        relation.output,
-        requestedColumns.map(relation.output.indexOf),
+        requestedColumns,
+        requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
@@ -401,8 +423,8 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
         (projectSet ++ filterSet -- handledSet).map(relation.attributeMap).toSeq
 
       val scan = RowDataSourceScanExec(
-        relation.output,
-        requestedColumns.map(relation.output.indexOf),
+        requestedColumns,
+        requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
@@ -429,9 +451,7 @@ case class DataSourceStrategy(conf: SQLConf) extends Strategy with Logging with 
   private[this] def toCatalystRDD(relation: LogicalRelation, rdd: RDD[Row]): RDD[InternalRow] = {
     toCatalystRDD(relation, relation.output, rdd)
   }
-}
 
-object DataSourceStrategy {
   /**
    * The attribute name may differ from the one in the schema if the query analyzer
    * is case insensitive. We should change attribute names to match the ones in the schema,
@@ -445,6 +465,20 @@ object DataSourceStrategy {
         case a: AttributeReference =>
           a.withName(attributes.find(_.semanticEquals(a)).getOrElse(a).name)
       }
+    }
+  }
+
+  def getPushedDownFilters(
+      partitionColumns: Seq[Expression],
+      normalizedFilters: Seq[Expression]): ExpressionSet = {
+    if (partitionColumns.isEmpty) {
+      ExpressionSet(Nil)
+    } else {
+      val partitionSet = AttributeSet(partitionColumns)
+      val predicates = ExpressionSet(normalizedFilters
+        .flatMap(extractPredicatesWithinOutputSet(_, partitionSet)))
+      logInfo(s"Pruning directories with: ${predicates.mkString(",")}")
+      predicates
     }
   }
 
@@ -593,9 +627,27 @@ object DataSourceStrategy {
         expressions.Not(rebuildExpressionFromFilter(pred, translatedFilterToExpr))
       case other =>
         translatedFilterToExpr.getOrElse(other,
-          throw new AnalysisException(
-            s"Fail to rebuild expression: missing key $filter in `translatedFilterToExpr`"))
+          throw QueryCompilationErrors.failedToRebuildExpressionError(filter))
     }
+  }
+
+  /**
+   * Translates a runtime filter into a data source filter.
+   *
+   * Runtime filters usually contain a subquery that must be evaluated before the translation.
+   * If the underlying subquery hasn't completed yet, this method will throw an exception.
+   */
+  protected[sql] def translateRuntimeFilter(expr: Expression): Option[Filter] = expr match {
+    case in @ InSubqueryExec(e @ PushableColumnAndNestedColumn(name), _, _, _) =>
+      val values = in.values().getOrElse {
+        throw new IllegalStateException(s"Can't translate $in to source filter, no subquery result")
+      }
+      val toScala = CatalystTypeConverters.createToScalaConverter(e.dataType)
+      Some(sources.In(name, values.map(toScala)))
+
+    case other =>
+      logWarning(s"Can't translate $other to source filter, unsupported expression")
+      None
   }
 
   /**
@@ -666,18 +718,25 @@ abstract class PushableColumnBase {
 
   def unapply(e: Expression): Option[String] = {
     import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
-    def helper(e: Expression): Option[Seq[String]] = e match {
-      case a: Attribute =>
-        if (nestedPredicatePushdownEnabled || !a.name.contains(".")) {
-          Some(Seq(a.name))
-        } else {
-          None
-        }
-      case s: GetStructField if nestedPredicatePushdownEnabled =>
-        helper(s.child).map(_ :+ s.childSchema(s.ordinal).name)
-      case _ => None
+    if (nestedPredicatePushdownEnabled) {
+      extractNestedCol(e).map(_.quoted)
+    } else {
+      extractTopLevelCol(e)
     }
-    helper(e).map(_.quoted)
+  }
+
+  private def extractTopLevelCol(e: Expression): Option[String] = e match {
+    // Attribute that contains dot "." in name is supported only when nested predicate pushdown
+    // is enabled.
+    case a: Attribute if !a.name.contains(".") => Some(a.name)
+    case _ => None
+  }
+
+  private def extractNestedCol(e: Expression): Option[Seq[String]] = e match {
+    case a: Attribute => Some(Seq(a.name))
+    case s: GetStructField =>
+      extractNestedCol(s.child).map(_ :+ s.childSchema(s.ordinal).name)
+    case _ => None
   }
 }
 

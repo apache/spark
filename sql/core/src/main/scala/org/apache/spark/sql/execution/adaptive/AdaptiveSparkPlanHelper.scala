@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * This class provides utility methods related to tree traversal of an [[AdaptiveSparkPlanExec]]
@@ -117,7 +115,7 @@ trait AdaptiveSparkPlanHelper {
 
   /**
    * Returns a sequence containing the subqueries in this plan, also including the (nested)
-   * subquries in its children
+   * subqueries in its children
    */
   def subqueriesAll(p: SparkPlan): Seq[SparkPlan] = {
     val subqueries = flatMap(p)(_.subqueries)
@@ -136,19 +134,5 @@ trait AdaptiveSparkPlanHelper {
   def stripAQEPlan(p: SparkPlan): SparkPlan = p match {
     case a: AdaptiveSparkPlanExec => a.executedPlan
     case other => other
-  }
-
-  /**
-   * Returns a cloned [[SparkSession]] with adaptive execution disabled, or the original
-   * [[SparkSession]] if its adaptive execution is already disabled.
-   */
-  def getOrCloneSessionWithAqeOff[T](session: SparkSession): SparkSession = {
-    if (!session.sessionState.conf.adaptiveExecutionEnabled) {
-      session
-    } else {
-      val newSession = session.cloneSession()
-      newSession.sessionState.conf.setConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED, false)
-      newSession
-    }
   }
 }

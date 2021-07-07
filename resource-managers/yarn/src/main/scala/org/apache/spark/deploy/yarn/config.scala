@@ -189,6 +189,15 @@ package object config extends Logging {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("1s")
 
+  private[spark] val CLIENT_INCLUDE_DRIVER_LOGS_LINK =
+    ConfigBuilder("spark.yarn.includeDriverLogsLink")
+      .doc("In cluster mode, whether the client application report includes links to the driver "
+          + "container's logs. This requires polling the ResourceManager's REST API, so it "
+          + "places some additional load on the RM.")
+      .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
   /* Shared Client-mode AM / Driver configuration. */
 
   private[spark] val AM_MAX_WAIT_TIME = ConfigBuilder("spark.yarn.am.waitTime")
@@ -379,14 +388,15 @@ package object config extends Logging {
     .stringConf
     .createOptional
 
-  /* YARN allocator-level blacklisting related config entries. */
-  private[spark] val YARN_EXECUTOR_LAUNCH_BLACKLIST_ENABLED =
-    ConfigBuilder("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
-      .version("2.4.0")
+  /* YARN allocator-level excludeOnFailure related config entries. */
+  private[spark] val YARN_EXECUTOR_LAUNCH_EXCLUDE_ON_FAILURE_ENABLED =
+    ConfigBuilder("spark.yarn.executor.launch.excludeOnFailure.enabled")
+      .version("3.1.0")
+      .withAlternative("spark.yarn.blacklist.executor.launch.blacklisting.enabled")
       .booleanConf
       .createWithDefault(false)
 
-  /* Initially blacklisted YARN nodes. */
+  /* Initially excluded YARN nodes. */
   private[spark] val YARN_EXCLUDE_NODES = ConfigBuilder("spark.yarn.exclude.nodes")
     .version("3.0.0")
     .stringConf

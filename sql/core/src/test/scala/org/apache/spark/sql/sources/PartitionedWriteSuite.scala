@@ -20,7 +20,8 @@ package org.apache.spark.sql.sources
 import java.io.File
 import java.sql.Timestamp
 
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 
 import org.apache.spark.TestUtils
 import org.apache.spark.internal.Logging
@@ -161,7 +162,51 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
     withTempPath { f =>
       val e = intercept[AnalysisException](
         Seq((3, 2)).toDF("a", "b").write.partitionBy("b", "b").csv(f.getAbsolutePath))
-      assert(e.getMessage.contains("Found duplicate column(s) b, b: `b`;"))
+      assert(e.getMessage.contains("Found duplicate column(s) b, b: `b`"))
     }
+  }
+
+  test("SPARK-27194 SPARK-29302: Fix commit collision in dynamic partition overwrite mode") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+      SQLConf.PartitionOverwriteMode.DYNAMIC.toString,
+      SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+        classOf[PartitionFileExistCommitProtocol].getName) {
+      withTempDir { d =>
+        withTable("t") {
+          sql(
+            s"""
+               | create table t(c1 int, p1 int) using parquet partitioned by (p1)
+               | location '${d.getAbsolutePath}'
+            """.stripMargin)
+
+          val df = Seq((1, 2)).toDF("c1", "p1")
+          df.write
+            .partitionBy("p1")
+            .mode("overwrite")
+            .saveAsTable("t")
+          checkAnswer(sql("select * from t"), df)
+        }
+      }
+    }
+  }
+}
+
+/**
+ * A file commit protocol with pre-created partition file. when try to overwrite partition dir
+ * in dynamic partition mode, FileAlreadyExist exception would raise without SPARK-27194
+ */
+private class PartitionFileExistCommitProtocol(
+    jobId: String,
+    path: String,
+    dynamicPartitionOverwrite: Boolean)
+  extends SQLHadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite) {
+  override def setupJob(jobContext: JobContext): Unit = {
+    super.setupJob(jobContext)
+    val stagingDir = new File(new Path(path).toUri.getPath, s".spark-staging-$jobId")
+    stagingDir.mkdirs()
+    val stagingPartDir = new File(stagingDir, "p1=2")
+    stagingPartDir.mkdirs()
+    val conflictTaskFile = new File(stagingPartDir, s"part-00000-$jobId.c000.snappy.parquet")
+    conflictTaskFile.createNewFile()
   }
 }

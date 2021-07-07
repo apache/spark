@@ -21,19 +21,34 @@ license: |
 
 ### Description
 
-Reset any runtime configurations specific to the current session which were set via the [SET](sql-ref-syntax-aux-conf-mgmt-set.html) command to their default values.
+The RESET command resets runtime configurations specific to the current session which were set via the [SET](sql-ref-syntax-aux-conf-mgmt-set.html) command to their default values.
 
 ### Syntax
 
 ```sql
-RESET
+RESET;
+
+RESET configuration_key;
 ```
+
+### Parameters
+
+* **(none)**
+
+    Reset any runtime configurations specific to the current session which were set via the [SET](sql-ref-syntax-aux-conf-mgmt-set.html) command to their default values.
+
+* **configuration_key**
+
+    Restore the value of the `configuration_key` to the default value. If the default value is undefined, the `configuration_key` will be removed.
 
 ### Examples
 
 ```sql
 -- Reset any runtime configurations specific to the current session which were set via the SET command to their default values.
 RESET;
+
+-- If you start your application with --conf spark.foo=bar and set spark.foo=foobar in runtime, the example below will restore it to 'bar'. If spark.foo is not specified during starting, the example bellow will remove this config from the SQLConf. It will ignore nonexistent keys.
+RESET spark.abc;
 ```
 
 ### Related Statements

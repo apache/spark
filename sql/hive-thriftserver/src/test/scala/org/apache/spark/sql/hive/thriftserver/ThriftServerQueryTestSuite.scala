@@ -23,7 +23,6 @@ import java.util.{Locale, MissingFormatArgumentException}
 
 import scala.util.control.NonFatal
 
-import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.exception.ExceptionUtils
 
 import org.apache.spark.SparkException
@@ -34,17 +33,31 @@ import org.apache.spark.sql.execution.HiveResult.{getTimeFormatters, toHiveStrin
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
+// scalastyle:off line.size.limit
 /**
  * Re-run all the tests in SQLQueryTestSuite via Thrift Server.
  *
+ * Each case is loaded from a file in "spark/sql/core/src/test/resources/sql-tests/inputs".
+ * Each case has a golden result file in "spark/sql/core/src/test/resources/sql-tests/results".
+ *
  * To run the entire test suite:
  * {{{
- *   build/sbt "hive-thriftserver/test-only *ThriftServerQueryTestSuite" -Phive-thriftserver
+ *   build/sbt -Phive-thriftserver "hive-thriftserver/testOnly *ThriftServerQueryTestSuite"
+ * }}}
+ *
+ * To run a single test file upon change:
+ * {{{
+ *   build/sbt -Phive-thriftserver "hive-thriftserver/testOnly *ThriftServerQueryTestSuite -- -z inline-table.sql"
  * }}}
  *
  * This test suite won't generate golden files. To re-generate golden files for entire suite, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite"
+ * }}}
+ *
+ * To re-generate golden file for a single test, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite -- -z describe.sql"
  * }}}
  *
  * TODO:
@@ -52,18 +65,14 @@ import org.apache.spark.sql.types._
  *   2. Support DESC command.
  *   3. Support SHOW command.
  */
+// scalastyle:on line.size.limit
 class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServer {
 
 
   override def mode: ServerMode.Value = ServerMode.binary
 
   override protected def testFile(fileName: String): String = {
-    val url = Thread.currentThread().getContextClassLoader.getResource(fileName)
-    // Copy to avoid URISyntaxException during accessing the resources in `sql/core`
-    val file = File.createTempFile("thriftserver-test", ".data")
-    file.deleteOnExit()
-    FileUtils.copyURLToFile(url, file)
-    file.getAbsolutePath
+    copyAndGetResourceFile(fileName, ".data").getAbsolutePath
   }
 
   /** List of test cases to ignore, in lower cases. */
@@ -98,7 +107,10 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
       }
 
       testCase match {
-        case _: PgSQLTest | _: AnsiTest =>
+        case _: PgSQLTest =>
+          statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
+          statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key} = true")
+        case _: AnsiTest =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = true")
         case _ =>
           statement.execute(s"SET ${SQLConf.ANSI_ENABLED.key} = false")

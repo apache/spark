@@ -21,9 +21,10 @@ import scala.collection.JavaConverters._
 
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector.complex.MapVector
-import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, TimeUnit}
+import org.apache.arrow.vector.types.{DateUnit, FloatingPointPrecision, IntervalUnit, TimeUnit}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -48,13 +49,15 @@ private[sql] object ArrowUtils {
     case DateType => new ArrowType.Date(DateUnit.DAY)
     case TimestampType =>
       if (timeZoneId == null) {
-        throw new UnsupportedOperationException(
-          s"${TimestampType.catalogString} must supply timeZoneId parameter")
+        throw QueryExecutionErrors.timeZoneIdNotSpecifiedForTimestampTypeError()
       } else {
         new ArrowType.Timestamp(TimeUnit.MICROSECOND, timeZoneId)
       }
+    case NullType => ArrowType.Null.INSTANCE
+    case _: YearMonthIntervalType => new ArrowType.Interval(IntervalUnit.YEAR_MONTH)
+    case _: DayTimeIntervalType => new ArrowType.Interval(IntervalUnit.DAY_TIME)
     case _ =>
-      throw new UnsupportedOperationException(s"Unsupported data type: ${dt.catalogString}")
+      throw QueryExecutionErrors.unsupportedDataTypeError(dt.catalogString)
   }
 
   def fromArrowType(dt: ArrowType): DataType = dt match {
@@ -72,7 +75,10 @@ private[sql] object ArrowUtils {
     case d: ArrowType.Decimal => DecimalType(d.getPrecision, d.getScale)
     case date: ArrowType.Date if date.getUnit == DateUnit.DAY => DateType
     case ts: ArrowType.Timestamp if ts.getUnit == TimeUnit.MICROSECOND => TimestampType
-    case _ => throw new UnsupportedOperationException(s"Unsupported data type: $dt")
+    case ArrowType.Null.INSTANCE => NullType
+    case yi: ArrowType.Interval if yi.getUnit == IntervalUnit.YEAR_MONTH => YearMonthIntervalType()
+    case di: ArrowType.Interval if di.getUnit == IntervalUnit.DAY_TIME => DayTimeIntervalType()
+    case _ => throw QueryExecutionErrors.unsupportedDataTypeError(dt.toString)
   }
 
   /** Maps field from Spark to Arrow. NOTE: timeZoneId required for TimestampType */

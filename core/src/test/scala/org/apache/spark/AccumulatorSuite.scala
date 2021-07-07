@@ -25,8 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.ref.WeakReference
 import scala.util.control.NonFatal
 
-import org.scalatest.Matchers
 import org.scalatest.exceptions.TestFailedException
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer

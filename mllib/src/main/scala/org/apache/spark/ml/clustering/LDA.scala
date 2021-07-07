@@ -199,8 +199,6 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
     " with estimates of the topic mixture distribution for each document (often called \"theta\"" +
     " in the literature).  Returns a vector of zeros for an empty document.")
 
-  setDefault(topicDistributionCol -> "topicDistribution")
-
   /** @group getParam */
   @Since("1.6.0")
   def getTopicDistributionCol: String = $(topicDistributionCol)
@@ -314,6 +312,11 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
   /** @group expertGetParam */
   @Since("2.0.0")
   def getKeepLastCheckpoint: Boolean = $(keepLastCheckpoint)
+
+  setDefault(maxIter -> 20, k -> 10, optimizer -> "online", checkpointInterval -> 10,
+    learningOffset -> 1024, learningDecay -> 0.51, subsamplingRate -> 0.05,
+    optimizeDocConcentration -> true, keepLastCheckpoint -> true,
+    topicDistributionCol -> "topicDistribution")
 
   /**
    * Validates and transforms the input schema.
@@ -862,10 +865,6 @@ class LDA @Since("1.6.0") (
 
   @Since("1.6.0")
   def this() = this(Identifiable.randomUID("lda"))
-
-  setDefault(maxIter -> 20, k -> 10, optimizer -> "online", checkpointInterval -> 10,
-    learningOffset -> 1024, learningDecay -> 0.51, subsamplingRate -> 0.05,
-    optimizeDocConcentration -> true, keepLastCheckpoint -> true)
 
   /**
    * The features for LDA should be a `Vector` representing the word counts in a document.

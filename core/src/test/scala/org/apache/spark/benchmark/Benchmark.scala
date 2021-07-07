@@ -26,7 +26,6 @@ import scala.util.Try
 
 import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.SystemUtils
-import org.scalatest.Assertions._
 
 import org.apache.spark.util.Utils
 

@@ -18,26 +18,22 @@
 package org.apache.spark.sql
 
 import java.io.File
+import java.net.URI
 import java.util.Locale
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.{SparkConf, TestUtils}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
-import org.apache.spark.sql.execution.{SQLExecution, WholeStageCodegenExec}
-import org.apache.spark.sql.execution.HiveResult.hiveResultString
-import org.apache.spark.sql.execution.command.{DescribeColumnCommand, DescribeCommandBase}
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
 import org.apache.spark.tags.ExtendedSQLTest
+import org.apache.spark.util.Utils
 
 /**
  * End-to-end test cases for SQL queries.
@@ -47,22 +43,22 @@ import org.apache.spark.tags.ExtendedSQLTest
  *
  * To run the entire test suite:
  * {{{
- *   build/sbt "sql/test-only *SQLQueryTestSuite"
+ *   build/sbt "sql/testOnly *SQLQueryTestSuite"
  * }}}
  *
  * To run a single test file upon change:
  * {{{
- *   build/sbt "~sql/test-only *SQLQueryTestSuite -- -z inline-table.sql"
+ *   build/sbt "~sql/testOnly *SQLQueryTestSuite -- -z inline-table.sql"
  * }}}
  *
  * To re-generate golden files for entire suite, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite"
  * }}}
  *
  * To re-generate golden file for a single test, run:
  * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/test-only *SQLQueryTestSuite -- -z describe.sql"
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly *SQLQueryTestSuite -- -z describe.sql"
  * }}}
  *
  * The format for input files is simple:
@@ -124,7 +120,8 @@ import org.apache.spark.tags.ExtendedSQLTest
  * different types of UDFs. See 'udf/udf-inner-join.sql' as an example.
  */
 @ExtendedSQLTest
-class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper {
+class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
+    with SQLQueryTestHelper {
 
   import IntegratedUDFTestUtils._
 
@@ -134,8 +131,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // We use a path based on Spark home for 2 reasons:
     //   1. Maven can't get correct resource directory when resources in other jars.
     //   2. We test subclasses in the hive-thriftserver module.
-    java.nio.file.Paths.get(sparkHome,
-      "sql", "core", "src", "test", "resources", "sql-tests").toFile
+    getWorkspaceFilePath("sql", "core", "src", "test", "resources", "sql-tests").toFile
   }
 
   protected val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
@@ -143,19 +139,18 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
 
   protected val validFileExtensions = ".sql"
 
-  private val notIncludedMsg = "[not included in comparison]"
-  private val clsName = this.getClass.getCanonicalName
-
-  protected val emptySchema = StructType(Seq.empty).catalogString
-
   protected override def sparkConf: SparkConf = super.sparkConf
     // Fewer shuffle partitions to speed up testing.
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
 
+  // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
+  // here we need to ignore it.
+  private val otherIgnoreList =
+    if (TestUtils.testCommandAvailable("/bin/bash")) Nil else Set("transform.sql")
   /** List of test cases to ignore, in lower cases. */
   protected def ignoreList: Set[String] = Set(
-    "ignored.sql"   // Do NOT remove this one. It is here to test the ignore functionality.
-  )
+    "ignored.sql" // Do NOT remove this one. It is here to test the ignore functionality.
+  ) ++ otherIgnoreList
 
   // Create all the test cases.
   listTestCases.foreach(createScalaTestCase)
@@ -276,18 +271,18 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     val allCode = importedCode ++ code
     val tempQueries = if (allCode.exists(_.trim.startsWith("--QUERY-DELIMITER"))) {
       // Although the loop is heavy, only used for bracketed comments test.
-      val querys = new ArrayBuffer[String]
+      val queries = new ArrayBuffer[String]
       val otherCodes = new ArrayBuffer[String]
       var tempStr = ""
       var start = false
       for (c <- allCode) {
         if (c.trim.startsWith("--QUERY-DELIMITER-START")) {
           start = true
-          querys ++= splitWithSemicolon(otherCodes.toSeq)
+          queries ++= splitWithSemicolon(otherCodes.toSeq)
           otherCodes.clear()
         } else if (c.trim.startsWith("--QUERY-DELIMITER-END")) {
           start = false
-          querys += s"\n${tempStr.stripSuffix(";")}"
+          queries += s"\n${tempStr.stripSuffix(";")}"
           tempStr = ""
         } else if (start) {
           tempStr += s"\n$c"
@@ -296,9 +291,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         }
       }
       if (otherCodes.nonEmpty) {
-        querys ++= splitWithSemicolon(otherCodes.toSeq)
+        queries ++= splitWithSemicolon(otherCodes.toSeq)
       }
-      querys.toSeq
+      queries.toSeq
     } else {
       splitWithSemicolon(allCode).toSeq
     }
@@ -372,6 +367,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         // vol used by boolean.sql and case.sql.
         localSparkSession.udf.register("vol", (s: String) => s)
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
+        localSparkSession.conf.set(SQLConf.LEGACY_INTERVAL_ENABLED.key, true)
       case _: AnsiTest =>
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
       case _ =>
@@ -399,7 +395,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
       val goldenOutput = {
         s"-- Automatically generated by ${getClass.getSimpleName}\n" +
         s"-- Number of queries: ${outputs.size}\n\n\n" +
-        outputs.zipWithIndex.map{case (qr, i) => qr.toString}.mkString("\n\n\n") + "\n"
+        outputs.mkString("\n\n\n") + "\n"
       }
       val resultFile = new File(testCase.resultFile)
       val parent = resultFile.getParentFile
@@ -464,70 +460,6 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     }
   }
 
-  /**
-   * This method handles exceptions occurred during query execution as they may need special care
-   * to become comparable to the expected output.
-   *
-   * @param result a function that returns a pair of schema and output
-   */
-  protected def handleExceptions(result: => (String, Seq[String])): (String, Seq[String]) = {
-    try {
-      result
-    } catch {
-      case a: AnalysisException =>
-        // Do not output the logical plan tree which contains expression IDs.
-        // Also implement a crude way of masking expression IDs in the error message
-        // with a generic pattern "###".
-        val msg = if (a.plan.nonEmpty) a.getSimpleMessage else a.getMessage
-        (emptySchema, Seq(a.getClass.getName, msg.replaceAll("#\\d+", "#x")))
-      case s: SparkException if s.getCause != null =>
-        // For a runtime exception, it is hard to match because its message contains
-        // information of stage, task ID, etc.
-        // To make result matching simpler, here we match the cause of the exception if it exists.
-        val cause = s.getCause
-        (emptySchema, Seq(cause.getClass.getName, cause.getMessage))
-      case NonFatal(e) =>
-        // If there is an exception, put the exception class followed by the message.
-        (emptySchema, Seq(e.getClass.getName, e.getMessage))
-    }
-  }
-
-  /** Executes a query and returns the result as (schema of the output, normalized output). */
-  private def getNormalizedResult(session: SparkSession, sql: String): (String, Seq[String]) = {
-    // Returns true if the plan is supposed to be sorted.
-    def isSorted(plan: LogicalPlan): Boolean = plan match {
-      case _: Join | _: Aggregate | _: Generate | _: Sample | _: Distinct => false
-      case _: DescribeCommandBase
-          | _: DescribeColumnCommand
-          | _: DescribeRelation
-          | _: DescribeColumnStatement => true
-      case PhysicalOperation(_, _, Sort(_, true, _)) => true
-      case _ => plan.children.iterator.exists(isSorted)
-    }
-
-    val df = session.sql(sql)
-    val schema = df.schema.catalogString
-    // Get answer, but also get rid of the #1234 expression ids that show up in explain plans
-    val answer = SQLExecution.withNewExecutionId(df.queryExecution, Some(sql)) {
-      hiveResultString(df.queryExecution.executedPlan).map(replaceNotIncludedMsg)
-    }
-
-    // If the output is not pre-sorted, sort it.
-    if (isSorted(df.queryExecution.analyzed)) (schema, answer) else (schema, answer.sorted)
-  }
-
-  protected def replaceNotIncludedMsg(line: String): String = {
-    line.replaceAll("#\\d+", "#x")
-      .replaceAll(
-        s"Location.*$clsName/",
-        s"Location $notIncludedMsg/{warehouse_dir}/")
-      .replaceAll("Created By.*", s"Created By $notIncludedMsg")
-      .replaceAll("Created Time.*", s"Created Time $notIncludedMsg")
-      .replaceAll("Last Access.*", s"Last Access $notIncludedMsg")
-      .replaceAll("Partition Statistics\t\\d+", s"Partition Statistics\t$notIncludedMsg")
-      .replaceAll("\\*\\(\\d+\\) ", "*") // remove the WholeStageCodegen codegenStageIds
-  }
-
   protected lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       val resultFile = file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
@@ -567,6 +499,14 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   /** Load built-in test tables into the SparkSession. */
   private def createTestTables(session: SparkSession): Unit = {
     import session.implicits._
+
+    // Before creating test tables, deletes orphan directories in warehouse dir
+    Seq("testdata", "arraydata", "mapdata", "aggtest", "onek", "tenk1").foreach { dirName =>
+      val f = new File(new URI(s"${conf.warehousePath}/$dirName"))
+      if (f.exists()) {
+        Utils.deleteRecursively(f)
+      }
+    }
 
     (1 to 100).map(i => (i, i.toString)).toDF("key", "value")
       .repartition(1)

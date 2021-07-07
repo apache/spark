@@ -16,9 +16,8 @@
 #
 
 import unittest
-import sys
 
-from pyspark.sql.functions import array, explode, col, lit, udf, sum, pandas_udf, PandasUDFType
+from pyspark.sql.functions import array, explode, col, lit, udf, pandas_udf
 from pyspark.sql.types import DoubleType, StructType, StructField, Row
 from pyspark.testing.sqlutils import ReusedSQLTestCase, have_pandas, have_pyarrow, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -26,15 +25,15 @@ from pyspark.testing.utils import QuietTest
 
 if have_pandas:
     import pandas as pd
-    from pandas.util.testing import assert_frame_equal, assert_series_equal
+    from pandas.testing import assert_frame_equal
 
 if have_pyarrow:
-    import pyarrow as pa
+    import pyarrow as pa  # noqa: F401
 
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore[arg-type]
 class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
     @property
@@ -136,8 +135,8 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
             .applyInPandas(lambda x, y: pd.DataFrame([(x.sum().sum(), y.sum().sum())]),
                            'sum1 int, sum2 int').collect()
 
-        self.assertEquals(result[0]['sum1'], 165)
-        self.assertEquals(result[0]['sum2'], 165)
+        self.assertEqual(result[0]['sum1'], 165)
+        self.assertEqual(result[0]['sum2'], 165)
 
     def test_with_key_left(self):
         self._test_with_key(self.data1, self.data1, isLeft=True)
@@ -175,16 +174,16 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         left = self.data1
         right = self.data2
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     NotImplementedError,
-                    'Invalid return type.*MapType'):
+                    'Invalid return type.*ArrayType.*TimestampType'):
                 left.groupby('id').cogroup(right.groupby('id')).applyInPandas(
-                    lambda l, r: l, 'id long, v map<int, int>')
+                    lambda l, r: l, 'id long, v array<timestamp>')
 
     def test_wrong_args(self):
         left = self.data1
         right = self.data2
-        with self.assertRaisesRegexp(ValueError, 'Invalid function'):
+        with self.assertRaisesRegex(ValueError, 'Invalid function'):
             left.groupby('id').cogroup(right.groupby('id')) \
                 .applyInPandas(lambda: 1, StructType([StructField("d", DoubleType())]))
 
@@ -195,14 +194,26 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
         row = df1.groupby("ColUmn").cogroup(
             df1.groupby("COLUMN")
         ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
-        self.assertEquals(row.asDict(), Row(column=2, value=2).asDict())
+        self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
 
         df2 = self.spark.createDataFrame([(1, 1)], ("column", "value"))
 
         row = df1.groupby("ColUmn").cogroup(
             df2.groupby("COLUMN")
         ).applyInPandas(lambda r, l: r + l, "column long, value long").first()
-        self.assertEquals(row.asDict(), Row(column=2, value=2).asDict())
+        self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
+
+    def test_self_join(self):
+        # SPARK-34319: self-join with FlatMapCoGroupsInPandas
+        df = self.spark.createDataFrame([(1, 1)], ("column", "value"))
+
+        row = df.groupby("ColUmn").cogroup(
+            df.groupby("COLUMN")
+        ).applyInPandas(lambda r, l: r + l, "column long, value long")
+
+        row = row.join(row).first()
+
+        self.assertEqual(row.asDict(), Row(column=2, value=2).asDict())
 
     @staticmethod
     def _test_with_key(left, right, isLeft):
@@ -245,10 +256,10 @@ class CogroupedMapInPandasTests(ReusedSQLTestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_cogrouped_map import *
+    from pyspark.sql.tests.test_pandas_cogrouped_map import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

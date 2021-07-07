@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.types.{DoubleType, FloatType}
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -50,7 +51,7 @@ import org.apache.spark.util.collection.BitSet
  *     is under the threshold with the addition of the next file, add it.  If not, open a new bucket
  *     and add it.  Proceed to the next file.
  */
-object FileSourceStrategy extends Strategy with Logging {
+object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
   // should prune buckets iff num buckets is greater than 1 and there is only one bucket column
   private def shouldPruneBuckets(bucketSpec: Option[BucketSpec]): Boolean = {
@@ -89,11 +90,16 @@ object FileSourceStrategy extends Strategy with Logging {
       case expressions.In(a: Attribute, list)
         if list.forall(_.isInstanceOf[Literal]) && a.name == bucketColumnName =>
         getBucketSetFromIterable(a, list.map(e => e.eval(EmptyRow)))
-      case expressions.InSet(a: Attribute, hset)
-        if hset.forall(_.isInstanceOf[Literal]) && a.name == bucketColumnName =>
-        getBucketSetFromIterable(a, hset.map(e => expressions.Literal(e).eval(EmptyRow)))
+      case expressions.InSet(a: Attribute, hset) if a.name == bucketColumnName =>
+        getBucketSetFromIterable(a, hset)
       case expressions.IsNull(a: Attribute) if a.name == bucketColumnName =>
         getBucketSetFromValue(a, null)
+      case expressions.IsNaN(a: Attribute)
+        if a.name == bucketColumnName && a.dataType == FloatType =>
+        getBucketSetFromValue(a, Float.NaN)
+      case expressions.IsNaN(a: Attribute)
+        if a.name == bucketColumnName && a.dataType == DoubleType =>
+        getBucketSetFromValue(a, Double.NaN)
       case expressions.And(left, right) =>
         getExpressionBuckets(left, bucketColumnName, numBuckets) &
           getExpressionBuckets(right, bucketColumnName, numBuckets)
@@ -154,11 +160,11 @@ object FileSourceStrategy extends Strategy with Logging {
         l.resolve(
           fsRelation.partitionSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
       val partitionSet = AttributeSet(partitionColumns)
-      val partitionKeyFilters =
-        ExpressionSet(normalizedFilters
-          .filter(_.references.subsetOf(partitionSet)))
 
-      logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
+      // this partitionKeyFilters should be the same with the ones being executed in
+      // PruneFileSourcePartitions
+      val partitionKeyFilters = DataSourceStrategy.getPushedDownFilters(partitionColumns,
+        normalizedFilters)
 
       // subquery expressions are filtered out because they can't be used to prune buckets or pushed
       // down as data filters, yet they would be executed
@@ -176,8 +182,15 @@ object FileSourceStrategy extends Strategy with Logging {
         l.resolve(fsRelation.dataSchema, fsRelation.sparkSession.sessionState.analyzer.resolver)
 
       // Partition keys are not available in the statistics of the files.
-      val dataFilters =
-        normalizedFiltersWithoutSubqueries.filter(_.references.intersect(partitionSet).isEmpty)
+      // `dataColumns` might have partition columns, we need to filter them out.
+      val dataColumnsWithoutPartitionCols = dataColumns.filterNot(partitionColumns.contains)
+      val dataFilters = normalizedFiltersWithoutSubqueries.flatMap { f =>
+        if (f.references.intersect(partitionSet).nonEmpty) {
+          extractPredicatesWithinOutputSet(f, AttributeSet(dataColumnsWithoutPartitionCols))
+        } else {
+          Some(f)
+        }
+      }
       val supportNestedPredicatePushdown =
         DataSourceUtils.supportNestedPredicatePushdown(fsRelation)
       val pushedFilters = dataFilters

@@ -27,7 +27,7 @@ import org.apache.spark.sql.types.DataTypes
 
 private[ml] object LSHTest {
   /**
-   * For any locality sensitive function h in a metric space, we meed to verify whether
+   * For any locality sensitive function h in a metric space, we need to verify whether
    * the following property is satisfied.
    *
    * There exist dist1, dist2, p1, p2, so that for any two elements e1 and e2,
@@ -71,13 +71,14 @@ private[ml] object LSHTest {
       transformedData.schema, model.getOutputCol, DataTypes.createArrayType(new VectorUDT))
 
     // Check output column dimensions
-    val headHashValue = transformedData.select(outputCol).head().get(0).asInstanceOf[Seq[Vector]]
+    val headHashValue =
+      transformedData.select(outputCol).head().get(0).asInstanceOf[scala.collection.Seq[Vector]]
     assert(headHashValue.length == model.getNumHashTables)
 
     // Perform a cross join and label each pair of same_bucket and distance
     val pairs = transformedData.as("a").crossJoin(transformedData.as("b"))
     val distUDF = udf((x: Vector, y: Vector) => model.keyDistance(x, y))
-    val sameBucket = udf((x: Seq[Vector], y: Seq[Vector]) => model.hashDistance(x, y) == 0.0)
+    val sameBucket = udf((x: Array[Vector], y: Array[Vector]) => model.hashDistance(x, y) == 0.0)
     val result = pairs
       .withColumn("same_bucket", sameBucket(col(s"a.$outputCol"), col(s"b.$outputCol")))
       .withColumn("distance", distUDF(col(s"a.$inputCol"), col(s"b.$inputCol")))

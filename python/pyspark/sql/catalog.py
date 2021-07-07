@@ -106,13 +106,16 @@ class Catalog(object):
                 isTemporary=jfunction.isTemporary()))
         return functions
 
-    @since(2.0)
     def listColumns(self, tableName, dbName=None):
         """Returns a list of columns for the given table/view in the specified database.
 
         If no database is specified, the current database is used.
 
-        Note: the order of arguments here is different from that of its JVM counterpart
+       .. versionadded:: 2.0.0
+
+        Notes
+        -----
+        the order of arguments here is different from that of its JVM counterpart
         because Python does not support method overloading.
         """
         if dbName is None:
@@ -130,7 +133,6 @@ class Catalog(object):
                 isBucket=jcolumn.isBucket()))
         return columns
 
-    @since(2.0)
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
         """Creates a table based on the dataset in a data source.
 
@@ -143,15 +145,20 @@ class Catalog(object):
         Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
         created external table.
 
-        :return: :class:`DataFrame`
+        .. versionadded:: 2.0.0
+
+        Returns
+        -------
+        :class:`DataFrame`
         """
         warnings.warn(
             "createExternalTable is deprecated since Spark 2.2, please use createTable instead.",
-            DeprecationWarning)
+            FutureWarning
+        )
         return self.createTable(tableName, path, source, schema, **options)
 
-    @since(2.2)
-    def createTable(self, tableName, path=None, source=None, schema=None, **options):
+    def createTable(
+            self, tableName, path=None, source=None, schema=None, description=None, **options):
         """Creates a table based on the dataset in a data source.
 
         It returns the DataFrame associated with the table.
@@ -164,30 +171,45 @@ class Catalog(object):
         Optionally, a schema can be provided as the schema of the returned :class:`DataFrame` and
         created table.
 
-        :return: :class:`DataFrame`
+        .. versionadded:: 2.2.0
+
+        Returns
+        -------
+        :class:`DataFrame`
+
+        .. versionchanged:: 3.1
+           Added the ``description`` parameter.
         """
         if path is not None:
             options["path"] = path
         if source is None:
             source = self._sparkSession._wrapped._conf.defaultDataSourceName()
+        if description is None:
+            description = ""
         if schema is None:
-            df = self._jcatalog.createTable(tableName, source, options)
+            df = self._jcatalog.createTable(tableName, source, description, options)
         else:
             if not isinstance(schema, StructType):
                 raise TypeError("schema should be StructType")
             scala_datatype = self._jsparkSession.parseDataType(schema.json())
-            df = self._jcatalog.createTable(tableName, source, scala_datatype, options)
+            df = self._jcatalog.createTable(
+                tableName, source, scala_datatype, description, options)
         return DataFrame(df, self._sparkSession._wrapped)
 
-    @since(2.0)
     def dropTempView(self, viewName):
         """Drops the local temporary view with the given view name in the catalog.
         If the view has been cached before, then it will also be uncached.
         Returns true if this view is dropped successfully, false otherwise.
 
-        Note that, the return type of this method was None in Spark 2.0, but changed to Boolean
+        .. versionadded:: 2.0.0
+
+        Notes
+        -----
+        The return type of this method was None in Spark 2.0, but changed to Boolean
         in Spark 2.1.
 
+        Examples
+        --------
         >>> spark.createDataFrame([(1, 1)]).createTempView("my_table")
         >>> spark.table("my_table").collect()
         [Row(_1=1, _2=1)]
@@ -199,12 +221,15 @@ class Catalog(object):
         """
         self._jcatalog.dropTempView(viewName)
 
-    @since(2.1)
     def dropGlobalTempView(self, viewName):
         """Drops the global temporary view with the given view name in the catalog.
         If the view has been cached before, then it will also be uncached.
         Returns true if this view is dropped successfully, false otherwise.
 
+        .. versionadded:: 2.1.0
+
+        Examples
+        --------
         >>> spark.createDataFrame([(1, 1)]).createGlobalTempView("my_table")
         >>> spark.table("global_temp.my_table").collect()
         [Row(_1=1, _2=1)]
@@ -216,16 +241,19 @@ class Catalog(object):
         """
         self._jcatalog.dropGlobalTempView(viewName)
 
-    @since(2.0)
     def registerFunction(self, name, f, returnType=None):
         """An alias for :func:`spark.udf.register`.
         See :meth:`pyspark.sql.UDFRegistration.register`.
 
-        .. note:: Deprecated in 2.3.0. Use :func:`spark.udf.register` instead.
+        .. versionadded:: 2.0.0
+
+        .. deprecated:: 2.3.0
+            Use :func:`spark.udf.register` instead.
         """
         warnings.warn(
             "Deprecated in 2.3.0. Use spark.udf.register instead.",
-            DeprecationWarning)
+            FutureWarning
+        )
         return self._sparkSession.udf.register(name, f, returnType)
 
     @since(2.0)

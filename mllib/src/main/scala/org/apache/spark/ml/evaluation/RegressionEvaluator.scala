@@ -80,8 +80,6 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("3.0.0")
   def setThroughOrigin(value: Boolean): this.type = set(throughOrigin, value)
 
-  setDefault(throughOrigin -> false)
-
   /** @group setParam */
   @Since("1.4.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
@@ -94,7 +92,7 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
   @Since("3.0.0")
   def setWeightCol(value: String): this.type = set(weightCol, value)
 
-  setDefault(metricName -> "rmse")
+  setDefault(metricName -> "rmse", throughOrigin -> false)
 
   @Since("2.0.0")
   override def evaluate(dataset: Dataset[_]): Double = {

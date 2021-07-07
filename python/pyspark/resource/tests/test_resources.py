@@ -14,10 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import random
 import unittest
 
-from pyspark.resource import ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder,\
+from pyspark.resource import ExecutorResourceRequests, ResourceProfileBuilder,\
     TaskResourceRequests
 
 
@@ -25,15 +24,16 @@ class ResourceProfileTests(unittest.TestCase):
     def test_profile_before_sc(self):
         rpb = ResourceProfileBuilder()
         ereqs = ExecutorResourceRequests().cores(2).memory("6g").memoryOverhead("1g")
-        ereqs.pysparkMemory("2g").resource("gpu", 2, "testGpus", "nvidia.com")
+        ereqs.pysparkMemory("2g").offheapMemory("3g").resource("gpu", 2, "testGpus", "nvidia.com")
         treqs = TaskResourceRequests().cpus(2).resource("gpu", 2)
 
         def assert_request_contents(exec_reqs, task_reqs):
-            self.assertEqual(len(exec_reqs), 5)
+            self.assertEqual(len(exec_reqs), 6)
             self.assertEqual(exec_reqs["cores"].amount, 2)
             self.assertEqual(exec_reqs["memory"].amount, 6144)
             self.assertEqual(exec_reqs["memoryOverhead"].amount, 1024)
             self.assertEqual(exec_reqs["pyspark.memory"].amount, 2048)
+            self.assertEqual(exec_reqs["offHeap"].amount, 3072)
             self.assertEqual(exec_reqs["gpu"].amount, 2)
             self.assertEqual(exec_reqs["gpu"].discoveryScript, "testGpus")
             self.assertEqual(exec_reqs["gpu"].resourceName, "gpu")
@@ -72,10 +72,10 @@ class ResourceProfileTests(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.resource.tests.test_resources import *
+    from pyspark.resource.tests.test_resources import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

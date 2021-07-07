@@ -29,7 +29,6 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.Logging
-import org.apache.spark.util.Utils
 
 /**
  * Tests the correctness of

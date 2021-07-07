@@ -3830,7 +3830,7 @@ INSERT INTO num_result SELECT t1.id, t2.id, t1.val, t2.val, t1.val * t2.val
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-`default`.`num_result` requires that the data to be inserted have the same number of columns as the target table: target table has 3 column(s) but the inserted data has 5 column(s), including 0 partition column(s) having constant value(s).;
+`default`.`num_result` requires that the data to be inserted have the same number of columns as the target table: target table has 3 column(s) but the inserted data has 5 column(s), including 0 partition column(s) having constant value(s).
 
 
 -- !query
@@ -4292,7 +4292,7 @@ struct<>
 -- !query
 SELECT decimal(double('NaN'))
 -- !query schema
-struct<CAST(CAST(NaN AS DOUBLE) AS DECIMAL(10,0)):decimal(10,0)>
+struct<NaN:decimal(10,0)>
 -- !query output
 NULL
 
@@ -4300,7 +4300,7 @@ NULL
 -- !query
 SELECT decimal(double('Infinity'))
 -- !query schema
-struct<CAST(CAST(Infinity AS DOUBLE) AS DECIMAL(10,0)):decimal(10,0)>
+struct<Infinity:decimal(10,0)>
 -- !query output
 NULL
 
@@ -4308,7 +4308,7 @@ NULL
 -- !query
 SELECT decimal(double('-Infinity'))
 -- !query schema
-struct<CAST(CAST(-Infinity AS DOUBLE) AS DECIMAL(10,0)):decimal(10,0)>
+struct<-Infinity:decimal(10,0)>
 -- !query output
 NULL
 
@@ -4316,7 +4316,7 @@ NULL
 -- !query
 SELECT decimal(float('NaN'))
 -- !query schema
-struct<CAST(CAST(NaN AS FLOAT) AS DECIMAL(10,0)):decimal(10,0)>
+struct<NaN:decimal(10,0)>
 -- !query output
 NULL
 
@@ -4324,7 +4324,7 @@ NULL
 -- !query
 SELECT decimal(float('Infinity'))
 -- !query schema
-struct<CAST(CAST(Infinity AS FLOAT) AS DECIMAL(10,0)):decimal(10,0)>
+struct<Infinity:decimal(10,0)>
 -- !query output
 NULL
 
@@ -4332,7 +4332,7 @@ NULL
 -- !query
 SELECT decimal(float('-Infinity'))
 -- !query schema
-struct<CAST(CAST(-Infinity AS FLOAT) AS DECIMAL(10,0)):decimal(10,0)>
+struct<-Infinity:decimal(10,0)>
 -- !query output
 NULL
 
@@ -4426,7 +4426,7 @@ struct<>
 -- !query
 SELECT width_bucket(5.0, 3.0, 4.0, 0)
 -- !query schema
-struct<widthbucket(CAST(5.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(0 AS BIGINT)):bigint>
+struct<width_bucket(5.0, 3.0, 4.0, 0):bigint>
 -- !query output
 NULL
 
@@ -4434,7 +4434,7 @@ NULL
 -- !query
 SELECT width_bucket(5.0, 3.0, 4.0, -5)
 -- !query schema
-struct<widthbucket(CAST(5.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(-5 AS BIGINT)):bigint>
+struct<width_bucket(5.0, 3.0, 4.0, -5):bigint>
 -- !query output
 NULL
 
@@ -4442,7 +4442,7 @@ NULL
 -- !query
 SELECT width_bucket(3.5, 3.0, 3.0, 888)
 -- !query schema
-struct<widthbucket(CAST(3.5 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(888 AS BIGINT)):bigint>
+struct<width_bucket(3.5, 3.0, 3.0, 888):bigint>
 -- !query output
 NULL
 
@@ -4450,7 +4450,7 @@ NULL
 -- !query
 SELECT width_bucket(double(5.0), double(3.0), double(4.0), 0)
 -- !query schema
-struct<widthbucket(CAST(5.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(0 AS BIGINT)):bigint>
+struct<width_bucket(5.0, 3.0, 4.0, 0):bigint>
 -- !query output
 NULL
 
@@ -4458,7 +4458,7 @@ NULL
 -- !query
 SELECT width_bucket(double(5.0), double(3.0), double(4.0), -5)
 -- !query schema
-struct<widthbucket(CAST(5.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(-5 AS BIGINT)):bigint>
+struct<width_bucket(5.0, 3.0, 4.0, -5):bigint>
 -- !query output
 NULL
 
@@ -4466,7 +4466,7 @@ NULL
 -- !query
 SELECT width_bucket(double(3.5), double(3.0), double(3.0), 888)
 -- !query schema
-struct<widthbucket(CAST(3.5 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(888 AS BIGINT)):bigint>
+struct<width_bucket(3.5, 3.0, 3.0, 888):bigint>
 -- !query output
 NULL
 
@@ -4474,7 +4474,7 @@ NULL
 -- !query
 SELECT width_bucket('NaN', 3.0, 4.0, 888)
 -- !query schema
-struct<widthbucket(CAST(NaN AS DOUBLE), CAST(3.0 AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(888 AS BIGINT)):bigint>
+struct<width_bucket(NaN, 3.0, 4.0, 888):bigint>
 -- !query output
 NULL
 
@@ -4482,7 +4482,7 @@ NULL
 -- !query
 SELECT width_bucket(double(0), 'NaN', double(4.0), 888)
 -- !query schema
-struct<widthbucket(CAST(0 AS DOUBLE), CAST(NaN AS DOUBLE), CAST(4.0 AS DOUBLE), CAST(888 AS BIGINT)):bigint>
+struct<width_bucket(0, NaN, 4.0, 888):bigint>
 -- !query output
 NULL
 
@@ -4564,7 +4564,7 @@ struct<operand_num:decimal(30,15),wb_1:bigint,wb_1f:bigint,wb_2:bigint,wb_2f:big
 -- !query
 SELECT width_bucket(double(0.0), double('Infinity'), 5, 10)
 -- !query schema
-struct<widthbucket(CAST(0.0 AS DOUBLE), CAST(Infinity AS DOUBLE), CAST(5 AS DOUBLE), CAST(10 AS BIGINT)):bigint>
+struct<width_bucket(0.0, Infinity, 5, 10):bigint>
 -- !query output
 NULL
 
@@ -4572,7 +4572,7 @@ NULL
 -- !query
 SELECT width_bucket(double(0.0), 5, double('-Infinity'), 20)
 -- !query schema
-struct<widthbucket(CAST(0.0 AS DOUBLE), CAST(5 AS DOUBLE), CAST(-Infinity AS DOUBLE), CAST(20 AS BIGINT)):bigint>
+struct<width_bucket(0.0, 5, -Infinity, 20):bigint>
 -- !query output
 NULL
 
@@ -4581,7 +4581,7 @@ NULL
 SELECT width_bucket(double('Infinity'), 1, 10, 10),
        width_bucket(double('-Infinity'), 1, 10, 10)
 -- !query schema
-struct<widthbucket(CAST(Infinity AS DOUBLE), CAST(1 AS DOUBLE), CAST(10 AS DOUBLE), CAST(10 AS BIGINT)):bigint,widthbucket(CAST(-Infinity AS DOUBLE), CAST(1 AS DOUBLE), CAST(10 AS DOUBLE), CAST(10 AS BIGINT)):bigint>
+struct<width_bucket(Infinity, 1, 10, 10):bigint,width_bucket(-Infinity, 1, 10, 10):bigint>
 -- !query output
 11	0
 
@@ -4657,7 +4657,7 @@ struct<n1:decimal(38,18)>
 -- !query
 select cast(999999999999999999999 as decimal(38, 0))/1000000000000000000000
 -- !query schema
-struct<(CAST(CAST(999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) / CAST(1000000000000000000000 AS DECIMAL(38,0))):decimal(38,6)>
+struct<(CAST(999999999999999999999 AS DECIMAL(38,0)) / 1000000000000000000000):decimal(38,6)>
 -- !query output
 1.000000
 
@@ -4665,7 +4665,7 @@ struct<(CAST(CAST(999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) / CA
 -- !query
 select div(cast(999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query schema
-struct<(CAST(CAST(999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) div CAST(1000000000000000000000 AS DECIMAL(38,0))):bigint>
+struct<(CAST(999999999999999999999 AS DECIMAL(38,0)) div 1000000000000000000000):bigint>
 -- !query output
 0
 
@@ -4673,7 +4673,7 @@ struct<(CAST(CAST(999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) div 
 -- !query
 select mod(cast(999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query schema
-struct<(CAST(CAST(999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) % CAST(1000000000000000000000 AS DECIMAL(38,0))):decimal(22,0)>
+struct<(CAST(999999999999999999999 AS DECIMAL(38,0)) % 1000000000000000000000):decimal(22,0)>
 -- !query output
 999999999999999999999
 
@@ -4681,7 +4681,7 @@ struct<(CAST(CAST(999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) % CA
 -- !query
 select div(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query schema
-struct<(CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) div CAST(1000000000000000000000 AS DECIMAL(38,0))):bigint>
+struct<(CAST(-9999999999999999999999 AS DECIMAL(38,0)) div 1000000000000000000000):bigint>
 -- !query output
 -9
 
@@ -4689,7 +4689,7 @@ struct<(CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) di
 -- !query
 select mod(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query schema
-struct<(CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) % CAST(1000000000000000000000 AS DECIMAL(38,0))):decimal(22,0)>
+struct<(CAST(-9999999999999999999999 AS DECIMAL(38,0)) % 1000000000000000000000):decimal(22,0)>
 -- !query output
 -999999999999999999999
 
@@ -4697,7 +4697,7 @@ struct<(CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) % 
 -- !query
 select div(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)*1000000000000000000000 + mod(cast(-9999999999999999999999 as decimal(38, 0)),1000000000000000000000)
 -- !query schema
-struct<(CAST((CAST(CAST((CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) div CAST(1000000000000000000000 AS DECIMAL(38,0))) AS DECIMAL(20,0)) AS DECIMAL(22,0)) * CAST(1000000000000000000000 AS DECIMAL(22,0))) AS DECIMAL(38,0)) + CAST((CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS DECIMAL(38,0)) % CAST(1000000000000000000000 AS DECIMAL(38,0))) AS DECIMAL(38,0))):decimal(38,0)>
+struct<(((CAST(-9999999999999999999999 AS DECIMAL(38,0)) div 1000000000000000000000) * 1000000000000000000000) + (CAST(-9999999999999999999999 AS DECIMAL(38,0)) % 1000000000000000000000)):decimal(38,0)>
 -- !query output
 -9999999999999999999999
 
@@ -4705,7 +4705,7 @@ struct<(CAST((CAST(CAST((CAST(CAST(-9999999999999999999999 AS DECIMAL(38,0)) AS 
 -- !query
 select mod (70.0,70)
 -- !query schema
-struct<(CAST(70.0 AS DECIMAL(3,1)) % CAST(CAST(70 AS DECIMAL(2,0)) AS DECIMAL(3,1))):decimal(3,1)>
+struct<(70.0 % 70):decimal(3,1)>
 -- !query output
 0.0
 
@@ -4713,7 +4713,7 @@ struct<(CAST(70.0 AS DECIMAL(3,1)) % CAST(CAST(70 AS DECIMAL(2,0)) AS DECIMAL(3,
 -- !query
 select div (70.0,70)
 -- !query schema
-struct<(CAST(70.0 AS DECIMAL(3,1)) div CAST(CAST(70 AS DECIMAL(2,0)) AS DECIMAL(3,1))):bigint>
+struct<(70.0 div 70):bigint>
 -- !query output
 1
 
@@ -4721,7 +4721,7 @@ struct<(CAST(70.0 AS DECIMAL(3,1)) div CAST(CAST(70 AS DECIMAL(2,0)) AS DECIMAL(
 -- !query
 select 70.0 / 70
 -- !query schema
-struct<(CAST(70.0 AS DECIMAL(3,1)) / CAST(CAST(70 AS DECIMAL(2,0)) AS DECIMAL(3,1))):decimal(8,6)>
+struct<(70.0 / 70):decimal(8,6)>
 -- !query output
 1.000000
 
@@ -4729,7 +4729,7 @@ struct<(CAST(70.0 AS DECIMAL(3,1)) / CAST(CAST(70 AS DECIMAL(2,0)) AS DECIMAL(3,
 -- !query
 select 12345678901234567890 % 123
 -- !query schema
-struct<(CAST(12345678901234567890 AS DECIMAL(20,0)) % CAST(CAST(123 AS DECIMAL(3,0)) AS DECIMAL(20,0))):decimal(3,0)>
+struct<(12345678901234567890 % 123):decimal(3,0)>
 -- !query output
 78
 
@@ -4737,7 +4737,7 @@ struct<(CAST(12345678901234567890 AS DECIMAL(20,0)) % CAST(CAST(123 AS DECIMAL(3
 -- !query
 select exp(0.0)
 -- !query schema
-struct<EXP(CAST(0.0 AS DOUBLE)):double>
+struct<EXP(0.0):double>
 -- !query output
 1.0
 
@@ -4745,7 +4745,7 @@ struct<EXP(CAST(0.0 AS DOUBLE)):double>
 -- !query
 select exp(1.0)
 -- !query schema
-struct<EXP(CAST(1.0 AS DOUBLE)):double>
+struct<EXP(1.0):double>
 -- !query output
 2.7182818284590455
 
@@ -4753,7 +4753,7 @@ struct<EXP(CAST(1.0 AS DOUBLE)):double>
 -- !query
 select exp(32.999)
 -- !query schema
-struct<EXP(CAST(32.999 AS DOUBLE)):double>
+struct<EXP(32.999):double>
 -- !query output
 2.1442904349215556E14
 
@@ -4761,7 +4761,7 @@ struct<EXP(CAST(32.999 AS DOUBLE)):double>
 -- !query
 select exp(-32.999)
 -- !query schema
-struct<EXP(CAST(-32.999 AS DOUBLE)):double>
+struct<EXP(-32.999):double>
 -- !query output
 4.663547361468238E-15
 
@@ -4769,7 +4769,7 @@ struct<EXP(CAST(-32.999 AS DOUBLE)):double>
 -- !query
 select exp(123.456)
 -- !query schema
-struct<EXP(CAST(123.456 AS DOUBLE)):double>
+struct<EXP(123.456):double>
 -- !query output
 4.132944352778106E53
 
@@ -4777,7 +4777,7 @@ struct<EXP(CAST(123.456 AS DOUBLE)):double>
 -- !query
 select exp(-123.456)
 -- !query schema
-struct<EXP(CAST(-123.456 AS DOUBLE)):double>
+struct<EXP(-123.456):double>
 -- !query output
 2.4195825412645934E-54
 
@@ -4785,7 +4785,7 @@ struct<EXP(CAST(-123.456 AS DOUBLE)):double>
 -- !query
 select exp(1234.5678)
 -- !query schema
-struct<EXP(CAST(1234.5678 AS DOUBLE)):double>
+struct<EXP(1234.5678):double>
 -- !query output
 Infinity
 
@@ -4793,33 +4793,43 @@ Infinity
 -- !query
 select * from range(cast(0.0 as decimal(38, 18)), cast(4.0 as decimal(38, 18)))
 -- !query schema
-struct<id:bigint>
+struct<>
 -- !query output
-0
-1
-2
-3
+org.apache.spark.sql.AnalysisException
+Table-valued function range with alternatives: 
+    range(start: long, end: long, step: long, numSlices: integer)
+    range(start: long, end: long, step: long)
+    range(start: long, end: long)
+    range(end: long)
+cannot be applied to (decimal(38,18), decimal(38,18)): Incompatible input data type. Expected: long; Found: decimal(38,18); line 1 pos 14
 
 
 -- !query
 select * from range(cast(0.1 as decimal(38, 18)), cast(4.0 as decimal(38, 18)), cast(1.3 as decimal(38, 18)))
 -- !query schema
-struct<id:bigint>
+struct<>
 -- !query output
-0
-1
-2
-3
+org.apache.spark.sql.AnalysisException
+Table-valued function range with alternatives: 
+    range(start: long, end: long, step: long, numSlices: integer)
+    range(start: long, end: long, step: long)
+    range(start: long, end: long)
+    range(end: long)
+cannot be applied to (decimal(38,18), decimal(38,18), decimal(38,18)): Incompatible input data type. Expected: long; Found: decimal(38,18); line 1 pos 14
 
 
 -- !query
 select * from range(cast(4.0 as decimal(38, 18)), cast(-1.5 as decimal(38, 18)), cast(-2.2 as decimal(38, 18)))
 -- !query schema
-struct<id:bigint>
+struct<>
 -- !query output
-0
-2
-4
+org.apache.spark.sql.AnalysisException
+Table-valued function range with alternatives: 
+    range(start: long, end: long, step: long, numSlices: integer)
+    range(start: long, end: long, step: long)
+    range(start: long, end: long)
+    range(end: long)
+cannot be applied to (decimal(38,18), decimal(38,18), decimal(38,18)): Incompatible input data type. Expected: long; Found: decimal(38,18); line 1 pos 14
 
 
 -- !query
@@ -4833,7 +4843,7 @@ struct<ln(1.2345678E-28):double>
 -- !query
 select ln(0.0456789)
 -- !query schema
-struct<ln(CAST(0.0456789 AS DOUBLE)):double>
+struct<ln(0.0456789):double>
 -- !query output
 -3.0861187944847437
 
@@ -4841,7 +4851,7 @@ struct<ln(CAST(0.0456789 AS DOUBLE)):double>
 -- !query
 select ln(0.99949452)
 -- !query schema
-struct<ln(CAST(0.99949452 AS DOUBLE)):double>
+struct<ln(0.99949452):double>
 -- !query output
 -5.056077980832118E-4
 
@@ -4849,7 +4859,7 @@ struct<ln(CAST(0.99949452 AS DOUBLE)):double>
 -- !query
 select ln(1.00049687395)
 -- !query schema
-struct<ln(CAST(1.00049687395 AS DOUBLE)):double>
+struct<ln(1.00049687395):double>
 -- !query output
 4.967505490136803E-4
 
@@ -4857,7 +4867,7 @@ struct<ln(CAST(1.00049687395 AS DOUBLE)):double>
 -- !query
 select ln(1234.567890123456789)
 -- !query schema
-struct<ln(CAST(1234.567890123456789 AS DOUBLE)):double>
+struct<ln(1234.567890123456789):double>
 -- !query output
 7.11847630129779
 
@@ -4881,7 +4891,7 @@ struct<ln(9.342536355E34):double>
 -- !query
 select log(3.4634998359873254962349856073435545)
 -- !query schema
-struct<LOG(E(), CAST(3.4634998359873254962349856073435545 AS DOUBLE)):double>
+struct<LOG(E(), 3.4634998359873254962349856073435545):double>
 -- !query output
 1.2422795911259166
 
@@ -4889,7 +4899,7 @@ struct<LOG(E(), CAST(3.4634998359873254962349856073435545 AS DOUBLE)):double>
 -- !query
 select log(9.999999999999999999)
 -- !query schema
-struct<LOG(E(), CAST(9.999999999999999999 AS DOUBLE)):double>
+struct<LOG(E(), 9.999999999999999999):double>
 -- !query output
 2.302585092994046
 
@@ -4897,7 +4907,7 @@ struct<LOG(E(), CAST(9.999999999999999999 AS DOUBLE)):double>
 -- !query
 select log(10.00000000000000000)
 -- !query schema
-struct<LOG(E(), CAST(10.00000000000000000 AS DOUBLE)):double>
+struct<LOG(E(), 10.00000000000000000):double>
 -- !query output
 2.302585092994046
 
@@ -4905,7 +4915,7 @@ struct<LOG(E(), CAST(10.00000000000000000 AS DOUBLE)):double>
 -- !query
 select log(10.00000000000000001)
 -- !query schema
-struct<LOG(E(), CAST(10.00000000000000001 AS DOUBLE)):double>
+struct<LOG(E(), 10.00000000000000001):double>
 -- !query output
 2.302585092994046
 
@@ -4913,7 +4923,7 @@ struct<LOG(E(), CAST(10.00000000000000001 AS DOUBLE)):double>
 -- !query
 select log(590489.45235237)
 -- !query schema
-struct<LOG(E(), CAST(590489.45235237 AS DOUBLE)):double>
+struct<LOG(E(), 590489.45235237):double>
 -- !query output
 13.288707052228641
 
@@ -4921,7 +4931,7 @@ struct<LOG(E(), CAST(590489.45235237 AS DOUBLE)):double>
 -- !query
 select log(0.99923, 4.58934e34)
 -- !query schema
-struct<LOG(CAST(0.99923 AS DOUBLE), 4.58934E34):double>
+struct<LOG(0.99923, 4.58934E34):double>
 -- !query output
 -103611.55579543479
 
@@ -4929,7 +4939,7 @@ struct<LOG(CAST(0.99923 AS DOUBLE), 4.58934E34):double>
 -- !query
 select log(1.000016, 8.452010e18)
 -- !query schema
-struct<LOG(CAST(1.000016 AS DOUBLE), 8.45201E18):double>
+struct<LOG(1.000016, 8.45201E18):double>
 -- !query output
 2723830.287707013
 
@@ -4937,7 +4947,7 @@ struct<LOG(CAST(1.000016 AS DOUBLE), 8.45201E18):double>
 -- !query
 SELECT SUM(decimal(9999)) FROM range(1, 100001)
 -- !query schema
-struct<sum(CAST(9999 AS DECIMAL(10,0))):decimal(20,0)>
+struct<sum(9999):decimal(20,0)>
 -- !query output
 999900000
 
@@ -4945,7 +4955,7 @@ struct<sum(CAST(9999 AS DECIMAL(10,0))):decimal(20,0)>
 -- !query
 SELECT SUM(decimal(-9999)) FROM range(1, 100001)
 -- !query schema
-struct<sum(CAST(-9999 AS DECIMAL(10,0))):decimal(20,0)>
+struct<sum(-9999):decimal(20,0)>
 -- !query output
 -999900000
 

@@ -17,12 +17,13 @@
 
 package org.apache.spark.deploy.history
 
-import java.io.IOException
 import java.util.Collection
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
+
+import com.google.common.collect.Lists;
 
 import org.apache.spark.util.kvstore._
 
@@ -51,8 +52,9 @@ private[history] class HybridStore extends KVStore {
   // A background thread that dumps data from inMemoryStore to levelDB
   private var backgroundThread: Thread = null
 
-  // A hash map that stores all classes that had been writen to inMemoryStore
-  private val klassMap = new ConcurrentHashMap[Class[_], Boolean]
+  // A hash map that stores all classes that had been written to inMemoryStore
+  // Visible for testing
+  private[history] val klassMap = new ConcurrentHashMap[Class[_], Boolean]
 
   override def getMetadata[T](klass: Class[T]): T = {
     getStore().getMetadata(klass)
@@ -144,10 +146,9 @@ private[history] class HybridStore extends KVStore {
     backgroundThread = new Thread(() => {
       try {
         for (klass <- klassMap.keys().asScala) {
-          val it = inMemoryStore.view(klass).closeableIterator()
-          while (it.hasNext()) {
-            levelDB.write(it.next())
-          }
+          val values = Lists.newArrayList(
+              inMemoryStore.view(klass).closeableIterator())
+          levelDB.writeAll(values)
         }
         listener.onSwitchToLevelDBSuccess()
         shouldUseInMemoryStore.set(false)
@@ -164,8 +165,9 @@ private[history] class HybridStore extends KVStore {
 
   /**
    * This method return the store that we should use.
+   * Visible for testing.
    */
-  private def getStore(): KVStore = {
+  private[history] def getStore(): KVStore = {
     if (shouldUseInMemoryStore.get) {
       inMemoryStore
     } else {

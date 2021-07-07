@@ -37,7 +37,7 @@ _broadcastRegistry = {}
 def _from_id(bid):
     from pyspark.broadcast import _broadcastRegistry
     if bid not in _broadcastRegistry:
-        raise Exception("Broadcast variable '%s' not loaded!" % bid)
+        raise RuntimeError("Broadcast variable '%s' not loaded!" % bid)
     return _broadcastRegistry[bid]
 
 
@@ -47,8 +47,8 @@ class Broadcast(object):
     A broadcast variable created with :meth:`SparkContext.broadcast`.
     Access its value through :attr:`value`.
 
-    Examples:
-
+    Examples
+    --------
     >>> from pyspark.context import SparkContext
     >>> sc = SparkContext('local', 'test')
     >>> b = sc.broadcast([1, 2, 3, 4, 5])
@@ -148,10 +148,13 @@ class Broadcast(object):
         broadcast is used after this is called, it will need to be
         re-sent to each executor.
 
-        :param blocking: Whether to block until unpersisting has completed
+        Parameters
+        ----------
+        blocking : bool, optional
+            Whether to block until unpersisting has completed
         """
         if self._jbroadcast is None:
-            raise Exception("Broadcast can only be unpersisted in driver")
+            raise RuntimeError("Broadcast can only be unpersisted in driver")
         self._jbroadcast.unpersist(blocking)
 
     def destroy(self, blocking=False):
@@ -163,15 +166,20 @@ class Broadcast(object):
         .. versionchanged:: 3.0.0
            Added optional argument `blocking` to specify whether to block until all
            blocks are deleted.
+
+        Parameters
+        ----------
+        blocking : bool, optional
+            Whether to block until unpersisting has completed
         """
         if self._jbroadcast is None:
-            raise Exception("Broadcast can only be destroyed in driver")
+            raise RuntimeError("Broadcast can only be destroyed in driver")
         self._jbroadcast.destroy(blocking)
         os.unlink(self._path)
 
     def __reduce__(self):
         if self._jbroadcast is None:
-            raise Exception("Broadcast can only be serialized in driver")
+            raise RuntimeError("Broadcast can only be serialized in driver")
         self._pickle_registry.add(self)
         return _from_id, (self._jbroadcast.id(),)
 

@@ -931,7 +931,7 @@ SELECT * FROM outermost ORDER BY 1;
 -- data-modifying WITH containing INSERT...ON CONFLICT DO UPDATE
 -- [ORIGINAL SQL]
 --CREATE TABLE withz AS SELECT i AS k, (i || ' v')::text v FROM generate_series(1, 16, 3) i;
-CREATE TABLE withz USING parquet AS SELECT i AS k, CAST(i || ' v' AS string) v FROM (SELECT EXPLODE(SEQUENCE(1, 16, 3)) i);
+CREATE TABLE withz USING parquet AS SELECT i AS k, CAST(i AS string) || ' v' AS v FROM (SELECT EXPLODE(SEQUENCE(1, 16, 3)) i);
 -- [NOTE] Spark SQL doesn't support UNIQUE constraints
 --ALTER TABLE withz ADD UNIQUE (k);
 

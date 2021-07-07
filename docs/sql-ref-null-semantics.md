@@ -125,7 +125,7 @@ The following tables illustrate the behavior of logical operators when one or bo
 |True|NULL|True|NULL|
 |False|NULL|NULL|False|
 |NULL|True|True|NULL|
-|NULL|False|NULL|NULL|
+|NULL|False|NULL|False|
 |NULL|NULL|NULL|NULL|
 
 |operand|NOT|

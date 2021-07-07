@@ -49,6 +49,7 @@ CACHE [ LAZY ] TABLE table_identifier
      * `NONE`
      * `DISK_ONLY`
      * `DISK_ONLY_2`
+     * `DISK_ONLY_3`
      * `MEMORY_ONLY`
      * `MEMORY_ONLY_2`
      * `MEMORY_ONLY_SER`
@@ -80,3 +81,4 @@ CACHE TABLE testCache OPTIONS ('storageLevel' 'DISK_ONLY') SELECT * FROM testDat
 * [UNCACHE TABLE](sql-ref-syntax-aux-cache-uncache-table.html)
 * [REFRESH TABLE](sql-ref-syntax-aux-cache-refresh-table.html)
 * [REFRESH](sql-ref-syntax-aux-cache-refresh.html)
+* [REFRESH FUNCTION](sql-ref-syntax-aux-cache-refresh-function.html)

@@ -25,9 +25,7 @@ from py4j.protocol import Py4JJavaError
 from pyspark import since
 from pyspark.rdd import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import (
-    Vectors, DenseVector, SparseVector, _convert_to_vector)
-from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.linalg import Vectors, _convert_to_vector
 from pyspark.mllib.util import JavaLoader, JavaSaveable
 
 __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
@@ -43,7 +41,10 @@ class VectorTransformer(object):
         """
         Applies transformation on a vector.
 
-        :param vector: vector to be transformed.
+        Parameters
+        ----------
+        vector : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+            vector or convertible or RDD to be transformed.
         """
         raise NotImplementedError
 
@@ -58,8 +59,16 @@ class Normalizer(VectorTransformer):
     For `p` = float('inf'), max(abs(vector)) will be used as norm for
     normalization.
 
-    :param p: Normalization in L^p^ space, p = 2 by default.
+    .. versionadded:: 1.2.0
 
+    Parameters
+    ----------
+    p : float, optional
+        Normalization in L^p^ space, p = 2 by default.
+
+    Examples
+    --------
+    >>> from pyspark.mllib.linalg import Vectors
     >>> v = Vectors.dense(range(3))
     >>> nor = Normalizer(1)
     >>> nor.transform(v)
@@ -72,21 +81,27 @@ class Normalizer(VectorTransformer):
     >>> nor2 = Normalizer(float("inf"))
     >>> nor2.transform(v)
     DenseVector([0.0, 0.5, 1.0])
-
-    .. versionadded:: 1.2.0
     """
     def __init__(self, p=2.0):
         assert p >= 1.0, "p should be greater than 1.0"
         self.p = float(p)
 
-    @since('1.2.0')
     def transform(self, vector):
         """
         Applies unit length normalization on a vector.
 
-        :param vector: vector or RDD of vector to be normalized.
-        :return: normalized vector. If the norm of the input is zero, it
-                 will return the input vector.
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+        vector : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+            vector or RDD of vector to be normalized.
+
+        Returns
+        -------
+        :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+            normalized vector(s). If the norm of the input is zero, it
+            will return the input vector.
         """
         if isinstance(vector, RDD):
             vector = vector.map(_convert_to_vector)
@@ -104,11 +119,16 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
         """
         Applies transformation on a vector or an RDD[Vector].
 
-        .. note:: In Python, transform cannot currently be used within
-            an RDD transformation or action.
-            Call transform directly on the RDD instead.
+        Parameters
+        ----------
+        vector : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+            Input vector(s) to be transformed.
 
-        :param vector: Vector or RDD of Vector to be transformed.
+        Notes
+        -----
+        In Python, transform cannot currently be used within
+        an RDD transformation or action.
+        Call transform directly on the RDD instead.
         """
         if isinstance(vector, RDD):
             vector = vector.map(_convert_to_vector)
@@ -124,19 +144,29 @@ class StandardScalerModel(JavaVectorTransformer):
     .. versionadded:: 1.2.0
     """
 
-    @since('1.2.0')
     def transform(self, vector):
         """
         Applies standardization transformation on a vector.
 
-        .. note:: In Python, transform cannot currently be used within
-            an RDD transformation or action.
-            Call transform directly on the RDD instead.
+        .. versionadded:: 1.2.0
 
-        :param vector: Vector or RDD of Vector to be standardized.
-        :return: Standardized vector. If the variance of a column is
-                 zero, it will return default `0.0` for the column with
-                 zero variance.
+        Parameters
+        ----------
+        vector : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+            Input vector(s) to be standardized.
+
+        Returns
+        -------
+        :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+            Standardized vector(s). If the variance of a column is
+            zero, it will return default `0.0` for the column with
+            zero variance.
+
+        Notes
+        -----
+        In Python, transform cannot currently be used within
+        an RDD transformation or action.
+        Call transform directly on the RDD instead.
         """
         return JavaVectorTransformer.transform(self, vector)
 
@@ -197,12 +227,20 @@ class StandardScaler(object):
     variance using column summary statistics on the samples in the
     training set.
 
-    :param withMean: False by default. Centers the data with mean
-                     before scaling. It will build a dense output, so take
-                     care when applying to sparse input.
-    :param withStd: True by default. Scales the data to unit
-                    standard deviation.
+    .. versionadded:: 1.2.0
 
+    Parameters
+    ----------
+    withMean : bool, optional
+        False by default. Centers the data with mean
+        before scaling. It will build a dense output, so take
+        care when applying to sparse input.
+    withStd : bool, optional
+        True by default. Scales the data to unit
+        standard deviation.
+
+    Examples
+    --------
     >>> vs = [Vectors.dense([-2.0, 2.3, 0]), Vectors.dense([3.8, 0.0, 1.9])]
     >>> dataset = sc.parallelize(vs)
     >>> standardizer = StandardScaler(True, True)
@@ -219,8 +257,6 @@ class StandardScaler(object):
     True
     >>> model.withMean
     True
-
-    .. versionadded:: 1.2.0
     """
     def __init__(self, withMean=False, withStd=True):
         if not (withMean or withStd):
@@ -228,15 +264,22 @@ class StandardScaler(object):
         self.withMean = withMean
         self.withStd = withStd
 
-    @since('1.2.0')
     def fit(self, dataset):
         """
         Computes the mean and variance and stores as a model to be used
         for later scaling.
 
-        :param dataset: The data used to compute the mean and variance
-                     to build the transformation model.
-        :return: a StandardScalarModel
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.RDD`
+            The data used to compute the mean and variance
+            to build the transformation model.
+
+        Returns
+        -------
+        :py:class:`StandardScalerModel`
         """
         dataset = dataset.map(_convert_to_vector)
         jmodel = callMLlibFunc("fitStandardScaler", self.withMean, self.withStd, dataset)
@@ -250,13 +293,21 @@ class ChiSqSelectorModel(JavaVectorTransformer):
     .. versionadded:: 1.4.0
     """
 
-    @since('1.4.0')
     def transform(self, vector):
         """
         Applies transformation on a vector.
 
-        :param vector: Vector or RDD of Vector to be transformed.
-        :return: transformed vector.
+        .. versionadded:: 1.4.0
+
+        Examples
+        --------
+        vector : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+            Input vector(s) to be transformed.
+
+        Returns
+        -------
+        :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+            transformed vector(s).
         """
         return JavaVectorTransformer.transform(self, vector)
 
@@ -285,6 +336,12 @@ class ChiSqSelector(object):
     By default, the selection method is `numTopFeatures`, with the default number of top features
     set to 50.
 
+    .. versionadded:: 1.4.0
+
+    Examples
+    --------
+    >>> from pyspark.mllib.linalg import SparseVector, DenseVector
+    >>> from pyspark.mllib.regression import LabeledPoint
     >>> data = sc.parallelize([
     ...     LabeledPoint(0.0, SparseVector(3, {0: 8.0, 1: 7.0})),
     ...     LabeledPoint(1.0, SparseVector(3, {1: 9.0, 2: 6.0})),
@@ -305,8 +362,6 @@ class ChiSqSelector(object):
     >>> model = ChiSqSelector(selectorType="percentile", percentile=0.34).fit(data)
     >>> model.transform(DenseVector([7.0, 9.0, 5.0]))
     DenseVector([7.0])
-
-    .. versionadded:: 1.4.0
     """
     def __init__(self, numTopFeatures=50, selectorType="numTopFeatures", percentile=0.1, fpr=0.05,
                  fdr=0.05, fwe=0.05):
@@ -371,15 +426,18 @@ class ChiSqSelector(object):
         self.selectorType = str(selectorType)
         return self
 
-    @since('1.4.0')
     def fit(self, data):
         """
         Returns a ChiSquared feature selector.
 
-        :param data: an `RDD[LabeledPoint]` containing the labeled dataset
-                     with categorical features. Real-valued features will be
-                     treated as categorical for each distinct value.
-                     Apply feature discretizer before using this function.
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD` of :py:class:`pyspark.mllib.regression.LabeledPoint`
+            containing the labeled dataset with categorical features.
+            Real-valued features will be treated as categorical for each
+            distinct value. Apply feature discretizer before using this function.
         """
         jmodel = callMLlibFunc("fitChiSqSelector", self.selectorType, self.numTopFeatures,
                                self.percentile, self.fpr, self.fdr, self.fwe, data)
@@ -398,6 +456,10 @@ class PCA(object):
     """
     A feature transformer that projects vectors to a low-dimensional space using PCA.
 
+    .. versionadded:: 1.5.0
+
+    Examples
+    --------
     >>> data = [Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),
     ...     Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),
     ...     Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0])]
@@ -407,20 +469,26 @@ class PCA(object):
     1.648...
     >>> pcArray[1]
     -4.013...
-
-    .. versionadded:: 1.5.0
     """
     def __init__(self, k):
         """
-        :param k: number of principal components.
+        Parameters
+        ----------
+        k : int
+            number of principal components.
         """
         self.k = int(k)
 
-    @since('1.5.0')
     def fit(self, data):
         """
         Computes a [[PCAModel]] that contains the principal components of the input vectors.
-        :param data: source vectors
+
+        .. versionadded:: 1.5.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            source vectors
         """
         jmodel = callMLlibFunc("fitPCA", self.k, data)
         return PCAModel(jmodel)
@@ -431,16 +499,23 @@ class HashingTF(object):
     Maps a sequence of terms to their term frequencies using the hashing
     trick.
 
-    .. note:: The terms must be hashable (can not be dict/set/list...).
+    .. versionadded:: 1.2.0
 
-    :param numFeatures: number of features (default: 2^20)
+    Parameters
+    ----------
+    numFeatures : int, optional
+        number of features (default: 2^20)
 
+    Notes
+    -----
+    The terms must be hashable (can not be dict/set/list...).
+
+    Examples
+    --------
     >>> htf = HashingTF(100)
     >>> doc = "a a b b c d".split(" ")
     >>> htf.transform(doc)
     SparseVector(100, {...})
-
-    .. versionadded:: 1.2.0
     """
     def __init__(self, numFeatures=1 << 20):
         self.numFeatures = numFeatures
@@ -484,7 +559,7 @@ class IDFModel(JavaVectorTransformer):
 
     .. versionadded:: 1.2.0
     """
-    @since('1.2.0')
+
     def transform(self, x):
         """
         Transforms term frequency (TF) vectors to TF-IDF vectors.
@@ -493,13 +568,24 @@ class IDFModel(JavaVectorTransformer):
         the terms which occur in fewer than `minDocFreq`
         documents will have an entry of 0.
 
-        .. note:: In Python, transform cannot currently be used within
-            an RDD transformation or action.
-            Call transform directly on the RDD instead.
+        .. versionadded:: 1.2.0
 
-        :param x: an RDD of term frequency vectors or a term frequency
-                  vector
-        :return: an RDD of TF-IDF vectors or a TF-IDF vector
+        Parameters
+        ----------
+        x : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+            an RDD of term frequency vectors or a term frequency
+            vector
+
+        Returns
+        -------
+        :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+            an RDD of TF-IDF vectors or a TF-IDF vector
+
+        Notes
+        -----
+        In Python, transform cannot currently be used within
+        an RDD transformation or action.
+        Call transform directly on the RDD instead.
         """
         return JavaVectorTransformer.transform(self, x)
 
@@ -538,9 +624,15 @@ class IDF(object):
     `minDocFreq`). For terms that are not in at least `minDocFreq`
     documents, the IDF is found as 0, resulting in TF-IDFs of 0.
 
-    :param minDocFreq: minimum of documents in which a term
-                       should appear for filtering
+    .. versionadded:: 1.2.0
 
+    Parameters
+    ----------
+    minDocFreq : int
+        minimum of documents in which a term should appear for filtering
+
+    Examples
+    --------
     >>> n = 4
     >>> freqs = [Vectors.sparse(n, (1, 3), (1.0, 2.0)),
     ...          Vectors.dense([0.0, 1.0, 2.0, 3.0]),
@@ -559,18 +651,20 @@ class IDF(object):
     DenseVector([0.0, 0.0, 1.3863, 0.863])
     >>> model.transform(Vectors.sparse(n, (1, 3), (1.0, 2.0)))
     SparseVector(4, {1: 0.0, 3: 0.5754})
-
-    .. versionadded:: 1.2.0
     """
     def __init__(self, minDocFreq=0):
         self.minDocFreq = minDocFreq
 
-    @since('1.2.0')
     def fit(self, dataset):
         """
         Computes the inverse document frequency.
 
-        :param dataset: an RDD of term frequency vectors
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+        dataset : :py:class:`pyspark.RDD`
+            an RDD of term frequency vectors
         """
         if not isinstance(dataset, RDD):
             raise TypeError("dataset should be an RDD of term frequency vectors")
@@ -581,34 +675,55 @@ class IDF(object):
 class Word2VecModel(JavaVectorTransformer, JavaSaveable, JavaLoader):
     """
     class for Word2Vec model
-
-    .. versionadded:: 1.2.0
     """
-    @since('1.2.0')
+
     def transform(self, word):
         """
         Transforms a word to its vector representation
 
-        .. note:: Local use only
+        .. versionadded:: 1.2.0
 
-        :param word: a word
-        :return: vector representation of word(s)
+        Parameters
+        ----------
+        word : str
+            a word
+
+        Returns
+        -------
+        :py:class:`pyspark.mllib.linalg.Vector`
+            vector representation of word(s)
+
+        Notes
+        -----
+        Local use only
         """
         try:
             return self.call("transform", word)
         except Py4JJavaError:
             raise ValueError("%s not found" % word)
 
-    @since('1.2.0')
     def findSynonyms(self, word, num):
         """
         Find synonyms of a word
 
-        :param word: a word or a vector representation of word
-        :param num: number of synonyms to find
-        :return: array of (word, cosineSimilarity)
+        .. versionadded:: 1.2.0
 
-        .. note:: Local use only
+        Parameters
+        ----------
+
+        word : str or  :py:class:`pyspark.mllib.linalg.Vector`
+            a word or a vector representation of word
+        num : int
+            number of synonyms to find
+
+        Returns
+        -------
+        :py:class:`collections.abc.Iterable`
+            array of (word, cosineSimilarity)
+
+        Notes
+        -----
+        Local use only
         """
         if not isinstance(word, str):
             word = _convert_to_vector(word)
@@ -652,6 +767,10 @@ class Word2Vec(object):
     and Distributed Representations of Words and Phrases and their
     Compositionality.
 
+    .. versionadded:: 1.2.0
+
+    Examples
+    --------
     >>> sentence = "a b " * 100 + "a c " * 10
     >>> localDoc = [sentence, sentence]
     >>> doc = sc.parallelize(localDoc).map(lambda line: line.split(" "))
@@ -685,9 +804,6 @@ class Word2Vec(object):
     ...     rmtree(path)
     ... except OSError:
     ...     pass
-
-    .. versionadded:: 1.2.0
-
     """
     def __init__(self):
         """
@@ -760,13 +876,20 @@ class Word2Vec(object):
         self.windowSize = windowSize
         return self
 
-    @since('1.2.0')
     def fit(self, data):
         """
         Computes the vector representation of each word in vocabulary.
 
-        :param data: training data. RDD of list of string
-        :return: Word2VecModel instance
+        .. versionadded:: 1.2.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            training data. RDD of list of string
+
+        Returns
+        -------
+        :py:class:`Word2VecModel`
         """
         if not isinstance(data, RDD):
             raise TypeError("data should be an RDD of list of string")
@@ -782,6 +905,10 @@ class ElementwiseProduct(VectorTransformer):
     Scales each column of the vector, with the supplied weight vector.
     i.e the elementwise product.
 
+    .. versionadded:: 1.5.0
+
+    Examples
+    --------
     >>> weight = Vectors.dense([1.0, 2.0, 3.0])
     >>> eprod = ElementwiseProduct(weight)
     >>> a = Vectors.dense([2.0, 1.0, 3.0])
@@ -791,8 +918,6 @@ class ElementwiseProduct(VectorTransformer):
     >>> rdd = sc.parallelize([a, b])
     >>> eprod.transform(rdd).collect()
     [DenseVector([2.0, 2.0, 9.0]), DenseVector([9.0, 6.0, 12.0])]
-
-    .. versionadded:: 1.5.0
     """
     def __init__(self, scalingVector):
         self.scalingVector = _convert_to_vector(scalingVector)

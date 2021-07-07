@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst
 import org.apache.spark.sql.catalyst.analysis.UnresolvedExtractValue
 import org.apache.spark.sql.catalyst.expressions.{Expression, GetStructField, UpCast}
 import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke, StaticInvoke}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.types._
 
 object DeserializerBuildHelper {
@@ -118,6 +118,15 @@ object DeserializerBuildHelper {
       returnNullable = false)
   }
 
+  def createDeserializerForLocalDateTime(path: Expression): Expression = {
+    StaticInvoke(
+      DateTimeUtils.getClass,
+      ObjectType(classOf[java.time.LocalDateTime]),
+      "microsToLocalDateTime",
+      path :: Nil,
+      returnNullable = false)
+  }
+
   def createDeserializerForJavaBigDecimal(
       path: Expression,
       returnNullable: Boolean): Expression = {
@@ -140,6 +149,24 @@ object DeserializerBuildHelper {
 
   def createDeserializerForScalaBigInt(path: Expression): Expression = {
     Invoke(path, "toScalaBigInt", ObjectType(classOf[scala.math.BigInt]),
+      returnNullable = false)
+  }
+
+  def createDeserializerForDuration(path: Expression): Expression = {
+    StaticInvoke(
+      IntervalUtils.getClass,
+      ObjectType(classOf[java.time.Duration]),
+      "microsToDuration",
+      path :: Nil,
+      returnNullable = false)
+  }
+
+  def createDeserializerForPeriod(path: Expression): Expression = {
+    StaticInvoke(
+      IntervalUtils.getClass,
+      ObjectType(classOf[java.time.Period]),
+      "monthsToPeriod",
+      path :: Nil,
       returnNullable = false)
   }
 

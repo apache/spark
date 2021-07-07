@@ -34,12 +34,13 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkContext, SparkExceptio
 import org.apache.spark.deploy.mesos.config._
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Network
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalBlockStoreClient
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.rpc.{RpcEndpointAddress, RpcEndpointRef}
+import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.{ExecutorProcessLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
@@ -63,7 +64,7 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
   with MesosScheduler
   with MesosSchedulerUtils {
 
-  // Blacklist a agent after this many failures
+  // Exclude an agent after this many failures
   private val MAX_AGENT_FAILURES = 2
 
   private val maxCoresOption = conf.get(config.CORES_MAX)
@@ -491,8 +492,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val tasks = new mutable.HashMap[OfferID, List[MesosTaskInfo]].withDefaultValue(Nil)
 
     // offerID -> resources
-    val remainingResources = mutable.Map(offers.map(offer =>
-      (offer.getId.getValue, offer.getResourcesList)): _*)
+    val remainingResources = mutable.Map[String, JList[Resource]]()
+    remainingResources ++= offers.map(offer => (offer.getId.getValue, offer.getResourcesList))
 
     var launchTasks = true
 
@@ -651,7 +652,9 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           .registerDriverWithShuffleService(
             agent.hostname,
             externalShufflePort,
-            sc.conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT),
+            sc.conf.get(
+              config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT
+            ).getOrElse(Utils.timeStringAsMs(s"${sc.conf.get(Network.NETWORK_TIMEOUT)}s")),
             sc.conf.get(config.EXECUTOR_HEARTBEAT_INTERVAL))
         agent.shuffleRegistered = true
       }
@@ -667,12 +670,12 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
           totalGpusAcquired -= gpus
           gpusByTaskId -= taskId
         }
-        // If it was a failure, mark the agent as failed for blacklisting purposes
+        // If it was a failure, mark the agent as failed for excluding purposes
         if (TaskState.isFailed(state)) {
           agent.taskFailures += 1
 
           if (agent.taskFailures >= MAX_AGENT_FAILURES) {
-            logInfo(s"Blacklisting Mesos agent $agentId due to too many failures; " +
+            logInfo(s"Excluding Mesos agent $agentId due to too many failures; " +
                 "is Spark installed on it?")
           }
         }

@@ -17,35 +17,57 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.{Locale, TimeZone}
+import java.util.TimeZone
 
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.log4j.Level
-import org.scalatest.Matchers
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.api.python.PythonEvalType
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Count, Sum}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser.parsePlan
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning}
-import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.connector.catalog.InMemoryTable
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
-
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class AnalysisSuite extends AnalysisTest with Matchers {
   import org.apache.spark.sql.catalyst.analysis.TestRelations._
+
+  test("fail for unresolved plan") {
+    intercept[AnalysisException] {
+      // `testRelation` does not have column `b`.
+      testRelation.select('b).analyze
+    }
+  }
+
+  test("fail if a leaf node has char/varchar type output") {
+    val schema1 = new StructType().add("c", CharType(5))
+    val schema2 = new StructType().add("c", VarcharType(5))
+    val schema3 = new StructType().add("c", ArrayType(CharType(5)))
+    Seq(schema1, schema2, schema3).foreach { schema =>
+      val table = new InMemoryTable("t", schema, Array.empty, Map.empty[String, String].asJava)
+      intercept[IllegalStateException] {
+        DataSourceV2Relation(
+          table, schema.toAttributes, None, None, CaseInsensitiveStringMap.empty()).analyze
+      }
+    }
+  }
 
   test("union project *") {
     val plan = (1 to 120)
@@ -73,7 +95,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("a")), testRelation),
       Project(testRelation.output, testRelation))
 
-    checkAnalysis(
+    checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("TbL.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation))
@@ -83,13 +105,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Seq("cannot resolve"))
 
-    checkAnalysis(
+    checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("TbL.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
       caseSensitive = false)
 
-    checkAnalysis(
+    checkAnalysisWithoutViewWrapper(
       Project(Seq(UnresolvedAttribute("tBl.a")),
         SubqueryAlias("TbL", UnresolvedRelation(TableIdentifier("TaBlE")))),
       Project(testRelation.output, testRelation),
@@ -148,10 +170,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val b = testRelation2.output(1)
     val c = testRelation2.output(2)
     val alias_a3 = count(a).as("a3")
-    val alias_b = b.as("aggOrder")
 
     // Case 1: when the child of Sort is not Aggregate,
-    //   the sort reference is handled by the rule ResolveSortReferences
+    //   the sort reference is handled by the rule ResolveMissingReferences
     val plan1 = testRelation2
       .groupBy($"a", $"c", $"b")($"a", $"c", count($"a").as("a3"))
       .select($"a", $"c", $"a3")
@@ -172,8 +193,8 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       .orderBy($"b".asc)
 
     val expected2 = testRelation2
-      .groupBy(a, c, b)(a, c, alias_a3, alias_b)
-      .orderBy(alias_b.toAttribute.asc)
+      .groupBy(a, c, b)(a, c, alias_a3, b)
+      .orderBy(b.asc)
       .select(a, c, alias_a3.toAttribute)
 
     checkAnalysis(plan2, expected2)
@@ -181,15 +202,15 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
   test("resolve relations") {
     assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe")), Seq())
-    checkAnalysis(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)
-    checkAnalysis(
+    checkAnalysisWithoutViewWrapper(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)
+    checkAnalysisWithoutViewWrapper(
       UnresolvedRelation(TableIdentifier("tAbLe")), testRelation, caseSensitive = false)
-    checkAnalysis(
+    checkAnalysisWithoutViewWrapper(
       UnresolvedRelation(TableIdentifier("TaBlE")), testRelation, caseSensitive = false)
   }
 
   test("divide should be casted into fractional types") {
-    val plan = caseInsensitiveAnalyzer.execute(
+    val plan = getAnalyzer.execute(
       testRelation2.select(
         $"a" / Literal(2) as "div1",
         $"a" / $"b" as "div2",
@@ -250,13 +271,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       CreateStruct(Seq(att1, ((att1.as("aa")) + 1).as("a_plus_1"))).as("col"),
       att1
     )
-    val prevPlan = getAnalyzer(true).execute(plan)
+    val prevPlan = getAnalyzer.execute(plan)
     plan = prevPlan.select(CreateArray(Seq(
       CreateStruct(Seq(att1, (att1 + 1).as("a_plus_1"))).as("col1"),
       /** alias should be eliminated by [[CleanupAliases]] */
       "col".attr.as("col2")
     )).as("arr"))
-    plan = getAnalyzer(true).execute(plan)
+    plan = getAnalyzer.execute(plan)
 
     val expectedPlan = prevPlan.select(
       CreateArray(Seq(
@@ -393,7 +414,6 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expected = testRelation2
       .groupBy(a, c)(alias1, alias2, alias3)
       .orderBy(alias1.toAttribute.asc, alias2.toAttribute.asc)
-      .select(alias1.toAttribute, alias2.toAttribute, alias3.toAttribute)
     checkAnalysis(plan, expected)
   }
 
@@ -403,7 +423,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysis(plan, expected)
   }
 
-  test("SPARK-12102: Ignore nullablity when comparing two sides of case") {
+  test("SPARK-12102: Ignore nullability when comparing two sides of case") {
     val relation = LocalRelation(Symbol("a").struct(Symbol("x").int),
       Symbol("b").struct(Symbol("x").int.withNullability(false)))
     val plan = relation.select(
@@ -607,6 +627,61 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
   }
 
+  test("SPARK-34319: analysis fails on self-join with FlatMapCoGroupsInPandas") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val project1 = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val project2 = Project(Seq(UnresolvedAttribute("a")), testRelation2)
+    val flatMapGroupsInPandas = FlatMapCoGroupsInPandas(
+      1,
+      1,
+      pythonUdf,
+      output,
+      project1,
+      project2)
+    val left = SubqueryAlias("temp0", flatMapGroupsInPandas)
+    val right = SubqueryAlias("temp1", flatMapGroupsInPandas)
+    val join = Join(left, right, Inner, None, JoinHint.NONE)
+    assertAnalysisSuccess(
+      Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
+  }
+
+  test("SPARK-34319: analysis fails on self-join with MapInPandas") {
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("a", LongType))),
+      Seq.empty,
+      PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+      true)
+    val output = pythonUdf.dataType.asInstanceOf[StructType].toAttributes
+    val project = Project(Seq(UnresolvedAttribute("a")), testRelation)
+    val mapInPandas = MapInPandas(
+      pythonUdf,
+      output,
+      project)
+    val left = SubqueryAlias("temp0", mapInPandas)
+    val right = SubqueryAlias("temp1", mapInPandas)
+    val join = Join(left, right, Inner, None, JoinHint.NONE)
+    assertAnalysisSuccess(
+      Project(Seq(UnresolvedAttribute("temp0.a"), UnresolvedAttribute("temp1.a")), join))
+  }
+
+  test("SPARK-34741: Avoid ambiguous reference in MergeIntoTable") {
+    val cond = 'a > 1
+    assertAnalysisError(
+      MergeIntoTable(
+        testRelation,
+        testRelation,
+        cond,
+        UpdateAction(Some(cond), Assignment('a, 'a) :: Nil) :: Nil,
+        Nil
+      ),
+      "Reference 'a' is ambiguous" :: Nil)
+  }
+
   test("SPARK-24488 Generator with multiple aliases") {
     assertAnalysisSuccess(
       listRelation.select(Explode($"list").as("first_alias").as("second_alias")))
@@ -631,30 +706,9 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     }
   }
 
-  test("SPARK-25691: AliasViewChild with different nullabilities") {
-    object ViewAnalyzer extends RuleExecutor[LogicalPlan] {
-      val batches = Batch("View", Once, EliminateView) :: Nil
-    }
-    val relation = LocalRelation(Symbol("a").int.notNull, Symbol("b").string)
-    val view = View(CatalogTable(
-        identifier = TableIdentifier("v1"),
-        tableType = CatalogTableType.VIEW,
-        storage = CatalogStorageFormat.empty,
-        schema = StructType(Seq(StructField("a", IntegerType), StructField("b", StringType)))),
-      output = Seq(Symbol("a").int, Symbol("b").string),
-      child = relation)
-    val tz = Option(conf.sessionLocalTimeZone)
-    val expected = Project(Seq(
-        Alias(Cast(Symbol("a").int.notNull, IntegerType, tz), "a")(),
-        Alias(Cast(Symbol("b").string, StringType, tz), "b")()),
-      relation)
-    val res = ViewAnalyzer.execute(view)
-    comparePlans(res, expected)
-  }
-
   test("CTE with non-existing column alias") {
     assertAnalysisError(parsePlan("WITH t(x) AS (SELECT 1) SELECT * FROM t WHERE y = 1"),
-      Seq("cannot resolve '`y`' given input columns: [x]"))
+      Seq("cannot resolve 'y' given input columns: [t.x]"))
   }
 
   test("CTE with non-matching column alias") {
@@ -763,22 +817,23 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     // RuleExecutor only throw exception or log warning when the rule is supposed to run
     // more than once.
     val maxIterations = 2
-    val conf = new SQLConf().copy(SQLConf.ANALYZER_MAX_ITERATIONS -> maxIterations)
-    val testAnalyzer = new Analyzer(
-      new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+    withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterations.toString) {
+      val testAnalyzer = new Analyzer(
+        new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
 
-    val plan = testRelation2.select(
-      $"a" / Literal(2) as "div1",
-      $"a" / $"b" as "div2",
-      $"a" / $"c" as "div3",
-      $"a" / $"d" as "div4",
-      $"e" / $"e" as "div5")
+      val plan = testRelation2.select(
+        $"a" / Literal(2) as "div1",
+        $"a" / $"b" as "div2",
+        $"a" / $"c" as "div3",
+        $"a" / $"d" as "div4",
+        $"e" / $"e" as "div5")
 
-    val message = intercept[TreeNodeException[LogicalPlan]] {
-      testAnalyzer.execute(plan)
-    }.getMessage
-    assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
-      s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+      val message = intercept[RuntimeException] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+    }
   }
 
   test("SPARK-30886 Deprecate two-parameter TRIM/LTRIM/RTRIM") {
@@ -794,7 +849,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
       withLogAppender(logAppender) {
         val testAnalyzer1 = new Analyzer(
-          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
 
         val plan1 = testRelation2.select(
           UnresolvedFunction(f, $"a" :: Nil, isDistinct = false))
@@ -816,7 +871,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
         // New analyzer from new SessionState
         val testAnalyzer2 = new Analyzer(
-          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin, conf), conf)
+          new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
         val plan4 = testRelation2.select(
           UnresolvedFunction(f, $"c" :: $"d" :: Nil, isDistinct = false))
         testAnalyzer2.execute(plan4)
@@ -894,5 +949,170 @@ class AnalysisSuite extends AnalysisTest with Matchers {
 
     assertAnalysisError(testRelation2.select(RowNumber() + 1),
       Seq("Window function row_number() requires an OVER clause."))
+  }
+
+  test("SPARK-32237: Hint in CTE") {
+    val plan = With(
+      Project(
+        Seq(UnresolvedAttribute("cte.a")),
+        UnresolvedRelation(TableIdentifier("cte"))
+      ),
+      Seq(
+        (
+          "cte",
+          SubqueryAlias(
+            AliasIdentifier("cte"),
+            UnresolvedHint(
+              "REPARTITION",
+              Seq(Literal(3)),
+              Project(testRelation.output, testRelation)
+            )
+          )
+        )
+      )
+    )
+    assertAnalysisSuccess(plan)
+  }
+
+  test("SPARK-33197: Make sure changes to ANALYZER_MAX_ITERATIONS take effect at runtime") {
+    // RuleExecutor only throw exception or log warning when the rule is supposed to run
+    // more than once.
+    val maxIterations = 2
+    val maxIterationsEnough = 5
+    withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterations.toString) {
+      val testAnalyzer = new Analyzer(
+        new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin))
+
+      val plan = testRelation2.select(
+        $"a" / Literal(2) as "div1",
+        $"a" / $"b" as "div2",
+        $"a" / $"c" as "div3",
+        $"a" / $"d" as "div4",
+        $"e" / $"e" as "div5")
+
+      val message1 = intercept[RuntimeException] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message1.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+
+      withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> maxIterationsEnough.toString) {
+        try {
+          testAnalyzer.execute(plan)
+        } catch {
+          case ex: AnalysisException
+            if ex.getMessage.contains(SQLConf.ANALYZER_MAX_ITERATIONS.key) =>
+              fail("analyzer.execute should not reach max iterations.")
+        }
+      }
+
+      val message2 = intercept[RuntimeException] {
+        testAnalyzer.execute(plan)
+      }.getMessage
+      assert(message2.startsWith(s"Max iterations ($maxIterations) reached for batch Resolution, " +
+        s"please set '${SQLConf.ANALYZER_MAX_ITERATIONS.key}' to a larger value."))
+    }
+  }
+
+  test("SPARK-33733: PullOutNondeterministic should check and collect deterministic field") {
+    val reflect =
+      CallMethodViaReflection(Seq("java.lang.Math", "abs", testRelation.output.head))
+    val udf = ScalaUDF(
+      (s: String) => s,
+      StringType,
+      Literal.create(null, StringType) :: Nil,
+      Option(ExpressionEncoder[String]().resolveAndBind()) :: Nil,
+      udfDeterministic = false)
+
+    Seq(reflect, udf).foreach { e: Expression =>
+      val plan = Sort(Seq(e.asc), false, testRelation)
+      val projected = Alias(e, "_nondeterministic")()
+      val expect =
+        Project(testRelation.output,
+          Sort(Seq(projected.toAttribute.asc), false,
+            Project(testRelation.output :+ projected,
+              testRelation)))
+      checkAnalysis(plan, expect)
+    }
+  }
+
+  test("SPARK-33857: Unify the default seed of random functions") {
+    Seq(new Rand(), new Randn(), Shuffle(Literal(Array(1))), Uuid()).foreach { r =>
+      assert(r.seedExpression == UnresolvedSeed)
+      val p = getAnalyzer.execute(Project(Seq(r.as("r")), testRelation))
+      assert(
+        p.asInstanceOf[Project].projectList.head.asInstanceOf[Alias]
+          .child.asInstanceOf[ExpressionWithRandomSeed]
+          .seedExpression.isInstanceOf[Literal]
+      )
+    }
+  }
+
+  test("SPARK-22748: Analyze __grouping__id as a literal function") {
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT grouping__id FROM (
+        |  SELECT grouping__id FROM (
+        |    SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |      GROUP BY a, b WITH ROLLUP
+        |  )
+        |)
+      """.stripMargin), false)
+
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT grouping__id FROM (
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |   GROUP BY a, b WITH CUBE
+        |)
+      """.stripMargin), false)
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT grouping__id FROM (
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |    GROUP BY a, b GROUPING SETS ((a, b), ())
+        |)
+      """.stripMargin), false)
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT a, b, count(1) FROM TaBlE2
+        |  GROUP BY CUBE(a, b) HAVING grouping__id > 0
+      """.stripMargin), false)
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT * FROM (
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |    GROUP BY a, b GROUPING SETS ((a, b), ())
+        |) WHERE grouping__id > 0
+      """.stripMargin), false)
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT * FROM (
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |    GROUP BY a, b GROUPING SETS ((a, b), ())
+        |) ORDER BY grouping__id > 0
+      """.stripMargin), false)
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT a, b, count(1) FROM TaBlE2
+        |  GROUP BY a, b GROUPING SETS ((a, b), ())
+        |    ORDER BY grouping__id > 0
+      """.stripMargin), false)
+
+    assertAnalysisError(parsePlan(
+      """
+        |SELECT grouping__id FROM (
+        |  SELECT a, b, count(1), grouping__id FROM TaBlE2
+        |    GROUP BY a, b
+        |)
+      """.stripMargin),
+      Seq("grouping_id() can only be used with GroupingSets/Cube/Rollup"),
+      false)
   }
 }

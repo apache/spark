@@ -49,7 +49,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
     assert(spark.streams.active.isEmpty)
     // Skip check default `StreamingQueryStatusListener` which is for streaming UI.
     assert(spark.streams.listListeners()
-      .filterNot(_.isInstanceOf[StreamingQueryStatusListener]).isEmpty)
+      .forall(_.isInstanceOf[StreamingQueryStatusListener]))
     // Make sure we don't leak any events to the next test
     spark.sparkContext.listenerBus.waitUntilEmpty()
   }

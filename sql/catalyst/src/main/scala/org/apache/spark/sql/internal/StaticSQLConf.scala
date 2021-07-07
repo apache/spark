@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal
 
 import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 import org.apache.spark.util.Utils
 
@@ -126,6 +127,16 @@ object StaticSQLConf {
     .toSequence
     .createOptional
 
+  val SPARK_CACHE_SERIALIZER = buildStaticConf("spark.sql.cache.serializer")
+    .doc("The name of a class that implements " +
+      "org.apache.spark.sql.columnar.CachedBatchSerializer. It will be used to " +
+      "translate SQL data into a format that can more efficiently be cached. The underlying " +
+      "API is subject to change so use with caution. Multiple classes cannot be specified. " +
+      "The class must have a no-arg constructor.")
+    .version("3.1.0")
+    .stringConf
+    .createWithDefault("org.apache.spark.sql.execution.columnar.DefaultCachedBatchSerializer")
+
   val QUERY_EXECUTION_LISTENERS = buildStaticConf("spark.sql.queryExecutionListeners")
     .doc("List of class names implementing QueryExecutionListener that will be automatically " +
       "added to newly created sessions. The classes should have either a no-arg constructor, " +
@@ -184,6 +195,7 @@ object StaticSQLConf {
 
   val SQL_LEGACY_SESSION_INIT_WITH_DEFAULTS =
     buildStaticConf("spark.sql.legacy.sessionInitWithConfigDefaults")
+      .internal()
       .doc("Flag to revert to legacy behavior where a cloned SparkSession receives SparkConf " +
         "defaults, dropping any overrides in its parent SparkSession.")
       .version("3.0.0")
@@ -226,4 +238,28 @@ object StaticSQLConf {
       .version("3.0.0")
       .intConf
       .createWithDefault(100)
+
+  val METADATA_CACHE_TTL_SECONDS = buildStaticConf("spark.sql.metadataCacheTTLSeconds")
+    .doc("Time-to-live (TTL) value for the metadata caches: partition file metadata cache and " +
+      "session catalog cache. This configuration only has an effect when this value having " +
+      "a positive value (> 0). It also requires setting " +
+      s"'${StaticSQLConf.CATALOG_IMPLEMENTATION.key}' to `hive`, setting " +
+      s"'${SQLConf.HIVE_FILESOURCE_PARTITION_FILE_CACHE_SIZE.key}' > 0 and setting " +
+      s"'${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key}' to `true` " +
+      "to be applied to the partition file metadata cache.")
+    .version("3.1.0")
+    .timeConf(TimeUnit.SECONDS)
+    .createWithDefault(-1)
+
+  val ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST =
+    buildStaticConf("spark.sql.streaming.ui.enabledCustomMetricList")
+      .internal()
+      .doc("Configures a list of custom metrics on Structured Streaming UI, which are enabled. " +
+        "The list contains the name of the custom metrics separated by comma. In aggregation" +
+        "only sum used. The list of supported custom metrics is state store provider specific " +
+        "and it can be found out for example from query progress log entry.")
+      .version("3.1.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 }

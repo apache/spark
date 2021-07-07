@@ -22,7 +22,4 @@ echo "CONTAINER_IP=$IP"
 export SPARK_LOCAL_IP=$IP
 export SPARK_PUBLIC_DNS=$IP
 
-# Avoid the default Docker behavior of mapping our IP address to an unreachable host name
-umount /etc/hosts
-
 /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker $1

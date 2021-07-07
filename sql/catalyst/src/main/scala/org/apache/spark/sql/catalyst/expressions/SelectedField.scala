@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -75,7 +75,11 @@ object SelectedField {
         val field = c.childSchema(c.ordinal)
         val newField = field.copy(dataType = dataTypeOpt.getOrElse(field.dataType))
         selectField(c.child, Option(struct(newField)))
-      case GetArrayStructFields(child, field, _, _, containsNull) =>
+      case GetArrayStructFields(child, _, ordinal, _, containsNull) =>
+        // For case-sensitivity aware field resolution, we should take `ordinal` which
+        // points to correct struct field.
+        val field = child.dataType.asInstanceOf[ArrayType]
+          .elementType.asInstanceOf[StructType](ordinal)
         val newFieldDataType = dataTypeOpt match {
           case None =>
             // GetArrayStructFields is the top level extractor. This means its result is
@@ -87,11 +91,11 @@ object SelectedField {
             dataType
           case Some(x) =>
             // This should not happen.
-            throw new AnalysisException(s"DataType '$x' is not supported by GetArrayStructFields.")
+            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "GetArrayStructFields")
         }
         val newField = StructField(field.name, newFieldDataType, field.nullable)
         selectField(child, Option(ArrayType(struct(newField), containsNull)))
-      case GetMapValue(child, _) =>
+      case GetMapValue(child, _, _) =>
         // GetMapValue does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
         val MapType(keyType, _, valueContainsNull) = child.dataType
@@ -105,7 +109,7 @@ object SelectedField {
           case ArrayType(dataType, _) => MapType(keyType, dataType, valueContainsNull)
           case x =>
             // This should not happen.
-            throw new AnalysisException(s"DataType '$x' is not supported by MapValues.")
+            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "MapValues")
         }
         selectField(child, opt)
       case MapKeys(child) =>
@@ -116,10 +120,10 @@ object SelectedField {
           case ArrayType(dataType, _) => MapType(dataType, valueType, valueContainsNull)
           case x =>
             // This should not happen.
-            throw new AnalysisException(s"DataType '$x' is not supported by MapKeys.")
+            throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "MapKeys")
         }
         selectField(child, opt)
-      case GetArrayItem(child, _) =>
+      case GetArrayItem(child, _, _) =>
         // GetArrayItem does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
         val ArrayType(_, containsNull) = child.dataType

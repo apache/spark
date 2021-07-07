@@ -94,12 +94,24 @@ class ParserUtilsSuite extends SparkFunSuite {
     assert(unescapeSQLString(""""\256"""") == "256")
 
     // String including a '\u0000' style literal characters (\u732B is a cat in Kanji).
-    assert(unescapeSQLString(""""How cute \u732B are"""")  == "How cute \u732B are")
+    assert(unescapeSQLString("\"How cute \\u732B are\"")  == "How cute \u732B are")
 
     // String including a surrogate pair character
     // (\uD867\uDE3D is Okhotsk atka mackerel in Kanji).
-    assert(unescapeSQLString(""""\uD867\uDE3D is a fish"""") == "\uD867\uDE3D is a fish")
+    assert(unescapeSQLString("\"\\uD867\\uDE3D is a fish\"") == "\uD867\uDE3D is a fish")
 
+    // String including a '\U00000000' style literal characters (\u732B is a cat in Kanji).
+    assert(unescapeSQLString("\"\\U00000041B\\U000000312\\U0000732B\"") == "AB12\u732B")
+
+    // String including surrogate pair characters (U+1F408 is a cat and U+1F415 is a dog in Emoji).
+    assert(unescapeSQLString("\"\\U0001F408 \\U0001F415\"") == "\uD83D\uDC08 \uD83D\uDC15")
+
+    // String including escaped normal characters.
+    assert(unescapeSQLString(
+      """"ab\
+        |cd\ef"""".stripMargin) ==
+      """ab
+        |cdef""".stripMargin)
     // scalastyle:on nonascii
   }
 

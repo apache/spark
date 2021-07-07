@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -16,7 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Utility for updating JIRA's with information about Github pull requests
+# Utility for updating JIRA's with information about GitHub pull requests
 
 import json
 import os
@@ -30,7 +30,7 @@ try:
     import jira.client
 except ImportError:
     print("This tool requires the jira-python library")
-    print("Install using 'sudo pip install jira'")
+    print("Install using 'sudo pip3 install jira'")
     sys.exit(-1)
 
 # User facing configs
@@ -142,9 +142,9 @@ jira_client = jira.client.JIRA({'server': JIRA_API_BASE},
 jira_prs = get_jira_prs()
 
 previous_max = get_max_pr()
-print("Retrieved %s JIRA PR's from Github" % len(jira_prs))
+print("Retrieved %s JIRA PR's from GitHub" % len(jira_prs))
 jira_prs = [(k, v) for k, v in jira_prs if int(v['number']) > previous_max]
-print("%s PR's remain after excluding visted ones" % len(jira_prs))
+print("%s PR's remain after excluding visited ones" % len(jira_prs))
 
 num_updates = 0
 considered = []
@@ -157,7 +157,7 @@ for issue, pr in sorted(jira_prs, key=lambda kv: int(kv[1]['number'])):
     considered = considered + [pr_num]
 
     url = pr['html_url']
-    title = "[Github] Pull Request #%s (%s)" % (pr['number'], pr['user']['login'])
+    title = "[GitHub] Pull Request #%s (%s)" % (pr['number'], pr['user']['login'])
     try:
         page = get_json(get_url(JIRA_API_BASE + "/rest/api/2/issue/" + issue + "/remotelink"))
         existing_links = map(lambda l: l['object']['url'], page)
@@ -174,7 +174,7 @@ for issue, pr in sorted(jira_prs, key=lambda kv: int(kv[1]['number'])):
     destination = {"title": title, "url": url, "icon": icon}
     # For all possible fields see:
     # https://developer.atlassian.com/display/JIRADEV/Fields+in+Remote+Issue+Links
-    # application = {"name": "Github pull requests", "type": "org.apache.spark.jira.github"}
+    # application = {"name": "GitHub pull requests", "type": "org.apache.spark.jira.github"}
     jira_client.add_remote_link(issue, destination)
 
     comment = "User '%s' has created a pull request for this issue:" % pr['user']['login']

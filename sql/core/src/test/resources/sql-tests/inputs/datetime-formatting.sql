@@ -11,7 +11,7 @@ create temporary view v as select col from values
 
 select col, date_format(col, 'G GG GGG GGGG') from v;
 
-select col, date_format(col, 'y yy yyy yyyy yyyyy yyyyyy yyyyyyy yyyyyyyy yyyyyyyyy yyyyyyyyyy') from v;
+select col, date_format(col, 'y yy yyy yyyy yyyyy yyyyyy') from v;
 
 select col, date_format(col, 'q qq') from v;
 

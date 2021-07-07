@@ -14,15 +14,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import os
 
-import sys
-
-from pyspark import keyword_only
+from pyspark import keyword_only, since, SparkContext
 from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import *
-from pyspark.ml.wrapper import JavaParams, JavaWrapper
-from pyspark.ml.common import inherit_doc, _java2py, _py2java
+from pyspark.ml.util import MLReadable, MLWritable, JavaMLWriter, JavaMLReader, \
+    DefaultParamsReader, DefaultParamsWriter, MLWriter, MLReader, JavaMLWritable
+from pyspark.ml.wrapper import JavaParams
+from pyspark.ml.common import inherit_doc
 
 
 @inherit_doc
@@ -50,21 +50,30 @@ class Pipeline(Estimator, MLReadable, MLWritable):
     stages = Param(Params._dummy(), "stages", "a list of pipeline stages")
 
     @keyword_only
-    def __init__(self, stages=None):
+    def __init__(self, *, stages=None):
         """
-        __init__(self, stages=None)
+        __init__(self, \\*, stages=None)
         """
         super(Pipeline, self).__init__()
         kwargs = self._input_kwargs
         self.setParams(**kwargs)
 
-    @since("1.3.0")
     def setStages(self, value):
         """
         Set pipeline stages.
 
-        :param value: a list of transformers or estimators
-        :return: the pipeline instance
+        .. versionadded:: 1.3.0
+
+        Parameters
+        ----------
+        value : list
+            of :py:class:`pyspark.ml.Transformer`
+            or :py:class:`pyspark.ml.Estimator`
+
+        Returns
+        -------
+        :py:class:`Pipeline`
+            the pipeline instance
         """
         return self._set(stages=value)
 
@@ -77,9 +86,9 @@ class Pipeline(Estimator, MLReadable, MLWritable):
 
     @keyword_only
     @since("1.3.0")
-    def setParams(self, stages=None):
+    def setParams(self, *, stages=None):
         """
-        setParams(self, stages=None)
+        setParams(self, \\*, stages=None)
         Sets params for Pipeline.
         """
         kwargs = self._input_kwargs
@@ -110,13 +119,21 @@ class Pipeline(Estimator, MLReadable, MLWritable):
                 transformers.append(stage)
         return PipelineModel(transformers)
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance.
 
-        :param extra: extra parameters
-        :returns: new instance
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        extra : dict, optional
+            extra parameters
+
+        Returns
+        -------
+        :py:class:`Pipeline`
+            new instance
         """
         if extra is None:
             extra = dict()
@@ -156,7 +173,10 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         """
         Transfer this instance to a Java Pipeline.  Used for ML persistence.
 
-        :return: Java object equivalent to this instance.
+        Returns
+        -------
+        py4j.java_gateway.JavaObject
+            Java object equivalent to this instance.
         """
 
         gateway = SparkContext._gateway
@@ -169,55 +189,6 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         _java_obj.setStages(java_stages)
 
         return _java_obj
-
-    def _make_java_param_pair(self, param, value):
-        """
-        Makes a Java param pair.
-        """
-        sc = SparkContext._active_spark_context
-        param = self._resolveParam(param)
-        java_param = sc._jvm.org.apache.spark.ml.param.Param(param.parent, param.name, param.doc)
-        if isinstance(value, Params) and hasattr(value, "_to_java"):
-            # Convert JavaEstimator/JavaTransformer object or Estimator/Transformer object which
-            # implements `_to_java` method (such as OneVsRest, Pipeline object) to java object.
-            # used in the case of an estimator having another estimator as a parameter
-            # the reason why this is not in _py2java in common.py is that importing
-            # Estimator and Model in common.py results in a circular import with inherit_doc
-            java_value = value._to_java()
-        else:
-            java_value = _py2java(sc, value)
-        return java_param.w(java_value)
-
-    def _transfer_param_map_to_java(self, pyParamMap):
-        """
-        Transforms a Python ParamMap into a Java ParamMap.
-        """
-        paramMap = JavaWrapper._new_java_obj("org.apache.spark.ml.param.ParamMap")
-        for param in self.params:
-            if param in pyParamMap:
-                pair = self._make_java_param_pair(param, pyParamMap[param])
-                paramMap.put([pair])
-        return paramMap
-
-    def _transfer_param_map_from_java(self, javaParamMap):
-        """
-        Transforms a Java ParamMap into a Python ParamMap.
-        """
-        sc = SparkContext._active_spark_context
-        paramMap = dict()
-        for pair in javaParamMap.toList():
-            param = pair.param()
-            if self.hasParam(str(param.name())):
-                java_obj = pair.value()
-                if sc._jvm.Class.forName("org.apache.spark.ml.PipelineStage").isInstance(java_obj):
-                    # Note: JavaParams._from_java support both JavaEstimator/JavaTransformer class
-                    # and Estimator/Transformer class which implements `_from_java` static method
-                    # (such as OneVsRest, Pipeline class).
-                    py_obj = JavaParams._from_java(java_obj)
-                else:
-                    py_obj = _java2py(sc, java_obj)
-                paramMap[self.getParam(param.name())] = py_obj
-        return paramMap
 
 
 @inherit_doc
@@ -307,10 +278,11 @@ class PipelineModel(Model, MLReadable, MLWritable):
             dataset = t.transform(dataset)
         return dataset
 
-    @since("1.4.0")
     def copy(self, extra=None):
         """
         Creates a copy of this instance.
+
+        .. versionadded:: 1.4.0
 
         :param extra: extra parameters
         :returns: new instance
@@ -410,7 +382,10 @@ class PipelineSharedReadWrite():
         """
         Load metadata and stages for a :py:class:`Pipeline` or :py:class:`PipelineModel`
 
-        :return: (UID, list of stages)
+        Returns
+        -------
+        tuple
+            (UID, list of stages)
         """
         stagesDir = os.path.join(path, "stages")
         stageUids = metadata['paramMap']['stageUids']

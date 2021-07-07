@@ -40,8 +40,8 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
   }
 
   private def generateStreamingQueryTable(request: HttpServletRequest): Seq[Node] = {
-    val (activeQueries, inactiveQueries) = parent.statusListener.allQueryStatus
-      .partition(_.isActive)
+    val (activeQueries, inactiveQueries) =
+      parent.store.allQueryUIData.partition(_.summary.isActive)
 
     val content = mutable.ListBuffer[Node]()
     // show active queries table only if there is at least one active query
@@ -111,7 +111,7 @@ private[ui] class StreamingQueryPage(parent: StreamingQueryTab)
   }
 }
 
-class StreamingQueryPagedTable(
+private[ui] class StreamingQueryPagedTable(
     request: HttpServletRequest,
     parent: StreamingQueryTab,
     data: Seq[StreamingQueryUIData],
@@ -176,7 +176,7 @@ class StreamingQueryPagedTable(
     val streamingQuery = query.streamingUIData
     val statisticsLink = "%s/%s/statistics?id=%s"
       .format(SparkUIUtils.prependBaseUri(request, parent.basePath), parent.prefix,
-        streamingQuery.runId)
+        streamingQuery.summary.runId)
 
     def details(detail: Any): Seq[Node] = {
       if (isActive) {
@@ -194,26 +194,30 @@ class StreamingQueryPagedTable(
     <tr>
       <td>{UIUtils.getQueryName(streamingQuery)}</td>
       <td>{UIUtils.getQueryStatus(streamingQuery)}</td>
-      <td>{streamingQuery.id}</td>
-      <td><a href={statisticsLink}>{streamingQuery.runId}</a></td>
-      <td>{SparkUIUtils.formatDate(streamingQuery.startTimestamp)}</td>
+      <td>{streamingQuery.summary.id}</td>
+      <td><a href={statisticsLink}>{streamingQuery.summary.runId}</a></td>
+      <td>{SparkUIUtils.formatDate(streamingQuery.summary.startTimestamp)}</td>
       <td>{SparkUIUtils.formatDurationVerbose(query.duration)}</td>
       <td>{withNoProgress(streamingQuery, {query.avgInput.formatted("%.2f")}, "NaN")}</td>
       <td>{withNoProgress(streamingQuery, {query.avgProcess.formatted("%.2f")}, "NaN")}</td>
       <td>{withNoProgress(streamingQuery, {streamingQuery.lastProgress.batchId}, "NaN")}</td>
-      {details(streamingQuery.exception.getOrElse("-"))}
+      {details(streamingQuery.summary.exception.getOrElse("-"))}
     </tr>
   }
 }
 
-case class StructuredStreamingRow(
+private[ui] case class StructuredStreamingRow(
     duration: Long,
     avgInput: Double,
     avgProcess: Double,
     streamingUIData: StreamingQueryUIData)
 
-class StreamingQueryDataSource(uiData: Seq[StreamingQueryUIData], sortColumn: String, desc: Boolean,
-    pageSize: Int, isActive: Boolean) extends PagedDataSource[StructuredStreamingRow](pageSize) {
+private[ui] class StreamingQueryDataSource(
+    uiData: Seq[StreamingQueryUIData],
+    sortColumn: String,
+    desc: Boolean,
+    pageSize: Int,
+    isActive: Boolean) extends PagedDataSource[StructuredStreamingRow](pageSize) {
 
   // convert StreamingQueryUIData to StreamingRow to provide required data for sorting and sort it
   private val data = uiData.map(streamingRow).sorted(ordering(sortColumn, desc))
@@ -222,32 +226,32 @@ class StreamingQueryDataSource(uiData: Seq[StreamingQueryUIData], sortColumn: St
 
   override def sliceData(from: Int, to: Int): Seq[StructuredStreamingRow] = data.slice(from, to)
 
-  private def streamingRow(query: StreamingQueryUIData): StructuredStreamingRow = {
+  private def streamingRow(uiData: StreamingQueryUIData): StructuredStreamingRow = {
     val duration = if (isActive) {
-      System.currentTimeMillis() - query.startTimestamp
+      System.currentTimeMillis() - uiData.summary.startTimestamp
     } else {
-      withNoProgress(query, {
-        val endTimeMs = query.lastProgress.timestamp
-        parseProgressTimestamp(endTimeMs) - query.startTimestamp
+      withNoProgress(uiData, {
+        val endTimeMs = uiData.lastProgress.timestamp
+        parseProgressTimestamp(endTimeMs) - uiData.summary.startTimestamp
       }, 0)
     }
 
-    val avgInput = (query.recentProgress.map(p => withNumberInvalid(p.inputRowsPerSecond)).sum /
-      query.recentProgress.length)
+    val avgInput = (uiData.recentProgress.map(p => withNumberInvalid(p.inputRowsPerSecond)).sum /
+      uiData.recentProgress.length)
 
-    val avgProcess = (query.recentProgress.map(p =>
-      withNumberInvalid(p.processedRowsPerSecond)).sum / query.recentProgress.length)
+    val avgProcess = (uiData.recentProgress.map(p =>
+      withNumberInvalid(p.processedRowsPerSecond)).sum / uiData.recentProgress.length)
 
-    StructuredStreamingRow(duration, avgInput, avgProcess, query)
+    StructuredStreamingRow(duration, avgInput, avgProcess, uiData)
   }
 
   private def ordering(sortColumn: String, desc: Boolean): Ordering[StructuredStreamingRow] = {
     val ordering: Ordering[StructuredStreamingRow] = sortColumn match {
-      case "Name" => Ordering.by(q => UIUtils.getQueryName(q.streamingUIData))
-      case "Status" => Ordering.by(q => UIUtils.getQueryStatus(q.streamingUIData))
-      case "ID" => Ordering.by(_.streamingUIData.id)
-      case "Run ID" => Ordering.by(_.streamingUIData.runId)
-      case "Start Time" => Ordering.by(_.streamingUIData.startTimestamp)
+      case "Name" => Ordering.by(row => UIUtils.getQueryName(row.streamingUIData))
+      case "Status" => Ordering.by(row => UIUtils.getQueryStatus(row.streamingUIData))
+      case "ID" => Ordering.by(_.streamingUIData.summary.id)
+      case "Run ID" => Ordering.by(_.streamingUIData.summary.runId)
+      case "Start Time" => Ordering.by(_.streamingUIData.summary.startTimestamp)
       case "Duration" => Ordering.by(_.duration)
       case "Avg Input /sec" => Ordering.by(_.avgInput)
       case "Avg Process /sec" => Ordering.by(_.avgProcess)

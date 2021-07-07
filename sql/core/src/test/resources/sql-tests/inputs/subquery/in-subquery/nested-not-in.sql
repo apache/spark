@@ -1,5 +1,8 @@
 -- Tests NOT-IN subqueries nested inside OR expression(s).
 
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=true
+--CONFIG_DIM1 spark.sql.optimizeNullAwareAntiJoin=false
+
 CREATE TEMPORARY VIEW EMP AS SELECT * FROM VALUES
   (100, "emp 1", 10),
   (200, "emp 2", NULL),

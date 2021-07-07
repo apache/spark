@@ -20,11 +20,9 @@ package org.apache.spark.sql.hive.execution
 import scala.util.Random
 
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDAFMax
-import org.scalatest.Matchers._
+import org.scalatest.matchers.must.Matchers._
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedFunction
 import org.apache.spark.sql.catalyst.expressions.{ExpressionEvalHelper, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -221,7 +219,7 @@ class ObjectHashAggregateSuite
     val withPartialSafe = max($"c2")
 
     // A Spark SQL native distinct aggregate function
-    val withDistinct = countDistinct($"c3")
+    val withDistinct = count_distinct($"c3")
 
     val allAggs = Seq(
       "typed" -> typed,

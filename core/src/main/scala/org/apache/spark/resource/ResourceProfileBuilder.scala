@@ -26,9 +26,9 @@ import org.apache.spark.annotation.{Evolving, Since}
 
 
 /**
- * Resource profile builder to build a Resource profile to associate with an RDD.
- * A ResourceProfile allows the user to specify executor and task requirements for an RDD
- * that will get applied during a stage. This allows the user to change the resource
+ * Resource profile builder to build a [[ResourceProfile]] to associate with an RDD.
+ * A [[ResourceProfile]] allows the user to specify executor and task resource requirements
+ * for an RDD that will get applied during a stage. This allows the user to change the resource
  * requirements between stages.
  *
  */
@@ -36,7 +36,9 @@ import org.apache.spark.annotation.{Evolving, Since}
 @Since("3.1.0")
 class ResourceProfileBuilder() {
 
+  // Task resource requests specified by users, mapped from resource name to the request.
   private val _taskResources = new ConcurrentHashMap[String, TaskResourceRequest]()
+  // Executor resource requests specified by users, mapped from resource name to the request.
   private val _executorResources = new ConcurrentHashMap[String, ExecutorResourceRequest]()
 
   def taskResources: Map[String, TaskResourceRequest] = _taskResources.asScala.toMap
@@ -54,11 +56,21 @@ class ResourceProfileBuilder() {
     _executorResources.asScala.asJava
   }
 
+  /**
+   * Add executor resource requests
+   * @param requests The detailed executor resource requests, see [[ExecutorResourceRequests]]
+   * @return This ResourceProfileBuilder
+   */
   def require(requests: ExecutorResourceRequests): this.type = {
     _executorResources.putAll(requests.requests.asJava)
     this
   }
 
+  /**
+   * Add task resource requests
+   * @param requests The detailed task resource requests, see [[TaskResourceRequest]]
+   * @return This ResourceProfileBuilder
+   */
   def require(requests: TaskResourceRequests): this.type = {
     _taskResources.putAll(requests.requests.asJava)
     this
@@ -80,7 +92,7 @@ class ResourceProfileBuilder() {
       s"task resources: ${_taskResources.asScala.map(pair => s"${pair._1}=${pair._2.toString()}")}"
   }
 
-  def build: ResourceProfile = {
+  def build(): ResourceProfile = {
     new ResourceProfile(executorResources, taskResources)
   }
 }

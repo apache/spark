@@ -22,11 +22,9 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
-import org.apache.spark.internal.{config, Logging}
-import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._
-import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleExecutorComponents}
-import org.apache.spark.util.Utils
+import org.apache.spark.shuffle.api.ShuffleExecutorComponents
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -146,7 +144,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] = {
     val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
       handle.shuffleId, _ => new OpenHashSet[Long](16))
-    mapTaskIds.synchronized { mapTaskIds.add(context.taskAttemptId()) }
+    mapTaskIds.synchronized { mapTaskIds.add(mapId) }
     val env = SparkEnv.get
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
@@ -168,8 +166,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
           metrics,
           shuffleExecutorComponents)
       case other: BaseShuffleHandle[K @unchecked, V @unchecked, _] =>
-        new SortShuffleWriter(
-          shuffleBlockResolver, other, mapId, context, shuffleExecutorComponents)
+        new SortShuffleWriter(other, mapId, context, shuffleExecutorComponents)
     }
   }
 

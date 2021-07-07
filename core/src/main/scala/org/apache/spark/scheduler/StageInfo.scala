@@ -42,7 +42,7 @@ class StageInfo(
     val resourceProfileId: Int) {
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
-  /** Time when all tasks in the stage completed or when the stage was cancelled. */
+  /** Time when the stage completed or when the stage was cancelled. */
   var completionTime: Option[Long] = None
   /** If the stage failed, the reason why. */
   var failureReason: Option[String] = None

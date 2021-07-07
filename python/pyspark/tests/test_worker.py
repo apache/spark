@@ -16,14 +16,13 @@
 # limitations under the License.
 #
 import os
-import sys
 import tempfile
 import threading
 import time
 import unittest
 has_resource_module = True
 try:
-    import resource
+    import resource  # noqa: F401
 except ImportError:
     has_resource_module = False
 
@@ -90,10 +89,19 @@ class WorkerTests(ReusedPySparkTestCase):
 
     def test_after_exception(self):
         def raise_exception(_):
-            raise Exception()
+            raise RuntimeError()
         rdd = self.sc.parallelize(range(100), 1)
         with QuietTest(self.sc):
-            self.assertRaises(Exception, lambda: rdd.foreach(raise_exception))
+            self.assertRaises(Py4JJavaError, lambda: rdd.foreach(raise_exception))
+        self.assertEqual(100, rdd.map(str).count())
+
+    def test_after_non_exception_error(self):
+        # SPARK-33339: Pyspark application will hang due to non Exception
+        def raise_system_exit(_):
+            raise SystemExit()
+        rdd = self.sc.parallelize(range(100), 1)
+        with QuietTest(self.sc):
+            self.assertRaises(Exception, lambda: rdd.foreach(raise_system_exit))
         self.assertEqual(100, rdd.map(str).count())
 
     def test_after_jvm_exception(self):
@@ -135,7 +143,7 @@ class WorkerTests(ReusedPySparkTestCase):
         t.daemon = True
         t.start()
         t.join(5)
-        self.assertTrue(not t.isAlive())
+        self.assertTrue(not t.is_alive())
         self.assertEqual(100000, rdd.count())
 
     def test_with_different_versions_of_python(self):
@@ -153,11 +161,11 @@ class WorkerTests(ReusedPySparkTestCase):
         # SPARK-21045: exceptions with no ascii encoding shall not hanging PySpark.
         try:
             def f():
-                raise Exception("exception with 中 and \xd6\xd0")
+                raise RuntimeError("exception with 中 and \xd6\xd0")
 
             self.sc.parallelize([1]).map(lambda x: f()).count()
         except Py4JJavaError as e:
-            self.assertRegexpMatches(str(e), "exception with 中")
+            self.assertRegex(str(e), "exception with 中")
 
 
 class WorkerReuseTest(PySparkTestCase):
@@ -200,10 +208,10 @@ class WorkerMemoryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.tests.test_worker import *
+    from pyspark.tests.test_worker import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

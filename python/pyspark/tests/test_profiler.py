@@ -85,11 +85,11 @@ class ProfilerTests2(unittest.TestCase):
     def test_profiler_disabled(self):
         sc = SparkContext(conf=SparkConf().set("spark.python.profile", "false"))
         try:
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 RuntimeError,
                 "'spark.python.profile' configuration must be set",
                 lambda: sc.show_profiles())
-            self.assertRaisesRegexp(
+            self.assertRaisesRegex(
                 RuntimeError,
                 "'spark.python.profile' configuration must be set",
                 lambda: sc.dump_profiles("/tmp/abc"))
@@ -98,10 +98,10 @@ class ProfilerTests2(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    from pyspark.tests.test_profiler import *
+    from pyspark.tests.test_profiler import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

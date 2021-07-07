@@ -22,6 +22,7 @@ import java.util
 
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
+import scala.collection.mutable
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
@@ -753,24 +754,51 @@ class SparseVector @Since("2.0.0") (
    * Create a slice of this vector based on the given indices.
    * @param selectedIndices Unsorted list of indices into the vector.
    *                        This does NOT do bound checking.
+   * @param sorted Whether the input indices are already sorted.
+   *               This does NOT do ordering checking.
    * @return  New SparseVector with values in the order specified by the given indices.
    *
    * NOTE: The API needs to be discussed before making this public.
-   *       Also, if we have a version assuming indices are sorted, we should optimize it.
    */
-  private[spark] def slice(selectedIndices: Array[Int]): SparseVector = {
-    var currentIdx = 0
-    val (sliceInds, sliceVals) = selectedIndices.flatMap { origIdx =>
-      val iIdx = java.util.Arrays.binarySearch(this.indices, origIdx)
-      val i_v = if (iIdx >= 0) {
-        Iterator((currentIdx, this.values(iIdx)))
-      } else {
-        Iterator()
+  private[spark] def slice(selectedIndices: Array[Int], sorted: Boolean = false): SparseVector = {
+    val localIndices = indices
+    val localValues = values
+    val ns = selectedIndices.length
+    val indexBuff = mutable.ArrayBuilder.make[Int]
+    val valueBuff = mutable.ArrayBuilder.make[Double]
+
+    if (sorted) {
+      val nk = localIndices.length
+      var k = 0
+      var s = 0
+      while (k < nk && s < ns) {
+        val i = localIndices(k)
+        val v = localValues(k)
+        if (v != 0) {
+          while (s < ns && selectedIndices(s) < i) { s += 1 }
+          if (s < ns && selectedIndices(s) == i) {
+            indexBuff += s
+            valueBuff += v
+            s += 1
+          }
+        }
+        k += 1
       }
-      currentIdx += 1
-      i_v
-    }.unzip
-    new SparseVector(selectedIndices.length, sliceInds.toArray, sliceVals.toArray)
+    } else {
+      var s = 0
+      while (s < ns) {
+        val j = java.util.Arrays.binarySearch(localIndices, selectedIndices(s))
+        if (j >= 0) {
+          val v = localValues(j)
+          if (v != 0) {
+            indexBuff += s
+            valueBuff += v
+          }
+        }
+        s += 1
+      }
+    }
+    new SparseVector(ns, indexBuff.result, valueBuff.result)
   }
 
   private[spark] override def iterator: Iterator[(Int, Double)] = {
@@ -786,7 +814,7 @@ class SparseVector @Since("2.0.0") (
 
       override def hasNext: Boolean = i < localSize
 
-      override def next: (Int, Double) = {
+      override def next(): (Int, Double) = {
         val v = if (i == k) {
           j += 1
           k = if (j < localNumActives) localIndices(j) else -1

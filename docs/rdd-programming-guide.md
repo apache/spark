@@ -105,6 +105,7 @@ Spark {{site.SPARK_VERSION}} works with Python 3.6+. It can use the standard CPy
 so C libraries like NumPy can be used. It also works with PyPy 2.3+.
 
 Python 2, 3.4 and 3.5 supports were removed in Spark 3.1.0.
+Python 3.6 support is deprecated in Spark 3.2.0.
 
 Spark applications in Python can either be run with the `bin/spark-submit` script which includes Spark at runtime, or by including it in your setup.py as:
 
@@ -1254,9 +1255,9 @@ storage levels is:
 </tr>
 </table>
 
-**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/2/library/pickle.html) library,
+**Note:** *In Python, stored objects will always be serialized with the [Pickle](https://docs.python.org/3/library/pickle.html) library,
 so it does not matter whether you choose a serialized level. The available storage levels in Python include `MEMORY_ONLY`, `MEMORY_ONLY_2`,
-`MEMORY_AND_DISK`, `MEMORY_AND_DISK_2`, `DISK_ONLY`, and `DISK_ONLY_2`.*
+`MEMORY_AND_DISK`, `MEMORY_AND_DISK_2`, `DISK_ONLY`, `DISK_ONLY_2`, and `DISK_ONLY_3`.*
 
 Spark also automatically persists some intermediate data in shuffle operations (e.g. `reduceByKey`), even without users calling `persist`. This is done to avoid recomputing the entire input if a node fails during the shuffle. We still recommend users call `persist` on the resulting RDD if they plan to reuse it.
 

@@ -86,7 +86,7 @@ makeSplits <- function(numSerializedSlices, length) {
   # For instance, for numSerializedSlices of 22, length of 50
   #  [1]  0  0  2  2  4  4  6  6  6  9  9 11 11 13 13 15 15 15 18 18 20 20 22 22 22
   # [26] 25 25 27 27 29 29 31 31 31 34 34 36 36 38 38 40 40 40 43 43 45 45 47 47 47
-  # Notice the slice group with 3 slices (ie. 6, 15, 22) are roughly evenly spaced.
+  # Notice the slice group with 3 slices (i.e. 6, 15, 22) are roughly evenly spaced.
   # We are trying to reimplement the calculation in the positions method in ParallelCollectionRDD
   if (numSerializedSlices > 0) {
     unlist(lapply(0: (numSerializedSlices - 1), function(x) {
@@ -116,7 +116,7 @@ makeSplits <- function(numSerializedSlices, length) {
 #' This change affects both createDataFrame and spark.lapply.
 #' In the specific one case that it is used to convert R native object into SparkDataFrame, it has
 #' always been kept at the default of 1. In the case the object is large, we are explicitly setting
-#' the parallism to numSlices (which is still 1).
+#' the parallelism to numSlices (which is still 1).
 #'
 #' Specifically, we are changing to split positions to match the calculation in positions() of
 #' ParallelCollectionRDD in Spark.

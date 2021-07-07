@@ -17,20 +17,21 @@
 import os
 import random
 import shutil
-import sys
 import tempfile
 import time
 import unittest
 from datetime import date, datetime
 from decimal import Decimal
+from distutils.version import LooseVersion
 
 from pyspark import TaskContext
 from pyspark.rdd import PythonEvalType
 from pyspark.sql import Column
 from pyspark.sql.functions import array, col, expr, lit, sum, struct, udf, pandas_udf, \
     PandasUDFType
-from pyspark.sql.types import Row
-from pyspark.sql.types import *
+from pyspark.sql.types import IntegerType, ByteType, StructType, ShortType, BooleanType, \
+    LongType, FloatType, DoubleType, DecimalType, StringType, ArrayType, StructField, \
+    Row, TimestampType, MapType, DateType, BinaryType
 from pyspark.sql.utils import AnalysisException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, test_compiled,\
     test_not_compiled_message, have_pandas, have_pyarrow, pandas_requirement_message, \
@@ -41,12 +42,12 @@ if have_pandas:
     import pandas as pd
 
 if have_pyarrow:
-    import pyarrow as pa
+    import pyarrow as pa  # noqa: F401
 
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow,
-    pandas_requirement_message or pyarrow_requirement_message)
+    pandas_requirement_message or pyarrow_requirement_message)  # type: ignore
 class ScalarPandasUDFTests(ReusedSQLTestCase):
 
     @classmethod
@@ -132,7 +133,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                             long_f(col('long')), float_f(col('float')),
                             double_f(col('double')), decimal_f('decimal'),
                             bool_f(col('bool')), array_long_f('array_long'))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_register_nondeterministic_vectorized_udf_basic(self):
         random_pandas_udf = pandas_udf(
@@ -168,7 +169,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             bool_f = pandas_udf(lambda x: x, BooleanType(), udf_type)
             res = df.select(bool_f(col('bool')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_null_byte(self):
         data = [(None,), (2,), (3,), (4,)]
@@ -177,7 +178,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             byte_f = pandas_udf(lambda x: x, ByteType(), udf_type)
             res = df.select(byte_f(col('byte')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_null_short(self):
         data = [(None,), (2,), (3,), (4,)]
@@ -186,7 +187,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             short_f = pandas_udf(lambda x: x, ShortType(), udf_type)
             res = df.select(short_f(col('short')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_null_int(self):
         data = [(None,), (2,), (3,), (4,)]
@@ -195,7 +196,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             int_f = pandas_udf(lambda x: x, IntegerType(), udf_type)
             res = df.select(int_f(col('int')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_null_long(self):
         data = [(None,), (2,), (3,), (4,)]
@@ -204,7 +205,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             long_f = pandas_udf(lambda x: x, LongType(), udf_type)
             res = df.select(long_f(col('long')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_null_float(self):
         data = [(3.0,), (5.0,), (-1.0,), (None,)]
@@ -213,7 +214,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             float_f = pandas_udf(lambda x: x, FloatType(), udf_type)
             res = df.select(float_f(col('float')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_null_double(self):
         data = [(3.0,), (5.0,), (-1.0,), (None,)]
@@ -222,7 +223,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             double_f = pandas_udf(lambda x: x, DoubleType(), udf_type)
             res = df.select(double_f(col('double')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_null_decimal(self):
         data = [(Decimal(3.0),), (Decimal(5.0),), (Decimal(-1.0),), (None,)]
@@ -231,7 +232,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             decimal_f = pandas_udf(lambda x: x, DecimalType(38, 18), udf_type)
             res = df.select(decimal_f(col('decimal')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_null_string(self):
         data = [("foo",), (None,), ("bar",), ("bar",)]
@@ -240,7 +241,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             str_f = pandas_udf(lambda x: x, StringType(), udf_type)
             res = df.select(str_f(col('str')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_string_in_udf(self):
         df = self.spark.range(10)
@@ -254,7 +255,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             str_f = pandas_udf(f, StringType(), udf_type)
             actual = df.select(str_f(col('id')))
             expected = df.select(col('id').cast('string'))
-            self.assertEquals(expected.collect(), actual.collect())
+            self.assertEqual(expected.collect(), actual.collect())
 
     def test_vectorized_udf_datatype_string(self):
         df = self.spark.range(10).select(
@@ -278,7 +279,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                             long_f(col('long')), float_f(col('float')),
                             double_f(col('double')), decimal_f('decimal'),
                             bool_f(col('bool')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_null_binary(self):
         data = [(bytearray(b"a"),), (None,), (bytearray(b"bb"),), (bytearray(b"ccc"),)]
@@ -287,7 +288,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             str_f = pandas_udf(lambda x: x, BinaryType(), udf_type)
             res = df.select(str_f(col('binary')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_array_type(self):
         data = [([1, 2],), ([3, 4],)]
@@ -296,7 +297,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             array_f = pandas_udf(lambda x: x, ArrayType(IntegerType()), udf_type)
             result = df.select(array_f(col('array')))
-            self.assertEquals(df.collect(), result.collect())
+            self.assertEqual(df.collect(), result.collect())
 
     def test_vectorized_udf_null_array(self):
         data = [([1, 2],), (None,), (None,), ([3, 4],), (None,)]
@@ -305,7 +306,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             array_f = pandas_udf(lambda x: x, ArrayType(IntegerType()), udf_type)
             result = df.select(array_f(col('array')))
-            self.assertEquals(df.collect(), result.collect())
+            self.assertEqual(df.collect(), result.collect())
 
     def test_vectorized_udf_struct_type(self):
         df = self.spark.range(10)
@@ -374,10 +375,24 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(
+                with self.assertRaisesRegex(
                         Exception,
                         'Invalid return type with scalar Pandas UDFs'):
                     pandas_udf(lambda x: x, returnType=nested_type, functionType=udf_type)
+
+    def test_vectorized_udf_map_type(self):
+        data = [({},), ({"a": 1},), ({"a": 1, "b": 2},), ({"a": 1, "b": 2, "c": 3},)]
+        schema = StructType([StructField("map", MapType(StringType(), LongType()))])
+        df = self.spark.createDataFrame(data, schema=schema)
+        for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
+            if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
+                with QuietTest(self.sc):
+                    with self.assertRaisesRegex(Exception, "MapType.*not supported"):
+                        pandas_udf(lambda x: x, MapType(StringType(), LongType()), udf_type)
+            else:
+                map_f = pandas_udf(lambda x: x, MapType(StringType(), LongType()), udf_type)
+                result = df.select(map_f(col('map')))
+                self.assertEqual(df.collect(), result.collect())
 
     def test_vectorized_udf_complex(self):
         df = self.spark.range(10).select(
@@ -407,7 +422,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                                  (iter_add, iter_power2, iter_mul)]:
             res = df.select(add(col('a'), col('b')), power2(col('a')), mul(col('b'), col('c')))
             expected = df.select(expr('a + b'), expr('power(2, a)'), expr('b * c'))
-            self.assertEquals(expected.collect(), res.collect())
+            self.assertEqual(expected.collect(), res.collect())
 
     def test_vectorized_udf_exception(self):
         df = self.spark.range(10)
@@ -420,14 +435,14 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         for raise_exception in [scalar_raise_exception, iter_raise_exception]:
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(Exception, 'division( or modulo)? by zero'):
+                with self.assertRaisesRegex(Exception, 'division( or modulo)? by zero'):
                     df.select(raise_exception(col('id'))).collect()
 
     def test_vectorized_udf_invalid_length(self):
         df = self.spark.range(10)
         raise_exception = pandas_udf(lambda _: pd.Series(1), LongType())
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     Exception,
                     'Result vector from pandas_udf was not the required length'):
                 df.select(raise_exception(col('id'))).collect()
@@ -438,7 +453,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 yield pd.Series(1)
 
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(
+            with self.assertRaisesRegex(
                     Exception,
                     "The length of output in Scalar iterator.*"
                     "the length of output was 1"):
@@ -454,7 +469,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 3}):
             df1 = self.spark.range(10).repartition(1)
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(
+                with self.assertRaisesRegex(
                         Exception,
                         "pandas iterator UDF should exhaust"):
                     df1.select(iter_udf_not_reading_all_input(col('id'))).collect()
@@ -471,7 +486,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         for f, g in [(scalar_f, scalar_g), (iter_f, iter_g)]:
             res = df.select(g(f(col('id'))))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_chained_struct_type(self):
         df = self.spark.range(10)
@@ -502,10 +517,10 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
     def test_vectorized_udf_wrong_return_type(self):
         with QuietTest(self.sc):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
-                with self.assertRaisesRegexp(
+                with self.assertRaisesRegex(
                         NotImplementedError,
-                        'Invalid return type.*scalar Pandas UDF.*MapType'):
-                    pandas_udf(lambda x: x, MapType(LongType(), LongType()), udf_type)
+                        'Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType'):
+                    pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
 
     def test_vectorized_udf_return_scalar(self):
         df = self.spark.range(10)
@@ -514,7 +529,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                             PandasUDFType.SCALAR_ITER)
         for f in [scalar_f, iter_f]:
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(Exception, 'Return.*type.*Series'):
+                with self.assertRaisesRegex(Exception, 'Return.*type.*Series'):
                     df.select(f(col('id'))).collect()
 
     def test_vectorized_udf_decorator(self):
@@ -530,14 +545,14 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         for identity in [scalar_identity, iter_identity]:
             res = df.select(identity(col('id')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_empty_partition(self):
         df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2))
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             f = pandas_udf(lambda x: x, LongType(), udf_type)
             res = df.select(f(col('id')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_struct_with_empty_partition(self):
         df = self.spark.createDataFrame(self.sc.parallelize([Row(id=1)], 2))\
@@ -570,16 +585,16 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
 
         for f in [scalar_f, iter_f]:
             res = df.select(f(col('id'), col('id')))
-            self.assertEquals(df.collect(), res.collect())
+            self.assertEqual(df.collect(), res.collect())
 
     def test_vectorized_udf_unsupported_types(self):
         with QuietTest(self.sc):
             for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
-                with self.assertRaisesRegexp(
+                with self.assertRaisesRegex(
                         NotImplementedError,
-                        'Invalid return type.*scalar Pandas UDF.*MapType'):
-                    pandas_udf(lambda x: x, MapType(StringType(), IntegerType()), udf_type)
-                with self.assertRaisesRegexp(
+                        'Invalid return type.*scalar Pandas UDF.*ArrayType.*TimestampType'):
+                    pandas_udf(lambda x: x, ArrayType(TimestampType()), udf_type)
+                with self.assertRaisesRegex(
                         NotImplementedError,
                         'Invalid return type.*scalar Pandas UDF.*ArrayType.StructType'):
                     pandas_udf(lambda x: x,
@@ -622,10 +637,10 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             result = df.withColumn("check_data",
                                    check_data(col("idx"), col("date"), col("date_copy"))).collect()
 
-            self.assertEquals(len(data), len(result))
+            self.assertEqual(len(data), len(result))
             for i in range(len(result)):
-                self.assertEquals(data[i][1], result[i][1])  # "date" col
-                self.assertEquals(data[i][1], result[i][2])  # "date_copy" col
+                self.assertEqual(data[i][1], result[i][1])  # "date" col
+                self.assertEqual(data[i][1], result[i][2])  # "date_copy" col
                 self.assertIsNone(result[i][3])  # "check_data" col
 
     def test_vectorized_udf_timestamps(self):
@@ -671,10 +686,10 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             result = df.withColumn("check_data", check_data(col("idx"), col("timestamp"),
                                                             col("timestamp_copy"))).collect()
             # Check that collection values are correct
-            self.assertEquals(len(data), len(result))
+            self.assertEqual(len(data), len(result))
             for i in range(len(result)):
-                self.assertEquals(data[i][1], result[i][1])  # "timestamp" col
-                self.assertEquals(data[i][1], result[i][2])  # "timestamp_copy" col
+                self.assertEqual(data[i][1], result[i][1])  # "timestamp" col
+                self.assertEqual(data[i][1], result[i][2])  # "timestamp_copy" col
                 self.assertIsNone(result[i][3])  # "check_data" col
 
     def test_vectorized_udf_return_timestamp_tz(self):
@@ -698,7 +713,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 i, ts = r
                 ts_tz = pd.Timestamp(i, unit='D', tz='America/Los_Angeles').to_pydatetime()
                 expected = spark_ts_t.fromInternal(spark_ts_t.toInternal(ts_tz))
-                self.assertEquals(expected, ts)
+                self.assertEqual(expected, ts)
 
     def test_vectorized_udf_check_config(self):
         with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerBatch": 3}):
@@ -784,9 +799,9 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for random_udf in [self.nondeterministic_vectorized_udf,
                            self.nondeterministic_vectorized_iter_udf]:
             with QuietTest(self.sc):
-                with self.assertRaisesRegexp(AnalysisException, 'nondeterministic'):
+                with self.assertRaisesRegex(AnalysisException, 'nondeterministic'):
                     df.groupby(df.id).agg(sum(random_udf(df.id))).collect()
-                with self.assertRaisesRegexp(AnalysisException, 'nondeterministic'):
+                with self.assertRaisesRegex(AnalysisException, 'nondeterministic'):
                     df.agg(sum(random_udf(df.id))).collect()
 
     def test_register_vectorized_udf_basic(self):
@@ -810,8 +825,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             res2 = self.spark.sql(
                 "SELECT add1(t.a, t.b) FROM (SELECT id as a, id as b FROM range(10)) t")
             expected = df.select(expr('a + b'))
-            self.assertEquals(expected.collect(), res1.collect())
-            self.assertEquals(expected.collect(), res2.collect())
+            self.assertEqual(expected.collect(), res1.collect())
+            self.assertEqual(expected.collect(), res2.collect())
 
     def test_scalar_iter_udf_init(self):
         import numpy as np
@@ -839,7 +854,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             finally:
                 raise RuntimeError("reached finally block")
         with QuietTest(self.sc):
-            with self.assertRaisesRegexp(Exception, "reached finally block"):
+            with self.assertRaisesRegex(Exception, "reached finally block"):
                 self.spark.range(1).select(test_close(col("id"))).collect()
 
     def test_scalar_iter_udf_close_early(self):
@@ -890,7 +905,7 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
         for udf_type in [PandasUDFType.SCALAR, PandasUDFType.SCALAR_ITER]:
             foo_udf = pandas_udf(lambda x: x, 'timestamp', udf_type)
             result = df.withColumn('time', foo_udf(df.time))
-            self.assertEquals(df.collect(), result.collect())
+            self.assertEqual(df.collect(), result.collect())
 
     def test_udf_category_type(self):
 
@@ -988,11 +1003,11 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             df_chained_4 = df.withColumn('f4_f2_f1', f4(f2(f1(df['v']))))
             df_chained_5 = df.withColumn('f4_f3_f1', f4(f3(f1(df['v']))))
 
-            self.assertEquals(expected_chained_1, df_chained_1.collect())
-            self.assertEquals(expected_chained_2, df_chained_2.collect())
-            self.assertEquals(expected_chained_3, df_chained_3.collect())
-            self.assertEquals(expected_chained_4, df_chained_4.collect())
-            self.assertEquals(expected_chained_5, df_chained_5.collect())
+            self.assertEqual(expected_chained_1, df_chained_1.collect())
+            self.assertEqual(expected_chained_2, df_chained_2.collect())
+            self.assertEqual(expected_chained_3, df_chained_3.collect())
+            self.assertEqual(expected_chained_4, df_chained_4.collect())
+            self.assertEqual(expected_chained_5, df_chained_5.collect())
 
             # Test multiple mixed UDF expressions in a single projection
             df_multi_1 = df \
@@ -1030,8 +1045,8 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 .withColumn('f4_f3_f2', f4(f3(f2(col('v'))))) \
                 .withColumn('f4_f3_f2_f1', f4(f3(f2(f1(col('v'))))))
 
-            self.assertEquals(expected_multi, df_multi_1.collect())
-            self.assertEquals(expected_multi, df_multi_2.collect())
+            self.assertEqual(expected_multi, df_multi_1.collect())
+            self.assertEqual(expected_multi, df_multi_2.collect())
 
     def test_mixed_udf_and_sql(self):
         df = self.spark.range(0, 1).toDF('v')
@@ -1092,10 +1107,10 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
                 .withColumn('f3_f1_f2', f3(f1(f2(df['v'])))) \
                 .withColumn('f3_f2_f1', f3(f2(f1(df['v']))))
 
-            self.assertEquals(expected, df1.collect())
+            self.assertEqual(expected, df1.collect())
 
     # SPARK-24721
-    @unittest.skipIf(not test_compiled, test_not_compiled_message)
+    @unittest.skipIf(not test_compiled, test_not_compiled_message)  # type: ignore
     def test_datasource_with_udf(self):
         # Same as SQLTests.test_datasource_with_udf, but with Pandas UDF
         # This needs to a separate test because Arrow dependency is optional
@@ -1123,26 +1138,26 @@ class ScalarPandasUDFTests(ReusedSQLTestCase):
             for df in [filesource_df, datasource_df, datasource_v2_df]:
                 result = df.withColumn('c', c1)
                 expected = df.withColumn('c', lit(2))
-                self.assertEquals(expected.collect(), result.collect())
+                self.assertEqual(expected.collect(), result.collect())
 
             for df in [filesource_df, datasource_df, datasource_v2_df]:
                 result = df.withColumn('c', c2)
                 expected = df.withColumn('c', col('i') + 1)
-                self.assertEquals(expected.collect(), result.collect())
+                self.assertEqual(expected.collect(), result.collect())
 
             for df in [filesource_df, datasource_df, datasource_v2_df]:
                 for f in [f1, f2]:
                     result = df.filter(f)
-                    self.assertEquals(0, result.count())
+                    self.assertEqual(0, result.count())
         finally:
             shutil.rmtree(path)
 
 
 if __name__ == "__main__":
-    from pyspark.sql.tests.test_pandas_udf_scalar import *
+    from pyspark.sql.tests.test_pandas_udf_scalar import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import java.io.File
+import java.util.Locale
 
 import scala.util.Random
 
@@ -154,12 +155,23 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             java8ApiConfValues.foreach { java8Api =>
               withSQLConf(
                 SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
-                SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString,
-                SQLConf.LEGACY_AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+                SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString,
+                SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString,
+                SQLConf.AVRO_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
                 val dataGenerator = RandomDataGenerator.forType(
                   dataType = dataType,
                   nullable = true,
-                  new Random(seed)
+                  new Random(seed),
+                  // TODO(SPARK-34440): Allow saving/loading datetime in ORC w/o rebasing
+                  // The ORC datasource always performs datetime rebasing that can lead to
+                  // shifting of the original dates/timestamps. For instance, 1582-10-06 is valid
+                  // date in the Proleptic Gregorian calendar but it does not exist in the Julian
+                  // calendar. The ORC datasource shifts the date to the next valid date 1582-10-15
+                  // during rebasing of this date to the Julian calendar. Since the test compares
+                  // the original date before saving and the date loaded back from the ORC files,
+                  // we set `validJulianDatetime` to `true` to generate only Proleptic Gregorian
+                  // dates that exist in the Julian calendar and will be not changed during rebase.
+                  validJulianDatetime = dataSourceName.toLowerCase(Locale.ROOT).contains("orc")
                 ).getOrElse {
                   fail(s"Failed to create data generator for schema $dataType")
                 }

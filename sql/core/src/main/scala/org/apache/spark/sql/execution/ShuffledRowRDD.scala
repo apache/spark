@@ -32,7 +32,16 @@ sealed trait ShufflePartitionSpec
 // `endReducerIndex` (exclusive).
 case class CoalescedPartitionSpec(
     startReducerIndex: Int,
-    endReducerIndex: Int) extends ShufflePartitionSpec
+    endReducerIndex: Int,
+    @transient dataSize: Option[Long] = None) extends ShufflePartitionSpec
+
+object CoalescedPartitionSpec {
+  def apply(startReducerIndex: Int,
+            endReducerIndex: Int,
+            dataSize: Long): CoalescedPartitionSpec = {
+    CoalescedPartitionSpec(startReducerIndex, endReducerIndex, Some(dataSize))
+  }
+}
 
 // A partition that reads partial data of one reducer, from `startMapIndex` (inclusive) to
 // `endMapIndex` (exclusive).
@@ -133,10 +142,9 @@ class ShuffledRowRDD(
       Array.tabulate(dependency.partitioner.numPartitions)(i => CoalescedPartitionSpec(i, i + 1)))
   }
 
-  if (SQLConf.get.fetchShuffleBlocksInBatch) {
-    dependency.rdd.context.setLocalProperty(
-      SortShuffleManager.FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY, "true")
-  }
+  dependency.rdd.context.setLocalProperty(
+    SortShuffleManager.FETCH_SHUFFLE_BLOCKS_IN_BATCH_ENABLED_KEY,
+    SQLConf.get.fetchShuffleBlocksInBatch.toString)
 
   override def getDependencies: Seq[Dependency[_]] = List(dependency)
 
@@ -162,7 +170,7 @@ class ShuffledRowRDD(
   override def getPreferredLocations(partition: Partition): Seq[String] = {
     val tracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
     partition.asInstanceOf[ShuffledRowRDDPartition].spec match {
-      case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
+      case CoalescedPartitionSpec(startReducerIndex, endReducerIndex, _) =>
         // TODO order by partition size.
         startReducerIndex.until(endReducerIndex).flatMap { reducerIndex =>
           tracker.getPreferredLocationsForShuffle(dependency, reducerIndex)
@@ -182,7 +190,7 @@ class ShuffledRowRDD(
     // as well as the `tempMetrics` for basic shuffle metrics.
     val sqlMetricsReporter = new SQLShuffleReadMetricsReporter(tempMetrics, metrics)
     val reader = split.asInstanceOf[ShuffledRowRDDPartition].spec match {
-      case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
+      case CoalescedPartitionSpec(startReducerIndex, endReducerIndex, _) =>
         SparkEnv.get.shuffleManager.getReader(
           dependency.shuffleHandle,
           startReducerIndex,

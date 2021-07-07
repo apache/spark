@@ -68,7 +68,7 @@ rToSQLTypes <- as.environment(list(
   "character" = "string",
   "logical" = "boolean"))
 
-# Helper function of coverting decimal type. When backend returns column type in the
+# Helper function of converting decimal type. When backend returns column type in the
 # format of decimal(,) (e.g., decimal(10, 0)), this function coverts the column type
 # as double type. This function converts backend returned types that are not the key
 # of PRIMITIVE_TYPES, but should be treated as PRIMITIVE_TYPES.

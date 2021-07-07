@@ -17,8 +17,6 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.lang.reflect.InvocationTargetException
-import java.nio.ByteBuffer
-import java.util.UUID
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
@@ -27,7 +25,7 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.OperationHandle
 import org.apache.hive.service.cli.operation.{GetCatalogsOperation, Operation, OperationManager}
 import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl, SessionManager}
-import org.apache.hive.service.rpc.thrift.{THandleIdentifier, TOperationHandle, TOperationType}
+import org.apache.hive.service.rpc.thrift.TProtocolVersion
 
 import org.apache.spark.SparkFunSuite
 
@@ -35,14 +33,14 @@ class HiveSessionImplSuite extends SparkFunSuite {
   private var session: HiveSessionImpl = _
   private var operationManager: OperationManagerMock = _
 
-  override def beforeAll() {
+  override def beforeAll(): Unit = {
     super.beforeAll()
 
     val sessionManager = new SessionManager(null)
     operationManager = new OperationManagerMock()
 
     session = new HiveSessionImpl(
-      ThriftserverShimUtils.testedProtocolVersions.head,
+      TProtocolVersion.HIVE_CLI_SERVICE_PROTOCOL_V1,
       "",
       "",
       new HiveConf(),
@@ -62,31 +60,6 @@ class HiveSessionImplSuite extends SparkFunSuite {
 
     assert(operationManager.getCalledHandles.contains(operationHandle1))
     assert(operationManager.getCalledHandles.contains(operationHandle2))
-  }
-}
-
-class GetCatalogsOperationMock(parentSession: HiveSession)
-  extends GetCatalogsOperation(parentSession) {
-
-  override def runInternal(): Unit = {}
-
-  override def getHandle: OperationHandle = {
-    val uuid: UUID = UUID.randomUUID()
-    val tHandleIdentifier: THandleIdentifier = new THandleIdentifier()
-    tHandleIdentifier.setGuid(getByteBufferFromUUID(uuid))
-    tHandleIdentifier.setSecret(getByteBufferFromUUID(uuid))
-    val tOperationHandle: TOperationHandle = new TOperationHandle()
-    tOperationHandle.setOperationId(tHandleIdentifier)
-    tOperationHandle.setOperationType(TOperationType.GET_TYPE_INFO)
-    tOperationHandle.setHasResultSetIsSet(false)
-    new OperationHandle(tOperationHandle)
-  }
-
-  private def getByteBufferFromUUID(uuid: UUID): Array[Byte] = {
-    val bb: ByteBuffer = ByteBuffer.wrap(new Array[Byte](16))
-    bb.putLong(uuid.getMostSignificantBits)
-    bb.putLong(uuid.getLeastSignificantBits)
-    bb.array
   }
 }
 
@@ -114,3 +87,4 @@ class OperationManagerMock extends OperationManager {
 
   def getCalledHandles: mutable.Set[OperationHandle] = calledHandles
 }
+

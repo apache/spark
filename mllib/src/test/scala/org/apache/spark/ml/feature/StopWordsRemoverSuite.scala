@@ -29,7 +29,7 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
 
   def testStopWordsRemover(t: StopWordsRemover, dataFrame: DataFrame): Unit = {
     testTransformer[(Array[String], Array[String])](dataFrame, t, "filtered", "expected") {
-       case Row(tokens: Seq[_], wantedTokens: Seq[_]) =>
+       case Row(tokens: scala.collection.Seq[_], wantedTokens: scala.collection.Seq[_]) =>
          assert(tokens === wantedTokens)
     }
   }
@@ -242,7 +242,8 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
     remover.transform(df)
       .select("filtered1", "expected1", "filtered2", "expected2")
       .collect().foreach {
-        case Row(r1: Seq[_], e1: Seq[_], r2: Seq[_], e2: Seq[_]) =>
+        case Row(r1: scala.collection.Seq[_], e1: scala.collection.Seq[_],
+          r2: scala.collection.Seq[_], e2: scala.collection.Seq[_]) =>
           assert(r1 === e1,
             s"The result value is not correct after bucketing. Expected $e1 but found $r1")
           assert(r2 === e2,
@@ -268,7 +269,8 @@ class StopWordsRemoverSuite extends MLTest with DefaultReadWriteTest {
     remover.transform(df)
       .select("filtered1", "expected1", "filtered2", "expected2")
       .collect().foreach {
-        case Row(r1: Seq[_], e1: Seq[_], r2: Seq[_], e2: Seq[_]) =>
+        case Row(r1: scala.collection.Seq[_], e1: scala.collection.Seq[_],
+          r2: scala.collection.Seq[_], e2: scala.collection.Seq[_]) =>
           assert(r1 === e1,
             s"The result value is not correct after bucketing. Expected $e1 but found $r1")
           assert(r2 === e2,

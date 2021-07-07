@@ -128,8 +128,8 @@ object JsonConstants {
       |:["3","4","5"]}},"resourcesused":{"gpu":
       |{"name":"gpu","addresses":[]},"fpga":
       |{"name":"fpga","addresses":[]}},"resourcesfree":
-      |{"gpu":{"name":"gpu","addresses":["2","1","0"]},
-      |"fpga":{"name":"fpga","addresses":["5","4","3"]}},
+      |{"gpu":{"name":"gpu","addresses":["0","1","2"]},
+      |"fpga":{"name":"fpga","addresses":["3","4","5"]}},
       |"state":"ALIVE","lastheartbeat":%d}
     """.format(currTimeInMillis).stripMargin
 

@@ -239,7 +239,7 @@ setMethod("partitionByRDD",
             javaPairRDD <- callJMethod(javaPairRDD, "partitionBy", rPartitioner)
 
             # Call .values() on the result to get back the final result, the
-            # shuffled acutal content key-val pairs.
+            # shuffled actual content key-val pairs.
             r <- callJMethod(javaPairRDD, "values")
 
             RDD(r, serializedMode = "byte")
@@ -411,7 +411,7 @@ setMethod("reduceByKeyLocally",
 #' \itemize{
 #'   \item createCombiner, which turns a V into a C (e.g., creates a one-element list)
 #'   \item mergeValue, to merge a V into a C (e.g., adds it to the end of a list) -
-#'   \item mergeCombiners, to combine two C's into a single one (e.g., concatentates
+#'   \item mergeCombiners, to combine two C's into a single one (e.g., concatenates
 #'    two lists).
 #' }
 #'

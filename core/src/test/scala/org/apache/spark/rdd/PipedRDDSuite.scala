@@ -176,7 +176,8 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
   }
 
   test("pipe with env variable") {
-    assume(TestUtils.testCommandAvailable(envCommand))
+    val executable = envCommand.split("\\s+", 2)(0)
+    assume(TestUtils.testCommandAvailable(executable))
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val piped = nums.pipe(s"$envCommand MY_TEST_ENV", Map("MY_TEST_ENV" -> "LALALA"))
     val c = piped.collect()
@@ -238,7 +239,8 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext with Eventuall
   }
 
   def testExportInputFile(varName: String): Unit = {
-    assume(TestUtils.testCommandAvailable(envCommand))
+    val executable = envCommand.split("\\s+", 2)(0)
+    assume(TestUtils.testCommandAvailable(executable))
     val nums = new HadoopRDD(sc, new JobConf(), classOf[TextInputFormat], classOf[LongWritable],
       classOf[Text], 2) {
       override def getPartitions: Array[Partition] = Array(generateFakeHadoopPartition())

@@ -38,7 +38,7 @@ def print_err(msg):
 
 
 def post_message_to_github(msg, ghprb_pull_id):
-    print("Attempting to post to Github...")
+    print("Attempting to post to GitHub...")
 
     api_url = os.getenv("GITHUB_API_BASE", "https://api.github.com/repos/apache/spark")
     url = api_url + "/issues/" + ghprb_pull_id + "/comments"
@@ -57,12 +57,12 @@ def post_message_to_github(msg, ghprb_pull_id):
         if response.getcode() == 201:
             print(" > Post successful.")
     except HTTPError as http_e:
-        print_err("Failed to post message to Github.")
+        print_err("Failed to post message to GitHub.")
         print_err(" > http_code: %s" % http_e.code)
         print_err(" > api_response: %s" % http_e.read())
         print_err(" > data: %s" % posted_message)
     except URLError as url_e:
-        print_err("Failed to post message to Github.")
+        print_err("Failed to post message to GitHub.")
         print_err(" > urllib_status: %s" % url_e.reason[1])
         print_err(" > data: %s" % posted_message)
 
@@ -89,7 +89,7 @@ def run_pr_checks(pr_tests, ghprb_actual_commit, sha1):
     """
     Executes a set of pull request checks to ease development and report issues with various
     components such as style, linting, dependencies, compatibilities, etc.
-    @return a list of messages to post back to Github
+    @return a list of messages to post back to GitHub
     """
     # Ensure we save off the current HEAD to revert to
     current_pr_head = run_cmd(['git', 'rev-parse', 'HEAD'], return_output=True).strip()
@@ -109,7 +109,7 @@ def run_tests(tests_timeout):
     """
     Runs the `dev/run-tests` script and responds with the correct error message
     under the various failure scenarios.
-    @return a tuple containing the test result code and the result note to post to Github
+    @return a tuple containing the test result code and the result note to post to GitHub
     """
 
     test_result_code = subprocess.Popen(['timeout',
@@ -175,8 +175,6 @@ def main():
     if "test-hadoop3.2" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_PROFILE"] = "hadoop3.2"
     # Switch the Hive profile based on the PR title:
-    if "test-hive1.2" in ghprb_pull_title:
-        os.environ["AMPLAB_JENKINS_BUILD_HIVE_PROFILE"] = "hive1.2"
     if "test-hive2.3" in ghprb_pull_title:
         os.environ["AMPLAB_JENKINS_BUILD_HIVE_PROFILE"] = "hive2.3"
 
@@ -200,16 +198,16 @@ def main():
     # To write a PR test:
     #   * the file must reside within the dev/tests directory
     #   * be an executable bash script
-    #   * accept three arguments on the command line, the first being the Github PR long commit
-    #     hash, the second the Github SHA1 hash, and the final the current PR hash
+    #   * accept three arguments on the command line, the first being the GitHub PR long commit
+    #     hash, the second the GitHub SHA1 hash, and the final the current PR hash
     #   * and, lastly, return string output to be included in the pr message output that will
-    #     be posted to Github
+    #     be posted to GitHub
     pr_tests = [
         "pr_merge_ability",
         "pr_public_classes"
     ]
 
-    # `bind_message_base` returns a function to generate messages for Github posting
+    # `bind_message_base` returns a function to generate messages for GitHub posting
     github_message = functools.partial(pr_message,
                                        build_display_name,
                                        build_url,

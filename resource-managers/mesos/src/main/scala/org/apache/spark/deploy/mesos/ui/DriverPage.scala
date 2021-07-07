@@ -22,7 +22,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.deploy.Command
-import org.apache.spark.deploy.mesos.MesosDriverDescription
+import org.apache.spark.deploy.mesos.{config, MesosDriverDescription}
 import org.apache.spark.scheduler.cluster.mesos.{MesosClusterRetryState, MesosClusterSubmissionState}
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
@@ -152,6 +152,13 @@ private[ui] class DriverPage(parent: MesosClusterUI) extends WebUIPage("driver")
     </tr>
     <tr>
       <td>Memory</td><td>{driver.mem}</td>
+    </tr>
+    <tr>
+      <td>Queue</td>
+      <td>
+        {driver.conf.get(
+        "spark.mesos.dispatcher.queue", config.DISPATCHER_QUEUE.defaultValueString)}
+      </td>
     </tr>
     <tr>
       <td>Submitted</td><td>{UIUtils.formatDate(driver.submissionDate)}</td>

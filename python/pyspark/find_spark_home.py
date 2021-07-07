@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -36,15 +36,24 @@ def _find_spark_home():
                 (os.path.isdir(os.path.join(path, "jars")) or
                  os.path.isdir(os.path.join(path, "assembly"))))
 
-    paths = ["../", os.path.dirname(os.path.realpath(__file__))]
+    # Spark distribution can be downloaded when PYSPARK_HADOOP_VERSION environment variable is set.
+    # We should look up this directory first, see also SPARK-32017.
+    spark_dist_dir = "spark-distribution"
+    paths = [
+        "../",  # When we're in spark/python.
+        # Two case belows are valid when the current script is called as a library.
+        os.path.join(os.path.dirname(os.path.realpath(__file__)), spark_dist_dir),
+        os.path.dirname(os.path.realpath(__file__))]
 
     # Add the path of the PySpark module if it exists
     import_error_raised = False
     from importlib.util import find_spec
     try:
         module_home = os.path.dirname(find_spec("pyspark").origin)
+        paths.append(os.path.join(module_home, spark_dist_dir))
         paths.append(module_home)
         # If we are installed in edit mode also look two dirs up
+        # Downloading different versions are not supported in edit mode.
         paths.append(os.path.join(module_home, "../../"))
     except ImportError:
         # Not pip installed no worries

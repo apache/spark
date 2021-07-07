@@ -17,18 +17,22 @@
 
 package org.apache.spark.sql
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.{Inner, InnerLike, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, Filter, HintInfo, Join, JoinHint, LogicalPlan, Project}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin.LogicalPlanWithDatasetId
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.exchange.BroadcastExchangeExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types._
 
 class DataFrameJoinSuite extends QueryTest
   with SharedSparkSession
@@ -117,6 +121,16 @@ class DataFrameJoinSuite extends QueryTest
 
     checkAnswer(
       df2.crossJoin(df1),
+      Row(2, "2", 1, "1") :: Row(2, "2", 3, "3") ::
+        Row(4, "4", 1, "1") :: Row(4, "4", 3, "3") :: Nil)
+
+    checkAnswer(
+      df1.join(df2, Nil, "cross"),
+      Row(1, "1", 2, "2") :: Row(1, "1", 4, "4") ::
+        Row(3, "3", 2, "2") :: Row(3, "3", 4, "4") :: Nil)
+
+    checkAnswer(
+      df2.join(df1, Nil, "cross"),
       Row(2, "2", 1, "1") :: Row(2, "2", 3, "3") ::
         Row(4, "4", 1, "1") :: Row(4, "4", 3, "3") :: Nil)
   }
@@ -261,7 +275,16 @@ class DataFrameJoinSuite extends QueryTest
     withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
       val df = spark.range(2)
       // this throws an exception before the fix
-      df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
+      val plan = df.join(df, df("id") <=> df("id")).queryExecution.optimizedPlan
+
+      plan match {
+        // SPARK-34178: we can't match the plan before the fix due to
+        // the right side plan doesn't contains dataset id.
+        case Join(
+          LogicalPlanWithDatasetId(_, leftId),
+          LogicalPlanWithDatasetId(_, rightId), _, _, _) =>
+          assert(leftId === rightId)
+      }
     }
   }
 
@@ -338,14 +361,14 @@ class DataFrameJoinSuite extends QueryTest
 
           def checkIfHintApplied(df: DataFrame): Unit = {
             val sparkPlan = df.queryExecution.executedPlan
-            val broadcastHashJoins = sparkPlan.collect { case p: BroadcastHashJoinExec => p }
+            val broadcastHashJoins = collect(sparkPlan) { case p: BroadcastHashJoinExec => p }
             assert(broadcastHashJoins.size == 1)
             val broadcastExchanges = broadcastHashJoins.head.collect {
               case p: BroadcastExchangeExec => p
             }
             assert(broadcastExchanges.size == 1)
             val tables = broadcastExchanges.head.collect {
-              case FileSourceScanExec(_, _, _, _, _, _, _, Some(tableIdent)) => tableIdent
+              case FileSourceScanExec(_, _, _, _, _, _, _, Some(tableIdent), _) => tableIdent
             }
             assert(tables.size == 1)
             assert(tables.head === TableIdentifier(table1Name, Some(dbName)))
@@ -353,7 +376,7 @@ class DataFrameJoinSuite extends QueryTest
 
           def checkIfHintNotApplied(df: DataFrame): Unit = {
             val sparkPlan = df.queryExecution.executedPlan
-            val broadcastHashJoins = sparkPlan.collect { case p: BroadcastHashJoinExec => p }
+            val broadcastHashJoins = collect(sparkPlan) { case p: BroadcastHashJoinExec => p }
             assert(broadcastHashJoins.isEmpty)
           }
 
@@ -416,6 +439,64 @@ class DataFrameJoinSuite extends QueryTest
           }
         }
       }
+    }
+  }
+
+  test("SPARK-32693: Compare two dataframes with same schema except nullable property") {
+    val schema1 = StructType(
+      StructField("a", IntegerType, false) ::
+        StructField("b", IntegerType, false) ::
+        StructField("c", IntegerType, false) :: Nil)
+    val rowSeq1: List[Row] = List(Row(10, 1, 1), Row(10, 50, 2))
+    val df1 = spark.createDataFrame(rowSeq1.asJava, schema1)
+
+    val schema2 = StructType(
+      StructField("a", IntegerType) ::
+        StructField("b", IntegerType) ::
+        StructField("c", IntegerType) :: Nil)
+    val rowSeq2: List[Row] = List(Row(10, 1, 1))
+    val df2 = spark.createDataFrame(rowSeq2.asJava, schema2)
+
+    checkAnswer(df1.except(df2), Row(10, 50, 2))
+
+    val schema3 = StructType(
+      StructField("a", IntegerType, false) ::
+        StructField("b", IntegerType, false) ::
+        StructField("c", IntegerType, false) ::
+        StructField("d", schema1, false) :: Nil)
+    val rowSeq3: List[Row] = List(Row(10, 1, 1, Row(10, 1, 1)), Row(10, 50, 2, Row(10, 50, 2)))
+    val df3 = spark.createDataFrame(rowSeq3.asJava, schema3)
+
+    val schema4 = StructType(
+      StructField("a", IntegerType) ::
+        StructField("b", IntegerType) ::
+        StructField("b", IntegerType) ::
+        StructField("d", schema2) :: Nil)
+    val rowSeq4: List[Row] = List(Row(10, 1, 1, Row(10, 1, 1)))
+    val df4 = spark.createDataFrame(rowSeq4.asJava, schema4)
+
+    checkAnswer(df3.except(df4), Row(10, 50, 2, Row(10, 50, 2)))
+  }
+
+  test("SPARK-34527: Resolve common columns from USING JOIN") {
+    val joinDf = testData2.as("testData2").join(
+      testData3.as("testData3"), usingColumns = Seq("a"), joinType = "fullouter")
+    val dfQuery = joinDf.select(
+      $"a", $"testData2.a", $"testData2.b", $"testData3.a", $"testData3.b")
+    val dfQuery2 = joinDf.select(
+      $"a", testData2.col("a"), testData2.col("b"), testData3.col("a"), testData3.col("b"))
+
+    Seq(dfQuery, dfQuery2).map { query =>
+      checkAnswer(query,
+        Seq(
+          Row(1, 1, 1, 1, null),
+          Row(1, 1, 2, 1, null),
+          Row(2, 2, 1, 2, 2),
+          Row(2, 2, 2, 2, 2),
+          Row(3, 3, 1, null, null),
+          Row(3, 3, 2, null, null)
+        )
+      )
     }
   }
 }

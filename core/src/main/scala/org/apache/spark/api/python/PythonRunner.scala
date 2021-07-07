@@ -21,15 +21,11 @@ import java.io._
 import java.net._
 import java.nio.charset.StandardCharsets
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
-
-import org.json4s.JsonAST._
-import org.json4s.JsonDSL._
-import org.json4s.jackson.JsonMethods.{compact, render}
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
@@ -85,7 +81,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
   private val conf = SparkEnv.get.conf
   protected val bufferSize: Int = conf.get(BUFFER_SIZE)
+  protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
   private val reuseWorker = conf.get(PYTHON_WORKER_REUSE)
+  protected val simplifiedTraceback: Boolean = false
 
   // All the Python functions should have the same exec, version and envvars.
   protected val envVars: java.util.Map[String, String] = funcs.head.funcs.head.envVars
@@ -133,6 +131,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (reuseWorker) {
       envVars.put("SPARK_REUSE_WORKER", "1")
     }
+    if (simplifiedTraceback) {
+      envVars.put("SPARK_SIMPLIFIED_TRACEBACK", "1")
+    }
     // SPARK-30299 this could be wrong with standalone mode when executor
     // cores might not be correct because it defaults to all cores on the box.
     val execCores = execCoresProp.map(_.toInt).getOrElse(conf.get(EXECUTOR_CORES))
@@ -140,6 +141,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     if (workerMemoryMb.isDefined) {
       envVars.put("PYSPARK_EXECUTOR_MEMORY_MB", workerMemoryMb.get.toString)
     }
+    envVars.put("SPARK_AUTH_SOCKET_TIMEOUT", authSocketTimeout.toString)
     envVars.put("SPARK_BUFFER_SIZE", bufferSize.toString)
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.asScala.toMap)
     // Whether is the worker released into idle pool or closed. When any codes try to release or
@@ -163,7 +165,16 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     }
 
     writerThread.start()
-    new MonitorThread(env, worker, context).start()
+    if (reuseWorker) {
+      val key = (worker, context.taskAttemptId)
+      // SPARK-35009: avoid creating multiple monitor threads for the same python worker
+      // and task context
+      if (PythonRunner.runningMonitorThreads.add(key)) {
+        new MonitorThread(SparkEnv.get, worker, context).start()
+      }
+    } else {
+      new MonitorThread(SparkEnv.get, worker, context).start()
+    }
 
     // Return an iterator that read lines from the process's stdout
     val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
@@ -243,7 +254,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
             /* backlog */ 1,
             InetAddress.getByName("localhost")))
           // A call to accept() for ServerSocket shall block infinitely.
-          serverSocket.map(_.setSoTimeout(0))
+          serverSocket.foreach(_.setSoTimeout(0))
           new Thread("accept-connections") {
             setDaemon(true)
 
@@ -563,7 +574,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     setDaemon(true)
 
-    override def run(): Unit = {
+    private def monitorWorker(): Unit = {
       // Kill the worker if it is interrupted, checking until task completion.
       // TODO: This has a race condition if interruption occurs, as completed may still become true.
       while (!context.isInterrupted && !context.isCompleted) {
@@ -585,10 +596,24 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         }
       }
     }
+
+    override def run(): Unit = {
+      try {
+        monitorWorker()
+      } finally {
+        if (reuseWorker) {
+          val key = (worker, context.taskAttemptId)
+          PythonRunner.runningMonitorThreads.remove(key)
+        }
+      }
+    }
   }
 }
 
 private[spark] object PythonRunner {
+
+  // already running worker monitor threads for worker and task attempts ID pairs
+  val runningMonitorThreads = ConcurrentHashMap.newKeySet[(Socket, Long)]()
 
   def apply(func: PythonFunction): PythonRunner = {
     new PythonRunner(Seq(ChainedPythonFunctions(Seq(func))))

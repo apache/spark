@@ -21,6 +21,7 @@ import scala.collection.immutable.{HashMap, TreeMap}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.{GenericArrayData, TypeUtils}
 import org.apache.spark.sql.types._
 
@@ -73,9 +74,10 @@ case class PivotFirst(
   valueColumn: Expression,
   pivotColumnValues: Seq[Any],
   mutableAggBufferOffset: Int = 0,
-  inputAggBufferOffset: Int = 0) extends ImperativeAggregate {
+  inputAggBufferOffset: Int = 0) extends ImperativeAggregate with BinaryLike[Expression] {
 
-  override val children: Seq[Expression] = pivotColumn :: valueColumn :: Nil
+  override val left: Expression = pivotColumn
+  override val right: Expression = valueColumn
 
   override val nullable: Boolean = false
 
@@ -151,5 +153,9 @@ case class PivotFirst(
 
   override val inputAggBufferAttributes: Seq[AttributeReference] =
     aggBufferAttributes.map(_.newInstance())
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): PivotFirst =
+    copy(pivotColumn = newLeft, valueColumn = newRight)
 }
 

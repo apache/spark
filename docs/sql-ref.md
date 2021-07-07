@@ -32,7 +32,7 @@ Spark SQL is Apache Spark's module for working with structured data. This guide 
    * [Integration with Hive UDFs/UDAFs/UDTFs](sql-ref-functions-udf-hive.html)
  * [Identifiers](sql-ref-identifier.html)
  * [Literals](sql-ref-literals.html)
- * [Null Semanitics](sql-ref-null-semantics.html)
+ * [Null Semantics](sql-ref-null-semantics.html)
  * [SQL Syntax](sql-ref-syntax.html)
    * [DDL Statements](sql-ref-syntax-ddl.html)
    * [DML Statements](sql-ref-syntax-dml.html)

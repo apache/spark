@@ -39,11 +39,11 @@
 #'                      version number in the format of "x.y" where x and y are integer.
 #'                      If \code{hadoopVersion = "without"}, "Hadoop free" build is installed.
 #'                      See
-#'                      \href{http://spark.apache.org/docs/latest/hadoop-provided.html}{
+#'                      \href{https://spark.apache.org/docs/latest/hadoop-provided.html}{
 #'                      "Hadoop Free" Build} for more information.
 #'                      Other patched version names can also be used, e.g. \code{"cdh4"}
 #' @param mirrorUrl base URL of the repositories to use. The directory layout should follow
-#'                  \href{http://www.apache.org/dyn/closer.lua/spark/}{Apache mirrors}.
+#'                  \href{https://www.apache.org/dyn/closer.lua/spark/}{Apache mirrors}.
 #' @param localDir a local directory where Spark is installed. The directory contains
 #'                 version-specific folders of Spark packages. Default is path to
 #'                 the cache directory:
@@ -64,7 +64,7 @@
 #'}
 #' @note install.spark since 2.1.0
 #' @seealso See available Hadoop versions:
-#'          \href{http://spark.apache.org/downloads.html}{Apache Spark}
+#'          \href{https://spark.apache.org/downloads.html}{Apache Spark}
 install.spark <- function(hadoopVersion = "2.7", mirrorUrl = NULL,
                           localDir = NULL, overwrite = FALSE) {
   sparkHome <- Sys.getenv("SPARK_HOME")
@@ -289,7 +289,7 @@ sparkCachePath <- function() {
 }
 
 # Length of the Spark cache specific relative path segments for each platform
-# eg. "Apache\Spark\Cache" is 3 in Windows, or "spark" is 1 in unix
+# e.g. "Apache\Spark\Cache" is 3 in Windows, or "spark" is 1 in unix
 # Must match sparkCachePath() exactly.
 sparkCacheRelPathLength <- function() {
   if (is_windows()) {

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, UserDefinedType}
 
 /*
@@ -36,7 +36,8 @@ import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType, Use
  * representation of data item.  For example back to back map operations.
  */
 object EliminateSerialization extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(DESERIALIZE_TO_OBJECT, APPEND_COLUMNS, TYPED_FILTER), ruleId) {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
       if d.outputObjAttr.dataType == s.inputObjAttr.dataType =>
       // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
@@ -73,7 +74,8 @@ object EliminateSerialization extends Rule[LogicalPlan] {
  * merging the filter functions into one conjunctive function.
  */
 object CombineTypedFilters extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(TYPED_FILTER), ruleId) {
     case t1 @ TypedFilter(_, _, _, _, t2 @ TypedFilter(_, _, _, _, child))
         if t1.deserializer.dataType == t2.deserializer.dataType =>
       TypedFilter(
@@ -109,7 +111,8 @@ object CombineTypedFilters extends Rule[LogicalPlan] {
  *   2. no custom collection class specified representation of data item.
  */
 object EliminateMapObjects extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
+    _.containsAllPatterns(MAP_OBJECTS, LAMBDA_VARIABLE), ruleId) {
      case MapObjects(_, LambdaVariable(_, _, false, _), inputData, None) => inputData
   }
 }
@@ -147,7 +150,7 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
    */
   private def pruneNamedStruct(struct: CreateNamedStruct, prunedType: StructType) = {
     // Filters out the pruned fields.
-    val resolver = SQLConf.get.resolver
+    val resolver = conf.resolver
     val prunedFields = struct.nameExprs.zip(struct.valExprs).filter { case (nameExpr, _) =>
       val name = nameExpr.eval(EmptyRow).toString
       prunedType.fieldNames.exists(resolver(_, name))
@@ -162,8 +165,16 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
    * Note: we should do `transformUp` explicitly to change data types.
    */
   private def alignNullTypeInIf(expr: Expression) = expr.transformUp {
-    case i @ If(_: IsNull, Literal(null, dt), ser) if !dt.sameType(ser.dataType) =>
+    case i @ If(IsNullCondition(), Literal(null, dt), ser) if !dt.sameType(ser.dataType) =>
       i.copy(trueValue = Literal(null, ser.dataType))
+  }
+
+  object IsNullCondition {
+    def unapply(expr: Expression): Boolean = expr match {
+      case _: IsNull => true
+      case i: Invoke if i.functionName == "isNullAt" => true
+      case _ => false
+    }
   }
 
   /**
@@ -200,7 +211,8 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAllPatterns(SERIALIZE_FROM_OBJECT, PROJECT), ruleId) {
     case p @ Project(_, s: SerializeFromObject) =>
       // Prunes individual serializer if it is not used at all by above projection.
       val usedRefs = p.references
@@ -208,7 +220,7 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
 
       val rootFields = SchemaPruning.identifyRootFields(p.projectList, Seq.empty)
 
-      if (SQLConf.get.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
+      if (conf.serializerNestedSchemaPruningEnabled && rootFields.nonEmpty) {
         // Prunes nested fields in serializers.
         val prunedSchema = SchemaPruning.pruneDataSchema(
           StructType.fromAttributes(prunedSerializer.map(_.toAttribute)), rootFields)
@@ -245,7 +257,7 @@ object ReassignLambdaVariableID extends Rule[LogicalPlan] {
     var hasNegativeIds = false
     var hasPositiveIds = false
 
-    plan.transformAllExpressions {
+    plan.transformAllExpressionsWithPruning(_.containsPattern(LAMBDA_VARIABLE), ruleId) {
       case lr: LambdaVariable if lr.id == 0 =>
         throw new IllegalStateException("LambdaVariable should never has 0 as its ID.")
 

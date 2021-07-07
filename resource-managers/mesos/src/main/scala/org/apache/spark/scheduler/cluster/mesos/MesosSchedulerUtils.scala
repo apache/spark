@@ -29,14 +29,14 @@ import scala.util.control.NonFatal
 import com.google.common.base.Splitter
 import com.google.common.io.Files
 import org.apache.mesos.{MesosSchedulerDriver, Protos, Scheduler, SchedulerDriver}
-import org.apache.mesos.Protos.{SlaveID => AgentID, TaskState => MesosTaskState, _}
+import org.apache.mesos.Protos.{TaskState => MesosTaskState, _}
 import org.apache.mesos.Protos.FrameworkInfo.Capability
 import org.apache.mesos.Protos.Resource.ReservationInfo
-import org.apache.mesos.protobuf.{ByteString, GeneratedMessageV3}
+import org.apache.mesos.protobuf.GeneratedMessageV3
 
 import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.TaskState
-import org.apache.spark.deploy.mesos.{config => mesosConfig}
+import org.apache.spark.deploy.mesos.{config => mesosConfig, MesosDriverDescription}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{Status => _, _}
 import org.apache.spark.util.Utils
@@ -313,7 +313,6 @@ trait MesosSchedulerUtils extends Logging {
       // offer has the required attribute and subsumes the required values for that attribute
       case (name, requiredValues) =>
         offerAttributes.get(name) match {
-          case None => false
           case Some(_) if requiredValues.isEmpty => true // empty value matches presence
           case Some(scalarValue: Value.Scalar) =>
             // check if provided values is less than equal to the offered values
@@ -332,6 +331,7 @@ trait MesosSchedulerUtils extends Logging {
             // check if the specified value is equal, if multiple values are specified
             // we succeed if any of them match.
             requiredValues.contains(textValue.getValue)
+          case _ => false
         }
     }
   }
@@ -356,7 +356,7 @@ trait MesosSchedulerUtils extends Logging {
    *                       https://github.com/apache/mesos/blob/master/src/common/values.cpp
    *                       https://github.com/apache/mesos/blob/master/src/common/attributes.cpp
    *
-   * @param constraintsVal constains string consisting of ';' separated key-value pairs (separated
+   * @param constraintsVal contains string consisting of ';' separated key-value pairs (separated
    *                       by ':')
    * @return  Map of constraints to match resources offers.
    */
@@ -379,7 +379,7 @@ trait MesosSchedulerUtils extends Logging {
           } else {
             v.split(',').toSet
           }
-        )
+        ).toMap
       } catch {
         case NonFatal(e) =>
           throw new IllegalArgumentException(s"Bad constraint string: $constraintsVal", e)
@@ -403,6 +403,21 @@ trait MesosSchedulerUtils extends Logging {
     sc.conf.get(mesosConfig.EXECUTOR_MEMORY_OVERHEAD).getOrElse(
       math.max(MEMORY_OVERHEAD_FRACTION * sc.executorMemory, MEMORY_OVERHEAD_MINIMUM).toInt) +
       sc.executorMemory
+  }
+
+  /**
+   * Return the amount of memory to allocate to each driver, taking into account
+   * container overheads.
+   *
+   * @param driverDesc used to get driver memory
+   * @return memory requirement defined as `DRIVER_MEMORY_OVERHEAD` if set in the config,
+   *         otherwise the larger of `MEMORY_OVERHEAD_MINIMUM (=384MB)` or
+   *         `MEMORY_OVERHEAD_FRACTION (=0.1) * driverMemory`
+   */
+  def driverContainerMemory(driverDesc: MesosDriverDescription): Int = {
+    val defaultMem = math.max(MEMORY_OVERHEAD_FRACTION * driverDesc.mem, MEMORY_OVERHEAD_MINIMUM)
+    driverDesc.conf.get(mesosConfig.DRIVER_MEMORY_OVERHEAD).getOrElse(defaultMem.toInt) +
+      driverDesc.mem
   }
 
   def setupUris(uris: Seq[String],

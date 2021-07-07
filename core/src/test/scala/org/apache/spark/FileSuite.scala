@@ -170,7 +170,7 @@ class FileSuite extends SparkFunSuite with LocalSparkContext {
     val nums = sc.makeRDD(1 to 3).map(x => (x, "a" * x)) // (1,a), (2,aa), (3,aaa)
     nums.saveAsSequenceFile(outputDir)
     // Similar to the tests above, we read a SequenceFile, but this time we pass type params
-    // that are convertable to Writable instead of calling sequenceFile[IntWritable, Text]
+    // that are convertible to Writable instead of calling sequenceFile[IntWritable, Text]
     val output1 = sc.sequenceFile[Int, String](outputDir)
     assert(output1.collect().toList === List((1, "a"), (2, "aa"), (3, "aaa")))
     // Also try having one type be a subclass of Writable and one not

@@ -62,14 +62,16 @@ done
 init_java
 init_maven_sbt
 
-ASF_SPARK_REPO="gitbox.apache.org/repos/asf/spark.git"
+function uriencode { jq -nSRr --arg v "$1" '$v|@uri'; }
+
+declare -r ENCODED_ASF_PASSWORD=$(uriencode "$ASF_PASSWORD")
 
 rm -rf spark
-git clone "https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO" -b $GIT_BRANCH
+git clone "https://$ASF_USERNAME:$ENCODED_ASF_PASSWORD@$ASF_SPARK_REPO" -b $GIT_BRANCH
 cd spark
 
 git config user.name "$GIT_NAME"
-git config user.email $GIT_EMAIL
+git config user.email "$GIT_EMAIL"
 
 # Create release version
 $MVN versions:set -DnewVersion=$RELEASE_VERSION | grep -v "no value" # silence logs
@@ -102,6 +104,8 @@ sed -i".tmp5" 's/__version__ = .*$/__version__ = "'"$R_NEXT_VERSION.dev0"'"/' py
 sed -i".tmp6" 's/SPARK_VERSION:.*$/SPARK_VERSION: '"$NEXT_VERSION"'/g' docs/_config.yml
 # Use R version for short version
 sed -i".tmp7" 's/SPARK_VERSION_SHORT:.*$/SPARK_VERSION_SHORT: '"$R_NEXT_VERSION"'/g' docs/_config.yml
+# Update the version index of DocSearch as the short version
+sed -i".tmp8" "s/'facetFilters':.*$/'facetFilters': [\"version:$R_NEXT_VERSION\"]/g" docs/_config.yml
 
 git commit -a -m "Preparing development version $NEXT_VERSION"
 

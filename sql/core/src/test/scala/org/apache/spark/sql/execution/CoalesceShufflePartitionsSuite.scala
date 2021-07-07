@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.IO_ENCRYPTION_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.adaptive._
@@ -57,15 +58,18 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
   def withSparkSession(
       f: SparkSession => Unit,
       targetPostShuffleInputSize: Int,
-      minNumPostShufflePartitions: Option[Int]): Unit = {
+      minNumPostShufflePartitions: Option[Int],
+      enableIOEncryption: Boolean = false): Unit = {
     val sparkConf =
       new SparkConf(false)
         .setMaster("local[*]")
         .setAppName("test")
         .set(UI_ENABLED, false)
+        .set(IO_ENCRYPTION_ENABLED, enableIOEncryption)
         .set(SQLConf.SHUFFLE_PARTITIONS.key, "5")
         .set(SQLConf.COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key, "5")
         .set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, "true")
+        .set(SQLConf.FETCH_SHUFFLE_BLOCKS_IN_BATCH.key, "true")
         .set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key, "-1")
         .set(
           SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key,
@@ -90,7 +94,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
     }
 
     test(s"determining the number of reducers: aggregate operator$testNameNote") {
-      val test = { spark: SparkSession =>
+      val test: SparkSession => Unit = { spark: SparkSession =>
         val df =
           spark
             .range(0, 1000, 1, numInputPartitions)
@@ -109,14 +113,13 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         val shuffleReaders = finalPlan.collect {
           case r @ CoalescedShuffleReader() => r
         }
-        assert(shuffleReaders.length === 1)
+
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
-            shuffleReaders.foreach { reader =>
-              assert(reader.outputPartitioning.numPartitions === numPartitions)
-            }
+            assert(shuffleReaders.isEmpty)
 
           case None =>
+            assert(shuffleReaders.length === 1)
             shuffleReaders.foreach { reader =>
               assert(reader.outputPartitioning.numPartitions === 3)
             }
@@ -127,7 +130,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
     }
 
     test(s"determining the number of reducers: join operator$testNameNote") {
-      val test = { spark: SparkSession =>
+      val test: SparkSession => Unit = { spark: SparkSession =>
         val df1 =
           spark
             .range(0, 1000, 1, numInputPartitions)
@@ -156,14 +159,13 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         val shuffleReaders = finalPlan.collect {
           case r @ CoalescedShuffleReader() => r
         }
-        assert(shuffleReaders.length === 2)
+
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
-            shuffleReaders.foreach { reader =>
-              assert(reader.outputPartitioning.numPartitions === numPartitions)
-            }
+            assert(shuffleReaders.isEmpty)
 
           case None =>
+            assert(shuffleReaders.length === 2)
             shuffleReaders.foreach { reader =>
               assert(reader.outputPartitioning.numPartitions === 2)
             }
@@ -208,14 +210,13 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         val shuffleReaders = finalPlan.collect {
           case r @ CoalescedShuffleReader() => r
         }
-        assert(shuffleReaders.length === 2)
+
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
-            shuffleReaders.foreach { reader =>
-              assert(reader.outputPartitioning.numPartitions === numPartitions)
-            }
+            assert(shuffleReaders.isEmpty)
 
           case None =>
+            assert(shuffleReaders.length === 2)
             shuffleReaders.foreach { reader =>
               assert(reader.outputPartitioning.numPartitions === 2)
             }
@@ -260,14 +261,13 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         val shuffleReaders = finalPlan.collect {
           case r @ CoalescedShuffleReader() => r
         }
-        assert(shuffleReaders.length === 2)
+
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
-            shuffleReaders.foreach { reader =>
-              assert(reader.outputPartitioning.numPartitions === numPartitions)
-            }
+            assert(shuffleReaders.isEmpty)
 
           case None =>
+            assert(shuffleReaders.length === 2)
             shuffleReaders.foreach { reader =>
               assert(reader.outputPartitioning.numPartitions === 3)
             }
@@ -327,7 +327,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       assert(finalPlan.collect {
-        case ShuffleQueryStageExec(_, r: ReusedExchangeExec) => r
+        case ShuffleQueryStageExec(_, r: ReusedExchangeExec, _) => r
       }.length == 2)
       assert(
         finalPlan.collect {
@@ -363,7 +363,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
 
       val reusedStages = level1Stages.flatMap { stage =>
         stage.plan.collect {
-          case ShuffleQueryStageExec(_, r: ReusedExchangeExec) => r
+          case ShuffleQueryStageExec(_, r: ReusedExchangeExec, _) => r
         }
       }
       assert(reusedStages.length == 1)
@@ -407,6 +407,25 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         }.isEmpty)
     }
     withSparkSession(test, 100, None)
+  }
+
+  test("SPARK-34790: enable IO encryption in AQE partition coalescing") {
+    val test: SparkSession => Unit = { spark: SparkSession =>
+      val ds = spark.range(0, 100, 1, numInputPartitions)
+      val resultDf = ds.repartition(ds.col("id"))
+      resultDf.collect()
+
+      val finalPlan = resultDf.queryExecution.executedPlan
+        .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      assert(
+        finalPlan.collect {
+          case r @ CoalescedShuffleReader() => r
+        }.isDefinedAt(0))
+    }
+    Seq(true, false).foreach { enableIOEncryption =>
+      // Before SPARK-34790, it will throw an exception when io encryption enabled.
+      withSparkSession(test, Int.MaxValue, None, enableIOEncryption)
+    }
   }
 }
 
