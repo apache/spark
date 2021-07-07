@@ -57,10 +57,11 @@ object IntervalUtils {
   }
   import IntervalUnit._
 
-  private val MAX_DAY = 106751991L
-  private val MAX_HOUR = 2562047788L
-  private val MAX_MINUTE = 153722867280L
-  private val MAX_SECOND = 9223372036854L
+  private val MAX_DAY = Long.MaxValue / MICROS_PER_DAY
+  private val MAX_HOUR = Long.MaxValue / MICROS_PER_HOUR
+  private val MAX_MINUTE = Long.MaxValue / MICROS_PER_MINUTE
+  private val MAX_SECOND = Long.MaxValue / MICROS_PER_SECOND
+  private val MIN_SECOND = Long.MinValue / MICROS_PER_SECOND
 
   def getYears(months: Int): Int = months / MONTHS_PER_YEAR
 
@@ -218,7 +219,7 @@ object IntervalUtils {
   }
 
   /**
-   * Parse YearMonth string in form: [+|-]YYYY-MM
+   * Parse year-month interval in form: [+|-]YYYY-MM
    *
    * adapted from HiveIntervalYearMonth.valueOf
    */
@@ -227,11 +228,11 @@ object IntervalUtils {
   }
 
   /**
-   * Parse YearMonth string in form: [+|-]YYYY-MM
+   * Parse year-month interval in form: [+|-]YYYY-MM
    *
    * adapted from HiveIntervalYearMonth.valueOf
    * Below interval conversion patterns are supported:
-   * - YEAR TO MONTH
+   * - YEAR TO (YEAR|MONTH)
    */
   def fromYearMonthString(input: String, startField: Byte, endField: Byte): CalendarInterval = {
     require(input != null, "Interval year-month string must be not null")
@@ -452,7 +453,7 @@ object IntervalUtils {
   }
 
   /**
-   * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
+   * Parse day-time interval in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
    *
    * adapted from HiveIntervalDayTime.valueOf
    */
@@ -461,13 +462,13 @@ object IntervalUtils {
   }
 
   /**
-   * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
+   * Parse day-time interval in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
    *
    * adapted from HiveIntervalDayTime.valueOf.
    * Below interval conversion patterns are supported:
-   * - DAY TO (HOUR|MINUTE|SECOND)
-   * - HOUR TO (MINUTE|SECOND)
-   * - MINUTE TO SECOND
+   * - DAY TO (DAY|HOUR|MINUTE|SECOND)
+   * - HOUR TO (HOUR|MINUTE|SECOND)
+   * - MINUTE TO (MINUTE|SECOND)
    */
   def fromDayTimeString(input: String, from: IntervalUnit, to: IntervalUnit): CalendarInterval = {
     require(input != null, "Interval day-time string must be not null")
@@ -575,11 +576,7 @@ object IntervalUtils {
    */
   private def parseSecondNano(secondNano: String): Long = {
     def parseSeconds(secondsStr: String): Long = {
-      toLongWithRange(
-        SECOND,
-        secondsStr,
-        Long.MinValue / MICROS_PER_SECOND,
-        Long.MaxValue / MICROS_PER_SECOND) * MICROS_PER_SECOND
+      toLongWithRange(SECOND, secondsStr, MIN_SECOND, MAX_SECOND) * MICROS_PER_SECOND
     }
 
     secondNano.split("\\.") match {
@@ -1201,10 +1198,10 @@ object IntervalUtils {
         val minIntervalString = style match {
           case ANSI_STYLE =>
             val firstStr = startField match {
-              case DT.DAY => "-106751991"
-              case DT.HOUR => "-2562047788"
-              case DT.MINUTE => "-153722867280"
-              case DT.SECOND => "-9223372036854.775808"
+              case DT.DAY => s"-$MAX_DAY"
+              case DT.HOUR => s"-$MAX_HOUR"
+              case DT.MINUTE => s"-$MAX_MINUTE"
+              case DT.SECOND => s"-$MAX_SECOND.775808"
             }
             val followingStr = if (startField == endField) {
               ""
