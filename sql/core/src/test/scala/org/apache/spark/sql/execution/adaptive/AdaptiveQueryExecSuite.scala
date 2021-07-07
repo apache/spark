@@ -1498,7 +1498,7 @@ class AdaptiveQueryExecSuite
             |  ON t1.key = t2.key
             |""".stripMargin
         val (origin, adaptive) = runAdaptiveAndVerifyResult(query)
-        assert(findTopLevelSortMergeJoin(origin).size == 1)
+        assert(findTopLevelBroadcastHashJoin(origin).size == 1)
         assert(findTopLevelBroadcastHashJoin(adaptive).size == 1)
       }
     }
