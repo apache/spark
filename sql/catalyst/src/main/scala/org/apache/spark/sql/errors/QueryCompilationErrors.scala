@@ -2040,6 +2040,13 @@ private[spark] object QueryCompilationErrors {
       s"(cycle: ${newPath.mkString(" -> ")})")
   }
 
+  def notAllowedToCreatePermanentViewWithoutAssigningAliasForExpressionError(
+      name: TableIdentifier,
+      attrName: String):Throwable = {
+    new AnalysisException(s"Not allowed to create a permanent view $name without " +
+      s"explicitly assigning an alias for expression $attrName")
+  }
+
   def notAllowedToCreatePermanentViewByReferencingTempViewError(
       name: TableIdentifier,
       nameParts: String): Throwable = {
