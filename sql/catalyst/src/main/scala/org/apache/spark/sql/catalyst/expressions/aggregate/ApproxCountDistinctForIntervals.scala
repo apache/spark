@@ -61,7 +61,7 @@ case class ApproxCountDistinctForIntervals(
   }
 
   override def inputTypes: Seq[AbstractDataType] = {
-    Seq(TypeCollection(NumericType, TimestampType, DateType), ArrayType)
+    Seq(TypeCollection(NumericType, TimestampType, DateType, TimestampNTZType), ArrayType)
   }
 
   // Mark as lazy so that endpointsExpression is not evaluated during tree transformation.
@@ -79,7 +79,7 @@ case class ApproxCountDistinctForIntervals(
       TypeCheckFailure("The endpoints provided must be constant literals")
     } else {
       endpointsExpression.dataType match {
-        case ArrayType(_: NumericType | DateType | TimestampType, _) =>
+        case ArrayType(_: NumericType | DateType | TimestampType | TimestampNTZType, _) =>
           if (endpoints.length < 2) {
             TypeCheckFailure("The number of endpoints must be >= 2 to construct intervals")
           } else {
@@ -122,7 +122,7 @@ case class ApproxCountDistinctForIntervals(
           n.numeric.toDouble(value.asInstanceOf[n.InternalType])
         case _: DateType =>
           value.asInstanceOf[Int].toDouble
-        case _: TimestampType =>
+        case TimestampType | TimestampNTZType =>
           value.asInstanceOf[Long].toDouble
       }
 
