@@ -18,7 +18,6 @@
 package org.apache.spark;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.annotation.Since;
 
 /**
  * Interface mixed into Throwables thrown from Spark.
