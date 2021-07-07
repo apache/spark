@@ -73,6 +73,22 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def psser(self):
         return ps.from_pandas(self.pser)
 
+    @property
+    def other_pser(self):
+        return pd.Series([[2, 3, 4]])
+
+    @property
+    def other_psser(self):
+        return ps.from_pandas(self.other_pser)
+
+    @property
+    def struct_pser(self):
+        return pd.Series([("x", 1)])
+
+    @property
+    def struct_psser(self):
+        return ps.Index([("x", 1)]).to_series().reset_index(drop=True)
+
     def test_add(self):
         for pser, psser in zip(self.psers, self.pssers):
             self.assert_eq(pser + pser, psser + psser)
@@ -223,6 +239,81 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
     def test_astype(self):
         self.assert_eq(self.pser.astype(str), self.psser.astype(str))
+
+    def test_neg(self):
+        self.assertRaises(TypeError, lambda: -self.psser)
+
+    def test_abs(self):
+        self.assertRaises(TypeError, lambda: abs(self.psser))
+
+    def test_invert(self):
+        self.assertRaises(TypeError, lambda: ~self.psser)
+
+    def test_eq(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser == self.other_pser, (self.psser == self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser == self.pser, (self.psser == self.psser).sort_index())
+            self.assert_eq(
+                self.struct_pser == self.struct_pser,
+                (self.struct_psser == self.struct_psser).sort_index(),
+            )
+
+    def test_ne(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser != self.other_pser, (self.psser != self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser != self.pser, (self.psser != self.psser).sort_index())
+            self.assert_eq(
+                self.struct_pser != self.struct_pser,
+                (self.struct_psser != self.struct_psser).sort_index(),
+            )
+
+    def test_lt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser < self.other_pser, (self.psser < self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser < self.pser, (self.psser < self.psser).sort_index())
+            self.assert_eq(
+                self.struct_pser < self.struct_pser,
+                (self.struct_psser < self.struct_psser).sort_index(),
+            )
+
+    def test_le(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser <= self.other_pser, (self.psser <= self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser <= self.pser, (self.psser <= self.psser).sort_index())
+            self.assert_eq(
+                self.struct_pser <= self.struct_pser,
+                (self.struct_psser <= self.struct_psser).sort_index(),
+            )
+
+    def test_gt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser > self.other_pser, (self.psser > self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser > self.pser, (self.psser > self.psser).sort_index())
+            self.assert_eq(
+                self.struct_pser > self.struct_pser,
+                (self.struct_psser > self.struct_psser).sort_index(),
+            )
+
+    def test_ge(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser >= self.other_pser, (self.psser >= self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
+            self.assert_eq(
+                self.struct_pser >= self.struct_pser,
+                (self.struct_psser >= self.struct_psser).sort_index(),
+            )
 
 
 if __name__ == "__main__":
