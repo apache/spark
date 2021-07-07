@@ -40,6 +40,14 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def psser(self):
         return ps.from_pandas(self.pser)
 
+    @property
+    def other_pser(self):
+        return pd.Series(["z", "y", "x"])
+
+    @property
+    def other_psser(self):
+        return ps.from_pandas(self.other_pser)
+
     def test_add(self):
         self.assert_eq(self.pser + "x", self.psser + "x")
         self.assertRaises(TypeError, lambda: self.psser + 1)
@@ -179,6 +187,57 @@ class StringOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         cat_type = CategoricalDtype(categories=["3", "1", "2"])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
+    def test_neg(self):
+        self.assertRaises(TypeError, lambda: -self.psser)
+
+    def test_abs(self):
+        self.assertRaises(TypeError, lambda: abs(self.psser))
+
+    def test_invert(self):
+        self.assertRaises(TypeError, lambda: ~self.psser)
+
+    def test_eq(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser == self.other_pser, (self.psser == self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser == self.pser, (self.psser == self.psser).sort_index())
+
+    def test_ne(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser != self.other_pser, (self.psser != self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser != self.pser, (self.psser != self.psser).sort_index())
+
+    def test_lt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser < self.other_pser, (self.psser < self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser < self.pser, (self.psser < self.psser).sort_index())
+
+    def test_le(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser <= self.other_pser, (self.psser <= self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser <= self.pser, (self.psser <= self.psser).sort_index())
+
+    def test_gt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser > self.other_pser, (self.psser > self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser > self.pser, (self.psser > self.psser).sort_index())
+
+    def test_ge(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser >= self.other_pser, (self.psser >= self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
+
 
 @unittest.skipIf(
     not extension_object_dtypes_available, "pandas extension object dtypes are not available"
@@ -191,6 +250,14 @@ class StringExtensionOpsTest(StringOpsTest, PandasOnSparkTestCase, TestCasesUtil
     @property
     def psser(self):
         return ps.from_pandas(self.pser)
+
+    @property
+    def other_pser(self):
+        return pd.Series([None, "z", "y", "x"], dtype="string")
+
+    @property
+    def other_psser(self):
+        return ps.from_pandas(self.other_pser)
 
     def test_radd(self):
         self.assert_eq("x" + self.pser, ("x" + self.psser).astype("string"))
@@ -234,8 +301,51 @@ class StringExtensionOpsTest(StringOpsTest, PandasOnSparkTestCase, TestCasesUtil
             if dtype in ["string", StringDtype()]:
                 self.check_extension(pser.astype(dtype), psser.astype(dtype))
 
+    def test_eq(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.check_extension(
+                self.pser == self.other_pser, (self.psser == self.other_psser).sort_index()
+            )
+            self.check_extension(self.pser == self.pser, (self.psser == self.psser).sort_index())
+
+    def test_ne(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.check_extension(
+                self.pser != self.other_pser, (self.psser != self.other_psser).sort_index()
+            )
+            self.check_extension(self.pser != self.pser, (self.psser != self.psser).sort_index())
+
+    def test_lt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.check_extension(
+                self.pser < self.other_pser, (self.psser < self.other_psser).sort_index()
+            )
+            self.check_extension(self.pser < self.pser, (self.psser < self.psser).sort_index())
+
+    def test_le(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.check_extension(
+                self.pser <= self.other_pser, (self.psser <= self.other_psser).sort_index()
+            )
+            self.check_extension(self.pser <= self.pser, (self.psser <= self.psser).sort_index())
+
+    def test_gt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.check_extension(
+                self.pser > self.other_pser, (self.psser > self.other_psser).sort_index()
+            )
+            self.check_extension(self.pser > self.pser, (self.psser > self.psser).sort_index())
+
+    def test_ge(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.check_extension(
+                self.pser >= self.other_pser, (self.psser >= self.other_psser).sort_index()
+            )
+            self.check_extension(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
+
 
 if __name__ == "__main__":
+
     from pyspark.pandas.tests.data_type_ops.test_string_ops import *  # noqa: F401
 
     try:

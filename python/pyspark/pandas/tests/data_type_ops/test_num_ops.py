@@ -30,6 +30,7 @@ from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
 )
+from pyspark.sql.types import DecimalType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
@@ -317,6 +318,57 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             cat_type = CategoricalDtype(categories=[2, 1, 3])
             self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
+    def test_neg(self):
+        for pser, psser in self.numeric_pser_psser_pairs:
+            if not isinstance(psser.spark.data_type, DecimalType):
+                self.assert_eq(-pser, -psser)
+
+    def test_abs(self):
+        for pser, psser in self.numeric_pser_psser_pairs:
+            if not isinstance(psser.spark.data_type, DecimalType):
+                self.assert_eq(abs(pser), abs(psser))
+
+    def test_invert(self):
+        for psser in self.numeric_pssers:
+            if not isinstance(psser.spark.data_type, DecimalType):
+                self.assertRaises(NotImplementedError, lambda: ~psser)
+
+    def test_eq(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.numeric_pser_psser_pairs:
+                if not isinstance(psser.spark.data_type, DecimalType):
+                    self.assert_eq(pser == pser, (psser == psser).sort_index())
+
+    def test_ne(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.numeric_pser_psser_pairs:
+                if not isinstance(psser.spark.data_type, DecimalType):
+                    self.assert_eq(pser != pser, (psser != psser).sort_index())
+
+    def test_lt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.numeric_pser_psser_pairs:
+                if not isinstance(psser.spark.data_type, DecimalType):
+                    self.assert_eq(pser < pser, (psser < psser).sort_index())
+
+    def test_le(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.numeric_pser_psser_pairs:
+                if not isinstance(psser.spark.data_type, DecimalType):
+                    self.assert_eq(pser <= pser, (psser <= psser).sort_index())
+
+    def test_gt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.numeric_pser_psser_pairs:
+                if not isinstance(psser.spark.data_type, DecimalType):
+                    self.assert_eq(pser > pser, (psser > psser).sort_index())
+
+    def test_ge(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.numeric_pser_psser_pairs:
+                if not isinstance(psser.spark.data_type, DecimalType):
+                    self.assert_eq(pser >= pser, (psser >= psser).sort_index())
+
 
 @unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
 class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
@@ -345,6 +397,48 @@ class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
             for dtype in self.extension_dtypes:
                 self.check_extension(pser.astype(dtype), psser.astype(dtype))
+
+    def test_neg(self):
+        for pser, psser in self.intergral_extension_pser_psser_pairs:
+            self.check_extension(-pser, -psser)
+
+    def test_abs(self):
+        for pser, psser in self.intergral_extension_pser_psser_pairs:
+            self.check_extension(abs(pser), abs(psser))
+
+    def test_invert(self):
+        for psser in self.intergral_extension_pssers:
+            self.assertRaises(NotImplementedError, lambda: ~psser)
+
+    def test_eq(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.intergral_extension_pser_psser_pairs:
+                self.check_extension(pser == pser, (psser == psser).sort_index())
+
+    def test_ne(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.intergral_extension_pser_psser_pairs:
+                self.check_extension(pser != pser, (psser != psser).sort_index())
+
+    def test_lt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.intergral_extension_pser_psser_pairs:
+                self.check_extension(pser < pser, (psser < psser).sort_index())
+
+    def test_le(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.intergral_extension_pser_psser_pairs:
+                self.check_extension(pser <= pser, (psser <= psser).sort_index())
+
+    def test_gt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.intergral_extension_pser_psser_pairs:
+                self.check_extension(pser > pser, (psser > psser).sort_index())
+
+    def test_ge(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.intergral_extension_pser_psser_pairs:
+                self.check_extension(pser >= pser, (psser >= psser).sort_index())
 
 
 @unittest.skipIf(
@@ -379,6 +473,52 @@ class FractionalExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for pser, psser in self.fractional_extension_pser_psser_pairs:
             for dtype in self.extension_dtypes:
                 self.check_extension(pser.astype(dtype), psser.astype(dtype))
+
+    def test_neg(self):
+        # pandas raises "TypeError: bad operand type for unary -: 'FloatingArray'"
+        for dtype in self.fractional_extension_dtypes:
+            self.assert_eq(
+                ps.Series([-0.1, -0.2, -0.3, None], dtype=dtype),
+                -ps.Series([0.1, 0.2, 0.3, None], dtype=dtype),
+            )
+
+    def test_abs(self):
+        for pser, psser in self.fractional_extension_pser_psser_pairs:
+            self.check_extension(abs(pser), abs(psser))
+
+    def test_invert(self):
+        for psser in self.fractional_extension_pssers:
+            self.assertRaises(NotImplementedError, lambda: ~psser)
+
+    def test_eq(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.fractional_extension_pser_psser_pairs:
+                self.check_extension(pser == pser, (psser == psser).sort_index())
+
+    def test_ne(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.fractional_extension_pser_psser_pairs:
+                self.check_extension(pser != pser, (psser != psser).sort_index())
+
+    def test_lt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.fractional_extension_pser_psser_pairs:
+                self.check_extension(pser < pser, (psser < psser).sort_index())
+
+    def test_le(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.fractional_extension_pser_psser_pairs:
+                self.check_extension(pser <= pser, (psser <= psser).sort_index())
+
+    def test_gt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.fractional_extension_pser_psser_pairs:
+                self.check_extension(pser > pser, (psser > psser).sort_index())
+
+    def test_ge(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            for pser, psser in self.fractional_extension_pser_psser_pairs:
+                self.check_extension(pser >= pser, (psser >= psser).sort_index())
 
 
 if __name__ == "__main__":

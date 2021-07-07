@@ -16,7 +16,7 @@
 #
 
 import numbers
-from typing import Any, Union
+from typing import cast, Any, Union
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -47,7 +47,7 @@ class BooleanOps(DataTypeOps):
 
     @property
     def pretty_name(self) -> str:
-        return "booleans"
+        return "bools"
 
     def add(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
@@ -272,12 +272,47 @@ class BooleanOps(DataTypeOps):
         else:
             return _as_other_type(index_ops, dtype, spark_type)
 
+    def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
+        return ~operand
+
+    def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
+        return operand
+
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__lt__)(left, right)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__le__)(left, right)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__ge__)(left, right)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__gt__)(left, right)
+
+    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
+        from pyspark.pandas.base import column_op
+
+        return cast(IndexOpsLike, column_op(Column.__invert__)(operand))
+
 
 class BooleanExtensionOps(BooleanOps):
     """
     The class for binary operations of pandas-on-Spark objects with spark type BooleanType,
     and dtype BooleanDtype.
     """
+
+    @property
+    def pretty_name(self) -> str:
+        return "booleans"
 
     def __and__(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         def and_func(left: Column, right: Any) -> Column:
@@ -304,3 +339,12 @@ class BooleanExtensionOps(BooleanOps):
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""
         return col.astype(self.dtype)
+
+    def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("Unary - can not be applied to %s." % self.pretty_name)
+
+    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
+
+    def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("abs() can not be applied to %s." % self.pretty_name)
