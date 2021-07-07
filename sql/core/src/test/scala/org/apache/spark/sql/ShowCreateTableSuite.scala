@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.sources.SimpleInsertSource
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.util.Utils
 
@@ -176,7 +177,7 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
       val createTable = "CREATE TABLE `t1` (`a` STRUCT<`b`: STRING>)"
       sql(s"$createTable USING json")
       val shownDDL = getShowDDL("SHOW CREATE TABLE t1")
-      assert(shownDDL == "CREATE TABLE `default`.`t1` (`a` STRUCT<`b`: STRING>)")
+      assert(shownDDL == "CREATE TABLE `default`.`t1` ( `a` STRUCT<`b`: STRING>) USING json")
 
       checkCreateTable("t1")
     }
@@ -191,25 +192,16 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
            |  a bigint NOT NULL,
            |  b bigint
            |)
-           |USING org.apache.spark.sql.sources.SimpleInsertSource
+           |USING ${classOf[SimpleInsertSource].getName}
         """.stripMargin)
-      val showDDL = sql(s"SHOW CREATE TABLE $t").head().getString(0)
-        .split("\n").map(_.trim)
-      assert(showDDL === Array(
-        "CREATE TABLE `default`.`SPARK_36012` (",
-        "`a` BIGINT NOT NULL,",
-        "`b` BIGINT)",
-        "USING org.apache.spark.sql.sources.SimpleInsertSource"))
+      val showDDL = getShowDDL(s"SHOW CREATE TABLE $t")
+      assert(showDDL == s"CREATE TABLE `default`.`$t` ( `a` BIGINT NOT NULL," +
+        s" `b` BIGINT) USING ${classOf[SimpleInsertSource].getName}")
     }
   }
 
   protected def getShowDDL(showCreateTableSql: String): String = {
-    val result = sql(showCreateTableSql)
-      .head()
-      .getString(0)
-      .split("\n")
-      .map(_.trim)
-    if (result.length > 1) result(0) + result(1) else result.head
+    sql(showCreateTableSql).head().getString(0).split("\n").map(_.trim).mkString(" ")
   }
 
   protected def checkCreateTable(table: String, serde: Boolean = false): Unit = {
