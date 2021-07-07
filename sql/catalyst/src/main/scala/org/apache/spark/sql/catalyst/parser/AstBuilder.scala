@@ -2486,7 +2486,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         val to = ctx.to.getText.toLowerCase(Locale.ROOT)
         (from, to) match {
           case ("year", "month") =>
-            IntervalUtils.fromYearMonthString(value)
+            IntervalUtils.castYearMonthStringToInterval(value,
+              YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH)
           case ("day", "hour") =>
             IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.HOUR)
           case ("day", "minute") =>

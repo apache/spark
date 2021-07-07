@@ -216,6 +216,14 @@ object IntervalUtils {
     }
   }
 
+  def castYearMonthStringToInterval(
+      input: String,
+      startField: Byte,
+      endField: Byte): CalendarInterval = {
+    val months = castStringToYMInterval(UTF8String.fromString(input), startField, endField)
+    new CalendarInterval(months, 0, 0)
+  }
+
   /**
    * Parse YearMonth string in form: [+|-]YYYY-MM
    *
@@ -332,8 +340,8 @@ object IntervalUtils {
         toDTInterval(day, hour, minute, secondAndMicro(second, micro),
           finalSign(firstSign, secondSign))
 
-      case hourMinuteRegex(sign, hour, minute) =>
-        checkDTIntervalStringDataType(DT(DT.HOUR, DT.MINUTE))
+      case hourMinuteRegex(sign, hour, minute)
+        if startField == DT.HOUR && endField == DT.MINUTE =>
         toDTInterval(hour, minute, "0", finalSign(sign))
       case hourMinuteLiteralRegex(firstSign, secondSign, hour, minute) =>
         checkDTIntervalStringDataType(DT(DT.HOUR, DT.MINUTE))
@@ -441,6 +449,14 @@ object IntervalUtils {
     micros
   }
 
+  def castDayTimeStringToInterval(
+      input: String,
+      startField: Byte,
+      endField: Byte): CalendarInterval = {
+    val micros = castStringToDTInterval(UTF8String.fromString(input), startField, endField)
+    new CalendarInterval(0, (micros / MICROS_PER_DAY).toInt, micros % MICROS_PER_DAY)
+  }
+
   /**
    * Parse dayTime string in form: [-]d HH:mm:ss.nnnnnnnnn and [-]HH:mm:ss.nnnnnnnnn
    *
@@ -463,7 +479,8 @@ object IntervalUtils {
     if (SQLConf.get.getConf(SQLConf.LEGACY_FROM_DAYTIME_STRING)) {
       parseDayTimeLegacy(input, from, to)
     } else {
-      parseDayTime(input, from, to)
+      castDayTimeStringToInterval(input,
+        DT.stringToField(from.toString), DT.stringToField(to.toString))
     }
   }
 
@@ -542,87 +559,6 @@ object IntervalUtils {
         throw new IllegalArgumentException(
           s"Error parsing interval day-time string: ${e.getMessage}", e)
     }
-  }
-
-  private val signRe = "(?<sign>[+|-])"
-  private val dayRe = "(?<day>\\d{1,9})"
-  private val hourRe = "(?<hour>\\d{1,2})"
-  private val minuteRe = "(?<minute>\\d{1,2})"
-  private val secondRe = "(?<second>(\\d{1,2})(\\.(\\d{1,9}))?)"
-  private val hourBoundRe = "(?<hour>\\d{1,10})"
-  private val minuteBoundRe = "(?<minute>\\d{1,12})"
-
-  private val dayTimePattern = Map(
-    (MINUTE, SECOND) -> s"^$signRe?$minuteBoundRe:$secondRe$$".r,
-    (HOUR, MINUTE) -> s"^$signRe?$hourBoundRe:$minuteRe$$".r,
-    (HOUR, SECOND) -> s"^$signRe?$hourBoundRe:$minuteRe:$secondRe$$".r,
-    (DAY, HOUR) -> s"^$signRe?$dayRe $hourRe$$".r,
-    (DAY, MINUTE) -> s"^$signRe?$dayRe $hourRe:$minuteRe$$".r,
-    (DAY, SECOND) -> s"^$signRe?$dayRe $hourRe:$minuteRe:$secondRe$$".r
-  )
-
-  private def unitsRange(start: IntervalUnit, end: IntervalUnit): Seq[IntervalUnit] = {
-    (start.id to end.id).map(IntervalUnit(_))
-  }
-
-  /**
-   * Parses an input string in the day-time format defined by the `from` and `to` bounds.
-   * It supports the following formats:
-   * - [+|-]D+ H[H]:m[m]:s[s][.SSSSSSSSS] for DAY TO SECOND
-   * - [+|-]D+ H[H]:m[m] for DAY TO MINUTE
-   * - [+|-]D+ H[H] for DAY TO HOUR
-   * - [+|-]H[H]:m[m]s[s][.SSSSSSSSS] for HOUR TO SECOND
-   * - [+|-]H[H]:m[m] for HOUR TO MINUTE
-   * - [+|-]m[m]:s[s][.SSSSSSSSS] for MINUTE TO SECOND
-   *
-   * Note: the seconds fraction is truncated to microseconds.
-   *
-   * @param input The input string to parse.
-   * @param from The interval unit from which the input string begins.
-   * @param to The interval unit at where the input string ends.
-   * @return an instance of `CalendarInterval` if the input string was parsed successfully
-   *         otherwise throws an exception.
-   * @throws IllegalArgumentException The input string has incorrect format and cannot be parsed.
-   * @throws ArithmeticException An interval unit value is out of valid range or the resulted
-   *                             interval fields `days` or `microseconds` are out of the valid
-   *                             ranges.
-   */
-  private def parseDayTime(
-      input: String,
-      from: IntervalUnit,
-      to: IntervalUnit): CalendarInterval = {
-    require(input != null, "Interval day-time string must be not null")
-    val regexp = dayTimePattern.get(from -> to)
-    require(regexp.isDefined, s"Cannot support (interval '$input' $from to $to) expression")
-    val pattern = regexp.get.pattern
-    val m = pattern.matcher(input.trim)
-    require(m.matches, s"Interval string must match day-time format of '$pattern': $input, " +
-      s"$fallbackNotice")
-    var micros: Long = 0L
-    var days: Int = 0
-    val sign = if (m.group("sign") != null && m.group("sign") == "-") -1 else 1
-    unitsRange(to, from).foreach {
-      case unit @ DAY =>
-        days = sign * toLongWithRange(unit, m.group(unit.toString), 0, Int.MaxValue).toInt
-      case unit @ HOUR =>
-        val parsed = toLongWithRange(unit, m.group(unit.toString), 0,
-          if (from == HOUR) MAX_HOUR else 23)
-        micros = Math.addExact(micros, sign * parsed * MICROS_PER_HOUR)
-      case unit @ MINUTE =>
-        val parsed = toLongWithRange(unit, m.group(unit.toString), 0,
-          if (from == MINUTE) MAX_MINUTE else 59)
-        micros = Math.addExact(micros, sign * parsed * MICROS_PER_MINUTE)
-      case unit @ SECOND =>
-        val seconds = sign match {
-          case 1 => parseSecondNano(m.group(unit.toString))
-          case -1 => parseSecondNano(s"-${m.group(unit.toString)}")
-        }
-        micros = Math.addExact(micros, seconds)
-      case _ =>
-        throw new IllegalArgumentException(
-          s"Cannot support (interval '$input' $from to $to) expression")
-    }
-    new CalendarInterval(0, days, micros)
   }
 
   // Parses a string with nanoseconds, truncates the result and returns microseconds
