@@ -56,6 +56,11 @@ object IntervalUtils {
   }
   import IntervalUnit._
 
+  private val MAX_DAY = 106751991L
+  private val MAX_HOUR = 2562047788L
+  private val MAX_MINUTE = 153722867280L
+  private val MAX_SECOND = 9223372036854L
+
   def getYears(months: Int): Int = months / MONTHS_PER_YEAR
 
   def getYears(interval: CalendarInterval): Int = getYears(interval.months)
@@ -402,7 +407,7 @@ object IntervalUtils {
       secondStr: String,
       sign: Int): Long = {
     var micros = 0L
-    val days = toLongWithRange(DAY, dayStr, 0, Int.MaxValue).toInt
+    val days = toLongWithRange(DAY, dayStr, 0, MAX_DAY).toInt
     micros = Math.addExact(micros, sign * days * MICROS_PER_DAY)
     val hours = toLongWithRange(HOUR, hourStr, 0, 23)
     micros = Math.addExact(micros, sign * hours * MICROS_PER_HOUR)
@@ -418,7 +423,7 @@ object IntervalUtils {
       secondStr: String,
       sign: Int): Long = {
     var micros = 0L
-    val hours = toLongWithRange(HOUR, hourStr, 0, 2562047788L)
+    val hours = toLongWithRange(HOUR, hourStr, 0, MAX_HOUR)
     micros = Math.addExact(micros, sign * hours * MICROS_PER_HOUR)
     val minutes = toLongWithRange(MINUTE, minuteStr, 0, 59)
     micros = Math.addExact(micros, sign * minutes * MICROS_PER_MINUTE)
@@ -431,7 +436,7 @@ object IntervalUtils {
       secondStr: String,
       sign: Int): Long = {
     var micros = 0L
-    val minutes = toLongWithRange(MINUTE, minuteStr, 0, 153722867280L)
+    val minutes = toLongWithRange(MINUTE, minuteStr, 0, MAX_MINUTE)
     micros = Math.addExact(micros, sign * minutes * MICROS_PER_MINUTE)
     micros = Math.addExact(micros, sign * parseSecondNano(secondStr))
     micros
@@ -602,11 +607,11 @@ object IntervalUtils {
         days = sign * toLongWithRange(unit, m.group(unit.toString), 0, Int.MaxValue).toInt
       case unit @ HOUR =>
         val parsed = toLongWithRange(unit, m.group(unit.toString), 0,
-          if (from == HOUR) 2562047788L else 23)
+          if (from == HOUR) MAX_HOUR else 23)
         micros = Math.addExact(micros, sign * parsed * MICROS_PER_HOUR)
       case unit @ MINUTE =>
         val parsed = toLongWithRange(unit, m.group(unit.toString), 0,
-          if (from == MINUTE) 153722867280L else 59)
+          if (from == MINUTE) MAX_MINUTE else 59)
         micros = Math.addExact(micros, sign * parsed * MICROS_PER_MINUTE)
       case unit @ SECOND =>
         val seconds = sign match {
