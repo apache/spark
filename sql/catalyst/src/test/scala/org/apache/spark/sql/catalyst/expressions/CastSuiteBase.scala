@@ -1107,8 +1107,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(Literal.create(str), dataType), value)
         if (dataType == YearMonthIntervalType(YEAR)) {
           checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR"), dataType), value)
+          checkEvaluation(cast(Literal.create(s"INTERVAL '$str' year"), dataType), value)
         } else {
           checkEvaluation(cast(Literal.create(s"INTERVAL '$str' MONTH"), dataType), value)
+          checkEvaluation(cast(Literal.create(s"INTERVAL '$str' month"), dataType), value)
         }
       }
 
@@ -1210,6 +1212,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("INTERVAL '9223372036854.775807' SECOND", DayTimeIntervalType(SECOND), Long.MaxValue))
       .foreach { case (interval, dataType, dt) =>
         checkEvaluation(cast(Literal.create(interval), dataType), dt)
+        checkEvaluation(cast(Literal.create(interval.toLowerCase(Locale.ROOT)), dataType), dt)
       }
 
     Seq(("INTERVAL '-106751991' DAY", DayTimeIntervalType(DAY), -106751991L * MICROS_PER_DAY),
