@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkException, SparkFiles, TaskContext}
+import org.apache.spark.{SparkFiles, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast,
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -185,8 +186,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       val exitCode = proc.exitValue()
       if (exitCode != 0) {
         logError(stderrBuffer.toString) // log the stderr circular buffer
-        throw new SparkException(s"Subprocess exited with status $exitCode. " +
-          s"Error: ${stderrBuffer.toString}", cause)
+        throw QueryExecutionErrors.subprocessExitedError(exitCode, stderrBuffer, cause)
       }
     }
   }
@@ -231,8 +231,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>
-        throw new SparkException(s"${nodeName} without serde does not support " +
-          s"${dt.getClass.getSimpleName} as output data type")
+        throw QueryExecutionErrors.outputDataTypeUnsupportedByNodeWithoutSerdeError(nodeName, dt)
     }
   }
 

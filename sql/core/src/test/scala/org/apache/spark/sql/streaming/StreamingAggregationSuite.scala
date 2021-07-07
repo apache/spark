@@ -796,6 +796,64 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
     }
   }
 
+  test("SPARK-35896: metrics in StateOperatorProgress are output correctly") {
+    val inputData = MemoryStream[Int]
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Int, Long)]
+
+    testStream(aggregated, Update) (
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
+      AddData(inputData, 3, 2, 1, 3),
+      CheckLastBatch((3, 2), (2, 1), (1, 1)),
+      assertNumStateRows(
+        total = Seq(3), updated = Seq(3), droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+
+      AddData(inputData, 1, 4),
+      CheckLastBatch((1, 2), (4, 1)),
+      assertStateOperatorProgressMetric(
+        operatorName = "stateStoreSave", numShufflePartitions = 3, numStateStoreInstances = 3)
+    )
+
+    inputData.reset() // reset the input to clear any data from prev test
+    testStream(aggregated, Complete) (
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
+      AddData(inputData, 3, 2, 1, 3),
+      CheckLastBatch((3, 2), (2, 1), (1, 1)),
+      assertNumStateRows(
+        total = Seq(3), updated = Seq(3), droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+
+      AddData(inputData, 1, 4),
+      CheckLastBatch((3, 2), (2, 1), (1, 2), (4, 1)),
+      assertStateOperatorProgressMetric(
+        operatorName = "stateStoreSave", numShufflePartitions = 3, numStateStoreInstances = 3)
+    )
+
+    // with watermark and append output mode
+    val aggWithWatermark = inputData.toDF()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .withWatermark("eventTime", "10 seconds")
+      .groupBy(window($"eventTime", "5 seconds") as 'window)
+      .agg(count("*") as 'count)
+      .select($"window".getField("start").cast("long").as[Long], $"count".as[Long])
+
+    inputData.reset() // reset the input to clear any data from prev test
+    testStream(aggWithWatermark, Append) (
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
+      AddData(inputData, 3, 2, 1, 9),
+      CheckLastBatch(),
+      assertStateOperatorProgressMetric(
+        operatorName = "stateStoreSave", numShufflePartitions = 3, numStateStoreInstances = 3),
+
+      AddData(inputData, 25), // Advance watermark to 15 secs, no-data-batch drops rows <= 15
+      CheckLastBatch((0, 3), (5, 1)),
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(2)))
+    )
+  }
+
   private def prepareTestForChangingSchemaOfState(
       tempDir: File): (MemoryStream[Int], DataFrame) = {
     val inputData = MemoryStream[Int]

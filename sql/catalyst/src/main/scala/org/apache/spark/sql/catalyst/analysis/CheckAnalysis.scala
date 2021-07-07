@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
-import org.apache.spark.sql.connector.catalog.TableChange.After
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -175,7 +174,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
-            a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
+            // cannot resolve '${a.sql}' given input columns: [$from]
+            a.failAnalysis(errorClass = "MISSING_COLUMN", messageParameters = Seq(a.sql, from))
+
+          case s: Star =>
+            withPosition(s) {
+              throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName)
+            }
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
@@ -437,43 +442,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
           case alter: AlterTableCommand if alter.table.resolved =>
-            val table = alter.table.asInstanceOf[ResolvedTable]
-            def findField(fieldName: Seq[String]): StructField = {
-              // Include collections because structs nested in maps and arrays may be altered.
-              val field = table.schema.findNestedField(fieldName, includeCollections = true)
-              if (field.isEmpty) {
-                alter.failAnalysis(s"Cannot ${alter.operation} missing field ${fieldName.quoted} " +
-                  s"in ${table.name} schema: ${table.schema.treeString}")
-              }
-              field.get._2
-            }
-            def findParentStruct(fieldNames: Seq[String]): StructType = {
-              val parent = fieldNames.init
-              val field = if (parent.nonEmpty) {
-                findField(parent).dataType
-              } else {
-                table.schema
-              }
-              field match {
-                case s: StructType => s
-                case o => alter.failAnalysis(s"Cannot ${alter.operation} ${fieldNames.quoted}, " +
-                  s"because its parent is not a StructType. Found $o")
-              }
-            }
-            alter.transformExpressions {
-              case UnresolvedFieldName(name) =>
-                alter.failAnalysis(s"Cannot ${alter.operation} missing field ${name.quoted} in " +
-                  s"${table.name} schema: ${table.schema.treeString}")
-              case UnresolvedFieldPosition(fieldName, position: After) =>
-                val parent = findParentStruct(fieldName)
-                val allFields = parent match {
-                  case s: StructType => s.fieldNames
-                  case o => alter.failAnalysis(s"Cannot ${alter.operation} ${fieldName.quoted}, " +
-                    s"because its parent is not a StructType. Found $o")
-                }
-                alter.failAnalysis(s"Couldn't resolve positional argument $position amongst " +
-                  s"${allFields.mkString("[", ", ", "]")}")
-            }
             checkAlterTableCommand(alter)
 
           case _ => // Falls back to the following checks
@@ -670,9 +638,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 s"Filter/Aggregate/Project and a few commands: $plan")
           }
         }
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan, isScalarOrLateral = true)
 
       case _: LateralSubquery =>
         assert(plan.isInstanceOf[LateralJoin])
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan, isScalarOrLateral = true)
 
       case inSubqueryOrExistsSubquery =>
         plan match {
@@ -681,11 +655,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
                 s" Filter/Join and a few commands: $plan")
         }
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan)
     }
-
-    // Validate to make sure the correlations appearing in the query are valid and
-    // allowed by spark.
-    checkCorrelationsInSubquery(expr.plan, isLateral = plan.isInstanceOf[LateralJoin])
   }
 
   /**
@@ -724,7 +697,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates to make sure the outer references appearing inside the subquery
    * are allowed.
    */
-  private def checkCorrelationsInSubquery(sub: LogicalPlan, isLateral: Boolean = false): Unit = {
+  private def checkCorrelationsInSubquery(
+      sub: LogicalPlan,
+      isScalarOrLateral: Boolean = false): Unit = {
     // Validate that correlated aggregate expression do not contain a mixture
     // of outer and local references.
     def checkMixedReferencesInsideAggregateExpr(expr: Expression): Unit = {
@@ -745,11 +720,11 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }
 
     // Check whether the logical plan node can host outer references.
-    // A `Project` can host outer references if it is inside a lateral subquery.
-    // Otherwise, only Filter can only outer references.
+    // A `Project` can host outer references if it is inside a scalar or a lateral subquery and
+    // DecorrelateInnerQuery is enabled. Otherwise, only Filter can only outer references.
     def canHostOuter(plan: LogicalPlan): Boolean = plan match {
       case _: Filter => true
-      case _: Project => isLateral
+      case _: Project => isScalarOrLateral && SQLConf.get.decorrelateInnerQueryEnabled
       case _ => false
     }
 

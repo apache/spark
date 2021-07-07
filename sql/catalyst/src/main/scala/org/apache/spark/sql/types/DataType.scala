@@ -184,7 +184,7 @@ object DataType {
       YearMonthIntervalType(YEAR),
       YearMonthIntervalType(MONTH),
       YearMonthIntervalType(YEAR, MONTH),
-      TimestampWithoutTZType)
+      TimestampNTZType)
       .map(t => t.typeName -> t).toMap
   }
 

@@ -101,9 +101,13 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
     "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"),
     "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to update"),
+    "numRemovedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of removed state rows"),
     "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
     "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
-    "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state")
+    "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
+    "numShufflePartitions" -> SQLMetrics.createMetric(sparkContext, "number of shuffle partitions"),
+    "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
+      "number of state store instances")
   ) ++ stateStoreCustomMetrics
 
   /**
@@ -118,16 +122,32 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
       new java.util.HashMap(customMetrics.mapValues(long2Long).toMap.asJava)
 
     new StateOperatorProgress(
+      operatorName = shortName,
       numRowsTotal = longMetric("numTotalStateRows").value,
       numRowsUpdated = longMetric("numUpdatedStateRows").value,
+      allUpdatesTimeMs = longMetric("allUpdatesTimeMs").value,
+      numRowsRemoved = longMetric("numRemovedStateRows").value,
+      allRemovalsTimeMs = longMetric("allRemovalsTimeMs").value,
+      commitTimeMs = longMetric("commitTimeMs").value,
       memoryUsedBytes = longMetric("stateMemory").value,
       numRowsDroppedByWatermark = longMetric("numRowsDroppedByWatermark").value,
+      numShufflePartitions = longMetric("numShufflePartitions").value,
+      numStateStoreInstances = longMetric("numStateStoreInstances").value,
       javaConvertedCustomMetrics
     )
   }
 
   /** Records the duration of running `body` for the next query progress update. */
   protected def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
+
+  /** Set the operator level metrics */
+  protected def setOperatorMetrics(numStateStoreInstances: Int = 1): Unit = {
+    assert(numStateStoreInstances >= 1, s"invalid number of stores: $numStateStoreInstances")
+    // Shuffle partitions capture the number of tasks that have this stateful operator instance.
+    // For each task instance this number is incremented by one.
+    longMetric("numShufflePartitions") += 1
+    longMetric("numStateStoreInstances") += numStateStoreInstances
+  }
 
   /**
    * Set the SQL metrics related to the state store.
@@ -172,6 +192,9 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     }
   }
 
+  /** Name to output in [[StreamingOperatorProgress]] to identify operator type */
+  protected def shortName: String = "defaultName"
+
   /**
    * Should the MicroBatchExecution run another batch based on this stateful operator and the
    * current updated metadata.
@@ -180,7 +203,9 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
 }
 
 /** An operator that supports watermark. */
-trait WatermarkSupport extends UnaryExecNode {
+trait WatermarkSupport extends SparkPlan {
+
+  def child: SparkPlan
 
   /** The keys that may have a watermark attribute. */
   def keyExpressions: Seq[Attribute]
@@ -210,9 +235,11 @@ trait WatermarkSupport extends UnaryExecNode {
 
   protected def removeKeysOlderThanWatermark(store: StateStore): Unit = {
     if (watermarkPredicateForKeys.nonEmpty) {
+      val numRemovedStateRows = longMetric("numRemovedStateRows")
       store.getRange(None, None).foreach { rowPair =>
         if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
           store.remove(rowPair.key)
+          numRemovedStateRows += 1
         }
       }
     }
@@ -222,9 +249,11 @@ trait WatermarkSupport extends UnaryExecNode {
       storeManager: StreamingAggregationStateManager,
       store: StateStore): Unit = {
     if (watermarkPredicateForKeys.nonEmpty) {
+      val numRemovedStateRows = longMetric("numRemovedStateRows")
       storeManager.keys(store).foreach { keyRow =>
         if (watermarkPredicateForKeys.get.eval(keyRow)) {
           storeManager.remove(store, keyRow)
+          numRemovedStateRows += 1
         }
       }
     }
@@ -345,6 +374,7 @@ case class StateStoreSaveExec(
         val numOutputRows = longMetric("numOutputRows")
         val numUpdatedStateRows = longMetric("numUpdatedStateRows")
         val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
+        val numRemovedStateRows = longMetric("numRemovedStateRows")
         val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
         val commitTimeMs = longMetric("commitTimeMs")
 
@@ -363,6 +393,7 @@ case class StateStoreSaveExec(
               stateManager.commit(store)
             }
             setStoreMetrics(store)
+            setOperatorMetrics()
             stateManager.values(store).map { valueRow =>
               numOutputRows += 1
               valueRow
@@ -391,6 +422,7 @@ case class StateStoreSaveExec(
                   val rowPair = rangeIter.next()
                   if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
                     stateManager.remove(store, rowPair.key)
+                    numRemovedStateRows += 1
                     removedValueRow = rowPair.value
                   }
                 }
@@ -404,9 +436,12 @@ case class StateStoreSaveExec(
               }
 
               override protected def close(): Unit = {
+                // Note: Due to the iterator lazy exec, this metric also captures the time taken
+                // by the consumer operators in addition to the processing in this operator.
                 allRemovalsTimeMs += NANOSECONDS.toMillis(System.nanoTime - removalStartTimeNs)
                 commitTimeMs += timeTakenMs { stateManager.commit(store) }
                 setStoreMetrics(store)
+                setOperatorMetrics()
               }
             }
 
@@ -443,6 +478,7 @@ case class StateStoreSaveExec(
                 }
                 commitTimeMs += timeTakenMs { stateManager.commit(store) }
                 setStoreMetrics(store)
+                setOperatorMetrics()
               }
             }
 
@@ -462,6 +498,8 @@ case class StateStoreSaveExec(
       ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
   }
+
+  override def shortName: String = "stateStoreSave"
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
@@ -534,6 +572,7 @@ case class StreamingDeduplicateExec(
         allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
         commitTimeMs += timeTakenMs { store.commit() }
         setStoreMetrics(store)
+        setOperatorMetrics()
       })
     }
   }
@@ -545,6 +584,8 @@ case class StreamingDeduplicateExec(
   override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
     Seq(StatefulOperatorCustomSumMetric("numDroppedDuplicateRows", "number of duplicates dropped"))
   }
+
+  override def shortName: String = "dedupe"
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get

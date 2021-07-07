@@ -53,7 +53,15 @@ from pyspark.sql.types import (
 )
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
-from pyspark.pandas._typing import DataFrameOrSeries, Dtype, FrameLike, Scalar
+from pyspark.pandas._typing import (
+    Axis,
+    DataFrameOrSeries,
+    Dtype,
+    FrameLike,
+    Label,
+    Name,
+    Scalar,
+)
 from pyspark.pandas.indexing import AtIndexer, iAtIndexer, iLocIndexer, LocIndexer
 from pyspark.pandas.internal import InternalFrame
 from pyspark.pandas.spark import functions as SF
@@ -107,7 +115,7 @@ class Frame(object, metaclass=ABCMeta):
         self,
         sfun: Union[Callable[[Column], Column], Callable[[Column, DataType], Column]],
         name: str,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         numeric_only: bool = True,
         **kwargs: Any
     ) -> Union["Series", Scalar]:
@@ -636,7 +644,7 @@ class Frame(object, metaclass=ABCMeta):
         path: Optional[str] = None,
         sep: str = ",",
         na_rep: str = "",
-        columns: Optional[List[Union[Any, Tuple]]] = None,
+        columns: Optional[List[Name]] = None,
         header: bool = True,
         quotechar: str = '"',
         date_format: Optional[str] = None,
@@ -811,9 +819,11 @@ class Frame(object, metaclass=ABCMeta):
             column_labels = psdf._internal.column_labels
         else:
             column_labels = []
-            for label in columns:
-                if not is_name_like_tuple(label):
-                    label = (label,)
+            for col in columns:
+                if is_name_like_tuple(col):
+                    label = cast(Label, col)
+                else:
+                    label = cast(Label, (col,))
                 if label not in psdf._internal.column_labels:
                     raise KeyError(name_like_string(label))
                 column_labels.append(label)
@@ -1130,7 +1140,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def mean(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return the mean of the values.
@@ -1193,7 +1203,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def sum(
-        self, axis: Union[int, str] = None, numeric_only: bool = None, min_count: int = 0
+        self, axis: Optional[Axis] = None, numeric_only: bool = None, min_count: int = 0
     ) -> Union[Scalar, "Series"]:
         """
         Return the sum of the values.
@@ -1278,7 +1288,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def product(
-        self, axis: Union[int, str] = None, numeric_only: bool = None, min_count: int = 0
+        self, axis: Optional[Axis] = None, numeric_only: bool = None, min_count: int = 0
     ) -> Union[Scalar, "Series"]:
         """
         Return the product of the values.
@@ -1377,7 +1387,7 @@ class Frame(object, metaclass=ABCMeta):
     prod = product
 
     def skew(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return unbiased skew normalized by N-1.
@@ -1433,7 +1443,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def kurtosis(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return unbiased kurtosis using Fisher’s definition of kurtosis (kurtosis of normal == 0.0).
@@ -1492,7 +1502,7 @@ class Frame(object, metaclass=ABCMeta):
     kurt = kurtosis
 
     def min(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return the minimum of the values.
@@ -1547,7 +1557,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def max(
-        self, axis: Union[int, str] = None, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return the maximum of the values.
@@ -1602,7 +1612,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def count(
-        self, axis: Union[int, str] = None, numeric_only: bool = False
+        self, axis: Optional[Axis] = None, numeric_only: bool = False
     ) -> Union[Scalar, "Series"]:
         """
         Count non-NA cells for each column.
@@ -1676,7 +1686,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def std(
-        self, axis: Union[int, str] = None, ddof: int = 1, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, ddof: int = 1, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return sample standard deviation.
@@ -1755,7 +1765,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def var(
-        self, axis: Union[int, str] = None, ddof: int = 1, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, ddof: int = 1, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return unbiased variance.
@@ -1834,7 +1844,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def median(
-        self, axis: Union[int, str] = None, numeric_only: bool = None, accuracy: int = 10000
+        self, axis: Optional[Axis] = None, numeric_only: bool = None, accuracy: int = 10000
     ) -> Union[Scalar, "Series"]:
         """
         Return the median of the values for the requested axis.
@@ -1943,7 +1953,7 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     def sem(
-        self, axis: Union[int, str] = None, ddof: int = 1, numeric_only: bool = None
+        self, axis: Optional[Axis] = None, ddof: int = 1, numeric_only: bool = None
     ) -> Union[Scalar, "Series"]:
         """
         Return unbiased standard error of the mean over requested axis.
@@ -2119,8 +2129,8 @@ class Frame(object, metaclass=ABCMeta):
     # should be updated when it's supported.
     def groupby(
         self: FrameLike,
-        by: Union[Any, Tuple, "Series", List[Union[Any, Tuple, "Series"]]],
-        axis: Union[int, str] = 0,
+        by: Union[Name, "Series", List[Union[Name, "Series"]]],
+        axis: Axis = 0,
         as_index: bool = True,
         dropna: bool = True,
     ) -> "GroupBy[FrameLike]":
@@ -2206,15 +2216,15 @@ class Frame(object, metaclass=ABCMeta):
         if isinstance(by, ps.DataFrame):
             raise ValueError("Grouper for '{}' not 1-dimensional".format(type(by).__name__))
         elif isinstance(by, ps.Series):
-            new_by = [by]  # type: List[Union[Tuple, ps.Series]]
+            new_by = [by]  # type: List[Union[Label, ps.Series]]
         elif is_name_like_tuple(by):
             if isinstance(self, ps.Series):
                 raise KeyError(by)
-            new_by = [cast(Tuple, by)]
+            new_by = [cast(Label, by)]
         elif is_name_like_value(by):
             if isinstance(self, ps.Series):
                 raise KeyError(by)
-            new_by = [(by,)]
+            new_by = [cast(Label, (by,))]
         elif is_list_like(by):
             new_by = []
             for key in by:
@@ -2227,11 +2237,11 @@ class Frame(object, metaclass=ABCMeta):
                 elif is_name_like_tuple(key):
                     if isinstance(self, ps.Series):
                         raise KeyError(key)
-                    new_by.append(key)
+                    new_by.append(cast(Label, key))
                 elif is_name_like_value(key):
                     if isinstance(self, ps.Series):
                         raise KeyError(key)
-                    new_by.append((key,))
+                    new_by.append(cast(Label, (key,)))
                 else:
                     raise ValueError(
                         "Grouper for '{}' not 1-dimensional".format(type(key).__name__)
@@ -2248,7 +2258,7 @@ class Frame(object, metaclass=ABCMeta):
 
     @abstractmethod
     def _build_groupby(
-        self: FrameLike, by: List[Union["Series", Tuple]], as_index: bool, dropna: bool
+        self: FrameLike, by: List[Union["Series", Label]], as_index: bool, dropna: bool
     ) -> "GroupBy[FrameLike]":
         pass
 
@@ -2614,9 +2624,7 @@ class Frame(object, metaclass=ABCMeta):
         except (KeyError, ValueError, IndexError):
             return default
 
-    def squeeze(
-        self, axis: Optional[Union[int, str]] = None
-    ) -> Union[Scalar, "DataFrame", "Series"]:
+    def squeeze(self, axis: Optional[Axis] = None) -> Union[Scalar, "DataFrame", "Series"]:
         """
         Squeeze 1 dimensional axis objects into scalars.
 
@@ -2752,7 +2760,7 @@ class Frame(object, metaclass=ABCMeta):
         self,
         before: Optional[Any] = None,
         after: Optional[Any] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         copy: bool_type = True,
     ) -> DataFrameOrSeries:
         """
@@ -2960,7 +2968,7 @@ class Frame(object, metaclass=ABCMeta):
         self: FrameLike,
         value: Optional[Any] = None,
         method: Optional[str] = None,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         inplace: bool_type = False,
         limit: Optional[int] = None,
     ) -> FrameLike:
@@ -2969,7 +2977,7 @@ class Frame(object, metaclass=ABCMeta):
     # TODO: add 'downcast' when value parameter exists
     def bfill(
         self: FrameLike,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         inplace: bool_type = False,
         limit: Optional[int] = None,
     ) -> FrameLike:
@@ -3048,7 +3056,7 @@ class Frame(object, metaclass=ABCMeta):
     # TODO: add 'downcast' when value parameter exists
     def ffill(
         self: FrameLike,
-        axis: Optional[Union[int, str]] = None,
+        axis: Optional[Axis] = None,
         inplace: bool_type = False,
         limit: Optional[int] = None,
     ) -> FrameLike:

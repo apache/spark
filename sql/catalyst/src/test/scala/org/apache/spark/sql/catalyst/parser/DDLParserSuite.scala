@@ -858,7 +858,7 @@ class DDLParserSuite extends AnalysisTest {
           IntegerType,
           true,
           None,
-          Some(UnresolvedFieldPosition(Seq("x"), first())))
+          Some(UnresolvedFieldPosition(first())))
       )))
 
     comparePlans(
@@ -870,7 +870,7 @@ class DDLParserSuite extends AnalysisTest {
           IntegerType,
           true,
           None,
-          Some(UnresolvedFieldPosition(Seq("x"), after("y"))))
+          Some(UnresolvedFieldPosition(after("y"))))
       )))
   }
 
@@ -896,7 +896,7 @@ class DDLParserSuite extends AnalysisTest {
             StringType,
             true,
             None,
-            Some(UnresolvedFieldPosition(Seq("a", "b"), first())))
+            Some(UnresolvedFieldPosition(first())))
       )))
   }
 
@@ -978,7 +978,7 @@ class DDLParserSuite extends AnalysisTest {
         None,
         None,
         None,
-        Some(UnresolvedFieldPosition(Seq("a", "b", "c"), first()))))
+        Some(UnresolvedFieldPosition(first()))))
   }
 
   test("alter table: multiple property changes are not allowed") {
@@ -1071,7 +1071,7 @@ class DDLParserSuite extends AnalysisTest {
         Some(IntegerType),
         None,
         None,
-        Some(UnresolvedFieldPosition(Seq("a", "b", "c"), after("other_col")))))
+        Some(UnresolvedFieldPosition(after("other_col")))))
 
     // renaming column not supported in hive style ALTER COLUMN.
     intercept("ALTER TABLE table_name CHANGE COLUMN a.b.c new_name INT",

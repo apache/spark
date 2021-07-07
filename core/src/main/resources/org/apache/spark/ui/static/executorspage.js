@@ -140,7 +140,7 @@ function totalDurationColor(totalGCTime, totalDuration) {
 }
 
 var sumOptionalColumns = [3, 4];
-var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14, 15];
+var execOptionalColumns = [5, 6, 7, 8, 9, 10, 13, 14, 25];
 var execDataTable;
 var sumDataTable;
 
@@ -566,7 +566,8 @@ $(document).ready(function () {
             {"visible": false, "targets": 9},
             {"visible": false, "targets": 10},
             {"visible": false, "targets": 13},
-            {"visible": false, "targets": 14}
+            {"visible": false, "targets": 14},
+            {"visible": false, "targets": 25}
           ],
           "deferRender": true
         };
@@ -721,7 +722,7 @@ $(document).ready(function () {
           "<div id='direct_mapped_pool_memory' class='direct_mapped_pool_memory-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='10'> Peak Pool Memory Direct / Mapped</div>" +
           "<div id='extra_resources' class='resources-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='13'> Resources</div>" +
           "<div id='resource_prof_id' class='resource-prof-id-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='14'> Resource Profile Id</div>" +
-          "<div id='exec_loss_reason' class='exec-loss-reason-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='15'> Exec Loss Reason</div>" +
+          "<div id='exec_loss_reason' class='exec-loss-reason-checkbox-div'><input type='checkbox' class='toggle-vis' data-sum-col-idx='' data-exec-col-idx='25'> Exec Loss Reason</div>" +
           "</div>");
 
         reselectCheckboxesBasedOnTaskTableState();

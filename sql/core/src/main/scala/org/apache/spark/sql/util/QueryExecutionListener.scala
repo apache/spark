@@ -23,7 +23,8 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.execution.{QueryExecution, QueryExecutionException}
+import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
 import org.apache.spark.sql.internal.StaticSQLConf._
 import org.apache.spark.util.{ListenerBus, Utils}
@@ -150,9 +151,7 @@ private[sql] class ExecutionListenerBus private(sessionUUID: String)
           val exception = ex match {
             case e: Exception => e
             case other: Throwable =>
-              val message = "Hit an error when executing a query" +
-                (if (other.getMessage == null) "" else s": ${other.getMessage}")
-              new QueryExecutionException(message, other)
+              QueryExecutionErrors.failedToExecuteQueryError(other)
           }
           listener.onFailure(funcName, event.qe, exception)
         case _ =>

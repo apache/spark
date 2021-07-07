@@ -853,19 +853,19 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     val plusYear = udf((l: java.time.LocalDateTime) => l.plusYears(1))
     val result = input.select(plusYear($"dateTime").as("newDateTime"))
     checkAnswer(result, Row(java.time.LocalDateTime.parse("2022-01-01T00:00:00")) :: Nil)
-    assert(result.schema === new StructType().add("newDateTime", TimestampWithoutTZType))
+    assert(result.schema === new StructType().add("newDateTime", TimestampNTZType))
     // UDF produces `null`
     val nullFunc = udf((_: java.time.LocalDateTime) => null.asInstanceOf[java.time.LocalDateTime])
     val nullResult = input.select(nullFunc($"dateTime").as("nullDateTime"))
     checkAnswer(nullResult, Row(null) :: Nil)
-    assert(nullResult.schema === new StructType().add("nullDateTime", TimestampWithoutTZType))
+    assert(nullResult.schema === new StructType().add("nullDateTime", TimestampNTZType))
     // Input parameter of UDF is null
     val nullInput = Seq(null.asInstanceOf[java.time.LocalDateTime]).toDF("nullDateTime")
     val constDuration = udf((_: java.time.LocalDateTime) =>
       java.time.LocalDateTime.parse("2021-01-01T00:00:00"))
     val constResult = nullInput.select(constDuration($"nullDateTime").as("firstDayOf2021"))
     checkAnswer(constResult, Row(java.time.LocalDateTime.parse("2021-01-01T00:00:00")) :: Nil)
-    assert(constResult.schema === new StructType().add("firstDayOf2021", TimestampWithoutTZType))
+    assert(constResult.schema === new StructType().add("firstDayOf2021", TimestampNTZType))
     // Error in the conversion of UDF result to the internal representation of timestamp without
     // time zone
     val overflowFunc = udf((l: java.time.LocalDateTime) => l.plusDays(Long.MaxValue))

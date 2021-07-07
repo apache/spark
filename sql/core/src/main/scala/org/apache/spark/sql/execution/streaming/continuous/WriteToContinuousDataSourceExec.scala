@@ -19,13 +19,13 @@ package org.apache.spark.sql.execution.streaming.continuous
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.write.PhysicalWriteInfoImpl
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.streaming.StreamExecution
 
@@ -63,7 +63,7 @@ case class WriteToContinuousDataSourceExec(write: StreamingWrite, query: SparkPl
           // Do not wrap interruption exceptions that will be handled by streaming specially.
           case _ if StreamExecution.isInterruptionException(cause, sparkContext) => throw cause
           // Only wrap non fatal exceptions.
-          case NonFatal(e) => throw new SparkException("Writing job aborted.", e)
+          case NonFatal(e) => throw QueryExecutionErrors.writingJobAbortedError(e)
           case _ => throw cause
         }
     }

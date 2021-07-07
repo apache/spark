@@ -58,7 +58,7 @@ class AvroRowReaderSuite
 
       val df = spark.read.format("avro").load(dir.getCanonicalPath)
       val fileScan = df.queryExecution.executedPlan collectFirst {
-        case BatchScanExec(_, f: AvroScan) => f
+        case BatchScanExec(_, f: AvroScan, _) => f
       }
       val filePath = fileScan.get.fileIndex.inputFiles(0)
       val fileSize = new File(new URI(filePath)).length
@@ -70,6 +70,7 @@ class AvroRowReaderSuite
         override val deserializer = new AvroDeserializer(
           reader.getSchema,
           StructType(new StructField("value", IntegerType, true) :: Nil),
+          false,
           CORRECTED,
           new NoopFilters)
         override val stopPosition = fileSize

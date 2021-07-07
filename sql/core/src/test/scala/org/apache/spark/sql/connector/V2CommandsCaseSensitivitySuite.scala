@@ -143,7 +143,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
         AlterTableAddColumns(
           table,
           Seq(QualifiedColType(UnresolvedFieldName(field), LongType, true, None, None))),
-        Seq("add", field.head)
+        Seq("Missing field " + field.head)
       )
     }
   }
@@ -158,7 +158,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
             LongType,
             true,
             None,
-            Some(UnresolvedFieldPosition(Seq("f"), ColumnPosition.after(ref)))))),
+            Some(UnresolvedFieldPosition(ColumnPosition.after(ref)))))),
         Seq("reference column", ref)
       )
     }
@@ -173,13 +173,13 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           LongType,
           true,
           None,
-          Some(UnresolvedFieldPosition(Seq("x"), ColumnPosition.after("id")))),
+          Some(UnresolvedFieldPosition(ColumnPosition.after("id")))),
         QualifiedColType(
           UnresolvedFieldName(Seq("x")),
           LongType,
           true,
           None,
-          Some(UnresolvedFieldPosition(Seq("y"), ColumnPosition.after("X")))))),
+          Some(UnresolvedFieldPosition(ColumnPosition.after("X")))))),
       Seq("Couldn't find the reference column for AFTER X at root")
     )
   }
@@ -194,7 +194,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
             LongType,
             true,
             None,
-            Some(UnresolvedFieldPosition(Seq("point", "z"), ColumnPosition.after(ref)))))),
+            Some(UnresolvedFieldPosition(ColumnPosition.after(ref)))))),
         Seq("reference column", ref)
       )
     }
@@ -215,7 +215,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           LongType,
           true,
           None,
-          Some(UnresolvedFieldPosition(Seq("point", "zz"), ColumnPosition.after("Z")))))),
+          Some(UnresolvedFieldPosition(ColumnPosition.after("Z")))))),
       Seq("Couldn't find the reference column for AFTER Z at point")
     )
   }
@@ -224,7 +224,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
         AlterTableDropColumns(table, Seq(UnresolvedFieldName(ref))),
-        Seq("Cannot delete missing field", ref.quoted)
+        Seq("Missing field " + ref.quoted)
       )
     }
   }
@@ -233,7 +233,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
         AlterTableRenameColumn(table, UnresolvedFieldName(ref), "newName"),
-        Seq("Cannot rename missing field", ref.quoted)
+        Seq("Missing field " + ref.quoted)
       )
     }
   }
@@ -242,7 +242,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
         AlterTableAlterColumn(table, UnresolvedFieldName(ref), None, Some(true), None, None),
-        Seq("Cannot update missing field", ref.quoted)
+        Seq("Missing field " + ref.quoted)
       )
     }
   }
@@ -251,7 +251,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
         AlterTableAlterColumn(table, UnresolvedFieldName(ref), Some(StringType), None, None, None),
-        Seq("Cannot update missing field", ref.quoted)
+        Seq("Missing field " + ref.quoted)
       )
     }
   }
@@ -260,7 +260,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
         AlterTableAlterColumn(table, UnresolvedFieldName(ref), None, None, Some("comment"), None),
-        Seq("Cannot update missing field", ref.quoted)
+        Seq("Missing field " + ref.quoted)
       )
     }
   }
