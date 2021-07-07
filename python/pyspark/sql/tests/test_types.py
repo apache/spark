@@ -209,13 +209,13 @@ class TypesTests(ReusedSQLTestCase):
         NestedRow = Row("f1", "f2")
 
         with self.sql_conf({"spark.sql.pyspark.inferNestedDictAsStruct.enabled": True}):
-            nestedRdd = self.sc.parallelize([NestedRow([{"payment": 200.5, "name": "A"}], [1, 2]),
-                                             NestedRow([{"payment": 100.5, "name": "B"}], [2, 3])])
+            data = [NestedRow([{"payment": 200.5, "name": "A"}], [1, 2]),
+                    NestedRow([{"payment": 100.5, "name": "B"}], [2, 3])]
+
+            nestedRdd = self.sc.parallelize(data)
             df = self.spark.createDataFrame(nestedRdd)
             self.assertEqual(Row(f1=[Row(payment=200.5, name='A')], f2=[1, 2]), df.first())
 
-            data = [NestedRow([{"payment": 200.5, "name": "A"}], [1, 2]),
-                    NestedRow([{"payment": 100.5, "name": "B"}], [2, 3])]
             df = self.spark.createDataFrame(data)
             self.assertEqual(Row(f1=[Row(payment=200.5, name='A')], f2=[1, 2]), df.first())
 
