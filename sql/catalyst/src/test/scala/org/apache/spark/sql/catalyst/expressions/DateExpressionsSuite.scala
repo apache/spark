@@ -25,7 +25,9 @@ import java.time.temporal.ChronoUnit
 import java.util.{Calendar, Locale, TimeZone}
 import java.util.concurrent.TimeUnit._
 
+import scala.language.postfixOps
 import scala.reflect.ClassTag
+import scala.util.Random
 
 import org.apache.spark.{SparkFunSuite, SparkUpgradeException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -122,8 +124,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     (2000 to 2002).foreach { y =>
       (0 to 11 by 11).foreach { m =>
         c.set(y, m, 28)
-        (0 to 5 * 24).foreach { i =>
-          c.add(Calendar.HOUR_OF_DAY, 1)
+        (0 to 12).foreach { i =>
+          c.add(Calendar.HOUR_OF_DAY, 10)
           checkEvaluation(Year(Literal(new Date(c.getTimeInMillis))),
             c.get(Calendar.YEAR))
         }
@@ -195,8 +197,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val c = Calendar.getInstance()
     (1999 to 2000).foreach { y =>
       c.set(y, 0, 1, 0, 0, 0)
-      (0 to 365).foreach { d =>
-        c.add(Calendar.DATE, 1)
+      val random = new Random(System.nanoTime)
+      random.shuffle(0 to 365 toList).take(10).foreach { d =>
+        c.set(Calendar.DAY_OF_YEAR, d)
         checkEvaluation(DayOfMonth(Literal(new Date(c.getTimeInMillis))),
           c.get(Calendar.DAY_OF_MONTH))
       }
@@ -332,19 +335,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val timeZoneId = Option(zid.getId)
       c.setTimeZone(TimeZone.getTimeZone(zid))
       (0 to 24 by 5).foreach { h =>
-        (0 to 60 by 29).foreach { m =>
-          (0 to 60 by 29).foreach { s =>
-            // validate timestamp with local time zone
-            c.set(2015, 18, 3, h, m, s)
-            checkEvaluation(
-              Hour(Literal(new Timestamp(c.getTimeInMillis)), timeZoneId),
-              c.get(Calendar.HOUR_OF_DAY))
+        // validate timestamp with local time zone
+        c.set(2015, 18, 3, h, 29, 59)
+        checkEvaluation(
+          Hour(Literal(new Timestamp(c.getTimeInMillis)), timeZoneId),
+          c.get(Calendar.HOUR_OF_DAY))
 
-            // validate timestamp without time zone
-            val localDateTime = LocalDateTime.of(2015, 1, 3, h, m, s)
-            checkEvaluation(Hour(Literal(localDateTime), timeZoneId), h)
-          }
-        }
+        // validate timestamp without time zone
+        val localDateTime = LocalDateTime.of(2015, 1, 3, h, 29, 59)
+        checkEvaluation(Hour(Literal(localDateTime), timeZoneId), h)
       }
       Seq(TimestampType, TimestampNTZType).foreach { dt =>
         checkConsistencyBetweenInterpretedAndCodegen(
@@ -367,17 +366,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val timeZoneId = Option(zid.getId)
       c.setTimeZone(TimeZone.getTimeZone(zid))
       (0 to 59 by 5).foreach { m =>
-        (0 to 59 by 15).foreach { s =>
-          // validate timestamp with local time zone
-          c.set(2015, 18, 3, 3, m, s)
-          checkEvaluation(
-            Minute(Literal(new Timestamp(c.getTimeInMillis)), timeZoneId),
-            c.get(Calendar.MINUTE))
+        // validate timestamp with local time zone
+        c.set(2015, 18, 3, 3, m, 3)
+        checkEvaluation(
+          Minute(Literal(new Timestamp(c.getTimeInMillis)), timeZoneId),
+          c.get(Calendar.MINUTE))
 
-          // validate timestamp without time zone
-          val localDateTime = LocalDateTime.of(2015, 1, 3, 3, m, s)
-          checkEvaluation(Minute(Literal(localDateTime), timeZoneId), m)
-        }
+        // validate timestamp without time zone
+        val localDateTime = LocalDateTime.of(2015, 1, 3, 3, m, 3)
+        checkEvaluation(Minute(Literal(localDateTime), timeZoneId), m)
       }
       Seq(TimestampType, TimestampNTZType).foreach { dt =>
         checkConsistencyBetweenInterpretedAndCodegen(

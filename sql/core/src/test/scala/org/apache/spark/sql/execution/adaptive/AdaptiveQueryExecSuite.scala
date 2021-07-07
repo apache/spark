@@ -1929,6 +1929,29 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-36020: Check logical link in remove redundant projects") {
+    withTempView("t") {
+      spark.range(10).selectExpr("id % 10 as key", "cast(id * 2 as int) as a",
+        "cast(id * 3 as int) as b", "array(id, id + 1, id + 3) as c").createOrReplaceTempView("t")
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "800") {
+        val query =
+          """
+            |WITH tt AS (
+            | SELECT key, a, b, explode(c) AS c FROM t
+            |)
+            |SELECT t1.key, t1.c, t2.key, t2.c
+            |FROM (SELECT a, b, c, key FROM tt WHERE a > 1) t1
+            |JOIN (SELECT a, b, c, key FROM tt) t2
+            |  ON t1.key = t2.key
+            |""".stripMargin
+        val (origin, adaptive) = runAdaptiveAndVerifyResult(query)
+        assert(findTopLevelSortMergeJoin(origin).size == 1)
+        assert(findTopLevelBroadcastHashJoin(adaptive).size == 1)
+      }
+    }
+  }
 }
 
 /**
