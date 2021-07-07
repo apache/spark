@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CreateArray, Expression, GetStructField, InSubquery, LateralSubquery, ListQuery, OuterReference}
+import org.apache.spark.sql.catalyst.expressions.{CreateArray, Expression, GetStructField, InSubquery, LateralSubquery, ListQuery, OuterReference, ScalarSubquery}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -238,6 +238,30 @@ class ResolveSubquerySuite extends AnalysisTest {
       LateralJoin(t4, LateralSubquery(
         Project(Seq(GetStructField(OuterReference(x), 0).as(a.name)), t0), Seq(x)),
         Inner, None)
+    )
+  }
+
+  test("SPARK-36028: resolve scalar subqueries with outer references in Project") {
+    // SELECT (SELECT a) FROM t1
+    checkAnalysis(
+      Project(ScalarSubquery(t0.select('a)).as("sub") :: Nil, t1),
+      Project(ScalarSubquery(Project(OuterReference(a) :: Nil, t0), Seq(a)).as("sub") :: Nil, t1)
+    )
+    // SELECT (SELECT a + b + c AS r FROM t2) FROM t1
+    checkAnalysis(
+      Project(ScalarSubquery(
+        t2.select(('a + 'b + 'c).as("r"))).as("sub") :: Nil, t1),
+      Project(ScalarSubquery(
+        Project((OuterReference(a) + b + c).as("r") :: Nil, t2), Seq(a)).as("sub") :: Nil, t1)
+    )
+    // SELECT (SELECT array(t1.*) AS arr) FROM t1
+    checkAnalysis(
+      Project(ScalarSubquery(t0.select(
+        CreateArray(Seq(star("t1"))).as("arr"))
+      ).as("sub") :: Nil, t1.as("t1")),
+      Project(ScalarSubquery(Project(
+        CreateArray(Seq(OuterReference(a), OuterReference(b))).as("arr") :: Nil, t0
+      ), Seq(a, b)).as("sub") :: Nil, t1)
     )
   }
 }
