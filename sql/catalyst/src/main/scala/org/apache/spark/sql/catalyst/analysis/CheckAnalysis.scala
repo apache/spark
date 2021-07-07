@@ -939,9 +939,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates the options used for alter table commands after table and columns are resolved.
    */
   private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
-    def checkColumnNotExists(fieldNames: Seq[String], struct: StructType): Unit = {
+    def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
       if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
-        alter.failAnalysis(s"Cannot ${alter.operation} column, because ${fieldNames.quoted} " +
+        alter.failAnalysis(s"Cannot $op column, because ${fieldNames.quoted} " +
           s"already exists in ${struct.treeString}")
       }
     }
@@ -949,13 +949,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     alter match {
       case AlterTableAddColumns(table: ResolvedTable, colsToAdd) =>
         colsToAdd.foreach { colToAdd =>
-          colToAdd.fieldName match {
-            case UnresolvedFieldName(name) =>
-              alter.failAnalysis(s"Cannot ${alter.operation} missing field ${name.quoted} in " +
-                s"${table.name} schema: ${table.schema.treeString}")
-            case _ =>
-          }
-          checkColumnNotExists(colToAdd.name, table.schema)
+          checkColumnNotExists("add", colToAdd.name, table.schema)
         }
 
       case AlterTableReplaceColumns(table: ResolvedTable, colsToAdd) =>
@@ -968,12 +962,12 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         // if column already exists.
         colsToAdd.foreach { colToAdd =>
           if (!colsToDelete.contains(colToAdd.name)) {
-            checkColumnNotExists(colToAdd.name, table.schema)
+            checkColumnNotExists("add", colToAdd.name, table.schema)
           }
         }
 
       case AlterTableRenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
-        checkColumnNotExists(col.path :+ newName, table.schema)
+        checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
       case a @ AlterTableAlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
         val fieldName = col.name.quoted

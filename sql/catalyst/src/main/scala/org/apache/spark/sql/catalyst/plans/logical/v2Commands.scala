@@ -1068,7 +1068,6 @@ case class UnsetTableProperties(
 
 trait AlterTableCommand extends UnaryCommand {
   def table: LogicalPlan
-  def operation: String
   def changes: Seq[TableChange]
   override def child: LogicalPlan = table
 }
@@ -1085,11 +1084,10 @@ case class AlterTableAddColumns(
     TypeUtils.failWithIntervalType(c.dataType)
   }
 
-  override def operation: String = "add"
-
   override def changes: Seq[TableChange] = {
     columnsToAdd.map { col =>
       require(col.fieldName.resolved)
+      require(col.position.isEmpty || col.position.get.resolved)
       TableChange.addColumn(
         col.name.toArray,
         col.dataType,
@@ -1114,8 +1112,6 @@ case class AlterTableReplaceColumns(
     failNullType(c.dataType)
     TypeUtils.failWithIntervalType(c.dataType)
   }
-
-  override def operation: String = "replace"
 
   override def changes: Seq[TableChange] = {
     // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
@@ -1146,8 +1142,6 @@ case class AlterTableReplaceColumns(
 case class AlterTableDropColumns(
     table: LogicalPlan,
     columnsToDrop: Seq[FieldName]) extends AlterTableCommand {
-  override def operation: String = "delete"
-
   override def changes: Seq[TableChange] = {
     columnsToDrop.map { col =>
       require(col.resolved, "FieldName should be resolved before it's converted to TableChange.")
@@ -1166,8 +1160,6 @@ case class AlterTableRenameColumn(
     table: LogicalPlan,
     column: FieldName,
     newName: String) extends AlterTableCommand {
-  override def operation: String = "rename"
-
   override def changes: Seq[TableChange] = {
     require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
     Seq(TableChange.renameColumn(column.name.toArray, newName))
@@ -1189,8 +1181,6 @@ case class AlterTableAlterColumn(
     position: Option[FieldPosition]) extends AlterTableCommand {
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   dataType.foreach(failNullType)
-
-  override def operation: String = "update"
 
   override def changes: Seq[TableChange] = {
     require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
