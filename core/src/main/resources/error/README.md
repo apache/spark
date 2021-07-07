@@ -1,11 +1,9 @@
 # Guidelines
 
-To throw a standardized user-facing exception, developers should specify the error class and
-message parameters rather than an arbitrary error message.
+To throw a standardized user-facing error of exception, developers should specify the error class
+and message parameters rather than an arbitrary error message.
 
 ## Usage
-
-To throw an exception, do the following.
 
 1. Check if an appropriate error class already exists in `error-class.json`.
    If true, skip to step 3. Otherwise, continue to step 2.
@@ -17,10 +15,9 @@ To throw an exception, do the following.
 
 ### Before
 
-Throw exception:
+Throw with arbitrary error message:
 
     throw new TestException("Problem A because B")
-
 
 ### After
 
@@ -44,7 +41,7 @@ Throw exception:
       def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
     }
 
-Throw exception:
+Throw with error class and message parameters:
 
     throw new SparkTestException("PROBLEM_BECAUSE", Seq("A", "B"))
 
@@ -78,6 +75,9 @@ Invariants:
 
 Error messages provide a descriptive, human-readable representation of the error.
 The message format accepts string parameters via the C-style printf syntax.
+
+The quality of the error message should match the
+[guidelines](https://spark.apache.org/error-message-guidelines.html).
 
 Invariants:
 

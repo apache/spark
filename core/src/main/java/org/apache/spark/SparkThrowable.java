@@ -17,7 +17,11 @@
 
 package org.apache.spark;
 
+import org.apache.spark.annotation.Experimental;
+
 /**
+ * :: Experimental ::
+ *
  * Interface mixed into Throwables thrown from Spark.
  *
  * - For backwards compatibility, existing Throwable types can be thrown with an arbitrary error
@@ -26,6 +30,7 @@ package org.apache.spark;
  *   parameters to construct an error message with SparkThrowableHelper.getMessage(). New Throwable
  *   types should not accept arbitrary error messages. See [[SparkArithmeticException]].
  */
+@Experimental
 public interface SparkThrowable {
     // Succinct, human-readable, unique, and consistent representation of the error category
     // If null, error class is not set
