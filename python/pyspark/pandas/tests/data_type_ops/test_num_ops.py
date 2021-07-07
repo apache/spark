@@ -396,7 +396,13 @@ class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_astype(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
             for dtype in self.extension_dtypes:
-                self.check_extension(pser.astype(dtype), psser.astype(dtype))
+                if dtype in self.string_extension_dtype:
+                    if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
+                        # Limit pandas version due to
+                        # https://github.com/pandas-dev/pandas/issues/31204
+                        self.check_extension(pser.astype(dtype), psser.astype(dtype))
+                else:
+                    self.check_extension(pser.astype(dtype), psser.astype(dtype))
 
     def test_neg(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
