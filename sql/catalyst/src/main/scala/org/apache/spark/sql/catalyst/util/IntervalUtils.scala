@@ -217,28 +217,25 @@ object IntervalUtils {
     }
   }
 
-  def castYearMonthStringToInterval(
-      input: String,
-      startField: Byte,
-      endField: Byte): CalendarInterval = {
-    val months = castStringToYMInterval(UTF8String.fromString(input), startField, endField)
-    new CalendarInterval(months, 0, 0)
-  }
-
   /**
    * Parse YearMonth string in form: [+|-]YYYY-MM
    *
    * adapted from HiveIntervalYearMonth.valueOf
    */
   def fromYearMonthString(input: String): CalendarInterval = {
-    require(input != null, "Interval year-month string must be not null")
-    input.trim match {
-      case yearMonthRegex(sign, yearStr, monthStr) =>
-        new CalendarInterval(toYMInterval(yearStr, monthStr, finalSign(sign)), 0, 0)
-      case _ =>
-        throw new IllegalArgumentException(
-          s"Interval string does not match year-month format of 'y-m': $input")
-    }
+    fromYearMonthString(input, YM.YEAR, YM.MONTH)
+  }
+
+  /**
+   * Parse YearMonth string in form: [+|-]YYYY-MM
+   *
+   * adapted from HiveIntervalYearMonth.valueOf
+   * Below interval conversion patterns are supported:
+   * - YEAR TO MONTH
+   */
+  def fromYearMonthString(input: String, startField: Byte, endField: Byte): CalendarInterval = {
+    val months = castStringToYMInterval(UTF8String.fromString(input), startField, endField)
+    new CalendarInterval(months, 0, 0)
   }
 
   private def safeToInterval[T](interval: String)(f: => T): T = {
