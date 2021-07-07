@@ -427,5 +427,9 @@ class EliminateSortsSuite extends AnalysisTest {
     comparePlans(
       Optimize.execute(testRelation.groupBy()(count(1).as("cnt")).orderBy('cnt.asc)).analyze,
       testRelation.groupBy()(count(1).as("cnt")).analyze)
+
+    comparePlans(
+      Optimize.execute(testRelation.limit(Literal(1)).orderBy('a.asc).orderBy('a.asc)).analyze,
+      testRelation.limit(Literal(1)).analyze)
   }
 }
