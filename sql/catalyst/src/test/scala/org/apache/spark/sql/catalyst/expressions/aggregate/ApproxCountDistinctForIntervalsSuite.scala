@@ -39,7 +39,7 @@ class ApproxCountDistinctForIntervalsSuite extends SparkFunSuite {
       assert(
         wrongColumn.checkInputDataTypes() match {
           case TypeCheckFailure(msg)
-            if msg.contains("requires (numeric or timestamp or date) type") => true
+            if msg.contains("requires (numeric or timestamp or date or timestamp_ntz) type") => true
           case _ => false
         })
     }
