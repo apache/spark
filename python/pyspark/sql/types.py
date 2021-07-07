@@ -1003,7 +1003,7 @@ if sys.version_info[0] < 4:
     _array_type_mappings['u'] = StringType
 
 
-def _infer_type(obj):
+def _infer_type(obj, infer_dict_as_struct=False):
     """Infer the DataType from obj
     """
     if obj is None:
@@ -1020,14 +1020,22 @@ def _infer_type(obj):
         return dataType()
 
     if isinstance(obj, dict):
-        for key, value in obj.items():
-            if key is not None and value is not None:
-                return MapType(_infer_type(key), _infer_type(value), True)
-        return MapType(NullType(), NullType(), True)
+        if infer_dict_as_struct:
+            struct = StructType()
+            for key, value in obj.items():
+                if key is not None and value is not None:
+                    struct.add(key, _infer_type(value, infer_dict_as_struct), True)
+            return struct
+        else:
+            for key, value in obj.items():
+                if key is not None and value is not None:
+                    return MapType(_infer_type(key, infer_dict_as_struct),
+                                   _infer_type(value, infer_dict_as_struct), True)
+            return MapType(NullType(), NullType(), True)
     elif isinstance(obj, list):
         for v in obj:
             if v is not None:
-                return ArrayType(_infer_type(obj[0]), True)
+                return ArrayType(_infer_type(obj[0], infer_dict_as_struct), True)
         return ArrayType(NullType(), True)
     elif isinstance(obj, array):
         if obj.typecode in _array_type_mappings:
@@ -1036,12 +1044,12 @@ def _infer_type(obj):
             raise TypeError("not supported type: array(%s)" % obj.typecode)
     else:
         try:
-            return _infer_schema(obj)
+            return _infer_schema(obj, infer_dict_as_struct=infer_dict_as_struct)
         except TypeError:
             raise TypeError("not supported type: %s" % type(obj))
 
 
-def _infer_schema(row, names=None):
+def _infer_schema(row, names=None, infer_dict_as_struct=False):
     """Infer the schema from dict/namedtuple/object"""
     if isinstance(row, dict):
         items = sorted(row.items())
@@ -1067,7 +1075,7 @@ def _infer_schema(row, names=None):
     fields = []
     for k, v in items:
         try:
-            fields.append(StructField(k, _infer_type(v), True))
+            fields.append(StructField(k, _infer_type(v, infer_dict_as_struct), True))
         except TypeError as e:
             raise TypeError("Unable to infer the type of the field {}.".format(k)) from e
     return StructType(fields)
