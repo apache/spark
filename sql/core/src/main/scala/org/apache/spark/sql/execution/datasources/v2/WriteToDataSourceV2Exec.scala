@@ -324,6 +324,8 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
 
   protected val customMetrics: Map[String, SQLMetric] = Map.empty
 
+  override lazy val metrics = customMetrics
+
   protected def writeWithV2(batchWrite: BatchWrite): Seq[InternalRow] = {
     val rdd: RDD[InternalRow] = {
       val tempRdd = query.execute()
@@ -415,6 +417,8 @@ object DataWritingSparkTask extends Logging {
         count += 1
         dataWriter.write(iter.next())
       }
+
+      CustomMetrics.updateMetrics(dataWriter.currentMetricsValues, customMetrics)
 
       val msg = if (useCommitCoordinator) {
         val coordinator = SparkEnv.get.outputCommitCoordinator

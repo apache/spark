@@ -89,6 +89,7 @@ abstract class FileFormatDataWriter(
       count += 1
       write(iterator.next())
     }
+    CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
   }
 
   /**
@@ -473,6 +474,7 @@ class DynamicPartitionDataConcurrentWriter(
       count += 1
       write(iterator.next())
     }
+    CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
 
     if (iterator.hasNext) {
       count = 0L
@@ -486,6 +488,7 @@ class DynamicPartitionDataConcurrentWriter(
         count += 1
         write(sortIterator.next())
       }
+      CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
     }
   }
 

@@ -64,6 +64,7 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
             count += 1
             dataWriter.write(dataIterator.next())
           }
+          CustomMetrics.updateMetrics(dataWriter.currentMetricsValues, customMetrics)
           logInfo(s"Writer for partition ${context.partitionId()} " +
             s"in epoch ${EpochTracker.getCurrentEpoch.get} is committing.")
           val msg = dataWriter.commit()
