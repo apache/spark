@@ -94,6 +94,8 @@ case class AdaptiveSparkPlanExec(
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
+    // We should remove redundant sort after reOptimizer since reOptimize will change SMJ to BHJ
+    // which can affect the output ordering
     RemoveRedundantSorts,
     PlanAdaptiveDynamicPruningFilters(this),
     ReuseAdaptiveSubquery(context.subqueryCache),
