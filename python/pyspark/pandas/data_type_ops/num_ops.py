@@ -41,7 +41,6 @@ from pyspark.sql.column import Column
 from pyspark.sql.types import (
     BooleanType,
     StringType,
-    TimestampType,
 )
 
 
