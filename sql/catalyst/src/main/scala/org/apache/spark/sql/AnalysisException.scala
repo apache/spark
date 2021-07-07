@@ -34,8 +34,8 @@ class AnalysisException protected[sql] (
     // Some plans fail to serialize due to bugs in scala collections.
     @transient val plan: Option[LogicalPlan] = None,
     val cause: Option[Throwable] = None,
-    errorClass: Option[String] = None,
-    messageParameters: Array[String] = Array.empty)
+    val errorClass: Option[String] = None,
+    val messageParameters: Array[String] = Array.empty)
   extends Exception(message, cause.orNull) with SparkThrowable with Serializable {
 
   def this(errorClass: String, messageParameters: Array[String], cause: Option[Throwable]) =
@@ -89,6 +89,5 @@ class AnalysisException protected[sql] (
   }
 
   override def getErrorClass: String = errorClass.orNull
-  override def getMessageParameters: Array[String] = messageParameters
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass.orNull)
 }

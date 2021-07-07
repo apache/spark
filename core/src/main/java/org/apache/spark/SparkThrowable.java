@@ -36,9 +36,6 @@ public interface SparkThrowable {
   // If null, error class is not set
   String getErrorClass();
 
-  // Parameters provided to format the error message
-  String[] getMessageParameters();
-
   // Portable error identifier across SQL engines
   // If null, error class or SQLSTATE is not set
   String getSqlState();

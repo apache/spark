@@ -127,7 +127,6 @@ class SparkThrowableSuite extends SparkFunSuite {
     } catch {
       case e: SparkThrowable =>
         assert(e.getErrorClass == null)
-        assert(e.getMessageParameters.isEmpty)
         assert(e.getSqlState == null)
       case _: Throwable =>
         // Should not end up here

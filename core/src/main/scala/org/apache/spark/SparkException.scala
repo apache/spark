@@ -38,7 +38,6 @@ class SparkException(
       messageParameters = messageParameters)
 
   override def getErrorClass: String = errorClass.orNull
-  override def getMessageParameters: Array[String] = messageParameters
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass.orNull)
 }
 
@@ -78,6 +77,5 @@ class SparkArithmeticException(errorClass: String, messageParameters: Array[Stri
     with SparkThrowable {
 
   override def getErrorClass: String = errorClass
-  override def getMessageParameters: Array[String] = messageParameters
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }

@@ -127,7 +127,7 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
       case e: AnalysisException =>
         val position = Origin(e.line, e.startPosition)
         throw new ParseException(Option(command), e.message, position, position,
-          Option(e.getErrorClass), e.getMessageParameters)
+          e.errorClass, e.messageParameters)
     }
   }
 }

@@ -1,6 +1,6 @@
 # Guidelines
 
-To throw a standardized user-facing error of exception, developers should specify the error class
+To throw a standardized user-facing error or exception, developers should specify the error class
 and message parameters rather than an arbitrary error message.
 
 ## Usage
