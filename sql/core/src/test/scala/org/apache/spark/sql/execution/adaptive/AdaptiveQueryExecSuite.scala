@@ -1985,7 +1985,7 @@ class AdaptiveQueryExecSuite
             assert(findTopLevelSort(adaptive).size == 2)
           } else {
             assert(findTopLevelSort(origin).size == 1)
-            // 1 sort in at top node, BHJ has no sort
+            // 1 sort at top node and BHJ has no sort
             assert(findTopLevelSort(adaptive).size == 1)
           }
         }
