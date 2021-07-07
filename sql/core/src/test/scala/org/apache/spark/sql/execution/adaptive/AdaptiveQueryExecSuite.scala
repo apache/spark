@@ -1959,6 +1959,39 @@ class AdaptiveQueryExecSuite
       runAdaptiveAndVerifyResult(query)
     }
   }
+
+  test("SPARK-36032: RemoveRedundantSorts should be applied after reOptimize in AQE") {
+    withTempView("v") {
+      spark.sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString)), 2)
+        .toDF("c1", "c2").createOrReplaceTempView("v")
+
+      Seq("-1", "10000").foreach { aqeBhj =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> aqeBhj,
+          SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+          val (origin, adaptive) = runAdaptiveAndVerifyResult(
+            """
+              |SELECT * FROM v t1 JOIN (
+              | SELECT c1 + 1 as c3 FROM v
+              |)t2 ON t1.c1 = t2.c3
+              |SORT BY c1
+          """.stripMargin)
+          if (aqeBhj.toInt < 0) {
+            // 1 sort since spark plan has no shuffle for SMJ
+            assert(findTopLevelSort(origin).size == 1)
+            // 2 sort in SMJ
+            assert(findTopLevelSort(adaptive).size == 2)
+          } else {
+            assert(findTopLevelSort(origin).size == 1)
+            // 1 sort in at top node, BHJ has no sort
+            assert(findTopLevelSort(adaptive).size == 1)
+          }
+        }
+      }
+    }
+  }
 }
 
 /**

@@ -88,13 +88,13 @@ case class AdaptiveSparkPlanExec(
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
     RemoveRedundantProjects,
     EnsureRequirements,
-    RemoveRedundantSorts,
     DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
   // optimizations should be stage-independent.
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
+    RemoveRedundantSorts,
     PlanAdaptiveDynamicPruningFilters(this),
     ReuseAdaptiveSubquery(context.subqueryCache),
     // Skew join does not handle `CustomShuffleReader` so needs to be applied first.
