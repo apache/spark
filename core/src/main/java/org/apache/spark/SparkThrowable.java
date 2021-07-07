@@ -17,11 +17,10 @@
 
 package org.apache.spark;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
+import org.apache.spark.annotation.Since;
 
 /**
- * :: Experimental ::
- *
  * Interface mixed into Throwables thrown from Spark.
  *
  * - For backwards compatibility, existing Throwable types can be thrown with an arbitrary error
@@ -29,17 +28,19 @@ import org.apache.spark.annotation.Experimental;
  * - To promote standardization, Throwables should be thrown with an error class and message
  *   parameters to construct an error message with SparkThrowableHelper.getMessage(). New Throwable
  *   types should not accept arbitrary error messages. See [[SparkArithmeticException]].
+ *
+ * @since 3.2.0
  */
-@Experimental
+@Evolving
 public interface SparkThrowable {
-    // Succinct, human-readable, unique, and consistent representation of the error category
-    // If null, error class is not set
-    String getErrorClass();
+  // Succinct, human-readable, unique, and consistent representation of the error category
+  // If null, error class is not set
+  String getErrorClass();
 
-    // Parameters provided to format the error message
-    String[] getMessageParameters();
+  // Parameters provided to format the error message
+  String[] getMessageParameters();
 
-    // Portable error identifier across SQL engines
-    // If null, error class or SQLSTATE is not set
-    String getSqlState();
+  // Portable error identifier across SQL engines
+  // If null, error class or SQLSTATE is not set
+  String getSqlState();
 }
