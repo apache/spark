@@ -211,11 +211,11 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     schedulerBackendUnderTest.doKillExecutors(Seq("1", "2"))
     verify(driverEndpointRef).send(RemoveExecutor("1", ExecutorKilled))
     verify(driverEndpointRef).send(RemoveExecutor("2", ExecutorKilled))
+    verify(labeledPods, never()).delete()
     verify(pod1op, never()).edit(any(
       classOf[java.util.function.UnaryOperator[io.fabric8.kubernetes.api.model.Pod]]))
     verify(pod2op, never()).edit(any(
       classOf[java.util.function.UnaryOperator[io.fabric8.kubernetes.api.model.Pod]]))
-    verify(labeledPods, never()).delete()
     schedulerExecutorService.tick(sparkConf.get(KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD) * 2,
       TimeUnit.MILLISECONDS)
     verify(labeledPods, never()).delete()
@@ -227,6 +227,7 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(podList.getItems()).thenReturn(Arrays.asList(pod1))
     schedulerBackendUnderTest.doKillExecutors(Seq("1", "2"))
     verify(labeledPods, never()).delete()
+    schedulerExecutorService.runUntilIdle()
     verify(pod1op).edit(any(
       classOf[java.util.function.UnaryOperator[io.fabric8.kubernetes.api.model.Pod]]))
     verify(pod2op, never()).edit(any(
