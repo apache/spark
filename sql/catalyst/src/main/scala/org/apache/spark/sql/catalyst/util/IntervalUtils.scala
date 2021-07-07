@@ -234,6 +234,7 @@ object IntervalUtils {
    * - YEAR TO MONTH
    */
   def fromYearMonthString(input: String, startField: Byte, endField: Byte): CalendarInterval = {
+    require(input != null, "Interval year-month string must be not null")
     val months = castStringToYMInterval(UTF8String.fromString(input), startField, endField)
     new CalendarInterval(months, 0, 0)
   }
@@ -469,6 +470,7 @@ object IntervalUtils {
    * - MINUTE TO SECOND
    */
   def fromDayTimeString(input: String, from: IntervalUnit, to: IntervalUnit): CalendarInterval = {
+    require(input != null, "Interval day-time string must be not null")
     if (SQLConf.get.getConf(SQLConf.LEGACY_FROM_DAYTIME_STRING)) {
       parseDayTimeLegacy(input, from, to)
     } else {
@@ -499,7 +501,6 @@ object IntervalUtils {
       input: String,
       from: IntervalUnit,
       to: IntervalUnit): CalendarInterval = {
-    require(input != null, "Interval day-time string must be not null")
     assert(input.length == input.trim.length)
     val m = dayTimePatternLegacy.pattern.matcher(input)
     require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $input, " +
