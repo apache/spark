@@ -327,41 +327,44 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     check("12:40", HOUR, MINUTE, "12 hours 40 minutes")
     check("+12:40", HOUR, MINUTE, "12 hours 40 minutes")
     check("-12:40", HOUR, MINUTE, "-12 hours -40 minutes")
-    checkFail("5 12:40", HOUR, MINUTE, "must match day-time format")
+    checkFail("5 12:40", HOUR, MINUTE, "Interval string does not match day-time format")
 
     check("12:40:30.999999999", HOUR, SECOND, "12 hours 40 minutes 30.999999 seconds")
     check("+12:40:30.123456789", HOUR, SECOND, "12 hours 40 minutes 30.123456 seconds")
     check("-12:40:30.123456789", HOUR, SECOND, "-12 hours -40 minutes -30.123456 seconds")
-    checkFail("5 12:40:30", HOUR, SECOND, "must match day-time format")
-    checkFail("12:40:30.0123456789", HOUR, SECOND, "must match day-time format")
+    checkFail("5 12:40:30", HOUR, SECOND, "Interval string does not match day-time format")
+    checkFail("12:40:30.0123456789", HOUR, SECOND,
+      "Interval string does not match day-time format")
 
     check("40:30.123456789", MINUTE, SECOND, "40 minutes 30.123456 seconds")
     check("+40:30.123456789", MINUTE, SECOND, "40 minutes 30.123456 seconds")
     check("-40:30.123456789", MINUTE, SECOND, "-40 minutes -30.123456 seconds")
-    checkFail("12:40:30", MINUTE, SECOND, "must match day-time format")
+    checkFail("12:40:30", MINUTE, SECOND, "Interval string does not match day-time format")
 
     check("5 12", DAY, HOUR, "5 days 12 hours")
     check("+5 12", DAY, HOUR, "5 days 12 hours")
     check("-5 12", DAY, HOUR, "-5 days -12 hours")
-    checkFail("5 12:30", DAY, HOUR, "must match day-time format")
+    checkFail("5 12:30", DAY, HOUR, "Interval string does not match day-time format")
 
     check("5 12:40", DAY, MINUTE, "5 days 12 hours 40 minutes")
     check("+5 12:40", DAY, MINUTE, "5 days 12 hours 40 minutes")
     check("-5 12:40", DAY, MINUTE, "-5 days -12 hours -40 minutes")
-    checkFail("5 12", DAY, MINUTE, "must match day-time format")
+    checkFail("5 12", DAY, MINUTE, "Interval string does not match day-time format")
 
     check("5 12:40:30.123", DAY, SECOND, "5 days 12 hours 40 minutes 30.123 seconds")
     check("+5 12:40:30.123456", DAY, SECOND, "5 days 12 hours 40 minutes 30.123456 seconds")
     check("-5 12:40:30.123456789", DAY, SECOND, "-5 days -12 hours -40 minutes -30.123456 seconds")
-    checkFail("5 12", DAY, SECOND, "must match day-time format")
+    checkFail("5 12", DAY, SECOND, "Interval string does not match day-time format")
 
     checkFail("5 30:12:20", DAY, SECOND, "hour 30 outside range")
-    checkFail("5 30-12", DAY, SECOND, "must match day-time format")
-    checkFail("5 1:12:20", HOUR, MICROSECOND, "Cannot support (interval")
-
+    checkFail("5 30-12", DAY, SECOND, "Interval string does not match day-time format")
+    withClue("Expected to throw an exception for the invalid input") {
+      val e = intercept[NoSuchElementException](fromDayTimeString("5 1:12:20", HOUR, MICROSECOND))
+      assert(e.getMessage.contains("key not found: microsecond"))
+    }
     // whitespaces
     check("\t +5 12:40\t ", DAY, MINUTE, "5 days 12 hours 40 minutes")
-    checkFail("+5\t 12:40", DAY, MINUTE, "must match day-time format")
+    checkFail("+5\t 12:40", DAY, MINUTE, "Interval string does not match day-time format")
 
   }
 
