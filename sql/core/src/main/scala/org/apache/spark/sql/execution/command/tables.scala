@@ -319,7 +319,8 @@ case class LoadDataCommand(
       }
     } else {
       if (partition.nonEmpty) {
-        throw QueryCompilationErrors.loadDataTargetTableNotPartitionedButPartitionSpecWasProvidedError(tableIdentWithDB)
+        throw QueryCompilationErrors
+          .loadDataTargetTableNotPartitionedButPartitionSpecWasProvidedError(tableIdentWithDB)
       }
     }
     val loadPath = {
@@ -1209,7 +1210,8 @@ case class ShowCreateTableAsSerdeCommand(
     val tableMetadata = catalog.getTableRawMetadata(table)
 
     val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
-      throw QueryCompilationErrors.showCreateTableAsSerdeNotAllowedOnSparkDataSourceTableError(table)
+      throw QueryCompilationErrors.showCreateTableAsSerdeNotAllowedOnSparkDataSourceTableError(
+        table)
     } else {
       showCreateHiveTable(tableMetadata)
     }
