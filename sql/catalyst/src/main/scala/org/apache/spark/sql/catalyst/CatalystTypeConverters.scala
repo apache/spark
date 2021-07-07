@@ -68,7 +68,7 @@ object CatalystTypeConverters {
       case DateType => DateConverter
       case TimestampType if SQLConf.get.datetimeJava8ApiEnabled => InstantConverter
       case TimestampType => TimestampConverter
-      case TimestampWithoutTZType => TimestampWithoutTZConverter
+      case TimestampNTZType => TimestampNTZConverter
       case dt: DecimalType => new DecimalConverter(dt)
       case BooleanType => BooleanConverter
       case ByteType => ByteConverter
@@ -357,13 +357,13 @@ object CatalystTypeConverters {
       DateTimeUtils.microsToInstant(row.getLong(column))
   }
 
-  private object TimestampWithoutTZConverter
+  private object TimestampNTZConverter
     extends CatalystTypeConverter[Any, LocalDateTime, Any] {
     override def toCatalystImpl(scalaValue: Any): Any = scalaValue match {
       case l: LocalDateTime => DateTimeUtils.localDateTimeToMicros(l)
       case other => throw new IllegalArgumentException(
         s"The value (${other.toString}) of the type (${other.getClass.getCanonicalName}) "
-          + s"cannot be converted to the ${TimestampWithoutTZType.sql} type")
+          + s"cannot be converted to the ${TimestampNTZType.sql} type")
     }
 
     override def toScala(catalystValue: Any): LocalDateTime =
@@ -511,7 +511,7 @@ object CatalystTypeConverters {
     case ld: LocalDate => LocalDateConverter.toCatalyst(ld)
     case t: Timestamp => TimestampConverter.toCatalyst(t)
     case i: Instant => InstantConverter.toCatalyst(i)
-    case l: LocalDateTime => TimestampWithoutTZConverter.toCatalyst(l)
+    case l: LocalDateTime => TimestampNTZConverter.toCatalyst(l)
     case d: BigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case d: JavaBigDecimal => new DecimalConverter(DecimalType(d.precision, d.scale)).toCatalyst(d)
     case seq: Seq[Any] => new GenericArrayData(seq.map(convertToCatalyst).toArray)

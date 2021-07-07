@@ -77,7 +77,10 @@ class PlanResolutionSuite extends AnalysisTest {
 
   private val v1Table: V1Table = {
     val t = mock(classOf[CatalogTable])
-    when(t.schema).thenReturn(new StructType().add("i", "int").add("s", "string"))
+    when(t.schema).thenReturn(new StructType()
+      .add("i", "int")
+      .add("s", "string")
+      .add("point", new StructType().add("x", "int").add("y", "int")))
     when(t.tableType).thenReturn(CatalogTableType.MANAGED)
     when(t.provider).thenReturn(Some(v1Format))
     V1Table(t)
@@ -1089,10 +1092,9 @@ class PlanResolutionSuite extends AnalysisTest {
           val e1 = intercept[AnalysisException] {
             parseAndResolve(sql3)
           }
-          assert(e1.getMessage.contains(
-            "ALTER COLUMN cannot find column j in v1 table. Available: i, s"))
+          assert(e1.getMessage.contains("Missing field j in table spark_catalog.default.v1Table"))
 
-          val sql4 = s"ALTER TABLE $tblName ALTER COLUMN a.b.c TYPE bigint"
+          val sql4 = s"ALTER TABLE $tblName ALTER COLUMN point.x TYPE bigint"
           val e2 = intercept[AnalysisException] {
             parseAndResolve(sql4)
           }
@@ -1150,14 +1152,13 @@ class PlanResolutionSuite extends AnalysisTest {
           val e = intercept[AnalysisException] {
             parseAndResolve(sql)
           }
-          assert(e.getMessage.contains(
-            "ALTER COLUMN cannot find column I in v1 table. Available: i, s"))
+          assert(e.getMessage.contains("Missing field I in table spark_catalog.default.v1Table"))
         } else {
           val actual = parseAndResolve(sql)
           val expected = AlterTableChangeColumnCommand(
             TableIdentifier(tblName, Some("default")),
-            "I",
-            StructField("I", IntegerType).withComment("new comment"))
+            "i",
+            StructField("i", IntegerType).withComment("new comment"))
           comparePlans(actual, expected)
         }
       }

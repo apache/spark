@@ -216,7 +216,7 @@ private[sql] object AnyTimestampType extends AbstractDataType with Serializable 
   override private[sql] def defaultConcreteType: DataType = TimestampType
 
   override private[sql] def acceptsType(other: DataType): Boolean =
-    other.isInstanceOf[TimestampType] || other.isInstanceOf[TimestampWithoutTZType]
+    other.isInstanceOf[TimestampType] || other.isInstanceOf[TimestampNTZType]
 
   override private[sql] def simpleString = "(timestamp or timestamp without time zone)"
 

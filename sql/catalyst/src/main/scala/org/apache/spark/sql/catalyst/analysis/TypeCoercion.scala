@@ -421,8 +421,8 @@ abstract class TypeCoercionBase {
         m.copy(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
 
       // Hive lets you do aggregation of timestamps... for some reason
-      case Sum(e @ TimestampType()) => Sum(Cast(e, DoubleType))
-      case Average(e @ TimestampType()) => Average(Cast(e, DoubleType))
+      case Sum(e @ TimestampType(), _) => Sum(Cast(e, DoubleType))
+      case Average(e @ TimestampType(), _) => Average(Cast(e, DoubleType))
 
       // Coalesce should return the first non-null value, which could be any column
       // from the list. So we need to make sure the return type is deterministic and
@@ -639,8 +639,8 @@ abstract class TypeCoercionBase {
         s.copy(right = Cast(s.right, s.left.dataType))
       case s @ SubtractTimestamps(AnyTimestampType(), AnyTimestampType(), _, _)
         if s.left.dataType != s.right.dataType =>
-        val newLeft = castIfNotSameType(s.left, TimestampWithoutTZType)
-        val newRight = castIfNotSameType(s.right, TimestampWithoutTZType)
+        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
+        val newRight = castIfNotSameType(s.right, TimestampNTZType)
         s.copy(left = newLeft, right = newRight)
 
       case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
@@ -962,7 +962,7 @@ object TypeCoercion extends TypeCoercionBase {
       // Implicit cast between date time types
       case (DateType, TimestampType) => TimestampType
       case (DateType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
-      case (TimestampType | TimestampWithoutTZType, DateType) => DateType
+      case (TimestampType | TimestampNTZType, DateType) => DateType
 
       // Implicit cast from/to string
       case (StringType, DecimalType) => DecimalType.SYSTEM_DEFAULT
@@ -1091,8 +1091,8 @@ object TypeCoercion extends TypeCoercionBase {
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
 
       case Abs(e @ StringType(), failOnError) => Abs(Cast(e, DoubleType), failOnError)
-      case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
-      case Average(e @ StringType()) => Average(Cast(e, DoubleType))
+      case Sum(e @ StringType(), _) => Sum(Cast(e, DoubleType))
+      case Average(e @ StringType(), _) => Average(Cast(e, DoubleType))
       case s @ StddevPop(e @ StringType(), _) =>
         s.withNewChildren(Seq(Cast(e, DoubleType)))
       case s @ StddevSamp(e @ StringType(), _) =>

@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
+import scala.util.{Failure, Random, Success, Try}
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst._
@@ -94,8 +94,9 @@ object FakeV2SessionCatalog extends TableCatalog {
 }
 
 /**
- * Provides a way to keep state during the analysis, mostly for resolving views. This enables us to
- * decouple the concerns of analysis environment from the catalog.
+ * Provides a way to keep state during the analysis, mostly for resolving views and subqueries.
+ * This enables us to decouple the concerns of analysis environment from the catalog and resolve
+ * star expressions in subqueries that reference the outer query plans.
  * The state that is kept here is per-query.
  *
  * Note this is thread local.
@@ -115,6 +116,8 @@ object FakeV2SessionCatalog extends TableCatalog {
  *                              if `t` was a permanent table when the current view was created, it
  *                              should still be a permanent table when resolving the current view,
  *                              even if a temp view `t` has been created.
+ * @param outerPlan The query plan from the outer query that can be used to resolve star
+ *                  expressions in a subquery.
  */
 case class AnalysisContext(
     catalogAndNamespace: Seq[String] = Nil,
@@ -122,7 +125,8 @@ case class AnalysisContext(
     maxNestedViewDepth: Int = -1,
     relationCache: mutable.Map[Seq[String], LogicalPlan] = mutable.Map.empty,
     referredTempViewNames: Seq[Seq[String]] = Seq.empty,
-    referredTempFunctionNames: Seq[String] = Seq.empty)
+    referredTempFunctionNames: Seq[String] = Seq.empty,
+    outerPlan: Option[LogicalPlan] = None)
 
 object AnalysisContext {
   private val value = new ThreadLocal[AnalysisContext]() {
@@ -149,6 +153,13 @@ object AnalysisContext {
       originContext.relationCache,
       viewDesc.viewReferredTempViewNames,
       viewDesc.viewReferredTempFunctionNames)
+    set(context)
+    try f finally { set(originContext) }
+  }
+
+  def withOuterPlan[A](outerPlan: LogicalPlan)(f: => A): A = {
+    val originContext = value.get()
+    val context = originContext.copy(outerPlan = Some(outerPlan))
     set(context)
     try f finally { set(originContext) }
   }
@@ -258,6 +269,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRelations ::
       ResolveTables ::
       ResolvePartitionSpec ::
+      ResolveAlterTableCommands ::
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveReferences ::
@@ -299,7 +311,6 @@ class Analyzer(override val catalogManager: CatalogManager)
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),
-    Batch("Normalize Alter Table Commands", Once, ResolveAlterTableCommands),
     Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints),
@@ -357,9 +368,9 @@ class Analyzer(override val catalogManager: CatalogManager)
           case (_: DayTimeIntervalType, DateType) => TimeAdd(Cast(r, TimestampType), l)
           case (DateType, _: YearMonthIntervalType) => DateAddYMInterval(l, r)
           case (_: YearMonthIntervalType, DateType) => DateAddYMInterval(r, l)
-          case (TimestampType | TimestampWithoutTZType, _: YearMonthIntervalType) =>
+          case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>
             TimestampAddYMInterval(l, r)
-          case (_: YearMonthIntervalType, TimestampType | TimestampWithoutTZType) =>
+          case (_: YearMonthIntervalType, TimestampType | TimestampNTZType) =>
             TimestampAddYMInterval(r, l)
           case (CalendarIntervalType, CalendarIntervalType) |
                (_: DayTimeIntervalType, _: DayTimeIntervalType) => a
@@ -378,7 +389,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             DatetimeSub(l, r, TimeAdd(Cast(l, TimestampType), UnaryMinus(r, f)))
           case (DateType, _: YearMonthIntervalType) =>
             DatetimeSub(l, r, DateAddYMInterval(l, UnaryMinus(r, f)))
-          case (TimestampType | TimestampWithoutTZType, _: YearMonthIntervalType) =>
+          case (TimestampType | TimestampNTZType, _: YearMonthIntervalType) =>
             DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, f)))
           case (CalendarIntervalType, CalendarIntervalType) |
                (_: DayTimeIntervalType, _: DayTimeIntervalType) => s
@@ -432,6 +443,17 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveAliases extends Rule[LogicalPlan] {
     private def assignAliases(exprs: Seq[NamedExpression]) = {
+      def extractOnly(e: Expression): Boolean = e match {
+        case _: ExtractValue => e.children.forall(extractOnly)
+        case _: Literal => true
+        case _: Attribute => true
+        case _ => false
+      }
+      def metaForAutoGeneratedAlias = {
+        new MetadataBuilder()
+          .putString("__autoGeneratedAlias", "true")
+          .build()
+      }
       exprs.map(_.transformUpWithPruning(_.containsPattern(UNRESOLVED_ALIAS)) {
           case u @ UnresolvedAlias(child, optGenAliasFunc) =>
           child match {
@@ -440,10 +462,17 @@ class Analyzer(override val catalogManager: CatalogManager)
             case e if !e.resolved => u
             case g: Generator => MultiAlias(g, Nil)
             case c @ Cast(ne: NamedExpression, _, _, _) => Alias(c, ne.name)()
-            case e: ExtractValue => Alias(e, toPrettySQL(e))()
+            case e: ExtractValue =>
+              if (extractOnly(e)) {
+                Alias(e, toPrettySQL(e))()
+              } else {
+                Alias(e, toPrettySQL(e))(explicitMetadata = Some(metaForAutoGeneratedAlias))
+              }
             case e if optGenAliasFunc.isDefined =>
               Alias(child, optGenAliasFunc.get.apply(e))()
-            case e => Alias(e, toPrettySQL(e))()
+            case l: Literal => Alias(l, toPrettySQL(l))()
+            case e =>
+              Alias(e, toPrettySQL(e))(explicitMetadata = Some(metaForAutoGeneratedAlias))
           }
         }
       ).asInstanceOf[Seq[NamedExpression]]
@@ -1579,6 +1608,30 @@ class Analyzer(override val catalogManager: CatalogManager)
       }
     }
 
+    // Expand the star expression using the input plan first. If failed, try resolve
+    // the star expression using the outer query plan and wrap the resolved attributes
+    // in outer references. Otherwise throw the original exception.
+    private def expand(s: Star, plan: LogicalPlan): Seq[NamedExpression] = {
+      withPosition(s) {
+        try {
+          s.expand(plan, resolver)
+        } catch {
+          case e: AnalysisException =>
+            AnalysisContext.get.outerPlan.map {
+              // Only Project and Aggregate can host star expressions.
+              case u @ (_: Project | _: Aggregate) =>
+                Try(s.expand(u.children.head, resolver)) match {
+                  case Success(expanded) => expanded.map(wrapOuterReference)
+                  case Failure(_) => throw e
+                }
+              // Do not use the outer plan to resolve the star expression
+              // since the star usage is invalid.
+              case _ => throw e
+            }.getOrElse { throw e }
+        }
+      }
+    }
+
     /**
      * Build a project list for Project/Aggregate and expand the star if possible
      */
@@ -1587,9 +1640,9 @@ class Analyzer(override val catalogManager: CatalogManager)
       child: LogicalPlan): Seq[NamedExpression] = {
       exprs.flatMap {
         // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
-        case s: Star => s.expand(child, resolver)
+        case s: Star => expand(s, child)
         // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
-        case UnresolvedAlias(s: Star, _) => s.expand(child, resolver)
+        case UnresolvedAlias(s: Star, _) => expand(s, child)
         case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
         case o => o :: Nil
       }.map(_.asInstanceOf[NamedExpression])
@@ -1622,28 +1675,28 @@ class Analyzer(override val catalogManager: CatalogManager)
             }
           }
           f1.copy(arguments = f1.arguments.flatMap {
-            case s: Star => s.expand(child, resolver)
+            case s: Star => expand(s, child)
             case o => o :: Nil
           })
         case c: CreateNamedStruct if containsStar(c.valExprs) =>
           val newChildren = c.children.grouped(2).flatMap {
-            case Seq(k, s : Star) => CreateStruct(s.expand(child, resolver)).children
+            case Seq(k, s : Star) => CreateStruct(expand(s, child)).children
             case kv => kv
           }
           c.copy(children = newChildren.toList )
         case c: CreateArray if containsStar(c.children) =>
           c.copy(children = c.children.flatMap {
-            case s: Star => s.expand(child, resolver)
+            case s: Star => expand(s, child)
             case o => o :: Nil
           })
         case p: Murmur3Hash if containsStar(p.children) =>
           p.copy(children = p.children.flatMap {
-            case s: Star => s.expand(child, resolver)
+            case s: Star => expand(s, child)
             case o => o :: Nil
           })
         case p: XxHash64 if containsStar(p.children) =>
           p.copy(children = p.children.flatMap {
-            case s: Star => s.expand(child, resolver)
+            case s: Star => expand(s, child)
             case o => o :: Nil
           })
         // count(*) has been replaced by count(1)
@@ -1705,12 +1758,13 @@ class Analyzer(override val catalogManager: CatalogManager)
           assert(ordinal >= 0 && ordinal < attrCandidates.length)
           attrCandidates(ordinal)
 
-        case GetViewColumnByNameAndOrdinal(viewName, colName, ordinal, expectedNumCandidates) =>
+        case GetViewColumnByNameAndOrdinal(
+            viewName, colName, ordinal, expectedNumCandidates, viewDDL) =>
           val attrCandidates = getAttrCandidates()
           val matched = attrCandidates.filter(a => resolver(a.name, colName))
           if (matched.length != expectedNumCandidates) {
             throw QueryCompilationErrors.incompatibleViewSchemaChange(
-              viewName, colName, expectedNumCandidates, matched)
+              viewName, colName, expectedNumCandidates, matched, viewDDL)
           }
           matched(ordinal)
 
@@ -2284,14 +2338,6 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Note: CTEs are handled in CTESubstitution.
    */
   object ResolveSubquery extends Rule[LogicalPlan] with PredicateHelper {
-
-    /**
-     * Wrap attributes in the expression with [[OuterReference]]s.
-     */
-    private def wrapOuterReference[E <: Expression](e: E): E = {
-      e.transform { case a: Attribute => OuterReference(a) }.asInstanceOf[E]
-    }
-
     /**
      * Resolve the correlated expressions in a subquery, as if the expressions live in the outer
      * plan. All resolved outer references are wrapped in an [[OuterReference]]
@@ -2333,7 +2379,9 @@ class Analyzer(override val catalogManager: CatalogManager)
       do {
         // Try to resolve the subquery plan using the regular analyzer.
         previous = current
-        current = executeSameContext(current)
+        current = AnalysisContext.withOuterPlan(outer) {
+          executeSameContext(current)
+        }
 
         // Use the outer references to resolve the subquery plan if it isn't resolved yet.
         if (!current.resolved) {
@@ -3529,34 +3577,32 @@ class Analyzer(override val catalogManager: CatalogManager)
    */
   object ResolveAlterTableCommands extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case a: AlterTableCommand if a.table.resolved =>
+      case a: AlterTableCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
         val table = a.table.asInstanceOf[ResolvedTable]
-        val transformed = a.transformExpressions {
-          case u: UnresolvedFieldName =>
-            resolveFieldNames(table.schema, u.name).getOrElse(u)
-          case u: UnresolvedFieldPosition => u.position match {
-            case after: After =>
-              resolveFieldNames(table.schema, u.fieldName.init :+ after.column())
-                .map { resolved =>
-                  ResolvedFieldPosition(ColumnPosition.after(resolved.field.name))
-                }.getOrElse(u)
-            case _ => ResolvedFieldPosition(u.position)
-          }
+        a.transformExpressions {
+          case u: UnresolvedFieldName => resolveFieldNames(table, u.name, u)
         }
 
-        transformed match {
-          case alter @ AlterTableAlterColumn(
-              _: ResolvedTable, ResolvedFieldName(_, field), Some(dataType), _, _, _) =>
-            // Hive style syntax provides the column type, even if it may not have changed.
-            val dt = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
-            if (dt == dataType) {
-              // The user didn't want the field to change, so remove this change.
-              alter.copy(dataType = None)
-            } else {
-              alter
-            }
+      case a @ AlterTableAlterColumn(
+          table: ResolvedTable, ResolvedFieldName(path, field), dataType, _, _, position) =>
+        val newDataType = dataType.flatMap { dt =>
+          // Hive style syntax provides the column type, even if it may not have changed.
+          val existing = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
+          if (existing == dt) None else Some(dt)
+        }
+        val newPosition = position map {
+          case u @ UnresolvedFieldPosition(after: After) =>
+            // TODO: since the field name is already resolved, it's more efficient if
+            //       `ResolvedFieldName` carries the parent struct and we resolve column position
+            //       based on the parent struct, instead of re-resolving the entire column path.
+            val resolved = resolveFieldNames(table, path :+ after.column(), u)
+            ResolvedFieldPosition(ColumnPosition.after(resolved.field.name))
+          case u: UnresolvedFieldPosition => ResolvedFieldPosition(u.position)
           case other => other
         }
+        val resolved = a.copy(dataType = newDataType, position = newPosition)
+        resolved.copyTagsFrom(a)
+        resolved
     }
 
     /**
@@ -3564,11 +3610,16 @@ class Analyzer(override val catalogManager: CatalogManager)
      * not found. An error will be thrown in CheckAnalysis for columns that can't be resolved.
      */
     private def resolveFieldNames(
-        schema: StructType,
-        fieldNames: Seq[String]): Option[ResolvedFieldName] = {
-      val fieldOpt = schema.findNestedField(
-        fieldNames, includeCollections = true, conf.resolver)
-      fieldOpt.map { case (path, field) => ResolvedFieldName(path, field) }
+        table: ResolvedTable,
+        fieldName: Seq[String],
+        context: Expression): ResolvedFieldName = {
+      table.schema.findNestedField(fieldName, includeCollections = true, conf.resolver).map {
+        case (path, field) => ResolvedFieldName(path, field)
+      }.getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context))
+    }
+
+    private def hasUnresolvedFieldName(a: AlterTableCommand): Boolean = {
+      a.expressions.exists(_.find(_.isInstanceOf[UnresolvedFieldName]).isDefined)
     }
   }
 

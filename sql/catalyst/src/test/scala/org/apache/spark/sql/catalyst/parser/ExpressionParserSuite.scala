@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -454,6 +455,17 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("type constructors") {
+    def checkTimestampNTZAndLTZ(): Unit = {
+      // Timestamp with local time zone
+      assertEqual("tImEstAmp_LTZ '2016-03-11 20:54:00.000'",
+        Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
+      intercept("timestamP_LTZ '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP_LTZ value")
+      // Timestamp without time zone
+      assertEqual("tImEstAmp_Ntz '2016-03-11 20:54:00.000'",
+        Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
+      intercept("tImEstAmp_Ntz '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP_NTZ value")
+    }
+
     // Dates.
     assertEqual("dAte '2016-03-11'", Literal(Date.valueOf("2016-03-11")))
     intercept("DAtE 'mar 11 2016'", "Cannot parse the DATE value")
@@ -463,6 +475,20 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
     intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
+    checkTimestampNTZAndLTZ()
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
+      assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
+        Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
+
+      intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
+
+      // If the timestamp string contains time zone, return a timestamp with local time zone literal
+      assertEqual("tImEstAmp '1970-01-01 00:00:00.000 +01:00'",
+        Literal(-3600000000L, TimestampType))
+
+      // The behavior of TIMESTAMP_NTZ and TIMESTAMP_LTZ is independent of SQLConf.TIMESTAMP_TYPE
+      checkTimestampNTZAndLTZ()
+    }
     // Interval.
     val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)

@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, REPARTITION_BY_COL, ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.reuse.ReuseExchangeAndSubquery
 import org.apache.spark.sql.functions._
@@ -420,7 +420,8 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
 
     val inputPlan = ShuffleExchangeExec(
       partitioning,
-      DummySparkPlan(outputPartitioning = partitioning))
+      DummySparkPlan(outputPartitioning = partitioning),
+      REPARTITION_BY_COL)
     val outputPlan = EnsureRequirements.apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
     if (outputPlan.collect { case e: ShuffleExchangeExec => true }.size == 1) {
