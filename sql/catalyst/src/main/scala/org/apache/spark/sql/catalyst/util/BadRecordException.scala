@@ -41,3 +41,8 @@ case class BadRecordException(
     record: () => UTF8String,
     partialResult: () => Option[InternalRow],
     cause: Throwable) extends Exception(cause)
+
+/**
+ * Exception thrown when the actual value is null but the schema is setting to non-nullable.
+ */
+case class IllegalSchemaArgumentException(message: String) extends Exception(message)

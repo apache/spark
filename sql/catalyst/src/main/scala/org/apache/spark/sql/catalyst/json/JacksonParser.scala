@@ -411,7 +411,7 @@ class JacksonParser(
             checkedIndexSet += index
           } catch {
             case e: SparkUpgradeException => throw e
-            case e: IllegalArgumentException => throw e
+            case e: IllegalSchemaArgumentException => throw e
             case NonFatal(e) if isRoot =>
               badRecordException = badRecordException.orElse(Some(e))
               parser.skipChildren()
@@ -425,7 +425,7 @@ class JacksonParser(
     var index = 0
     while (badRecordException.isEmpty && !skipRow && index < schema.length) {
       if (!schema(index).nullable && row.isNullAt(index)) {
-        throw new IllegalArgumentException(
+        throw new IllegalSchemaArgumentException(
           s"the null value found when parsing non-nullable field ${schema(index).name}.")
       }
       if (!checkedIndexSet.contains(index)) {
@@ -499,7 +499,7 @@ class JacksonParser(
       }
     } catch {
       case e: SparkUpgradeException => throw e
-      case e: IllegalArgumentException => throw e
+      case e: IllegalSchemaArgumentException => throw e
       case e @ (_: RuntimeException | _: JsonProcessingException | _: MalformedInputException) =>
         // JSON parser currently doesn't support partial results for corrupted records.
         // For such records, all fields other than the field configured by

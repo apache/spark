@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.json
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.IllegalSchemaArgumentException
 import org.apache.spark.sql.sources.{EqualTo, Filter, IsNotNull, IsNull, StringStartsWith}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -60,7 +61,7 @@ class JacksonParserSuite extends SparkFunSuite {
       if (nullable) {
         action
       } else {
-        assertThrows[IllegalArgumentException] {
+        assertThrows[IllegalSchemaArgumentException] {
           action
         }
       }
