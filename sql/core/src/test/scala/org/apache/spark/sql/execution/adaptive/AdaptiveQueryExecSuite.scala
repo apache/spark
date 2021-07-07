@@ -1497,9 +1497,8 @@ class AdaptiveQueryExecSuite
             |JOIN (SELECT a, b, c, key FROM tt) t2
             |  ON t1.key = t2.key
             |""".stripMargin
-        val (origin, adaptive) = runAdaptiveAndVerifyResult(query)
-        assert(findTopLevelBroadcastHashJoin(origin).size == 1)
-        assert(findTopLevelBroadcastHashJoin(adaptive).size == 1)
+        // here we only need to make sure this query can run
+        runAdaptiveAndVerifyResult(query)
       }
     }
   }
