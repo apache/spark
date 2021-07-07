@@ -253,7 +253,7 @@ object DateTimeUtils {
       // A Long is able to represent a timestamp within [+-]200 thousand years
       val maxDigitsYear = 6
       // For the nanosecond part, more than 6 digits is allowed, but will be truncated.
-      segment == 6 || (segment == 0 && digits <= maxDigitsYear) ||
+      segment == 6 || (segment == 0 && digits > 0 && digits <= maxDigitsYear) ||
         (segment != 0 && segment != 6 && digits <= 2)
     }
     if (s == null || s.trimAll().numBytes() == 0) {
@@ -268,16 +268,16 @@ object DateTimeUtils {
     var j = 0
     var digitsMilli = 0
     var justTime = false
-    var sign = 1
+    var yearSign: Option[Int] = None
     if (bytes(j) == '-' || bytes(j) == '+') {
-      sign = if (bytes(j) == '-') -1 else 1
+      yearSign = if (bytes(j) == '-') Some(-1) else Some(1)
       j += 1
     }
     while (j < bytes.length) {
       val b = bytes(j)
       val parsedValue = b - '0'.toByte
       if (parsedValue < 0 || parsedValue > 9) {
-        if (j == 0 && b == 'T') {
+        if (j == 0 && b == 'T' && yearSign.isEmpty) {
           justTime = true
           i += 3
         } else if (i < 2) {
@@ -289,7 +289,7 @@ object DateTimeUtils {
             currentSegmentValue = 0
             currentSegmentDigits = 0
             i += 1
-          } else if (i == 0 && b == ':') {
+          } else if (i == 0 && b == ':' && yearSign.isEmpty) {
             justTime = true
             if (!isValidDigits(3, currentSegmentDigits)) {
               return (Array.empty, None, false)
@@ -384,7 +384,6 @@ object DateTimeUtils {
       j += 1
     }
 
-    // TODO: is this possible: justTime == true && i == 0
     if (!isValidDigits(i, currentSegmentDigits)) {
       return (Array.empty, None, false)
     }
@@ -401,7 +400,7 @@ object DateTimeUtils {
       case "-" => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
       case zoneName: String => getZoneId(zoneName.trim)
     }
-    segments(0) *= sign
+    segments(0) *= yearSign.getOrElse(1)
     (segments, zoneId, justTime)
   }
 
@@ -529,7 +528,7 @@ object DateTimeUtils {
       // An integer is able to represent a date within [+-]5 million years.
       var maxDigitsYear = 7
       // For the nanosecond part, more than 6 digits is allowed, but will be truncated.
-      (segment == 0 && digits <= maxDigitsYear) || (segment != 0 && digits <= 2)
+      (segment == 0 && digits > 0 && digits <= maxDigitsYear) || (segment != 0 && digits <= 2)
     }
     if (s == null || s.trimAll().numBytes() == 0) {
       return None

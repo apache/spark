@@ -106,6 +106,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
   test("cast string to date") {
     var c = Calendar.getInstance()
+    c.set(12345, 0, 1, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("12345"), DateType), new Date(c.getTimeInMillis))
+    c.set(12345, 11, 18, 0, 0, 0)
+    c.set(Calendar.MILLISECOND, 0)
+    checkEvaluation(Cast(Literal("12345-12-18"), DateType), new Date(c.getTimeInMillis))
     c.set(2015, 0, 1, 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     checkEvaluation(Cast(Literal("2015"), DateType), new Date(c.getTimeInMillis))
@@ -131,6 +137,9 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
       val tz = TimeZone.getTimeZone(zid)
       var c = Calendar.getInstance(tz)
+      checkEvaluation(
+        cast("123", TimestampType, Option(zid.getId)),
+        LocalDateTime.of(123, 1, 1, 0, 0, 0).atZone(zid).toInstant)
       c.set(2015, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
       checkCastStringToTimestamp("2015", new Timestamp(c.getTimeInMillis))
@@ -967,6 +976,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     // The input string can contain date only
     checkEvaluation(cast("2021-06-17", TimestampNTZType),
       LocalDateTime.of(2021, 6, 17, 0, 0))
+    checkEvaluation(cast("123", TimestampNTZType),
+      LocalDateTime.of(123, 1, 1, 0, 0))
   }
 
   test("SPARK-35112: Cast string to day-time interval") {

@@ -259,44 +259,14 @@ select to_timestamp_ntz('2021-06-25 10:11:12') - interval '20 15:40' day to minu
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval '20 15:40:32.99899999' day to second;
 
 -- datetime with year outside [0000-9999]
--- enable java8API for datetime because the `java.sql.Date` only supports year from 0 to 9999
-set spark.sql.datetime.java8API.enabled=true;
-select date'02015-03-18';
+select date'999999-03-18';
 select date'015';
 select date'-1-1-28';
--- Int.MaxValue and Int.MaxValue + 1 day
-select cast('5881580-7-11' as date);;
-select cast('5881580-7-12' as date);
--- Int.MinValue and Int.MinValue - 1 day
-select cast('-5877641-6-23' as date);
-select cast('-5877641-6-22' as date);
+select cast('2021-4294967297-11' as date);
 
 select timestamp'-1969-12-31 16:00:00';
-select timestamp'02015-03-18 16:00:00';
 select timestamp'015-03-18 16:00:00';
 select timestamp'-000001';
 select timestamp'99999-03-18T12:03:17';
--- Long.MaxValue and Long.MaxValue + 1 micro seconds
-select cast('294247-01-10T04:00:54.775807Z' as timestamp);
-select cast('294247-01-10T04:00:54.775808Z' as timestamp);
--- Long.MinValue and Long.MinValue - 1 micro seconds
-select cast('-290308-12-21T19:59:05.224192Z' as timestamp);
-select cast('-290308-12-21T19:59:05.224191Z' as timestamp);
-
--- Check overflow of single segment in date format
-select cast('4294967297' as date);
-select cast('2021-4294967297-11' as date);
-
--- Check overflow of single segment in timestamp format
 select cast('4294967297' as timestamp);
-select cast('2021-4294967297-11' as timestamp);
-select cast('4294967297:30:00' as timestamp);
-select cast('2021-11-4294967297T12:30:00' as timestamp);
-select cast('2021-01-01T12:4294967297:00' as timestamp);
-select cast('2021-01-01T12:30:4294967297' as timestamp);
 select cast('2021-01-01T12:30:4294967297.123456' as timestamp);
-select cast('2021-01-01T12:30:4294967297+07:30' as timestamp);
-select cast('2021-01-01T12:30:4294967297UTC' as timestamp);
-select cast('2021-01-01T12:30:4294967297+4294967297:30' as timestamp);
-
-set spark.sql.datetime.java8API.enabled=false;
