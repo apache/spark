@@ -474,8 +474,8 @@ object IntervalUtils {
     if (SQLConf.get.getConf(SQLConf.LEGACY_FROM_DAYTIME_STRING)) {
       parseDayTimeLegacy(input, from, to)
     } else {
-      castDayTimeStringToInterval(input,
-        DT.stringToField(from.toString), DT.stringToField(to.toString))
+      castDayTimeStringToInterval(
+        input, DT.stringToField(from.toString), DT.stringToField(to.toString))
     }
   }
 
