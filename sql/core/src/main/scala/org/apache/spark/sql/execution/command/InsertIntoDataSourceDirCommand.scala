@@ -61,7 +61,7 @@ case class InsertIntoDataSourceDirCommand(
 
     val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
     if (!isFileFormat) {
-      throw QueryExecutionErrors.onlyDataSourcesProvidingFileFormatSupportedError(
+      throw QueryExecutionErrors.onlySupportDataSourcesProvidingFileFormatError(
         dataSource.providingClass.toString)
     }
 

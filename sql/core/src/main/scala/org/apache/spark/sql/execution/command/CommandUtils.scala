@@ -382,7 +382,7 @@ object CommandUtils extends Logging {
           Coalesce(Seq(Cast(Max(Length(col)), LongType), defaultSize)),
           nullArray)
       case _ =>
-        throw QueryCompilationErrors.analyzingColStatisticsNotSupportedOfDataTypeError(
+        throw QueryCompilationErrors.analyzingColumnStatisticsNotSupportedForColumnTypeError(
           col.name, col.dataType)
     }
   }

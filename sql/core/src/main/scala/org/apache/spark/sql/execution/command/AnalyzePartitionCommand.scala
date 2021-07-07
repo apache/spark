@@ -59,7 +59,7 @@ case class AnalyzePartitionCommand(
       val tableId = table.identifier
       val schemaColumns = table.partitionColumnNames.mkString(",")
       val specColumns = normalizedPartitionSpec.keys.mkString(",")
-      throw QueryCompilationErrors.notGetExpectedPrefixColError(
+      throw QueryCompilationErrors.unexpectedPartitionColumnPrefixError(
         tableId.table, tableId.database.get, schemaColumns, specColumns)
     }
 

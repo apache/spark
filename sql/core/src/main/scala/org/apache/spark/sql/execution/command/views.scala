@@ -94,24 +94,24 @@ case class CreateViewCommand(
 
   // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with 'CREATE TEMPORARY TABLE'
   if (allowExisting && isTemporary) {
-    throw QueryCompilationErrors.defineTempViewWithIfExistsError()
+    throw QueryCompilationErrors.defineTempViewWithIfNotExistsError()
   }
 
   // Temporary view names should NOT contain database prefix like "database.table"
   if (isTemporary && name.database.isDefined) {
     val database = name.database.get
-    throw QueryCompilationErrors.notAllowToAddDBPrefixForTempViewError(database)
+    throw QueryCompilationErrors.notAllowedToAddDBPrefixForTempViewError(database)
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     if (!isAnalyzed) {
-      throw QueryCompilationErrors.logicalPlanNotAnalyzedError()
+      throw QueryCompilationErrors.logicalPlanForViewNotAnalyzedError()
     }
     val analyzedPlan = plan
 
     if (userSpecifiedColumns.nonEmpty &&
         userSpecifiedColumns.length != analyzedPlan.output.length) {
-      throw QueryCompilationErrors.numberColNotMatchError(
+      throw QueryCompilationErrors.createViewNumColumnsMismatchUserSpecifiedColumnLengthError(
         analyzedPlan.output.length, userSpecifiedColumns.length)
     }
 
@@ -151,7 +151,7 @@ case class CreateViewCommand(
         // Handles `CREATE VIEW IF NOT EXISTS v0 AS SELECT ...`. Does nothing when the target view
         // already exists.
       } else if (tableMetadata.tableType != CatalogTableType.VIEW) {
-        throw QueryCompilationErrors.notViewError(name)
+        throw QueryCompilationErrors.tableIsNotViewError(name)
       } else if (replace) {
         // Detect cyclic view reference on CREATE OR REPLACE VIEW.
         val viewIdent = tableMetadata.identifier
@@ -202,7 +202,7 @@ case class CreateViewCommand(
    */
   private def prepareTable(session: SparkSession, analyzedPlan: LogicalPlan): CatalogTable = {
     if (originalText.isEmpty) {
-      throw QueryCompilationErrors.createPersistedViewNotAllowError()
+      throw QueryCompilationErrors.createPersistedViewFromDatasetAPINotAllowedError()
     }
     val aliasedSchema = CharVarcharUtils.getRawSchema(
       aliasPlan(session, analyzedPlan).schema)
@@ -541,11 +541,11 @@ object ViewHelper extends SQLConfHelper with Logging {
     if (!isTemporary) {
       val (tempViews, tempFunctions) = collectTemporaryObjects(catalog, child)
       tempViews.foreach { nameParts =>
-        throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferTempViewError(
+        throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferencingTempViewError(
           name, nameParts.quoted)
       }
       tempFunctions.foreach { funcName =>
-        throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferTempFuncError(
+        throw QueryCompilationErrors.notAllowedToCreatePermanentViewByReferencingTempFuncError(
           name, funcName)
       }
     }

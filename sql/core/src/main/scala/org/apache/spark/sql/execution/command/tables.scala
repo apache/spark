@@ -311,15 +311,15 @@ case class LoadDataCommand(
     }
     if (targetTable.partitionColumnNames.nonEmpty) {
       if (partition.isEmpty) {
-        throw QueryCompilationErrors.loadDataNoPartitionSpecProvidedError(tableIdentWithDB)
+        throw QueryCompilationErrors.loadDataWithoutPartitionSpecProvidedError(tableIdentWithDB)
       }
       if (targetTable.partitionColumnNames.size != partition.get.size) {
-        throw QueryCompilationErrors.loadDataNumberColsNotMatchError(
+        throw QueryCompilationErrors.loadDataPartitionSizeNotMatchNumPartitionColumnsError(
           tableIdentWithDB, partition.get.size, targetTable.partitionColumnNames.size)
       }
     } else {
       if (partition.nonEmpty) {
-        throw QueryCompilationErrors.loadDataButPartitionSpecWasProvidedError(tableIdentWithDB)
+        throw QueryCompilationErrors.loadDataTargetTableNotPartitionedButPartitionSpecWasProvidedError(tableIdentWithDB)
       }
     }
     val loadPath = {
@@ -439,7 +439,7 @@ case class TruncateTableCommand(
       throw QueryCompilationErrors.truncateTableOnExternalTablesError(tableIdentWithDB)
     }
     if (table.partitionColumnNames.isEmpty && partitionSpec.isDefined) {
-      throw QueryCompilationErrors.truncateTablePartitionNotSupportedOnTableNotPartitionedError(
+      throw QueryCompilationErrors.truncateTablePartitionNotSupportedForNotPartitionedTablesError(
         tableIdentWithDB)
     }
     if (partitionSpec.isDefined) {
@@ -508,7 +508,7 @@ case class TruncateTableCommand(
                 fs.setPermission(path, permission)
               } catch {
                 case NonFatal(e) =>
-                  throw QueryExecutionErrors.failSetOriginalPermissionBackError(
+                  throw QueryExecutionErrors.failToSetOriginalPermissionBackError(
                     permission, path, e)
               }
             }
@@ -1209,7 +1209,7 @@ case class ShowCreateTableAsSerdeCommand(
     val tableMetadata = catalog.getTableRawMetadata(table)
 
     val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
-      throw QueryCompilationErrors.isSparkDataSourceTableError(table)
+      throw QueryCompilationErrors.showCreateTableAsSerdeNotAllowedOnSparkDataSourceTableError(table)
     } else {
       showCreateHiveTable(tableMetadata)
     }

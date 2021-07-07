@@ -1701,11 +1701,11 @@ private[spark] object QueryCompilationErrors {
     new NoSuchTableException(db = db, table = table)
   }
 
-  def tempViewNotCachedForAnalyzingColError(tableIdent: TableIdentifier): Throwable = {
+  def tempViewNotCachedForAnalyzingColumnsError(tableIdent: TableIdentifier): Throwable = {
     new AnalysisException(s"Temporary view $tableIdent is not cached for analyzing columns.")
   }
 
-  def colTypeNotSupportStatisticsCollectionError(
+  def columnTypeNotSupportStatisticsCollectionError(
       name: String,
       tableIdent: TableIdentifier,
       dataType: DataType): Throwable = {
@@ -1717,7 +1717,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("ANALYZE TABLE is not supported on views.")
   }
 
-  def notGetExpectedPrefixColError(
+  def unexpectedPartitionColumnPrefixError(
       table: String,
       database: String,
       schemaColumns: String,
@@ -1739,18 +1739,18 @@ private[spark] object QueryCompilationErrors {
     new NoSuchPartitionException(db, table, partition)
   }
 
-  def analyzingColStatisticsNotSupportedOfDataTypeError(
+  def analyzingColumnStatisticsNotSupportedForColumnTypeError(
       name: String,
       dataType: DataType): Throwable = {
     new AnalysisException("Analyzing column statistics is not supported for column " +
       s"$name of data type: $dataType.")
   }
 
-  def tableAlreadyExistsError(table: String, guide: String): Throwable = {
+  def tableAlreadyExistsError(table: String, guide: String = ""): Throwable = {
     new AnalysisException(s"Table $table already exists." + guide)
   }
 
-  def createTableAsSelectCanNotCreateTableOnNonEmptyDirError(tablePath: String): Throwable = {
+  def createTableAsSelectWithNonEmptyDirectoryError(tablePath: String): Throwable = {
     new AnalysisException(
       s"CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory " +
         s"${tablePath} . To allow overwriting the existing non-empty directory, " +
@@ -1765,7 +1765,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"Attempted to unset non-existent property '$property' in table '$table'")
   }
 
-  def alterTableChangeColumnNotSupportForTypeError(
+  def alterTableChangeColumnNotSupportedForColumnTypeError(
       originColumn: StructField,
       newColumn: StructField): Throwable = {
     new AnalysisException("ALTER TABLE CHANGE COLUMN is not supported for changing column " +
@@ -1789,17 +1789,17 @@ private[spark] object QueryCompilationErrors {
       "not supported for tables created with the datasource API")
   }
 
-  def cmdOnlyWorksOnPartitionedTables(cmd: String, tableIdentWithDB: String): Throwable = {
+  def cmdOnlyWorksOnPartitionedTablesError(cmd: String, tableIdentWithDB: String): Throwable = {
     new AnalysisException(
       s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
   }
 
-  def cmdOnlyWorksOnTables(cmd: String, tableIdentWithDB: String): Throwable = {
+  def cmdOnlyWorksOnTableWithLocationError(cmd: String, tableIdentWithDB: String): Throwable = {
     new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
       s"location provided: $tableIdentWithDB")
   }
 
-  def actionNotAllowedOnTableSinceFilesourcePartitionManagementDisableError(
+  def actionNotAllowedOnTableWithFilesourcePartitionManagementDisabledError(
       action: String,
       tableName: String): Throwable = {
     new AnalysisException(
@@ -1826,7 +1826,7 @@ private[spark] object QueryCompilationErrors {
       "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
   }
 
-  def cannotOverwritePathIsReadError(): Throwable = {
+  def cannotOverwritePathBeingReadFromError(): Throwable = {
     new AnalysisException("Cannot overwrite a path that is also being read from.")
   }
 
@@ -1834,7 +1834,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.")
   }
 
-  def defineTempFuncWithIfExistsError(): Throwable = {
+  def defineTempFuncWithIfNotExistsError(): Throwable = {
     new AnalysisException("It is not allowed to define a TEMPORARY function with IF NOT EXISTS.")
   }
 
@@ -1886,12 +1886,12 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"LOAD DATA is not supported for datasource tables: $tableIdentWithDB")
   }
 
-  def loadDataNoPartitionSpecProvidedError(tableIdentWithDB: String): Throwable = {
+  def loadDataWithoutPartitionSpecProvidedError(tableIdentWithDB: String): Throwable = {
     new AnalysisException(s"LOAD DATA target table $tableIdentWithDB is partitioned, " +
       s"but no partition spec is provided")
   }
 
-  def loadDataNumberColsNotMatchError(
+  def loadDataPartitionSizeNotMatchNumPartitionColumnsError(
       tableIdentWithDB: String,
       partitionSize: Int,
       targetTableSize: Int): Throwable = {
@@ -1903,7 +1903,8 @@ private[spark] object QueryCompilationErrors {
        """.stripMargin.replaceAll("\n", " "))
   }
 
-  def loadDataButPartitionSpecWasProvidedError(tableIdentWithDB: String): Throwable = {
+  def loadDataTargetTableNotPartitionedButPartitionSpecWasProvidedError(
+      tableIdentWithDB: String): Throwable = {
     new AnalysisException(s"LOAD DATA target table $tableIdentWithDB is not " +
       s"partitioned, but a partition spec was provided.")
   }
@@ -1917,7 +1918,7 @@ private[spark] object QueryCompilationErrors {
       s"Operation not allowed: TRUNCATE TABLE on external tables: $tableIdentWithDB")
   }
 
-  def truncateTablePartitionNotSupportedOnTableNotPartitionedError(
+  def truncateTablePartitionNotSupportedForNotPartitionedTablesError(
       tableIdentWithDB: String): Throwable = {
     new AnalysisException(s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported" +
       s" for tables that are not partitioned: $tableIdentWithDB")
@@ -1976,7 +1977,8 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(s"DESC PARTITION is not allowed on a view: $table")
   }
 
-  def isSparkDataSourceTableError(table: TableIdentifier): Throwable = {
+  def showCreateTableAsSerdeNotAllowedOnSparkDataSourceTableError(
+      table: TableIdentifier): Throwable = {
     new AnalysisException(
       s"$table is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead.")
   }
@@ -1994,20 +1996,20 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
   }
 
-  def defineTempViewWithIfExistsError(): Throwable = {
+  def defineTempViewWithIfNotExistsError(): Throwable = {
     new AnalysisException("It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
   }
 
-  def notAllowToAddDBPrefixForTempViewError(database: String): Throwable = {
+  def notAllowedToAddDBPrefixForTempViewError(database: String): Throwable = {
     new AnalysisException(
       s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
   }
 
-  def logicalPlanNotAnalyzedError(): Throwable = {
+  def logicalPlanForViewNotAnalyzedError(): Throwable = {
     new AnalysisException("The logical plan that represents the view is not analyzed.")
   }
 
-  def numberColNotMatchError(
+  def createViewNumColumnsMismatchUserSpecifiedColumnLengthError(
       analyzedPlanLength: Int,
       userSpecifiedColumnsLength: Int): Throwable = {
     new AnalysisException(s"The number of columns produced by the SELECT clause " +
@@ -2015,7 +2017,7 @@ private[spark] object QueryCompilationErrors {
       s"specified by CREATE VIEW (num: `$userSpecifiedColumnsLength`).")
   }
 
-  def notViewError(name: TableIdentifier): Throwable = {
+  def tableIsNotViewError(name: TableIdentifier): Throwable = {
     new AnalysisException(s"$name is not a view")
   }
 
@@ -2025,7 +2027,7 @@ private[spark] object QueryCompilationErrors {
         "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
   }
 
-  def createPersistedViewNotAllowError(): Throwable = {
+  def createPersistedViewFromDatasetAPINotAllowedError(): Throwable = {
     new AnalysisException("It is not allowed to create a persisted view from the Dataset API")
   }
 
@@ -2036,7 +2038,7 @@ private[spark] object QueryCompilationErrors {
       s"(cycle: ${newPath.mkString(" -> ")})")
   }
 
-  def notAllowedToCreatePermanentViewByReferTempViewError(
+  def notAllowedToCreatePermanentViewByReferencingTempViewError(
       name: TableIdentifier,
       nameParts: String): Throwable = {
     new AnalysisException(s"Not allowed to create a permanent view $name by " +
@@ -2044,7 +2046,7 @@ private[spark] object QueryCompilationErrors {
       "Please create a temp view instead by CREATE TEMP VIEW")
   }
 
-  def notAllowedToCreatePermanentViewByReferTempFuncError(
+  def notAllowedToCreatePermanentViewByReferencingTempFuncError(
       name: TableIdentifier,
       funcName: String): Throwable = {
     new AnalysisException(s"Not allowed to create a permanent view $name by " +

@@ -63,7 +63,7 @@ case class CreateFunctionCommand(
 
   // Disallow to define a temporary function with `IF NOT EXISTS`
   if (ignoreIfExists && isTemp) {
-    throw QueryCompilationErrors.defineTempFuncWithIfExistsError()
+    throw QueryCompilationErrors.defineTempFuncWithIfNotExistsError()
   }
 
   // Temporary function names should not contain database prefix like "database.function"

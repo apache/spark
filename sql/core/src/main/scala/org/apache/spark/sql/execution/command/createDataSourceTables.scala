@@ -54,7 +54,7 @@ case class CreateDataSourceTableCommand(table: CatalogTable, ignoreIfExists: Boo
       if (ignoreIfExists) {
         return Seq.empty[Row]
       } else {
-        throw QueryCompilationErrors.tableAlreadyExistsError(table.identifier.unquotedString, "")
+        throw QueryCompilationErrors.tableAlreadyExistsError(table.identifier.unquotedString)
       }
     }
 

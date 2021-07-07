@@ -344,7 +344,7 @@ case class AlterTableChangeColumnCommand(
     val originColumn = findColumnByName(table.dataSchema, columnName, resolver)
     // Throw an AnalysisException if the column name/dataType is changed.
     if (!columnEqual(originColumn, newColumn, resolver)) {
-      throw QueryCompilationErrors.alterTableChangeColumnNotSupportForTypeError(
+      throw QueryCompilationErrors.alterTableChangeColumnNotSupportedForColumnTypeError(
         originColumn, newColumn)
     }
 
@@ -620,11 +620,11 @@ case class RepairTableCommand(
     val table = catalog.getTableRawMetadata(tableName)
     val tableIdentWithDB = table.identifier.quotedString
     if (table.partitionColumnNames.isEmpty) {
-      throw QueryCompilationErrors.cmdOnlyWorksOnPartitionedTables(cmd, tableIdentWithDB)
+      throw QueryCompilationErrors.cmdOnlyWorksOnPartitionedTablesError(cmd, tableIdentWithDB)
     }
 
     if (table.storage.locationUri.isEmpty) {
-      throw QueryCompilationErrors.cmdOnlyWorksOnTables(cmd, tableIdentWithDB)
+      throw QueryCompilationErrors.cmdOnlyWorksOnTableWithLocationError(cmd, tableIdentWithDB)
     }
 
     val root = new Path(table.location)
@@ -891,7 +891,7 @@ object DDLUtils {
     val tableName = table.identifier.table
     if (!spark.sqlContext.conf.manageFilesourcePartitions && isDatasourceTable(table)) {
       throw QueryCompilationErrors
-        .actionNotAllowedOnTableSinceFilesourcePartitionManagementDisableError(action, tableName)
+        .actionNotAllowedOnTableWithFilesourcePartitionManagementDisabledError(action, tableName)
     }
     if (!table.tracksPartitionsInCatalog && isDatasourceTable(table)) {
       throw QueryCompilationErrors.actionNotAllowedOnTableSincePartitionMetadataNotStoredError(
@@ -956,7 +956,7 @@ object DDLUtils {
     }.flatten
 
     if (inputPaths.contains(outputPath)) {
-      throw QueryCompilationErrors.cannotOverwritePathIsReadError()
+      throw QueryCompilationErrors.cannotOverwritePathBeingReadFromError()
     }
   }
 }

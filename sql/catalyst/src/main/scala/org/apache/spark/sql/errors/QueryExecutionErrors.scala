@@ -1544,11 +1544,11 @@ object QueryExecutionErrors {
     new NullPointerException(s"Value at index $index is null")
   }
 
-  def onlyDataSourcesProvidingFileFormatSupportedError(providingClass: String): Throwable = {
+  def onlySupportDataSourcesProvidingFileFormatError(providingClass: String): Throwable = {
     new SparkException(s"Only Data Sources providing FileFormat are supported: $providingClass")
   }
 
-  def failSetOriginalPermissionBackError(
+  def failToSetOriginalPermissionBackError(
       permission: FsPermission,
       path: Path,
       e: Throwable): Throwable = {

@@ -72,7 +72,7 @@ case class AnalyzeColumnCommand(
 
   private def analyzeColumnInTempView(plan: LogicalPlan, sparkSession: SparkSession): Unit = {
     if (!analyzeColumnInCachedData(plan, sparkSession)) {
-      throw QueryCompilationErrors.tempViewNotCachedForAnalyzingColError(tableIdent)
+      throw QueryCompilationErrors.tempViewNotCachedForAnalyzingColumnsError(tableIdent)
     }
   }
 
@@ -92,7 +92,7 @@ case class AnalyzeColumnCommand(
     // Make sure the column types are supported for stats gathering.
     columnsToAnalyze.foreach { attr =>
       if (!supportsType(attr.dataType)) {
-        throw QueryCompilationErrors.colTypeNotSupportStatisticsCollectionError(
+        throw QueryCompilationErrors.columnTypeNotSupportStatisticsCollectionError(
           attr.name, tableIdent, attr.dataType)
       }
     }
