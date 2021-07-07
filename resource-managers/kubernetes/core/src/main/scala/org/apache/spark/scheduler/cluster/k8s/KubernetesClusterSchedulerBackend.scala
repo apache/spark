@@ -188,8 +188,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
   private def labelLowPriorityExecs(execIds: Seq[String]) = {
     // Only kick off the labeling task if we have a label.
     conf.get(KUBERNETES_EXECUTOR_POD_DECOMMISSION_LABEL).foreach { label =>
-      val labelTask = new Runnable() {
-        override def run(): Unit = Utils.tryLogNonFatalError {
+//      val labelTask = new Runnable() {
+//        override def run(): Unit = Utils.tryLogNonFatalError {
 
           val podsToLabel = kubernetesClient.pods()
             .withLabel(SPARK_APP_ID_LABEL, applicationId())
@@ -206,9 +206,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
                 .endMetadata()
                 .build()})
           }
-        }
-      }
-      executorService.submit(labelTask)
+//        }
+//      }
+//      executorService.submit(labelTask)
     }
   }
 
