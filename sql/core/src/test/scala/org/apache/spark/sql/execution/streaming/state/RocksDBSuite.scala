@@ -387,10 +387,16 @@ class RocksDBSuite extends SparkFunSuite {
       updatingThreads.foreach(_.join())
       cleaningThread.interrupt()
       cleaningThread.join()
-      // if (exception != null) {
-      //   fail(exception.last)
-      // }
-      exception.foreach(e => logError(s"THREAD ERROR MESSAGES: ${e.getMessage}"))
+      // scalastyle:off println
+      if (exception.nonEmpty) {
+        println("LYJMARK: Exception found stdout")
+        logError("LYJMARK: Exception found")
+        exception.foreach(e => logError(s"THREAD ERROR MESSAGES: ${e.getMessage}"))
+        exception.foreach(e => println(s"STDOUT Error: ${e.getMessage}"))
+      }
+      logError("LYJMARK: No exception found")
+      println("LYJMARK: No exception found stdout")
+      // scalastyle:on println
       withDB(remoteDir, numUpdatesInEachThread) { db =>
         assert(toStr(db.get("a")) === numUpdatesInEachThread.toString)
       }
