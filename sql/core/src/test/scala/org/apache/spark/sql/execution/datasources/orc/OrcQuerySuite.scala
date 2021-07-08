@@ -521,7 +521,7 @@ abstract class OrcQueryTest extends OrcTest {
     }
   }
 
-  test("ORC doesn't support TimestampNTZ") {
+  test("SPARK-36050: ORC doesn't support TimestampNTZ") {
     val expectedMessage = "ORC data source does not support timestamp_ntz data type"
     // check write path
     withTempPath { dir =>
