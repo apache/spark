@@ -30,8 +30,8 @@ import org.apache.spark.sql.execution._
  */
 object ValidateRequirements extends Logging {
 
-  def validate(plan: SparkPlan): Boolean = plan match {
-    case _ => plan.children.forall(validate) && validateInternal(plan)
+  def validate(plan: SparkPlan): Boolean = {
+    plan.children.forall(validate) && validateInternal(plan)
   }
 
   private def validateInternal(plan: SparkPlan): Boolean = {
