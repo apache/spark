@@ -62,7 +62,7 @@ class DateOps(DataTypeOps):
             warnings.warn(msg, UserWarning)
             return column_op(F.datediff)(left, SF.lit(right)).astype("long")
         else:
-            raise TypeError("date subtraction can only be applied to date series.")
+            raise TypeError("Date subtraction can only be applied to date series.")
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
@@ -76,7 +76,7 @@ class DateOps(DataTypeOps):
             warnings.warn(msg, UserWarning)
             return -column_op(F.datediff)(left, SF.lit(right)).astype("long")
         else:
-            raise TypeError("date subtraction can only be applied to date series.")
+            raise TypeError("Date subtraction can only be applied to date series.")
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
