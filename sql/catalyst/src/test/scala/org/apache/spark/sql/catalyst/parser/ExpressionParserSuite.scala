@@ -770,7 +770,8 @@ class ExpressionParserSuite extends AnalysisTest {
         "0:0:0",
         "0:0:1")
       hourTimeValues.foreach { value =>
-        val result = Literal(IntervalUtils.fromDayTimeString(value, HOUR, SECOND))
+        val result = Literal(IntervalUtils.fromDayTimeString(
+          value, DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND))
         checkIntervals(s"'$value' hour to second", result)
       }
     }
