@@ -201,6 +201,32 @@ case class Now() extends CurrentTimestampLike {
 }
 
 /**
+ * Returns the current timestamp without time zone at the start of query evaluation.
+ * There is no code generation since this expression should get constant folded by the optimizer.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns the current timestamp without time zone at the start of query evaluation. All calls of localtimestamp within the same query return the same value.
+
+    _FUNC_ - Returns the current timestamp without time zone at the start of query evaluation.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25 15:49:11.914
+      > SELECT _FUNC_;
+       2020-04-25 15:49:11.914
+  """,
+  group = "datetime_funcs",
+  since = "3.2.0")
+case class LocalTimestamp() extends CurrentTimestampLike {
+  override def dataType: DataType = TimestampNTZType
+  override def eval(input: InternalRow): Any = currentTimestampNTZ()
+  override def prettyName: String = "localtimestamp"
+}
+
+/**
  * Expression representing the current batch time, which is used by StreamExecution to
  * 1. prevent optimizer from pushing this expression below a stateful operator
  * 2. allow IncrementalExecution to substitute this expression with a Literal(timestamp)

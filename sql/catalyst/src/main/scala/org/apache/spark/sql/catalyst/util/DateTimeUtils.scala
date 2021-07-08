@@ -969,6 +969,11 @@ object DateTimeUtils {
   def currentTimestamp(): Long = instantToMicros(Instant.now())
 
   /**
+   * Obtains the current local date-time as microseconds since the epoch in the default time-zone.
+   */
+  def currentTimestampNTZ(): Long = localDateTimeToMicros(LocalDateTime.now())
+
+  /**
    * Obtains the current date as days since the epoch in the specified time-zone.
    */
   def currentDate(zoneId: ZoneId): Int = localDateToDays(LocalDate.now(zoneId))

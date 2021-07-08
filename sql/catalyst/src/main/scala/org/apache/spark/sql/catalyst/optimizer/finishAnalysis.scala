@@ -80,6 +80,9 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val timeExpr = CurrentTimestamp()
     val timestamp = timeExpr.eval(EmptyRow).asInstanceOf[Long]
     val currentTime = Literal.create(timestamp, timeExpr.dataType)
+    val localTimestampExpr = LocalTimestamp()
+    val localTimestamp = localTimestampExpr.eval(EmptyRow).asInstanceOf[Long]
+    val localTime = Literal.create(localTimestamp, localTimestampExpr.dataType)
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
@@ -91,6 +94,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
         })
       case CurrentTimestamp() | Now() => currentTime
       case CurrentTimeZone() => timezone
+      case LocalTimestamp() => localTime
     }
   }
 }
