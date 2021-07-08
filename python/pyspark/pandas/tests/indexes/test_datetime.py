@@ -212,7 +212,7 @@ class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
                 self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx % other)
                 self.assertRaisesRegex(TypeError, expected_err_msg, lambda: other % psidx)
 
-            expected_err_msg = "datetime subtraction can only be applied to datetime series."
+            expected_err_msg = "Datetime subtraction can only be applied to datetime series."
 
             for other in [1, 0.1]:
                 self.assertRaisesRegex(TypeError, expected_err_msg, lambda: psidx - other)
