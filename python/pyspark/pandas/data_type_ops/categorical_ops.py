@@ -16,19 +16,16 @@
 #
 
 from itertools import chain
-from typing import cast, TYPE_CHECKING, Union
+from typing import Any, Union
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-import pyspark.pandas as ps
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import DataTypeOps
-from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
+from pyspark.pandas.spark import functions as SF
+from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql import functions as F
-
-if TYPE_CHECKING:
-    from pyspark.pandas.indexes import Index  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
 
 
 class CategoricalOps(DataTypeOps):
@@ -50,23 +47,34 @@ class CategoricalOps(DataTypeOps):
         """Prepare column when from_pandas."""
         return col.cat.codes
 
-    def astype(
-        self, index_ops: Union["Index", "Series"], dtype: Union[str, type, Dtype]
-    ) -> Union["Index", "Series"]:
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype) and dtype.categories is None:
-            return cast(Union[ps.Index, ps.Series], index_ops).copy()
+            return index_ops.copy()
 
         categories = index_ops.dtype.categories
         if len(categories) == 0:
-            scol = F.lit(None)
+            scol = SF.lit(None)
         else:
             kvs = chain(
-                *[(F.lit(code), F.lit(category)) for code, category in enumerate(categories)]
+                *[(SF.lit(code), SF.lit(category)) for code, category in enumerate(categories)]
             )
             map_scol = F.create_map(*kvs)
             scol = map_scol.getItem(index_ops.spark.column)
         return index_ops._with_new_scol(
             scol.alias(index_ops._internal.data_spark_column_names[0])
         ).astype(dtype)
+
+    # TODO(SPARK-35997): Implement comparison operators below
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise NotImplementedError("< can not be applied to %s." % self.pretty_name)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise NotImplementedError("<= can not be applied to %s." % self.pretty_name)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise NotImplementedError("> can not be applied to %s." % self.pretty_name)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise NotImplementedError(">= can not be applied to %s." % self.pretty_name)

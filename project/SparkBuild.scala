@@ -737,9 +737,6 @@ object Catalyst {
 }
 
 object SQL {
-
-  import sbtavro.SbtAvro.autoImport._
-
   lazy val settings = Seq(
     (console / initialCommands) :=
       """
@@ -761,10 +758,8 @@ object SQL {
         |import sqlContext.implicits._
         |import sqlContext._
       """.stripMargin,
-    (console / cleanupCommands) := "sc.stop()",
-    Test / avroGenerate := (Compile / avroGenerate).value
+    (console / cleanupCommands) := "sc.stop()"
   )
-
 }
 
 object Hive {
@@ -802,11 +797,30 @@ object Hive {
 }
 
 object YARN {
+  val genConfigProperties = TaskKey[Unit]("gen-config-properties",
+    "Generate config.properties which contains a setting whether Hadoop is provided or not")
+  val propFileName = "config.properties"
+  val hadoopProvidedProp = "spark.yarn.isHadoopProvided"
+
   lazy val settings = Seq(
     excludeDependencies --= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
       ExclusionRule("javax.servlet", "javax.servlet-api"),
-      ExclusionRule("javax.ws.rs", "jsr311-api"))
+      ExclusionRule("javax.ws.rs", "jsr311-api")),
+    Compile / unmanagedResources :=
+      (Compile / unmanagedResources).value.filter(!_.getName.endsWith(s"$propFileName")),
+    genConfigProperties := {
+      val file = (Compile / classDirectory).value / s"org/apache/spark/deploy/yarn/$propFileName"
+      val isHadoopProvided = SbtPomKeys.effectivePom.value.getProperties.get(hadoopProvidedProp)
+      IO.write(file, s"$hadoopProvidedProp = $isHadoopProvided")
+    },
+    Compile / copyResources := (Def.taskDyn {
+      val c = (Compile / copyResources).value
+      Def.task {
+        (Compile / genConfigProperties).value
+        c
+      }
+    }).value
   )
 }
 

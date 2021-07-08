@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.util.LegacyDateFormats.SIMPLE_DATE_FORMAT
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.DAY
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -58,6 +59,11 @@ trait TimeZoneAwareExpression extends Expression {
   def withTimeZone(timeZoneId: String): TimeZoneAwareExpression
 
   @transient lazy val zoneId: ZoneId = DateTimeUtils.getZoneId(timeZoneId.get)
+
+  def zoneIdForType(dataType: DataType): ZoneId = dataType match {
+    case _: TimestampNTZType => java.time.ZoneOffset.UTC
+    case _ => zoneId
+  }
 }
 
 trait TimestampFormatterHelper extends TimeZoneAwareExpression {
@@ -65,6 +71,10 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
   protected def formatString: Expression
 
   protected def isParsing: Boolean
+
+  // Whether the timestamp formatter is for TimestampNTZType.
+  // If yes, the formatter is always `Iso8601TimestampFormatter`.
+  protected def forTimestampNTZ: Boolean = false
 
   @transient final protected lazy val formatterOption: Option[TimestampFormatter] =
     if (formatString.foldable) {
@@ -76,7 +86,8 @@ trait TimestampFormatterHelper extends TimeZoneAwareExpression {
       format = fmt,
       zoneId = zoneId,
       legacyFormat = SIMPLE_DATE_FORMAT,
-      isParsing = isParsing)
+      isParsing = isParsing,
+      forTimestampNTZ = forTimestampNTZ)
   }
 }
 
@@ -313,16 +324,18 @@ trait GetTimeField extends UnaryExpression
   val func: (Long, ZoneId) => Any
   val funcName: String
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  @transient protected lazy val zoneIdInEval: ZoneId = zoneIdForType(child.dataType)
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType)
 
   override def dataType: DataType = IntegerType
 
   override protected def nullSafeEval(timestamp: Any): Any = {
-    func(timestamp.asInstanceOf[Long], zoneId)
+    func(timestamp.asInstanceOf[Long], zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, c => s"$dtu.$funcName($c, $zid)")
   }
@@ -995,6 +1008,77 @@ case class UnixTimestamp(
     copy(timeExp = newLeft, format = newRight)
 }
 
+case class GetTimestampNTZ(
+    left: Expression,
+    right: Expression,
+    timeZoneId: Option[String] = None,
+    failOnError: Boolean = SQLConf.get.ansiEnabled) extends ToTimestamp {
+
+  override val forTimestampNTZ: Boolean = true
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
+
+  override def dataType: DataType = TimestampNTZType
+
+  override protected def downScaleFactor: Long = 1
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Some(timeZoneId))
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression,
+      newRight: Expression): Expression =
+    copy(left = newLeft, right = newRight)
+}
+
+
+/**
+ * Parses a column to a timestamp without time zone based on the supplied format.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
+      to a timestamp without time zone. Returns null with invalid input. By default, it follows casting rules to
+      a timestamp if the `fmt` is omitted.
+  """,
+  arguments = """
+    Arguments:
+      * timestamp_str - A string to be parsed to timestamp without time zone.
+      * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
+              date and time format patterns.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2016-12-31 00:12:00');
+       2016-12-31 00:12:00
+      > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
+       2016-12-31 00:00:00
+  """,
+  group = "datetime_funcs",
+  since = "3.2.0")
+// scalastyle:on line.size.limit
+case class ParseToTimestampNTZ(
+    left: Expression,
+    format: Option[Expression],
+    child: Expression) extends RuntimeReplaceable {
+
+  def this(left: Expression, format: Expression) = {
+    this(left, Option(format), GetTimestampNTZ(left, format))
+  }
+
+  def this(left: Expression) = this(left, None, Cast(left, TimestampNTZType))
+
+  override def flatArguments: Iterator[Any] = Iterator(left, format)
+  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
+
+  override def prettyName: String = "to_timestamp_ntz"
+  override def dataType: DataType = TimestampNTZType
+
+  override protected def withNewChildInternal(newChild: Expression): ParseToTimestampNTZ =
+    copy(child = newChild)
+}
+
 abstract class ToTimestamp
   extends BinaryExpression with TimestampFormatterHelper with ExpectsInputTypes {
 
@@ -1037,7 +1121,11 @@ abstract class ToTimestamp
           } else {
             val formatter = formatterOption.getOrElse(getFormatter(fmt.toString))
             try {
-              formatter.parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
+              if (forTimestampNTZ) {
+                formatter.parseWithoutTimeZone(t.asInstanceOf[UTF8String].toString)
+              } else {
+                formatter.parse(t.asInstanceOf[UTF8String].toString) / downScaleFactor
+              }
             } catch {
               case e if isParseError(e) =>
                 if (failOnError) {
@@ -1054,6 +1142,17 @@ abstract class ToTimestamp
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = CodeGenerator.javaType(dataType)
     val parseErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
+    val parseMethod = if (forTimestampNTZ) {
+      "parseWithoutTimeZone"
+    } else {
+      "parse"
+    }
+    val downScaleCode = if (forTimestampNTZ) {
+      ""
+    } else {
+      s"/ $downScaleFactor"
+    }
+
     left.dataType match {
       case StringType => formatterOption.map { fmt =>
         val df = classOf[TimestampFormatter].getName
@@ -1061,7 +1160,7 @@ abstract class ToTimestamp
         nullSafeCodeGen(ctx, ev, (datetimeStr, _) =>
           s"""
              |try {
-             |  ${ev.value} = $formatterName.parse($datetimeStr.toString()) / $downScaleFactor;
+             |  ${ev.value} = $formatterName.$parseMethod($datetimeStr.toString()) $downScaleCode;
              |} catch (java.time.DateTimeException e) {
              |  $parseErrorBranch
              |} catch (java.time.format.DateTimeParseException e) {
@@ -1083,7 +1182,7 @@ abstract class ToTimestamp
              |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
              |  true);
              |try {
-             |  ${ev.value} = $timestampFormatter.parse($string.toString()) / $downScaleFactor;
+             |  ${ev.value} = $timestampFormatter.$parseMethod($string.toString()) $downScaleCode;
              |} catch (java.time.format.DateTimeParseException e) {
              |    $parseErrorBranch
              |} catch (java.time.DateTimeException e) {
@@ -1354,23 +1453,25 @@ case class TimeAdd(start: Expression, interval: Expression, timeZoneId: Option[S
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TimestampType, TypeCollection(CalendarIntervalType, DayTimeIntervalType))
+    Seq(AnyTimestampType, TypeCollection(CalendarIntervalType, DayTimeIntervalType))
 
-  override def dataType: DataType = TimestampType
+  override def dataType: DataType = start.dataType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(left.dataType)
+
   override def nullSafeEval(start: Any, interval: Any): Any = right.dataType match {
     case _: DayTimeIntervalType =>
-      timestampAddDayTime(start.asInstanceOf[Long], interval.asInstanceOf[Long], zoneId)
+      timestampAddDayTime(start.asInstanceOf[Long], interval.asInstanceOf[Long], zoneIdInEval)
     case CalendarIntervalType =>
       val i = interval.asInstanceOf[CalendarInterval]
-      timestampAddInterval(start.asInstanceOf[Long], i.months, i.days, i.microseconds, zoneId)
+      timestampAddInterval(start.asInstanceOf[Long], i.months, i.days, i.microseconds, zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     interval.dataType match {
       case _: DayTimeIntervalType =>
@@ -1657,19 +1758,21 @@ case class TimestampAddYMInterval(
 
   override def toString: String = s"$left + $right"
   override def sql: String = s"${left.sql} + ${right.sql}"
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, YearMonthIntervalType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType, YearMonthIntervalType)
 
-  override def dataType: DataType = TimestampType
+  override def dataType: DataType = timestamp.dataType
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(left.dataType)
+
   override def nullSafeEval(micros: Any, months: Any): Any = {
-    timestampAddMonths(micros.asInstanceOf[Long], months.asInstanceOf[Int], zoneId)
+    timestampAddMonths(micros.asInstanceOf[Long], months.asInstanceOf[Int], zoneIdInEval)
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+    val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     defineCodeGen(ctx, ev, (micros, months) => {
       s"""$dtu.timestampAddMonths($micros, $months, $zid)"""
@@ -2548,17 +2651,19 @@ case class SubtractTimestamps(
   def this(endTimestamp: Expression, startTimestamp: Expression) =
     this(endTimestamp, startTimestamp, SQLConf.get.legacyIntervalEnabled)
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, TimestampType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType, AnyTimestampType)
   override def dataType: DataType =
     if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
+  @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(left.dataType)
+
   @transient
   private lazy val evalFunc: (Long, Long) => Any = legacyInterval match {
     case false => (leftMicros, rightMicros) =>
-      subtractTimestamps(leftMicros, rightMicros, zoneId)
+      subtractTimestamps(leftMicros, rightMicros, zoneIdInEval)
     case true => (leftMicros, rightMicros) =>
       new CalendarInterval(0, 0, leftMicros - rightMicros)
   }
@@ -2569,7 +2674,7 @@ case class SubtractTimestamps(
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = legacyInterval match {
     case false =>
-      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+      val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
       val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
       defineCodeGen(ctx, ev, (l, r) => s"""$dtu.subtractTimestamps($l, $r, $zid)""")
     case true =>
@@ -2610,8 +2715,7 @@ case class SubtractDates(
 
   override def inputTypes: Seq[AbstractDataType] = Seq(DateType, DateType)
   override def dataType: DataType = {
-    // TODO(SPARK-35727): Return INTERVAL DAY from dates subtraction
-    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
+    if (legacyInterval) CalendarIntervalType else DayTimeIntervalType(DAY)
   }
 
   @transient

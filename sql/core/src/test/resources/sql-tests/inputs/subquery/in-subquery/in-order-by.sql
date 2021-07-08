@@ -105,7 +105,7 @@ WHERE  t1b IN (SELECT Min(t2b)
                FROM   t2
                WHERE  t1b = t2b
                ORDER  BY Min(t2b))
-ORDER BY t1c DESC nulls first;
+ORDER BY t1c DESC nulls first, t1a DESC, t1d DESC, t1h;
 
 -- TC 01.07
 SELECT t1a,

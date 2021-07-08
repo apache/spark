@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -48,6 +48,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
@@ -194,12 +195,7 @@ class Dataset[T] private[sql](
 
   @transient lazy val sparkSession: SparkSession = {
     if (queryExecution == null || queryExecution.sparkSession == null) {
-      throw new SparkException(
-      "Dataset transformations and actions can only be invoked by the driver, not inside of" +
-        " other Dataset transformations; for example, dataset1.map(x => dataset2.values.count()" +
-        " * x) is invalid because the values transformation and count action cannot be " +
-        "performed inside of the dataset1.map transformation. For more information," +
-        " see SPARK-28702.")
+      throw QueryExecutionErrors.transformationsAndActionsNotInvokedByDriverError()
     }
     queryExecution.sparkSession
   }
@@ -260,8 +256,7 @@ class Dataset[T] private[sql](
       s"; did you mean to quote the `$colName` column?"
     } else ""
     val fieldsStr = fields.mkString(", ")
-    val errorMsg = s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}"""
-    new AnalysisException(errorMsg)
+    QueryCompilationErrors.cannotResolveColumnNameAmongFieldsError(colName, fieldsStr, extraMsg)
   }
 
   private[sql] def numericColumns: Seq[Expression] = {
@@ -597,7 +592,8 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
+  def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation] ||
+    logicalPlan.isInstanceOf[CommandResult]
 
   /**
    * Returns true if the `Dataset` is empty.
@@ -748,9 +744,7 @@ class Dataset[T] private[sql](
         IntervalUtils.stringToInterval(UTF8String.fromString(delayThreshold))
       } catch {
         case e: IllegalArgumentException =>
-          throw new AnalysisException(
-            s"Unable to parse time delay '$delayThreshold'",
-            cause = Some(e))
+          throw QueryCompilationErrors.cannotParseTimeDelayError(delayThreshold, e)
       }
     require(!IntervalUtils.isNegative(parsedDelay),
       s"delay threshold ($delayThreshold) should not be negative.")
@@ -1165,7 +1159,7 @@ class Dataset[T] private[sql](
         JoinHint.NONE)).analyzed.asInstanceOf[Join]
 
     if (joined.joinType == LeftSemi || joined.joinType == LeftAnti) {
-      throw new AnalysisException("Invalid join type in joinWith: " + joined.joinType.sql)
+      throw QueryCompilationErrors.invalidJoinTypeInJoinWithError(joined.joinType)
     }
 
     // If auto self join alias is enable
@@ -1459,8 +1453,7 @@ class Dataset[T] private[sql](
         if (!needInputType) {
           typedCol
         } else {
-          throw new AnalysisException(s"Typed column $typedCol that needs input type and schema " +
-            "cannot be passed in untyped `select` API. Use the typed `Dataset.select` API instead.")
+          throw QueryCompilationErrors.cannotPassTypedColumnInUntypedSelectError(typedCol.toString)
         }
 
       case other => other
@@ -2080,10 +2073,8 @@ class Dataset[T] private[sql](
    * }}}
    *
    * Note that `allowMissingColumns` supports nested column in struct types. Missing nested columns
-   * of struct columns with same name will also be filled with null values. This currently does not
-   * support nested columns in array and map types. Note that if there is any missing nested columns
-   * to be filled, in order to make consistent schema between two sides of union, the nested fields
-   * of structs will be sorted after merging schema.
+   * of struct columns with the same name will also be filled with null values and added to the end
+   * of struct. This currently does not support nested columns in array and map types.
    *
    * @group typedrel
    * @since 3.1.0
@@ -2579,8 +2570,8 @@ class Dataset[T] private[sql](
       // so we call filter instead of find.
       val cols = allColumns.filter(col => resolver(col.name, colName))
       if (cols.isEmpty) {
-        throw new AnalysisException(
-          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+        throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
+          colName, schema.fieldNames.mkString(", "))
       }
       cols
     }
@@ -3366,7 +3357,7 @@ class Dataset[T] private[sql](
     val tableIdentifier = try {
       sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName)
     } catch {
-      case _: ParseException => throw new AnalysisException(s"Invalid view name: $viewName")
+      case _: ParseException => throw QueryCompilationErrors.invalidViewNameError(viewName)
     }
     CreateViewCommand(
       name = tableIdentifier,

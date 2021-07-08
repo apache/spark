@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{BROADCAST, HintInfo, ResolvedHint}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TimestampFormatter}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.{Aggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
 import org.apache.spark.sql.internal.SQLConf
@@ -2929,31 +2930,6 @@ object functions {
   //////////////////////////////////////////////////////////////////////////////////////////////
 
   /**
-   * (Scala-specific) Creates a datetime interval
-   *
-   * @param years Number of years
-   * @param months Number of months
-   * @param weeks Number of weeks
-   * @param days Number of days
-   * @param hours Number of hours
-   * @param mins Number of mins
-   * @param secs Number of secs
-   * @return A datetime interval
-   * @group datetime_funcs
-   * @since 3.2.0
-   */
-  def make_interval(
-      years: Column = lit(0),
-      months: Column = lit(0),
-      weeks: Column = lit(0),
-      days: Column = lit(0),
-      hours: Column = lit(0),
-      mins: Column = lit(0),
-      secs: Column = lit(0)): Column = withExpr {
-    MakeInterval(years.expr, months.expr, weeks.expr, days.expr, hours.expr, mins.expr, secs.expr)
-  }
-
-  /**
    * Returns the date that is `numMonths` after `startDate`.
    *
    * @param startDate A date, timestamp or string. If a string, the data must be in a format that
@@ -4768,7 +4744,7 @@ object functions {
       case lit @ Literal(_, IntegerType) =>
         Bucket(lit, e.expr)
       case _ =>
-        throw new AnalysisException(s"Invalid number of buckets: bucket($numBuckets, $e)")
+        throw QueryCompilationErrors.invalidBucketsNumberError(numBuckets.toString, e.toString)
     }
   }
 
@@ -5270,18 +5246,7 @@ object functions {
     "Please use Scala `udf` method without return type parameter.", "3.0.0")
   def udf(f: AnyRef, dataType: DataType): UserDefinedFunction = {
     if (!SQLConf.get.getConf(SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF)) {
-      val errorMsg = "You're using untyped Scala UDF, which does not have the input type " +
-        "information. Spark may blindly pass null to the Scala closure with primitive-type " +
-        "argument, and the closure will see the default value of the Java type for the null " +
-        "argument, e.g. `udf((x: Int) => x, IntegerType)`, the result is 0 for null input. " +
-        "To get rid of this error, you could:\n" +
-        "1. use typed Scala UDF APIs(without return type parameter), e.g. `udf((x: Int) => x)`\n" +
-        "2. use Java UDF APIs, e.g. `udf(new UDF1[String, Integer] { " +
-        "override def call(s: String): Integer = s.length() }, IntegerType)`, " +
-        "if input types are all non primitive\n" +
-        s"3. set ${SQLConf.LEGACY_ALLOW_UNTYPED_SCALA_UDF.key} to true and " +
-        s"use this API with caution"
-      throw new AnalysisException(errorMsg)
+      throw QueryCompilationErrors.usingUntypedScalaUDFError()
     }
     SparkUserDefinedFunction(f, dataType, inputEncoders = Nil)
   }

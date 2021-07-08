@@ -40,6 +40,16 @@ class DateOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         return ps.from_pandas(self.pser)
 
     @property
+    def other_pser(self):
+        return pd.Series(
+            [datetime.date(2000, 1, 31), datetime.date(1994, 3, 1), datetime.date(1990, 2, 2)]
+        )
+
+    @property
+    def other_psser(self):
+        return ps.from_pandas(self.other_pser)
+
+    @property
     def some_date(self):
         return datetime.date(1994, 1, 1)
 
@@ -183,6 +193,57 @@ class DateOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pd.Series([None, None, None]), psser.astype(bool))
         cat_type = CategoricalDtype(categories=["a", "b", "c"])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+
+    def test_neg(self):
+        self.assertRaises(TypeError, lambda: -self.psser)
+
+    def test_abs(self):
+        self.assertRaises(TypeError, lambda: abs(self.psser))
+
+    def test_invert(self):
+        self.assertRaises(TypeError, lambda: ~self.psser)
+
+    def test_eq(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser == self.other_pser, (self.psser == self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser == self.pser, (self.psser == self.psser).sort_index())
+
+    def test_ne(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser != self.other_pser, (self.psser != self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser != self.pser, (self.psser != self.psser).sort_index())
+
+    def test_lt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser < self.other_pser, (self.psser < self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser < self.pser, (self.psser < self.psser).sort_index())
+
+    def test_le(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser <= self.other_pser, (self.psser <= self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser <= self.pser, (self.psser <= self.psser).sort_index())
+
+    def test_gt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser > self.other_pser, (self.psser > self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser > self.pser, (self.psser > self.psser).sort_index())
+
+    def test_ge(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser >= self.other_pser, (self.psser >= self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
 
 
 if __name__ == "__main__":

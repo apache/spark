@@ -26,8 +26,9 @@ import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse
 
+import org.apache.spark.SparkError
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, SQLContext}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
 import org.apache.spark.sql.execution.HiveResult.hiveResultString
 import org.apache.spark.sql.internal.{SQLConf, VariableSubstitution}
@@ -58,7 +59,6 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
   }
 
   override def run(command: String): CommandProcessorResponse = {
-    // TODO unify the error code
     try {
       val substitutorCommand = SQLConf.withExistingConf(context.conf) {
         new VariableSubstitution().substitute(command)
@@ -71,9 +71,9 @@ private[hive] class SparkSQLDriver(val context: SQLContext = SparkSQLEnv.sqlCont
       tableSchema = getResultSetSchema(execution)
       new CommandProcessorResponse(0)
     } catch {
-        case ae: AnalysisException =>
-          logDebug(s"Failed in [$command]", ae)
-          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(ae), null, ae)
+        case se: SparkError =>
+          logDebug(s"Failed in [$command]", se)
+          new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(se), se.sqlState.orNull, se)
         case cause: Throwable =>
           logError(s"Failed in [$command]", cause)
           new CommandProcessorResponse(1, ExceptionUtils.getStackTrace(cause), null, cause)

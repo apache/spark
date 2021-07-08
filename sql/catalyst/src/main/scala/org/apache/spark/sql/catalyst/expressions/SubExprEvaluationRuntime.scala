@@ -73,11 +73,11 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
    */
   private def replaceWithProxy(
       expr: Expression,
+      equivalentExpressions: EquivalentExpressions,
       proxyMap: IdentityHashMap[Expression, ExpressionProxy]): Expression = {
-    if (proxyMap.containsKey(expr)) {
-      proxyMap.get(expr)
-    } else {
-      expr.mapChildren(replaceWithProxy(_, proxyMap))
+    equivalentExpressions.getExprState(expr) match {
+      case Some(stats) if proxyMap.containsKey(stats.expr) => proxyMap.get(stats.expr)
+      case _ => expr.mapChildren(replaceWithProxy(_, equivalentExpressions, proxyMap))
     }
   }
 
@@ -91,9 +91,8 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
 
     val proxyMap = new IdentityHashMap[Expression, ExpressionProxy]
 
-    val commonExprs = equivalentExpressions.getAllEquivalentExprs(1)
-    commonExprs.foreach { e =>
-      val expr = e.head
+    val commonExprs = equivalentExpressions.getCommonSubexpressions
+    commonExprs.foreach { expr =>
       val proxy = ExpressionProxy(expr, proxyExpressionCurrentId, this)
       proxyExpressionCurrentId += 1
 
@@ -102,12 +101,12 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
       // common expr2, ..., common expr n), we will insert into `proxyMap` some key/value
       // pairs like Map(common expr 1 -> proxy(common expr 1), ...,
       // common expr n -> proxy(common expr 1)).
-      e.map(proxyMap.put(_, proxy))
+      proxyMap.put(expr, proxy)
     }
 
     // Only adding proxy if we find subexpressions.
     if (!proxyMap.isEmpty) {
-      expressions.map(replaceWithProxy(_, proxyMap))
+      expressions.map(replaceWithProxy(_, equivalentExpressions, proxyMap))
     } else {
       expressions
     }

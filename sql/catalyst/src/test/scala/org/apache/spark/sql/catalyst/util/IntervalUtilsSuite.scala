@@ -327,41 +327,44 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
     check("12:40", HOUR, MINUTE, "12 hours 40 minutes")
     check("+12:40", HOUR, MINUTE, "12 hours 40 minutes")
     check("-12:40", HOUR, MINUTE, "-12 hours -40 minutes")
-    checkFail("5 12:40", HOUR, MINUTE, "must match day-time format")
+    checkFail("5 12:40", HOUR, MINUTE, "Interval string does not match day-time format")
 
     check("12:40:30.999999999", HOUR, SECOND, "12 hours 40 minutes 30.999999 seconds")
     check("+12:40:30.123456789", HOUR, SECOND, "12 hours 40 minutes 30.123456 seconds")
     check("-12:40:30.123456789", HOUR, SECOND, "-12 hours -40 minutes -30.123456 seconds")
-    checkFail("5 12:40:30", HOUR, SECOND, "must match day-time format")
-    checkFail("12:40:30.0123456789", HOUR, SECOND, "must match day-time format")
+    checkFail("5 12:40:30", HOUR, SECOND, "Interval string does not match day-time format")
+    checkFail("12:40:30.0123456789", HOUR, SECOND,
+      "Interval string does not match day-time format")
 
     check("40:30.123456789", MINUTE, SECOND, "40 minutes 30.123456 seconds")
     check("+40:30.123456789", MINUTE, SECOND, "40 minutes 30.123456 seconds")
     check("-40:30.123456789", MINUTE, SECOND, "-40 minutes -30.123456 seconds")
-    checkFail("12:40:30", MINUTE, SECOND, "must match day-time format")
+    checkFail("12:40:30", MINUTE, SECOND, "Interval string does not match day-time format")
 
     check("5 12", DAY, HOUR, "5 days 12 hours")
     check("+5 12", DAY, HOUR, "5 days 12 hours")
     check("-5 12", DAY, HOUR, "-5 days -12 hours")
-    checkFail("5 12:30", DAY, HOUR, "must match day-time format")
+    checkFail("5 12:30", DAY, HOUR, "Interval string does not match day-time format")
 
     check("5 12:40", DAY, MINUTE, "5 days 12 hours 40 minutes")
     check("+5 12:40", DAY, MINUTE, "5 days 12 hours 40 minutes")
     check("-5 12:40", DAY, MINUTE, "-5 days -12 hours -40 minutes")
-    checkFail("5 12", DAY, MINUTE, "must match day-time format")
+    checkFail("5 12", DAY, MINUTE, "Interval string does not match day-time format")
 
     check("5 12:40:30.123", DAY, SECOND, "5 days 12 hours 40 minutes 30.123 seconds")
     check("+5 12:40:30.123456", DAY, SECOND, "5 days 12 hours 40 minutes 30.123456 seconds")
     check("-5 12:40:30.123456789", DAY, SECOND, "-5 days -12 hours -40 minutes -30.123456 seconds")
-    checkFail("5 12", DAY, SECOND, "must match day-time format")
+    checkFail("5 12", DAY, SECOND, "Interval string does not match day-time format")
 
     checkFail("5 30:12:20", DAY, SECOND, "hour 30 outside range")
-    checkFail("5 30-12", DAY, SECOND, "must match day-time format")
-    checkFail("5 1:12:20", HOUR, MICROSECOND, "Cannot support (interval")
-
+    checkFail("5 30-12", DAY, SECOND, "Interval string does not match day-time format")
+    withClue("Expected to throw an exception for the invalid input") {
+      val e = intercept[NoSuchElementException](fromDayTimeString("5 1:12:20", HOUR, MICROSECOND))
+      assert(e.getMessage.contains("key not found: microsecond"))
+    }
     // whitespaces
     check("\t +5 12:40\t ", DAY, MINUTE, "5 days 12 hours 40 minutes")
-    checkFail("+5\t 12:40", DAY, MINUTE, "must match day-time format")
+    checkFail("+5\t 12:40", DAY, MINUTE, "Interval string does not match day-time format")
 
   }
 
@@ -554,13 +557,13 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         ("INTERVAL '-0 00:00:00.000001' DAY TO SECOND",
           "INTERVAL '-0 00:00' DAY TO MINUTE",
           "INTERVAL '-0 00' DAY TO HOUR",
-          "INTERVAL '00:00:00.000001' HOUR TO SECOND",
-          "INTERVAL '00:00' HOUR TO MINUTE",
-          "INTERVAL '00:00.000001' MINUTE TO SECOND",
+          "INTERVAL '-00:00:00.000001' HOUR TO SECOND",
+          "INTERVAL '-00:00' HOUR TO MINUTE",
+          "INTERVAL '-00:00.000001' MINUTE TO SECOND",
           "INTERVAL '-0' DAY",
-          "INTERVAL '00' HOUR",
-          "INTERVAL '00' MINUTE",
-          "INTERVAL '00.000001' SECOND"),
+          "INTERVAL '-00' HOUR",
+          "INTERVAL '-00' MINUTE",
+          "INTERVAL '-00.000001' SECOND"),
       10 * MICROS_PER_MILLIS ->
         ("INTERVAL '0 00:00:00.01' DAY TO SECOND",
           "INTERVAL '0 00:00' DAY TO MINUTE",
@@ -576,24 +579,46 @@ class IntervalUtilsSuite extends SparkFunSuite with SQLHelper {
         ("INTERVAL '-123 00:00:03' DAY TO SECOND",
           "INTERVAL '-123 00:00' DAY TO MINUTE",
           "INTERVAL '-123 00' DAY TO HOUR",
-          "INTERVAL '00:00:03' HOUR TO SECOND",
-          "INTERVAL '00:00' HOUR TO MINUTE",
-          "INTERVAL '00:03' MINUTE TO SECOND",
+          "INTERVAL '-2952:00:03' HOUR TO SECOND",
+          "INTERVAL '-2952:00' HOUR TO MINUTE",
+          "INTERVAL '-177120:03' MINUTE TO SECOND",
           "INTERVAL '-123' DAY",
-          "INTERVAL '00' HOUR",
-          "INTERVAL '00' MINUTE",
-          "INTERVAL '03' SECOND"),
+          "INTERVAL '-2952' HOUR",
+          "INTERVAL '-177120' MINUTE",
+          "INTERVAL '-10627203' SECOND"),
       Long.MinValue ->
         ("INTERVAL '-106751991 04:00:54.775808' DAY TO SECOND",
           "INTERVAL '-106751991 04:00' DAY TO MINUTE",
           "INTERVAL '-106751991 04' DAY TO HOUR",
-          "INTERVAL '04:00:54.775808' HOUR TO SECOND",
-          "INTERVAL '04:00' HOUR TO MINUTE",
-          "INTERVAL '00:54.775808' MINUTE TO SECOND",
+          "INTERVAL '-2562047788:00:54.775808' HOUR TO SECOND",
+          "INTERVAL '-2562047788:00' HOUR TO MINUTE",
+          "INTERVAL '-153722867280:54.775808' MINUTE TO SECOND",
           "INTERVAL '-106751991' DAY",
-          "INTERVAL '04' HOUR",
-          "INTERVAL '00' MINUTE",
-          "INTERVAL '54.775808' SECOND")
+          "INTERVAL '-2562047788' HOUR",
+          "INTERVAL '-153722867280' MINUTE",
+          "INTERVAL '-9223372036854.775808' SECOND"),
+      69159782123456L ->
+        ("INTERVAL '800 11:03:02.123456' DAY TO SECOND",
+          "INTERVAL '800 11:03' DAY TO MINUTE",
+          "INTERVAL '800 11' DAY TO HOUR",
+          "INTERVAL '19211:03:02.123456' HOUR TO SECOND",
+          "INTERVAL '19211:03' HOUR TO MINUTE",
+          "INTERVAL '1152663:02.123456' MINUTE TO SECOND",
+          "INTERVAL '800' DAY",
+          "INTERVAL '19211' HOUR",
+          "INTERVAL '1152663' MINUTE",
+          "INTERVAL '69159782.123456' SECOND"),
+      -69159782123456L ->
+        ("INTERVAL '-800 11:03:02.123456' DAY TO SECOND",
+          "INTERVAL '-800 11:03' DAY TO MINUTE",
+          "INTERVAL '-800 11' DAY TO HOUR",
+          "INTERVAL '-19211:03:02.123456' HOUR TO SECOND",
+          "INTERVAL '-19211:03' HOUR TO MINUTE",
+          "INTERVAL '-1152663:02.123456' MINUTE TO SECOND",
+          "INTERVAL '-800' DAY",
+          "INTERVAL '-19211' HOUR",
+          "INTERVAL '-1152663' MINUTE",
+          "INTERVAL '-69159782.123456' SECOND")
     ).foreach {
       case (
         micros, (

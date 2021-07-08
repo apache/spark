@@ -16,10 +16,6 @@ tensorflow, ...). See comprehensive examples in
 
 .. note::
    The MLflow package must be installed in order to use this module.
-   If MLflow is not installed in your environment already, you
-   can install it with the following command:
-
-   **pip install koalas[mlflow]**
 
 .. autosummary::
    :toctree: api/

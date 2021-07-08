@@ -14,14 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from abc import ABCMeta, abstractmethod
 from functools import partial
 from typing import (  # noqa: F401 (SPARK-34943)
     Any,
-    Union,
-    TYPE_CHECKING,
     Callable,
+    Generic,
     List,
-    cast,
     Optional,
 )
 
@@ -36,24 +35,17 @@ from pyspark.pandas.missing.window import (
 
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
-
+from pyspark.pandas._typing import FrameLike
+from pyspark.pandas.groupby import GroupBy
 from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, SPARK_INDEX_NAME_FORMAT
+from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.utils import scol_for
 from pyspark.sql.column import Column
 from pyspark.sql.window import WindowSpec
 
-if TYPE_CHECKING:
-    from pyspark.pandas.frame import DataFrame  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.series import Series  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.groupby import SeriesGroupBy  # noqa: F401 (SPARK-34943)
-    from pyspark.pandas.groupby import DataFrameGroupBy  # noqa: F401 (SPARK-34943)
 
-
-class RollingAndExpanding(object):
-    def __init__(
-        self, psdf_or_psser: Union["Series", "DataFrame"], window: WindowSpec, min_periods: int
-    ):
-        self._psdf_or_psser = psdf_or_psser
+class RollingAndExpanding(Generic[FrameLike], metaclass=ABCMeta):
+    def __init__(self, window: WindowSpec, min_periods: int):
         self._window = window
         # This unbounded Window is later used to handle 'min_periods' for now.
         self._unbounded_window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
@@ -61,91 +53,80 @@ class RollingAndExpanding(object):
         )
         self._min_periods = min_periods
 
-    def _apply_as_series_or_frame(
-        self, func: Callable[[Column], Column]
-    ) -> Union["Series", "DataFrame"]:
+    @abstractmethod
+    def _apply_as_series_or_frame(self, func: Callable[[Column], Column]) -> FrameLike:
         """
         Wraps a function that handles Spark column in order
         to support it in both pandas-on-Spark Series and DataFrame.
         Note that the given `func` name should be same as the API's method name.
         """
-        raise NotImplementedError(
-            "A class that inherits this class should implement this method "
-            "to handle the index and columns of output."
-        )
+        pass
 
-    def count(self) -> Union["Series", "DataFrame"]:
-        def count(scol: Column) -> Column:
-            return F.count(scol).over(self._window)
+    @abstractmethod
+    def count(self) -> FrameLike:
+        pass
 
-        return cast(
-            Union["Series", "DataFrame"], self._apply_as_series_or_frame(count).astype("float64")
-        )
-
-    def sum(self) -> Union["Series", "DataFrame"]:
+    def sum(self) -> FrameLike:
         def sum(scol: Column) -> Column:
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.sum(scol).over(self._window),
-            ).otherwise(F.lit(None))
+            ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(sum)
 
-    def min(self) -> Union["Series", "DataFrame"]:
+    def min(self) -> FrameLike:
         def min(scol: Column) -> Column:
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.min(scol).over(self._window),
-            ).otherwise(F.lit(None))
+            ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(min)
 
-    def max(self) -> Union["Series", "DataFrame"]:
+    def max(self) -> FrameLike:
         def max(scol: Column) -> Column:
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.max(scol).over(self._window),
-            ).otherwise(F.lit(None))
+            ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(max)
 
-    def mean(self) -> Union["Series", "DataFrame"]:
+    def mean(self) -> FrameLike:
         def mean(scol: Column) -> Column:
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.mean(scol).over(self._window),
-            ).otherwise(F.lit(None))
+            ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(mean)
 
-    def std(self) -> Union["Series", "DataFrame"]:
+    def std(self) -> FrameLike:
         def std(scol: Column) -> Column:
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.stddev(scol).over(self._window),
-            ).otherwise(F.lit(None))
+            ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(std)
 
-    def var(self) -> Union["Series", "DataFrame"]:
+    def var(self) -> FrameLike:
         def var(scol: Column) -> Column:
             return F.when(
                 F.row_number().over(self._unbounded_window) >= self._min_periods,
                 F.variance(scol).over(self._window),
-            ).otherwise(F.lit(None))
+            ).otherwise(SF.lit(None))
 
         return self._apply_as_series_or_frame(var)
 
 
-class Rolling(RollingAndExpanding):
+class RollingLike(RollingAndExpanding[FrameLike]):
     def __init__(
         self,
-        psdf_or_psser: Union["Series", "DataFrame"],
         window: int,
         min_periods: Optional[int] = None,
     ):
-        from pyspark.pandas import DataFrame, Series
-
         if window < 0:
             raise ValueError("window must be >= 0")
         if (min_periods is not None) and (min_periods < 0):
@@ -155,17 +136,37 @@ class Rolling(RollingAndExpanding):
             #  a value.
             min_periods = window
 
+        window_spec = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            Window.currentRow - (window - 1), Window.currentRow
+        )
+
+        super().__init__(window_spec, min_periods)
+
+    def count(self) -> FrameLike:
+        def count(scol: Column) -> Column:
+            return F.count(scol).over(self._window)
+
+        return self._apply_as_series_or_frame(count).astype("float64")  # type: ignore
+
+
+class Rolling(RollingLike[FrameLike]):
+    def __init__(
+        self,
+        psdf_or_psser: FrameLike,
+        window: int,
+        min_periods: Optional[int] = None,
+    ):
+        from pyspark.pandas.frame import DataFrame
+        from pyspark.pandas.series import Series
+
+        super().__init__(window, min_periods)
+
         if not isinstance(psdf_or_psser, (DataFrame, Series)):
             raise TypeError(
                 "psdf_or_psser must be a series or dataframe; however, got: %s"
                 % type(psdf_or_psser)
             )
-
-        window_spec = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
-            Window.currentRow - (window - 1), Window.currentRow
-        )
-
-        super().__init__(psdf_or_psser, window_spec, min_periods)
+        self._psdf_or_psser = psdf_or_psser
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeRolling, item):
@@ -176,15 +177,13 @@ class Rolling(RollingAndExpanding):
                 return partial(property_or_func, self)
         raise AttributeError(item)
 
-    def _apply_as_series_or_frame(
-        self, func: Callable[[Column], Column]
-    ) -> Union["Series", "DataFrame"]:
+    def _apply_as_series_or_frame(self, func: Callable[[Column], Column]) -> FrameLike:
         return self._psdf_or_psser._apply_series_op(
             lambda psser: psser._with_new_scol(func(psser.spark.column)),  # TODO: dtype?
             should_resolve=True,
         )
 
-    def count(self) -> Union["Series", "DataFrame"]:
+    def count(self) -> FrameLike:
         """
         The rolling count of any non-NaN observations inside the window.
 
@@ -233,7 +232,7 @@ class Rolling(RollingAndExpanding):
         """
         return super().count()
 
-    def sum(self) -> Union["Series", "DataFrame"]:
+    def sum(self) -> FrameLike:
         """
         Calculate rolling summation of given DataFrame or Series.
 
@@ -311,7 +310,7 @@ class Rolling(RollingAndExpanding):
         """
         return super().sum()
 
-    def min(self) -> Union["Series", "DataFrame"]:
+    def min(self) -> FrameLike:
         """
         Calculate the rolling minimum.
 
@@ -389,7 +388,7 @@ class Rolling(RollingAndExpanding):
         """
         return super().min()
 
-    def max(self) -> Union["Series", "DataFrame"]:
+    def max(self) -> FrameLike:
         """
         Calculate the rolling maximum.
 
@@ -466,7 +465,7 @@ class Rolling(RollingAndExpanding):
         """
         return super().max()
 
-    def mean(self) -> Union["Series", "DataFrame"]:
+    def mean(self) -> FrameLike:
         """
         Calculate the rolling mean of the values.
 
@@ -544,7 +543,7 @@ class Rolling(RollingAndExpanding):
         """
         return super().mean()
 
-    def std(self) -> Union["Series", "DataFrame"]:
+    def std(self) -> FrameLike:
         """
         Calculate rolling standard deviation.
 
@@ -594,7 +593,7 @@ class Rolling(RollingAndExpanding):
         """
         return super().std()
 
-    def var(self) -> Union["Series", "DataFrame"]:
+    def var(self) -> FrameLike:
         """
         Calculate unbiased rolling variance.
 
@@ -645,27 +644,14 @@ class Rolling(RollingAndExpanding):
         return super().var()
 
 
-class RollingGroupby(Rolling):
+class RollingGroupby(RollingLike[FrameLike]):
     def __init__(
         self,
-        groupby: Union["SeriesGroupBy", "DataFrameGroupBy"],
+        groupby: GroupBy[FrameLike],
         window: int,
         min_periods: Optional[int] = None,
     ):
-        from pyspark.pandas.groupby import SeriesGroupBy
-        from pyspark.pandas.groupby import DataFrameGroupBy
-
-        if isinstance(groupby, SeriesGroupBy):
-            psdf_or_psser = groupby._psser  # type: Union[DataFrame, Series]
-        elif isinstance(groupby, DataFrameGroupBy):
-            psdf_or_psser = groupby._psdf
-        else:
-            raise TypeError(
-                "groupby must be a SeriesGroupBy or DataFrameGroupBy; "
-                "however, got: %s" % type(groupby)
-            )
-
-        super().__init__(psdf_or_psser, window, min_periods)
+        super().__init__(window, min_periods)
 
         self._groupby = groupby
         self._window = self._window.partitionBy(*[ser.spark.column for ser in groupby._groupkeys])
@@ -682,17 +668,13 @@ class RollingGroupby(Rolling):
                 return partial(property_or_func, self)
         raise AttributeError(item)
 
-    def _apply_as_series_or_frame(
-        self, func: Callable[[Column], Column]
-    ) -> Union["Series", "DataFrame"]:
+    def _apply_as_series_or_frame(self, func: Callable[[Column], Column]) -> FrameLike:
         """
         Wraps a function that handles Spark column in order
         to support it in both pandas-on-Spark Series and DataFrame.
         Note that the given `func` name should be same as the API's method name.
         """
         from pyspark.pandas import DataFrame
-        from pyspark.pandas.series import first_series
-        from pyspark.pandas.groupby import SeriesGroupBy
 
         groupby = self._groupby
         psdf = groupby._psdf
@@ -755,13 +737,9 @@ class RollingGroupby(Rolling):
             data_fields=[c._internal.data_fields[0] for c in applied],
         )
 
-        ret = DataFrame(internal)  # type: DataFrame
-        if isinstance(groupby, SeriesGroupBy):
-            return first_series(ret)
-        else:
-            return ret
+        return groupby._cleanup_and_return(DataFrame(internal))
 
-    def count(self) -> Union["Series", "DataFrame"]:
+    def count(self) -> FrameLike:
         """
         The rolling count of any non-NaN observations inside the window.
 
@@ -815,7 +793,7 @@ class RollingGroupby(Rolling):
         """
         return super().count()
 
-    def sum(self) -> Union["Series", "DataFrame"]:
+    def sum(self) -> FrameLike:
         """
         The rolling summation of any non-NaN observations inside the window.
 
@@ -869,7 +847,7 @@ class RollingGroupby(Rolling):
         """
         return super().sum()
 
-    def min(self) -> Union["Series", "DataFrame"]:
+    def min(self) -> FrameLike:
         """
         The rolling minimum of any non-NaN observations inside the window.
 
@@ -923,7 +901,7 @@ class RollingGroupby(Rolling):
         """
         return super().min()
 
-    def max(self) -> Union["Series", "DataFrame"]:
+    def max(self) -> FrameLike:
         """
         The rolling maximum of any non-NaN observations inside the window.
 
@@ -977,7 +955,7 @@ class RollingGroupby(Rolling):
         """
         return super().max()
 
-    def mean(self) -> Union["Series", "DataFrame"]:
+    def mean(self) -> FrameLike:
         """
         The rolling mean of any non-NaN observations inside the window.
 
@@ -1031,7 +1009,7 @@ class RollingGroupby(Rolling):
         """
         return super().mean()
 
-    def std(self) -> Union["Series", "DataFrame"]:
+    def std(self) -> FrameLike:
         """
         Calculate rolling standard deviation.
 
@@ -1050,7 +1028,7 @@ class RollingGroupby(Rolling):
         """
         return super().std()
 
-    def var(self) -> Union["Series", "DataFrame"]:
+    def var(self) -> FrameLike:
         """
         Calculate unbiased rolling variance.
 
@@ -1070,24 +1048,40 @@ class RollingGroupby(Rolling):
         return super().var()
 
 
-class Expanding(RollingAndExpanding):
-    def __init__(self, psdf_or_psser: Union["Series", "DataFrame"], min_periods: int = 1):
-        from pyspark.pandas import DataFrame, Series
-
+class ExpandingLike(RollingAndExpanding[FrameLike]):
+    def __init__(self, min_periods: int = 1):
         if min_periods < 0:
             raise ValueError("min_periods must be >= 0")
+
+        window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
+            Window.unboundedPreceding, Window.currentRow
+        )
+
+        super().__init__(window, min_periods)
+
+    def count(self) -> FrameLike:
+        def count(scol: Column) -> Column:
+            return F.when(
+                F.row_number().over(self._unbounded_window) >= self._min_periods,
+                F.count(scol).over(self._window),
+            ).otherwise(F.lit(None))
+
+        return self._apply_as_series_or_frame(count).astype("float64")  # type: ignore
+
+
+class Expanding(ExpandingLike[FrameLike]):
+    def __init__(self, psdf_or_psser: FrameLike, min_periods: int = 1):
+        from pyspark.pandas.frame import DataFrame
+        from pyspark.pandas.series import Series
+
+        super().__init__(min_periods)
 
         if not isinstance(psdf_or_psser, (DataFrame, Series)):
             raise TypeError(
                 "psdf_or_psser must be a series or dataframe; however, got: %s"
                 % type(psdf_or_psser)
             )
-
-        window = Window.orderBy(NATURAL_ORDER_COLUMN_NAME).rowsBetween(
-            Window.unboundedPreceding, Window.currentRow
-        )
-
-        super().__init__(psdf_or_psser, window, min_periods)
+        self._psdf_or_psser = psdf_or_psser
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeExpanding, item):
@@ -1104,7 +1098,7 @@ class Expanding(RollingAndExpanding):
 
     _apply_as_series_or_frame = Rolling._apply_as_series_or_frame
 
-    def count(self) -> Union["Series", "DataFrame"]:
+    def count(self) -> FrameLike:
         """
         The expanding count of any non-NaN observations inside the window.
 
@@ -1143,16 +1137,9 @@ class Expanding(RollingAndExpanding):
         2  2.0
         3  3.0
         """
+        return super().count()
 
-        def count(scol: Column) -> Column:
-            return F.when(
-                F.row_number().over(self._unbounded_window) >= self._min_periods,
-                F.count(scol).over(self._window),
-            ).otherwise(F.lit(None))
-
-        return self._apply_as_series_or_frame(count).astype("float64")  # type: ignore
-
-    def sum(self) -> Union["Series", "DataFrame"]:
+    def sum(self) -> FrameLike:
         """
         Calculate expanding summation of given DataFrame or Series.
 
@@ -1214,7 +1201,7 @@ class Expanding(RollingAndExpanding):
         """
         return super().sum()
 
-    def min(self) -> Union["Series", "DataFrame"]:
+    def min(self) -> FrameLike:
         """
         Calculate the expanding minimum.
 
@@ -1251,7 +1238,7 @@ class Expanding(RollingAndExpanding):
         """
         return super().min()
 
-    def max(self) -> Union["Series", "DataFrame"]:
+    def max(self) -> FrameLike:
         """
         Calculate the expanding maximum.
 
@@ -1287,7 +1274,7 @@ class Expanding(RollingAndExpanding):
         """
         return super().max()
 
-    def mean(self) -> Union["Series", "DataFrame"]:
+    def mean(self) -> FrameLike:
         """
         Calculate the expanding mean of the values.
 
@@ -1331,7 +1318,7 @@ class Expanding(RollingAndExpanding):
         """
         return super().mean()
 
-    def std(self) -> Union["Series", "DataFrame"]:
+    def std(self) -> FrameLike:
         """
         Calculate expanding standard deviation.
 
@@ -1381,7 +1368,7 @@ class Expanding(RollingAndExpanding):
         """
         return super().std()
 
-    def var(self) -> Union["Series", "DataFrame"]:
+    def var(self) -> FrameLike:
         """
         Calculate unbiased expanding variance.
 
@@ -1432,22 +1419,9 @@ class Expanding(RollingAndExpanding):
         return super().var()
 
 
-class ExpandingGroupby(Expanding):
-    def __init__(self, groupby: Union["SeriesGroupBy", "DataFrameGroupBy"], min_periods: int = 1):
-        from pyspark.pandas.groupby import SeriesGroupBy
-        from pyspark.pandas.groupby import DataFrameGroupBy
-
-        if isinstance(groupby, SeriesGroupBy):
-            psdf_or_psser = groupby._psser  # type: Union[DataFrame, Series]
-        elif isinstance(groupby, DataFrameGroupBy):
-            psdf_or_psser = groupby._psdf
-        else:
-            raise TypeError(
-                "groupby must be a SeriesGroupBy or DataFrameGroupBy; "
-                "however, got: %s" % type(groupby)
-            )
-
-        super().__init__(psdf_or_psser, min_periods)
+class ExpandingGroupby(ExpandingLike[FrameLike]):
+    def __init__(self, groupby: GroupBy[FrameLike], min_periods: int = 1):
+        super().__init__(min_periods)
 
         self._groupby = groupby
         self._window = self._window.partitionBy(*[ser.spark.column for ser in groupby._groupkeys])
@@ -1464,9 +1438,9 @@ class ExpandingGroupby(Expanding):
                 return partial(property_or_func, self)
         raise AttributeError(item)
 
-    _apply_as_series_or_frame = RollingGroupby._apply_as_series_or_frame  # type: ignore
+    _apply_as_series_or_frame = RollingGroupby._apply_as_series_or_frame
 
-    def count(self) -> Union["Series", "DataFrame"]:
+    def count(self) -> FrameLike:
         """
         The expanding count of any non-NaN observations inside the window.
 
@@ -1520,7 +1494,7 @@ class ExpandingGroupby(Expanding):
         """
         return super().count()
 
-    def sum(self) -> Union["Series", "DataFrame"]:
+    def sum(self) -> FrameLike:
         """
         Calculate expanding summation of given DataFrame or Series.
 
@@ -1574,7 +1548,7 @@ class ExpandingGroupby(Expanding):
         """
         return super().sum()
 
-    def min(self) -> Union["Series", "DataFrame"]:
+    def min(self) -> FrameLike:
         """
         Calculate the expanding minimum.
 
@@ -1628,7 +1602,7 @@ class ExpandingGroupby(Expanding):
         """
         return super().min()
 
-    def max(self) -> Union["Series", "DataFrame"]:
+    def max(self) -> FrameLike:
         """
         Calculate the expanding maximum.
 
@@ -1681,7 +1655,7 @@ class ExpandingGroupby(Expanding):
         """
         return super().max()
 
-    def mean(self) -> Union["Series", "DataFrame"]:
+    def mean(self) -> FrameLike:
         """
         Calculate the expanding mean of the values.
 
@@ -1735,7 +1709,7 @@ class ExpandingGroupby(Expanding):
         """
         return super().mean()
 
-    def std(self) -> Union["Series", "DataFrame"]:
+    def std(self) -> FrameLike:
         """
         Calculate expanding standard deviation.
 
@@ -1755,7 +1729,7 @@ class ExpandingGroupby(Expanding):
         """
         return super().std()
 
-    def var(self) -> Union["Series", "DataFrame"]:
+    def var(self) -> FrameLike:
         """
         Calculate unbiased expanding variance.
 

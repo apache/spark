@@ -50,4 +50,17 @@ public interface VectorizedValuesReader {
   void readFloats(int total, WritableColumnVector c, int rowId);
   void readDoubles(int total, WritableColumnVector c, int rowId);
   void readBinary(int total, WritableColumnVector c, int rowId);
+
+   /*
+    * Skips `total` values
+    */
+   void skipBooleans(int total);
+   void skipBytes(int total);
+   void skipShorts(int total);
+   void skipIntegers(int total);
+   void skipLongs(int total);
+   void skipFloats(int total);
+   void skipDoubles(int total);
+   void skipBinary(int total);
+   void skipFixedLenByteArray(int total, int len);
 }

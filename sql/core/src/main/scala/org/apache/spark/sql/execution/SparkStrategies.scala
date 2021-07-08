@@ -32,7 +32,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NONE, REPARTITION_BY_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
@@ -561,11 +561,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case FlatMapGroupsWithState(
         func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, stateEnc, outputMode, _,
-        timeout, child) =>
+        timeout, hasInitialState, stateGroupAttr, sda, sDeser, initialState, child) =>
         val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
         val execPlan = FlatMapGroupsWithStateExec(
-          func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateEnc, stateVersion,
-          outputMode, timeout, batchTimestampMs = None, eventTimeWatermark = None, planLater(child))
+          func, keyDeser, valueDeser, sDeser, groupAttr, stateGroupAttr, dataAttr, sda, outputAttr,
+          None, stateEnc, stateVersion, outputMode, timeout, batchTimestampMs = None,
+          eventTimeWatermark = None, planLater(initialState), hasInitialState, planLater(child)
+        )
         execPlan :: Nil
       case _ =>
         Nil
@@ -669,7 +671,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.MapGroups(f, key, value, grouping, data, objAttr, child) =>
         execution.MapGroupsExec(f, key, value, grouping, data, objAttr, planLater(child)) :: Nil
       case logical.FlatMapGroupsWithState(
-          f, key, value, grouping, data, output, _, _, _, timeout, child) =>
+          f, key, value, grouping, data, output, _, _, _, timeout, _, _, _, _, _, child) =>
         execution.MapGroupsExec(
           f, key, value, grouping, data, output, timeout, planLater(child)) :: Nil
       case logical.CoGroup(f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr, left, right) =>
@@ -714,11 +716,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
         val shuffleOrigin = if (r.partitionExpressions.isEmpty && r.optNumPartitions.isEmpty) {
-          REPARTITION_BY_NONE
+          REBALANCE_PARTITIONS_BY_NONE
         } else if (r.optNumPartitions.isEmpty) {
           REPARTITION_BY_COL
         } else {
           REPARTITION_BY_NUM
+        }
+        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
+      case r: logical.RebalancePartitions =>
+        val shuffleOrigin = if (r.partitionExpressions.isEmpty) {
+          REBALANCE_PARTITIONS_BY_NONE
+        } else {
+          REBALANCE_PARTITIONS_BY_COL
         }
         exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil

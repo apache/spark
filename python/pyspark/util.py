@@ -26,6 +26,8 @@ import threading
 import traceback
 import types
 
+from py4j.clientserver import ClientServer
+
 __all__ = []  # type: ignore
 
 
@@ -308,7 +310,9 @@ def inheritable_thread_target(f):
     """
     from pyspark import SparkContext
 
-    if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
+    if isinstance(SparkContext._gateway, ClientServer):
+        # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
+
         # NOTICE the internal difference vs `InheritableThread`. `InheritableThread`
         # copies local properties when the thread starts but `inheritable_thread_target`
         # copies when the function is wrapped.
@@ -350,7 +354,8 @@ class InheritableThread(threading.Thread):
     def __init__(self, target, *args, **kwargs):
         from pyspark import SparkContext
 
-        if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
+        if isinstance(SparkContext._gateway, ClientServer):
+            # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
             def copy_local_properties(*a, **k):
                 # self._props is set before starting the thread to match the behavior with JVM.
                 assert hasattr(self, "_props")
@@ -368,7 +373,9 @@ class InheritableThread(threading.Thread):
     def start(self, *args, **kwargs):
         from pyspark import SparkContext
 
-        if os.environ.get("PYSPARK_PIN_THREAD", "true").lower() == "true":
+        if isinstance(SparkContext._gateway, ClientServer):
+            # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
+
             # Local property copy should happen in Thread.start to mimic JVM's behavior.
             self._props = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
         return super(InheritableThread, self).start(*args, **kwargs)
@@ -378,20 +385,18 @@ class InheritableThread(threading.Thread):
         from pyspark import SparkContext
 
         jvm = SparkContext._jvm
-        thread_connection = jvm._gateway_client.thread_connection.connection()
+        thread_connection = jvm._gateway_client.get_thread_connection()
         if thread_connection is not None:
-            connections = jvm._gateway_client.deque
-            # Reuse the lock for Py4J in PySpark
-            with SparkContext._lock:
-                for i in range(len(connections)):
-                    if connections[i] is thread_connection:
-                        connections[i].close()
-                        del connections[i]
-                        break
-                else:
-                    # Just in case the connection was not closed but removed from the
-                    # queue.
-                    thread_connection.close()
+            try:
+                # Dequeue is shared across other threads but it's thread-safe.
+                # If this function has to be invoked one more time in the same thead
+                # Py4J will create a new connection automatically.
+                jvm._gateway_client.deque.remove(thread_connection)
+            except ValueError:
+                # Should never reach this point
+                return
+            finally:
+                thread_connection.close()
 
 
 if __name__ == "__main__":

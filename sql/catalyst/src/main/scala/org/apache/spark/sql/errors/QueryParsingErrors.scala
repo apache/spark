@@ -206,7 +206,7 @@ object QueryParsingErrors {
   }
 
   def fromToIntervalUnsupportedError(
-      from: String, to: String, ctx: UnitToUnitIntervalContext): Throwable = {
+      from: String, to: String, ctx: ParserRuleContext): Throwable = {
     new ParseException(s"Intervals FROM $from TO $to are not supported.", ctx)
   }
 
@@ -320,7 +320,8 @@ object QueryParsingErrors {
   }
 
   def duplicateKeysError(key: String, ctx: ParserRuleContext): Throwable = {
-    new ParseException(s"Found duplicate keys '$key'.", ctx)
+    // Found duplicate keys '$key'
+    new ParseException(errorClass = "DUPLICATE_KEY", messageParameters = Seq(key), ctx)
   }
 
   def unexpectedFomatForSetConfigurationError(ctx: SetConfigurationContext): Throwable = {

@@ -25,6 +25,14 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
+/**
+ * Test suite base for
+ *   1. [[Cast]] with ANSI mode enabled
+ *   2. [[AnsiCast]]
+ *   3. [[TryCast]]
+ * Note: for new test cases that work for [[Cast]], [[AnsiCast]] and [[TryCast]], please add them
+ *       in `CastSuiteBase` instead of this file to ensure the test coverage.
+ */
 abstract class AnsiCastSuiteBase extends CastSuiteBase {
 
   private def testIntMaxAndMin(dt: DataType): Unit = {
@@ -410,8 +418,8 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
       "2021-06-17abc",
       "2021-06-17 00:00:00ABC").foreach { invalidInput =>
       checkExceptionInExpression[DateTimeException](
-        cast(invalidInput, TimestampWithoutTZType),
-        s"Cannot cast $invalidInput to TimestampWithoutTZType")
+        cast(invalidInput, TimestampNTZType),
+        s"Cannot cast $invalidInput to TimestampNTZType")
     }
   }
 }

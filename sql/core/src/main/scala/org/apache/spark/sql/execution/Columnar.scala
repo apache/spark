@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types._
@@ -264,14 +265,13 @@ private object RowToColumnConverter {
       case DoubleType => DoubleConverter
       case StringType => StringConverter
       case CalendarIntervalType => CalendarConverter
-      case at: ArrayType => new ArrayConverter(getConverterForType(at.elementType, nullable))
+      case at: ArrayType => ArrayConverter(getConverterForType(at.elementType, at.containsNull))
       case st: StructType => new StructConverter(st.fields.map(
         (f) => getConverterForType(f.dataType, f.nullable)))
       case dt: DecimalType => new DecimalConverter(dt)
-      case mt: MapType => new MapConverter(getConverterForType(mt.keyType, nullable),
-        getConverterForType(mt.valueType, nullable))
-      case unknown => throw new UnsupportedOperationException(
-        s"Type $unknown not supported")
+      case mt: MapType => MapConverter(getConverterForType(mt.keyType, nullable = false),
+        getConverterForType(mt.valueType, mt.valueContainsNull))
+      case unknown => throw QueryExecutionErrors.unsupportedDataTypeError(unknown.toString)
     }
 
     if (nullable) {

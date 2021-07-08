@@ -29,7 +29,7 @@ turning on some experimental options.
 
 Spark SQL can cache tables using an in-memory columnar format by calling `spark.catalog.cacheTable("tableName")` or `dataFrame.cache()`.
 Then Spark SQL will scan only required columns and will automatically tune compression to minimize
-memory usage and GC pressure. You can call `spark.catalog.uncacheTable("tableName")` to remove the table from memory.
+memory usage and GC pressure. You can call `spark.catalog.uncacheTable("tableName")` or `dataFrame.unpersist()` to remove the table from memory.
 
 Configuration of in-memory caching can be done using the `setConf` method on `SparkSession` or by running
 `SET key=value` commands using SQL.
@@ -228,6 +228,8 @@ The "REPARTITION_BY_RANGE" hint must have column names and a partition number is
     SELECT /*+ REPARTITION */ * FROM t
     SELECT /*+ REPARTITION_BY_RANGE(c) */ * FROM t
     SELECT /*+ REPARTITION_BY_RANGE(3, c) */ * FROM t
+    SELECT /*+ REBALANCE */ * FROM t
+    SELECT /*+ REBALANCE(c) */ * FROM t
 
 For more details please refer to the documentation of [Partitioning Hints](sql-ref-syntax-qry-select-hints.html#partitioning-hints).
 
