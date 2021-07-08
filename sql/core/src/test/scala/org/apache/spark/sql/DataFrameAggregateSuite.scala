@@ -1404,6 +1404,9 @@ class DataFrameAggregateSuite extends QueryTest
     val ts2 = "2021-01-01T00:00:01"
     val localDateTime = Seq(ts1, ts1, ts2).map(LocalDateTime.parse)
     val df = localDateTime.toDF("ts").groupBy("ts").count().orderBy("ts")
+    val expectedSchema =
+      new StructType().add(StructField("ts", TimestampNTZType)).add("count", LongType, false)
+    assert (df.schema == expectedSchema)
     checkAnswer(df, Seq(Row(LocalDateTime.parse(ts1), 2), Row(LocalDateTime.parse(ts2), 1)))
   }
 }
