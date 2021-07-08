@@ -134,7 +134,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       new StateStoreConf, new Configuration)
     provider
   }
-  
+
   override def getLatestData(
       storeProvider: RocksDBStateStoreProvider): Set[((String, Int), Int)] = {
     getData(storeProvider, version = -1)
