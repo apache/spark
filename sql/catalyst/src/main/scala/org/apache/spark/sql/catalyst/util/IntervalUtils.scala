@@ -458,7 +458,7 @@ object IntervalUtils {
    * adapted from HiveIntervalDayTime.valueOf
    */
   def fromDayTimeString(s: String): CalendarInterval = {
-    fromDayTimeString(s, DAY, SECOND)
+    fromDayTimeString(s, DT.DAY, DT.SECOND)
   }
 
   /**
@@ -470,13 +470,12 @@ object IntervalUtils {
    * - HOUR TO (HOUR|MINUTE|SECOND)
    * - MINUTE TO (MINUTE|SECOND)
    */
-  def fromDayTimeString(input: String, from: IntervalUnit, to: IntervalUnit): CalendarInterval = {
+  def fromDayTimeString(input: String, from: Byte, to: Byte): CalendarInterval = {
     require(input != null, "Interval day-time string must be not null")
     if (SQLConf.get.getConf(SQLConf.LEGACY_FROM_DAYTIME_STRING)) {
       parseDayTimeLegacy(input, from, to)
     } else {
-      castDayTimeStringToInterval(
-        input, DT.stringToField(from.toString), DT.stringToField(to.toString))
+      castDayTimeStringToInterval(input, from, to)
     }
   }
 
@@ -500,8 +499,8 @@ object IntervalUtils {
    */
   private def parseDayTimeLegacy(
       input: String,
-      from: IntervalUnit,
-      to: IntervalUnit): CalendarInterval = {
+      from: Byte,
+      to: Byte): CalendarInterval = {
     assert(input.length == input.trim.length)
     val m = dayTimePatternLegacy.pattern.matcher(input)
     require(m.matches, s"Interval string must match day-time format of 'd h:m:s.n': $input, " +
@@ -517,7 +516,7 @@ object IntervalUtils {
       var hours: Long = 0L
       var minutes: Long = 0L
       var seconds: Long = 0L
-      if (m.group(5) != null || from == MINUTE) { // 'HH:mm:ss' or 'mm:ss minute'
+      if (m.group(5) != null || from == DT.MINUTE) { // 'HH:mm:ss' or 'mm:ss minute'
         hours = toLongWithRange(HOUR, m.group(5), 0, 23)
         minutes = toLongWithRange(MINUTE, m.group(6), 0, 59)
         seconds = toLongWithRange(SECOND, m.group(7), 0, 59)
@@ -531,18 +530,17 @@ object IntervalUtils {
       // Hive allow nanosecond precision interval
       var secondsFraction = parseNanos(m.group(9), seconds < 0)
       to match {
-        case HOUR =>
+        case DT.HOUR =>
           minutes = 0
           seconds = 0
           secondsFraction = 0
-        case MINUTE =>
+        case DT.MINUTE =>
           seconds = 0
           secondsFraction = 0
-        case SECOND =>
+        case DT.SECOND =>
           // No-op
-        case _ =>
-          throw new IllegalArgumentException(
-            s"Cannot support (interval '$input' $from to $to) expression")
+        case _ => throw new IllegalArgumentException(s"Cannot support (" +
+          s"interval '$input' ${DT.fieldToString(from)} to ${DT.fieldToString(to)}) expression")
       }
       var micros = secondsFraction
       micros = Math.addExact(micros, Math.multiplyExact(hours, MICROS_PER_HOUR))
