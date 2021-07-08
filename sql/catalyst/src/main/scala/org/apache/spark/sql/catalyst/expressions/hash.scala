@@ -490,7 +490,7 @@ abstract class HashExpression[E] extends Expression {
     case BooleanType => genHashBoolean(input, result)
     case ByteType | ShortType | IntegerType | DateType => genHashInt(input, result)
     case LongType => genHashLong(input, result)
-    case TimestampType => genHashTimestamp(input, result)
+    case TimestampType | TimestampNTZType => genHashTimestamp(input, result)
     case FloatType => genHashFloat(input, result)
     case DoubleType => genHashDouble(input, result)
     case d: DecimalType => genHashDecimal(ctx, d, input, result)
