@@ -80,7 +80,7 @@ abstract class QueryStageExec extends LeafExecNode {
    * broadcasting data, etc. The caller side can use the returned [[Future]] to wait until this
    * stage is ready.
    */
-  final def materialize(): Future[Any] = executeQuery {
+  final def materialize(): Future[Any] = {
     logDebug(s"Materialize query stage ${this.getClass.getSimpleName}: $id")
     doMaterialize()
   }
@@ -119,7 +119,6 @@ abstract class QueryStageExec extends LeafExecNode {
   override def executeTail(n: Int): Array[InternalRow] = plan.executeTail(n)
   override def executeToIterator(): Iterator[InternalRow] = plan.executeToIterator()
 
-  protected override def doPrepare(): Unit = plan.prepare()
   protected override def doExecute(): RDD[InternalRow] = plan.execute()
   override def supportsColumnar: Boolean = plan.supportsColumnar
   protected override def doExecuteColumnar(): RDD[ColumnarBatch] = plan.executeColumnar()
@@ -171,7 +170,9 @@ case class ShuffleQueryStageExec(
       throw new IllegalStateException(s"wrong plan for shuffle stage:\n ${plan.treeString}")
   }
 
-  override def doMaterialize(): Future[Any] = shuffle.mapOutputStatisticsFuture
+  @transient private lazy val shuffleFuture = shuffle.submitShuffleJob
+
+  override def doMaterialize(): Future[Any] = shuffleFuture
 
   override def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec = {
     val reuse = ShuffleQueryStageExec(
@@ -182,13 +183,10 @@ case class ShuffleQueryStageExec(
     reuse
   }
 
-  override def cancel(): Unit = {
-    shuffle.mapOutputStatisticsFuture match {
-      case action: FutureAction[MapOutputStatistics]
-        if !shuffle.mapOutputStatisticsFuture.isCompleted =>
-        action.cancel()
-      case _ =>
-    }
+  override def cancel(): Unit = shuffleFuture match {
+    case action: FutureAction[MapOutputStatistics] if !action.isCompleted =>
+      action.cancel()
+    case _ =>
   }
 
   /**
@@ -224,7 +222,7 @@ case class BroadcastQueryStageExec(
   }
 
   @transient private lazy val materializeWithTimeout = {
-    val broadcastFuture = broadcast.completionFuture
+    val broadcastFuture = broadcast.submitBroadcastJob
     val timeout = conf.broadcastTimeout
     val promise = Promise[Any]()
     val fail = BroadcastQueryStageExec.scheduledExecutor.schedule(new Runnable() {
