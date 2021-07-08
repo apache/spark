@@ -78,7 +78,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val rocksDBConfInTask: RocksDBConf = testRDD.mapPartitionsWithStateStore[RocksDBConf](
         spark.sqlContext, testStateInfo, testSchema, testSchema, None) {
           (store: StateStore, _: Iterator[String]) =>
-            // Use reflection to get RockDB instance
+            // Use reflection to get RocksDB instance
             val dbInstanceMethod =
               store.getClass.getMethods.filter(_.getName.contains("dbInstance")).head
             Iterator(dbInstanceMethod.invoke(store).asInstanceOf[RocksDB].conf)
