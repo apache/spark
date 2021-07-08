@@ -127,7 +127,7 @@ class PrefixKeyScanStateEncoder(
     val prefixKeyEncoded = encodeUnsafeRow(extractPrefixKey(row))
     val remainingEncoded = encodeUnsafeRow(remainingKeyProjection(row))
 
-    val encodedBytes = new Array[Byte](prefixKeyEncoded.length + remainingEncoded.length + 4 + 4)
+    val encodedBytes = new Array[Byte](prefixKeyEncoded.length + remainingEncoded.length + 4)
     Platform.putInt(encodedBytes, Platform.BYTE_ARRAY_OFFSET, prefixKeyEncoded.length)
     Platform.copyMemory(prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
       encodedBytes, Platform.BYTE_ARRAY_OFFSET + 4, prefixKeyEncoded.length)
