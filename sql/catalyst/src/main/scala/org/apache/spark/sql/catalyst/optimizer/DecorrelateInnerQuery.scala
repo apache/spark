@@ -230,17 +230,19 @@ object DecorrelateInnerQuery extends PredicateHelper {
           // and use the new join conditions to rewrite domain joins in its child. For example:
           // DomainJoin [c'] LeftOuter (a = c') with domainAttrMap: { c' -> _1 }.
           // Then the new conditions to use will be [(a = _1)].
-          val newConditions = condition.map(
-            _.transform { case a: Attribute => domainAttrMap.getOrElse(a, a)}
-          ).map(splitConjunctivePredicates).getOrElse(conditions)
+          assert(condition.isDefined,
+            s"LeftOuter domain join should always have the join condition defined:\n$d")
+          val newCond = condition.get.transform {
+            case a: Attribute => domainAttrMap.getOrElse(a, a)
+          }
           // Recursively rewrite domain joins using the new conditions.
-          rewriteDomainJoins(outerPlan, child, newConditions)
+          rewriteDomainJoins(outerPlan, child, splitConjunctivePredicates(newCond))
         case Inner =>
           // The decorrelation framework adds domain inner joins by traversing down the plan tree
           // recursively until it reaches a node that is not correlated with the outer query.
           // So the child node of a domain inner join shouldn't contain another domain join.
           assert(child.find(_.isInstanceOf[DomainJoin]).isEmpty,
-            s"Child of a domain join shouldn't contain another domain join.\n$child")
+            s"Child of a domain inner join shouldn't contain another domain join.\n$child")
           child
         case o =>
           throw new IllegalStateException(s"Unexpected domain join type $o")
