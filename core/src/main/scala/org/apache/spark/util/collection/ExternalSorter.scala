@@ -307,13 +307,14 @@ private[spark] class ExternalSorter[K, V, C](
       }
       if (objectsWritten > 0) {
         flush()
-        writer.close()
       } else {
         writer.revertPartialWritesAndClose()
       }
       success = true
     } finally {
-      if (!success) {
+      if (success) {
+        writer.close()
+      } else {
         // This code path only happens if an exception was thrown above before we set success;
         // close our stuff and let the exception be thrown further
         DiskBlockObjectHelper.deleteAbnormalDiskBlockObjectFile(writer)
