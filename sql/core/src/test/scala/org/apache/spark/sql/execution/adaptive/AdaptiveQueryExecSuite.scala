@@ -1952,6 +1952,13 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-35874: AQE Shuffle should wait for its subqueries to finish before materializing") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val query = "SELECT b FROM testData2 DISTRIBUTE BY (b, (SELECT max(key) FROM testData))"
+      runAdaptiveAndVerifyResult(query)
+    }
+  }
 }
 
 /**
