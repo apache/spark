@@ -41,22 +41,6 @@ object IntervalStringStyles extends Enumeration {
 
 object IntervalUtils {
 
-  object IntervalUnit extends Enumeration {
-    type IntervalUnit = Value
-
-    val NANOSECOND = Value(0, "nanosecond")
-    val MICROSECOND = Value(1, "microsecond")
-    val MILLISECOND = Value(2, "millisecond")
-    val SECOND = Value(3, "second")
-    val MINUTE = Value(4, "minute")
-    val HOUR = Value(5, "hour")
-    val DAY = Value(6, "day")
-    val WEEK = Value(7, "week")
-    val MONTH = Value(8, "month")
-    val YEAR = Value(9, "year")
-  }
-  import IntervalUnit._
-
   private val MAX_DAY = Long.MaxValue / MICROS_PER_DAY
   private val MAX_HOUR = Long.MaxValue / MICROS_PER_HOUR
   private val MAX_MINUTE = Long.MaxValue / MICROS_PER_MINUTE
@@ -97,7 +81,7 @@ object IntervalUtils {
   def getSeconds(interval: CalendarInterval): Decimal = getSeconds(interval.microseconds)
 
   private def toLongWithRange(
-      fieldName: IntervalUnit,
+      fieldName: UTF8String,
       s: String,
       minValue: Long,
       maxValue: Long): Long = {
@@ -250,10 +234,11 @@ object IntervalUtils {
     }
   }
 
-  private def toYMInterval(yearStr: String, monthStr: String, sign: Int): Int = {
+  private def toYMInterval(year: String, month: String, sign: Int): Int = {
     safeToInterval("year-month") {
-      val years = toLongWithRange(YEAR, yearStr, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
-      val totalMonths = sign * (years * MONTHS_PER_YEAR + toLongWithRange(MONTH, monthStr, 0, 11))
+      val years = toLongWithRange(yearStr, year, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
+      val totalMonths =
+        sign * (years * MONTHS_PER_YEAR + toLongWithRange(monthStr, month, 0, 11))
       Math.toIntExact(totalMonths)
     }
   }
@@ -402,45 +387,33 @@ object IntervalUtils {
     }
   }
 
-  def toDTInterval(
-      dayStr: String,
-      hourStr: String,
-      minuteStr: String,
-      secondStr: String,
-      sign: Int): Long = {
+  def toDTInterval(day: String, hour: String, minute: String, second: String, sign: Int): Long = {
     var micros = 0L
-    val days = toLongWithRange(DAY, dayStr, 0, MAX_DAY).toInt
+    val days = toLongWithRange(dayStr, day, 0, MAX_DAY).toInt
     micros = Math.addExact(micros, sign * days * MICROS_PER_DAY)
-    val hours = toLongWithRange(HOUR, hourStr, 0, 23)
+    val hours = toLongWithRange(hourStr, hour, 0, 23)
     micros = Math.addExact(micros, sign * hours * MICROS_PER_HOUR)
-    val minutes = toLongWithRange(MINUTE, minuteStr, 0, 59)
+    val minutes = toLongWithRange(minuteStr, minute, 0, 59)
     micros = Math.addExact(micros, sign * minutes * MICROS_PER_MINUTE)
-    micros = Math.addExact(micros, sign * parseSecondNano(secondStr))
+    micros = Math.addExact(micros, sign * parseSecondNano(second))
     micros
   }
 
-  def toDTInterval(
-      hourStr: String,
-      minuteStr: String,
-      secondStr: String,
-      sign: Int): Long = {
+  def toDTInterval(hour: String, minute: String, second: String, sign: Int): Long = {
     var micros = 0L
-    val hours = toLongWithRange(HOUR, hourStr, 0, MAX_HOUR)
+    val hours = toLongWithRange(hourStr, hour, 0, MAX_HOUR)
     micros = Math.addExact(micros, sign * hours * MICROS_PER_HOUR)
-    val minutes = toLongWithRange(MINUTE, minuteStr, 0, 59)
+    val minutes = toLongWithRange(minuteStr, minute, 0, 59)
     micros = Math.addExact(micros, sign * minutes * MICROS_PER_MINUTE)
-    micros = Math.addExact(micros, sign * parseSecondNano(secondStr))
+    micros = Math.addExact(micros, sign * parseSecondNano(second))
     micros
   }
 
-  def toDTInterval(
-      minuteStr: String,
-      secondStr: String,
-      sign: Int): Long = {
+  def toDTInterval(minute: String, second: String, sign: Int): Long = {
     var micros = 0L
-    val minutes = toLongWithRange(MINUTE, minuteStr, 0, MAX_MINUTE)
+    val minutes = toLongWithRange(minuteStr, minute, 0, MAX_MINUTE)
     micros = Math.addExact(micros, sign * minutes * MICROS_PER_MINUTE)
-    micros = Math.addExact(micros, sign * parseSecondNano(secondStr))
+    micros = Math.addExact(micros, sign * parseSecondNano(second))
     micros
   }
 
@@ -511,21 +484,21 @@ object IntervalUtils {
       val days = if (m.group(2) == null) {
         0
       } else {
-        toLongWithRange(DAY, m.group(3), 0, Integer.MAX_VALUE).toInt
+        toLongWithRange(dayStr, m.group(3), 0, Integer.MAX_VALUE).toInt
       }
       var hours: Long = 0L
       var minutes: Long = 0L
       var seconds: Long = 0L
       if (m.group(5) != null || from == DT.MINUTE) { // 'HH:mm:ss' or 'mm:ss minute'
-        hours = toLongWithRange(HOUR, m.group(5), 0, 23)
-        minutes = toLongWithRange(MINUTE, m.group(6), 0, 59)
-        seconds = toLongWithRange(SECOND, m.group(7), 0, 59)
+        hours = toLongWithRange(hourStr, m.group(5), 0, 23)
+        minutes = toLongWithRange(minuteStr, m.group(6), 0, 59)
+        seconds = toLongWithRange(secondStr, m.group(7), 0, 59)
       } else if (m.group(8) != null) { // 'mm:ss.nn'
-        minutes = toLongWithRange(MINUTE, m.group(6), 0, 59)
-        seconds = toLongWithRange(SECOND, m.group(7), 0, 59)
+        minutes = toLongWithRange(minuteStr, m.group(6), 0, 59)
+        seconds = toLongWithRange(secondStr, m.group(7), 0, 59)
       } else { // 'HH:mm'
-        hours = toLongWithRange(HOUR, m.group(6), 0, 23)
-        minutes = toLongWithRange(SECOND, m.group(7), 0, 59)
+        hours = toLongWithRange(hourStr, m.group(6), 0, 23)
+        minutes = toLongWithRange(secondStr, m.group(7), 0, 59)
       }
       // Hive allow nanosecond precision interval
       var secondsFraction = parseNanos(m.group(9), seconds < 0)
@@ -555,15 +528,15 @@ object IntervalUtils {
   }
 
   // Parses a string with nanoseconds, truncates the result and returns microseconds
-  private def parseNanos(nanosStr: String, isNegative: Boolean): Long = {
-    if (nanosStr != null) {
+  private def parseNanos(nanos: String, isNegative: Boolean): Long = {
+    if (nanos != null) {
       val maxNanosLen = 9
-      val alignedStr = if (nanosStr.length < maxNanosLen) {
-        (nanosStr + "000000000").substring(0, maxNanosLen)
-      } else nanosStr
-      val nanos = toLongWithRange(NANOSECOND, alignedStr, 0L, 999999999L)
-      val micros = nanos / NANOS_PER_MICROS
-      if (isNegative) -micros else micros
+      val alignedStr = if (nanos.length < maxNanosLen) {
+        (nanos + "000000000").substring(0, maxNanosLen)
+      } else nanos
+      val nanoSecond = toLongWithRange(nanosStr, alignedStr, 0L, 999999999L)
+      val microSecond = nanoSecond / NANOS_PER_MICROS
+      if (isNegative) -microSecond else microSecond
     } else {
       0L
     }
@@ -574,7 +547,7 @@ object IntervalUtils {
    */
   private def parseSecondNano(secondNano: String): Long = {
     def parseSeconds(secondsStr: String): Long = {
-      toLongWithRange(SECOND, secondsStr, MIN_SECOND, MAX_SECOND) * MICROS_PER_SECOND
+      toLongWithRange(secondStr, secondsStr, MIN_SECOND, MAX_SECOND) * MICROS_PER_SECOND
     }
 
     secondNano.split("\\.") match {
@@ -774,19 +747,20 @@ object IntervalUtils {
         UNIT_SUFFIX,
         UNIT_END = Value
   }
-  private final val intervalStr = UTF8String.fromString("interval")
-  private def unitToUtf8(unit: IntervalUnit): UTF8String = {
-    UTF8String.fromString(unit.toString)
+  private final val intervalStr = unitToUtf8("interval")
+  private def unitToUtf8(unit: String): UTF8String = {
+    UTF8String.fromString(unit)
   }
-  private final val yearStr = unitToUtf8(YEAR)
-  private final val monthStr = unitToUtf8(MONTH)
-  private final val weekStr = unitToUtf8(WEEK)
-  private final val dayStr = unitToUtf8(DAY)
-  private final val hourStr = unitToUtf8(HOUR)
-  private final val minuteStr = unitToUtf8(MINUTE)
-  private final val secondStr = unitToUtf8(SECOND)
-  private final val millisStr = unitToUtf8(MILLISECOND)
-  private final val microsStr = unitToUtf8(MICROSECOND)
+  private final val yearStr = unitToUtf8("year")
+  private final val monthStr = unitToUtf8("month")
+  private final val weekStr = unitToUtf8("week")
+  private final val dayStr = unitToUtf8("day")
+  private final val hourStr = unitToUtf8("hour")
+  private final val minuteStr = unitToUtf8("minute")
+  private final val secondStr = unitToUtf8("second")
+  private final val millisStr = unitToUtf8("millisecond")
+  private final val microsStr = unitToUtf8("microsecond")
+  private final val nanosStr = unitToUtf8("nanosecond")
 
   /**
    * A safe version of `stringToInterval`. It returns null for invalid input string.
