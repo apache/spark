@@ -47,7 +47,7 @@ object ValidateRequirements extends Logging {
       case (_: ClusteredDistribution, i) => i
       case (_: HashClusteredDistribution, i) => i
     }.map(i => children(i).outputPartitioning.numPartitions)
-    if (!numPartitions.tail.forall(_ == numPartitions.head)) {
+    if (numPartitions.length > 1 && !numPartitions.tail.forall(_ == numPartitions.head)) {
       logDebug(s"ValidateRequirements failed: different partition num in\n$plan")
       return false
     }
