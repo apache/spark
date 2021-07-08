@@ -19,14 +19,17 @@ package org.apache.spark.util.collection
 
 import java.io._
 import java.util.Comparator
+
 import scala.collection.BufferedIterator
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+
 import com.google.common.io.ByteStreams
+
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.ShuffleWriteMetrics
-import org.apache.spark.internal.{Logging, config}
+import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer.{DeserializationStream, Serializer, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockManager, DiskBlockObjectHelper}
 import org.apache.spark.util.CompletionIterator
