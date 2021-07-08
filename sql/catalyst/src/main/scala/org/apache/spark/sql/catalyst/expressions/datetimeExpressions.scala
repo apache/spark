@@ -217,7 +217,7 @@ case class Now() extends CurrentTimestampLike {
        2020-04-25 15:49:11.914
   """,
   group = "datetime_funcs",
-  since = "3.2.0")
+  since = "3.3.0")
 case class LocalTimestamp() extends CurrentTimestampLike {
   override def dataType: DataType = TimestampNTZType
   override def eval(input: InternalRow): Any = currentTimestampNTZ()

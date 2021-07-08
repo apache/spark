@@ -173,8 +173,8 @@ class ContinuousExecution(
 
     withNewSources.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case (_: CurrentTimestamp | _: CurrentDate | _: LocalTimestamp) =>
-        throw new IllegalStateException(
-          "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
+        throw new IllegalStateException("CurrentTimestamp, CurrentDate and LocalTimestamp not yet" +
+          " supported for continuous processing")
     }
 
     reportTimeTaken("queryPlanning") {
