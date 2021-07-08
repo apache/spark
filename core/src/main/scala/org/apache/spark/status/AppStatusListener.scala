@@ -764,10 +764,10 @@ private[spark] class AppStatusListener(
         speculationStageSummary.killedTasksSummary,
         event.taskInfo.speculative)
 
-      if (stage.activeTasks == 0) {
-        update(stage.speculationStageSummary, now)
+      if (isLastTask) {
+        update(speculationStageSummary, now)
       } else {
-        maybeUpdate(stage.speculationStageSummary, now)
+        maybeUpdate(speculationStageSummary, now)
       }
 
       if (!stage.cleaning && stage.savedTasks.get() > maxTasksPerStage) {

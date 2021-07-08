@@ -414,7 +414,6 @@ private class LiveSpeculationStageSummary(
     )
     new SpeculationStageSummaryWrapper(stageId, attemptId, info)
   }
-
 }
 
 private class LiveStage(var info: StageInfo) extends LiveEntity {
@@ -678,6 +677,7 @@ private class SchedulerPool(name: String) extends LiveEntity {
 }
 
 private[spark] object LiveEntityHelpers {
+
   private def accuValuetoString(value: Any): String = value match {
     case list: java.util.List[_] =>
       // SPARK-30379: For collection accumulator, string representation might

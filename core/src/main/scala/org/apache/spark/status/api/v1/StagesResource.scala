@@ -109,6 +109,16 @@ private[v1] class StagesResource extends BaseAppResource {
   }
 
   @GET
+  @Path("{stageId: \\d+}/{stageAttemptId: \\d+}/speculationSummary")
+  def speculationMetricsData(
+    @PathParam("stageId") stageId: Int,
+    @PathParam("stageAttemptId") attemptId: Int): Any = {
+    withUI { ui =>
+      ui.store.speculationSummary(stageId, attemptId)
+    }
+  }
+
+  @GET
   @Path("{stageId: \\d+}/{stageAttemptId: \\d+}/taskSummary")
   def taskSummary(
       @PathParam("stageId") stageId: Int,

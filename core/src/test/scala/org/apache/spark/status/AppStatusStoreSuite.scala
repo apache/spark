@@ -265,5 +265,4 @@ class AppStatusStoreSuite extends SparkFunSuite {
       ))
     new SpeculationStageSummaryWrapper(stageId, stageAttemptId, speculationStageSummary)
   }
-
 }

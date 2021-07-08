@@ -194,7 +194,8 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "one rdd storage json" -> "applications/local-1422981780767/storage/rdd/0",
     "miscellaneous process" ->
         "applications/application_1555004656427_0144/allmiscellaneousprocess",
-    "stage with speculation summary" -> "applications/application_1614367313143_2793/stages/0"
+    "stage with speculation summary" ->
+      "applications/application_1625351839633_843287/stages/0/0/speculationSummary",
   )
 
   // run a bunch of characterization tests -- just verify the behavior is the same as what is saved
