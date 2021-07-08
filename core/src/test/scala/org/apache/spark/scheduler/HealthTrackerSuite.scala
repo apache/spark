@@ -74,9 +74,11 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
    * something similar, since we know the universe of values that might appear in these sets.
    */
   def assertEquivalentToSet(f: String => Boolean, expected: Set[String]): Unit = {
-    val actual = allExecutorAndHostIds.filter(f)
-    assert(actual.size === expected.size)
-    assert(actual.forall(expected.contains))
+    allExecutorAndHostIds.foreach { id =>
+      val actual = f(id)
+      val exp = expected.contains(id)
+      assert(actual === exp, raw"""for string "$id" """)
+    }
   }
 
   def mockTaskSchedWithConf(conf: SparkConf): TaskSchedulerImpl = {
