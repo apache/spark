@@ -107,7 +107,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     assert(store.hasCommitted)
     val storeMetrics = store.metrics
     assert(storeMetrics.numKeys === 1)
-    assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) == 1L)
+    assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_COPIED) > 0L)
     assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_FILES_REUSED) == 0L)
     assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_BYTES_COPIED) > 0L)
     assert(getCustomMetric(storeMetrics, CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED) > 0L)
