@@ -20,7 +20,6 @@
 import logging
 from argparse import ArgumentParser
 from importlib import import_module
-import inspect
 import os
 import re
 import shutil
@@ -78,12 +77,12 @@ def _contain_unittests_class(module_name, slow=False):
     False
     """
     module = import_module(module_name)
-    for _, _class in inspect.getmembers(module, inspect.isclass):
-        if issubclass(_class, unittest.TestCase):
-            if slow and hasattr(module, 'is_slow_test'):
-                return True
-            if not slow and not hasattr(module, 'is_slow_test'):
-                return True
+    counts = unittest.defaultTestLoader.loadTestsFromModule(module).countTestCases()
+    if counts:
+        if slow and hasattr(module, 'is_slow_test'):
+            return True
+        if not slow and not hasattr(module, 'is_slow_test'):
+            return True
     return False
 
 
@@ -105,22 +104,22 @@ def _discover_python_unittests(paths):
     -------
     A set of complete test module name discovered under specified paths
 
-    >>> sorted([x for x in _discover_python_unittests(['pyspark/tests'])])
-    ... # doctest: +NORMALIZE_WHITESPACE
-    ['pyspark.tests.test_appsubmit', 'pyspark.tests.test_broadcast', 'pyspark.tests.test_conf',
-    'pyspark.tests.test_context', 'pyspark.tests.test_daemon', 'pyspark.tests.test_install_spark',
-    'pyspark.tests.test_join', 'pyspark.tests.test_pin_thread', 'pyspark.tests.test_profiler',
-    'pyspark.tests.test_rdd', 'pyspark.tests.test_rddbarrier', 'pyspark.tests.test_readwrite',
-    'pyspark.tests.test_serializers', 'pyspark.tests.test_shuffle',
-    'pyspark.tests.test_taskcontext', 'pyspark.tests.test_util', 'pyspark.tests.test_worker']
-    >>> sorted([x for x in _discover_python_unittests([("pyspark/pandas/tests", "slow")])])
-    ... # doctest: +NORMALIZE_WHITESPACE
+    >>> sorted([x for x in _discover_python_unittests(
+    ...     ['pyspark/pandas/tests/plot'])])  # doctest: +NORMALIZE_WHITESPACE
+    ['pyspark.pandas.tests.plot.test_frame_plot',
+    'pyspark.pandas.tests.plot.test_frame_plot_matplotlib',
+    'pyspark.pandas.tests.plot.test_frame_plot_plotly',
+    'pyspark.pandas.tests.plot.test_series_plot',
+    'pyspark.pandas.tests.plot.test_series_plot_matplotlib',
+    'pyspark.pandas.tests.plot.test_series_plot_plotly']
+    >>> sorted([x for x in _discover_python_unittests(
+    ...     [("pyspark/pandas/tests", "slow")])]) # doctest: +NORMALIZE_WHITESPACE
     ['pyspark.pandas.tests.indexes.test_base', 'pyspark.pandas.tests.indexes.test_datetime',
     'pyspark.pandas.tests.test_dataframe', 'pyspark.pandas.tests.test_groupby',
     'pyspark.pandas.tests.test_indexing', 'pyspark.pandas.tests.test_ops_on_diff_frames',
     'pyspark.pandas.tests.test_ops_on_diff_frames_groupby', 'pyspark.pandas.tests.test_series',
     'pyspark.pandas.tests.test_stats']
-    >>> sorted([x for x in _discover_python_unittests([('pyspark/tests', 'slow')])])
+    >>> sorted([x for x in _discover_python_unittests([('pyspark/pandas/tests/plot', 'slow')])])
     []
     """
     if not paths:
