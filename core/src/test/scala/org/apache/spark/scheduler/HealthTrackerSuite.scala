@@ -62,11 +62,11 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
   // All executors and hosts used in tests should be in this set, so that [[assertEquivalentToSet]]
   // works.  Its OK if its got extraneous entries
   val allExecutorAndHostIds = {
-    (('A' to 'Z')++ (1 to 100).map(_.toString))
-      .flatMap{ suffix =>
+    ('A' to 'Z')
+      .flatMap { suffix =>
         Seq(s"host$suffix", s"host-$suffix")
       }
-  }.toSet
+  }.toSet ++ (1 to 100).map(_.toString)
 
   /**
    * Its easier to write our tests as if we could directly look at the sets of nodes & executors in
@@ -74,11 +74,9 @@ class HealthTrackerSuite extends SparkFunSuite with BeforeAndAfterEach with Mock
    * something similar, since we know the universe of values that might appear in these sets.
    */
   def assertEquivalentToSet(f: String => Boolean, expected: Set[String]): Unit = {
-    allExecutorAndHostIds.foreach { id =>
-      val actual = f(id)
-      val exp = expected.contains(id)
-      assert(actual === exp, raw"""for string "$id" """)
-    }
+    val actual = allExecutorAndHostIds.filter(f)
+    assert(actual.size === expected.size)
+    assert(actual.forall(expected.contains))
   }
 
   def mockTaskSchedWithConf(conf: SparkConf): TaskSchedulerImpl = {
