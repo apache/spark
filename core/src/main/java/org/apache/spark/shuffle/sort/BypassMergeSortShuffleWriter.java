@@ -274,10 +274,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
           try {
             for (DiskBlockObjectWriter writer : partitionWriters) {
               // This method explicitly does _not_ throw exceptions:
-              File file = writer.revertPartialWritesAndClose();
-              if (!file.delete()) {
-                logger.error("Error while deleting file {}", file.getAbsolutePath());
-              }
+              DiskBlockObjectHelper$.MODULE$.deleteAbnormalDiskBlockObjectFile(writer);
             }
           } finally {
             partitionWriters = null;

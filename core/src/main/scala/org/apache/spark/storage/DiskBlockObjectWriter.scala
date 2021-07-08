@@ -288,3 +288,19 @@ private[spark] class DiskBlockObjectWriter(
     bs.flush()
   }
 }
+
+private[spark] object DiskBlockObjectHelper extends Logging {
+
+  /**
+   * Reverts writes that haven't been committed yet and delete the object file hold by the
+   * DiskBlockObjectWriter.
+   */
+  def deleteAbnormalDiskBlockObjectFile(writer: DiskBlockObjectWriter): Unit = {
+    val file = writer.revertPartialWritesAndClose()
+    if (file.exists()) {
+      if (!file.delete()) {
+        logWarning(s"Error deleting $file")
+      }
+    }
+  }
+}
