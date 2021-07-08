@@ -259,7 +259,7 @@ struct<DATE '2019-01-01':date>
 -- !query
 select timestamp '2019-01-01\t'
 -- !query schema
-struct<1546300800000000:timestamp_ntz>
+struct<TIMESTAMP_NTZ '2019-01-01 00:00:00':timestamp_ntz>
 -- !query output
 2019-01-01 00:00:00
 
@@ -295,7 +295,7 @@ select timestamp '2019-01-01中文'
 -- !query
 select timestamp'2011-11-11 11:11:11' + interval '2' day
 -- !query schema
-struct<1321009871000000 + INTERVAL '2 days':timestamp_ntz>
+struct<TIMESTAMP_NTZ '2011-11-11 11:11:11' + INTERVAL '2 days':timestamp_ntz>
 -- !query output
 2011-11-13 11:11:11
 
@@ -303,7 +303,7 @@ struct<1321009871000000 + INTERVAL '2 days':timestamp_ntz>
 -- !query
 select timestamp'2011-11-11 11:11:11' - interval '2' day
 -- !query schema
-struct<1321009871000000 - INTERVAL '2 days':timestamp_ntz>
+struct<TIMESTAMP_NTZ '2011-11-11 11:11:11' - INTERVAL '2 days':timestamp_ntz>
 -- !query output
 2011-11-09 11:11:11
 
@@ -360,7 +360,7 @@ cannot resolve '1 + (- INTERVAL '2 seconds')' due to data type mismatch: argumen
 -- !query
 select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678'
 -- !query schema
-struct<(DATE '2020-01-01' - 1570356672345678):interval day to second>
+struct<(DATE '2020-01-01' - TIMESTAMP_NTZ '2019-10-06 10:11:12.345678'):interval day to second>
 -- !query output
 86 13:48:47.654322000
 
@@ -368,7 +368,7 @@ struct<(DATE '2020-01-01' - 1570356672345678):interval day to second>
 -- !query
 select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01'
 -- !query schema
-struct<(1570356672345678 - DATE '2020-01-01'):interval day to second>
+struct<(TIMESTAMP_NTZ '2019-10-06 10:11:12.345678' - DATE '2020-01-01'):interval day to second>
 -- !query output
 -86 13:48:47.654322000
 
@@ -376,7 +376,7 @@ struct<(1570356672345678 - DATE '2020-01-01'):interval day to second>
 -- !query
 select timestamp'2019-10-06 10:11:12.345678' - null
 -- !query schema
-struct<(1570356672345678 - NULL):interval day to second>
+struct<(TIMESTAMP_NTZ '2019-10-06 10:11:12.345678' - NULL):interval day to second>
 -- !query output
 NULL
 
@@ -384,7 +384,7 @@ NULL
 -- !query
 select null - timestamp'2019-10-06 10:11:12.345678'
 -- !query schema
-struct<(NULL - 1570356672345678):interval day to second>
+struct<(NULL - TIMESTAMP_NTZ '2019-10-06 10:11:12.345678'):interval day to second>
 -- !query output
 NULL
 
@@ -535,7 +535,7 @@ select date_add(timestamp'2011-11-11', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_add(1320969600000000, 1)' due to data type mismatch: argument 1 requires date type, however, '1320969600000000' is of timestamp_ntz type.; line 1 pos 7
+cannot resolve 'date_add(TIMESTAMP_NTZ '2011-11-11 00:00:00', 1)' due to data type mismatch: argument 1 requires date type, however, 'TIMESTAMP_NTZ '2011-11-11 00:00:00'' is of timestamp_ntz type.; line 1 pos 7
 
 
 -- !query
@@ -569,7 +569,7 @@ select date_sub(timestamp'2011-11-11', 1)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'date_sub(1320969600000000, 1)' due to data type mismatch: argument 1 requires date type, however, '1320969600000000' is of timestamp_ntz type.; line 1 pos 7
+cannot resolve 'date_sub(TIMESTAMP_NTZ '2011-11-11 00:00:00', 1)' due to data type mismatch: argument 1 requires date type, however, 'TIMESTAMP_NTZ '2011-11-11 00:00:00'' is of timestamp_ntz type.; line 1 pos 7
 
 
 -- !query
