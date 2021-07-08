@@ -771,8 +771,7 @@ object IntervalUtils {
       minuteStr,
       secondStr,
       millisStr,
-      microsStr,
-      nanosStr)
+      microsStr)
   }
 
   /**
