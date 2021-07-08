@@ -1978,7 +1978,7 @@ class DataSourceV2SQLSuite
       sql(
         s"""
            |CREATE TABLE $t (
-           |  a bigint,
+           |  a bigint NOT NULL,
            |  b bigint,
            |  c bigint,
            |  `extra col` ARRAY<INT>,
@@ -1996,7 +1996,7 @@ class DataSourceV2SQLSuite
       val showDDL = getShowCreateDDL(s"SHOW CREATE TABLE $t")
       assert(showDDL === Array(
         "CREATE TABLE testcat.ns1.ns2.tbl (",
-        "`a` BIGINT,",
+        "`a` BIGINT NOT NULL,",
         "`b` BIGINT,",
         "`c` BIGINT,",
         "`extra col` ARRAY<INT>,",
