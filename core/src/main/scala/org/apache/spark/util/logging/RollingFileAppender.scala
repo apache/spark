@@ -42,8 +42,9 @@ private[spark] class RollingFileAppender(
     activeFile: File,
     val rollingPolicy: RollingPolicy,
     conf: SparkConf,
-    bufferSize: Int = RollingFileAppender.DEFAULT_BUFFER_SIZE
-  ) extends FileAppender(inputStream, activeFile, bufferSize) {
+    bufferSize: Int = RollingFileAppender.DEFAULT_BUFFER_SIZE,
+    closeStreams: Boolean = false
+  ) extends FileAppender(inputStream, activeFile, bufferSize, closeStreams) {
 
   private val maxRetainedFiles = conf.get(config.EXECUTOR_LOGS_ROLLING_MAX_RETAINED_FILES)
   private val enableCompression = conf.get(config.EXECUTOR_LOGS_ROLLING_ENABLE_COMPRESSION)
