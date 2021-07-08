@@ -262,6 +262,7 @@ case class CurrentBatchTimestamp(
     val timestampUs = millisToMicros(timestampMs)
     dataType match {
       case _: TimestampType => Literal(timestampUs, TimestampType)
+      case _: TimestampNTZType => Literal(timestampUs, TimestampNTZType)
       case _: DateType => Literal(microsToDays(timestampUs, zoneId), DateType)
     }
   }
