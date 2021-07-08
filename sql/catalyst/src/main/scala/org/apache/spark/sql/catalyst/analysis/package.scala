@@ -47,7 +47,7 @@ package object analysis {
       throw new AnalysisException(msg, t.origin.line, t.origin.startPosition, cause = Some(cause))
     }
 
-    def failAnalysis(errorClass: String, messageParameters: Seq[String]): Nothing = {
+    def failAnalysis(errorClass: String, messageParameters: Array[String]): Nothing = {
       throw new AnalysisException(
         errorClass = errorClass,
         messageParameters = messageParameters,
