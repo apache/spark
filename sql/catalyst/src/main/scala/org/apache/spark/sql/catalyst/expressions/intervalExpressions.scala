@@ -154,7 +154,7 @@ object ExtractIntervalPart {
         ExtractIntervalMinutes(source)
       case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", DayTimeIntervalType(start, end))
         if isUnitInIntervalRange(SECOND, start, end) =>
-        ExtractIntervalSeconds(source)
+        ExtractANSIIntervalSeconds(source)
       case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", CalendarIntervalType) =>
         ExtractIntervalSeconds(source)
       case _ => errorHandleFunc
