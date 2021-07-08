@@ -64,8 +64,12 @@ object RocksDBStateEncoder {
   }
 
   def decodeToUnsafeRow(bytes: Array[Byte], numFields: Int): UnsafeRow = {
-    val row = new UnsafeRow(numFields)
-    decodeToUnsafeRow(bytes, row)
+    if (bytes != null) {
+      val row = new UnsafeRow(numFields)
+      decodeToUnsafeRow(bytes, row)
+    } else {
+      null
+    }
   }
 
   def decodeToUnsafeRow(bytes: Array[Byte], reusedRow: UnsafeRow): UnsafeRow = {
@@ -76,7 +80,9 @@ object RocksDBStateEncoder {
         Platform.BYTE_ARRAY_OFFSET + STATE_ENCODING_NUM_VERSION_BYTES,
         bytes.length - STATE_ENCODING_NUM_VERSION_BYTES)
       reusedRow
-    } else null
+    } else {
+      null
+    }
   }
 }
 
