@@ -18,7 +18,7 @@
 addSbtPlugin("com.etsy" % "sbt-checkstyle-plugin" % "3.1.1")
 
 // sbt-checkstyle-plugin uses an old version of checkstyle. Match it to Maven's.
-libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "8.25"
+libraryDependencies += "com.puppycrawl.tools" % "checkstyle" % "8.39"
 
 // checkstyle uses guava 23.0.
 libraryDependencies += "com.google.guava" % "guava" % "23.0"
@@ -39,6 +39,6 @@ libraryDependencies += "org.ow2.asm"  % "asm" % "9.1"
 
 libraryDependencies += "org.ow2.asm"  % "asm-commons" % "9.1"
 
-addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.2")
+addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-pom-reader" % "2.2.0")

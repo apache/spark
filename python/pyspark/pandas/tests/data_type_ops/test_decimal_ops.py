@@ -21,8 +21,9 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from pyspark.pandas.data_type_ops.num_ops import DecimalOps
 from pyspark import pandas as ps
+from pyspark.pandas.config import option_context
+from pyspark.pandas.data_type_ops.num_ops import DecimalOps
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
@@ -35,6 +36,14 @@ class DecimalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
     def decimal_psser(self):
         return ps.from_pandas(self.decimal_pser)
+
+    @property
+    def other_decimal_pser(self):
+        return pd.Series([d.Decimal(2.0), d.Decimal(1.0), d.Decimal(-3.0)])
+
+    @property
+    def other_decimal_psser(self):
+        return ps.from_pandas(self.other_decimal_pser)
 
     @property
     def float_pser(self):
@@ -53,6 +62,49 @@ class DecimalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertEqual(self.float_psser._dtype_op.pretty_name, "fractions")
         self.assert_eq(self.decimal_pser.isnull(), self.decimal_psser.isnull())
         self.assert_eq(self.float_pser.isnull(), self.float_psser.isnull())
+
+    def test_neg(self):
+        self.assert_eq(-self.other_decimal_pser, -self.other_decimal_psser)
+
+    def test_abs(self):
+        self.assert_eq(abs(self.other_decimal_pser), abs(self.other_decimal_psser))
+
+    def test_invert(self):
+        self.assertRaises(TypeError, lambda: ~self.decimal_psser)
+
+    def test_eq(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.decimal_pser == self.other_decimal_pser,
+                (self.decimal_psser == self.other_decimal_psser).sort_index(),
+            )
+            self.assert_eq(
+                self.decimal_pser == self.decimal_pser,
+                (self.decimal_psser == self.decimal_psser).sort_index(),
+            )
+
+    def test_ne(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.decimal_pser != self.other_decimal_pser,
+                (self.decimal_psser != self.other_decimal_psser).sort_index(),
+            )
+            self.assert_eq(
+                self.decimal_pser != self.decimal_pser,
+                (self.decimal_psser != self.decimal_psser).sort_index(),
+            )
+
+    def test_lt(self):
+        self.assertRaises(TypeError, lambda: self.decimal_psser < self.other_decimal_psser)
+
+    def test_le(self):
+        self.assertRaises(TypeError, lambda: self.decimal_psser <= self.other_decimal_psser)
+
+    def test_gt(self):
+        self.assertRaises(TypeError, lambda: self.decimal_psser > self.other_decimal_psser)
+
+    def test_ge(self):
+        self.assertRaises(TypeError, lambda: self.decimal_psser >= self.other_decimal_psser)
 
 
 if __name__ == "__main__":

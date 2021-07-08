@@ -1983,4 +1983,18 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(
       s"class $className doesn't implement interface UserDefinedAggregateFunction")
   }
+
+  def missingFieldError(
+      fieldName: Seq[String], table: ResolvedTable, context: Expression): Throwable = {
+    throw new AnalysisException(
+      s"Missing field ${fieldName.quoted} in table ${table.name} with schema:\n" +
+        table.schema.treeString,
+      context.origin.line,
+      context.origin.startPosition)
+  }
+
+  def invalidFieldName(fieldName: Seq[String], path: Seq[String]): Throwable = {
+    new AnalysisException(
+      s"Field name ${fieldName.quoted} is invalid, ${path.quoted} is not a struct.")
+  }
 }

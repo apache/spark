@@ -130,7 +130,11 @@ case class AdaptiveSparkPlanExec(
     }
   }
 
-  @transient private val costEvaluator = SimpleCostEvaluator
+  @transient private val costEvaluator =
+    conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
+      case Some(className) => CostEvaluator.instantiate(className, session.sparkContext.getConf)
+      case _ => SimpleCostEvaluator
+    }
 
   @transient val initialPlan = context.session.withActive {
     applyPhysicalRules(
