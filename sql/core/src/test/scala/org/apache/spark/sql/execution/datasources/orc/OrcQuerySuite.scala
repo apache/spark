@@ -521,6 +521,26 @@ abstract class OrcQueryTest extends OrcTest {
     }
   }
 
+  test("ORC doesn't support TimestampNTZ") {
+    val expectedMessage = "ORC data source does not support timestamp_ntz data type"
+    // check write path
+    withTempPath { dir =>
+      val msg = intercept[AnalysisException] {
+        sql("SELECT timestamp_ntz'2021-01-01 00:00:00'").write.orc(dir.getCanonicalPath)
+      }.getMessage
+      assert(msg.contains(expectedMessage))
+    }
+    // check read path
+    withTempPath { dir =>
+      sql("SELECT timestamp_ltz'2021-01-01 00:00:00' as ts").write.orc(dir.getCanonicalPath)
+      val schema = new StructType().add(StructField("ts", TimestampNTZType))
+      val msg = intercept[AnalysisException] {
+        spark.read.schema(schema).orc(dir.getCanonicalPath)
+      }.getMessage
+      assert(msg.contains(expectedMessage))
+    }
+  }
+
   test("read from multiple orc input paths") {
     val path1 = Utils.createTempDir()
     val path2 = Utils.createTempDir()
