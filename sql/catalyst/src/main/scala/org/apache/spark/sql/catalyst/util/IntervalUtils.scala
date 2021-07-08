@@ -762,18 +762,6 @@ object IntervalUtils {
   private final val microsStr = unitToUtf8("microsecond")
   private final val nanosStr = unitToUtf8("nanosecond")
 
-  def intervalUnits: Seq[UTF8String] = {
-    Seq(yearStr,
-      monthStr,
-      weekStr,
-      dayStr,
-      hourStr,
-      minuteStr,
-      secondStr,
-      millisStr,
-      microsStr)
-  }
-
   /**
    * A safe version of `stringToInterval`. It returns null for invalid input string.
    */

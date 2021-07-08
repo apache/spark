@@ -698,15 +698,16 @@ class ExpressionParserSuite extends AnalysisTest {
     // Single Intervals.
     val forms = Seq("", "s")
     val values = Seq("0", "10", "-7", "21")
-    IntervalUtils.intervalUnits.foreach { unit =>
-      forms.foreach { form =>
-         values.foreach { value =>
-           val expected = intervalLiteral(unit, value)
-           checkIntervals(s"$value $unit$form", expected)
-           checkIntervals(s"'$value' $unit$form", expected)
-         }
+    Seq("year", "month", "week", "day", "hour", "minute", "second", "millisecond", "microsecond")
+      .foreach { unit =>
+        forms.foreach { form =>
+          values.foreach { value =>
+            val expected = intervalLiteral(unit, value)
+            checkIntervals(s"$value $unit$form", expected)
+            checkIntervals(s"'$value' $unit$form", expected)
+          }
+        }
       }
-    }
 
     // Hive nanosecond notation.
     checkIntervals("13.123456789 seconds", intervalLiteral("second", "13.123456789"))
