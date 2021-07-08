@@ -237,8 +237,8 @@ object IntervalUtils {
   private def toYMInterval(year: String, month: String, sign: Int): Int = {
     safeToInterval("year-month") {
       val years = toLongWithRange(yearStr, year, 0, Integer.MAX_VALUE / MONTHS_PER_YEAR)
-      val totalMonths = sign * (years * MONTHS_PER_YEAR +
-        toLongWithRange(monthStr, month, 0, 11))
+      val totalMonths =
+        sign * (years * MONTHS_PER_YEAR + toLongWithRange(monthStr, month, 0, 11))
       Math.toIntExact(totalMonths)
     }
   }
