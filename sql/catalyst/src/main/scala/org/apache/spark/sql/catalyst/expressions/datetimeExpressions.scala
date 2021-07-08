@@ -215,8 +215,6 @@ case class Now() extends CurrentTimestampLike {
     Examples:
       > SELECT _FUNC_();
        2020-04-25 15:49:11.914
-      > SELECT _FUNC_;
-       2020-04-25 15:49:11.914
   """,
   group = "datetime_funcs",
   since = "3.2.0")
