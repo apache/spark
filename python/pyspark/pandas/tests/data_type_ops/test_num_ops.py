@@ -406,7 +406,14 @@ class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
     def test_neg(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
-            self.check_extension(-pser, -psser)
+            if LooseVersion(pd.__version__) < LooseVersion("1.1.3"):
+                # pandas < 1.1.0: object dtype is returned after negation
+                # pandas 1.1.1 and 1.1.2:
+                #   a TypeError "bad operand type for unary -: 'IntegerArray'" is raised
+                # Pleare refer to https://github.com/pandas-dev/pandas/issues/36063.
+                self.check_extension(pd.Series([-1, -2, -3, None], dtype=pser.dtype), -psser)
+            else:
+                self.check_extension(-pser, -psser)
 
     def test_abs(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
