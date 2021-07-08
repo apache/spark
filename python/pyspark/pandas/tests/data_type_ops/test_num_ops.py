@@ -410,7 +410,7 @@ class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 # pandas < 1.1.0: object dtype is returned after negation
                 # pandas 1.1.1 and 1.1.2:
                 #   a TypeError "bad operand type for unary -: 'IntegerArray'" is raised
-                # Pleare refer to https://github.com/pandas-dev/pandas/issues/36063.
+                # Please refer to https://github.com/pandas-dev/pandas/issues/36063.
                 self.check_extension(pd.Series([-1, -2, -3, None], dtype=pser.dtype), -psser)
             else:
                 self.check_extension(-pser, -psser)
