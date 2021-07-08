@@ -33,7 +33,7 @@ final class ShuffleInMemorySorter {
     public int compare(PackedRecordPointer left, PackedRecordPointer right) {
       int leftId = left.getPartitionId();
       int rightId = right.getPartitionId();
-      return leftId < rightId ? -1 : (leftId > rightId ? 1 : 0);
+      return Integer.compare(leftId, rightId);
     }
   }
   private static final SortComparator SORT_COMPARATOR = new SortComparator();
