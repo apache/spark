@@ -128,7 +128,7 @@ class NumericOps(DataTypeOps):
         return column_op(rmod)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, column_op(F.bitwiseNOT)(operand))
+        return cast(IndexOpsLike, column_op(F.bitwise_not)(operand))
 
     def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
         return cast(IndexOpsLike, column_op(Column.__neg__)(operand))
