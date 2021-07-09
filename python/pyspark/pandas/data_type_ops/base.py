@@ -49,6 +49,7 @@ from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
     extension_object_dtypes_available,
+    spark_type_to_pandas_dtype,
 )
 
 if extension_dtypes_available:
@@ -79,7 +80,7 @@ def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = 
 
 
 def transform_boolean_operand_to_numeric(
-    operand: Any, *, dtype: Optional[Dtype] = None, spark_type: Optional[DataType] = None
+    operand: Any, *, spark_type: Optional[DataType] = None
 ) -> Any:
     """Transform boolean operand to numeric.
 
@@ -91,9 +92,11 @@ def transform_boolean_operand_to_numeric(
     from pyspark.pandas.base import IndexOpsMixin
 
     if isinstance(operand, IndexOpsMixin) and isinstance(operand.spark.data_type, BooleanType):
-        assert dtype, "dtype must be provided if the operand is a boolean IndexOpsMixin"
         assert spark_type, "spark_type must be provided if the operand is a boolean IndexOpsMixin"
         assert isinstance(spark_type, NumericType), "spark_type must be NumericType"
+        dtype = spark_type_to_pandas_dtype(
+            spark_type, use_extension_dtypes=operand._internal.data_fields[0].is_extension_dtype
+        )
         return operand._with_new_scol(
             operand.spark.column.cast(spark_type),
             field=operand._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),

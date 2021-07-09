@@ -32,7 +32,7 @@ from pyspark.pandas.data_type_ops.base import (
     _as_other_type,
 )
 from pyspark.pandas.spark import functions as SF
-from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.typedef.typehints import as_spark_type, extension_dtypes, pandas_on_spark_type
 from pyspark.sql import functions as F
 from pyspark.sql.column import Column
 from pyspark.sql.types import BooleanType, StringType
@@ -56,17 +56,14 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, bool):
             return left.__or__(right)
         elif isinstance(right, numbers.Number):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return left + right
         else:
             assert isinstance(right, IndexOpsMixin)
             if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BooleanType):
                 return left.__or__(right)
             else:
-                left = transform_boolean_operand_to_numeric(
-                    left, dtype=right.dtype, spark_type=right.spark.data_type
-                )
+                left = transform_boolean_operand_to_numeric(left, spark_type=right.spark.data_type)
                 return left + right
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -75,14 +72,11 @@ class BooleanOps(DataTypeOps):
                 "Subtraction can not be applied to %s and the given type." % self.pretty_name
             )
         if isinstance(right, numbers.Number):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return left - right
         else:
             assert isinstance(right, IndexOpsMixin)
-            left = transform_boolean_operand_to_numeric(
-                left, dtype=right.dtype, spark_type=right.spark.data_type
-            )
+            left = transform_boolean_operand_to_numeric(left, spark_type=right.spark.data_type)
             return left - right
 
     def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -93,17 +87,14 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, bool):
             return left.__and__(right)
         elif isinstance(right, numbers.Number):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return left * right
         else:
             assert isinstance(right, IndexOpsMixin)
             if isinstance(right, IndexOpsMixin) and isinstance(right.spark.data_type, BooleanType):
                 return left.__and__(right)
             else:
-                left = transform_boolean_operand_to_numeric(
-                    left, dtype=right.dtype, spark_type=right.spark.data_type
-                )
+                left = transform_boolean_operand_to_numeric(left, spark_type=right.spark.data_type)
                 return left * right
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -112,14 +103,11 @@ class BooleanOps(DataTypeOps):
                 "True division can not be applied to %s and the given type." % self.pretty_name
             )
         if isinstance(right, numbers.Number):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return left / right
         else:
             assert isinstance(right, IndexOpsMixin)
-            left = transform_boolean_operand_to_numeric(
-                left, dtype=right.dtype, spark_type=right.spark.data_type
-            )
+            left = transform_boolean_operand_to_numeric(left, spark_type=right.spark.data_type)
             return left / right
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -128,14 +116,11 @@ class BooleanOps(DataTypeOps):
                 "Floor division can not be applied to %s and the given type." % self.pretty_name
             )
         if isinstance(right, numbers.Number):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return left // right
         else:
             assert isinstance(right, IndexOpsMixin)
-            left = transform_boolean_operand_to_numeric(
-                left, dtype=right.dtype, spark_type=right.spark.data_type
-            )
+            left = transform_boolean_operand_to_numeric(left, spark_type=right.spark.data_type)
             return left // right
 
     def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -144,14 +129,11 @@ class BooleanOps(DataTypeOps):
                 "Modulo can not be applied to %s and the given type." % self.pretty_name
             )
         if isinstance(right, numbers.Number):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return left % right
         else:
             assert isinstance(right, IndexOpsMixin)
-            left = transform_boolean_operand_to_numeric(
-                left, dtype=right.dtype, spark_type=right.spark.data_type
-            )
+            left = transform_boolean_operand_to_numeric(left, spark_type=right.spark.data_type)
             return left % right
 
     def pow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -160,22 +142,18 @@ class BooleanOps(DataTypeOps):
                 "Exponentiation can not be applied to %s and the given type." % self.pretty_name
             )
         if isinstance(right, numbers.Number):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return left ** right
         else:
             assert isinstance(right, IndexOpsMixin)
-            left = transform_boolean_operand_to_numeric(
-                left, dtype=right.dtype, spark_type=right.spark.data_type
-            )
+            left = transform_boolean_operand_to_numeric(left, spark_type=right.spark.data_type)
             return left ** right
 
     def radd(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, bool):
             return left.__or__(right)
         elif isinstance(right, numbers.Number):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return right + left
         else:
             raise TypeError(
@@ -184,8 +162,7 @@ class BooleanOps(DataTypeOps):
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return right - left
         else:
             raise TypeError(
@@ -196,8 +173,7 @@ class BooleanOps(DataTypeOps):
         if isinstance(right, bool):
             return left.__and__(right)
         elif isinstance(right, numbers.Number):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return right * left
         else:
             raise TypeError(
@@ -206,8 +182,7 @@ class BooleanOps(DataTypeOps):
 
     def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return right / left
         else:
             raise TypeError(
@@ -216,8 +191,7 @@ class BooleanOps(DataTypeOps):
 
     def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return right // left
         else:
             raise TypeError(
@@ -226,8 +200,7 @@ class BooleanOps(DataTypeOps):
 
     def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return right ** left
         else:
             raise TypeError(
@@ -236,8 +209,7 @@ class BooleanOps(DataTypeOps):
 
     def rmod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, numbers.Number) and not isinstance(right, bool):
-            dtype, spark_type = pandas_on_spark_type(type(right))
-            left = transform_boolean_operand_to_numeric(left, dtype=dtype, spark_type=spark_type)
+            left = transform_boolean_operand_to_numeric(left, spark_type=as_spark_type(type(right)))
             return right % left
         else:
             raise TypeError(
