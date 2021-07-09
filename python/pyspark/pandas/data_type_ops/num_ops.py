@@ -33,7 +33,6 @@ from pyspark.pandas.data_type_ops.base import (
     _as_other_type,
     _as_string_type,
 )
-from pyspark.pandas.internal import InternalField
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
 from pyspark.sql import functions as F
@@ -55,38 +54,42 @@ class NumericOps(DataTypeOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Addition can not be applied to given types.")
 
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
-
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return column_op(Column.__add__)(left, right)
 
     def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Subtraction can not be applied to given types.")
 
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
-
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return column_op(Column.__sub__)(left, right)
 
     def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Modulo can not be applied to given types.")
 
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
-
         def mod(left: Column, right: Any) -> Column:
             return ((left % right) + right) % right
 
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return column_op(mod)(left, right)
 
     def pow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Exponentiation can not be applied to given types.")
 
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
-
         def pow_func(left: Column, right: Any) -> Column:
             return F.when(left == 1, left).otherwise(Column.__pow__(left, right))
 
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return column_op(pow_func)(left, right)
 
     def radd(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -179,28 +182,28 @@ class IntegralOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Multiplication can not be applied to given types.")
 
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
-
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return column_op(Column.__mul__)(left, right)
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
 
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
-
         def truediv(left: Column, right: Any) -> Column:
             return F.when(
                 SF.lit(right != 0) | SF.lit(right).isNull(), left.__div__(right)
             ).otherwise(SF.lit(np.inf).__div__(left))
 
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return numpy_column_op(truediv)(left, right)
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Floor division can not be applied to given types.")
-
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def floordiv(left: Column, right: Any) -> Column:
             return F.when(SF.lit(right is np.nan), np.nan).otherwise(
@@ -209,6 +212,9 @@ class IntegralOps(NumericOps):
                 ).otherwise(SF.lit(np.inf).__div__(left))
             )
 
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return numpy_column_op(floordiv)(left, right)
 
     def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -220,7 +226,9 @@ class IntegralOps(NumericOps):
                 SF.lit(right).__truediv__(left)
             )
 
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return numpy_column_op(rtruediv)(left, right)
 
     def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -232,7 +240,9 @@ class IntegralOps(NumericOps):
                 F.floor(SF.lit(right).__div__(left))
             )
 
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return numpy_column_op(rfloordiv)(left, right)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
@@ -262,15 +272,14 @@ class FractionalOps(NumericOps):
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Multiplication can not be applied to given types.")
 
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
-
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return column_op(Column.__mul__)(left, right)
 
     def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("True division can not be applied to given types.")
-
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def truediv(left: Column, right: Any) -> Column:
             return F.when(
@@ -281,13 +290,14 @@ class FractionalOps(NumericOps):
                 )
             )
 
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return numpy_column_op(truediv)(left, right)
 
     def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if not is_valid_operand_for_numeric_arithmetic(right):
             raise TypeError("Floor division can not be applied to given types.")
-
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
 
         def floordiv(left: Column, right: Any) -> Column:
             return F.when(SF.lit(right is np.nan), np.nan).otherwise(
@@ -300,6 +310,9 @@ class FractionalOps(NumericOps):
                 )
             )
 
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return numpy_column_op(floordiv)(left, right)
 
     def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -311,7 +324,9 @@ class FractionalOps(NumericOps):
                 SF.lit(right).__truediv__(left)
             )
 
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return numpy_column_op(rtruediv)(left, right)
 
     def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
@@ -325,7 +340,9 @@ class FractionalOps(NumericOps):
                 )
             )
 
-        right = transform_boolean_operand_to_numeric(right, left.spark.data_type)
+        right = transform_boolean_operand_to_numeric(
+            right, dtype=left.dtype, spark_type=left.spark.data_type
+        )
         return numpy_column_op(rfloordiv)(left, right)
 
     def isnull(self, index_ops: IndexOpsLike) -> IndexOpsLike:
@@ -351,7 +368,7 @@ class FractionalOps(NumericOps):
                 ).otherwise(index_ops.spark.column.cast(spark_type))
             return index_ops._with_new_scol(
                 scol.alias(index_ops._internal.data_spark_column_names[0]),
-                field=InternalField(dtype=dtype),
+                field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
             )
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype, null_str=str(np.nan))
