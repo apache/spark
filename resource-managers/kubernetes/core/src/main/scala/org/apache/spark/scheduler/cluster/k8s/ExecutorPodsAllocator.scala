@@ -116,8 +116,10 @@ private[spark] class ExecutorPodsAllocator(
           .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
       }
     }
-    snapshotsStore.addSubscriber(podAllocationDelay) {
-      onNewSnapshots(applicationId, schedulerBackend, _)
+    if (!useReplicasets) {
+      snapshotsStore.addSubscriber(podAllocationDelay) {
+        onNewSnapshots(applicationId, schedulerBackend, _)
+      }
     }
   }
 
@@ -143,6 +145,8 @@ private[spark] class ExecutorPodsAllocator(
       applicationId: String,
       schedulerBackend: KubernetesClusterSchedulerBackend,
       snapshots: Seq[ExecutorPodsSnapshot]): Unit = {
+    // we don't need to manage snapshots if K8s is doing the scheduling.
+    if (useReplicasets) return;
     val k8sKnownExecIds = snapshots.flatMap(_.executorPods.keys)
     newlyCreatedExecutors --= k8sKnownExecIds
     schedulerKnownNewlyCreatedExecs --= k8sKnownExecIds
@@ -400,10 +404,8 @@ private[spark] class ExecutorPodsAllocator(
           .withRestartPolicy("Always")
         .endSpec()
         .build()
-      // Resources that need to be created but there not associated per-pod
+      // Resources that need to be created, volumes are per-pod which is all we care about here.
       val resources = resolvedExecutorSpec.executorKubernetesResources
-      val miscK8sResources = resources
-        .filter(_.getKind != "PersistentVolumeClaim")
       // We'll let PVCs be handled by the statefulset, we need
       val volumes = resources
         .filter(_.getKind == "PersistentVolumeClaim")
@@ -433,8 +435,7 @@ private[spark] class ExecutorPodsAllocator(
         .endSpec()
         .build()
 
-      // Complicated how we want to references here. I think lets give it to the driver.
-      addOwnerReference(driverPod.get, miscK8sResources)
+      addOwnerReference(driverPod.get, statefulSet)
       kubernetesClient.apps().statefulSets().create(statefulSet)
     }
   }

@@ -139,6 +139,13 @@ private[spark] class BasicExecutorFeatureStep(
             .build())
           .build())
       } ++ {
+        Seq(new EnvVarBuilder()
+          .withName(ENV_EXECUTOR_POD_NAME)
+          .withValueFrom(new EnvVarSourceBuilder()
+            .withNewFieldRef("v1", "metadata.name")
+            .build())
+          .build())
+      } ++ {
         if (kubernetesConf.get(AUTH_SECRET_FILE_EXECUTOR).isEmpty) {
           Option(secMgr.getSecretKey()).map { authSecret =>
             new EnvVarBuilder()
