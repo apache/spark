@@ -98,7 +98,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
   override def start(): Unit = {
     super.start()
     val initExecs = Map(defaultProfile -> initialExecutors)
-    podAllocator.setTotalExpectedExecutors(initExecs)
+    podAllocator.setTotalExpectedExecutors(applicationId(), initExecs)
     lifecycleEventHandler.start(this)
     podAllocator.start(applicationId(), this)
     watchEvents.start(applicationId())
@@ -173,7 +173,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def doRequestTotalExecutors(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
-    podAllocator.setTotalExpectedExecutors(resourceProfileToTotalExecs)
+    podAllocator.setTotalExpectedExecutors(applicationId(), resourceProfileToTotalExecs)
     Future.successful(true)
   }
 

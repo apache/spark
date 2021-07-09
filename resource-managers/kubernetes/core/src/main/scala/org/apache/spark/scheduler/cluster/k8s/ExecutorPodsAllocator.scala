@@ -121,10 +121,15 @@ private[spark] class ExecutorPodsAllocator(
     }
   }
 
-  def setTotalExpectedExecutors(resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
+  def setTotalExpectedExecutors(applicationId: String,
+      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
+
     resourceProfileToTotalExecs.foreach { case (rp, numExecs) =>
       rpIdToResourceProfile.getOrElseUpdate(rp.id, rp)
       totalExpectedExecutorsPerResourceProfileId.put(rp.id, numExecs)
+      if (useReplicasets) {
+        setTargetExecutorsReplicaset(numExecs, applicationId, rp.id)
+      }
     }
     logDebug(s"Set total expected execs to $totalExpectedExecutorsPerResourceProfileId")
     if (numOutstandingPods.get() == 0) {
@@ -303,7 +308,10 @@ private[spark] class ExecutorPodsAllocator(
         }
       }
 
-      setTargetExecutors(targetNum, knownPodCount, applicationId, rpId, k8sKnownPVCNames)
+      if (newlyCreatedExecutorsForRpId.isEmpty
+        && knownPodCount < targetNum && !useReplicasets) {
+        requestNewExecutorsDirect(targetNum, knownPodCount, applicationId, rpId, k8sKnownPVCNames)
+      }
 
       totalPendingCount += knownPendingCount
 
@@ -349,30 +357,11 @@ private[spark] class ExecutorPodsAllocator(
     }
   }
 
-  // TODO change this to be not in the snapshot receive but in the
-  // set or get place and snapshot receive only do thing elsewhere.
-
-  private def setTargetExecutors(
-      expected: Int,
-      running: Int,
-      applicationId: String,
-      resourceProfileId: Int,
-      pvcsInUse: Seq[String]): Unit = {
-    if (!useReplicasets) {
-      if (running < expected) {
-        requestNewExecutorsDirect(expected, running, applicationId, resourceProfileId, pvcsInUse)
-      }
-    } else {
-      setTargetExecutorsReplicaset(expected, running, applicationId, resourceProfileId)
-    }
-  }
-
   // For now just track the sets created, in the future maybe track requested value too.
   val setsCreated = new mutable.HashSet[Int]()
 
   private def setTargetExecutorsReplicaset(
       expected: Int,
-      running: Int,
       applicationId: String,
       resourceProfileId: Int): Unit = {
     val setName = s"spark-s-${applicationId}-${resourceProfileId}"
