@@ -390,19 +390,11 @@ private[spark] class ExecutorPodsAllocator(
       val meta = executorPod.pod.getMetadata()
 
       // Create a pod template spec with the right resource profile id.
-      // We're going with a statefulSet for now since we want to support PVC templates.
-      // This does force us into a restart policy of "Always" which isn't ideal.
-      // As a work around we can always delete the pod if were in statefulset mode (TODO)
-      // Jobs would give us flexibility around restart policy, but not scaling up after success + no support of PVC templates is probably not idea.
-
       val podTemplateSpec = new PodTemplateSpecBuilder(
         new PodTemplateSpec(meta, podWithAttachedContainer))
         .editMetadata()
           .addToLabels("rpi", resourceProfileId.toString)
         .endMetadata()
-        .editSpec()
-          .withRestartPolicy("Always")
-        .endSpec()
         .build()
       // Resources that need to be created, volumes are per-pod which is all we care about here.
       val resources = resolvedExecutorSpec.executorKubernetesResources

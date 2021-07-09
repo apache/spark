@@ -267,6 +267,14 @@ private[spark] class BasicExecutorFeatureStep(
         .withUid(pod.getMetadata.getUid)
         .build()
     }
+
+    // We're going with a statefulSet or direct for now since we want to support PVC templates.
+    // This does force us into a restart policy of "Always" which isn't ideal.
+    // Jobs would give us flexibility around restart policy, but not scaling up after success + no support of PVC templates is probably not idea.
+    val policy = kubernetesConf.get(KUBERNETES_ALLOCATION_REPLICASET) match {
+      case true => "Always"
+      case _ => "Never"
+    }
     val executorPodBuilder = new PodBuilder(pod.pod)
       .editOrNewMetadata()
         .withName(name)
@@ -276,7 +284,7 @@ private[spark] class BasicExecutorFeatureStep(
         .endMetadata()
       .editOrNewSpec()
         .withHostname(hostname)
-        .withRestartPolicy("Never")
+        .withRestartPolicy(policy)
         .addToNodeSelector(kubernetesConf.nodeSelector.asJava)
         .addToNodeSelector(kubernetesConf.executorNodeSelector.asJava)
         .addToImagePullSecrets(kubernetesConf.imagePullSecrets: _*)
