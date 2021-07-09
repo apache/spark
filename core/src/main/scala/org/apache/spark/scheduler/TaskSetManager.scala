@@ -1017,7 +1017,7 @@ private[spark] class TaskSetManager(
     // so we would need to rerun these tasks on other executors.
     if (isShuffleMapTasks && !env.blockManager.externalShuffleServiceEnabled && !isZombie) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
-        val index = taskInfos(tid).index
+        val index = info.index
         // We may have a running task whose partition has been marked as successful,
         // this partition has another task completed in another stage attempt.
         // We treat it as a running task and will call handleFailedTask later.
