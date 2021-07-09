@@ -1894,7 +1894,7 @@ class AdaptiveQueryExecSuite
       SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
       SQLConf.SHUFFLE_PARTITIONS.key -> "10",
-      SQLConf.ADAPTIVE_FORCE_ENABLE_SKEW_JOIN.key -> "true") {
+      SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN.key -> "true") {
       withTempView("skewData1", "skewData2") {
         spark
           .range(0, 1000, 1, 10)
