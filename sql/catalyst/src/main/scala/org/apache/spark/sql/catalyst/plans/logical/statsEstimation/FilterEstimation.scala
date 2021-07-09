@@ -233,6 +233,8 @@ case class FilterEstimation(plan: Filter) extends Logging {
     val rowCountValue = childStats.rowCount.get
     val nullPercent: Double = if (rowCountValue == 0) {
       0
+    } else if (colStat.nullCount.get > rowCountValue) {
+      1
     } else {
       (BigDecimal(colStat.nullCount.get) / BigDecimal(rowCountValue)).toDouble
     }
