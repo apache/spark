@@ -56,6 +56,13 @@ import org.apache.spark.util.random.RandomSampler
 class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logging {
   import ParserUtils._
 
+  private val yearMonthUnitPattern =
+    YearMonthIntervalType.yearMonthFields.map(YearMonthIntervalType.fieldToString).mkString("|")
+  private val dayTimeUnitPattern =
+    DayTimeIntervalType.dayTimeFields.map(DayTimeIntervalType.fieldToString).mkString("|")
+  private val multiUnitsPattern =
+    s"(?i)(\\d+)($yearMonthUnitPattern|$dayTimeUnitPattern|week|millisecond|microsecond)(s)?".r
+
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
   }
@@ -2418,7 +2425,23 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         }
       }
       if (yearMonthFields.nonEmpty) {
-        assert(dayTimeFields.isEmpty)
+        if (dayTimeFields.nonEmpty) {
+          val matchIter =
+            multiUnitsPattern.findAllMatchIn(ctx.errorCapturingMultiUnitsInterval.body.getText)
+          val literalBuilder = new StringBuilder
+          matchIter.foreach { matched =>
+            literalBuilder.append(matched.group(1) + " ")
+            literalBuilder.append(matched.group(2))
+            if (matched.group(3) != null) {
+              // In case a unit ends with "s"
+              literalBuilder.append(matched.group(3))
+            }
+            if (matchIter.hasNext) {
+              literalBuilder.append(" ")
+            }
+          }
+          throw QueryParsingErrors.mixedIntervalUnitsError(literalBuilder.toString, ctx)
+        }
         Literal(
           calendarInterval.months, YearMonthIntervalType(yearMonthFields.min, yearMonthFields.max))
       } else {
@@ -2461,22 +2484,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     withOrigin(ctx) {
       val units = ctx.unit.asScala
       val values = ctx.intervalValue().asScala
-      var isYearMonthInterval: Boolean = false
-      var isDayTimeInterval: Boolean = false
-
       try {
         assert(units.length == values.length)
         val kvs = units.indices.map { i =>
           val u = units(i).getText
-          val normalized = u.toLowerCase(Locale.ROOT).stripSuffix("s")
-          if (YearMonthIntervalType.stringToField.contains(normalized)) {
-            isYearMonthInterval = true
-          } else if (DayTimeIntervalType.stringToField.contains(normalized) ||
-                     normalized == "week" || normalized == "millisecond" ||
-                     normalized == "microsecond") {
-            isDayTimeInterval = true
-          }
-
           val v = if (values(i).STRING() != null) {
             val value = string(values(i).STRING())
             // SPARK-32840: For invalid cases, e.g. INTERVAL '1 day 2' hour,
@@ -2490,16 +2501,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           } else {
             values(i).getText
           }
-
           UTF8String.fromString(" " + v + " " + u)
         }
-        val intervalLiteral = UTF8String.concat(kvs: _*)
-        val calendarInterval = IntervalUtils.stringToInterval(intervalLiteral)
-        if (!conf.legacyIntervalEnabled && isYearMonthInterval && isDayTimeInterval) {
-          throw QueryParsingErrors.mixedIntervalUnitsError(intervalLiteral.toString.trim, ctx)
-        } else {
-          calendarInterval
-        }
+        IntervalUtils.stringToInterval(UTF8String.concat(kvs: _*))
       } catch {
         case i: IllegalArgumentException =>
           val e = new ParseException(i.getMessage, ctx)

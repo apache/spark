@@ -826,7 +826,7 @@ class ExpressionParserSuite extends AnalysisTest {
 
     Seq(true, false).foreach { legacyEnabled =>
       withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> legacyEnabled.toString) {
-        val intervalStr = "3 months 4 days 22 seconds 1 millisecond"
+        val intervalStr = "3 monThs 4 dayS 22 sEcond 1 millisecond"
         if (legacyEnabled) {
           checkIntervals(intervalStr, Literal(new CalendarInterval(3, 4, 22001000L)))
         } else {
