@@ -131,33 +131,21 @@ class NumericOps(DataTypeOps):
         return cast(IndexOpsLike, column_op(F.bitwiseNOT)(operand))
 
     def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
-        from pyspark.pandas.base import column_op
-
         return cast(IndexOpsLike, column_op(Column.__neg__)(operand))
 
     def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
-        from pyspark.pandas.base import column_op
-
         return cast(IndexOpsLike, column_op(F.abs)(operand))
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__gt__)(left, right)
 
 
