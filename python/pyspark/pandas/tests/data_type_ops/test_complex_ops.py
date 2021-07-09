@@ -120,8 +120,10 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assert_eq(
                     self.non_numeric_array_psers.get(data_type)
                     + self.non_numeric_array_psers.get(data_type),
-                    self.non_numeric_array_pssers.get(data_type)
-                    + self.non_numeric_array_pssers.get(data_type),
+                    (
+                        self.non_numeric_array_pssers.get(data_type)
+                        + self.non_numeric_array_pssers.get(data_type)
+                    ).sort_index(),
                 )
 
             # Numeric array + Non-numeric array
