@@ -24,8 +24,9 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolumeClaim, Pod, PodBuilder,
-  PodSpecBuilder}
+import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolumeClaim,
+  PersistentVolumeClaimBuilder, Pod, PodBuilder, PodSpec, PodSpecBuilder, PodTemplateSpec,
+  PodTemplateSpecBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -58,6 +59,7 @@ private[spark] class ExecutorPodsAllocator(
 
   private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
 
+  // TODO: Change to statefulSet?
   private val useReplicasets = conf.get(KUBERNETES_ALLOCATION_REPLICASET)
 
   private val podCreationTimeout = math.max(
@@ -347,7 +349,8 @@ private[spark] class ExecutorPodsAllocator(
     }
   }
 
-  // TODO change this to be not in the snapshot receive but in the setta rget place and snapshot receive only do thing elsewhere.
+  // TODO change this to be not in the snapshot receive but in the
+  // set or get place and snapshot receive only do thing elsewhere.
 
   private def setTargetExecutors(
       expected: Int,
@@ -372,7 +375,7 @@ private[spark] class ExecutorPodsAllocator(
       running: Int,
       applicationId: String,
       resourceProfileId: Int): Unit = {
-    val setName = s"spark-rs-${applicationId}-${resourceProfileId}"
+    val setName = s"spark-s-${applicationId}-${resourceProfileId}"
     if (setsCreated.contains(resourceProfileId)) {
       // TODO Update the replicaset with our new target.
     } else {
@@ -388,22 +391,20 @@ private[spark] class ExecutorPodsAllocator(
         kubernetesClient, rpIdToResourceProfile(resourceProfileId))
       val executorPod = resolvedExecutorSpec.pod
       val podWithAttachedContainer: PodSpec = new PodSpecBuilder(executorPod.pod.getSpec())
-        .editOrNewSpec()
         .addToContainers(executorPod.container)
-        .endSpec()
         .build()
 
-      val meta = executorPod.pod.getMetaData()
+      val meta = executorPod.pod.getMetadata()
 
       // Create a pod template spec with the right resource profile id.
       val podTemplateSpec = new PodTemplateSpecBuilder(
-        new PodTemplateSpec(meta, podWithAttachedContainer: Any))
+        new PodTemplateSpec(meta, podWithAttachedContainer))
         .editMetadata()
           .addToLabels("rpi", resourceProfileId.toString)
         .endMetadata()
         .build()
-      // TODO: holden - double check mount secrets
       // Resources that need to be created but there not associated per-pod
+      val resources = resolvedExecutorSpec.executorKubernetesResources
       val miscK8sResources = resources
         .filter(_.getKind != "PersistentVolumeClaim")
       // We'll let PVCs be handled by the statefulset, we need
@@ -416,11 +417,11 @@ private[spark] class ExecutorPodsAllocator(
               .withName(v.getMetadata().getName().replace("EXECID", ""))
             .endMetadata()
             .build()
-        }
+        }.asJava
 
       val statefulSet = new io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder()
         .withNewMetadata()
-          .withName(replicasetName)
+          .withName(setName)
           .withNamespace(conf.get(KUBERNETES_NAMESPACE))
         .endMetadata()
         .withNewSpec()
@@ -435,8 +436,9 @@ private[spark] class ExecutorPodsAllocator(
         .endSpec()
         .build()
 
-      addOwnerReference(createdExecutorPod, miscK8sResources)
-      kubernetesClient.satefulSet().create(statefulSet)
+      // Complicated how we want to references here. I think lets give it to the driver.
+      addOwnerReference(driverPod.get, miscK8sResources)
+      kubernetesClient.apps().statefulSets().create(statefulSet)
     }
   }
 
