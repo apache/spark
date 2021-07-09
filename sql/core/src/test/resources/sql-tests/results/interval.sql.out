@@ -17,11 +17,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Cannot mix year-month and day-time fields: 4 month 2 weeks 3 microseconds(line 1, pos 16)
+Cannot mix year-month and day-time fields: interval 4 month 2 weeks 3 microseconds(line 1, pos 7)
 
 == SQL ==
 select interval 4 month 2 weeks 3 microseconds * 1.5
-----------------^^^
+-------^^^
 
 
 -- !query
@@ -147,11 +147,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Cannot mix year-month and day-time fields: -1 month 1 day -1 second(line 1, pos 17)
+Cannot mix year-month and day-time fields: interval -1 month 1 day -1 second(line 1, pos 8)
 
 == SQL ==
 select -interval -1 month 1 day -1 second
------------------^^^
+--------^^^
 
 
 -- !query
@@ -201,11 +201,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Cannot mix year-month and day-time fields: -1 month 1 day -1 second(line 1, pos 17)
+Cannot mix year-month and day-time fields: interval -1 month 1 day -1 second(line 1, pos 8)
 
 == SQL ==
 select +interval -1 month 1 day -1 second
------------------^^^
+--------^^^
 
 
 -- !query
@@ -522,11 +522,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Cannot mix year-month and day-time fields: 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond(line 1, pos 16)
+Cannot mix year-month and day-time fields: interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond(line 1, pos 7)
 
 == SQL ==
 select interval 1 year 2 month 3 week 4 day 5 hour 6 minute 7 seconds 8 millisecond 9 microsecond
-----------------^^^
+-------^^^
 
 
 -- !query
@@ -560,11 +560,11 @@ struct<>
 -- !query output
 org.apache.spark.sql.catalyst.parser.ParseException
 
-Cannot mix year-month and day-time fields: 30 year 25 month -100 day 40 hour 80 minute 299.889987299 second(line 1, pos 16)
+Cannot mix year-month and day-time fields: interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second(line 1, pos 7)
 
 == SQL ==
 select interval '30' year '25' month '-100' day '40' hour '80' minute '299.889987299' second
-----------------^^^
+-------^^^
 
 
 -- !query
