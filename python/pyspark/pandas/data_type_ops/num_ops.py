@@ -128,7 +128,7 @@ class NumericOps(DataTypeOps):
         return column_op(rmod)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
-        return column_op(F.bitwiseNOT)(operand)
+        return cast(IndexOpsLike, column_op(F.bitwiseNOT)(operand))
 
     def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
         from pyspark.pandas.base import column_op
