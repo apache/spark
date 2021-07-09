@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
@@ -691,15 +692,19 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   def dtIntervalLiteral(u: String, s: String): Literal = {
-    val value = java.lang.Long.parseLong(s)
+    val value = if (u == "second") {
+      (BigDecimal(s) * NANOS_PER_SECOND).toLong
+    } else {
+      java.lang.Long.parseLong(s)
+    }
     val (duration, field) = u match {
       case "week" => (Duration.ofDays(value * 7), DT.DAY)
       case "day" => (Duration.ofDays(value), DT.DAY)
       case "hour" => (Duration.ofHours(value), DT.HOUR)
       case "minute" => (Duration.ofMinutes(value), DT.MINUTE)
-      case "second" => (Duration.ofSeconds(value), DT.SECOND)
+      case "second" => (Duration.ofNanos(value), DT.SECOND)
       case "millisecond" => (Duration.ofMillis(value), DT.SECOND)
-      case "microsecond" => (Duration.ofNanos(value * 1000), DT.SECOND)
+      case "microsecond" => (Duration.ofNanos(value * NANOS_PER_MICROS), DT.SECOND)
     }
     Literal.create(duration, DayTimeIntervalType(field))
   }
@@ -745,6 +750,9 @@ class ExpressionParserSuite extends AnalysisTest {
       }
     }
 
+    // Hive nanosecond notation.
+    checkIntervals("13.123456789 seconds", dtIntervalLiteral("second", "13.123456789"))
+
     withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
       (ymIntervalUnits ++ dtIntervalUnits).foreach { unit =>
         forms.foreach { form =>
@@ -755,9 +763,6 @@ class ExpressionParserSuite extends AnalysisTest {
           }
         }
       }
-
-      // Hive nanosecond notation.
-      checkIntervals("13.123456789 seconds", legacyIntervalLiteral("second", "13.123456789"))
       checkIntervals(
         "-13.123456789 second",
         Literal(new CalendarInterval(
@@ -831,7 +836,7 @@ class ExpressionParserSuite extends AnalysisTest {
           checkIntervals(intervalStr, Literal(new CalendarInterval(3, 4, 22001000L)))
         } else {
           intercept(s"interval $intervalStr",
-            s"Cannot mix year-month and day-time fields: $intervalStr")
+            s"Cannot mix year-month and day-time fields: interval $intervalStr")
         }
       }
     }

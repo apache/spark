@@ -56,13 +56,6 @@ import org.apache.spark.util.random.RandomSampler
 class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logging {
   import ParserUtils._
 
-  private val yearMonthUnitPattern =
-    YearMonthIntervalType.yearMonthFields.map(YearMonthIntervalType.fieldToString).mkString("|")
-  private val dayTimeUnitPattern =
-    DayTimeIntervalType.dayTimeFields.map(DayTimeIntervalType.fieldToString).mkString("|")
-  private val multiUnitsPattern =
-    s"(?i)(\\d+)($yearMonthUnitPattern|$dayTimeUnitPattern|week|millisecond|microsecond)(s)?".r
-
   protected def typedVisit[T](ctx: ParseTree): T = {
     ctx.accept(this).asInstanceOf[T]
   }
@@ -2426,21 +2419,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       }
       if (yearMonthFields.nonEmpty) {
         if (dayTimeFields.nonEmpty) {
-          val matchIter =
-            multiUnitsPattern.findAllMatchIn(ctx.errorCapturingMultiUnitsInterval.body.getText)
-          val literalBuilder = new StringBuilder
-          matchIter.foreach { matched =>
-            literalBuilder.append(matched.group(1) + " ")
-            literalBuilder.append(matched.group(2))
-            if (matched.group(3) != null) {
-              // In case a unit ends with "s"
-              literalBuilder.append(matched.group(3))
-            }
-            if (matchIter.hasNext) {
-              literalBuilder.append(" ")
-            }
-          }
-          throw QueryParsingErrors.mixedIntervalUnitsError(literalBuilder.toString, ctx)
+          val literalStr = source(ctx)
+          throw QueryParsingErrors.mixedIntervalUnitsError(literalStr, ctx)
         }
         Literal(
           calendarInterval.months, YearMonthIntervalType(yearMonthFields.min, yearMonthFields.max))
