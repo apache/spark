@@ -1909,7 +1909,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   usage = """
     _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
       to a timestamp. Returns null with invalid input. By default, it follows casting rules to
-      a timestamp if the `fmt` is omitted.The result data type is consistent with the value of
+      a timestamp if the `fmt` is omitted. The result data type is consistent with the value of
       configuration `spark.sql.timestampType`.
   """,
   arguments = """
