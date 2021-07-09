@@ -301,7 +301,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
-        for pser, psser in self.numeric_pser_psser_pairs:
+        for pser, psser in self.numeric_withnan_pser_psser_pairs:
             self.assert_eq(pser.isnull(), psser.isnull())
 
     def test_astype(self):
@@ -320,53 +320,59 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
     def test_neg(self):
         for pser, psser in self.numeric_pser_psser_pairs:
-            if not isinstance(psser.spark.data_type, DecimalType):
-                self.assert_eq(-pser, -psser)
+            self.assert_eq(-pser, -psser)
 
     def test_abs(self):
         for pser, psser in self.numeric_pser_psser_pairs:
-            if not isinstance(psser.spark.data_type, DecimalType):
-                self.assert_eq(abs(pser), abs(psser))
+            self.assert_eq(abs(pser), abs(psser))
 
     def test_invert(self):
         for psser in self.numeric_pssers:
             if not isinstance(psser.spark.data_type, DecimalType):
                 self.assertRaises(NotImplementedError, lambda: ~psser)
+            else:
+                self.assertRaises(TypeError, lambda: ~psser)
 
     def test_eq(self):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
-                if not isinstance(psser.spark.data_type, DecimalType):
-                    self.assert_eq(pser == pser, (psser == psser).sort_index())
+                self.assert_eq(pser == pser, (psser == psser).sort_index())
 
     def test_ne(self):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
-                if not isinstance(psser.spark.data_type, DecimalType):
-                    self.assert_eq(pser != pser, (psser != psser).sort_index())
+                self.assert_eq(pser != pser, (psser != psser).sort_index())
 
     def test_lt(self):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
-                if not isinstance(psser.spark.data_type, DecimalType):
+                if isinstance(psser.spark.data_type, DecimalType):
+                    self.assertRaises(TypeError, lambda: psser < psser)
+                else:
                     self.assert_eq(pser < pser, (psser < psser).sort_index())
 
     def test_le(self):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
-                if not isinstance(psser.spark.data_type, DecimalType):
+                if isinstance(psser.spark.data_type, DecimalType):
+                    self.assertRaises(TypeError, lambda: psser <= psser)
+                else:
                     self.assert_eq(pser <= pser, (psser <= psser).sort_index())
 
     def test_gt(self):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
-                if not isinstance(psser.spark.data_type, DecimalType):
+                if isinstance(psser.spark.data_type, DecimalType):
+                    self.assertRaises(TypeError, lambda: psser > psser)
+                else:
                     self.assert_eq(pser > pser, (psser > psser).sort_index())
 
     def test_ge(self):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
-                if not isinstance(psser.spark.data_type, DecimalType):
+                if isinstance(psser.spark.data_type, DecimalType):
+                    self.assertRaises(TypeError, lambda: psser >= psser)
+                else:
                     self.assert_eq(pser >= pser, (psser >= psser).sort_index())
 
 
