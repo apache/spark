@@ -1520,7 +1520,7 @@ private[spark] object QueryCompilationErrors {
     // The second argument of '{function}' function needs to be an integer
     new AnalysisException(
       errorClass = "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER",
-      messageParameters = Seq(function),
+      messageParameters = Array(function),
       cause = Some(e))
   }
 
@@ -1982,5 +1982,19 @@ private[spark] object QueryCompilationErrors {
   def classDoesNotImplementUserDefinedAggregateFunctionError(className: String): Throwable = {
     new AnalysisException(
       s"class $className doesn't implement interface UserDefinedAggregateFunction")
+  }
+
+  def missingFieldError(
+      fieldName: Seq[String], table: ResolvedTable, context: Expression): Throwable = {
+    throw new AnalysisException(
+      s"Missing field ${fieldName.quoted} in table ${table.name} with schema:\n" +
+        table.schema.treeString,
+      context.origin.line,
+      context.origin.startPosition)
+  }
+
+  def invalidFieldName(fieldName: Seq[String], path: Seq[String]): Throwable = {
+    new AnalysisException(
+      s"Field name ${fieldName.quoted} is invalid, ${path.quoted} is not a struct.")
   }
 }

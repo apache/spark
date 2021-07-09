@@ -56,8 +56,31 @@ class TestCasesUtils(object):
         return [ps.from_pandas(pser) for pser in self.numeric_psers]
 
     @property
+    def decimal_withnan_pser(self):
+        return pd.Series([decimal.Decimal(1.0), decimal.Decimal(2.0), decimal.Decimal(np.nan)])
+
+    @property
+    def decimal_withnan_psser(self):
+        return ps.from_pandas(self.decimal_withnan_pser)
+
+    @property
+    def float_withnan_pser(self):
+        return pd.Series([1, 2, np.nan], dtype=float)
+
+    @property
+    def float_withnan_psser(self):
+        return ps.from_pandas(self.float_withnan_pser)
+
+    @property
     def numeric_pser_psser_pairs(self):
         return zip(self.numeric_psers, self.numeric_pssers)
+
+    @property
+    def numeric_withnan_pser_psser_pairs(self):
+        return zip(
+            self.numeric_psers + [self.decimal_withnan_pser, self.float_withnan_pser],
+            self.numeric_pssers + [self.decimal_withnan_psser, self.float_withnan_psser],
+        )
 
     @property
     def non_numeric_psers(self):
@@ -95,6 +118,10 @@ class TestCasesUtils(object):
     @property
     def pser_psser_pairs(self):
         return zip(self.psers, self.pssers)
+
+    @property
+    def string_extension_dtype(self):
+        return ["string", StringDtype()] if extension_object_dtypes_available else []
 
     @property
     def object_extension_dtypes(self):

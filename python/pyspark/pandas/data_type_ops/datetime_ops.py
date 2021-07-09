@@ -22,7 +22,7 @@ from typing import Any, Union, cast
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column
 from pyspark.sql.types import BooleanType, StringType, TimestampType
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
@@ -67,7 +67,7 @@ class DatetimeOps(DataTypeOps):
                 ),
             )
         else:
-            raise TypeError("datetime subtraction can only be applied to datetime series.")
+            raise TypeError("Datetime subtraction can only be applied to datetime series.")
 
     def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
@@ -86,7 +86,27 @@ class DatetimeOps(DataTypeOps):
                 ),
             )
         else:
-            raise TypeError("datetime subtraction can only be applied to datetime series.")
+            raise TypeError("Datetime subtraction can only be applied to datetime series.")
+
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__lt__)(left, right)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__le__)(left, right)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__ge__)(left, right)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__gt__)(left, right)
 
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""

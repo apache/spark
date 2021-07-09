@@ -34,6 +34,7 @@ from pyspark.pandas.data_type_ops.base import (
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
+from pyspark.sql import Column
 from pyspark.sql.types import BooleanType
 
 
@@ -52,15 +53,9 @@ class StringOps(DataTypeOps):
         elif isinstance(right, str):
             return column_op(F.concat)(left, SF.lit(right))
         else:
-            raise TypeError("string addition can only be applied to string series or literals.")
-
-    def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("subtraction can not be applied to string series or literals.")
+            raise TypeError("Addition can not be applied to given types.")
 
     def mul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        if isinstance(right, str):
-            raise TypeError("multiplication can not be applied to a string literal.")
-
         if (
             isinstance(right, IndexOpsMixin)
             and isinstance(right.spark.data_type, IntegralType)
@@ -68,19 +63,7 @@ class StringOps(DataTypeOps):
         ) or isinstance(right, int):
             return column_op(SF.repeat)(left, right)
         else:
-            raise TypeError("a string series can only be multiplied to an int series or literal")
-
-    def truediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("division can not be applied on string series or literals.")
-
-    def floordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("division can not be applied on string series or literals.")
-
-    def mod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("modulo can not be applied on string series or literals.")
-
-    def pow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("exponentiation can not be applied on string series or literals.")
+            raise TypeError("Multiplication can not be applied to given types.")
 
     def radd(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, str):
@@ -89,28 +72,33 @@ class StringOps(DataTypeOps):
                 left._with_new_scol(F.concat(SF.lit(right), left.spark.column)),  # TODO: dtype?
             )
         else:
-            raise TypeError("string addition can only be applied to string series or literals.")
-
-    def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("subtraction can not be applied to string series or literals.")
+            raise TypeError("Addition can not be applied to given types.")
 
     def rmul(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         if isinstance(right, int):
             return column_op(SF.repeat)(left, right)
         else:
-            raise TypeError("a string series can only be multiplied to an int series or literal")
+            raise TypeError("Multiplication can not be applied to given types.")
 
-    def rtruediv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("division can not be applied on string series or literals.")
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
 
-    def rfloordiv(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("division can not be applied on string series or literals.")
+        return column_op(Column.__lt__)(left, right)
 
-    def rpow(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("exponentiation can not be applied on string series or literals.")
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
 
-    def rmod(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise TypeError("modulo can not be applied on string series or literals.")
+        return column_op(Column.__le__)(left, right)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__ge__)(left, right)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__gt__)(left, right)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)

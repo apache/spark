@@ -16,12 +16,12 @@
 #
 
 from itertools import chain
-from typing import Union
+from typing import Any, Union
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.pandas._typing import Dtype, IndexOpsLike
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
@@ -65,3 +65,16 @@ class CategoricalOps(DataTypeOps):
         return index_ops._with_new_scol(
             scol.alias(index_ops._internal.data_spark_column_names[0])
         ).astype(dtype)
+
+    # TODO(SPARK-35997): Implement comparison operators below
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise NotImplementedError("< can not be applied to %s." % self.pretty_name)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise NotImplementedError("<= can not be applied to %s." % self.pretty_name)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise NotImplementedError("> can not be applied to %s." % self.pretty_name)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise NotImplementedError(">= can not be applied to %s." % self.pretty_name)
