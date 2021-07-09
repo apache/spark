@@ -622,7 +622,6 @@ pyspark_pandas = Module(
         "pyspark.pandas.tests.data_type_ops.test_complex_ops",
         "pyspark.pandas.tests.data_type_ops.test_date_ops",
         "pyspark.pandas.tests.data_type_ops.test_datetime_ops",
-        "pyspark.pandas.tests.data_type_ops.test_decimal_ops",
         "pyspark.pandas.tests.data_type_ops.test_null_ops",
         "pyspark.pandas.tests.data_type_ops.test_num_ops",
         "pyspark.pandas.tests.data_type_ops.test_string_ops",
