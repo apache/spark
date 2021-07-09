@@ -529,6 +529,11 @@ private[spark] class AppStatusStore(
         } else {
           None
         }
+      val speculationStageSummary: Option[v1.SpeculationStageSummary] = if (withSummaries) {
+        speculationSummary(stage.stageId, stage.attemptId)
+      } else {
+        None
+      }
 
       new v1.StageData(
         status = stage.status,
@@ -577,7 +582,7 @@ private[spark] class AppStatusStore(
         accumulatorUpdates = stage.accumulatorUpdates,
         tasks = tasks,
         executorSummary = executorSummaries,
-        speculationSummary = speculationSummary(stage.stageId, stage.attemptId),
+        speculationSummary = speculationStageSummary,
         killedTasksSummary = stage.killedTasksSummary,
         resourceProfileId = stage.resourceProfileId,
         peakExecutorMetrics = stage.peakExecutorMetrics,
