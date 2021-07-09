@@ -389,13 +389,8 @@ private[spark] class ExecutorPodsAllocator(
 
       val meta = executorPod.pod.getMetadata()
 
-      // Create a pod template spec with the right resource profile id.
-      val podTemplateSpec = new PodTemplateSpecBuilder(
-        new PodTemplateSpec(meta, podWithAttachedContainer))
-        .editMetadata()
-          .addToLabels("rpi", resourceProfileId.toString)
-        .endMetadata()
-        .build()
+      // Create a pod template spec from the pod.
+      val podTemplateSpec = new PodTemplateSpec(meta, podWithAttachedContainer)
       // Resources that need to be created, volumes are per-pod which is all we care about here.
       val resources = resolvedExecutorSpec.executorKubernetesResources
       // We'll let PVCs be handled by the statefulset, we need
@@ -420,7 +415,7 @@ private[spark] class ExecutorPodsAllocator(
           .withNewSelector()
             .addToMatchLabels(SPARK_APP_ID_LABEL, applicationId)
             .addToMatchLabels(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-            .addToMatchLabels("rpi", resourceProfileId.toString)
+            .addToMatchLabels(RESOURCE_PROFILE_LABEL, resourceProfileId.toString)
           .endSelector()
           .withTemplate(podTemplateSpec)
           .addAllToVolumeClaimTemplates(volumes)
