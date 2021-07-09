@@ -82,6 +82,9 @@ private[spark] class KubernetesDriverConf(
     val proxyUser: Option[String])
   extends KubernetesConf(sparkConf) {
 
+  def driverNodeSelector: Map[String, String] =
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX)
+
   override val resourceNamePrefix: String = {
     val custom = if (Utils.isTesting) get(KUBERNETES_DRIVER_POD_NAME_PREFIX) else None
     custom.getOrElse(KubernetesConf.getResourceNamePrefix(appName))
@@ -136,6 +139,9 @@ private[spark] class KubernetesExecutorConf(
     val driverPod: Option[Pod],
     val resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID)
   extends KubernetesConf(sparkConf) with Logging {
+
+  def executorNodeSelector: Map[String, String] =
+    KubernetesUtils.parsePrefixedKeyValuePairs(sparkConf, KUBERNETES_EXECUTOR_NODE_SELECTOR_PREFIX)
 
   override val resourceNamePrefix: String = {
     get(KUBERNETES_EXECUTOR_POD_NAME_PREFIX).getOrElse(
