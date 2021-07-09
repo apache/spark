@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Objects
+
 import scala.collection.mutable
 
 import org.apache.spark.TaskContext
@@ -113,7 +115,7 @@ class EquivalentExpressions {
     // Start with the highest common expression, update `map` with the expression and remove it (and
     // its children recursively if required) from `localEquivalenceMap`. The remaining highest
     // expression in `localEquivalenceMap` is also common expression.
-    var statsOption = Some(localEquivalenceMap).filter(_.nonEmpty).map(_.values.maxBy(_.height))
+    var statsOption = Some(localEquivalenceMap).filter(_.nonEmpty).map(_.maxBy(_._1.height)._2)
     while (statsOption.nonEmpty) {
       val stats = statsOption.get
       updateExprTree(stats.expr, localEquivalenceMap, -stats.useCount)
@@ -126,7 +128,7 @@ class EquivalentExpressions {
       // treated as common subexpression. If `add` is false then the other way around.
       updateExprTree(stats.expr, map, useCount)
 
-      statsOption = Some(localEquivalenceMap).filter(_.nonEmpty).map(_.values.maxBy(_.height))
+      statsOption = Some(localEquivalenceMap).filter(_.nonEmpty).map(_.maxBy(_._1.height)._2)
     }
   }
 
@@ -221,7 +223,7 @@ class EquivalentExpressions {
 
   // Exposed for testing.
   private[sql] def getAllExprStates(count: Int = 0): Seq[ExpressionStats] = {
-    equivalenceMap.values.filter(_.useCount > count).toSeq.sortBy(_.height)
+    equivalenceMap.filter(_._2.useCount > count).toSeq.sortBy(_._1.height).map(_._2)
   }
 
   /**
@@ -249,12 +251,20 @@ class EquivalentExpressions {
  * Wrapper around an Expression that provides semantic equality.
  */
 case class ExpressionEquals(e: Expression) {
+  private def getHeight(tree: Expression): Int = {
+    tree.children.map(getHeight).reduceOption(_ max _).getOrElse(0) + 1
+  }
+
+  // This is used to do a fast pre-check for child-parent relationship. For example, expr1 can
+  // only be a parent of expr2 if expr1.height is larger than expr2.height.
+  lazy val height = getHeight(e)
+
   override def equals(o: Any): Boolean = o match {
-    case other: ExpressionEquals => e.semanticEquals(other.e)
+    case other: ExpressionEquals => e.semanticEquals(other.e) && height == other.height
     case _ => false
   }
 
-  override def hashCode: Int = e.semanticHash()
+  override def hashCode: Int = Objects.hash(e.semanticHash(): Integer, height: Integer)
 }
 
 /**
@@ -264,12 +274,4 @@ case class ExpressionEquals(e: Expression) {
  * Instead of appending to a mutable list/buffer of Expressions, just update the "flattened"
  * useCount in this wrapper in-place.
  */
-case class ExpressionStats(expr: Expression)(var useCount: Int) {
-  // This is used to do a fast pre-check for child-parent relationship. For example, expr1 can
-  // only be a parent of expr2 if expr1.height is larger than expr2.height.
-  lazy val height = getHeight(expr)
-
-  private def getHeight(tree: Expression): Int = {
-    tree.children.map(getHeight).reduceOption(_ max _).getOrElse(0) + 1
-  }
-}
+case class ExpressionStats(expr: Expression)(var useCount: Int)

@@ -338,6 +338,19 @@ class SubexpressionEliminationSuite extends SparkFunSuite with ExpressionEvalHel
     assert(commonExprs.head.expr eq add)
   }
 
+  test("SPARK-36073: Transparently canonicalized expressions are not necessary subexpressions") {
+    val add = Add(Literal(1), Literal(2))
+    val transparent = PromotePrecision(add)
+
+    val equivalence = new EquivalentExpressions
+    equivalence.addExprTree(transparent)
+
+    val commonExprs = equivalence.getAllExprStates()
+    assert(commonExprs.size == 2)
+    assert(commonExprs.map(_.useCount) === Seq(1, 1))
+    assert(commonExprs.map(_.expr) === Seq(add, transparent))
+  }
+
   test("SPARK-35439: Children subexpr should come first than parent subexpr") {
     val add = Add(Literal(1), Literal(2))
 
