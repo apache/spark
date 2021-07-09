@@ -281,25 +281,25 @@ case class AdaptiveSparkPlanExec(
         // plans are updated, we can clear the query stage list because at this point the two plans
         // are semantically and physically in sync again.
         val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
-        val (reOptimizePhysicalPlan, newLogicalPlan) = reOptimize(logicalPlan)
-        val planWithExtraShuffle = rePlanWithExtraShuffle(reOptimizePhysicalPlan)
+        val (reOptimizationPhysicalPlan, newLogicalPlan) = reOptimize(logicalPlan)
+        val planWithExtraShuffle = rePlanWithExtraShuffle(reOptimizationPhysicalPlan)
         val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
-        val newCost = costEvaluator.evaluateCost(reOptimizePhysicalPlan)
+        val reOptimizationCost = costEvaluator.evaluateCost(reOptimizationPhysicalPlan)
         val extraShuffleCost = costEvaluator.evaluateCost(planWithExtraShuffle)
         def updateCurrentPlan(newPhysicalPlan: SparkPlan): Unit = {
-          logOnLevel(s"Plan changed from $currentPhysicalPlan to $newPhysicalPlan")
+          logOnLevel(s"Plan changed from\n$currentPhysicalPlan\nto\n$newPhysicalPlan")
           cleanUpTempTags(newPhysicalPlan)
           currentPhysicalPlan = newPhysicalPlan
           currentLogicalPlan = newLogicalPlan
           stagesToReplace = Seq.empty[QueryStageExec]
         }
 
-        if (extraShuffleCost < newCost ||
-          (extraShuffleCost == newCost && planWithExtraShuffle != reOptimizePhysicalPlan)) {
+        if (extraShuffleCost < reOptimizationCost || (extraShuffleCost == reOptimizationCost &&
+          reOptimizationPhysicalPlan != planWithExtraShuffle)) {
           updateCurrentPlan(planWithExtraShuffle)
-        } else if (newCost < origCost ||
-          (newCost == origCost && currentPhysicalPlan != reOptimizePhysicalPlan)) {
-          updateCurrentPlan(reOptimizePhysicalPlan)
+        } else if (reOptimizationCost < origCost ||
+          (reOptimizationCost == origCost && currentPhysicalPlan != reOptimizationPhysicalPlan)) {
+          updateCurrentPlan(reOptimizationPhysicalPlan)
         }
         // Now that some stages have finished, we can try creating new stages.
         result = createQueryStages(currentPhysicalPlan)
