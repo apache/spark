@@ -1960,7 +1960,7 @@ class AdaptiveQueryExecSuite
     }
   }
 
-  test("SPARK-36032: RemoveRedundantSorts should be applied after reOptimize in AQE") {
+  test("SPARK-36032: Use inputPlan instead of currentPhysicalPlan to initialize logical link") {
     withTempView("v") {
       spark.sparkContext.parallelize(
         (1 to 10).map(i => TestData(i, i.toString)), 2)
@@ -1981,7 +1981,7 @@ class AdaptiveQueryExecSuite
           if (aqeBhj.toInt < 0) {
             // 1 sort since spark plan has no shuffle for SMJ
             assert(findTopLevelSort(origin).size == 1)
-            // 2 sort in SMJ
+            // 2 sorts in SMJ
             assert(findTopLevelSort(adaptive).size == 2)
           } else {
             assert(findTopLevelSort(origin).size == 1)
