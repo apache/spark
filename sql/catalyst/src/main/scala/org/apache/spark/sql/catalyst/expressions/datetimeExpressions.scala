@@ -1020,8 +1020,6 @@ case class GetTimestamp(
 
   override val forTimestampNTZ: Boolean = dataType == TimestampNTZType
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
-
   override protected def downScaleFactor: Long = 1
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
