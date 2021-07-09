@@ -120,6 +120,10 @@ class TestCasesUtils(object):
         return zip(self.psers, self.pssers)
 
     @property
+    def string_extension_dtype(self):
+        return ["string", StringDtype()] if extension_object_dtypes_available else []
+
+    @property
     def object_extension_dtypes(self):
         return (
             ["boolean", "string", BooleanDtype(), StringDtype()]
