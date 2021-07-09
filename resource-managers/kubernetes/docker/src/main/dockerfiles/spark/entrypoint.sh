@@ -79,6 +79,14 @@ case "$1" in
     ;;
   executor)
     shift 1
+    # If the execid is set to the generic EXECID parse the pod name
+    if [ "${SPARK_EXECUTOR_ID}" == "EXECID" ]; then
+      POD_NAME_SPLIT=(${SPARK_EXECUTOR_POD_NAME//-/ })
+      EID=${POD_NAME_SPLIT[-1]}
+      # POD names start with 0, always add 1 so that executor ids start from 1
+      EID=$((EID+1))
+      export SPARK_EXECUTOR_ID=${EID}
+    fi
     CMD=(
       ${JAVA_HOME}/bin/java
       "${SPARK_EXECUTOR_JAVA_OPTS[@]}"
