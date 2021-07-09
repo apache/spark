@@ -30,6 +30,7 @@ import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.sql.catalyst.util.NumberConverter
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 
 class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
@@ -38,7 +39,8 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
 
   def testExecuteStatementWithProtocolVersion(
       version: TProtocolVersion,
-      sql: String)(f: HiveQueryResultSet => Unit): Unit = {
+      sql: String,
+      conf: (String, String)*)(f: HiveQueryResultSet => Unit): Unit = {
     val rawTransport = new TSocket("localhost", serverPort)
     val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
     val user = System.getProperty("user.name")
@@ -50,6 +52,10 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
       val clientProtocol = new TOpenSessionReq(version)
       val openResp = client.OpenSession(clientProtocol)
       val sessHandle = openResp.getSessionHandle
+      conf.foreach {
+        case (k, v) =>
+          client.ExecuteStatement(new TExecuteStatementReq(sessHandle, s"SET $k = $v"))
+      }
       val execReq = new TExecuteStatementReq(sessHandle, sql)
       val execResp = client.ExecuteStatement(execReq)
       val stmtHandle = execResp.getOperationHandle
@@ -362,7 +368,10 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
     }
 
     test(s"$version get interval type") {
-      testExecuteStatementWithProtocolVersion(version, "SELECT interval '1' year '2' day") { rs =>
+      testExecuteStatementWithProtocolVersion(
+        version,
+        "SELECT interval '1' year '2' day",
+        SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") { rs =>
         assert(rs.next())
         assert(rs.getString(1) === "1 years 2 days")
         val metaData = rs.getMetaData

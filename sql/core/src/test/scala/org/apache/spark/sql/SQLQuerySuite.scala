@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import java.io.File
 import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.commons.io.FileUtils
@@ -1441,30 +1443,52 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-8753: add interval type") {
     import org.apache.spark.unsafe.types.CalendarInterval
 
-    val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
-    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123 )))
+    val ymDF = sql("select interval 3 years -3 month")
+    checkAnswer(ymDF, Row(Period.of(2, 9, 0)))
     withTempPath(f => {
-      // Currently we don't yet support saving out values of interval data type.
       val e = intercept[AnalysisException] {
-        df.write.json(f.getCanonicalPath)
+        ymDF.write.json(f.getCanonicalPath)
       }
       e.message.contains("Cannot save interval data type into external storage")
     })
+
+    val dtDF = sql("select interval 5 days 8 hours 12 minutes 50 seconds")
+    checkAnswer(dtDF, Row(Duration.ofDays(5).plusHours(8).plusMinutes(12).plusSeconds(50)))
+    withTempPath(f => {
+      val e = intercept[AnalysisException] {
+        dtDF.write.json(f.getCanonicalPath)
+      }
+      e.message.contains("Cannot save interval data type into external storage")
+    })
+
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
+      checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
+      withTempPath(f => {
+        // Currently we don't yet support saving out values of interval data type.
+        val e = intercept[AnalysisException] {
+          df.write.json(f.getCanonicalPath)
+        }
+        e.message.contains("Cannot save interval data type into external storage")
+      })
+    }
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
-    val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")
-    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")
+      checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
 
-    checkAnswer(df.select(df("i") + new CalendarInterval(2, 1, 123)),
-      Row(new CalendarInterval(12 * 3 - 3 + 2, 7 * 7 + 1, 123 + 123)))
+      checkAnswer(df.select(df("i") + new CalendarInterval(2, 1, 123)),
+        Row(new CalendarInterval(12 * 3 - 3 + 2, 7 * 7 + 1, 123 + 123)))
 
-    checkAnswer(df.select(df("i") - new CalendarInterval(2, 1, 123)),
-      Row(new CalendarInterval(12 * 3 - 3 - 2, 7 * 7 - 1, 123 - 123)))
+      checkAnswer(df.select(df("i") - new CalendarInterval(2, 1, 123)),
+        Row(new CalendarInterval(12 * 3 - 3 - 2, 7 * 7 - 1, 123 - 123)))
 
-    // unary minus
-    checkAnswer(df.select(-df("i")),
-      Row(new CalendarInterval(-(12 * 3 - 3), -7 * 7, -123)))
+      // unary minus
+      checkAnswer(df.select(-df("i")),
+        Row(new CalendarInterval(-(12 * 3 - 3), -7 * 7, -123)))
+    }
   }
 
   test("aggregation with codegen updates peak execution memory") {
@@ -4011,18 +4035,102 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-35737: Parse day-time interval literals to tightest types") {
+    import DayTimeIntervalType._
     val dayToSecDF = spark.sql("SELECT INTERVAL '13 02:02:10' DAY TO SECOND")
-    assert(dayToSecDF.schema.head.dataType === DayTimeIntervalType(0, 3))
+    assert(dayToSecDF.schema.head.dataType === DayTimeIntervalType(DAY, SECOND))
     val dayToMinuteDF = spark.sql("SELECT INTERVAL '-2 13:00' DAY TO MINUTE")
-    assert(dayToMinuteDF.schema.head.dataType === DayTimeIntervalType(0, 2))
+    assert(dayToMinuteDF.schema.head.dataType === DayTimeIntervalType(DAY, MINUTE))
     val dayToHourDF = spark.sql("SELECT INTERVAL '0 15' DAY TO HOUR")
-    assert(dayToHourDF.schema.head.dataType === DayTimeIntervalType(0, 1))
+    assert(dayToHourDF.schema.head.dataType === DayTimeIntervalType(DAY, HOUR))
+    val dayDF = spark.sql("SELECT INTERVAL '23' DAY")
+    assert(dayDF.schema.head.dataType === DayTimeIntervalType(DAY))
     val hourToSecDF = spark.sql("SELECT INTERVAL '00:21:02.03' HOUR TO SECOND")
-    assert(hourToSecDF.schema.head.dataType === DayTimeIntervalType(1, 3))
+    assert(hourToSecDF.schema.head.dataType === DayTimeIntervalType(HOUR, SECOND))
     val hourToMinuteDF = spark.sql("SELECT INTERVAL '01:02' HOUR TO MINUTE")
-    assert(hourToMinuteDF.schema.head.dataType === DayTimeIntervalType(1, 2))
+    assert(hourToMinuteDF.schema.head.dataType === DayTimeIntervalType(HOUR, MINUTE))
+    val hourDF1 = spark.sql("SELECT INTERVAL '17' HOUR")
+    assert(hourDF1.schema.head.dataType === DayTimeIntervalType(HOUR))
     val minuteToSecDF = spark.sql("SELECT INTERVAL '10:03.775808000' MINUTE TO SECOND")
-    assert(minuteToSecDF.schema.head.dataType === DayTimeIntervalType(2, 3))
+    assert(minuteToSecDF.schema.head.dataType === DayTimeIntervalType(MINUTE, SECOND))
+    val minuteDF1 = spark.sql("SELECT INTERVAL '03' MINUTE")
+    assert(minuteDF1.schema.head.dataType === DayTimeIntervalType(MINUTE))
+    val secondDF1 = spark.sql("SELECT INTERVAL '11' SECOND")
+    assert(secondDF1.schema.head.dataType === DayTimeIntervalType(SECOND))
+
+    // Seconds greater than 1 minute
+    val secondDF2 = spark.sql("SELECT INTERVAL '75' SECONDS")
+    assert(secondDF2.schema.head.dataType === DayTimeIntervalType(SECOND))
+
+    // Minutes and seconds greater than 1 hour
+    val minuteDF2 = spark.sql("SELECT INTERVAL '68' MINUTES")
+    assert(minuteDF2.schema.head.dataType === DayTimeIntervalType(MINUTE))
+    val secondDF3 = spark.sql("SELECT INTERVAL '11112' SECONDS")
+    assert(secondDF3.schema.head.dataType === DayTimeIntervalType(SECOND))
+
+    // Hours, minutes and seconds greater than 1 day
+    val hourDF2 = spark.sql("SELECT INTERVAL '27' HOURS")
+    assert(hourDF2.schema.head.dataType === DayTimeIntervalType(HOUR))
+    val minuteDF3 = spark.sql("SELECT INTERVAL '2883' MINUTES")
+    assert(minuteDF3.schema.head.dataType === DayTimeIntervalType(MINUTE))
+    val secondDF4 = spark.sql("SELECT INTERVAL '266582' SECONDS")
+    assert(secondDF4.schema.head.dataType === DayTimeIntervalType(SECOND))
+  }
+
+  test("SPARK-35773: Parse year-month interval literals to tightest types") {
+    import YearMonthIntervalType._
+    val yearToMonthDF = spark.sql("SELECT INTERVAL '2021-06' YEAR TO MONTH")
+    assert(yearToMonthDF.schema.head.dataType === YearMonthIntervalType(YEAR, MONTH))
+    val yearDF = spark.sql("SELECT INTERVAL '2022' YEAR")
+    assert(yearDF.schema.head.dataType === YearMonthIntervalType(YEAR))
+    val monthDF1 = spark.sql("SELECT INTERVAL '08' MONTH")
+    assert(monthDF1.schema.head.dataType === YearMonthIntervalType(MONTH))
+    // Months greater than 1 year
+    val monthDF2 = spark.sql("SELECT INTERVAL '25' MONTHS")
+    assert(monthDF2.schema.head.dataType === YearMonthIntervalType(MONTH))
+  }
+
+  test("SPARK-35749: Parse multiple unit fields interval literals as day-time interval types") {
+    def evalAsSecond(query: String): Long = {
+      spark.sql(query).map(_.getAs[Duration](0)).collect.head.getSeconds
+    }
+
+    Seq(
+      ("SELECT INTERVAL '7' DAY", 604800),
+      ("SELECT INTERVAL '5' HOUR", 18000),
+      ("SELECT INTERVAL '2' MINUTE", 120),
+      ("SELECT INTERVAL '30' SECOND", 30),
+      ("SELECT INTERVAL '10' DAY '20' HOUR '30' MINUTE '40' SECOND", 937840),
+      // Units end with 's'
+      ("SELECT INTERVAL '2' DAYS '18' HOURS '34' MINUTES '53' SECONDS", 239693),
+      // A unit occurs more than one time
+      ("SELECT INTERVAL '1' DAY '23' HOURS '3' DAYS '70' MINUTES " +
+        "'5' SECONDS '24' HOURS '10' MINUTES '80' SECONDS", 519685)
+    ).foreach { case (query, expect) =>
+      assert(evalAsSecond(query) === expect)
+      // Units are lower case
+      assert(evalAsSecond(query.toLowerCase(Locale.ROOT)) === expect)
+    }
+  }
+
+  test("SPARK-35749: Parse multiple unit fields interval literals as year-month interval types") {
+    def evalAsYearAndMonth(query: String): (Int, Int) = {
+      val result = spark.sql(query).map(_.getAs[Period](0)).collect.head
+      (result.getYears, result.getMonths)
+    }
+
+    Seq(
+      ("SELECT INTERVAL '10' YEAR", (10, 0)),
+      ("SELECT INTERVAL '7' MONTH", (0, 7)),
+      ("SELECT INTERVAL '8' YEAR '3' MONTH", (8, 3)),
+      // Units end with 's'
+      ("SELECT INTERVAL '5' YEARS '10' MONTHS", (5, 10)),
+      // A unit is appears more than one time
+      ("SELECT INTERVAL '3' YEARS '5' MONTHS '1' YEAR '8' MONTHS", (5, 1))
+    ).foreach { case (query, expect) =>
+      assert(evalAsYearAndMonth(query) === expect)
+      // Units are lower case
+      assert(evalAsYearAndMonth(query.toLowerCase(Locale.ROOT)) === expect)
+    }
   }
 
   test("SPARK-35937: Extract date field from timestamp should work in ANSI mode") {
