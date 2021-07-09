@@ -208,9 +208,6 @@
     -->
     <profile>
       <id>hadoop-3.2</id>
-      <activation>
-        <activeByDefault>true</activeByDefault>
-      </activation>
       <properties>
         <extra.source.dir>src/hadoop-3/main/scala</extra.source.dir>
         <extra.testsource.dir>src/hadoop-3/test/scala</extra.testsource.dir>
