@@ -1935,13 +1935,13 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
     this(left, Option(format), GetTimestamp(left, format, SQLConf.get.timestampType))
   }
 
-  def this(left: Expression) = this(left, None, Cast(left, TimestampType))
+  def this(left: Expression) = this(left, None, Cast(left, SQLConf.get.timestampType))
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
   override def exprsReplaced: Seq[Expression] = left +: format.toSeq
 
   override def prettyName: String = "to_timestamp"
-  override def dataType: DataType = TimestampType
+  override val dataType: DataType = SQLConf.get.timestampType
 
   override protected def withNewChildInternal(newChild: Expression): ParseToTimestamp =
     copy(child = newChild)
