@@ -66,7 +66,7 @@ private[spark] object PythonEvalType {
   }
 }
 
-object BasePythonRunner {
+private object BasePythonRunner {
 
   private lazy val faultHandlerLogDir = Utils.createTempDir(namePrefix = "faulthandler")
 

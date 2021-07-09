@@ -464,7 +464,13 @@ def read_udfs(pickleSer, infile, eval_type):
 
 
 def main(infile, outfile):
+    faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
     try:
+        if faulthandler_log_path:
+            faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
+            faulthandler_log_file = open(faulthandler_log_path, "w")
+            faulthandler.enable(file=faulthandler_log_file)
+
         boot_time = time.time()
         split_index = read_int(infile)
         if split_index == -1:  # for unit tests
@@ -607,21 +613,10 @@ def main(infile, outfile):
                 if hasattr(out_iter, 'close'):
                     out_iter.close()
 
-        faulthandler_log_path = os.environ.get("PYTHON_FAULTHANDLER_DIR", None)
-        if faulthandler_log_path:
-            faulthandler_log_path = os.path.join(faulthandler_log_path, str(os.getpid()))
-            faulthandler_log_file = open(faulthandler_log_path, "w")
-            faulthandler.enable(file=faulthandler_log_file)
-        try:
-            if profiler:
-                profiler.profile(process)
-            else:
-                process()
-        finally:
-            if faulthandler_log_path:
-                faulthandler.disable()
-                faulthandler_log_file.close()
-                os.remove(faulthandler_log_path)
+        if profiler:
+            profiler.profile(process)
+        else:
+            process()
 
         # Reset task context to None. This is a guard code to avoid residual context when worker
         # reuse.
@@ -648,6 +643,11 @@ def main(infile, outfile):
             print("PySpark worker failed with exception:", file=sys.stderr)
             print(traceback.format_exc(), file=sys.stderr)
         sys.exit(-1)
+    finally:
+        if faulthandler_log_path:
+            faulthandler.disable()
+            faulthandler_log_file.close()
+            os.remove(faulthandler_log_path)
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)
     write_long(shuffle.MemoryBytesSpilled, outfile)
