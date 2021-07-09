@@ -63,6 +63,9 @@ private[history] class ApplicationCache(
      * Removal event notifies the provider to detach the UI.
      * @param key removal key
      * @param value removal value
+     * @param cause the reason why a `CacheEntry` was removed, it should
+     *              always be `SIZE` because `appCache` configured with
+     *              `maximumSize` eviction strategy
      */
     override def onRemoval(key: CacheKey, value: CacheEntry,
         cause: RemovalCause): Unit = {
