@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.Origin
 
 /**
  * Thrown when a query fails to analyze, usually because the query itself is invalid.
@@ -48,12 +49,11 @@ class AnalysisException protected[sql] (
   def this(
       errorClass: String,
       messageParameters: Array[String],
-      line: Option[Int],
-      startPosition: Option[Int]) =
+      origin: Origin) =
     this(
       SparkThrowableHelper.getMessage(errorClass, messageParameters),
-      line = line,
-      startPosition = startPosition,
+      line = origin.line,
+      startPosition = origin.startPosition,
       errorClass = Some(errorClass),
       messageParameters = messageParameters)
 

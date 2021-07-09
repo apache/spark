@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidU
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
-import org.apache.spark.sql.catalyst.trees.TreeNode
+import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, FailFastMode, ParseMode, PermissiveMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -1349,9 +1349,13 @@ private[spark] object QueryCompilationErrors {
         s"${evalTypes.mkString(",")}")
   }
 
-  def ambiguousFieldNameError(fieldName: String, names: String): Throwable = {
+  def ambiguousFieldNameError(
+      fieldName: Seq[String], nunMatches: Int, context: Origin): Throwable = {
     new AnalysisException(
-      s"Ambiguous field name: $fieldName. Found multiple columns that can match: $names")
+      errorClass = "INVALID_FIELD_NAME",
+      messageParameters = Array(fieldName.quoted,
+        s"${fieldName.last} is ambiguous and has $nunMatches matching fields in the struct"),
+      origin = context)
   }
 
   def cannotUseIntervalTypeInTableSchemaError(): Throwable = {
@@ -1993,8 +1997,10 @@ private[spark] object QueryCompilationErrors {
       context.origin.startPosition)
   }
 
-  def invalidFieldName(fieldName: Seq[String], path: Seq[String]): Throwable = {
+  def invalidFieldName(fieldName: Seq[String], path: Seq[String], context: Origin): Throwable = {
     new AnalysisException(
-      s"Field name ${fieldName.quoted} is invalid, ${path.quoted} is not a struct.")
+      errorClass = "INVALID_FIELD_NAME",
+      messageParameters = Array(fieldName.quoted, s"${path.quoted} is not a struct"),
+      origin = context)
   }
 }

@@ -21,5 +21,8 @@
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
+  },
+  "INVALID_FIELD_NAME" : {
+    "message" : [ "Field name %s is invalid: %s." ]
   }
 }
