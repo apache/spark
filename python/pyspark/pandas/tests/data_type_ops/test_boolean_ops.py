@@ -644,6 +644,10 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             if dtype in self.fractional_extension_dtypes:
                 # A pandas boolean extension series cannot be casted to fractional extension dtypes
                 self.assert_eq([1.0, 0.0, np.nan], self.psser.astype(dtype).tolist())
+            elif dtype in self.string_extension_dtype:
+                if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
+                    # Limit pandas version due to https://github.com/pandas-dev/pandas/issues/31204
+                    self.check_extension(pser.astype(dtype), psser.astype(dtype))
             else:
                 self.check_extension(pser.astype(dtype), psser.astype(dtype))
 
