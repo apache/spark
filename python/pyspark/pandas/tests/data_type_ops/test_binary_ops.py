@@ -53,7 +53,7 @@ class BinaryOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         with option_context("compute.ops_on_diff_frames", True):
             for psser in self.pssers:
                 self.assertRaises(TypeError, lambda: self.psser + psser)
-            self.assert_eq(self.psser + self.psser, self.pser + self.pser)
+            self.assert_eq(self.pser + self.pser, (self.psser + self.psser).sort_index())
 
     def test_sub(self):
         self.assertRaises(TypeError, lambda: self.psser - "x")

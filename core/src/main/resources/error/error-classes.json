@@ -15,6 +15,9 @@
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
   },
+  "UNABLE_TO_ACQUIRE_MEMORY" : {
+    "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
+  },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
