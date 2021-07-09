@@ -1008,17 +1008,19 @@ case class UnixTimestamp(
     copy(timeExp = newLeft, format = newRight)
 }
 
-case class GetTimestampNTZ(
+/**
+ * Gets timestamps from strings using given pattern.
+ */
+case class GetTimestamp(
     left: Expression,
     right: Expression,
+    override val dataType: DataType,
     timeZoneId: Option[String] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled) extends ToTimestamp {
 
-  override val forTimestampNTZ: Boolean = true
+  override val forTimestampNTZ: Boolean = dataType == TimestampNTZType
 
   override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
-
-  override def dataType: DataType = TimestampNTZType
 
   override protected def downScaleFactor: Long = 1
 
@@ -1064,7 +1066,7 @@ case class ParseToTimestampNTZ(
     child: Expression) extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), GetTimestampNTZ(left, format))
+    this(left, Option(format), GetTimestamp(left, format, TimestampNTZType))
   }
 
   def this(left: Expression) = this(left, None, Cast(left, TimestampNTZType))
@@ -1884,7 +1886,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), Cast(GetTimestamp(left, format), DateType))
+    this(left, Option(format), Cast(GetTimestamp(left, format, TimestampType), DateType))
   }
 
   def this(left: Expression) = {
@@ -1931,7 +1933,7 @@ case class ParseToTimestamp(left: Expression, format: Option[Expression], child:
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), GetTimestamp(left, format))
+    this(left, Option(format), GetTimestamp(left, format, SQLConf.get.timestampType))
   }
 
   def this(left: Expression) = this(left, None, Cast(left, TimestampType))
@@ -2194,27 +2196,6 @@ case class DateDiff(endDate: Expression, startDate: Expression)
   override protected def withNewChildrenInternal(
       newLeft: Expression, newRight: Expression): DateDiff =
     copy(endDate = newLeft, startDate = newRight)
-}
-
-/**
- * Gets timestamps from strings using given pattern.
- */
-private case class GetTimestamp(
-    left: Expression,
-    right: Expression,
-    timeZoneId: Option[String] = None,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends ToTimestamp {
-
-  override val downScaleFactor = 1
-  override def dataType: DataType = TimestampType
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): GetTimestamp =
-    copy(left = newLeft, right = newRight)
 }
 
 @ExpressionDescription(
