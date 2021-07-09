@@ -411,6 +411,7 @@ private[spark] class ExecutorPodsAllocator(
           .withNamespace(conf.get(KUBERNETES_NAMESPACE))
         .endMetadata()
         .withNewSpec()
+          .withPodManagementPolicy("Parallel")
           .withReplicas(expected)
           .withNewSelector()
             .addToMatchLabels(SPARK_APP_ID_LABEL, applicationId)
