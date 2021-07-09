@@ -61,56 +61,52 @@ class JacksonParserSuite extends SparkFunSuite {
       if (nullable) {
         action
       } else {
-        assertThrows[IllegalSchemaArgumentException] {
+        val msg = intercept[IllegalSchemaArgumentException] {
           action
+        }.message
+        assert(msg.contains("the null value found when parsing non-nullable field c2."))
+      }
+    }
+
+    val missingFieldInput = """{"c1":1}"""
+    val nullValueInput = """{"c1": 1, "c2": null}"""
+    Seq(true, false).foreach { nullable =>
+      val schema = StructType(Seq(
+        StructField("c1", IntegerType),
+        StructField("c2", IntegerType, nullable = nullable)
+      ))
+      val expected = Seq(InternalRow(1, null))
+      Seq(missingFieldInput, nullValueInput).foreach { input =>
+        assertAction(nullable) {
+          check(input = input, schema = schema, filters = Seq.empty, expected = expected)
         }
       }
     }
+
+    // filter by not exist field and filter by null value field.
     Seq(true, false).foreach { nullable =>
       val schema = StructType(Seq(
-        StructField("i", IntegerType),
-        StructField("not_exist_col", IntegerType, nullable = nullable)
+        StructField("c1", IntegerType),
+        StructField("c2", IntegerType, nullable = nullable)
       ))
-      val expected = Seq(InternalRow(1, null))
-      assertAction(nullable) {
-        check(schema = schema, filters = Seq(EqualTo("i", 1)), expected = expected)
+      Seq(missingFieldInput, nullValueInput).foreach { input =>
+        assertAction(nullable) {
+          check(input = input, schema = schema, filters = Seq(EqualTo("c2", 1)),
+            expected = Seq.empty)
+        }
+        assertAction(nullable) {
+          check(input = input, schema = schema, filters = Seq(EqualTo("c2", 0)),
+            expected = Seq.empty)
+        }
+        assertAction(nullable) {
+          check(input = input, schema = schema, filters = Seq(IsNotNull("c2")),
+            expected = Seq.empty)
+        }
+        assertAction(nullable) {
+          check(input = input, schema = schema, filters = Seq(IsNull("c2")),
+            expected = Seq(InternalRow(1, null)))
+        }
       }
-    }
-
-    val schema = (nullable: Boolean) => StructType(Seq(
-      StructField("i", IntegerType),
-      StructField("not_exist_col", IntegerType, nullable = nullable)
-    ))
-    // filter by not exist column
-    Seq(true, false).foreach { nullable =>
-      val s = schema(nullable)
-      assertAction(nullable) {
-        check(schema = s, filters = Seq(EqualTo("not_exist_col", 1)), expected = Seq.empty)
-      }
-      assertAction(nullable) {
-        check(schema = s, filters = Seq(EqualTo("not_exist_col", 0)), expected = Seq.empty)
-      }
-      assertAction(nullable) {
-        check(schema = s, filters = Seq(IsNotNull("not_exist_col")), expected = Seq.empty)
-      }
-      assertAction(nullable) {
-        check(schema = s, filters = Seq(IsNull("not_exist_col")),
-          expected = Seq(InternalRow(1, null)))
-      }
-
-    }
-
-    val input = """{"a": 1, "b": null}"""
-    // filter by null value column
-    Seq(true, false).foreach { nullable =>
-      val s2 = StructType(Seq(
-        StructField("a", IntegerType),
-        StructField("b", IntegerType, nullable = nullable)))
-      assertAction(nullable) {
-        check(input = input, schema = s2, filters = Seq(IsNotNull("b")), expected = Seq.empty)
-      }
-      val expected5 = if (nullable) Seq(InternalRow(1, null)) else Seq.empty
-      check(input = input, schema = s2, filters = Seq(IsNull("b")), expected = expected5)
     }
   }
 }

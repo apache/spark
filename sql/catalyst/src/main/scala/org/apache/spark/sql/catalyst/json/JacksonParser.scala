@@ -406,7 +406,12 @@ class JacksonParser(
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
           try {
-            row.update(index, fieldConverters(index).apply(parser))
+            val fieldValue = fieldConverters(index).apply(parser)
+            if (!schema(index).nullable && fieldValue == null) {
+              throw new IllegalSchemaArgumentException(
+                s"the null value found when parsing non-nullable field ${schema(index).name}.")
+            }
+            row.update(index, fieldValue)
             skipRow = structFilters.skipRow(row, index)
             checkedIndexSet += index
           } catch {
