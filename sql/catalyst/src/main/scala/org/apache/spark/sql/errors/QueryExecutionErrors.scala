@@ -135,7 +135,7 @@ object QueryExecutionErrors {
   }
 
   def divideByZeroError(): ArithmeticException = {
-    new SparkArithmeticException("DIVIDE_BY_ZERO", Seq.empty)
+    new SparkArithmeticException(errorClass = "DIVIDE_BY_ZERO", messageParameters = Array.empty)
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
@@ -607,7 +607,7 @@ object QueryExecutionErrors {
   def writingJobAbortedError(e: Throwable): Throwable = {
     new SparkException(
       errorClass = "WRITING_JOB_ABORTED",
-      messageParameters = Seq.empty,
+      messageParameters = Array.empty,
       cause = e)
   }
 

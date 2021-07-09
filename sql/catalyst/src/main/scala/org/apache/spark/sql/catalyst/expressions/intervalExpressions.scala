@@ -29,6 +29,8 @@ import org.apache.spark.sql.catalyst.util.IntervalUtils._
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.CalendarInterval
 
 abstract class ExtractIntervalPart[T](
@@ -125,32 +127,42 @@ object ExtractIntervalPart {
       source: Expression,
       errorHandleFunc: => Nothing): Expression = {
     (extractField.toUpperCase(Locale.ROOT), source.dataType) match {
-      case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", _: YearMonthIntervalType) =>
+      case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", YearMonthIntervalType(start, end))
+        if isUnitInIntervalRange(YEAR, start, end) =>
         ExtractANSIIntervalYears(source)
       case ("YEAR" | "Y" | "YEARS" | "YR" | "YRS", CalendarIntervalType) =>
         ExtractIntervalYears(source)
-      case ("MONTH" | "MON" | "MONS" | "MONTHS", _: YearMonthIntervalType) =>
+      case ("MONTH" | "MON" | "MONS" | "MONTHS", YearMonthIntervalType(start, end))
+        if isUnitInIntervalRange(MONTH, start, end) =>
         ExtractANSIIntervalMonths(source)
       case ("MONTH" | "MON" | "MONS" | "MONTHS", CalendarIntervalType) =>
         ExtractIntervalMonths(source)
-      case ("DAY" | "D" | "DAYS", _: DayTimeIntervalType) =>
+      case ("DAY" | "D" | "DAYS", DayTimeIntervalType(start, end))
+        if isUnitInIntervalRange(DAY, start, end) =>
         ExtractANSIIntervalDays(source)
       case ("DAY" | "D" | "DAYS", CalendarIntervalType) =>
         ExtractIntervalDays(source)
-      case ("HOUR" | "H" | "HOURS" | "HR" | "HRS", _: DayTimeIntervalType) =>
+      case ("HOUR" | "H" | "HOURS" | "HR" | "HRS", DayTimeIntervalType(start, end))
+        if isUnitInIntervalRange(HOUR, start, end) =>
         ExtractANSIIntervalHours(source)
       case ("HOUR" | "H" | "HOURS" | "HR" | "HRS", CalendarIntervalType) =>
         ExtractIntervalHours(source)
-      case ("MINUTE" | "M" | "MIN" | "MINS" | "MINUTES", _: DayTimeIntervalType) =>
+      case ("MINUTE" | "M" | "MIN" | "MINS" | "MINUTES", DayTimeIntervalType(start, end))
+        if isUnitInIntervalRange(MINUTE, start, end) =>
         ExtractANSIIntervalMinutes(source)
       case ("MINUTE" | "M" | "MIN" | "MINS" | "MINUTES", CalendarIntervalType) =>
         ExtractIntervalMinutes(source)
-      case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", _: DayTimeIntervalType) =>
+      case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", DayTimeIntervalType(start, end))
+        if isUnitInIntervalRange(SECOND, start, end) =>
         ExtractANSIIntervalSeconds(source)
       case ("SECOND" | "S" | "SEC" | "SECONDS" | "SECS", CalendarIntervalType) =>
         ExtractIntervalSeconds(source)
       case _ => errorHandleFunc
     }
+  }
+
+  private def isUnitInIntervalRange(unit: Byte, start: Byte, end: Byte): Boolean = {
+    start <= unit && unit <= end
   }
 }
 
