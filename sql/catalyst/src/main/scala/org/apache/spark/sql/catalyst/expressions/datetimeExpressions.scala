@@ -261,7 +261,7 @@ case class CurrentBatchTimestamp(
     dataType match {
       case _: TimestampType => Literal(timestampUs, TimestampType)
       case _: TimestampNTZType =>
-        Literal(convertTz(timestampUs, ZoneOffset.UTC, zoneId), TimestampNTZType)
+        Literal(convertTz(timestampUs, zoneId, ZoneOffset.UTC), TimestampNTZType)
       case _: DateType => Literal(microsToDays(timestampUs, zoneId), DateType)
     }
   }
