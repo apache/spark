@@ -64,6 +64,7 @@ class SparkOptimizer(
       ColumnPruning,
       PushPredicateThroughNonJoin,
       RemoveNoopOperators) :+
+    Batch("BroadcastJoinOuterJoinStreamSide", Once, BroadcastJoinOuterJoinStreamSide) :+
     Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules :+

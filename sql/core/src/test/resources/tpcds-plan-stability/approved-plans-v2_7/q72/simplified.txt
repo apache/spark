@@ -1,9 +1,9 @@
 TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_promo,promo]
-  WholeStageCodegen (15)
+  WholeStageCodegen (25)
     HashAggregate [i_item_desc,w_warehouse_name,d_week_seq,count] [count(1),no_promo,promo,total_cnt,count]
       InputAdapter
         Exchange [i_item_desc,w_warehouse_name,d_week_seq] #1
-          WholeStageCodegen (14)
+          WholeStageCodegen (24)
             HashAggregate [i_item_desc,w_warehouse_name,d_week_seq] [count,count]
               Project [w_warehouse_name,i_item_desc,d_week_seq]
                 SortMergeJoin [cs_item_sk,cs_order_number,cr_item_sk,cr_order_number]
@@ -104,13 +104,17 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                                             InputAdapter
                                               Scan parquet default.promotion [p_promo_sk]
                   InputAdapter
-                    WholeStageCodegen (13)
+                    WholeStageCodegen (23)
                       Sort [cr_item_sk,cr_order_number]
                         InputAdapter
                           Exchange [cr_item_sk,cr_order_number] #12
-                            WholeStageCodegen (12)
-                              Project [cr_item_sk,cr_order_number]
-                                Filter [cr_item_sk,cr_order_number]
-                                  ColumnarToRow
-                                    InputAdapter
-                                      Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_returned_date_sk]
+                            WholeStageCodegen (22)
+                              BroadcastHashJoin [cr_item_sk,cr_order_number,cs_item_sk,cs_order_number]
+                                Project [cr_item_sk,cr_order_number]
+                                  Filter [cr_item_sk,cr_order_number]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_returned_date_sk]
+                                InputAdapter
+                                  BroadcastExchange #13
+                                    ReusedExchange [cs_item_sk,cs_order_number,w_warehouse_name,i_item_desc,d_week_seq] #2

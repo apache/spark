@@ -1,10 +1,10 @@
 == Physical Plan ==
-TakeOrderedAndProject (70)
-+- * HashAggregate (69)
-   +- Exchange (68)
-      +- * HashAggregate (67)
-         +- * Project (66)
-            +- * SortMergeJoin LeftOuter (65)
+TakeOrderedAndProject (73)
++- * HashAggregate (72)
+   +- Exchange (71)
+      +- * HashAggregate (70)
+         +- * Project (69)
+            +- * SortMergeJoin LeftOuter (68)
                :- * Sort (58)
                :  +- Exchange (57)
                :     +- * Project (56)
@@ -63,12 +63,15 @@ TakeOrderedAndProject (70)
                :              +- * Filter (53)
                :                 +- * ColumnarToRow (52)
                :                    +- Scan parquet default.promotion (51)
-               +- * Sort (64)
-                  +- Exchange (63)
-                     +- * Project (62)
-                        +- * Filter (61)
-                           +- * ColumnarToRow (60)
-                              +- Scan parquet default.catalog_returns (59)
+               +- * Sort (67)
+                  +- Exchange (66)
+                     +- * BroadcastHashJoin LeftSemi BuildRight (65)
+                        :- * Project (62)
+                        :  +- * Filter (61)
+                        :     +- * ColumnarToRow (60)
+                        :        +- Scan parquet default.catalog_returns (59)
+                        +- BroadcastExchange (64)
+                           +- ReusedExchange (63)
 
 
 (1) Scan parquet default.catalog_sales
@@ -230,7 +233,7 @@ Join condition: None
 Output [8]: [cs_ship_date_sk#1, cs_item_sk#4, cs_promo_sk#5, cs_order_number#6, cs_sold_date_sk#8, inv_date_sk#13, w_warehouse_name#16, i_item_desc#19]
 Input [10]: [cs_ship_date_sk#1, cs_bill_hdemo_sk#3, cs_item_sk#4, cs_promo_sk#5, cs_order_number#6, cs_sold_date_sk#8, inv_date_sk#13, w_warehouse_name#16, i_item_desc#19, hd_demo_sk#24]
 
-(36) ReusedExchange [Reuses operator id: 75]
+(36) ReusedExchange [Reuses operator id: 78]
 Output [3]: [d_date_sk#27, d_date#28, d_week_seq#29]
 
 (37) BroadcastHashJoin [codegen id : 10]
@@ -338,86 +341,98 @@ Location [not included in comparison]/{warehouse_dir}/catalog_returns]
 PushedFilters: [IsNotNull(cr_item_sk), IsNotNull(cr_order_number)]
 ReadSchema: struct<cr_item_sk:int,cr_order_number:int>
 
-(60) ColumnarToRow [codegen id : 12]
+(60) ColumnarToRow [codegen id : 22]
 Input [3]: [cr_item_sk#39, cr_order_number#40, cr_returned_date_sk#41]
 
-(61) Filter [codegen id : 12]
+(61) Filter [codegen id : 22]
 Input [3]: [cr_item_sk#39, cr_order_number#40, cr_returned_date_sk#41]
 Condition : (isnotnull(cr_item_sk#39) AND isnotnull(cr_order_number#40))
 
-(62) Project [codegen id : 12]
+(62) Project [codegen id : 22]
 Output [2]: [cr_item_sk#39, cr_order_number#40]
 Input [3]: [cr_item_sk#39, cr_order_number#40, cr_returned_date_sk#41]
 
-(63) Exchange
-Input [2]: [cr_item_sk#39, cr_order_number#40]
-Arguments: hashpartitioning(cr_item_sk#39, cr_order_number#40, 5), ENSURE_REQUIREMENTS, [id=#42]
+(63) ReusedExchange [Reuses operator id: 57]
+Output [5]: [cs_item_sk#4, cs_order_number#6, w_warehouse_name#16, i_item_desc#19, d_week_seq#29]
 
-(64) Sort [codegen id : 13]
+(64) BroadcastExchange
+Input [5]: [cs_item_sk#4, cs_order_number#6, w_warehouse_name#16, i_item_desc#19, d_week_seq#29]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[0, int, true] as bigint), 32) | (cast(input[1, int, true] as bigint) & 4294967295))),false), [id=#42]
+
+(65) BroadcastHashJoin [codegen id : 22]
+Left keys [2]: [cr_item_sk#39, cr_order_number#40]
+Right keys [2]: [cs_item_sk#4, cs_order_number#6]
+Join condition: None
+
+(66) Exchange
+Input [2]: [cr_item_sk#39, cr_order_number#40]
+Arguments: hashpartitioning(cr_item_sk#39, cr_order_number#40, 5), ENSURE_REQUIREMENTS, [id=#43]
+
+(67) Sort [codegen id : 23]
 Input [2]: [cr_item_sk#39, cr_order_number#40]
 Arguments: [cr_item_sk#39 ASC NULLS FIRST, cr_order_number#40 ASC NULLS FIRST], false, 0
 
-(65) SortMergeJoin [codegen id : 14]
+(68) SortMergeJoin [codegen id : 24]
 Left keys [2]: [cs_item_sk#4, cs_order_number#6]
 Right keys [2]: [cr_item_sk#39, cr_order_number#40]
 Join condition: None
 
-(66) Project [codegen id : 14]
+(69) Project [codegen id : 24]
 Output [3]: [w_warehouse_name#16, i_item_desc#19, d_week_seq#29]
 Input [7]: [cs_item_sk#4, cs_order_number#6, w_warehouse_name#16, i_item_desc#19, d_week_seq#29, cr_item_sk#39, cr_order_number#40]
 
-(67) HashAggregate [codegen id : 14]
+(70) HashAggregate [codegen id : 24]
 Input [3]: [w_warehouse_name#16, i_item_desc#19, d_week_seq#29]
 Keys [3]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29]
 Functions [1]: [partial_count(1)]
-Aggregate Attributes [1]: [count#43]
-Results [4]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count#44]
+Aggregate Attributes [1]: [count#44]
+Results [4]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count#45]
 
-(68) Exchange
-Input [4]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count#44]
-Arguments: hashpartitioning(i_item_desc#19, w_warehouse_name#16, d_week_seq#29, 5), ENSURE_REQUIREMENTS, [id=#45]
+(71) Exchange
+Input [4]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count#45]
+Arguments: hashpartitioning(i_item_desc#19, w_warehouse_name#16, d_week_seq#29, 5), ENSURE_REQUIREMENTS, [id=#46]
 
-(69) HashAggregate [codegen id : 15]
-Input [4]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count#44]
+(72) HashAggregate [codegen id : 25]
+Input [4]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count#45]
 Keys [3]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29]
 Functions [1]: [count(1)]
-Aggregate Attributes [1]: [count(1)#46]
-Results [6]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count(1)#46 AS no_promo#47, count(1)#46 AS promo#48, count(1)#46 AS total_cnt#49]
+Aggregate Attributes [1]: [count(1)#47]
+Results [6]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, count(1)#47 AS no_promo#48, count(1)#47 AS promo#49, count(1)#47 AS total_cnt#50]
 
-(70) TakeOrderedAndProject
-Input [6]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, no_promo#47, promo#48, total_cnt#49]
-Arguments: 100, [total_cnt#49 DESC NULLS LAST, i_item_desc#19 ASC NULLS FIRST, w_warehouse_name#16 ASC NULLS FIRST, d_week_seq#29 ASC NULLS FIRST], [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, no_promo#47, promo#48, total_cnt#49]
+(73) TakeOrderedAndProject
+Input [6]: [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, no_promo#48, promo#49, total_cnt#50]
+Arguments: 100, [total_cnt#50 DESC NULLS LAST, i_item_desc#19 ASC NULLS FIRST, w_warehouse_name#16 ASC NULLS FIRST, d_week_seq#29 ASC NULLS FIRST], [i_item_desc#19, w_warehouse_name#16, d_week_seq#29, no_promo#48, promo#49, total_cnt#50]
 
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 1 Hosting Expression = cs_sold_date_sk#8 IN dynamicpruning#9
-BroadcastExchange (75)
-+- * Project (74)
-   +- * Filter (73)
-      +- * ColumnarToRow (72)
-         +- Scan parquet default.date_dim (71)
+BroadcastExchange (78)
++- * Project (77)
+   +- * Filter (76)
+      +- * ColumnarToRow (75)
+         +- Scan parquet default.date_dim (74)
 
 
-(71) Scan parquet default.date_dim
-Output [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#50]
+(74) Scan parquet default.date_dim
+Output [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#51]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2001), IsNotNull(d_date_sk), IsNotNull(d_week_seq), IsNotNull(d_date)]
 ReadSchema: struct<d_date_sk:int,d_date:date,d_week_seq:int,d_year:int>
 
-(72) ColumnarToRow [codegen id : 1]
-Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#50]
+(75) ColumnarToRow [codegen id : 1]
+Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#51]
 
-(73) Filter [codegen id : 1]
-Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#50]
-Condition : ((((isnotnull(d_year#50) AND (d_year#50 = 2001)) AND isnotnull(d_date_sk#27)) AND isnotnull(d_week_seq#29)) AND isnotnull(d_date#28))
+(76) Filter [codegen id : 1]
+Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#51]
+Condition : ((((isnotnull(d_year#51) AND (d_year#51 = 2001)) AND isnotnull(d_date_sk#27)) AND isnotnull(d_week_seq#29)) AND isnotnull(d_date#28))
 
-(74) Project [codegen id : 1]
+(77) Project [codegen id : 1]
 Output [3]: [d_date_sk#27, d_date#28, d_week_seq#29]
-Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#50]
+Input [4]: [d_date_sk#27, d_date#28, d_week_seq#29, d_year#51]
 
-(75) BroadcastExchange
+(78) BroadcastExchange
 Input [3]: [d_date_sk#27, d_date#28, d_week_seq#29]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#51]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#52]
 
 

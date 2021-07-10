@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
-import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -4056,6 +4056,26 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
            |select * from start S join end E on S.c1 = E.c1
            |""".stripMargin),
         Row(1, 2, 1, 2) :: Nil)
+    }
+  }
+
+  test("SPARK-36080: Broadcast outer join stream side") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10000") {
+      withTable("t1", "t2") {
+        sql("CREATE TABLE t1 USING parquet AS SELECT id AS a, id AS b FROM range(5)")
+        sql("CREATE TABLE t2 USING parquet AS SELECT id AS x, id AS y FROM range(1000000)")
+        val df = sql("select * from t1 left join t2 on t1.a = t2.x where b = 3")
+        df.collect()
+        val adaptivePlan = df.queryExecution.executedPlan
+
+        val broadcastExchangeExec = collect(adaptivePlan) { case b: BroadcastExchangeExec => b }
+        val reusedExchangeExec = collect(adaptivePlan) { case r: ReusedExchangeExec => r }
+
+        assert(broadcastExchangeExec.size == 2, "Two BroadcastExchangeExec")
+        assert(reusedExchangeExec.size == 1, "one and only ReusedExchangeExec")
+
+        checkAnswer(df, Row(3, 3, 3, 3) :: Nil)
+      }
     }
   }
 }

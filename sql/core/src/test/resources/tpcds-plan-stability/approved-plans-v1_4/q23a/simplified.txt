@@ -1,12 +1,12 @@
-WholeStageCodegen (24)
+WholeStageCodegen (34)
   HashAggregate [sum,isEmpty] [sum(sales),sum(sales),sum,isEmpty]
     InputAdapter
       Exchange #1
-        WholeStageCodegen (23)
+        WholeStageCodegen (33)
           HashAggregate [sales] [sum,isEmpty,sum,isEmpty]
             InputAdapter
               Union
-                WholeStageCodegen (11)
+                WholeStageCodegen (16)
                   Project [cs_quantity,cs_list_price]
                     BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                       Project [cs_quantity,cs_list_price,cs_sold_date_sk]
@@ -66,74 +66,78 @@ WholeStageCodegen (24)
                                                                             InputAdapter
                                                                               Scan parquet default.item [i_item_sk,i_item_desc]
                           InputAdapter
-                            WholeStageCodegen (9)
+                            WholeStageCodegen (14)
                               Sort [c_customer_sk]
-                                Project [c_customer_sk]
-                                  Filter [ssales]
-                                    Subquery #3
-                                      WholeStageCodegen (5)
-                                        HashAggregate [max] [max(csales),tpcds_cmax,max]
-                                          InputAdapter
-                                            Exchange #10
-                                              WholeStageCodegen (4)
-                                                HashAggregate [csales] [max,max]
-                                                  HashAggregate [c_customer_sk,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),csales,sum,isEmpty]
+                                BroadcastHashJoin [c_customer_sk,cs_bill_customer_sk]
+                                  Project [c_customer_sk]
+                                    Filter [ssales]
+                                      Subquery #3
+                                        WholeStageCodegen (5)
+                                          HashAggregate [max] [max(csales),tpcds_cmax,max]
+                                            InputAdapter
+                                              Exchange #10
+                                                WholeStageCodegen (4)
+                                                  HashAggregate [csales] [max,max]
+                                                    HashAggregate [c_customer_sk,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),csales,sum,isEmpty]
+                                                      InputAdapter
+                                                        Exchange [c_customer_sk] #11
+                                                          WholeStageCodegen (3)
+                                                            HashAggregate [c_customer_sk,ss_quantity,ss_sales_price] [sum,isEmpty,sum,isEmpty]
+                                                              Project [ss_quantity,ss_sales_price,c_customer_sk]
+                                                                BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
+                                                                  Project [ss_quantity,ss_sales_price,ss_sold_date_sk,c_customer_sk]
+                                                                    BroadcastHashJoin [ss_customer_sk,c_customer_sk]
+                                                                      Filter [ss_customer_sk]
+                                                                        ColumnarToRow
+                                                                          InputAdapter
+                                                                            Scan parquet default.store_sales [ss_customer_sk,ss_quantity,ss_sales_price,ss_sold_date_sk]
+                                                                              SubqueryBroadcast [d_date_sk] #4
+                                                                                BroadcastExchange #12
+                                                                                  WholeStageCodegen (1)
+                                                                                    Project [d_date_sk]
+                                                                                      Filter [d_year,d_date_sk]
+                                                                                        ColumnarToRow
+                                                                                          InputAdapter
+                                                                                            Scan parquet default.date_dim [d_date_sk,d_year]
+                                                                      InputAdapter
+                                                                        ReusedExchange [c_customer_sk] #9
+                                                                  InputAdapter
+                                                                    ReusedExchange [d_date_sk] #12
+                                      HashAggregate [c_customer_sk,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),ssales,sum,isEmpty]
+                                        InputAdapter
+                                          Exchange [c_customer_sk] #8
+                                            WholeStageCodegen (8)
+                                              HashAggregate [c_customer_sk,ss_quantity,ss_sales_price] [sum,isEmpty,sum,isEmpty]
+                                                Project [ss_quantity,ss_sales_price,c_customer_sk]
+                                                  BroadcastHashJoin [ss_customer_sk,c_customer_sk]
+                                                    Project [ss_customer_sk,ss_quantity,ss_sales_price]
+                                                      Filter [ss_customer_sk]
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet default.store_sales [ss_customer_sk,ss_quantity,ss_sales_price,ss_sold_date_sk]
                                                     InputAdapter
-                                                      Exchange [c_customer_sk] #11
-                                                        WholeStageCodegen (3)
-                                                          HashAggregate [c_customer_sk,ss_quantity,ss_sales_price] [sum,isEmpty,sum,isEmpty]
-                                                            Project [ss_quantity,ss_sales_price,c_customer_sk]
-                                                              BroadcastHashJoin [ss_sold_date_sk,d_date_sk]
-                                                                Project [ss_quantity,ss_sales_price,ss_sold_date_sk,c_customer_sk]
-                                                                  BroadcastHashJoin [ss_customer_sk,c_customer_sk]
-                                                                    Filter [ss_customer_sk]
-                                                                      ColumnarToRow
-                                                                        InputAdapter
-                                                                          Scan parquet default.store_sales [ss_customer_sk,ss_quantity,ss_sales_price,ss_sold_date_sk]
-                                                                            SubqueryBroadcast [d_date_sk] #4
-                                                                              BroadcastExchange #12
-                                                                                WholeStageCodegen (1)
-                                                                                  Project [d_date_sk]
-                                                                                    Filter [d_year,d_date_sk]
-                                                                                      ColumnarToRow
-                                                                                        InputAdapter
-                                                                                          Scan parquet default.date_dim [d_date_sk,d_year]
-                                                                    InputAdapter
-                                                                      ReusedExchange [c_customer_sk] #9
-                                                                InputAdapter
-                                                                  ReusedExchange [d_date_sk] #12
-                                    HashAggregate [c_customer_sk,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),ssales,sum,isEmpty]
-                                      InputAdapter
-                                        Exchange [c_customer_sk] #8
-                                          WholeStageCodegen (8)
-                                            HashAggregate [c_customer_sk,ss_quantity,ss_sales_price] [sum,isEmpty,sum,isEmpty]
-                                              Project [ss_quantity,ss_sales_price,c_customer_sk]
-                                                BroadcastHashJoin [ss_customer_sk,c_customer_sk]
-                                                  Project [ss_customer_sk,ss_quantity,ss_sales_price]
-                                                    Filter [ss_customer_sk]
-                                                      ColumnarToRow
-                                                        InputAdapter
-                                                          Scan parquet default.store_sales [ss_customer_sk,ss_quantity,ss_sales_price,ss_sold_date_sk]
-                                                  InputAdapter
-                                                    BroadcastExchange #9
-                                                      WholeStageCodegen (7)
-                                                        Filter [c_customer_sk]
-                                                          ColumnarToRow
-                                                            InputAdapter
-                                                              Scan parquet default.customer [c_customer_sk]
+                                                      BroadcastExchange #9
+                                                        WholeStageCodegen (7)
+                                                          Filter [c_customer_sk]
+                                                            ColumnarToRow
+                                                              InputAdapter
+                                                                Scan parquet default.customer [c_customer_sk]
+                                  InputAdapter
+                                    BroadcastExchange #13
+                                      ReusedExchange [cs_bill_customer_sk,cs_quantity,cs_list_price,cs_sold_date_sk] #2
                       InputAdapter
                         ReusedExchange [d_date_sk] #3
-                WholeStageCodegen (22)
+                WholeStageCodegen (32)
                   Project [ws_quantity,ws_list_price]
                     BroadcastHashJoin [ws_sold_date_sk,d_date_sk]
                       Project [ws_quantity,ws_list_price,ws_sold_date_sk]
                         SortMergeJoin [ws_bill_customer_sk,c_customer_sk]
                           InputAdapter
-                            WholeStageCodegen (17)
+                            WholeStageCodegen (22)
                               Sort [ws_bill_customer_sk]
                                 InputAdapter
-                                  Exchange [ws_bill_customer_sk] #13
-                                    WholeStageCodegen (16)
+                                  Exchange [ws_bill_customer_sk] #14
+                                    WholeStageCodegen (21)
                                       Project [ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk]
                                         BroadcastHashJoin [ws_item_sk,item_sk]
                                           ColumnarToRow
@@ -143,13 +147,17 @@ WholeStageCodegen (24)
                                           InputAdapter
                                             ReusedExchange [item_sk] #4
                           InputAdapter
-                            WholeStageCodegen (20)
+                            WholeStageCodegen (30)
                               Sort [c_customer_sk]
-                                Project [c_customer_sk]
-                                  Filter [ssales]
-                                    ReusedSubquery [tpcds_cmax] #3
-                                    HashAggregate [c_customer_sk,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),ssales,sum,isEmpty]
-                                      InputAdapter
-                                        ReusedExchange [c_customer_sk,sum,isEmpty] #8
+                                BroadcastHashJoin [c_customer_sk,ws_bill_customer_sk]
+                                  Project [c_customer_sk]
+                                    Filter [ssales]
+                                      ReusedSubquery [tpcds_cmax] #3
+                                      HashAggregate [c_customer_sk,sum,isEmpty] [sum(CheckOverflow((promote_precision(cast(cast(ss_quantity as decimal(10,0)) as decimal(12,2))) * promote_precision(cast(ss_sales_price as decimal(12,2)))), DecimalType(18,2), true)),ssales,sum,isEmpty]
+                                        InputAdapter
+                                          ReusedExchange [c_customer_sk,sum,isEmpty] #8
+                                  InputAdapter
+                                    BroadcastExchange #15
+                                      ReusedExchange [ws_bill_customer_sk,ws_quantity,ws_list_price,ws_sold_date_sk] #14
                       InputAdapter
                         ReusedExchange [d_date_sk] #3
