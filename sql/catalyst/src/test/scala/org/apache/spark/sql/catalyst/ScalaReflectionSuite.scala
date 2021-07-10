@@ -156,6 +156,16 @@ object TraitProductWithNoConstructorCompanion {}
 
 trait TraitProductWithNoConstructorCompanion extends Product1[Int] {}
 
+class IntWrapper(val i: Int) extends AnyVal
+case class StrWrapper(s: String) extends AnyVal
+case class CaseClassWithGeneric[T](generic: T)
+
+case class ValueClassData(
+  intField: Int,
+  wrappedInt: IntWrapper, // an int column
+  strField: String,
+  wrappedStr: StrWrapper) // a string column
+
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
 
@@ -450,5 +460,52 @@ class ScalaReflectionSuite extends SparkFunSuite {
       StructField("i", IntegerType, false),
       StructField("e", StringType, true))))
     assert(deserializerFor[FooClassWithEnum].dataType == ObjectType(classOf[FooClassWithEnum]))
+  }
+
+  test("SPARK-20384: schema for case class that is a value class") {
+    val schema = schemaFor[IntWrapper]
+    assert(schema === Schema(IntegerType, nullable = false))
+  }
+
+  test("SPARK-20384: schema for case class that contains value class fields") {
+    val schema = schemaFor[ValueClassData]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField("intField", IntegerType, nullable = false),
+        StructField("wrappedInt", IntegerType, nullable = false),
+        StructField("strField", StringType, nullable = true),
+        StructField("wrappedStr", StringType, nullable = true))),
+      nullable = true))
+  }
+
+  test("SPARK-20384: schema for array of value class") {
+    val schema = schemaFor[Array[IntWrapper]]
+    assert(schema === Schema(
+      ArrayType(IntegerType, containsNull = false),
+      nullable = true))
+  }
+
+  test("SPARK-20384: schema for map of value class") {
+    val schema = schemaFor[Map[IntWrapper, StrWrapper]]
+    assert(schema === Schema(
+      MapType(IntegerType, StringType, valueContainsNull = true),
+      nullable = true))
+  }
+
+  test("SPARK-20384: schema for tuple with value class") {
+    val schema = schemaFor[(IntWrapper, StrWrapper)]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField("_1", IntegerType, nullable = false),
+        StructField("_2", StringType, nullable = true))),
+      nullable = true))
+  }
+
+  test("SPARK-20384: schema for case class with generic field") {
+    val schema = schemaFor[CaseClassWithGeneric[Int]]
+    assert(schema === Schema(
+      StructType(Seq(
+        StructField("generic", IntegerType, nullable = false))),
+      nullable = true))
   }
 }

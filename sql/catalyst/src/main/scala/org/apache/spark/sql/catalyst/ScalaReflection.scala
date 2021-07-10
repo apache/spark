@@ -357,6 +357,17 @@ object ScalaReflection extends ScalaReflection {
           dataType = ObjectType(udt.getClass))
         Invoke(obj, "deserialize", ObjectType(udt.userClass), path :: Nil)
 
+      case t if isValueClass(t) =>
+        val (_, underlyingType) = getUnderlyingParameterOf(t)
+        val underlyingClsName = getClassNameFromType(underlyingType)
+        val clsName = getUnerasedClassNameFromType(t)
+        val newTypePath = walkedTypePath.recordValueClass(clsName, underlyingClsName)
+
+        // We only end up here for value classes that should be instansiated
+        val arg = deserializerFor(underlyingType, path, newTypePath)
+        val cls = getClassFromType(t)
+        NewInstance(cls, Seq(arg), ObjectType(cls), propagateNull = false)
+
       case t if definedByConstructorParams(t) =>
         val params = getConstructorParameters(t)
 
@@ -579,6 +590,14 @@ object ScalaReflection extends ScalaReflection {
         val udtClass = udt.getClass
         createSerializerForUserDefinedType(inputObject, udt, udtClass)
 
+      case t if isValueClass(t) =>
+        val (name, underlyingType) = getUnderlyingParameterOf(t)
+        val underlyingClsName = getClassNameFromType(underlyingType)
+        val clsName = getUnerasedClassNameFromType(t)
+        val newPath = walkedTypePath.recordValueClass(clsName, underlyingClsName)
+        val getArg = Invoke(inputObject, name, dataTypeFor(underlyingType))
+        serializerFor(getArg, underlyingType, newPath)
+
       case t if definedByConstructorParams(t) =>
         if (seenTypeSet.contains(t)) {
           throw QueryExecutionErrors.cannotHaveCircularReferencesInClassError(t.toString)
@@ -787,6 +806,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, definitions.ShortTpe) => Schema(ShortType, nullable = false)
       case t if isSubtype(t, definitions.ByteTpe) => Schema(ByteType, nullable = false)
       case t if isSubtype(t, definitions.BooleanTpe) => Schema(BooleanType, nullable = false)
+      case t if isValueClass(t) =>
+        val (_, underlyingType) = getUnderlyingParameterOf(t)
+        schemaFor(underlyingType)
       case t if definedByConstructorParams(t) =>
         val params = getConstructorParameters(t)
         Schema(StructType(
@@ -957,6 +979,22 @@ trait ScalaReflection extends Logging {
   }
 
   /**
+   * Same as `getClassNameFromType` but returns the class name before erasure.
+   */
+  def getUnerasedClassNameFromType(tpe: `Type`): String = {
+    tpe.dealias.typeSymbol.asClass.fullName
+  }
+
+  def isValueClass(tpe: `Type`): Boolean = {
+    tpe.typeSymbol.asClass.isDerivedValueClass
+  }
+
+  /** Returns the name and type of the underlying parameter of value class `tpe`. */
+  def getUnderlyingParameterOf(tpe: `Type`): (String, Type) = {
+    getConstructorParameters(tpe).head
+  }
+
+  /**
    * Returns the parameter names and types for the primary constructor of this type.
    *
    * Note that it only works for scala classes with primary constructor, and currently doesn't
@@ -968,15 +1006,27 @@ trait ScalaReflection extends Logging {
     val TypeRef(_, _, actualTypeArgs) = dealiasedTpe
     val params = constructParams(dealiasedTpe)
     // if there are type variables to fill in, do the substitution (SomeClass[T] -> SomeClass[Int])
-    if (actualTypeArgs.nonEmpty) {
-      params.map { p =>
+    params.map { p => {
+      if (isTypeParameter(p)) {
         p.name.decodedName.toString ->
           p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
+      } else {
+        p.name.decodedName.toString -> unwrapIfValueClassType(p.typeSignature)
       }
+    }
+    }
+  }
+
+  private def isTypeParameter(sym: Symbol): Boolean = {
+    sym.typeSignature.typeSymbol.isParameter
+  }
+
+  private def unwrapIfValueClassType(tpe: Type): Type = {
+    if (isValueClass(tpe)) {
+      val (_, underlyingType) = getUnderlyingParameterOf(tpe)
+      underlyingType
     } else {
-      params.map { p =>
-        p.name.decodedName.toString -> p.typeSignature
-      }
+      tpe
     }
   }
 

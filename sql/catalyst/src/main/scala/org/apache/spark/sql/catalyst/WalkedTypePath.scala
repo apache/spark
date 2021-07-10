@@ -46,6 +46,9 @@ case class WalkedTypePath(private val walkedPaths: Seq[String] = Nil) {
   def recordField(className: String, fieldName: String): WalkedTypePath =
     newInstance(s"""- field (class: "$className", name: "$fieldName")""")
 
+  def recordValueClass(className: String, underlyingClassName: String): WalkedTypePath =
+    newInstance(s"""- Scala value class: $className($underlyingClassName)""")
+
   override def toString: String = {
     walkedPaths.mkString("\n")
   }

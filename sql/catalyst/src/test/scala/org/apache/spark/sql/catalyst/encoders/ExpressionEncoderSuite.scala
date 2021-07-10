@@ -116,6 +116,16 @@ object ReferenceValueClass {
 }
 case class IntAndString(i: Int, s: String)
 
+case class StringWrapper(s: String) extends AnyVal
+case class ValueContainer(a: Int, b: StringWrapper)
+case class IntWrapper(i: Int) extends AnyVal
+case class ComplexValueClassContainer(a: Int, b: ValueContainer, c: IntWrapper)
+case class SeqOfValueClass(s: Seq[StringWrapper])
+case class MapOfValueClassKey(m: Map[IntWrapper, String])
+case class MapOfValueClassValue(m: Map[String, StringWrapper])
+case class OptionOfValueClassValue(o: Option[StringWrapper])
+case class CaseClassWithGeneric[T, S](t: T, s: S)
+
 class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTest {
   OuterScopes.addOuterScope(this)
 
@@ -396,6 +406,42 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
 
   encodeDecodeTest(
     ReferenceValueClass(ReferenceValueClass.Container(1)), "reference value class")
+
+  encodeDecodeTest(StringWrapper("a"), "SPARK-20384: string value class")
+  encodeDecodeTest(ValueContainer(1, StringWrapper("b")), "SPARK-20384: nested value class")
+  encodeDecodeTest(
+    ValueContainer(1, StringWrapper(null)),
+    "SPARK-20384: nested value class with null")
+  encodeDecodeTest(ComplexValueClassContainer(1, ValueContainer(2, StringWrapper("b")),
+    IntWrapper(3)), "SPARK-20384: complex value class")
+  encodeDecodeTest(
+    Array(IntWrapper(1), IntWrapper(2), IntWrapper(3)),
+    "SPARK-20384: array of value class")
+  encodeDecodeTest(Array.empty[IntWrapper], "SPARK-20384: empty array of value class")
+  encodeDecodeTest(
+    Seq(IntWrapper(1), IntWrapper(2), IntWrapper(3)),
+    "SPARK-20384: seq of value class")
+  encodeDecodeTest(Seq.empty[IntWrapper], "SPARK-20384: empty seq of value class")
+  encodeDecodeTest(
+    Map(IntWrapper(1) -> StringWrapper("a"), IntWrapper(2) -> StringWrapper("b")),
+    "SPARK-20384: map with value class")
+
+  // test for nested value class collections
+  encodeDecodeTest(
+    MapOfValueClassKey(Map(IntWrapper(1)-> "a")),
+    "SPARK-20384: case class with map of value class key")
+  encodeDecodeTest(
+    MapOfValueClassValue(Map("a"-> StringWrapper("b"))),
+    "SPARK-20384: case class with map of value class value")
+  encodeDecodeTest(
+    SeqOfValueClass(Seq(StringWrapper("a"))),
+    "SPARK-20384: case class with seq of class value")
+  encodeDecodeTest(
+    OptionOfValueClassValue(Some(StringWrapper("a"))),
+    "SPARK-20384: case class with option of class value")
+  encodeDecodeTest(
+    (IntWrapper(1), StringWrapper("a")),
+    "SPARK-20384: Tuple with value classes")
 
   encodeDecodeTest(Option(31), "option of int")
   encodeDecodeTest(Option.empty[Int], "empty option of int")
