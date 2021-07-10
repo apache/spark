@@ -733,12 +733,12 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
    */
   private def rewrite(plan: LogicalPlan): LogicalPlan = plan.transformUpWithSubqueries {
     case LateralJoin(left, right @ LateralSubquery(OneRowSubquery(projectList), _, _, _), _, None)
-        if right.plan.subqueriesAll.isEmpty =>
+        if right.plan.subqueriesAll.isEmpty && right.joinCond.isEmpty =>
       Project(left.output ++ projectList, left)
     case p: LogicalPlan => p.transformExpressionsUpWithPruning(
       _.containsPattern(SCALAR_SUBQUERY)) {
       case s @ ScalarSubquery(OneRowSubquery(projectList), _, _, _)
-          if s.plan.subqueriesAll.isEmpty =>
+          if s.plan.subqueriesAll.isEmpty && s.joinCond.isEmpty =>
         assert(projectList.size == 1)
         projectList.head
     }
