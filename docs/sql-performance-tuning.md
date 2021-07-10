@@ -249,12 +249,20 @@ This feature coalesces the post shuffle partitions based on the map output stati
      <td>3.0.0</td>
    </tr>
    <tr>
-     <td><code>spark.sql.adaptive.coalescePartitions.minPartitionNum</code></td>
-     <td>Default Parallelism</td>
+     <td><code>spark.sql.adaptive.coalescePartitions.parallelismFirst</code></td>
+     <td>true</td>
      <td>
-       The minimum number of shuffle partitions after coalescing. If not set, the default value is the default parallelism of the Spark cluster. This configuration only has an effect when <code>spark.sql.adaptive.enabled</code> and <code>spark.sql.adaptive.coalescePartitions.enabled</code> are both enabled.
+       When true, Spark ignores the target size specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code> (default 64MB) when coalescing contiguous shuffle partitions, and only respect the minimum partition size specified by <code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code> (default 1MB), to maximize the parallelism. This is to avoid performance regression when enabling adaptive query execution. It's recommended to set this config to false and respect the target size specified by <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>.
      </td>
-     <td>3.0.0</td>
+     <td>3.2.0</td>
+   </tr>
+   <tr>
+     <td><code>spark.sql.adaptive.coalescePartitions.minPartitionSize</code></td>
+     <td>1MB</td>
+     <td>
+       The minimum size of shuffle partitions after coalescing. Its value can be at most 20% of <code>spark.sql.adaptive.advisoryPartitionSizeInBytes</code>. This is useful when the target size is ignored during partition coalescing, which is the default case.
+     </td>
+     <td>3.2.0</td>
    </tr>
    <tr>
      <td><code>spark.sql.adaptive.coalescePartitions.initialPartitionNum</code></td>
