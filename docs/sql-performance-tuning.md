@@ -289,7 +289,7 @@ AQE converts sort-merge join to broadcast hash join when the runtime statistics 
   </table>
 
 ### Converting sort-merge join to shuffled hash join
-AQE converts sort-merge join to shuffled hash join when all reduce partitions size are small enough, the max threshold can see the config `spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold`.
+AQE converts sort-merge join to shuffled hash join when all post shuffle partitions are smaller than a threshold, the max threshold can see the config `spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold`.
   <table class="table">
      <tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr>
      <tr>
