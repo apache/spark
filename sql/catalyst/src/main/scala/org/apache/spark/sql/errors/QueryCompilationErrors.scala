@@ -1997,4 +1997,9 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(
       s"Field name ${fieldName.quoted} is invalid, ${path.quoted} is not a struct.")
   }
+
+  def parentTypeNotStructError(fieldName: Seq[String], parentDataType: DataType): Throwable = {
+    new AnalysisException(s"Cannot add ${fieldName.quoted}, because " +
+      s"its parent is not a StructType. Found $parentDataType")
+  }
 }
