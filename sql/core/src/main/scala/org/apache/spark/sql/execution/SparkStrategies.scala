@@ -229,7 +229,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           .getOrElse(createJoinWithoutHint())
 
       case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
-          if canBroadcastBySize(j.right, conf) =>=>
+          if canBroadcastBySize(j.right, conf) =>
         Seq(joins.BroadcastHashJoinExec(leftKeys, rightKeys, LeftAnti, BuildRight,
           None, planLater(j.left), planLater(j.right), isNullAwareAntiJoin = true))
 
