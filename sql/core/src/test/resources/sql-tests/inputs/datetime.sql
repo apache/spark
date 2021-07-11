@@ -257,3 +257,7 @@ select to_timestamp_ntz('2021-06-25 10:11:12') - interval '10-9' year to month;
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval '20 15' day to hour;
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval '20 15:40' day to minute;
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval '20 15:40:32.99899999' day to second;
+
+-- timestamp numeric fields constructor
+SELECT make_timestamp(2021, 07, 11, 6, 30, 45.678);
+SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007);
