@@ -442,6 +442,9 @@ class ExpressionEncoderSuite extends CodegenInterpretedPlanTest with AnalysisTes
   encodeDecodeTest(
     (IntWrapper(1), StringWrapper("a")),
     "SPARK-20384: Tuple with value classes")
+  encodeDecodeTest(
+    CaseClassWithGeneric(IntWrapper(1), StringWrapper("a")),
+    "SPARK-20384: case class with value class in generic fields")
 
   encodeDecodeTest(Option(31), "option of int")
   encodeDecodeTest(Option.empty[Int], "empty option of int")

@@ -362,8 +362,6 @@ object ScalaReflection extends ScalaReflection {
         val underlyingClsName = getClassNameFromType(underlyingType)
         val clsName = getUnerasedClassNameFromType(t)
         val newTypePath = walkedTypePath.recordValueClass(clsName, underlyingClsName)
-
-        // We only end up here for value classes that should be instansiated
         val arg = deserializerFor(underlyingType, path, newTypePath)
         val cls = getClassFromType(t)
         NewInstance(cls, Seq(arg), ObjectType(cls), propagateNull = false)
@@ -595,7 +593,8 @@ object ScalaReflection extends ScalaReflection {
         val underlyingClsName = getClassNameFromType(underlyingType)
         val clsName = getUnerasedClassNameFromType(t)
         val newPath = walkedTypePath.recordValueClass(clsName, underlyingClsName)
-        val getArg = Invoke(inputObject, name, dataTypeFor(underlyingType))
+        val getArg = Invoke(KnownNotNull(inputObject), name, dataTypeFor(underlyingType),
+          returnNullable = !underlyingType.typeSymbol.asClass.isPrimitive)
         serializerFor(getArg, underlyingType, newPath)
 
       case t if definedByConstructorParams(t) =>

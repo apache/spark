@@ -37,6 +37,7 @@ import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.test.SQLTestData.{StringWrapper}
 import org.apache.spark.sql.types._
 
 case class TestDataPoint(x: Int, y: Double, s: String, t: TestDataPoint2)
@@ -2042,18 +2043,39 @@ class DatasetSuite extends QueryTest
   }
 
   test("SPARK-20384: Dataset with only value class") {
-    val data = Seq(IntWrapper(1), IntWrapper(2), IntWrapper(3))
+    val intData = Seq(1, 2, 3)
+    val wrappedData = intData.map(IntWrapper(_))
+    val wrappedDs = wrappedData.toDS()
+    val intDs = intData.toDS()
+
+    assert(intDs.schema === wrappedDs.schema)
+
+    checkDataset(wrappedDs, wrappedData: _*)
+  }
+
+  test("SPARK-20384: Model with StringWrapper as field and generic field") {
+    val data = Seq(
+      ThreeStrings("a", StringWrapper("a"), StringWrapper("a")),
+      ThreeStrings("b", StringWrapper("b"), StringWrapper("b")),
+      ThreeStrings("c", StringWrapper("c"), StringWrapper("c"))
+    )
     val ds = data.toDS()
-    val expectedSchema = StructType(Seq(StructField("value", IntegerType, nullable = true)))
+
+    val expectedSchema = StructType(Seq(
+      StructField("value1", StringType, nullable = true),
+      StructField("value2", StringType, nullable = true),
+      StructField("value3", StringType, nullable = true)
+    ))
+
     assert(ds.schema === expectedSchema)
     checkDataset(ds, data: _*)
   }
 
-  test("SPARK-20384: Dataset with complex case class with value classes") {
+  test("SPARK-20384: Dataset with IntWrapper as field and generic field") {
     val data = Seq(
-      ContainsValueClass(1, IntWrapper(1), 1),
-      ContainsValueClass(2, IntWrapper(2), 2),
-      ContainsValueClass(3, IntWrapper(3), 3)
+      ThreeInts(1, IntWrapper(1), IntWrapper(1)),
+      ThreeInts(2, IntWrapper(2), IntWrapper(2)),
+      ThreeInts(3, IntWrapper(3), IntWrapper(3))
     )
     val ds = data.toDS()
 
@@ -2093,7 +2115,8 @@ case class OtherTuple(_1: String, _2: Int)
 
 case class TupleClass(data: (Int, String))
 case class IntWrapper(wrapped: Int) extends AnyVal
-case class ContainsValueClass[T](value1: Int, value2: IntWrapper, value3: T)
+case class ThreeInts[T](value1: Int, value2: IntWrapper, value3: T)
+case class ThreeStrings[T](value1: String, value2: StringWrapper, value3: T)
 
 class OuterClass extends Serializable {
   case class InnerClass(a: String)

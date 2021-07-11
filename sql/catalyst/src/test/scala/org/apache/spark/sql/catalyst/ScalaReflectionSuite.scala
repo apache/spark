@@ -502,7 +502,7 @@ class ScalaReflectionSuite extends SparkFunSuite {
   }
 
   test("SPARK-20384: schema for case class with generic field") {
-    val schema = schemaFor[CaseClassWithGeneric[Int]]
+    val schema = schemaFor[CaseClassWithGeneric[IntWrapper]]
     assert(schema === Schema(
       StructType(Seq(
         StructField("generic", IntegerType, nullable = false))),
