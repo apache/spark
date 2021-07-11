@@ -2435,9 +2435,7 @@ case class MakeTimestamp(
            |${ev.value} = $dtu.instantToMicros(instant);
            |""".stripMargin
       } else {
-        s"""
-           |${ev.value} = $dtu.localDateTimeToMicros(ldt);
-           |""".stripMargin
+        s"${ev.value} = $dtu.localDateTimeToMicros(ldt);"
       }
       s"""
       try {
