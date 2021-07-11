@@ -2040,6 +2040,32 @@ class DatasetSuite extends QueryTest
       joined,
       (1, 1), (2, 2), (3, 3))
   }
+
+  test("SPARK-20384: Dataset with only value class") {
+    val data = Seq(IntWrapper(1), IntWrapper(2), IntWrapper(3))
+    val ds = data.toDS()
+    val expectedSchema = StructType(Seq(StructField("value", IntegerType, nullable = true)))
+    assert(ds.schema === expectedSchema)
+    checkDataset(ds, data: _*)
+  }
+
+  test("SPARK-20384: Dataset with complex case class with value classes") {
+    val data = Seq(
+      ContainsValueClass(1, IntWrapper(1), 1),
+      ContainsValueClass(2, IntWrapper(2), 2),
+      ContainsValueClass(3, IntWrapper(3), 3)
+    )
+    val ds = data.toDS()
+
+    val expectedSchema = StructType(Seq(
+      StructField("value1", IntegerType, nullable = false),
+      StructField("value2", IntegerType, nullable = false),
+      StructField("value3", IntegerType, nullable = false)
+    ))
+
+    assert(ds.schema === expectedSchema)
+    checkDataset(ds, data: _*)
+  }
 }
 
 case class Bar(a: Int)
@@ -2066,6 +2092,8 @@ case class Generic[T](id: T, value: Double)
 case class OtherTuple(_1: String, _2: Int)
 
 case class TupleClass(data: (Int, String))
+case class IntWrapper(wrapped: Int) extends AnyVal
+case class ContainsValueClass[T](value1: Int, value2: IntWrapper, value3: T)
 
 class OuterClass extends Serializable {
   case class InnerClass(a: String)
