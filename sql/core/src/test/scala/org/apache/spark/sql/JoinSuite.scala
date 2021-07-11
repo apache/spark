@@ -28,6 +28,7 @@ import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
+import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -1403,7 +1404,8 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
     }
   }
 
-  test("SPARK-36082: when the right side is small enough to use SingleColumn Null Aware Anti Join") {
+  test("SPARK-36082: when the right side is small enough to " +
+      "use SingleColumn Null Aware Anti Join") {
     spark.sharedState.cacheManager.clearCache()
     sql("CACHE TABLE testData")
     val sizeInByteOfTestData = statisticSizeInByte(spark.table("testData"))
