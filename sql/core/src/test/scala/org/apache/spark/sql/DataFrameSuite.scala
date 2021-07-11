@@ -870,7 +870,7 @@ class DataFrameSuite extends QueryTest
     val cd = ArrayStringWrapper(Seq(StringWrapper("c"), StringWrapper("d")))
 
     val df = spark.sparkContext.parallelize(Seq(ab, cd)).toDF
-    val filtered = df.where(array_contains(col("wrappers"), StringWrapper("b")))
+    val filtered = df.where(array_contains(col("wrappers"), "b"))
     checkAnswer(filtered, spark.sparkContext.parallelize(Seq(ab)).toDF)
   }
 
