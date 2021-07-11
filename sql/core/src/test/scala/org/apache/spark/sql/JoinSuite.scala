@@ -1402,4 +1402,17 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       assertJoin(sql, classOf[ShuffledHashJoinExec])
     }
   }
+
+  test("SPARK-36082: when the right side is small enough to use SingleColumn Null Aware Anti Join") {
+    spark.sharedState.cacheManager.clearCache()
+    sql("CACHE TABLE testData")
+    val sizeInByteOfTestData = statisticSizeInByte(spark.table("testData"))
+    withSQLConf(SQLConf.OPTIMIZE_NULL_AWARE_ANTI_JOIN.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> (sizeInByteOfTestData + 1).toString) {
+      val joinExec = assertJoin((
+        "select * from testData where key not in (select a from testData2)",
+        classOf[BroadcastNestedLoopJoinExec]))
+      assert(joinExec.asInstanceOf[BroadcastNestedLoopJoinExec].buildSide == BuildLeft)
+    }
+  }
 }
