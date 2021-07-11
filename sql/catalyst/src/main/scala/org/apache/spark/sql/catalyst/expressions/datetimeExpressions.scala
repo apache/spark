@@ -1009,7 +1009,7 @@ case class UnixTimestamp(
 }
 
 /**
- * Gets timestamps from strings using given pattern.
+ * Gets timestamps or dates from strings.
  */
 case class GetTimestamp(
     left: Expression,
@@ -1928,20 +1928,24 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   group = "datetime_funcs",
   since = "2.2.0")
 // scalastyle:on line.size.limit
-case class ParseToTimestamp(left: Expression, format: Option[Expression], child: Expression)
-  extends RuntimeReplaceable {
+case class ParseToTimestamp(
+    left: Expression,
+    format: Option[Expression],
+    override val dataType: DataType,
+    child: Expression) extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), GetTimestamp(left, format, SQLConf.get.timestampType))
+    this(left, Option(format), SQLConf.get.timestampType,
+      GetTimestamp(left, format, SQLConf.get.timestampType))
   }
 
-  def this(left: Expression) = this(left, None, Cast(left, SQLConf.get.timestampType))
+  def this(left: Expression) =
+    this(left, None, SQLConf.get.timestampType, Cast(left, SQLConf.get.timestampType))
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
   override def exprsReplaced: Seq[Expression] = left +: format.toSeq
 
   override def prettyName: String = "to_timestamp"
-  override val dataType: DataType = SQLConf.get.timestampType
 
   override protected def withNewChildInternal(newChild: Expression): ParseToTimestamp =
     copy(child = newChild)
