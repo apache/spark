@@ -1091,8 +1091,10 @@ abstract class ToTimestamp
   override protected def formatString: Expression = right
   override protected def isParsing = true
 
+  override def forTimestampNTZ: Boolean = left.dataType == TimestampNTZType
+
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
+    Seq(TypeCollection(StringType, DateType, TimestampType, TimestampNTZType), StringType)
 
   override def dataType: DataType = LongType
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
@@ -1112,7 +1114,7 @@ abstract class ToTimestamp
       left.dataType match {
         case DateType =>
           daysToMicros(t.asInstanceOf[Int], zoneId) / downScaleFactor
-        case TimestampType =>
+        case TimestampType | TimestampNTZType =>
           t.asInstanceOf[Long] / downScaleFactor
         case StringType =>
           val fmt = right.eval(input)
@@ -1192,7 +1194,7 @@ abstract class ToTimestamp
              |}
              |""".stripMargin)
       }
-      case TimestampType =>
+      case TimestampType | TimestampNTZType =>
         val eval1 = left.genCode(ctx)
         ev.copy(code = code"""
           ${eval1.code}

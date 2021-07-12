@@ -916,6 +916,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
                 Literal(new Timestamp(1000000)), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
               1000L)
             checkEvaluation(
+              UnixTimestamp(
+                Literal(DateTimeUtils.microsToLocalDateTime(DateTimeUtils.millisToMicros(1000000))),
+                Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
+              1000L)
+            checkEvaluation(
               UnixTimestamp(Literal(date1), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
               MICROSECONDS.toSeconds(
                 DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
@@ -980,6 +985,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               1000L)
             checkEvaluation(ToUnixTimestamp(
               Literal(new Timestamp(1000000)), Literal(fmt1)),
+              1000L)
+            checkEvaluation(ToUnixTimestamp(
+              Literal(DateTimeUtils.microsToLocalDateTime(DateTimeUtils.millisToMicros(1000000))),
+              Literal(fmt1)),
               1000L)
             checkEvaluation(
               ToUnixTimestamp(Literal(date1), Literal(fmt1), timeZoneId),
