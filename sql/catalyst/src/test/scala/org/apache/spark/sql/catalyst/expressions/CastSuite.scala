@@ -535,7 +535,7 @@ class CastSuite extends CastSuiteBase {
       checkEvaluation(
         cast(cast(cast(cast(cast(cast("5", TimestampType, UTC_OPT), ByteType),
           DecimalType.SYSTEM_DEFAULT), LongType), StringType), ShortType),
-        -128.toShort)
+        null)
       checkEvaluation(cast(cast(cast(cast(cast(cast("5", DecimalType.SYSTEM_DEFAULT),
         ByteType), TimestampType), LongType), StringType), ShortType),
         5.toShort)
