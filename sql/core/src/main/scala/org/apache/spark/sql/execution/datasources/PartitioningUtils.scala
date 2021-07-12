@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.getPartitionVa
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -481,13 +482,15 @@ object PartitioningUtils {
     val timestampTry = Try {
       val unescapedRaw = unescapePathName(raw)
       // try and parse the date, if no exception occurs this is a candidate to be resolved as
-      // TimestampType
+      // TimestampType or TimestampNTZType
       timestampFormatter.parse(unescapedRaw)
+      // the inferred data type is consistent with the default timestamp type
+      val timestampType = SQLConf.get.timestampType
       // SPARK-23436: see comment for date
-      val timestampValue = Cast(Literal(unescapedRaw), TimestampType, Some(zoneId.getId)).eval()
+      val timestampValue = Cast(Literal(unescapedRaw), timestampType, Some(zoneId.getId)).eval()
       // Disallow TimestampType if the cast returned null
       require(timestampValue != null)
-      TimestampType
+      timestampType
     }
 
     if (typeInference) {
@@ -522,11 +525,12 @@ object PartitioningUtils {
     case _: DecimalType => Literal(new JBigDecimal(value)).value
     case DateType =>
       Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
-    case TimestampType =>
+    // Timestamp types
+    case dt if AnyTimestampType.acceptsType(dt) =>
       Try {
-        Cast(Literal(unescapePathName(value)), TimestampType, Some(zoneId.getId)).eval()
+        Cast(Literal(unescapePathName(value)), dt, Some(zoneId.getId)).eval()
       }.getOrElse {
-        Cast(Cast(Literal(value), DateType, Some(zoneId.getId)), TimestampType).eval()
+        Cast(Cast(Literal(value), DateType, Some(zoneId.getId)), dt).eval()
       }
     case dt => throw QueryExecutionErrors.typeUnsupportedError(dt)
   }

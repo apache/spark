@@ -20,8 +20,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 import java.io.File
 import java.math.BigInteger
 import java.sql.Timestamp
-import java.time.{ZoneId, ZoneOffset}
-import java.util.{Calendar, Locale}
+import java.time.{LocalDateTime, ZoneId, ZoneOffset}
+import java.util.Locale
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
@@ -32,12 +32,13 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.TimeZoneUTC
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.localDateTimeToMicros
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.{PartitionPath => Partition}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -82,12 +83,13 @@ abstract class ParquetPartitionDiscoverySuite
     check("1.5", DoubleType)
     check("hello", StringType)
     check("1990-02-24", DateType)
-    check("1990-02-24 12:00:30", TimestampType)
-
-    val c = Calendar.getInstance(TimeZoneUTC)
-    c.set(1990, 1, 24, 12, 0, 30)
-    c.set(Calendar.MILLISECOND, 0)
-    check("1990-02-24 12:00:30", TimestampType, ZoneOffset.UTC)
+    // The inferred timestmap type is consistent with the value of `SQLConf.TIMESTAMP_TYPE`
+    Seq(TimestampTypes.TIMESTAMP_LTZ, TimestampTypes.TIMESTAMP_NTZ).foreach { tsType =>
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> tsType.toString) {
+        check("1990-02-24 12:00:30", SQLConf.get.timestampType)
+        check("1990-02-24 12:00:30", SQLConf.get.timestampType, ZoneOffset.UTC)
+      }
+    }
 
     check(defaultPartitionName, NullType)
   }
@@ -366,31 +368,44 @@ abstract class ParquetPartitionDiscoverySuite
       s"hdfs://host:9000/path2"),
       PartitionSpec.emptySpec)
 
-    // The cases below check the resolution for type conflicts.
-    val t1 = Timestamp.valueOf("2014-01-01 00:00:00.0").getTime * 1000
-    val t2 = Timestamp.valueOf("2014-01-01 00:01:00.0").getTime * 1000
-    // Values in column 'a' are inferred as null, date and timestamp each, and timestamp is set
-    // as a common type.
-    // Values in column 'b' are inferred as integer, decimal(22, 0) and null, and decimal(22, 0)
-    // is set as a common type.
-    check(Seq(
-      s"hdfs://host:9000/path/a=$defaultPartitionName/b=0",
-      s"hdfs://host:9000/path/a=2014-01-01/b=${Long.MaxValue}111",
-      s"hdfs://host:9000/path/a=2014-01-01 00%3A01%3A00.0/b=$defaultPartitionName"),
-      PartitionSpec(
-        StructType(Seq(
-          StructField("a", TimestampType),
-          StructField("b", DecimalType(22, 0)))),
-        Seq(
-          Partition(
-            InternalRow(null, Decimal(0)),
-            s"hdfs://host:9000/path/a=$defaultPartitionName/b=0"),
-          Partition(
-            InternalRow(t1, Decimal(s"${Long.MaxValue}111")),
-            s"hdfs://host:9000/path/a=2014-01-01/b=${Long.MaxValue}111"),
-          Partition(
-            InternalRow(t2, null),
-            s"hdfs://host:9000/path/a=2014-01-01 00%3A01%3A00.0/b=$defaultPartitionName"))))
+    // The inferred timestmap type is consistent with the value of `SQLConf.TIMESTAMP_TYPE`
+    Seq(TimestampTypes.TIMESTAMP_LTZ, TimestampTypes.TIMESTAMP_NTZ).foreach { tsType =>
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> tsType.toString) {
+        // The cases below check the resolution for type conflicts.
+        val t1 = if (tsType == TimestampTypes.TIMESTAMP_LTZ) {
+          Timestamp.valueOf("2014-01-01 00:00:00.0").getTime * 1000
+        } else {
+          localDateTimeToMicros(LocalDateTime.parse("2014-01-01T00:00:00"))
+        }
+        val t2 = if (tsType == TimestampTypes.TIMESTAMP_LTZ) {
+          Timestamp.valueOf("2014-01-01 00:01:00.0").getTime * 1000
+        } else {
+          localDateTimeToMicros(LocalDateTime.parse("2014-01-01T00:01:00"))
+        }
+        // Values in column 'a' are inferred as null, date and timestamp each, and timestamp is set
+        // as a common type.
+        // Values in column 'b' are inferred as integer, decimal(22, 0) and null, and decimal(22, 0)
+        // is set as a common type.
+        check(Seq(
+          s"hdfs://host:9000/path/a=$defaultPartitionName/b=0",
+          s"hdfs://host:9000/path/a=2014-01-01/b=${Long.MaxValue}111",
+          s"hdfs://host:9000/path/a=2014-01-01 00%3A01%3A00.0/b=$defaultPartitionName"),
+          PartitionSpec(
+            StructType(Seq(
+              StructField("a", SQLConf.get.timestampType),
+              StructField("b", DecimalType(22, 0)))),
+            Seq(
+              Partition(
+                InternalRow(null, Decimal(0)),
+                s"hdfs://host:9000/path/a=$defaultPartitionName/b=0"),
+              Partition(
+                InternalRow(t1, Decimal(s"${Long.MaxValue}111")),
+                s"hdfs://host:9000/path/a=2014-01-01/b=${Long.MaxValue}111"),
+              Partition(
+                InternalRow(t2, null),
+                s"hdfs://host:9000/path/a=2014-01-01 00%3A01%3A00.0/b=$defaultPartitionName"))))
+      }
+    }
   }
 
   test("parse partitions with type inference disabled") {
