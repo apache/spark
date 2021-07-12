@@ -19,23 +19,23 @@ import datetime
 import warnings
 from typing import Any, Union
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F
+from pyspark.sql import functions as F, Column
 from pyspark.sql.types import BooleanType, DateType, StringType
 
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    IndexOpsLike,
-    T_IndexOps,
-    _as_bool_type,
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
 )
-from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
+from pyspark.pandas.spark import functions as SF
+from pyspark.pandas.typedef import pandas_on_spark_type
 
 
 class DateOps(DataTypeOps):
@@ -47,7 +47,7 @@ class DateOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "dates"
 
-    def sub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (
@@ -60,11 +60,11 @@ class DateOps(DataTypeOps):
             return column_op(F.datediff)(left, right).astype("long")
         elif isinstance(right, datetime.date) and not isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return column_op(F.datediff)(left, F.lit(right)).astype("long")
+            return column_op(F.datediff)(left, SF.lit(right)).astype("long")
         else:
-            raise TypeError("date subtraction can only be applied to date series.")
+            raise TypeError("Date subtraction can only be applied to date series.")
 
-    def rsub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         # Note that date subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' in days from date's subtraction.
         msg = (
@@ -74,17 +74,42 @@ class DateOps(DataTypeOps):
         )
         if isinstance(right, datetime.date) and not isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
-            return -column_op(F.datediff)(left, F.lit(right)).astype("long")
+            return -column_op(F.datediff)(left, SF.lit(right)).astype("long")
         else:
-            raise TypeError("date subtraction can only be applied to date series.")
+            raise TypeError("Date subtraction can only be applied to date series.")
 
-    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__lt__)(left, right)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__le__)(left, right)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__ge__)(left, right)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__gt__)(left, right)
+
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
         elif isinstance(spark_type, BooleanType):
-            return _as_bool_type(index_ops, dtype)
+            return index_ops._with_new_scol(
+                index_ops.spark.column.isNotNull(),
+                field=index_ops._internal.data_fields[0].copy(
+                    dtype=np.dtype(bool), spark_type=spark_type, nullable=False
+                ),
+            )
         elif isinstance(spark_type, StringType):
             return _as_string_type(index_ops, dtype, null_str=str(pd.NaT))
         else:

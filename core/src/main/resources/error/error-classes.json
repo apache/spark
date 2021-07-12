@@ -1,0 +1,25 @@
+{
+  "DIVIDE_BY_ZERO" : {
+    "message" : [ "divide by zero" ],
+    "sqlState" : "22012"
+  },
+  "DUPLICATE_KEY" : {
+    "message" : [ "Found duplicate keys '%s'" ],
+    "sqlState" : "23000"
+  },
+  "MISSING_COLUMN" : {
+    "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
+    "sqlState" : "42000"
+  },
+  "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
+    "message" : [ "The second argument of '%s' function needs to be an integer." ],
+    "sqlState" : "22023"
+  },
+  "UNABLE_TO_ACQUIRE_MEMORY" : {
+    "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
+  },
+  "WRITING_JOB_ABORTED" : {
+    "message" : [ "Writing job aborted" ],
+    "sqlState" : "40000"
+  }
+}

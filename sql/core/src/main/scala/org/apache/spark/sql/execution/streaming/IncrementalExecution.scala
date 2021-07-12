@@ -157,10 +157,14 @@ class IncrementalExecution(
           Some(offsetSeqMetadata.batchWatermarkMs))
 
       case m: FlatMapGroupsWithStateExec =>
+        // We set this to true only for the first batch of the streaming query.
+        val hasInitialState = (currentBatchId == 0L && m.hasInitialState)
         m.copy(
           stateInfo = Some(nextStatefulOperationStateInfo),
           batchTimestampMs = Some(offsetSeqMetadata.batchTimestampMs),
-          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs))
+          eventTimeWatermark = Some(offsetSeqMetadata.batchWatermarkMs),
+          hasInitialState = hasInitialState
+        )
 
       case j: StreamingSymmetricHashJoinExec =>
         j.copy(

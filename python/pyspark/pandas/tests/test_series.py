@@ -57,8 +57,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         pser = self.pser
         psser = self.psser
 
-        self.assert_eq(psser + 1, pser + 1)
-        self.assert_eq(1 + psser, 1 + pser)
         self.assert_eq(psser + 1 + 10 * psser, pser + 1 + 10 * pser)
         self.assert_eq(psser + 1 + 10 * psser.index, pser + 1 + 10 * pser.index)
         self.assert_eq(psser.index + 1 + 10 * psser, pser.index + 1 + 10 * pser)
@@ -91,51 +89,6 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
             self.assertTrue(isinstance(psser.dtype, extension_dtypes))
         else:
             self.assert_eq(psser, pser)
-
-    @unittest.skipIf(not extension_dtypes_available, "pandas extension dtypes are not available")
-    def test_extension_dtypes(self):
-        for pser in [
-            pd.Series([1, 2, None, 4], dtype="Int8"),
-            pd.Series([1, 2, None, 4], dtype="Int16"),
-            pd.Series([1, 2, None, 4], dtype="Int32"),
-            pd.Series([1, 2, None, 4], dtype="Int64"),
-        ]:
-            psser = ps.from_pandas(pser)
-
-            self._check_extension(psser, pser)
-            self._check_extension(psser + psser, pser + pser)
-
-    @unittest.skipIf(
-        not extension_object_dtypes_available, "pandas extension object dtypes are not available"
-    )
-    def test_extension_object_dtypes(self):
-        # string
-        pser = pd.Series(["a", None, "c", "d"], dtype="string")
-        psser = ps.from_pandas(pser)
-
-        self._check_extension(psser, pser)
-
-        # boolean
-        pser = pd.Series([True, False, True, None], dtype="boolean")
-        psser = ps.from_pandas(pser)
-
-        self._check_extension(psser, pser)
-        self._check_extension(psser & psser, pser & pser)
-        self._check_extension(psser | psser, pser | pser)
-
-    @unittest.skipIf(
-        not extension_float_dtypes_available, "pandas extension float dtypes are not available"
-    )
-    def test_extension_float_dtypes(self):
-        for pser in [
-            pd.Series([1.0, 2.0, None, 4.0], dtype="Float32"),
-            pd.Series([1.0, 2.0, None, 4.0], dtype="Float64"),
-        ]:
-            psser = ps.from_pandas(pser)
-
-            self._check_extension(psser, pser)
-            self._check_extension(psser + 1, pser + 1)
-            self._check_extension(psser + psser, pser + pser)
 
     def test_empty_series(self):
         pser_a = pd.Series([], dtype="i1")
@@ -432,6 +385,10 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.isin(["cow", "lama"]), pser.isin(["cow", "lama"]))
         self.assert_eq(psser.isin(np.array(["cow", "lama"])), pser.isin(np.array(["cow", "lama"])))
         self.assert_eq(psser.isin({"cow"}), pser.isin({"cow"}))
+
+        pser = pd.Series([np.int64(1), np.int32(1), 1])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(psser.isin([np.int64(1)]), pser.isin([np.int64(1)]))
 
         msg = "only list-like objects are allowed to be passed to isin()"
         with self.assertRaisesRegex(TypeError, msg):
@@ -868,18 +825,16 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psser.nlargest(), pser.nlargest())
         self.assert_eq((psser + 1).nlargest(), (pser + 1).nlargest())
 
-    def test_isnull(self):
+    def test_notnull(self):
         pser = pd.Series([1, 2, 3, 4, np.nan, 6], name="x")
         psser = ps.from_pandas(pser)
 
         self.assert_eq(psser.notnull(), pser.notnull())
-        self.assert_eq(psser.isnull(), pser.isnull())
 
         pser = self.pser
         psser = self.psser
 
         self.assert_eq(psser.notnull(), pser.notnull())
-        self.assert_eq(psser.isnull(), pser.isnull())
 
     def test_all(self):
         for pser in [

@@ -257,8 +257,10 @@ case class HashAggregateExec(
       aggNames: Seq[String],
       aggBufferUpdatingExprs: Seq[Seq[Expression]],
       aggCodeBlocks: Seq[Block],
-      subExprs: Map[Expression, SubExprEliminationState]): Option[Seq[String]] = {
-    val exprValsInSubExprs = subExprs.flatMap { case (_, s) => s.value :: s.isNull :: Nil }
+      subExprs: Map[ExpressionEquals, SubExprEliminationState]): Option[Seq[String]] = {
+    val exprValsInSubExprs = subExprs.flatMap { case (_, s) =>
+      s.eval.value :: s.eval.isNull :: Nil
+    }
     if (exprValsInSubExprs.exists(_.isInstanceOf[SimpleExprValue])) {
       // `SimpleExprValue`s cannot be used as an input variable for split functions, so
       // we give up splitting functions if it exists in `subExprs`.
@@ -363,7 +365,7 @@ case class HashAggregateExec(
       bindReferences(updateExprsForOneFunc, inputAttrs)
     }
     val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-    val effectiveCodes = subExprs.codes.mkString("\n")
+    val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
     val bufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
       ctx.withSubExprEliminationExprs(subExprs.states) {
         boundUpdateExprsForOneFunc.map(_.genCode(ctx))
@@ -989,7 +991,7 @@ case class HashAggregateExec(
         bindReferences(updateExprsForOneFunc, inputAttrs)
       }
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-      val effectiveCodes = subExprs.codes.mkString("\n")
+      val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
       val unsafeRowBufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
         ctx.withSubExprEliminationExprs(subExprs.states) {
           boundUpdateExprsForOneFunc.map(_.genCode(ctx))
@@ -1035,7 +1037,7 @@ case class HashAggregateExec(
             bindReferences(updateExprsForOneFunc, inputAttrs)
           }
           val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-          val effectiveCodes = subExprs.codes.mkString("\n")
+          val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
           val fastRowEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
             ctx.withSubExprEliminationExprs(subExprs.states) {
               boundUpdateExprsForOneFunc.map(_.genCode(ctx))

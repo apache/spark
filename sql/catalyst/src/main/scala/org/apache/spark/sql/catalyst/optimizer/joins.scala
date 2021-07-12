@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * Reorder the joins and push all the conditions into join, so that the bottom ones have at least
@@ -274,14 +275,16 @@ trait JoinSelectionHelper {
     } else {
       hintToPreferShuffleHashJoinLeft(hint) ||
         (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(left, conf) &&
-          muchSmaller(left, right))
+          muchSmaller(left, right)) ||
+        forceApplyShuffledHashJoin(conf)
     }
     val buildRight = if (hintOnly) {
       hintToShuffleHashJoinRight(hint)
     } else {
       hintToPreferShuffleHashJoinRight(hint) ||
         (!conf.preferSortMergeJoin && canBuildLocalHashMapBySize(right, conf) &&
-          muchSmaller(right, left))
+          muchSmaller(right, left)) ||
+        forceApplyShuffledHashJoin(conf)
     }
     getBuildSide(
       canBuildShuffledHashJoinLeft(joinType) && buildLeft,
@@ -423,6 +426,15 @@ trait JoinSelectionHelper {
    */
   private def muchSmaller(a: LogicalPlan, b: LogicalPlan): Boolean = {
     a.stats.sizeInBytes * 3 <= b.stats.sizeInBytes
+  }
+
+  /**
+   * Returns whether a shuffled hash join should be force applied.
+   * The config key is hard-coded because it's testing only and should not be exposed.
+   */
+  private def forceApplyShuffledHashJoin(conf: SQLConf): Boolean = {
+    Utils.isTesting &&
+      conf.getConfString("spark.sql.join.forceApplyShuffledHashJoin", "false") == "true"
   }
 }
 

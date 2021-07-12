@@ -68,6 +68,14 @@ private[sql] class AvroOptions(
   }
 
   /**
+   * Iff true, perform Catalyst-to-Avro schema matching based on field position instead of field
+   * name. This allows for a structurally equivalent Catalyst schema to be used with an Avro schema
+   * whose field names do not match. Defaults to false.
+   */
+  val positionalFieldMatching: Boolean =
+    parameters.get("positionalFieldMatching").exists(_.toBoolean)
+
+  /**
    * Top level record name in write result, which is required in Avro spec.
    * See https://avro.apache.org/docs/1.10.2/spec.html#schema_record .
    * Default value is "topLevelRecord"

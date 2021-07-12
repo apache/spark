@@ -32,7 +32,7 @@ import org.apache.avro.generic.GenericData.Record
 import org.apache.avro.util.Utf8
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.avro.AvroUtils.toFieldStr
+import org.apache.spark.sql.avro.AvroUtils.{toFieldDescription, toFieldStr}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -48,12 +48,12 @@ private[sql] class AvroSerializer(
     rootCatalystType: DataType,
     rootAvroType: Schema,
     nullable: Boolean,
+    positionalFieldMatch: Boolean,
     datetimeRebaseMode: LegacyBehaviorPolicy.Value) extends Logging {
 
   def this(rootCatalystType: DataType, rootAvroType: Schema, nullable: Boolean) = {
-    this(rootCatalystType, rootAvroType, nullable,
-      LegacyBehaviorPolicy.withName(SQLConf.get.getConf(
-        SQLConf.AVRO_REBASE_MODE_IN_WRITE)))
+    this(rootCatalystType, rootAvroType, nullable, positionalFieldMatch = false,
+      LegacyBehaviorPolicy.withName(SQLConf.get.getConf(SQLConf.AVRO_REBASE_MODE_IN_WRITE)))
   }
 
   def serialize(catalystData: Any): Any = {
@@ -250,14 +250,18 @@ private[sql] class AvroSerializer(
         s"Avro $avroPathStr schema length (${avroFields.size}) doesn't match " +
         s"SQL ${toFieldStr(catalystPath)} schema length (${catalystStruct.length})")
     }
-    val avroSchemaHelper = new AvroUtils.AvroSchemaHelper(avroStruct, avroPath)
+    val avroSchemaHelper =
+      new AvroUtils.AvroSchemaHelper(avroStruct, avroPath, positionalFieldMatch)
 
     val (avroIndices: Array[Int], fieldConverters: Array[Converter]) =
-      catalystStruct.map { catalystField =>
-        val avroField = avroSchemaHelper.getFieldByName(catalystField.name) match {
+      catalystStruct.zipWithIndex.map { case (catalystField, catalystPos) =>
+        val avroField = avroSchemaHelper.getAvroField(catalystField.name, catalystPos) match {
           case Some(f) => f
-          case None => throw new IncompatibleSchemaException(s"Cannot find " +
-              s"${toFieldStr(catalystPath :+ catalystField.name)} in Avro schema at $avroPathStr")
+          case None =>
+            val fieldDescription = toFieldDescription(
+              catalystPath :+ catalystField.name, catalystPos, positionalFieldMatch)
+            throw new IncompatibleSchemaException(
+              s"Cannot find $fieldDescription in Avro schema at $avroPathStr")
         }
         val converter = newConverter(catalystField.dataType,
           resolveNullableType(avroField.schema(), catalystField.nullable),

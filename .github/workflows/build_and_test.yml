@@ -366,9 +366,7 @@ jobs:
         #   See also https://github.com/sphinx-doc/sphinx/issues/7551.
         # Jinja2 3.0.0+ causes error when building with Sphinx.
         #   See also https://issues.apache.org/jira/browse/SPARK-35375.
-        # TODO(SPARK-35684, SPARK-35683): Bump up the mypy version. This is blocked by
-        #   Index.difference logic issue.
-        python3.6 -m pip install flake8 pydata_sphinx_theme 'mypy==0.812' numpydoc 'jinja2<3.0.0' 'black==21.5b2'
+        python3.6 -m pip install flake8 pydata_sphinx_theme 'mypy==0.910' numpydoc 'jinja2<3.0.0' 'black==21.5b2'
     - name: Install R linter dependencies and SparkR
       run: |
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
@@ -414,8 +412,14 @@ jobs:
         cd docs
         bundle exec jekyll build
 
-  java-11:
-    name: Java 11 build with Maven
+  java-11-17:
+    name: Java ${{ matrix.java }} build with Maven
+    strategy:
+      fail-fast: false
+      matrix:
+        java:
+          - 11
+          - 17-ea
     runs-on: ubuntu-20.04
     steps:
     - name: Checkout Spark repository
@@ -446,19 +450,20 @@ jobs:
       uses: actions/cache@v2
       with:
         path: ~/.m2/repository
-        key: java11-maven-${{ hashFiles('**/pom.xml') }}
+        key: java${{ matrix.java }}-maven-${{ hashFiles('**/pom.xml') }}
         restore-keys: |
-          java11-maven-
-    - name: Install Java 11
+          java${{ matrix.java }}-maven-
+    - name: Install Java ${{ matrix.java }}
       uses: actions/setup-java@v1
       with:
-        java-version: 11
+        java-version: ${{ matrix.java }}
     - name: Build with Maven
       run: |
         export MAVEN_OPTS="-Xss64m -Xmx2g -XX:ReservedCodeCacheSize=1g -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
+        export JAVA_VERSION=${{ matrix.java }}
         # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
-        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=11 install
+        ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
         rm -rf ~/.m2/repository/org/apache/spark
 
   scala-213:

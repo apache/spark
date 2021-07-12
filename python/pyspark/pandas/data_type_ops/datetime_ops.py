@@ -19,23 +19,23 @@ import datetime
 import warnings
 from typing import Any, Union, cast
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F
-from pyspark.sql.types import BooleanType, StringType, TimestampType
+from pyspark.sql import functions as F, Column
+from pyspark.sql.types import BooleanType, LongType, StringType, TimestampType
 
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    IndexOpsLike,
-    T_IndexOps,
     _as_bool_type,
     _as_categorical_type,
     _as_other_type,
 )
-from pyspark.pandas.internal import InternalField
-from pyspark.pandas.typedef import as_spark_type, Dtype, extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.spark import functions as SF
+from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
 
 
 class DatetimeOps(DataTypeOps):
@@ -47,7 +47,7 @@ class DatetimeOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "datetimes"
 
-    def sub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def sub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' from 'datetime64[ns]'s subtraction.
         msg = (
@@ -61,15 +61,18 @@ class DatetimeOps(DataTypeOps):
         elif isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
             return cast(
-                IndexOpsLike,
-                left.spark.transform(
-                    lambda scol: scol.astype("long") - F.lit(right).cast(as_spark_type("long"))
+                SeriesOrIndex,
+                left._with_new_scol(
+                    left.spark.column.cast(LongType()) - SF.lit(right).cast(LongType()),
+                    field=left._internal.data_fields[0].copy(
+                        dtype=np.dtype("int64"), spark_type=LongType()
+                    ),
                 ),
             )
         else:
-            raise TypeError("datetime subtraction can only be applied to datetime series.")
+            raise TypeError("Datetime subtraction can only be applied to datetime series.")
 
-    def rsub(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def rsub(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         # Note that timestamp subtraction casts arguments to integer. This is to mimic pandas's
         # behaviors. pandas returns 'timedelta64[ns]' from 'datetime64[ns]'s subtraction.
         msg = (
@@ -80,19 +83,42 @@ class DatetimeOps(DataTypeOps):
         if isinstance(right, datetime.datetime):
             warnings.warn(msg, UserWarning)
             return cast(
-                IndexOpsLike,
-                left.spark.transform(
-                    lambda scol: F.lit(right).cast(as_spark_type("long")) - scol.astype("long")
+                SeriesOrIndex,
+                left._with_new_scol(
+                    SF.lit(right).cast(LongType()) - left.spark.column.cast(LongType()),
+                    field=left._internal.data_fields[0].copy(
+                        dtype=np.dtype("int64"), spark_type=LongType()
+                    ),
                 ),
             )
         else:
-            raise TypeError("datetime subtraction can only be applied to datetime series.")
+            raise TypeError("Datetime subtraction can only be applied to datetime series.")
+
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__lt__)(left, right)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__le__)(left, right)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__ge__)(left, right)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__gt__)(left, right)
 
     def prepare(self, col: pd.Series) -> pd.Series:
         """Prepare column when from_pandas."""
         return col
 
-    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
@@ -111,7 +137,7 @@ class DatetimeOps(DataTypeOps):
                 scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
             return index_ops._with_new_scol(
                 scol.alias(index_ops._internal.data_spark_column_names[0]),
-                field=InternalField(dtype=dtype),
+                field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
             )
         else:
             return _as_other_type(index_ops, dtype, spark_type)

@@ -132,6 +132,11 @@ private[spark] class HostLocalDirManager(
       executorIdToLocalDirsCache.asMap().asScala.toMap
     }
 
+  private[spark] def getCachedHostLocalDirsFor(executorId: String): Option[Array[String]] =
+    executorIdToLocalDirsCache.synchronized {
+      Option(executorIdToLocalDirsCache.getIfPresent(executorId))
+    }
+
   private[spark] def getHostLocalDirs(
       host: String,
       port: Int,
@@ -250,7 +255,9 @@ private[spark] class BlockManager(
   // specified memory threshold. Files will be deleted automatically based on weak reference.
   // Exposed for test
   private[storage] val remoteBlockTempFileManager =
-    new BlockManager.RemoteBlockDownloadFileManager(this)
+    new BlockManager.RemoteBlockDownloadFileManager(
+      this,
+      securityManager.getIOEncryptionKey())
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
   var hostLocalDirManager: Option[HostLocalDirManager] = None
@@ -1993,22 +2000,23 @@ private[spark] object BlockManager {
     metricRegistry.registerAll(metricSet)
   }
 
-  class RemoteBlockDownloadFileManager(blockManager: BlockManager)
+  class RemoteBlockDownloadFileManager(
+       blockManager: BlockManager,
+       encryptionKey: Option[Array[Byte]])
       extends DownloadFileManager with Logging {
-    // lazy because SparkEnv is set after this
-    lazy val encryptionKey = SparkEnv.get.securityManager.getIOEncryptionKey()
 
     private class ReferenceWithCleanup(
         file: DownloadFile,
         referenceQueue: JReferenceQueue[DownloadFile]
         ) extends WeakReference[DownloadFile](file, referenceQueue) {
 
+      // we cannot use `file.delete()` here otherwise it won't be garbage-collected
       val filePath = file.path()
 
       def cleanUp(): Unit = {
         logDebug(s"Clean up file $filePath")
 
-        if (!file.delete()) {
+        if (!new File(filePath).delete()) {
           logDebug(s"Fail to delete file $filePath")
         }
       }

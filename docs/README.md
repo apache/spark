@@ -130,17 +130,3 @@ using [MkDocs](https://www.mkdocs.org/).
 NOTE: To skip the step of building and copying over the Scala, Java, Python, R and SQL API docs, run `SKIP_API=1
 bundle exec jekyll build`. In addition, `SKIP_SCALADOC=1`, `SKIP_PYTHONDOC=1`, `SKIP_RDOC=1` and `SKIP_SQLDOC=1` can be used
 to skip a single step of the corresponding language. `SKIP_SCALADOC` indicates skipping both the Scala and Java docs.
-
-### Automatically Rebuilding API Docs
-
-`bundle exec jekyll serve --watch` will only watch what's in `docs/`, and it won't follow symlinks. That means it won't monitor your API docs under `python/docs` or elsewhere.
-
-To work around this limitation for Python, install [`entr`](http://eradman.com/entrproject/) and run the following in a separate shell:
-
-```sh
-cd "$SPARK_HOME/python/docs"
-find .. -type f -name '*.py' \
-| entr -s 'make html && cp -r _build/html/. ../../docs/api/python'
-```
-
-Whenever there is a change to your Python code, `entr` will automatically rebuild the Python API docs and copy them to `docs/`, thus triggering a Jekyll update.

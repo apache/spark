@@ -21,7 +21,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.{SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.analysis.{ResolvedNamespace, ResolvedPartitionSpec, ResolvedTable}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning, Expression, NamedExpression, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
@@ -114,8 +114,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // projection and filters were already pushed down in the optimizer.
       // this uses PhysicalOperation to get the projection and ensure that if the batch scan does
       // not support columnar, a projection is added to convert the rows to UnsafeRow.
-      val batchExec = BatchScanExec(relation.output, relation.scan)
-      withProjectAndFilter(project, filters, batchExec, !batchExec.supportsColumnar) :: Nil
+      val (runtimeFilters, postScanFilters) = filters.partition {
+        case _: DynamicPruning => true
+        case _ => false
+      }
+      val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters)
+      withProjectAndFilter(project, postScanFilters, batchExec, !batchExec.supportsColumnar) :: Nil
 
     case PhysicalOperation(p, f, r: StreamingDataSourceV2Relation)
       if r.startOffset.isDefined && r.endOffset.isDefined =>
@@ -377,8 +381,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     case LoadData(_: ResolvedTable, _, _, _, _) =>
       throw QueryCompilationErrors.loadDataNotSupportedForV2TablesError()
 
-    case ShowCreateTable(_: ResolvedTable, _, _) =>
-      throw QueryCompilationErrors.showCreateTableNotSupportedForV2TablesError()
+    case ShowCreateTable(rt: ResolvedTable, asSerde, output) =>
+      if (asSerde) {
+        throw QueryCompilationErrors.showCreateTableAsSerdeNotSupportedForV2TablesError()
+      }
+      ShowCreateTableExec(output, rt.table) :: Nil
 
     case TruncateTable(r: ResolvedTable) =>
       TruncateTableExec(
