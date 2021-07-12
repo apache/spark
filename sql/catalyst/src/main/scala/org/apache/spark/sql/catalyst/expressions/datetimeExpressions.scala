@@ -2272,6 +2272,128 @@ case class MakeDate(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
+  usage = "_FUNC_(year, month, day, hour, min, sec) - Create local date-time from year, month, day, hour, min, sec fields. ",
+  arguments = """
+    Arguments:
+      * year - the year to represent, from 1 to 9999
+      * month - the month-of-year to represent, from 1 (January) to 12 (December)
+      * day - the day-of-month to represent, from 1 to 31
+      * hour - the hour-of-day to represent, from 0 to 23
+      * min - the minute-of-hour to represent, from 0 to 59
+      * sec - the second-of-minute and its micro-fraction to represent, from
+              0 to 60. If the sec argument equals to 60, the seconds field is set
+              to 0 and 1 minute is added to the final timestamp.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
+       2014-12-28 06:30:45.887
+      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
+       2019-07-01 00:00:00
+      > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
+       NULL
+  """,
+  group = "datetime_funcs",
+  since = "3.2.0")
+// scalastyle:on line.size.limit
+case class MakeTimestampNTZ(
+    year: Expression,
+    month: Expression,
+    day: Expression,
+    hour: Expression,
+    min: Expression,
+    sec: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled,
+    child: Expression) extends RuntimeReplaceable {
+  def this(
+      year: Expression,
+      month: Expression,
+      day: Expression,
+      hour: Expression,
+      min: Expression,
+      sec: Expression) = {
+    this(year, month, day, hour, min, sec, failOnError = SQLConf.get.ansiEnabled,
+      MakeTimestamp(year, month, day, hour, min, sec, dataType = TimestampNTZType))
+  }
+
+  override def exprsReplaced: Seq[Expression] = Seq(year, month, day, hour, min, sec)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create the current timestamp with local time zone from year, month, day, hour, min, sec and timezone fields. ",
+  arguments = """
+    Arguments:
+      * year - the year to represent, from 1 to 9999
+      * month - the month-of-year to represent, from 1 (January) to 12 (December)
+      * day - the day-of-month to represent, from 1 to 31
+      * hour - the hour-of-day to represent, from 0 to 23
+      * min - the minute-of-hour to represent, from 0 to 59
+      * sec - the second-of-minute and its micro-fraction to represent, from
+              0 to 60. If the sec argument equals to 60, the seconds field is set
+              to 0 and 1 minute is added to the final timestamp.
+      * timezone - the time zone identifier. For example, CET, UTC and etc.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
+       2014-12-28 06:30:45.887
+      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887, 'CET');
+       2014-12-27 21:30:45.887
+      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
+       2019-07-01 00:00:00
+      > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 'PST');
+       NULL
+      > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
+       NULL
+  """,
+  group = "datetime_funcs",
+  since = "3.2.0")
+// scalastyle:on line.size.limit
+case class MakeTimestampLTZ(
+    year: Expression,
+    month: Expression,
+    day: Expression,
+    hour: Expression,
+    min: Expression,
+    sec: Expression,
+    timezone: Option[Expression],
+    failOnError: Boolean = SQLConf.get.ansiEnabled,
+    child: Expression) extends RuntimeReplaceable {
+  def this(
+     year: Expression,
+     month: Expression,
+     day: Expression,
+     hour: Expression,
+     min: Expression,
+     sec: Expression) = {
+    this(year, month, day, hour, min, sec, None, failOnError = SQLConf.get.ansiEnabled,
+      MakeTimestamp(year, month, day, hour, min, sec, dataType = TimestampType))
+  }
+
+  def this(
+      year: Expression,
+      month: Expression,
+      day: Expression,
+      hour: Expression,
+      min: Expression,
+      sec: Expression,
+      timezone: Expression) = {
+    this(year, month, day, hour, min, sec, Some(timezone), failOnError = SQLConf.get.ansiEnabled,
+      MakeTimestamp(year, month, day, hour, min, sec, Some(timezone), dataType = TimestampType))
+  }
+
+  override def exprsReplaced: Seq[Expression] = Seq(year, month, day, hour, min, sec)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
   usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields. " +
     "The result data type is consistent with the value of configuration `spark.sql.timestampType`",
   arguments = """
