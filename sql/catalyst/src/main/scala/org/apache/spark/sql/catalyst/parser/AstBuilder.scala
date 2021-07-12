@@ -40,7 +40,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, getZoneId, stringToDate, stringToTimestamp, stringToTimestampWithoutTimeZone}
-import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit
 import org.apache.spark.sql.connector.catalog.{SupportsNamespaces, TableCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, Expression => V2Expression, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
@@ -2487,18 +2486,10 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
         (from, to) match {
           case ("year", "month") =>
             IntervalUtils.fromYearMonthString(value)
-          case ("day", "hour") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.HOUR)
-          case ("day", "minute") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.MINUTE)
-          case ("day", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.DAY, IntervalUnit.SECOND)
-          case ("hour", "minute") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.MINUTE)
-          case ("hour", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.HOUR, IntervalUnit.SECOND)
-          case ("minute", "second") =>
-            IntervalUtils.fromDayTimeString(value, IntervalUnit.MINUTE, IntervalUnit.SECOND)
+          case ("day", "hour") | ("day", "minute") | ("day", "second") | ("hour", "minute") |
+               ("hour", "second") | ("minute", "second") =>
+            IntervalUtils.fromDayTimeString(value,
+              DayTimeIntervalType.stringToField(from), DayTimeIntervalType.stringToField(to))
           case _ =>
             throw QueryParsingErrors.fromToIntervalUnsupportedError(from, to, ctx)
         }

@@ -259,7 +259,7 @@ struct<DATE '2019-01-01':date>
 -- !query
 select timestamp '2019-01-01\t'
 -- !query schema
-struct<TIMESTAMP '2019-01-01 00:00:00':timestamp>
+struct<TIMESTAMP_NTZ '2019-01-01 00:00:00':timestamp_ntz>
 -- !query output
 2019-01-01 00:00:00
 
@@ -295,7 +295,7 @@ select timestamp '2019-01-01中文'
 -- !query
 select timestamp'2011-11-11 11:11:11' + interval '2' day
 -- !query schema
-struct<TIMESTAMP '2011-11-11 11:11:11' + INTERVAL '2 days':timestamp>
+struct<TIMESTAMP_NTZ '2011-11-11 11:11:11' + INTERVAL '2 days':timestamp_ntz>
 -- !query output
 2011-11-13 11:11:11
 
@@ -303,7 +303,7 @@ struct<TIMESTAMP '2011-11-11 11:11:11' + INTERVAL '2 days':timestamp>
 -- !query
 select timestamp'2011-11-11 11:11:11' - interval '2' day
 -- !query schema
-struct<TIMESTAMP '2011-11-11 11:11:11' - INTERVAL '2 days':timestamp>
+struct<TIMESTAMP_NTZ '2011-11-11 11:11:11' - INTERVAL '2 days':timestamp_ntz>
 -- !query output
 2011-11-09 11:11:11
 
@@ -360,7 +360,7 @@ cannot resolve '1 + (- INTERVAL '2 seconds')' due to data type mismatch: argumen
 -- !query
 select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678'
 -- !query schema
-struct<(DATE '2020-01-01' - TIMESTAMP '2019-10-06 10:11:12.345678'):interval day to second>
+struct<(DATE '2020-01-01' - TIMESTAMP_NTZ '2019-10-06 10:11:12.345678'):interval day to second>
 -- !query output
 86 13:48:47.654322000
 
@@ -368,7 +368,7 @@ struct<(DATE '2020-01-01' - TIMESTAMP '2019-10-06 10:11:12.345678'):interval day
 -- !query
 select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01'
 -- !query schema
-struct<(TIMESTAMP '2019-10-06 10:11:12.345678' - DATE '2020-01-01'):interval day to second>
+struct<(TIMESTAMP_NTZ '2019-10-06 10:11:12.345678' - DATE '2020-01-01'):interval day to second>
 -- !query output
 -86 13:48:47.654322000
 
@@ -376,7 +376,7 @@ struct<(TIMESTAMP '2019-10-06 10:11:12.345678' - DATE '2020-01-01'):interval day
 -- !query
 select timestamp'2019-10-06 10:11:12.345678' - null
 -- !query schema
-struct<(TIMESTAMP '2019-10-06 10:11:12.345678' - NULL):interval day to second>
+struct<(TIMESTAMP_NTZ '2019-10-06 10:11:12.345678' - NULL):interval day to second>
 -- !query output
 NULL
 
@@ -384,7 +384,7 @@ NULL
 -- !query
 select null - timestamp'2019-10-06 10:11:12.345678'
 -- !query schema
-struct<(NULL - TIMESTAMP '2019-10-06 10:11:12.345678'):interval day to second>
+struct<(NULL - TIMESTAMP_NTZ '2019-10-06 10:11:12.345678'):interval day to second>
 -- !query output
 NULL
 
@@ -532,9 +532,10 @@ struct<date_add(DATE '2011-11-11', 1):date>
 -- !query
 select date_add(timestamp'2011-11-11', 1)
 -- !query schema
-struct<date_add(TIMESTAMP '2011-11-11 00:00:00', 1):date>
+struct<>
 -- !query output
-2011-11-12
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_add(TIMESTAMP_NTZ '2011-11-11 00:00:00', 1)' due to data type mismatch: argument 1 requires date type, however, 'TIMESTAMP_NTZ '2011-11-11 00:00:00'' is of timestamp_ntz type.; line 1 pos 7
 
 
 -- !query
@@ -565,9 +566,10 @@ The second argument of 'date_sub' function needs to be an integer.
 -- !query
 select date_sub(timestamp'2011-11-11', 1)
 -- !query schema
-struct<date_sub(TIMESTAMP '2011-11-11 00:00:00', 1):date>
+struct<>
 -- !query output
-2011-11-10
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_sub(TIMESTAMP_NTZ '2011-11-11 00:00:00', 1)' due to data type mismatch: argument 1 requires date type, however, 'TIMESTAMP_NTZ '2011-11-11 00:00:00'' is of timestamp_ntz type.; line 1 pos 7
 
 
 -- !query
@@ -716,7 +718,7 @@ select to_timestamp('2019-10-06 10:11:12.0', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
 struct<to_timestamp(2019-10-06 10:11:12.0, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
-NULL
+2019-10-06 10:11:12
 
 
 -- !query
@@ -724,7 +726,7 @@ select to_timestamp('2019-10-06 10:11:12.1', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
 struct<to_timestamp(2019-10-06 10:11:12.1, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
-NULL
+2019-10-06 10:11:12.1
 
 
 -- !query
@@ -732,7 +734,7 @@ select to_timestamp('2019-10-06 10:11:12.12', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]')
 -- !query schema
 struct<to_timestamp(2019-10-06 10:11:12.12, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
-NULL
+2019-10-06 10:11:12.12
 
 
 -- !query
@@ -740,7 +742,7 @@ select to_timestamp('2019-10-06 10:11:12.123UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zz
 -- !query schema
 struct<to_timestamp(2019-10-06 10:11:12.123UTC, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
-NULL
+2019-10-06 03:11:12.123
 
 
 -- !query
@@ -748,7 +750,7 @@ select to_timestamp('2019-10-06 10:11:12.1234', 'yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]
 -- !query schema
 struct<to_timestamp(2019-10-06 10:11:12.1234, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
-NULL
+2019-10-06 10:11:12.1234
 
 
 -- !query
@@ -756,7 +758,7 @@ select to_timestamp('2019-10-06 10:11:12.12345CST', 'yyyy-MM-dd HH:mm:ss.SSSSSS[
 -- !query schema
 struct<to_timestamp(2019-10-06 10:11:12.12345CST, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
-NULL
+2019-10-06 08:11:12.12345
 
 
 -- !query
@@ -764,7 +766,7 @@ select to_timestamp('2019-10-06 10:11:12.123456PST', 'yyyy-MM-dd HH:mm:ss.SSSSSS
 -- !query schema
 struct<to_timestamp(2019-10-06 10:11:12.123456PST, yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
-NULL
+2019-10-06 10:11:12.123456
 
 
 -- !query
@@ -780,7 +782,7 @@ select to_timestamp('123456 2019-10-06 10:11:12.123456PST', 'SSSSSS yyyy-MM-dd H
 -- !query schema
 struct<to_timestamp(123456 2019-10-06 10:11:12.123456PST, SSSSSS yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]):timestamp>
 -- !query output
-NULL
+2019-10-06 10:11:12.123456
 
 
 -- !query
@@ -796,7 +798,7 @@ select to_timestamp('2019-10-06 10:11:12.1234', 'yyyy-MM-dd HH:mm:ss.[SSSSSS]')
 -- !query schema
 struct<to_timestamp(2019-10-06 10:11:12.1234, yyyy-MM-dd HH:mm:ss.[SSSSSS]):timestamp>
 -- !query output
-NULL
+2019-10-06 10:11:12.1234
 
 
 -- !query
@@ -804,7 +806,7 @@ select to_timestamp('2019-10-06 10:11:12.123', 'yyyy-MM-dd HH:mm:ss[.SSSSSS]')
 -- !query schema
 struct<to_timestamp(2019-10-06 10:11:12.123, yyyy-MM-dd HH:mm:ss[.SSSSSS]):timestamp>
 -- !query output
-NULL
+2019-10-06 10:11:12.123
 
 
 -- !query
@@ -812,7 +814,7 @@ select to_timestamp('2019-10-06 10:11:12', 'yyyy-MM-dd HH:mm:ss[.SSSSSS]')
 -- !query schema
 struct<to_timestamp(2019-10-06 10:11:12, yyyy-MM-dd HH:mm:ss[.SSSSSS]):timestamp>
 -- !query output
-NULL
+2019-10-06 10:11:12
 
 
 -- !query
@@ -820,7 +822,7 @@ select to_timestamp('2019-10-06 10:11:12.12', 'yyyy-MM-dd HH:mm[:ss.SSSSSS]')
 -- !query schema
 struct<to_timestamp(2019-10-06 10:11:12.12, yyyy-MM-dd HH:mm[:ss.SSSSSS]):timestamp>
 -- !query output
-NULL
+2019-10-06 10:11:12.12
 
 
 -- !query
@@ -828,7 +830,7 @@ select to_timestamp('2019-10-06 10:11', 'yyyy-MM-dd HH:mm[:ss.SSSSSS]')
 -- !query schema
 struct<to_timestamp(2019-10-06 10:11, yyyy-MM-dd HH:mm[:ss.SSSSSS]):timestamp>
 -- !query output
-NULL
+2019-10-06 10:11:00
 
 
 -- !query
@@ -836,7 +838,7 @@ select to_timestamp("2019-10-06S10:11:12.12345", "yyyy-MM-dd'S'HH:mm:ss.SSSSSS")
 -- !query schema
 struct<to_timestamp(2019-10-06S10:11:12.12345, yyyy-MM-dd'S'HH:mm:ss.SSSSSS):timestamp>
 -- !query output
-NULL
+2019-10-06 10:11:12.12345
 
 
 -- !query
@@ -844,7 +846,7 @@ select to_timestamp("12.12342019-10-06S10:11", "ss.SSSSyyyy-MM-dd'S'HH:mm")
 -- !query schema
 struct<to_timestamp(12.12342019-10-06S10:11, ss.SSSSyyyy-MM-dd'S'HH:mm):timestamp>
 -- !query output
-NULL
+2019-10-06 10:11:12.1234
 
 
 -- !query
@@ -868,7 +870,7 @@ select to_timestamp("12.1234019-10-06S10:11", "ss.SSSSy-MM-dd'S'HH:mm")
 -- !query schema
 struct<to_timestamp(12.1234019-10-06S10:11, ss.SSSSy-MM-dd'S'HH:mm):timestamp>
 -- !query output
-NULL
+0019-10-06 10:11:12.1234
 
 
 -- !query
@@ -892,7 +894,7 @@ select to_timestamp("2019-10-06T10:11:12'12", "yyyy-MM-dd'T'HH:mm:ss''SSSS")
 -- !query schema
 struct<to_timestamp(2019-10-06T10:11:12'12, yyyy-MM-dd'T'HH:mm:ss''SSSS):timestamp>
 -- !query output
-2019-10-06 10:11:12.012
+2019-10-06 10:11:12.12
 
 
 -- !query
@@ -1218,25 +1220,28 @@ struct<to_timestamp_ntz(2019 10:10:10, yyyy hh:mm:ss):timestamp_ntz>
 -- !query
 select to_timestamp('2019-10-06 A', 'yyyy-MM-dd GGGGG')
 -- !query schema
-struct<to_timestamp(2019-10-06 A, yyyy-MM-dd GGGGG):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'yyyy-MM-dd GGGGG' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
 select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEEE')
 -- !query schema
-struct<to_timestamp(22 05 2020 Friday, dd MM yyyy EEEEEE):timestamp>
+struct<>
 -- !query output
-2020-05-22 00:00:00
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'dd MM yyyy EEEEEE' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
 select to_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE')
 -- !query schema
-struct<to_timestamp(22 05 2020 Friday, dd MM yyyy EEEEE):timestamp>
+struct<>
 -- !query output
-2020-05-22 00:00:00
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'dd MM yyyy EEEEE' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
@@ -1269,41 +1274,45 @@ Fail to recognize 'dd MM yyyy EEEEE' pattern in the DateTimeFormatter. You can f
 -- !query
 select unix_timestamp('22 05 2020 Friday', 'dd MM yyyy EEEEE')
 -- !query schema
-struct<unix_timestamp(22 05 2020 Friday, dd MM yyyy EEEEE):bigint>
+struct<>
 -- !query output
-1590130800
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'dd MM yyyy EEEEE' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
 select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
-struct<from_json({"t":"26/October/2015"}):struct<t:timestamp>>
+struct<from_json({"t":"26/October/2015"}):struct<t:timestamp_ntz>>
 -- !query output
-{"t":2015-10-26 00:00:00}
+{"t":null}
 
 
 -- !query
 select from_json('{"d":"26/October/2015"}', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
-struct<from_json({"d":"26/October/2015"}):struct<d:date>>
+struct<>
 -- !query output
-{"d":2015-10-26}
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
 select from_csv('26/October/2015', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
-struct<from_csv(26/October/2015):struct<t:timestamp>>
+struct<>
 -- !query output
-{"t":2015-10-26 00:00:00}
+java.lang.Exception
+Unsupported type: timestamp_ntz
 
 
 -- !query
 select from_csv('26/October/2015', 'd Date', map('dateFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
-struct<from_csv(26/October/2015):struct<d:date>>
+struct<>
 -- !query output
-{"d":2015-10-26}
+org.apache.spark.SparkUpgradeException
+You may get a different result due to the upgrading of Spark 3.0: Fail to recognize 'dd/MMMMM/yyyy' pattern in the DateTimeFormatter. 1) You can set spark.sql.legacy.timeParserPolicy to LEGACY to restore the behavior before Spark 3.0. 2) You can form a valid datetime pattern with the guide from https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html
 
 
 -- !query
@@ -1389,7 +1398,7 @@ NULL
 -- !query
 select cast("Unparseable" as timestamp)
 -- !query schema
-struct<CAST(Unparseable AS TIMESTAMP):timestamp>
+struct<CAST(Unparseable AS TIMESTAMP_NTZ):timestamp_ntz>
 -- !query output
 NULL
 
@@ -1589,7 +1598,7 @@ struct<to_timestamp_ntz(2021-06-25 10:11:12) - INTERVAL '20 15:40:32.998999' DAY
 -- !query
 SELECT make_timestamp(2021, 07, 11, 6, 30, 45.678)
 -- !query schema
-struct<make_timestamp(2021, 7, 11, 6, 30, 45.678):timestamp>
+struct<make_timestamp(2021, 7, 11, 6, 30, 45.678):timestamp_ntz>
 -- !query output
 2021-07-11 06:30:45.678
 
@@ -1597,6 +1606,6 @@ struct<make_timestamp(2021, 7, 11, 6, 30, 45.678):timestamp>
 -- !query
 SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007)
 -- !query schema
-struct<make_timestamp(2021, 7, 11, 6, 30, 60.007):timestamp>
+struct<make_timestamp(2021, 7, 11, 6, 30, 60.007):timestamp_ntz>
 -- !query output
 NULL

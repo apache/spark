@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.SparkError
+import org.apache.spark.{SparkThrowable, SparkThrowableHelper}
 import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -35,23 +35,23 @@ class AnalysisException protected[sql] (
     @transient val plan: Option[LogicalPlan] = None,
     val cause: Option[Throwable] = None,
     val errorClass: Option[String] = None,
-    val messageParameters: Seq[String] = Seq.empty)
-  extends Exception(message, cause.orNull) with SparkError with Serializable {
+    val messageParameters: Array[String] = Array.empty)
+  extends Exception(message, cause.orNull) with SparkThrowable with Serializable {
 
-  def this(errorClass: String, messageParameters: Seq[String], cause: Option[Throwable]) =
+  def this(errorClass: String, messageParameters: Array[String], cause: Option[Throwable]) =
     this(
-      SparkError.getMessage(errorClass, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
       errorClass = Some(errorClass),
       messageParameters = messageParameters,
       cause = cause)
 
   def this(
       errorClass: String,
-      messageParameters: Seq[String],
+      messageParameters: Array[String],
       line: Option[Int],
       startPosition: Option[Int]) =
     this(
-      SparkError.getMessage(errorClass, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
       line = line,
       startPosition = startPosition,
       errorClass = Some(errorClass),
@@ -64,7 +64,7 @@ class AnalysisException protected[sql] (
       plan: Option[LogicalPlan] = this.plan,
       cause: Option[Throwable] = this.cause,
       errorClass: Option[String] = this.errorClass,
-      messageParameters: Seq[String] = this.messageParameters): AnalysisException =
+      messageParameters: Array[String] = this.messageParameters): AnalysisException =
     new AnalysisException(message, line, startPosition, plan, cause, errorClass, messageParameters)
 
   def withPosition(line: Option[Int], startPosition: Option[Int]): AnalysisException = {
@@ -87,4 +87,7 @@ class AnalysisException protected[sql] (
   } else {
     message
   }
+
+  override def getErrorClass: String = errorClass.orNull
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass.orNull)
 }
