@@ -21,7 +21,6 @@ import java.io.File
 import java.net.URI
 import java.util.Locale
 
-import org.apache.avro.SchemaParseException
 import org.apache.hadoop.fs.Path
 import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.scalatest.BeforeAndAfterEach
@@ -3005,32 +3004,6 @@ class HiveDDLSuite
         }.getMessage
         assert(e.contains("Attribute name \"(IF((1 = 1), 1, 0))\" contains" +
           " invalid character(s) among \" ,;{}()\\n\\t=\". Please use alias to rename it."))
-      }
-    }
-  }
-
-  test("SPARK-33865: Hive DDL with avro should check col name") {
-    withTable("t1") {
-      withView("v") {
-        spark.range(1).createTempView("v")
-
-        val e1 = intercept[SchemaParseException] {
-          spark.sql(s"CREATE TABLE t1 STORED AS AVRO " +
-            "AS SELECT ID, ABS(ID) FROM v")
-        }.getMessage
-        assert(e1.contains("Illegal character in: abs(ID)"))
-
-        val e2 = intercept[SchemaParseException] {
-          spark.sql(s"CREATE TABLE t1 STORED AS AVRO " +
-            "AS SELECT ID, IF(ID=1,1,0) FROM v")
-        }.getMessage
-        assert(e2.contains("Illegal initial character: (IF((ID = CAST(1 AS BIGINT)), 1, 0))"))
-
-        spark.sql(s"CREATE TABLE t1 STORED AS AVRO " +
-          "AS SELECT ID, IF(ID=1,ID,0) AS A, ABS(ID) AS B FROM v")
-        val expectedSchema = StructType(Seq(StructField("ID", LongType, true),
-          StructField("A", LongType, true), StructField("B", LongType, true)))
-        assert(spark.table("t1").schema == expectedSchema)
       }
     }
   }

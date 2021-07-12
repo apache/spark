@@ -164,6 +164,10 @@ trait FileFormat {
    */
   def supportDataType(dataType: DataType): Boolean = true
 
+  /**
+   * Check whether target schema field name is valid.
+   * If field name is invalid, will throw [[AnalysisException]].
+   */
   def checkFieldNames(names: Seq[String]): Unit = {}
 }
 

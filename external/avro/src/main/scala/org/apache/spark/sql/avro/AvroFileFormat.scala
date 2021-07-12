@@ -22,7 +22,7 @@ import java.net.URI
 
 import scala.util.control.NonFatal
 
-import org.apache.avro.{Schema, SchemaParseException}
+import org.apache.avro.SchemaParseException
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
