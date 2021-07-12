@@ -311,7 +311,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test (expected = RuntimeException.class)
+  @Test (expected = IllegalArgumentException.class)
   public void testBlockReceivedAfterNewAttemptRegistered() throws IOException {
     String testApp = "updateLocalDirsTwiceWithTwoAttempts";
     Path[] attempt1LocalDirs = createLocalDirs(1);
@@ -338,14 +338,14 @@ public class RemoteBlockPushResolverSuite {
       stream2.onData(stream2.getID(), block);
     }
     stream2.onComplete(stream2.getID());
-    StreamCallbackWithID stream3 = pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(testApp, 1, 0, 1, 0, 0));
-    stream3.onData(stream3.getID(), ByteBuffer.wrap(new byte[4]));
     try {
-      stream3.onComplete(stream2.getID());
-    } catch (RuntimeException re) {
+      StreamCallbackWithID stream3 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, 1, 0, 1, 0, 0));
+    } catch (IllegalArgumentException re) {
       assertEquals(
-        "Block shufflePush_0_1_0 received after newer attempt has started", re.getMessage());
+        "The attempt id 1 in this PushBlockStream message does not match " +
+          "with the current attempt id 2 stored in shuffle service for application " +
+          "updateLocalDirsTwiceWithTwoAttempts", re.getMessage());
       throw re;
     }
   }
@@ -471,24 +471,25 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = NullPointerException.class)
+  @Test(expected = IllegalArgumentException.class)
   public void testExecutorRegisterWithInvalidJsonForPushShuffle() throws IOException {
     String testApp = "executorRegisterWithInvalidShuffleManagerMeta";
     Path[] activeLocalDirs = createLocalDirs(1);
-    registerExecutor(testApp, prepareLocalDirs(activeLocalDirs, MERGE_DIRECTORY),
-      INVALID_MERGE_DIRECTORY_META);
     try {
-      pushResolver.getMergedBlockDirs(testApp);
-    } catch (Throwable e) {
-      assertTrue(e.getMessage()
-        .startsWith("application " + testApp + " is not registered or NM was restarted."));
-      Throwables.propagate(e);
+      registerExecutor(testApp, prepareLocalDirs(activeLocalDirs, MERGE_DIRECTORY),
+        INVALID_MERGE_DIRECTORY_META);
+    } catch (IllegalArgumentException re) {
+      assertEquals(
+        "Failed to get the merge directory information from the shuffleManagerMeta " +
+          "shuffleManager:{\"mergeDirInvalid\": \"merge_manager_2\", \"attemptId\": \"2\"} in " +
+          "executor registration message", re.getMessage());
+      throw re;
     }
   }
 
   @Test(expected = NullPointerException.class)
   public void testExecutorRegistrationFromTwoAppAttempts() throws IOException {
-    String testApp = "updateLocalDirsTwiceWithTwoAttempts";
+    String testApp = "testExecutorRegistrationFromTwoAppAttempts";
     Path[] attempt1LocalDirs = createLocalDirs(1);
     registerExecutor(testApp,
       prepareLocalDirs(attempt1LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_1),
