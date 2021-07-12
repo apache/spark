@@ -1736,7 +1736,7 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException(
       s"""
          |Column name "$name" contains invalid character(s)
-         |${characters.map(str => s"among \"$str\"").getOrElse("")}".
+         |${characters.map("among \"" + _ + "\"").getOrElse("")}".
          |Please use alias to rename it.
        """.stripMargin.replaceAll("\n", " "))
   }
