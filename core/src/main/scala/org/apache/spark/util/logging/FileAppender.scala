@@ -126,15 +126,9 @@ private[spark] object FileAppender extends Logging {
   def apply(
     inputStream: InputStream,
     file: File,
-    conf: SparkConf) : FileAppender = {
-    apply(inputStream, file, conf, false)
-  }
-
-  def apply(
-    inputStream: InputStream,
-    file: File,
     conf: SparkConf,
-    closeStreams: Boolean): FileAppender = {
+    closeStreams: Boolean = false
+  ) : FileAppender = {
 
     val rollingStrategy = conf.get(config.EXECUTOR_LOGS_ROLLING_STRATEGY)
     val rollingSizeBytes = conf.get(config.EXECUTOR_LOGS_ROLLING_MAX_SIZE)
