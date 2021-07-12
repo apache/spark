@@ -182,8 +182,8 @@ class DeprecatedAPISuite extends QueryTest with SharedSparkSession {
       jsonDF = sqlContext.jsonRDD(jsonRDD.toJavaRDD())
       checkAnswer(jsonDF, Row(18, "Marry") :: Row(20, "Jack") :: Nil)
 
-      schema = StructType(StructField("name", StringType, false) ::
-        StructField("age", IntegerType, false) :: Nil)
+      schema = StructType(StructField("name", StringType, true) ::
+        StructField("age", IntegerType, true) :: Nil)
       jsonDF = sqlContext.jsonRDD(jsonRDD, schema)
       checkAnswer(jsonDF, Row("Jack", 20) :: Row("Marry", 18) :: Nil)
       jsonDF = sqlContext.jsonRDD(jsonRDD.toJavaRDD(), schema)
