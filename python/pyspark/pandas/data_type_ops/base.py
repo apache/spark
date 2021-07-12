@@ -49,6 +49,7 @@ from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
     extension_object_dtypes_available,
+    spark_type_to_pandas_dtype,
 )
 
 if extension_dtypes_available:
@@ -79,7 +80,7 @@ def is_valid_operand_for_numeric_arithmetic(operand: Any, *, allow_bool: bool = 
 
 
 def transform_boolean_operand_to_numeric(
-    operand: Any, spark_type: Optional[DataType] = None
+    operand: Any, *, spark_type: Optional[DataType] = None
 ) -> Any:
     """Transform boolean operand to numeric.
 
@@ -92,7 +93,14 @@ def transform_boolean_operand_to_numeric(
 
     if isinstance(operand, IndexOpsMixin) and isinstance(operand.spark.data_type, BooleanType):
         assert spark_type, "spark_type must be provided if the operand is a boolean IndexOpsMixin"
-        return operand.spark.transform(lambda scol: scol.cast(spark_type))
+        assert isinstance(spark_type, NumericType), "spark_type must be NumericType"
+        dtype = spark_type_to_pandas_dtype(
+            spark_type, use_extension_dtypes=operand._internal.data_fields[0].is_extension_dtype
+        )
+        return operand._with_new_scol(
+            operand.spark.column.cast(spark_type),
+            field=operand._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
+        )
     elif isinstance(operand, bool):
         return int(operand)
     else:
@@ -122,7 +130,7 @@ def _as_categorical_type(
 
             scol = F.coalesce(map_scol.getItem(index_ops.spark.column), SF.lit(-1))
         return index_ops._with_new_scol(
-            scol.cast(spark_type).alias(index_ops._internal.data_fields[0].name),
+            scol.cast(spark_type),
             field=index_ops._internal.data_fields[0].copy(
                 dtype=dtype, spark_type=spark_type, nullable=False
             ),
@@ -131,17 +139,15 @@ def _as_categorical_type(
 
 def _as_bool_type(index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
     """Cast `index_ops` to BooleanType Spark type, given `dtype`."""
-    from pyspark.pandas.internal import InternalField
-
+    spark_type = BooleanType()
     if isinstance(dtype, extension_dtypes):
-        scol = index_ops.spark.column.cast(BooleanType())
+        scol = index_ops.spark.column.cast(spark_type)
     else:
         scol = F.when(index_ops.spark.column.isNull(), SF.lit(False)).otherwise(
-            index_ops.spark.column.cast(BooleanType())
+            index_ops.spark.column.cast(spark_type)
         )
     return index_ops._with_new_scol(
-        scol.alias(index_ops._internal.data_spark_column_names[0]),
-        field=InternalField(dtype=dtype),
+        scol, field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type)
     )
 
 
@@ -151,16 +157,14 @@ def _as_string_type(
     """Cast `index_ops` to StringType Spark type, given `dtype` and `null_str`,
     representing null Spark column.
     """
-    from pyspark.pandas.internal import InternalField
-
+    spark_type = StringType()
     if isinstance(dtype, extension_dtypes):
-        scol = index_ops.spark.column.cast(StringType())
+        scol = index_ops.spark.column.cast(spark_type)
     else:
-        casted = index_ops.spark.column.cast(StringType())
+        casted = index_ops.spark.column.cast(spark_type)
         scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
     return index_ops._with_new_scol(
-        scol.alias(index_ops._internal.data_spark_column_names[0]),
-        field=InternalField(dtype=dtype),
+        scol, field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type)
     )
 
 
@@ -181,10 +185,7 @@ def _as_other_type(
     assert not need_pre_process, "Pre-processing is needed before the type casting."
 
     scol = index_ops.spark.column.cast(spark_type)
-    return index_ops._with_new_scol(
-        scol.alias(index_ops._internal.data_spark_column_names[0]),
-        field=InternalField(dtype=dtype),
-    )
+    return index_ops._with_new_scol(scol, field=InternalField(dtype=dtype))
 
 
 class DataTypeOps(object, metaclass=ABCMeta):
