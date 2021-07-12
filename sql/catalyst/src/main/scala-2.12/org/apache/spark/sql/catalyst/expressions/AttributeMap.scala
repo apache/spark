@@ -23,6 +23,10 @@ package org.apache.spark.sql.catalyst.expressions
  * of the name, or the expected nullability).
  */
 object AttributeMap {
+  def apply[A](kvs: Map[Attribute, A]): AttributeMap[A] = {
+    new AttributeMap(kvs.map(kv => (kv._1.exprId, kv)))
+  }
+
   def apply[A](kvs: Seq[(Attribute, A)]): AttributeMap[A] = {
     new AttributeMap(kvs.map(kv => (kv._1.exprId, kv)).toMap)
   }
@@ -36,6 +40,8 @@ class AttributeMap[A](val baseMap: Map[ExprId, (Attribute, A)])
   //  Note: this class supports Scala 2.12. A parallel source tree has a 2.13 implementation.
 
   override def get(k: Attribute): Option[A] = baseMap.get(k.exprId).map(_._2)
+
+  override def getOrElse[B1 >: A](k: Attribute, default: => B1): B1 = get(k).getOrElse(default)
 
   override def contains(k: Attribute): Boolean = get(k).isDefined
 

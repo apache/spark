@@ -16,6 +16,7 @@
 # limitations under the License.
 #
 
+import functools
 import itertools
 import os
 import platform
@@ -263,6 +264,73 @@ def _parse_memory(s):
     return int(float(s[:-1]) * units[s[-1].lower()])
 
 
+def inheritable_thread_target(f):
+    """
+    Return thread target wrapper which is recommended to be used in PySpark when the
+    pinned thread mode is enabled. The wrapper function, before calling original
+    thread target, it inherits the inheritable properties specific
+    to JVM thread such as ``InheritableThreadLocal``.
+
+    Also, note that pinned thread mode does not close the connection from Python
+    to JVM when the thread is finished in the Python side. With this wrapper, Python
+    garbage-collects the Python thread instance and also closes the connection
+    which finishes JVM thread correctly.
+
+    When the pinned thread mode is off, it return the original ``f``.
+
+    .. versionadded:: 3.2.0
+
+    Parameters
+    ----------
+    f : function
+        the original thread target.
+
+    Notes
+    -----
+    This API is experimental.
+
+    It is important to know that it captures the local properties when you decorate it
+    whereas :class:`InheritableThread` captures when the thread is started.
+    Therefore, it is encouraged to decorate it when you want to capture the local
+    properties.
+
+    For example, the local properties from the current Spark context is captured
+    when you define a function here instead of the invocation:
+
+    >>> @inheritable_thread_target
+    ... def target_func():
+    ...     pass  # your codes.
+
+    If you have any updates on local properties afterwards, it would not be reflected to
+    the Spark context in ``target_func()``.
+
+    The example below mimics the behavior of JVM threads as close as possible:
+
+    >>> Thread(target=inheritable_thread_target(target_func)).start()  # doctest: +SKIP
+    """
+    from pyspark import SparkContext
+
+    if isinstance(SparkContext._gateway, ClientServer):
+        # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
+
+        # NOTICE the internal difference vs `InheritableThread`. `InheritableThread`
+        # copies local properties when the thread starts but `inheritable_thread_target`
+        # copies when the function is wrapped.
+        properties = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
+
+        @functools.wraps(f)
+        def wrapped(*args, **kwargs):
+            try:
+                # Set local properties in child thread.
+                SparkContext._active_spark_context._jsc.sc().setLocalProperties(properties)
+                return f(*args, **kwargs)
+            finally:
+                InheritableThread._clean_py4j_conn_for_current_thread()
+        return wrapped
+    else:
+        return f
+
+
 class InheritableThread(threading.Thread):
     """
     Thread that is recommended to be used in PySpark instead of :class:`threading.Thread`
@@ -279,7 +347,6 @@ class InheritableThread(threading.Thread):
 
     .. versionadded:: 3.1.0
 
-
     Notes
     -----
     This API is experimental.
@@ -287,46 +354,61 @@ class InheritableThread(threading.Thread):
     def __init__(self, target, *args, **kwargs):
         from pyspark import SparkContext
 
-        sc = SparkContext._active_spark_context
-
-        if isinstance(sc._gateway, ClientServer):
+        if isinstance(SparkContext._gateway, ClientServer):
             # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
-            properties = sc._jsc.sc().getLocalProperties().clone()
-            self._sc = sc
-
             def copy_local_properties(*a, **k):
-                sc._jsc.sc().setLocalProperties(properties)
-                return target(*a, **k)
+                # self._props is set before starting the thread to match the behavior with JVM.
+                assert hasattr(self, "_props")
+                SparkContext._active_spark_context._jsc.sc().setLocalProperties(self._props)
+                try:
+                    return target(*a, **k)
+                finally:
+                    InheritableThread._clean_py4j_conn_for_current_thread()
 
             super(InheritableThread, self).__init__(
                 target=copy_local_properties, *args, **kwargs)
         else:
             super(InheritableThread, self).__init__(target=target, *args, **kwargs)
 
-    def __del__(self):
+    def start(self, *args, **kwargs):
         from pyspark import SparkContext
 
         if isinstance(SparkContext._gateway, ClientServer):
-            thread_connection = self._sc._jvm._gateway_client.thread_connection.connection()
-            if thread_connection is not None:
-                connections = self._sc._jvm._gateway_client.deque
+            # Here's when the pinned-thread mode (PYSPARK_PIN_THREAD) is on.
 
-                # Reuse the lock for Py4J in PySpark
-                with SparkContext._lock:
-                    for i in range(len(connections)):
-                        if connections[i] is thread_connection:
-                            connections[i].close()
-                            del connections[i]
-                            break
-                    else:
-                        # Just in case the connection was not closed but removed from the queue.
-                        thread_connection.close()
+            # Local property copy should happen in Thread.start to mimic JVM's behavior.
+            self._props = SparkContext._active_spark_context._jsc.sc().getLocalProperties().clone()
+        return super(InheritableThread, self).start(*args, **kwargs)
+
+    @staticmethod
+    def _clean_py4j_conn_for_current_thread():
+        from pyspark import SparkContext
+
+        jvm = SparkContext._jvm
+        thread_connection = jvm._gateway_client.get_thread_connection()
+        if thread_connection is not None:
+            try:
+                # Dequeue is shared across other threads but it's thread-safe.
+                # If this function has to be invoked one more time in the same thead
+                # Py4J will create a new connection automatically.
+                jvm._gateway_client.deque.remove(thread_connection)
+            except ValueError:
+                # Should never reach this point
+                return
+            finally:
+                thread_connection.close()
 
 
 if __name__ == "__main__":
-    import doctest
-
     if "pypy" not in platform.python_implementation().lower() and sys.version_info[:2] >= (3, 7):
-        (failure_count, test_count) = doctest.testmod()
+        import doctest
+        import pyspark.util
+        from pyspark.context import SparkContext
+
+        globs = pyspark.util.__dict__.copy()
+        globs['sc'] = SparkContext('local[4]', 'PythonTest')
+        (failure_count, test_count) = doctest.testmod(pyspark.util, globs=globs)
+        globs['sc'].stop()
+
         if failure_count:
             sys.exit(-1)

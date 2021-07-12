@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{GENERATOR, TreePattern}
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
@@ -51,6 +52,8 @@ trait Generator extends Expression {
   override def foldable: Boolean = false
 
   override def nullable: Boolean = false
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(GENERATOR)
 
   /**
    * The output element schema.

@@ -562,14 +562,14 @@ class CheckpointTests(unittest.TestCase):
         def check_output(n):
             while not os.listdir(outputd):
                 if self.ssc.awaitTerminationOrTimeout(0.5):
-                    raise Exception("ssc stopped")
+                    raise RuntimeError("ssc stopped")
             time.sleep(1)  # make sure mtime is larger than the previous one
             with open(os.path.join(inputd, str(n)), 'w') as f:
                 f.writelines(["%d\n" % i for i in range(10)])
 
             while True:
                 if self.ssc.awaitTerminationOrTimeout(0.5):
-                    raise Exception("ssc stopped")
+                    raise RuntimeError("ssc stopped")
                 p = os.path.join(outputd, max(os.listdir(outputd)))
                 if '_SUCCESS' not in os.listdir(p):
                     # not finished

@@ -225,6 +225,28 @@ class WholeStageCodegenSuite extends QueryTest with SharedSparkSession
     checkAnswer(twoJoinsDF, Seq(Row(0), Row(1), Row(2), Row(3)))
   }
 
+  test("Left Anti SortMergeJoin should be included in WholeStageCodegen") {
+    val df1 = spark.range(10).select($"id".as("k1"))
+    val df2 = spark.range(4).select($"id".as("k2"))
+    val df3 = spark.range(6).select($"id".as("k3"))
+
+    // test one left anti sort merge join
+    val oneJoinDF = df1.join(df2.hint("SHUFFLE_MERGE"), $"k1" === $"k2", "left_anti")
+    assert(oneJoinDF.queryExecution.executedPlan.collect {
+      case WholeStageCodegenExec(ProjectExec(_, _ : SortMergeJoinExec)) => true
+    }.size === 1)
+    checkAnswer(oneJoinDF, Seq(Row(4), Row(5), Row(6), Row(7), Row(8), Row(9)))
+
+    // test two left anti sort merge joins
+    val twoJoinsDF = df1.join(df2.hint("SHUFFLE_MERGE"), $"k1" === $"k2", "left_anti")
+      .join(df3.hint("SHUFFLE_MERGE"), $"k1" === $"k3", "left_anti")
+    assert(twoJoinsDF.queryExecution.executedPlan.collect {
+      case WholeStageCodegenExec(ProjectExec(_, _ : SortMergeJoinExec)) |
+           WholeStageCodegenExec(_ : SortMergeJoinExec) => true
+    }.size === 2)
+    checkAnswer(twoJoinsDF, Seq(Row(6), Row(7), Row(8), Row(9)))
+  }
+
   test("Inner/Cross BroadcastNestedLoopJoinExec should be included in WholeStageCodegen") {
     val df1 = spark.range(4).select($"id".as("k1"))
     val df2 = spark.range(3).select($"id".as("k2"))

@@ -18,7 +18,8 @@
 package org.apache.spark.sql.internal
 
 import java.util.{Locale, NoSuchElementException, Properties, TimeZone}
-import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.Deflater
 
@@ -35,7 +36,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.{IGNORE_MISSING_FILES => SPARK_IGNORE_MISSING_FILES}
 import org.apache.spark.network.util.ByteUnit
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{HintErrorLogger, Resolver}
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode
@@ -43,6 +43,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodeGenerator
 import org.apache.spark.sql.catalyst.plans.logical.HintErrorHandler
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.types.{AtomicType, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.util.Utils
 
@@ -53,28 +55,60 @@ import org.apache.spark.util.Utils
 
 object SQLConf {
 
-  private[sql] val sqlConfEntries =
-    new ConcurrentHashMap[String, ConfigEntry[_]]()
+  private[this] val sqlConfEntriesUpdateLock = new Object
 
-  val staticConfKeys: java.util.Set[String] =
-    java.util.Collections.synchronizedSet(new java.util.HashSet[String]())
+  @volatile
+  private[this] var sqlConfEntries: util.Map[String, ConfigEntry[_]] = util.Collections.emptyMap()
 
-  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntries.merge(entry.key, entry,
-    (existingConfigEntry, newConfigEntry) => {
-      require(existingConfigEntry == null,
-        s"Duplicate SQLConfigEntry. ${newConfigEntry.key} has been registered")
-      newConfigEntry
-    }
-  )
+  private[this] val staticConfKeysUpdateLock = new Object
+
+  @volatile
+  private[this] var staticConfKeys: java.util.Set[String] = util.Collections.emptySet()
+
+  private def register(entry: ConfigEntry[_]): Unit = sqlConfEntriesUpdateLock.synchronized {
+    require(!sqlConfEntries.containsKey(entry.key),
+      s"Duplicate SQLConfigEntry. ${entry.key} has been registered")
+    val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
+    updatedMap.put(entry.key, entry)
+    sqlConfEntries = updatedMap
+  }
 
   // For testing only
-  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntries.remove(entry.key)
+  private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntriesUpdateLock.synchronized {
+    val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
+    updatedMap.remove(entry.key)
+    sqlConfEntries = updatedMap
+  }
+
+  private[internal] def getConfigEntry(key: String): ConfigEntry[_] = {
+    sqlConfEntries.get(key)
+  }
+
+  private[internal] def getConfigEntries(): util.Collection[ConfigEntry[_]] = {
+    sqlConfEntries.values()
+  }
+
+  private[internal] def containsConfigEntry(entry: ConfigEntry[_]): Boolean = {
+    getConfigEntry(entry.key) == entry
+  }
+
+  private[sql] def containsConfigKey(key: String): Boolean = {
+    sqlConfEntries.containsKey(key)
+  }
+
+  def registerStaticConfigKey(key: String): Unit = staticConfKeysUpdateLock.synchronized {
+    val updated = new util.HashSet[String](staticConfKeys)
+    updated.add(key)
+    staticConfKeys = updated
+  }
+
+  def isStaticConfigKey(key: String): Boolean = staticConfKeys.contains(key)
 
   def buildConf(key: String): ConfigBuilder = ConfigBuilder(key).onCreate(register)
 
   def buildStaticConf(key: String): ConfigBuilder = {
     ConfigBuilder(key).onCreate { entry =>
-      staticConfKeys.add(entry.key)
+      SQLConf.registerStaticConfigKey(entry.key)
       SQLConf.register(entry)
     }
   }
@@ -184,7 +218,7 @@ object SQLConf {
         if (conf != null) {
           conf
         } else if (Utils.isTesting) {
-          throw new RuntimeException("Cannot get SQLConf inside scheduler event loop thread.")
+          throw QueryExecutionErrors.cannotGetSQLConfInSchedulerEventLoopThreadError()
         } else {
           confGetter.get()()
         }
@@ -492,10 +526,35 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  private val MIN_PARTITION_SIZE_KEY = "spark.sql.adaptive.coalescePartitions.minPartitionSize"
+
+  val COALESCE_PARTITIONS_PARALLELISM_FIRST =
+    buildConf("spark.sql.adaptive.coalescePartitions.parallelismFirst")
+      .doc("When true, Spark ignores the target size specified by " +
+        s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}' (default 64MB) when coalescing contiguous " +
+        "shuffle partitions, and only respect the minimum partition size specified by " +
+        s"'$MIN_PARTITION_SIZE_KEY' (default 1MB), to maximize the parallelism. " +
+        "This is to avoid performance regression when enabling adaptive query execution. " +
+        "It's recommended to set this config to false and respect the target size specified by " +
+        s"'${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val COALESCE_PARTITIONS_MIN_PARTITION_SIZE =
+    buildConf("spark.sql.adaptive.coalescePartitions.minPartitionSize")
+      .doc("The minimum size of shuffle partitions after coalescing. Its value can be at most " +
+        s"20% of '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'. This is useful when the target size " +
+        "is ignored during partition coalescing, which is the default case.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefaultString("1MB")
+
   val COALESCE_PARTITIONS_MIN_PARTITION_NUM =
     buildConf("spark.sql.adaptive.coalescePartitions.minPartitionNum")
-      .doc("The suggested (not guaranteed) minimum number of shuffle partitions after " +
-        "coalescing. If not set, the default value is the default parallelism of the " +
+      .internal()
+      .doc("(deprecated) The suggested (not guaranteed) minimum number of shuffle partitions " +
+        "after coalescing. If not set, the default value is the default parallelism of the " +
         "Spark cluster. This configuration only has an effect when " +
         s"'${ADAPTIVE_EXECUTION_ENABLED.key}' and " +
         s"'${COALESCE_PARTITIONS_ENABLED.key}' are both true.")
@@ -596,6 +655,35 @@ object SQLConf {
         "Note that, this config is used only in adaptive framework.")
       .version("3.2.0")
       .bytesConf(ByteUnit.BYTE)
+      .createOptional
+
+  val ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD =
+    buildConf("spark.sql.adaptive.maxShuffledHashJoinLocalMapThreshold")
+      .doc("Configures the maximum size in bytes per partition that can be allowed to build " +
+        "local hash map. If this value is not smaller than " +
+        s"${ADVISORY_PARTITION_SIZE_IN_BYTES.key} and all the partition size are not larger " +
+        "than this config, join selection prefer to use shuffled hash join instead of " +
+        s"sort merge join regardless of the value of ${PREFER_SORTMERGEJOIN.key}.")
+      .version("3.2.0")
+      .bytesConf(ByteUnit.BYTE)
+      .createWithDefault(0L)
+
+  val ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED =
+    buildConf("spark.sql.adaptive.optimizeSkewsInRebalancePartitions.enabled")
+      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' is true, Spark will optimize the " +
+        "skewed shuffle partitions in RebalancePartitions and split them to smaller ones " +
+        s"according to the target size (specified by '${ADVISORY_PARTITION_SIZE_IN_BYTES.key}'), " +
+        "to avoid data skew.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  val ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS =
+    buildConf("spark.sql.adaptive.customCostEvaluatorClass")
+      .doc("The custom cost evaluator class to be used for adaptive execution. If not being set," +
+        " Spark will use its own SimpleCostEvaluator by default.")
+      .version("3.2.0")
+      .stringConf
       .createOptional
 
   val SUBEXPRESSION_ELIMINATION_ENABLED =
@@ -770,10 +858,10 @@ object SQLConf {
 
   val PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD =
     buildConf("spark.sql.parquet.pushdown.inFilterThreshold")
-      .doc("The maximum number of values to filter push-down optimization for IN predicate. " +
-        "Large threshold won't necessarily provide much better performance. " +
-        "The experiment argued that 300 is the limit threshold. " +
-        "By setting this value to 0 this feature can be disabled. " +
+      .doc("For IN predicate, Parquet filter will push-down a set of OR clauses if its " +
+        "number of values not exceeds this threshold. Otherwise, Parquet filter will push-down " +
+        "a value greater than or equal to its minimum value and less than or equal to " +
+        "its maximum value. By setting this value to 0 this feature can be disabled. " +
         s"This configuration only has an effect when '${PARQUET_FILTER_PUSHDOWN_ENABLED.key}' is " +
         "enabled.")
       .version("2.4.0")
@@ -831,11 +919,11 @@ object SQLConf {
     .doc("Sets the compression codec used when writing ORC files. If either `compression` or " +
       "`orc.compress` is specified in the table-specific options/properties, the precedence " +
       "would be `compression`, `orc.compress`, `spark.sql.orc.compression.codec`." +
-      "Acceptable values include: none, uncompressed, snappy, zlib, lzo, zstd.")
+      "Acceptable values include: none, uncompressed, snappy, zlib, lzo, zstd, lz4.")
     .version("2.3.0")
     .stringConf
     .transform(_.toLowerCase(Locale.ROOT))
-    .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo", "zstd"))
+    .checkValues(Set("none", "uncompressed", "snappy", "zlib", "lzo", "zstd", "lz4"))
     .createWithDefault("snappy")
 
   val ORC_IMPLEMENTATION = buildConf("spark.sql.orc.impl")
@@ -1557,6 +1645,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val FILESTREAM_SINK_METADATA_IGNORED =
+    buildConf("spark.sql.streaming.fileStreamSink.ignoreMetadata")
+      .internal()
+      .doc("If this is enabled, when Spark reads from the results of a streaming query written " +
+        "by `FileStreamSink`, Spark will ignore the metadata log and treat it as normal path to " +
+        "read, e.g. listing files using HDFS APIs.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val VARIABLE_SUBSTITUTE_ENABLED =
     buildConf("spark.sql.variable.substitute")
       .doc("This enables substitution using syntax like `${var}`, `${system:var}`, " +
@@ -1616,6 +1714,15 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val ALLOW_NON_EMPTY_LOCATION_IN_CTAS =
+    buildConf("spark.sql.legacy.allowNonEmptyLocationInCTAS")
+      .internal()
+      .doc("When false, CTAS with LOCATION throws an analysis exception if the " +
+        "location is not empty.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val ALLOW_STAR_WITH_SINGLE_TABLE_IDENTIFIER_IN_COUNT =
     buildConf("spark.sql.legacy.allowStarWithSingleTableIdentifierInCount")
       .internal()
@@ -1639,6 +1746,15 @@ object SQLConf {
       .doc("When true, analyzed plan instead of SQL text will be stored when creating " +
         "temporary view")
       .version("3.1.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val ALLOW_AUTO_GENERATED_ALIAS_FOR_VEW =
+    buildConf("spark.sql.legacy.allowAutoGeneratedAliasForView")
+      .internal()
+      .doc("When true, it's allowed to use a input query without explicit alias when creating " +
+        "a permanent view.")
+      .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
 
@@ -2022,6 +2138,26 @@ object SQLConf {
       .intConf
       .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
 
+  val SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD =
+    buildConf("spark.sql.sessionWindow.buffer.in.memory.threshold")
+      .internal()
+      .doc("Threshold for number of windows guaranteed to be held in memory by the " +
+        "session window operator. Note that the buffer is used only for the query Spark " +
+        "cannot apply aggregations on determining session window.")
+      .version("3.2.0")
+      .intConf
+      .createWithDefault(4096)
+
+  val SESSION_WINDOW_BUFFER_SPILL_THRESHOLD =
+    buildConf("spark.sql.sessionWindow.buffer.spill.threshold")
+      .internal()
+      .doc("Threshold for number of rows to be spilled by window operator. Note that " +
+        "the buffer is used only for the query Spark cannot apply aggregations on determining " +
+        "session window.")
+      .version("3.2.0")
+      .intConf
+      .createWithDefault(SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD.defaultValue.get)
+
   val SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD =
     buildConf("spark.sql.sortMergeJoinExec.buffer.in.memory.threshold")
       .internal()
@@ -2165,7 +2301,7 @@ object SQLConf {
         "shows the exception messages from UDFs. Note that this works only with CPython 3.7+.")
       .version("3.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PANDAS_GROUPED_MAP_ASSIGN_COLUMNS_BY_NAME =
     buildConf("spark.sql.legacy.execution.pandas.groupedMap.assignColumnsByName")
@@ -2718,6 +2854,24 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  object TimestampTypes extends Enumeration {
+    val TIMESTAMP_NTZ, TIMESTAMP_LTZ = Value
+  }
+
+  val TIMESTAMP_TYPE =
+    buildConf("spark.sql.timestampType")
+      .doc("Configures the default timestamp type of Spark SQL, including SQL DDL, Cast clause " +
+        s"and type literal. Setting the configuration as ${TimestampTypes.TIMESTAMP_NTZ} will " +
+        "use TIMESTAMP WITHOUT TIME ZONE as the default type while putting it as " +
+        s"${TimestampTypes.TIMESTAMP_LTZ} will use TIMESTAMP WITH LOCAL TIME ZONE. " +
+        "Before the 3.2.0 release, Spark only supports the TIMESTAMP WITH " +
+        "LOCAL TIME ZONE type.")
+      .version("3.2.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValues(TimestampTypes.values.map(_.toString))
+      .createWithDefault(TimestampTypes.TIMESTAMP_LTZ.toString)
+
   val DATETIME_JAVA8API_ENABLED = buildConf("spark.sql.datetime.java8API.enabled")
     .doc("If the configuration property is set to true, java.time.Instant and " +
       "java.time.LocalDate classes of Java 8 API are used as external types for " +
@@ -3181,6 +3335,13 @@ object SQLConf {
     .intConf
     .createWithDefault(0)
 
+  val INFER_NESTED_DICT_AS_STRUCT = buildConf("spark.sql.pyspark.inferNestedDictAsStruct.enabled")
+    .doc("PySpark's SparkSession.createDataFrame infers the nested dict as a map by default. " +
+      "When it set to true, it infers the nested dict as a struct.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
   /**
    * Holds information about keys that have been deprecated.
    *
@@ -3231,7 +3392,9 @@ object SQLConf {
       DeprecatedConfig(AVRO_REBASE_MODE_IN_READ.alternatives.head, "3.2",
         s"Use '${AVRO_REBASE_MODE_IN_READ.key}' instead."),
       DeprecatedConfig(LEGACY_REPLACE_DATABRICKS_SPARK_AVRO_ENABLED.key, "3.2",
-        """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead.""")
+        """Use `.format("avro")` in `DataFrameWriter` or `DataFrameReader` instead."""),
+      DeprecatedConfig(COALESCE_PARTITIONS_MIN_PARTITION_NUM.key, "3.2",
+        s"Use '${COALESCE_PARTITIONS_MIN_PARTITION_SIZE.key}' instead.")
     )
 
     Map(configs.map { cfg => cfg.key -> cfg } : _*)
@@ -3349,6 +3512,8 @@ class SQLConf extends Serializable with Logging {
 
   def statefulOperatorCorrectnessCheckEnabled: Boolean =
     getConf(STATEFUL_OPERATOR_CHECK_CORRECTNESS_ENABLED)
+
+  def fileStreamSinkMetadataIgnored: Boolean = getConf(FILESTREAM_SINK_METADATA_IGNORED)
 
   def streamingFileCommitProtocolClass: String = getConf(STREAMING_FILE_COMMIT_PROTOCOL_CLASS)
 
@@ -3697,6 +3862,10 @@ class SQLConf extends Serializable with Logging {
 
   def windowExecBufferSpillThreshold: Int = getConf(WINDOW_EXEC_BUFFER_SPILL_THRESHOLD)
 
+  def sessionWindowBufferInMemoryThreshold: Int = getConf(SESSION_WINDOW_BUFFER_IN_MEMORY_THRESHOLD)
+
+  def sessionWindowBufferSpillThreshold: Int = getConf(SESSION_WINDOW_BUFFER_SPILL_THRESHOLD)
+
   def sortMergeJoinExecBufferInMemoryThreshold: Int =
     getConf(SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD)
 
@@ -3717,8 +3886,13 @@ class SQLConf extends Serializable with Logging {
 
   def storeAnalyzedPlanForView: Boolean = getConf(SQLConf.STORE_ANALYZED_PLAN_FOR_VIEW)
 
+  def allowAutoGeneratedAliasForView: Boolean = getConf(SQLConf.ALLOW_AUTO_GENERATED_ALIAS_FOR_VEW)
+
   def allowStarWithSingleTableIdentifierInCount: Boolean =
     getConf(SQLConf.ALLOW_STAR_WITH_SINGLE_TABLE_IDENTIFIER_IN_COUNT)
+
+  def allowNonEmptyLocationInCTAS: Boolean =
+    getConf(SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS)
 
   def starSchemaDetection: Boolean = getConf(STARSCHEMA_DETECTION)
 
@@ -3783,6 +3957,15 @@ class SQLConf extends Serializable with Logging {
     StoreAssignmentPolicy.withName(getConf(STORE_ASSIGNMENT_POLICY))
 
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
+
+  def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
+    case "TIMESTAMP_LTZ" =>
+      // For historical reason, the TimestampType maps to TIMESTAMP WITH LOCAL TIME ZONE
+      TimestampType
+
+    case "TIMESTAMP_NTZ" =>
+      TimestampNTZType
+  }
 
   def nestedSchemaPruningEnabled: Boolean = getConf(NESTED_SCHEMA_PRUNING_ENABLED)
 
@@ -3872,6 +4055,8 @@ class SQLConf extends Serializable with Logging {
 
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
+  def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
+
   /** ********************** SQLConf functionality methods ************ */
 
   /** Set Spark SQL configuration properties. */
@@ -3883,7 +4068,7 @@ class SQLConf extends Serializable with Logging {
   def setConfString(key: String, value: String): Unit = {
     require(key != null, "key cannot be null")
     require(value != null, s"value cannot be null for key: $key")
-    val entry = sqlConfEntries.get(key)
+    val entry = getConfigEntry(key)
     if (entry != null) {
       // Only verify configs in the SQLConf object
       entry.valueConverter(value)
@@ -3895,7 +4080,7 @@ class SQLConf extends Serializable with Logging {
   def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
     require(entry != null, "entry cannot be null")
     require(value != null, s"value cannot be null for key: ${entry.key}")
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    require(containsConfigEntry(entry), s"$entry is not registered")
     setConfWithCheck(entry.key, entry.stringConverter(value))
   }
 
@@ -3905,9 +4090,9 @@ class SQLConf extends Serializable with Logging {
     Option(settings.get(key)).
       orElse {
         // Try to use the default value
-        Option(sqlConfEntries.get(key)).map { e => e.stringConverter(e.readFrom(reader)) }
+        Option(getConfigEntry(key)).map { e => e.stringConverter(e.readFrom(reader)) }
       }.
-      getOrElse(throw new NoSuchElementException(key))
+      getOrElse(throw QueryExecutionErrors.noSuchElementExceptionError(key))
   }
 
   /**
@@ -3916,7 +4101,7 @@ class SQLConf extends Serializable with Logging {
    * desired one.
    */
   def getConf[T](entry: ConfigEntry[T], defaultValue: T): T = {
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    require(containsConfigEntry(entry), s"$entry is not registered")
     Option(settings.get(entry.key)).map(entry.valueConverter).getOrElse(defaultValue)
   }
 
@@ -3925,7 +4110,7 @@ class SQLConf extends Serializable with Logging {
    * yet, return `defaultValue` in [[ConfigEntry]].
    */
   def getConf[T](entry: ConfigEntry[T]): T = {
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    require(containsConfigEntry(entry), s"$entry is not registered")
     entry.readFrom(reader)
   }
 
@@ -3934,7 +4119,7 @@ class SQLConf extends Serializable with Logging {
    * is not set yet, returns None.
    */
   def getConf[T](entry: OptionalConfigEntry[T]): Option[T] = {
-    require(sqlConfEntries.get(entry.key) == entry, s"$entry is not registered")
+    require(containsConfigEntry(entry), s"$entry is not registered")
     entry.readFrom(reader)
   }
 
@@ -3943,19 +4128,18 @@ class SQLConf extends Serializable with Logging {
    * not set yet, return `defaultValue`.
    */
   def getConfString(key: String, defaultValue: String): String = {
-    if (defaultValue != null && defaultValue != ConfigEntry.UNDEFINED) {
-      val entry = sqlConfEntries.get(key)
-      if (entry != null) {
-        // Only verify configs in the SQLConf object
-        entry.valueConverter(defaultValue)
-      }
-    }
     Option(settings.get(key)).getOrElse {
       // If the key is not set, need to check whether the config entry is registered and is
       // a fallback conf, so that we can check its parent.
-      sqlConfEntries.get(key) match {
-        case e: FallbackConfigEntry[_] => getConfString(e.fallback.key, defaultValue)
-        case _ => defaultValue
+      getConfigEntry(key) match {
+        case e: FallbackConfigEntry[_] =>
+          getConfString(e.fallback.key, defaultValue)
+        case e: ConfigEntry[_] if defaultValue != null && defaultValue != ConfigEntry.UNDEFINED =>
+          // Only verify configs in the SQLConf object
+          e.valueConverter(defaultValue)
+          defaultValue
+        case _ =>
+          defaultValue
       }
     }
   }
@@ -3992,9 +4176,9 @@ class SQLConf extends Serializable with Logging {
    * Return all the configuration definitions that have been defined in [[SQLConf]]. Each
    * definition contains key, defaultValue and doc.
    */
-  def getAllDefinedConfs: Seq[(String, String, String, String)] = sqlConfEntries.synchronized {
+  def getAllDefinedConfs: Seq[(String, String, String, String)] = {
     loadDefinedConfs()
-    sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
+    getConfigEntries().asScala.filter(_.isPublic).map { entry =>
       val displayValue = Option(getConfString(entry.key, null)).getOrElse(entry.defaultValueString)
       (entry.key, displayValue, entry.doc, entry.version)
     }.toSeq
@@ -4004,11 +4188,18 @@ class SQLConf extends Serializable with Logging {
    * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
    */
   def redactOptions[K, V](options: Map[K, V]): Map[K, V] = {
+    redactOptions(options.toSeq).toMap
+  }
+
+  /**
+   * Redacts the given option map according to the description of SQL_OPTIONS_REDACTION_PATTERN.
+   */
+  def redactOptions[K, V](options: Seq[(K, V)]): Seq[(K, V)] = {
     val regexes = Seq(
       getConf(SQL_OPTIONS_REDACTION_PATTERN),
       SECRET_REDACTION_PATTERN.readFrom(reader))
 
-    regexes.foldLeft(options.toSeq) { case (opts, r) => Utils.redact(Some(r), opts) }.toMap
+    regexes.foldLeft(options) { case (opts, r) => Utils.redact(Some(r), opts) }
   }
 
   /**
@@ -4034,8 +4225,7 @@ class SQLConf extends Serializable with Logging {
     SQLConf.removedSQLConfigs.get(key).foreach {
       case RemovedConfig(configName, version, defaultValue, comment) =>
         if (value != defaultValue) {
-          throw new AnalysisException(
-            s"The SQL config '$configName' was removed in the version $version. $comment")
+          throw QueryCompilationErrors.configRemovedInVersionError(configName, version, comment)
         }
     }
   }
@@ -4077,6 +4267,6 @@ class SQLConf extends Serializable with Logging {
   }
 
   def isModifiable(key: String): Boolean = {
-    sqlConfEntries.containsKey(key) && !staticConfKeys.contains(key)
+    containsConfigKey(key) && !isStaticConfigKey(key)
   }
 }

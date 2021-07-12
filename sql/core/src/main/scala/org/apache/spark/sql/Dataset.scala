@@ -20,13 +20,13 @@ package org.apache.spark.sql
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.StringUtils
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.annotation.{DeveloperApi, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -48,6 +48,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.execution.arrow.{ArrowBatchStreamWriter, ArrowConverters}
@@ -69,7 +70,7 @@ private[sql] object Dataset {
   val curId = new java.util.concurrent.atomic.AtomicLong()
   val DATASET_ID_KEY = "__dataset_id"
   val COL_POS_KEY = "__col_position"
-  val DATASET_ID_TAG = TreeNodeTag[Long]("dataset_id")
+  val DATASET_ID_TAG = TreeNodeTag[HashSet[Long]]("dataset_id")
 
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
     val dataset = new Dataset(sparkSession, logicalPlan, implicitly[Encoder[T]])
@@ -194,12 +195,7 @@ class Dataset[T] private[sql](
 
   @transient lazy val sparkSession: SparkSession = {
     if (queryExecution == null || queryExecution.sparkSession == null) {
-      throw new SparkException(
-      "Dataset transformations and actions can only be invoked by the driver, not inside of" +
-        " other Dataset transformations; for example, dataset1.map(x => dataset2.values.count()" +
-        " * x) is invalid because the values transformation and count action cannot be " +
-        "performed inside of the dataset1.map transformation. For more information," +
-        " see SPARK-28702.")
+      throw QueryExecutionErrors.transformationsAndActionsNotInvokedByDriverError()
     }
     queryExecution.sparkSession
   }
@@ -221,19 +217,11 @@ class Dataset[T] private[sql](
   }
 
   @transient private[sql] val logicalPlan: LogicalPlan = {
-    // For various commands (like DDL) and queries with side effects, we force query execution
-    // to happen right away to let these side effects take place eagerly.
-    val plan = queryExecution.analyzed match {
-      case c: Command =>
-        LocalRelation(c.output, withAction("command", queryExecution)(_.executeCollect()))
-      case u @ Union(children, _, _) if children.forall(_.isInstanceOf[Command]) =>
-        LocalRelation(u.output, withAction("command", queryExecution)(_.executeCollect()))
-      case _ =>
-        queryExecution.analyzed
-    }
-    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED) &&
-        plan.getTagValue(Dataset.DATASET_ID_TAG).isEmpty) {
-      plan.setTagValue(Dataset.DATASET_ID_TAG, id)
+    val plan = queryExecution.commandExecuted
+    if (sparkSession.sessionState.conf.getConf(SQLConf.FAIL_AMBIGUOUS_SELF_JOIN_ENABLED)) {
+      val dsIds = plan.getTagValue(Dataset.DATASET_ID_TAG).getOrElse(new HashSet[Long])
+      dsIds.add(id)
+      plan.setTagValue(Dataset.DATASET_ID_TAG, dsIds)
     }
     plan
   }
@@ -268,8 +256,7 @@ class Dataset[T] private[sql](
       s"; did you mean to quote the `$colName` column?"
     } else ""
     val fieldsStr = fields.mkString(", ")
-    val errorMsg = s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}"""
-    new AnalysisException(errorMsg)
+    QueryCompilationErrors.cannotResolveColumnNameAmongFieldsError(colName, fieldsStr, extraMsg)
   }
 
   private[sql] def numericColumns: Seq[Expression] = {
@@ -605,7 +592,8 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
+  def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation] ||
+    logicalPlan.isInstanceOf[CommandResult]
 
   /**
    * Returns true if the `Dataset` is empty.
@@ -756,9 +744,7 @@ class Dataset[T] private[sql](
         IntervalUtils.stringToInterval(UTF8String.fromString(delayThreshold))
       } catch {
         case e: IllegalArgumentException =>
-          throw new AnalysisException(
-            s"Unable to parse time delay '$delayThreshold'",
-            cause = Some(e))
+          throw QueryCompilationErrors.cannotParseTimeDelayError(delayThreshold, e)
       }
     require(!IntervalUtils.isNegative(parsedDelay),
       s"delay threshold ($delayThreshold) should not be negative.")
@@ -1043,6 +1029,30 @@ class Dataset[T] private[sql](
   def join(right: Dataset[_], joinExprs: Column): DataFrame = join(right, joinExprs, "inner")
 
   /**
+   * find the trivially true predicates and automatically resolves them to both sides.
+   */
+  private def resolveSelfJoinCondition(plan: Join): Join = {
+    val resolver = sparkSession.sessionState.analyzer.resolver
+    val cond = plan.condition.map { _.transform {
+      case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
+        if a.sameRef(b) =>
+        catalyst.expressions.EqualTo(
+          plan.left.resolveQuoted(a.name, resolver)
+            .getOrElse(throw resolveException(a.name, plan.left.schema.fieldNames)),
+          plan.right.resolveQuoted(b.name, resolver)
+            .getOrElse(throw resolveException(b.name, plan.right.schema.fieldNames)))
+      case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
+        if a.sameRef(b) =>
+        catalyst.expressions.EqualNullSafe(
+          plan.left.resolveQuoted(a.name, resolver)
+            .getOrElse(throw resolveException(a.name, plan.left.schema.fieldNames)),
+          plan.right.resolveQuoted(b.name, resolver)
+            .getOrElse(throw resolveException(b.name, plan.right.schema.fieldNames)))
+    }}
+    plan.copy(condition = cond)
+  }
+
+  /**
    * Join with another `DataFrame`, using the given join expression. The following performs
    * a full outer join between `df1` and `df2`.
    *
@@ -1096,26 +1106,9 @@ class Dataset[T] private[sql](
     // Otherwise, find the trivially true predicates and automatically resolves them to both sides.
     // By the time we get here, since we have already run analysis, all attributes should've been
     // resolved and become AttributeReference.
-    val resolver = sparkSession.sessionState.analyzer.resolver
-    val cond = plan.condition.map { _.transform {
-      case catalyst.expressions.EqualTo(a: AttributeReference, b: AttributeReference)
-          if a.sameRef(b) =>
-        catalyst.expressions.EqualTo(
-          plan.left.resolveQuoted(a.name, resolver)
-            .getOrElse(throw resolveException(a.name, plan.left.schema.fieldNames)),
-          plan.right.resolveQuoted(b.name, resolver)
-            .getOrElse(throw resolveException(b.name, plan.right.schema.fieldNames)))
-      case catalyst.expressions.EqualNullSafe(a: AttributeReference, b: AttributeReference)
-        if a.sameRef(b) =>
-        catalyst.expressions.EqualNullSafe(
-          plan.left.resolveQuoted(a.name, resolver)
-            .getOrElse(throw resolveException(a.name, plan.left.schema.fieldNames)),
-          plan.right.resolveQuoted(b.name, resolver)
-            .getOrElse(throw resolveException(b.name, plan.right.schema.fieldNames)))
-    }}
 
     withPlan {
-      plan.copy(condition = cond)
+      resolveSelfJoinCondition(plan)
     }
   }
 
@@ -1157,7 +1150,7 @@ class Dataset[T] private[sql](
   def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
     // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
     // etc.
-    val joined = sparkSession.sessionState.executePlan(
+    var joined = sparkSession.sessionState.executePlan(
       Join(
         this.logicalPlan,
         other.logicalPlan,
@@ -1166,7 +1159,12 @@ class Dataset[T] private[sql](
         JoinHint.NONE)).analyzed.asInstanceOf[Join]
 
     if (joined.joinType == LeftSemi || joined.joinType == LeftAnti) {
-      throw new AnalysisException("Invalid join type in joinWith: " + joined.joinType.sql)
+      throw QueryCompilationErrors.invalidJoinTypeInJoinWithError(joined.joinType)
+    }
+
+    // If auto self join alias is enable
+    if (sqlContext.conf.dataFrameSelfJoinAutoResolveAmbiguity) {
+      joined = resolveSelfJoinCondition(joined)
     }
 
     implicit val tuple2Encoder: Encoder[(T, U)] =
@@ -1455,8 +1453,7 @@ class Dataset[T] private[sql](
         if (!needInputType) {
           typedCol
         } else {
-          throw new AnalysisException(s"Typed column $typedCol that needs input type and schema " +
-            "cannot be passed in untyped `select` API. Use the typed `Dataset.select` API instead.")
+          throw QueryCompilationErrors.cannotPassTypedColumnInUntypedSelectError(typedCol.toString)
         }
 
       case other => other
@@ -2076,10 +2073,8 @@ class Dataset[T] private[sql](
    * }}}
    *
    * Note that `allowMissingColumns` supports nested column in struct types. Missing nested columns
-   * of struct columns with same name will also be filled with null values. This currently does not
-   * support nested columns in array and map types. Note that if there is any missing nested columns
-   * to be filled, in order to make consistent schema between two sides of union, the nested fields
-   * of structs will be sorted after merging schema.
+   * of struct columns with the same name will also be filled with null values and added to the end
+   * of struct. This currently does not support nested columns in array and map types.
    *
    * @group typedrel
    * @since 3.1.0
@@ -2575,8 +2570,8 @@ class Dataset[T] private[sql](
       // so we call filter instead of find.
       val cols = allColumns.filter(col => resolver(col.name, colName))
       if (cols.isEmpty) {
-        throw new AnalysisException(
-          s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
+        throw QueryCompilationErrors.cannotResolveColumnNameAmongAttributesError(
+          colName, schema.fieldNames.mkString(", "))
       }
       cols
     }
@@ -3362,7 +3357,7 @@ class Dataset[T] private[sql](
     val tableIdentifier = try {
       sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName)
     } catch {
-      case _: ParseException => throw new AnalysisException(s"Invalid view name: $viewName")
+      case _: ParseException => throw QueryCompilationErrors.invalidViewNameError(viewName)
     }
     CreateViewCommand(
       name = tableIdentifier,

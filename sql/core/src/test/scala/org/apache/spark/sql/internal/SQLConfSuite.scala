@@ -438,7 +438,9 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     val e = intercept[IllegalArgumentException] {
       spark.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "Asia/shanghai")
     }
-    assert(e.getMessage === "Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)")
+    assert(e.getMessage ===
+      s"'Asia/shanghai' in ${SQLConf.SESSION_LOCAL_TIMEZONE.key} is invalid." +
+        " Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)")
   }
 
   test("set time zone") {
@@ -450,8 +452,8 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
     assert(spark.conf.get(SQLConf.SESSION_LOCAL_TIMEZONE) === TimeZone.getDefault.getID)
 
     val e1 = intercept[IllegalArgumentException](sql("set time zone 'invalid'"))
-    assert(e1.getMessage === "Cannot resolve the given timezone with" +
-      " ZoneId.of(_, ZoneId.SHORT_IDS)")
+    assert(e1.getMessage === s"'invalid' in ${SQLConf.SESSION_LOCAL_TIMEZONE.key} is invalid." +
+      " Cannot resolve the given timezone with ZoneId.of(_, ZoneId.SHORT_IDS)")
 
     (-18 to 18).map(v => (v, s"interval '$v' hours")).foreach { case (i, interval) =>
       sql(s"set time zone $interval")

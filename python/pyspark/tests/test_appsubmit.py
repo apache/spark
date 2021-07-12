@@ -225,7 +225,7 @@ class SparkSubmitTests(unittest.TestCase):
             |sc = SparkContext(conf = conf)
             |try:
             |    if sc._conf.get("spark.test_config") != "1":
-            |        raise Exception("Cannot find spark.test_config in SparkContext's conf.")
+            |        raise RuntimeError("Cannot find spark.test_config in SparkContext's conf.")
             |finally:
             |    sc.stop()
             """)

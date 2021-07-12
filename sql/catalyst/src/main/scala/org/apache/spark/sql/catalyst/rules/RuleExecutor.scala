@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.sideBySide
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -163,12 +164,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
   private def checkBatchIdempotence(batch: Batch, plan: TreeType): Unit = {
     val reOptimized = batch.rules.foldLeft(plan) { case (p, rule) => rule(p) }
     if (!plan.fastEquals(reOptimized)) {
-      val message =
-        s"""
-           |Once strategy's idempotence is broken for batch ${batch.name}
-           |${sideBySide(plan.treeString, reOptimized.treeString).mkString("\n")}
-          """.stripMargin
-      throw new RuntimeException(message)
+      throw QueryExecutionErrors.onceStrategyIdempotenceIsBrokenForBatchError(
+        batch.name, plan, reOptimized)
     }
   }
 
@@ -196,9 +193,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
     // Run the structural integrity checker against the initial input
     if (!isPlanIntegral(plan)) {
-      val message = "The structural integrity of the input plan is broken in " +
-        s"${this.getClass.getName.stripSuffix("$")}."
-      throw new RuntimeException(message)
+      throw QueryExecutionErrors.structuralIntegrityOfInputPlanIsBrokenInClassError(
+        this.getClass.getName.stripSuffix("$"))
     }
 
     batches.foreach { batch =>
@@ -229,9 +225,8 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
             // Run the structural integrity checker against the plan after each rule.
             if (effective && !isPlanIntegral(result)) {
-              val message = s"After applying rule ${rule.ruleName} in batch ${batch.name}, " +
-                "the structural integrity of the plan is broken."
-              throw new RuntimeException(message)
+              throw QueryExecutionErrors.structuralIntegrityIsBrokenAfterApplyingRuleError(
+                rule.ruleName, batch.name)
             }
 
             result

@@ -66,38 +66,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       }
       createAlterTable(nameParts, catalog, tbl, changes)
 
-    case a @ AlterTableAlterColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
-      a.dataType.foreach(failNullType)
-      val colName = a.column.toArray
-      val typeChange = a.dataType.map { newDataType =>
-        TableChange.updateColumnType(colName, newDataType)
-      }
-      val nullabilityChange = a.nullable.map { nullable =>
-        TableChange.updateColumnNullability(colName, nullable)
-      }
-      val commentChange = a.comment.map { newComment =>
-        TableChange.updateColumnComment(colName, newComment)
-      }
-      val positionChange = a.position.map { newPosition =>
-        TableChange.updateColumnPosition(colName, newPosition)
-      }
-      createAlterTable(
-        nameParts,
-        catalog,
-        tbl,
-        typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
-
-    case AlterTableRenameColumnStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), col, newName) =>
-      val changes = Seq(TableChange.renameColumn(col.toArray, newName))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
-    case AlterTableDropColumnsStatement(
-         nameParts @ NonSessionCatalogAndTable(catalog, tbl), cols) =>
-      val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
-      createAlterTable(nameParts, catalog, tbl, changes)
-
     case c @ CreateTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
       assertNoNullTypeInSchema(c.tableSchema)

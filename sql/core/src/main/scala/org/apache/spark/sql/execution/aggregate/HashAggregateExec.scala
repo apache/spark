@@ -67,12 +67,15 @@ case class HashAggregateExec(
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
     "avgHashProbe" ->
-      SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iters"))
+      SQLMetrics.createAverageMetric(sparkContext, "avg hash probe bucket list iters"),
+    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks"))
 
   // This is for testing. We force TungstenAggregationIterator to fall back to the unsafe row hash
   // map and/or the sort-based aggregation once it has processed a given number of input rows.
   private val testFallbackStartsAt: Option[(Int, Int)] = {
-    sqlContext.getConf("spark.sql.TungstenAggregate.testFallbackStartsAt", null) match {
+    Option(session).map { s =>
+      s.conf.get("spark.sql.TungstenAggregate.testFallbackStartsAt", null)
+    }.orNull match {
       case null | "" => None
       case fallbackStartsAt =>
         val splits = fallbackStartsAt.split(",").map(_.trim)
@@ -86,6 +89,7 @@ case class HashAggregateExec(
     val spillSize = longMetric("spillSize")
     val avgHashProbe = longMetric("avgHashProbe")
     val aggTime = longMetric("aggTime")
+    val numTasksFallBacked = longMetric("numTasksFallBacked")
 
     child.execute().mapPartitionsWithIndex { (partIndex, iter) =>
 
@@ -112,7 +116,8 @@ case class HashAggregateExec(
             numOutputRows,
             peakMemory,
             spillSize,
-            avgHashProbe)
+            avgHashProbe,
+            numTasksFallBacked)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
@@ -252,8 +257,10 @@ case class HashAggregateExec(
       aggNames: Seq[String],
       aggBufferUpdatingExprs: Seq[Seq[Expression]],
       aggCodeBlocks: Seq[Block],
-      subExprs: Map[Expression, SubExprEliminationState]): Option[Seq[String]] = {
-    val exprValsInSubExprs = subExprs.flatMap { case (_, s) => s.value :: s.isNull :: Nil }
+      subExprs: Map[ExpressionEquals, SubExprEliminationState]): Option[Seq[String]] = {
+    val exprValsInSubExprs = subExprs.flatMap { case (_, s) =>
+      s.eval.value :: s.eval.isNull :: Nil
+    }
     if (exprValsInSubExprs.exists(_.isInstanceOf[SimpleExprValue])) {
       // `SimpleExprValue`s cannot be used as an input variable for split functions, so
       // we give up splitting functions if it exists in `subExprs`.
@@ -358,7 +365,7 @@ case class HashAggregateExec(
       bindReferences(updateExprsForOneFunc, inputAttrs)
     }
     val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-    val effectiveCodes = subExprs.codes.mkString("\n")
+    val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
     val bufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
       ctx.withSubExprEliminationExprs(subExprs.states) {
         boundUpdateExprsForOneFunc.map(_.genCode(ctx))
@@ -460,7 +467,8 @@ case class HashAggregateExec(
       sorter: UnsafeKVExternalSorter,
       peakMemory: SQLMetric,
       spillSize: SQLMetric,
-      avgHashProbe: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
+      avgHashProbe: SQLMetric,
+      numTasksFallBacked: SQLMetric): KVIterator[UnsafeRow, UnsafeRow] = {
 
     // update peak execution memory
     val mapMemory = hashMap.getPeakMemoryUsedBytes
@@ -479,6 +487,7 @@ case class HashAggregateExec(
     }
 
     // merge the final hashMap into sorter
+    numTasksFallBacked += 1
     sorter.merge(hashMap.destructAndCreateExternalSorter())
     hashMap.free()
     val sortedIter = sorter.sortedIterator()
@@ -672,15 +681,15 @@ case class HashAggregateExec(
 
       // This is for testing/benchmarking only.
       // We enforce to first level to be a vectorized hashmap, instead of the default row-based one.
-      isVectorizedHashMapEnabled = sqlContext.conf.enableVectorizedHashMap
+      isVectorizedHashMapEnabled = conf.enableVectorizedHashMap
     }
   }
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {
     val initAgg = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "initAgg")
-    if (sqlContext.conf.enableTwoLevelAggMap) {
+    if (conf.enableTwoLevelAggMap) {
       enableTwoLevelHashMap(ctx)
-    } else if (sqlContext.conf.enableVectorizedHashMap) {
+    } else if (conf.enableVectorizedHashMap) {
       logWarning("Two level hashmap is disabled but vectorized hashmap is enabled.")
     }
     val bitMaxCapacity = testFallbackStartsAt match {
@@ -693,7 +702,7 @@ case class HashAggregateExec(
         } else {
           (math.log10(fastMapCounter) / math.log10(2)).floor.toInt
         }
-      case _ => sqlContext.conf.fastHashAggregateRowMaxCapacityBit
+      case _ => conf.fastHashAggregateRowMaxCapacityBit
     }
 
     val thisPlan = ctx.addReferenceObj("plan", this)
@@ -764,9 +773,10 @@ case class HashAggregateExec(
     val peakMemory = metricTerm(ctx, "peakMemory")
     val spillSize = metricTerm(ctx, "spillSize")
     val avgHashProbe = metricTerm(ctx, "avgHashProbe")
+    val numTasksFallBacked = metricTerm(ctx, "numTasksFallBacked")
 
     val finishRegularHashMap = s"$iterTerm = $thisPlan.finishAggregate(" +
-      s"$hashMapTerm, $sorterTerm, $peakMemory, $spillSize, $avgHashProbe);"
+      s"$hashMapTerm, $sorterTerm, $peakMemory, $spillSize, $avgHashProbe, $numTasksFallBacked);"
     val finishHashMap = if (isFastHashMapEnabled) {
       s"""
          |$iterTermForFastHashMap = $fastHashMapTerm.rowIterator();
@@ -981,7 +991,7 @@ case class HashAggregateExec(
         bindReferences(updateExprsForOneFunc, inputAttrs)
       }
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-      val effectiveCodes = subExprs.codes.mkString("\n")
+      val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
       val unsafeRowBufferEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
         ctx.withSubExprEliminationExprs(subExprs.states) {
           boundUpdateExprsForOneFunc.map(_.genCode(ctx))
@@ -1027,7 +1037,7 @@ case class HashAggregateExec(
             bindReferences(updateExprsForOneFunc, inputAttrs)
           }
           val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExprs.flatten)
-          val effectiveCodes = subExprs.codes.mkString("\n")
+          val effectiveCodes = ctx.evaluateSubExprEliminationState(subExprs.states.values)
           val fastRowEvals = boundUpdateExprs.map { boundUpdateExprsForOneFunc =>
             ctx.withSubExprEliminationExprs(subExprs.states) {
               boundUpdateExprsForOneFunc.map(_.genCode(ctx))

@@ -218,6 +218,7 @@ DataFrame APIs
     DataFrame.write
     DataFrame.writeStream
     DataFrame.writeTo
+    DataFrame.to_pandas_on_spark
     DataFrameNaFunctions.drop
     DataFrameNaFunctions.fill
     DataFrameNaFunctions.replace
@@ -493,6 +494,7 @@ Functions
     schema_of_csv
     schema_of_json
     second
+    sentences
     sequence
     sha1
     sha2

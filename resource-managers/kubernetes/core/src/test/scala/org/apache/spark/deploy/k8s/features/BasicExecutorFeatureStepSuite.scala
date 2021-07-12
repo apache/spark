@@ -341,6 +341,58 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
     assert(!SecretVolumeUtils.podHasVolume(podConfigured.pod, SPARK_CONF_VOLUME_EXEC))
   }
 
+  test("SPARK-35482: user correct block manager port for executor pods") {
+    try {
+      val initPod = SparkPod.initialPod()
+      val sm = new SecurityManager(baseConf)
+      val step1 =
+        new BasicExecutorFeatureStep(newExecutorConf(), sm, defaultProfile)
+      val containerPort1 = step1.configurePod(initPod).container.getPorts.get(0)
+      assert(containerPort1.getContainerPort === DEFAULT_BLOCKMANAGER_PORT,
+        s"should use port no. $DEFAULT_BLOCKMANAGER_PORT as default")
+
+      baseConf.set(BLOCK_MANAGER_PORT, 12345)
+      val step2 = new BasicExecutorFeatureStep(newExecutorConf(), sm, defaultProfile)
+      val containerPort2 = step2.configurePod(initPod).container.getPorts.get(0)
+      assert(containerPort2.getContainerPort === 12345)
+
+      baseConf.set(BLOCK_MANAGER_PORT, 1000)
+      val e = intercept[IllegalArgumentException] {
+        new BasicExecutorFeatureStep(newExecutorConf(), sm, defaultProfile)
+      }
+      assert(e.getMessage.contains("port number must be 0 or in [1024, 65535]"))
+
+      baseConf.set(BLOCK_MANAGER_PORT, 0)
+      val step3 = new BasicExecutorFeatureStep(newExecutorConf(), sm, defaultProfile)
+      assert(step3.configurePod(initPod).container.getPorts.isEmpty, "random port")
+    } finally {
+      baseConf.remove(BLOCK_MANAGER_PORT)
+    }
+  }
+
+  test("SPARK-35969: Make the pod prefix more readable and tallied with K8S DNS Label Names") {
+    baseConf.remove(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)
+    baseConf.set("spark.app.name", "xyz.abc _i_am_a_app_name_w/_some_abbrs")
+    val baseDriverPod = SparkPod.initialPod()
+    val step1 = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+    val podConfigured1 = step1.configurePod(baseDriverPod)
+    assert(podConfigured1.pod.getMetadata.getName
+      .startsWith("xyz-abc-i-am-a-app-name-w-some-abbrs"))
+
+    // scalastyle:off nonascii
+    baseConf.set("spark.app.name", "time.is the#most￥valuable_—thing。it's&about?time.")
+    // scalastyle:on
+
+    val step2 = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
+      defaultProfile)
+
+    val podConfigured2 = step2.configurePod(baseDriverPod)
+    assert(podConfigured2.pod.getMetadata.getName
+      .startsWith("time-is-the-most-valuable-thing-it-s-about-time-"))
+
+  }
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)

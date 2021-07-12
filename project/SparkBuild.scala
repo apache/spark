@@ -203,13 +203,12 @@ object SparkBuild extends PomBuild {
   // Silencer: Scala compiler plugin for warning suppression
   // Aim: enable fatal warnings, but suppress ones related to using of deprecated APIs
   // depends on scala version:
-  // <2.13 - silencer 1.6.0 and compiler settings to enable fatal warnings
-  // 2.13.0,2.13.1 - silencer 1.7.1 and compiler settings to enable fatal warnings
+  // <2.13.2 - silencer 1.7.5 and compiler settings to enable fatal warnings
   // 2.13.2+ - no silencer and configured warnings to achieve the same
   lazy val compilerWarningSettings: Seq[sbt.Def.Setting[_]] = Seq(
     libraryDependencies ++= {
       if (VersionNumber(scalaVersion.value).matchesSemVer(SemanticSelector("<2.13.2"))) {
-        val silencerVersion = if (scalaBinaryVersion.value == "2.13") "1.7.1" else "1.6.0"
+        val silencerVersion = "1.7.5"
         Seq(
           "org.scala-lang.modules" %% "scala-collection-compat" % "2.2.0",
           compilerPlugin("com.github.ghik" % "silencer-plugin" % silencerVersion cross CrossVersion.full),
@@ -249,7 +248,9 @@ object SparkBuild extends PomBuild {
           "-Wconf:msg=^(?=.*?Widening conversion from)(?=.*?is deprecated because it loses precision).+$:s",
           "-Wconf:msg=Auto-application to \\`\\(\\)\\` is deprecated:s",
           "-Wconf:msg=method with a single empty parameter list overrides method without any parameter list:s",
-          "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s"
+          "-Wconf:msg=method without a parameter list overrides a method with a single empty one:s",
+          // SPARK-35574 Prevent the recurrence of compilation warnings related to `procedure syntax is deprecated`
+          "-Wconf:cat=deprecation&msg=procedure syntax is deprecated:e"
         )
       }
     }
@@ -516,7 +517,8 @@ object SparkParallelTestGrouping {
     "org.apache.spark.sql.hive.thriftserver.SparkSQLEnvSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.ThriftServerPageSuite",
     "org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2ListenerSuite",
-    "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite"
+    "org.apache.spark.sql.kafka010.KafkaDelegationTokenSuite",
+    "org.apache.spark.shuffle.KubernetesLocalDiskShuffleDataIOSuite"
   )
 
   private val DEFAULT_TEST_GROUP = "default_test_group"
@@ -735,9 +737,6 @@ object Catalyst {
 }
 
 object SQL {
-
-  import sbtavro.SbtAvro.autoImport._
-
   lazy val settings = Seq(
     (console / initialCommands) :=
       """
@@ -759,10 +758,8 @@ object SQL {
         |import sqlContext.implicits._
         |import sqlContext._
       """.stripMargin,
-    (console / cleanupCommands) := "sc.stop()",
-    Test / avroGenerate := (Compile / avroGenerate).value
+    (console / cleanupCommands) := "sc.stop()"
   )
-
 }
 
 object Hive {
@@ -800,11 +797,30 @@ object Hive {
 }
 
 object YARN {
+  val genConfigProperties = TaskKey[Unit]("gen-config-properties",
+    "Generate config.properties which contains a setting whether Hadoop is provided or not")
+  val propFileName = "config.properties"
+  val hadoopProvidedProp = "spark.yarn.isHadoopProvided"
+
   lazy val settings = Seq(
     excludeDependencies --= Seq(
       ExclusionRule(organization = "com.sun.jersey"),
       ExclusionRule("javax.servlet", "javax.servlet-api"),
-      ExclusionRule("javax.ws.rs", "jsr311-api"))
+      ExclusionRule("javax.ws.rs", "jsr311-api")),
+    Compile / unmanagedResources :=
+      (Compile / unmanagedResources).value.filter(!_.getName.endsWith(s"$propFileName")),
+    genConfigProperties := {
+      val file = (Compile / classDirectory).value / s"org/apache/spark/deploy/yarn/$propFileName"
+      val isHadoopProvided = SbtPomKeys.effectivePom.value.getProperties.get(hadoopProvidedProp)
+      IO.write(file, s"$hadoopProvidedProp = $isHadoopProvided")
+    },
+    Compile / copyResources := (Def.taskDyn {
+      val c = (Compile / copyResources).value
+      Def.task {
+        (Compile / genConfigProperties).value
+        c
+      }
+    }).value
   )
 }
 

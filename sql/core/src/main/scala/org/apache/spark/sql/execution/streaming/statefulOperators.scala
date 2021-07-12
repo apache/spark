@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit._
 
 import scala.collection.JavaConverters._
 
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -29,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.state._
@@ -65,6 +67,24 @@ trait StatefulOperator extends SparkPlan {
   }
 }
 
+/**
+ * Custom stateful operator metric definition to allow operators to expose their own custom metrics.
+ * Also provides [[SQLMetric]] instance to show the metric in UI and accumulate it at the query
+ * level.
+ */
+trait StatefulOperatorCustomMetric {
+  def name: String
+  def desc: String
+  def createSQLMetric(sparkContext: SparkContext): SQLMetric
+}
+
+/** Custom stateful operator metric for simple "count" gauge */
+case class StatefulOperatorCustomSumMetric(name: String, desc: String)
+  extends StatefulOperatorCustomMetric {
+  override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
+    SQLMetrics.createMetric(sparkContext, desc)
+}
+
 /** An operator that reads from a StateStore. */
 trait StateStoreReader extends StatefulOperator {
   override lazy val metrics = Map(
@@ -74,16 +94,20 @@ trait StateStoreReader extends StatefulOperator {
 /** An operator that writes to a StateStore. */
 trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
 
-  override lazy val metrics = Map(
+  override lazy val metrics = statefulOperatorCustomMetrics ++ Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "numRowsDroppedByWatermark" -> SQLMetrics.createMetric(sparkContext,
       "number of rows which are dropped by watermark"),
     "numTotalStateRows" -> SQLMetrics.createMetric(sparkContext, "number of total state rows"),
     "numUpdatedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of updated state rows"),
     "allUpdatesTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to update"),
+    "numRemovedStateRows" -> SQLMetrics.createMetric(sparkContext, "number of removed state rows"),
     "allRemovalsTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to remove"),
     "commitTimeMs" -> SQLMetrics.createTimingMetric(sparkContext, "time to commit changes"),
-    "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state")
+    "stateMemory" -> SQLMetrics.createSizeMetric(sparkContext, "memory used by state"),
+    "numShufflePartitions" -> SQLMetrics.createMetric(sparkContext, "number of shuffle partitions"),
+    "numStateStoreInstances" -> SQLMetrics.createMetric(sparkContext,
+      "number of state store instances")
   ) ++ stateStoreCustomMetrics
 
   /**
@@ -91,23 +115,39 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
    * the driver after this SparkPlan has been executed and metrics have been updated.
    */
   def getProgress(): StateOperatorProgress = {
-    val customMetrics = stateStoreCustomMetrics
+    val customMetrics = (stateStoreCustomMetrics ++ statefulOperatorCustomMetrics)
       .map(entry => entry._1 -> longMetric(entry._1).value)
 
     val javaConvertedCustomMetrics: java.util.HashMap[String, java.lang.Long] =
       new java.util.HashMap(customMetrics.mapValues(long2Long).toMap.asJava)
 
     new StateOperatorProgress(
+      operatorName = shortName,
       numRowsTotal = longMetric("numTotalStateRows").value,
       numRowsUpdated = longMetric("numUpdatedStateRows").value,
+      allUpdatesTimeMs = longMetric("allUpdatesTimeMs").value,
+      numRowsRemoved = longMetric("numRemovedStateRows").value,
+      allRemovalsTimeMs = longMetric("allRemovalsTimeMs").value,
+      commitTimeMs = longMetric("commitTimeMs").value,
       memoryUsedBytes = longMetric("stateMemory").value,
       numRowsDroppedByWatermark = longMetric("numRowsDroppedByWatermark").value,
+      numShufflePartitions = longMetric("numShufflePartitions").value,
+      numStateStoreInstances = longMetric("numStateStoreInstances").value,
       javaConvertedCustomMetrics
     )
   }
 
   /** Records the duration of running `body` for the next query progress update. */
   protected def timeTakenMs(body: => Unit): Long = Utils.timeTakenMs(body)._2
+
+  /** Set the operator level metrics */
+  protected def setOperatorMetrics(numStateStoreInstances: Int = 1): Unit = {
+    assert(numStateStoreInstances >= 1, s"invalid number of stores: $numStateStoreInstances")
+    // Shuffle partitions capture the number of tasks that have this stateful operator instance.
+    // For each task instance this number is incremented by one.
+    longMetric("numShufflePartitions") += 1
+    longMetric("numStateStoreInstances") += numStateStoreInstances
+  }
 
   /**
    * Set the SQL metrics related to the state store.
@@ -123,14 +163,22 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
   }
 
   private def stateStoreCustomMetrics: Map[String, SQLMetric] = {
-    val provider = StateStoreProvider.create(sqlContext.conf.stateStoreProviderClass)
+    val provider = StateStoreProvider.create(conf.stateStoreProviderClass)
     provider.supportedCustomMetrics.map {
-      case StateStoreCustomSumMetric(name, desc) =>
-        name -> SQLMetrics.createMetric(sparkContext, desc)
-      case StateStoreCustomSizeMetric(name, desc) =>
-        name -> SQLMetrics.createSizeMetric(sparkContext, desc)
-      case StateStoreCustomTimingMetric(name, desc) =>
-        name -> SQLMetrics.createTimingMetric(sparkContext, desc)
+      metric => (metric.name, metric.createSQLMetric(sparkContext))
+    }.toMap
+  }
+
+  /**
+   * Set of stateful operator custom metrics. These are captured as part of the generic
+   * key-value map [[StateOperatorProgress.customMetrics]].
+   * Stateful operators can extend this method to provide their own unique custom metrics.
+   */
+  protected def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = Nil
+
+  private def statefulOperatorCustomMetrics: Map[String, SQLMetric] = {
+    customStatefulOperatorMetrics.map {
+      metric => (metric.name, metric.createSQLMetric(sparkContext))
     }.toMap
   }
 
@@ -144,6 +192,9 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
     }
   }
 
+  /** Name to output in [[StreamingOperatorProgress]] to identify operator type */
+  protected def shortName: String = "defaultName"
+
   /**
    * Should the MicroBatchExecution run another batch based on this stateful operator and the
    * current updated metadata.
@@ -152,7 +203,9 @@ trait StateStoreWriter extends StatefulOperator { self: SparkPlan =>
 }
 
 /** An operator that supports watermark. */
-trait WatermarkSupport extends UnaryExecNode {
+trait WatermarkSupport extends SparkPlan {
+
+  def child: SparkPlan
 
   /** The keys that may have a watermark attribute. */
   def keyExpressions: Seq[Attribute]
@@ -182,9 +235,11 @@ trait WatermarkSupport extends UnaryExecNode {
 
   protected def removeKeysOlderThanWatermark(store: StateStore): Unit = {
     if (watermarkPredicateForKeys.nonEmpty) {
+      val numRemovedStateRows = longMetric("numRemovedStateRows")
       store.getRange(None, None).foreach { rowPair =>
         if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
           store.remove(rowPair.key)
+          numRemovedStateRows += 1
         }
       }
     }
@@ -194,9 +249,11 @@ trait WatermarkSupport extends UnaryExecNode {
       storeManager: StreamingAggregationStateManager,
       store: StateStore): Unit = {
     if (watermarkPredicateForKeys.nonEmpty) {
+      val numRemovedStateRows = longMetric("numRemovedStateRows")
       storeManager.keys(store).foreach { keyRow =>
         if (watermarkPredicateForKeys.get.eval(keyRow)) {
           storeManager.remove(store, keyRow)
+          numRemovedStateRows += 1
         }
       }
     }
@@ -250,8 +307,8 @@ case class StateStoreRestoreExec(
       keyExpressions.toStructType,
       stateManager.getStateValueSchema,
       indexOrdinal = None,
-      sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
+      session.sessionState,
+      Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
         val hasInput = iter.hasNext
         if (!hasInput && keyExpressions.isEmpty) {
           // If our `keyExpressions` are empty, we're getting a global aggregation. In that case
@@ -263,8 +320,9 @@ case class StateStoreRestoreExec(
           iter.flatMap { row =>
             val key = stateManager.getKey(row.asInstanceOf[UnsafeRow])
             val restoredRow = stateManager.get(store, key)
-            numOutputRows += 1
-            Option(restoredRow).toSeq :+ row
+            val outputRows = Option(restoredRow).toSeq :+ row
+            numOutputRows += outputRows.size
+            outputRows
           }
         }
     }
@@ -311,11 +369,12 @@ case class StateStoreSaveExec(
       keyExpressions.toStructType,
       stateManager.getStateValueSchema,
       indexOrdinal = None,
-      sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { (store, iter) =>
+      session.sessionState,
+      Some(session.streams.stateStoreCoordinator)) { (store, iter) =>
         val numOutputRows = longMetric("numOutputRows")
         val numUpdatedStateRows = longMetric("numUpdatedStateRows")
         val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
+        val numRemovedStateRows = longMetric("numRemovedStateRows")
         val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
         val commitTimeMs = longMetric("commitTimeMs")
 
@@ -334,6 +393,7 @@ case class StateStoreSaveExec(
               stateManager.commit(store)
             }
             setStoreMetrics(store)
+            setOperatorMetrics()
             stateManager.values(store).map { valueRow =>
               numOutputRows += 1
               valueRow
@@ -362,6 +422,7 @@ case class StateStoreSaveExec(
                   val rowPair = rangeIter.next()
                   if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
                     stateManager.remove(store, rowPair.key)
+                    numRemovedStateRows += 1
                     removedValueRow = rowPair.value
                   }
                 }
@@ -375,9 +436,12 @@ case class StateStoreSaveExec(
               }
 
               override protected def close(): Unit = {
+                // Note: Due to the iterator lazy exec, this metric also captures the time taken
+                // by the consumer operators in addition to the processing in this operator.
                 allRemovalsTimeMs += NANOSECONDS.toMillis(System.nanoTime - removalStartTimeNs)
                 commitTimeMs += timeTakenMs { stateManager.commit(store) }
                 setStoreMetrics(store)
+                setOperatorMetrics()
               }
             }
 
@@ -414,10 +478,11 @@ case class StateStoreSaveExec(
                 }
                 commitTimeMs += timeTakenMs { stateManager.commit(store) }
                 setStoreMetrics(store)
+                setOperatorMetrics()
               }
             }
 
-          case _ => throw new UnsupportedOperationException(s"Invalid output mode: $outputMode")
+          case _ => throw QueryExecutionErrors.invalidStreamingOutputModeError(outputMode)
         }
     }
   }
@@ -433,6 +498,8 @@ case class StateStoreSaveExec(
       ClusteredDistribution(keyExpressions, stateInfo.map(_.numPartitions)) :: Nil
     }
   }
+
+  override def shortName: String = "stateStoreSave"
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     (outputMode.contains(Append) || outputMode.contains(Update)) &&
@@ -464,18 +531,18 @@ case class StreamingDeduplicateExec(
       keyExpressions.toStructType,
       child.output.toStructType,
       indexOrdinal = None,
-      sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator),
+      session.sessionState,
+      Some(session.streams.stateStoreCoordinator),
       // We won't check value row in state store since the value StreamingDeduplicateExec.EMPTY_ROW
       // is unrelated to the output schema.
       Map(StateStoreConf.FORMAT_VALIDATION_CHECK_VALUE_CONFIG -> "false")) { (store, iter) =>
       val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
       val numOutputRows = longMetric("numOutputRows")
-      val numTotalStateRows = longMetric("numTotalStateRows")
       val numUpdatedStateRows = longMetric("numUpdatedStateRows")
       val allUpdatesTimeMs = longMetric("allUpdatesTimeMs")
       val allRemovalsTimeMs = longMetric("allRemovalsTimeMs")
       val commitTimeMs = longMetric("commitTimeMs")
+      val numDroppedDuplicateRows = longMetric("numDroppedDuplicateRows")
 
       val baseIterator = watermarkPredicateForData match {
         case Some(predicate) => applyRemovingRowsOlderThanWatermark(iter, predicate)
@@ -495,6 +562,7 @@ case class StreamingDeduplicateExec(
           true
         } else {
           // Drop duplicated rows
+          numDroppedDuplicateRows += 1
           false
         }
       }
@@ -504,6 +572,7 @@ case class StreamingDeduplicateExec(
         allRemovalsTimeMs += timeTakenMs { removeKeysOlderThanWatermark(store) }
         commitTimeMs += timeTakenMs { store.commit() }
         setStoreMetrics(store)
+        setOperatorMetrics()
       })
     }
   }
@@ -511,6 +580,12 @@ case class StreamingDeduplicateExec(
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  override def customStatefulOperatorMetrics: Seq[StatefulOperatorCustomMetric] = {
+    Seq(StatefulOperatorCustomSumMetric("numDroppedDuplicateRows", "number of duplicates dropped"))
+  }
+
+  override def shortName: String = "dedupe"
 
   override def shouldRunAnotherBatch(newMetadata: OffsetSeqMetadata): Boolean = {
     eventTimeWatermark.isDefined && newMetadata.batchWatermarkMs > eventTimeWatermark.get

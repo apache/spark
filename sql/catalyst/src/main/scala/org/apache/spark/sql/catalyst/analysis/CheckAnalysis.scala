@@ -26,9 +26,9 @@ import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsAtomicPartitionManagement, SupportsPartitionManagement, Table}
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn, RenameColumn, UpdateColumnComment, UpdateColumnNullability, UpdateColumnPosition, UpdateColumnType}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
+import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
@@ -122,6 +122,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case u: UnresolvedRelation =>
         u.failAnalysis(s"Table or view not found: ${u.multipartIdentifier.quoted}")
 
+      case u: UnresolvedHint =>
+        u.failAnalysis(s"Hint not found: ${u.name}")
+
       case InsertIntoStatement(u: UnresolvedRelation, _, _, _, _, _) =>
         u.failAnalysis(s"Table not found: ${u.multipartIdentifier.quoted}")
 
@@ -159,7 +162,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
       // `ShowTableExtended` should have been converted to the v1 command if the table is v1.
       case _: ShowTableExtended =>
-        throw new AnalysisException("SHOW TABLE EXTENDED is not supported for v2 tables.")
+        throw QueryCompilationErrors.commandUnsupportedInV2TableError("SHOW TABLE EXTENDED")
 
       case operator: LogicalPlan =>
         // Check argument data types of higher-order functions downwards first.
@@ -179,7 +182,13 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         operator transformExpressionsUp {
           case a: Attribute if !a.resolved =>
             val from = operator.inputSet.toSeq.map(_.qualifiedName).mkString(", ")
-            a.failAnalysis(s"cannot resolve '${a.sql}' given input columns: [$from]")
+            // cannot resolve '${a.sql}' given input columns: [$from]
+            a.failAnalysis(errorClass = "MISSING_COLUMN", messageParameters = Array(a.sql, from))
+
+          case s: Star =>
+            withPosition(s) {
+              throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName)
+            }
 
           case e: Expression if e.checkInputDataTypes().isFailure =>
             e.checkInputDataTypes() match {
@@ -440,6 +449,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
+          case alter: AlterTableCommand if alter.table.resolved =>
+            checkAlterTableCommand(alter)
+
           case alter: AlterTable if alter.table.resolved =>
             val table = alter.table
             def findField(operation: String, fieldName: Array[String]): StructField = {
@@ -509,69 +521,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 positionArgumentExists(add.position(), parent, fieldsAdded)
                 TypeUtils.failWithIntervalType(add.dataType())
                 colsToAdd(parentName) = fieldsAdded :+ add.fieldNames().last
-              case update: UpdateColumnType =>
-                val field = {
-                  val f = findField("update", update.fieldNames)
-                  CharVarcharUtils.getRawType(f.metadata)
-                    .map(dt => f.copy(dataType = dt))
-                    .getOrElse(f)
-                }
-                val fieldName = update.fieldNames.quoted
-                update.newDataType match {
-                  case _: StructType =>
-                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
-                      s"update a struct by updating its fields")
-                  case _: MapType =>
-                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
-                      s"update a map by updating $fieldName.key or $fieldName.value")
-                  case _: ArrayType =>
-                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
-                      s"update the element by updating $fieldName.element")
-                  case u: UserDefinedType[_] =>
-                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
-                      s"update a UserDefinedType[${u.sql}] by updating its fields")
-                  case _: CalendarIntervalType =>
-                    alter.failAnalysis(s"Cannot update ${table.name} field $fieldName to " +
-                      s"interval type")
-                  case _ =>
-                    // update is okay
-                }
-
-                // We don't need to handle nested types here which shall fail before
-                def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
-                  case (CharType(l1), CharType(l2)) => l1 == l2
-                  case (CharType(l1), VarcharType(l2)) => l1 <= l2
-                  case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
-                  case _ => Cast.canUpCast(from, to)
-                }
-
-                if (!canAlterColumnType(field.dataType, update.newDataType)) {
-                  alter.failAnalysis(
-                    s"Cannot update ${table.name} field $fieldName: " +
-                        s"${field.dataType.simpleString} cannot be cast to " +
-                        s"${update.newDataType.simpleString}")
-                }
-              case update: UpdateColumnNullability =>
-                val field = findField("update", update.fieldNames)
-                val fieldName = update.fieldNames.quoted
-                if (!update.nullable && field.nullable) {
-                  alter.failAnalysis(
-                    s"Cannot change nullable column to non-nullable: $fieldName")
-                }
-              case updatePos: UpdateColumnPosition =>
-                findField("update", updatePos.fieldNames)
-                val parent = findParentStruct("update", updatePos.fieldNames())
-                val parentName = updatePos.fieldNames().init
-                positionArgumentExists(
-                  updatePos.position(),
-                  parent,
-                  colsToAdd.getOrElse(parentName, Nil))
-              case rename: RenameColumn =>
-                findField("rename", rename.fieldNames)
-                checkColumnNotExists(
-                  "rename", rename.fieldNames().init :+ rename.newName(), table.schema)
-              case update: UpdateColumnComment =>
-                findField("update", update.fieldNames)
               case delete: DeleteColumn =>
                 findField("delete", delete.fieldNames)
                 // REPLACE COLUMNS has deletes followed by adds. Remember the deleted columns
@@ -744,17 +693,17 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     checkAnalysis(expr.plan)
 
     expr match {
-      case ScalarSubquery(query, conditions, _) =>
+      case ScalarSubquery(query, outerAttrs, _, _) =>
         // Scalar subquery must return one column as output.
         if (query.output.size != 1) {
           failAnalysis(
             s"Scalar subquery must return only one column, but got ${query.output.size}")
         }
 
-        if (conditions.nonEmpty) {
+        if (outerAttrs.nonEmpty) {
           cleanQueryInScalarSubquery(query) match {
-            case a: Aggregate => checkAggregateInScalarSubquery(conditions, query, a)
-            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(conditions, query, a)
+            case a: Aggregate => checkAggregateInScalarSubquery(outerAttrs, query, a)
+            case Filter(_, a: Aggregate) => checkAggregateInScalarSubquery(outerAttrs, query, a)
             case p: LogicalPlan if p.maxRows.exists(_ <= 1) => // Ok
             case fail => failAnalysis(s"Correlated scalar subqueries must be aggregated: $fail")
           }
@@ -776,6 +725,15 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
                 s"Filter/Aggregate/Project and a few commands: $plan")
           }
         }
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan, isScalarOrLateral = true)
+
+      case _: LateralSubquery =>
+        assert(plan.isInstanceOf[LateralJoin])
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan, isScalarOrLateral = true)
 
       case inSubqueryOrExistsSubquery =>
         plan match {
@@ -784,11 +742,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             failAnalysis(s"IN/EXISTS predicate sub-queries can only be used in" +
                 s" Filter/Join and a few commands: $plan")
         }
+        // Validate to make sure the correlations appearing in the query are valid and
+        // allowed by spark.
+        checkCorrelationsInSubquery(expr.plan)
     }
-
-    // Validate to make sure the correlations appearing in the query are valid and
-    // allowed by spark.
-    checkCorrelationsInSubquery(expr.plan)
   }
 
   /**
@@ -827,24 +784,16 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates to make sure the outer references appearing inside the subquery
    * are allowed.
    */
-  private def checkCorrelationsInSubquery(sub: LogicalPlan): Unit = {
+  private def checkCorrelationsInSubquery(
+      sub: LogicalPlan,
+      isScalarOrLateral: Boolean = false): Unit = {
     // Validate that correlated aggregate expression do not contain a mixture
     // of outer and local references.
     def checkMixedReferencesInsideAggregateExpr(expr: Expression): Unit = {
       expr.foreach {
         case a: AggregateExpression if containsOuter(a) =>
-          val outer = a.collect { case OuterReference(e) => e.toAttribute }
-          val local = a.references -- outer
-          if (local.nonEmpty) {
-            val msg =
-              s"""
-                 |Found an aggregate expression in a correlated predicate that has both
-                 |outer and local references, which is not supported yet.
-                 |Aggregate expression: ${SubExprUtils.stripOuterReference(a).sql},
-                 |Outer references: ${outer.map(_.sql).mkString(", ")},
-                 |Local references: ${local.map(_.sql).mkString(", ")}.
-               """.stripMargin.replace("\n", " ").trim()
-            failAnalysis(msg)
+          if (a.references.nonEmpty) {
+            throw QueryCompilationErrors.mixedRefsInAggFunc(a.sql)
           }
         case _ =>
       }
@@ -857,12 +806,21 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       }
     }
 
+    // Check whether the logical plan node can host outer references.
+    // A `Project` can host outer references if it is inside a scalar or a lateral subquery and
+    // DecorrelateInnerQuery is enabled. Otherwise, only Filter can only outer references.
+    def canHostOuter(plan: LogicalPlan): Boolean = plan match {
+      case _: Filter => true
+      case _: Project => isScalarOrLateral && SQLConf.get.decorrelateInnerQueryEnabled
+      case _ => false
+    }
+
     // Make sure a plan's expressions do not contain :
     // 1. Aggregate expressions that have mixture of outer and local references.
-    // 2. Expressions containing outer references on plan nodes other than Filter.
+    // 2. Expressions containing outer references on plan nodes other than allowed operators.
     def failOnInvalidOuterReference(p: LogicalPlan): Unit = {
       p.expressions.foreach(checkMixedReferencesInsideAggregateExpr)
-      if (!p.isInstanceOf[Filter] && p.expressions.exists(containsOuter)) {
+      if (!canHostOuter(p) && p.expressions.exists(containsOuter)) {
         failAnalysis(
           "Expressions referencing the outer query are not supported outside of WHERE/HAVING " +
             s"clauses:\n$p")
@@ -996,6 +954,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case r: RepartitionByExpression =>
         failOnInvalidOuterReference(r)
 
+      case l: LateralJoin =>
+        failOnInvalidOuterReference(l)
+
       // Category 3:
       // Filter is one of the two operators allowed to host correlated expressions.
       // The other operator is Join. Filter can be anywhere in a correlated subquery.
@@ -1061,22 +1022,63 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     }}
   }
 
-  // Make sure that table is able to alter partition.
-  private def checkAlterTablePartition(
-      table: Table, parts: Seq[PartitionSpec]): Unit = {
-    (table, parts) match {
-      case (table, _) if !table.isInstanceOf[SupportsPartitionManagement] =>
-        failAnalysis(s"Table ${table.name()} can not alter partitions.")
+  /**
+   * Validates the options used for alter table commands after table and columns are resolved.
+   */
+  private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
+    def checkColumnNotExists(fieldNames: Seq[String], struct: StructType): Unit = {
+      if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
+        alter.failAnalysis(s"Cannot ${alter.operation} column, because ${fieldNames.quoted} " +
+          s"already exists in ${struct.treeString}")
+      }
+    }
 
-      case (_, parts) if parts.exists(_.isInstanceOf[UnresolvedPartitionSpec]) =>
-        failAnalysis("PartitionSpecs are not resolved")
+    alter match {
+      case AlterTableRenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
+        checkColumnNotExists(col.path :+ newName, table.schema)
+      case a @ AlterTableAlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
+        val fieldName = col.name.quoted
+        if (a.dataType.isDefined) {
+          val field = CharVarcharUtils.getRawType(col.field.metadata)
+            .map(dt => col.field.copy(dataType = dt))
+            .getOrElse(col.field)
+          val newDataType = a.dataType.get
+          newDataType match {
+            case _: StructType =>
+              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                "update a struct by updating its fields")
+            case _: MapType =>
+              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                s"update a map by updating $fieldName.key or $fieldName.value")
+            case _: ArrayType =>
+              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                s"update the element by updating $fieldName.element")
+            case u: UserDefinedType[_] =>
+              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
+                s"update a UserDefinedType[${u.sql}] by updating its fields")
+            case _: CalendarIntervalType | _: YearMonthIntervalType | _: DayTimeIntervalType =>
+              alter.failAnalysis(s"Cannot update ${table.name} field $fieldName to interval type")
+            case _ => // update is okay
+          }
 
-      // Skip atomic partition tables
-      case (_: SupportsAtomicPartitionManagement, _) =>
-      case (_: SupportsPartitionManagement, parts) if parts.size > 1 =>
-        failAnalysis(
-          s"Nonatomic partition table ${table.name()} can not alter multiple partitions.")
+          // We don't need to handle nested types here which shall fail before.
+          def canAlterColumnType(from: DataType, to: DataType): Boolean = (from, to) match {
+            case (CharType(l1), CharType(l2)) => l1 == l2
+            case (CharType(l1), VarcharType(l2)) => l1 <= l2
+            case (VarcharType(l1), VarcharType(l2)) => l1 <= l2
+            case _ => Cast.canUpCast(from, to)
+          }
 
+          if (!canAlterColumnType(field.dataType, newDataType)) {
+            alter.failAnalysis(s"Cannot update ${table.name} field $fieldName: " +
+              s"${field.dataType.simpleString} cannot be cast to ${newDataType.simpleString}")
+          }
+        }
+        if (a.nullable.isDefined) {
+          if (!a.nullable.get && col.field.nullable) {
+            alter.failAnalysis(s"Cannot change nullable column to non-nullable: $fieldName")
+          }
+        }
       case _ =>
     }
   }

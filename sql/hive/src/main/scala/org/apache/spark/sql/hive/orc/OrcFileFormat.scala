@@ -314,6 +314,7 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
     "NONE" -> "",
     "SNAPPY" -> ".snappy",
     "ZLIB" -> ".zlib",
+    "LZ4" -> ".lz4",
     "LZO" -> ".lzo")
 
   def unwrapOrcStructs(

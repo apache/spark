@@ -39,9 +39,7 @@ import org.apache.spark.shuffle.ShuffleWriter
 import org.apache.spark.storage.{ShuffleBlockId, ShuffleDataBlockId, ShuffleIndexBlockId}
 import org.apache.spark.util.MutablePair
 
-abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalSparkContext {
-
-  val conf = new SparkConf(loadDefaults = false)
+abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDirsTest {
 
   // Ensure that the DAGScheduler doesn't retry stages whose fetches fail, so that we accurately
   // test that the shuffle works (rather than retrying until all blocks are local to one Executor).

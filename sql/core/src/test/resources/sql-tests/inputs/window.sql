@@ -70,12 +70,21 @@ RANGE BETWEEN CURRENT ROW AND 2 FOLLOWING) FROM testData ORDER BY cate, val_date
 SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_timestamp
 RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING) FROM testData
 ORDER BY cate, val_timestamp;
+SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp)
+RANGE BETWEEN CURRENT ROW AND interval 23 days 4 hours FOLLOWING) FROM testData
+ORDER BY cate, to_timestamp_ntz(val_timestamp);
 SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_timestamp
 RANGE BETWEEN CURRENT ROW AND interval '1-1' year to month FOLLOWING) FROM testData
 ORDER BY cate, val_timestamp;
+SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp)
+RANGE BETWEEN CURRENT ROW AND interval '1-1' year to month FOLLOWING) FROM testData
+ORDER BY cate, to_timestamp_ntz(val_timestamp);
 SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_timestamp
 RANGE BETWEEN CURRENT ROW AND interval '1 2:3:4.001' day to second FOLLOWING) FROM testData
 ORDER BY cate, val_timestamp;
+SELECT val_timestamp, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY to_timestamp_ntz(val_timestamp)
+RANGE BETWEEN CURRENT ROW AND interval '1 2:3:4.001' day to second FOLLOWING) FROM testData
+ORDER BY cate, to_timestamp_ntz(val_timestamp);
 SELECT val_date, cate, avg(val_timestamp) OVER(PARTITION BY cate ORDER BY val_date
 RANGE BETWEEN CURRENT ROW AND interval '1-1' year to month FOLLOWING) FROM testData
 ORDER BY cate, val_date;
