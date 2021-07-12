@@ -924,7 +924,7 @@ abstract class JsonSuite
   test("Applying schemas with MapType") {
     withTempView("jsonWithSimpleMap", "jsonWithComplexMap") {
       val schemaWithSimpleMap = StructType(
-        StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
+        StructField("map", MapType(StringType, IntegerType, true), true) :: Nil)
       val jsonWithSimpleMap = spark.read.schema(schemaWithSimpleMap).json(mapType1)
 
       jsonWithSimpleMap.createOrReplaceTempView("jsonWithSimpleMap")
@@ -953,7 +953,7 @@ abstract class JsonSuite
         StructField("field1", ArrayType(IntegerType, true), true) ::
         StructField("field2", IntegerType, true) :: Nil)
       val schemaWithComplexMap = StructType(
-        StructField("map", MapType(StringType, innerStruct, true), false) :: Nil)
+        StructField("map", MapType(StringType, innerStruct, true), true) :: Nil)
 
       val jsonWithComplexMap = spark.read.schema(schemaWithComplexMap).json(mapType2)
 
@@ -1392,7 +1392,7 @@ abstract class JsonSuite
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
       withTempDir { dir =>
         val schemaWithSimpleMap = StructType(
-          StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
+          StructField("map", MapType(StringType, IntegerType, true), true) :: Nil)
         val df = spark.read.schema(schemaWithSimpleMap).json(mapType1)
 
         val path = dir.getAbsolutePath

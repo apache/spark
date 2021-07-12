@@ -147,8 +147,8 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
       "{\"id\":2,\"vec\":[2.25,4.5,8.75]}"
     )
     val schema = StructType(Seq(
-      StructField("id", IntegerType, false),
-      StructField("vec", new TestUDT.MyDenseVectorUDT, false)
+      StructField("id", IntegerType, true),
+      StructField("vec", new TestUDT.MyDenseVectorUDT, true)
     ))
 
     val jsonRDD = spark.read.schema(schema).json(data.toDS())
@@ -167,8 +167,8 @@ class UserDefinedTypeSuite extends QueryTest with SharedSparkSession with Parque
     )
 
     val schema = StructType(Seq(
-      StructField("id", IntegerType, false),
-      StructField("vec", new TestUDT.MyDenseVectorUDT, false)
+      StructField("id", IntegerType, true),
+      StructField("vec", new TestUDT.MyDenseVectorUDT, true)
     ))
 
     val jsonDataset = spark.read.schema(schema).json(data.toDS())
