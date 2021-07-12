@@ -30,6 +30,7 @@ import sun.util.calendar.ZoneInfo
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DateType, Decimal, TimestampNTZType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -969,9 +970,10 @@ object DateTimeUtils {
   def currentTimestamp(): Long = instantToMicros(Instant.now())
 
   /**
-   * Obtains the current local date-time as microseconds since the epoch in the default time-zone.
+   * Obtains the current local date-time as microseconds since the epoch at the session time-zone.
    */
-  def currentTimestampNTZ(): Long = localDateTimeToMicros(LocalDateTime.now())
+  def currentTimestampNTZ(): Long = localDateTimeToMicros(
+    LocalDateTime.now(getZoneId(SQLConf.get.sessionLocalTimeZone)))
 
   /**
    * Obtains the current date as days since the epoch in the specified time-zone.

@@ -209,7 +209,7 @@ case class Now() extends CurrentTimestampLike {
   usage = """
     _FUNC_() - Returns the current timestamp without time zone at the start of query evaluation. All calls of localtimestamp within the same query return the same value.
 
-    _FUNC_ - Returns the current timestamp without time zone at the start of query evaluation.
+    _FUNC_ - Returns the current local date-time at the session time zone at the start of query evaluation.
   """,
   examples = """
     Examples:
