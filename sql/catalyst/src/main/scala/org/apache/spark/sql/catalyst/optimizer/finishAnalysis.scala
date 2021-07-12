@@ -94,7 +94,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
         })
       case CurrentTimestamp() | Now() => currentTime
       case CurrentTimeZone() => timezone
-      case LocalTimestamp() => localTime
+      case LocalTimestamp(_) => localTime
     }
   }
 }
