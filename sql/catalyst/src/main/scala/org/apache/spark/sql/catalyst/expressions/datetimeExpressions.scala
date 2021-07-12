@@ -218,9 +218,16 @@ case class Now() extends CurrentTimestampLike {
   """,
   group = "datetime_funcs",
   since = "3.3.0")
-case class LocalTimestamp() extends CurrentTimestampLike {
+case class LocalTimestamp(timeZoneId: Option[String] = None) extends CurrentTimestampLike
+  with TimeZoneAwareExpression {
+
   override def dataType: DataType = TimestampNTZType
-  override def eval(input: InternalRow): Any = currentTimestampNTZ()
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def eval(input: InternalRow): Any = localDateTimeToMicros(LocalDateTime.now(zoneId))
+
   override def prettyName: String = "localtimestamp"
 }
 
