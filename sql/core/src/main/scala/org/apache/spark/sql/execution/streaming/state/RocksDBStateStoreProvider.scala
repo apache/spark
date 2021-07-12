@@ -84,7 +84,7 @@ private[sql] class RocksDBStateStoreProvider
     override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] = {
       require(encoder.supportPrefixKeyScan, "Prefix scan requires setting prefix key!")
 
-      val prefix = encoder.decodePrefixKey(prefixKey)
+      val prefix = encoder.encodePrefixKey(prefixKey)
       rocksDB.prefixScan(prefix).map(kv => encoder.decode(kv))
     }
 
@@ -156,8 +156,8 @@ private[sql] class RocksDBStateStoreProvider
     this.hadoopConf = hadoopConf
 
     require((keySchema.length == 0 && numColsPrefixKey == 0) ||
-      (keySchema.length > numColsPrefixKey), "The number of columns for prefix key must be " +
-      "greater than the number of columns in the key!")
+      (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
+      "greater than the number of columns for prefix key!")
 
     this.encoder = RocksDBStateEncoder.getEncoder(keySchema, valueSchema, numColsPrefixKey)
 

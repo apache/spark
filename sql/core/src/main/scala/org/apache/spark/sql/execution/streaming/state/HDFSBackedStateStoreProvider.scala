@@ -241,8 +241,8 @@ private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider wit
     this.numberOfVersionsToRetainInMemory = storeConf.maxVersionsToRetainInMemory
 
     require((keySchema.length == 0 && numColsPrefixKey == 0) ||
-      (keySchema.length > numColsPrefixKey), "The number of columns for prefix key must be " +
-      "greater than the number of columns in the key!")
+      (keySchema.length > numColsPrefixKey), "The number of columns in the key must be " +
+      "greater than the number of columns for prefix key!")
     this.numColsPrefixKey = numColsPrefixKey
 
     fm.mkdirs(baseDir)

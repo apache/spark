@@ -44,6 +44,11 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  *
  * `abort` method will be called when the task is completed - please clean up the resources in
  * the method.
+ *
+ * IMPLEMENTATION NOTES:
+ * * The implementation can throw exception on calling prefixScan method if the functionality is
+ *   not supported yet from the implementation. Note that some stateful operations would not work
+ *   on disabling prefixScan functionality.
  */
 trait ReadStateStore {
 
@@ -63,9 +68,9 @@ trait ReadStateStore {
    * Return an iterator containing all the key-value pairs which are matched with
    * the given prefix key.
    *
-   * Spark will provide numColsPrefixKey greater than 0 in StateStoreProvider.init method if
-   * the state store is responsible to handle the request for prefix scan. The schema of the
-   * prefix key should be same with the leftmost `numColsPrefixKey` columns of the key schema.
+   * The operator will provide numColsPrefixKey greater than 0 in StateStoreProvider.init method
+   * if the operator needs to leverage the "prefix scan" feature. The schema of the prefix key
+   * should be same with the leftmost `numColsPrefixKey` columns of the key schema.
    *
    * It is expected to throw exception if Spark calls this method without setting numColsPrefixKey
    * to the greater than 0.
@@ -251,6 +256,8 @@ trait StateStoreProvider {
    * @param keySchema Schema of keys to be stored
    * @param valueSchema Schema of value to be stored
    * @param numColsPrefixKey The number of leftmost columns to be used as prefix key.
+   *                         A value not greater than 0 means the operator doesn't activate prefix
+   *                         key, and the operator should not call prefixScan method in StateStore.
    * @param storeConfs Configurations used by the StateStores
    * @param hadoopConf Hadoop configuration that could be used by StateStore to save state data
    */

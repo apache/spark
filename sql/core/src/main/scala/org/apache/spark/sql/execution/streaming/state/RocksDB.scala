@@ -194,7 +194,7 @@ class RocksDB(
     val iter = prefixScanReuseIter.computeIfAbsent(threadId, tid => {
       val it = writeBatch.newIteratorWithBase(db.newIterator())
       logInfo(s"Getting iterator from version $loadedVersion for prefix scan on " +
-        s"tid $tid")
+        s"thread ID $tid")
       it
     })
 

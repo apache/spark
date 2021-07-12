@@ -24,7 +24,7 @@ import org.apache.spark.unsafe.Platform
 
 sealed trait RocksDBStateEncoder {
   def supportPrefixKeyScan: Boolean
-  def decodePrefixKey(groupKey: UnsafeRow): Array[Byte]
+  def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte]
   def extractPrefixKey(key: UnsafeRow): UnsafeRow
 
   def encodeKey(row: UnsafeRow): Array[Byte]
@@ -93,10 +93,10 @@ class PrefixKeyScanStateEncoder(
 
   import RocksDBStateEncoder._
 
-  require(keySchema.length > numColsPrefixKey, "The number of columns for prefix key must be " +
-    "greater than the number of columns in the key!")
+  require(keySchema.length > numColsPrefixKey, "The number of columns in the key must be " +
+    "greater than the number of columns for prefix key!")
 
-  private val groupKeyFieldsWithIdx: Seq[(StructField, Int)] = {
+  private val prefixKeyFieldsWithIdx: Seq[(StructField, Int)] = {
     keySchema.zipWithIndex.take(numColsPrefixKey)
   }
 
@@ -105,7 +105,7 @@ class PrefixKeyScanStateEncoder(
   }
 
   private val prefixKeyProjection: UnsafeProjection = {
-    val refs = groupKeyFieldsWithIdx.map(x => BoundReference(x._2, x._1.dataType, x._1.nullable))
+    val refs = prefixKeyFieldsWithIdx.map(x => BoundReference(x._2, x._1.dataType, x._1.nullable))
     UnsafeProjection.create(refs)
   }
 
@@ -143,23 +143,24 @@ class PrefixKeyScanStateEncoder(
   override def encodeValue(row: UnsafeRow): Array[Byte] = encodeUnsafeRow(row)
 
   override def decodeKey(keyBytes: Array[Byte]): UnsafeRow = {
-    val groupKeyEncodedLen = Platform.getInt(keyBytes, Platform.BYTE_ARRAY_OFFSET)
-    val groupKeyEncoded = new Array[Byte](groupKeyEncodedLen)
-    Platform.copyMemory(keyBytes, Platform.BYTE_ARRAY_OFFSET + 4, groupKeyEncoded,
-      Platform.BYTE_ARRAY_OFFSET, groupKeyEncodedLen)
+    val prefixKeyEncodedLen = Platform.getInt(keyBytes, Platform.BYTE_ARRAY_OFFSET)
+    val prefixKeyEncoded = new Array[Byte](prefixKeyEncodedLen)
+    Platform.copyMemory(keyBytes, Platform.BYTE_ARRAY_OFFSET + 4, prefixKeyEncoded,
+      Platform.BYTE_ARRAY_OFFSET, prefixKeyEncodedLen)
 
     // Here we calculate the remainingKeyEncodedLen leveraging the length of keyBytes
-    val remainingKeyEncodedLen = keyBytes.length - 4 - groupKeyEncodedLen
+    val remainingKeyEncodedLen = keyBytes.length - 4 - prefixKeyEncodedLen
 
     val remainingKeyEncoded = new Array[Byte](remainingKeyEncodedLen)
     Platform.copyMemory(keyBytes, Platform.BYTE_ARRAY_OFFSET + 4 +
-      groupKeyEncodedLen, remainingKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
+      prefixKeyEncodedLen, remainingKeyEncoded, Platform.BYTE_ARRAY_OFFSET,
       remainingKeyEncodedLen)
 
-    val groupKeyDecoded = decodeToUnsafeRow(groupKeyEncoded, groupKeyFieldsWithIdx.length)
-    val remainingKeyDecoded = decodeToUnsafeRow(remainingKeyEncoded, numFields = 1)
+    val prefixKeyDecoded = decodeToUnsafeRow(prefixKeyEncoded, numFields = numColsPrefixKey)
+    val remainingKeyDecoded = decodeToUnsafeRow(remainingKeyEncoded,
+      numFields = keySchema.length - numColsPrefixKey)
 
-    restoreKeyProjection(joinedRowOnKey.withLeft(groupKeyDecoded).withRight(remainingKeyDecoded))
+    restoreKeyProjection(joinedRowOnKey.withLeft(prefixKeyDecoded).withRight(remainingKeyDecoded))
   }
 
   override def decodeValue(valueBytes: Array[Byte]): UnsafeRow = {
@@ -170,12 +171,12 @@ class PrefixKeyScanStateEncoder(
     prefixKeyProjection(key)
   }
 
-  override def decodePrefixKey(groupKey: UnsafeRow): Array[Byte] = {
-    val groupKeyEncoded = encodeUnsafeRow(groupKey)
-    val prefix = new Array[Byte](groupKeyEncoded.length + 4)
-    Platform.putInt(prefix, Platform.BYTE_ARRAY_OFFSET, groupKeyEncoded.length)
-    Platform.copyMemory(groupKeyEncoded, Platform.BYTE_ARRAY_OFFSET, prefix,
-      Platform.BYTE_ARRAY_OFFSET + 4, groupKeyEncoded.length)
+  override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
+    val prefixKeyEncoded = encodeUnsafeRow(prefixKey)
+    val prefix = new Array[Byte](prefixKeyEncoded.length + 4)
+    Platform.putInt(prefix, Platform.BYTE_ARRAY_OFFSET, prefixKeyEncoded.length)
+    Platform.copyMemory(prefixKeyEncoded, Platform.BYTE_ARRAY_OFFSET, prefix,
+      Platform.BYTE_ARRAY_OFFSET + 4, prefixKeyEncoded.length)
     prefix
   }
 
@@ -242,10 +243,10 @@ class NoPrefixKeyStateEncoder(keySchema: StructType, valueSchema: StructType)
   override def supportPrefixKeyScan: Boolean = false
 
   override def extractPrefixKey(key: UnsafeRow): UnsafeRow = {
-    throw new IllegalStateException("This encoder doesn't support grouped key!")
+    throw new IllegalStateException("This encoder doesn't support prefix key!")
   }
 
-  override def decodePrefixKey(groupKey: UnsafeRow): Array[Byte] = {
-    throw new IllegalStateException("This encoder doesn't support grouped key!")
+  override def encodePrefixKey(prefixKey: UnsafeRow): Array[Byte] = {
+    throw new IllegalStateException("This encoder doesn't support prefix key!")
   }
 }
