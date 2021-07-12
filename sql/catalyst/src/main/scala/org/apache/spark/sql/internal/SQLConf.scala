@@ -626,6 +626,42 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("256MB")
 
+  val ADAPTIVE_SHUFFLE_SAMPLE_SIZE_PER_PARTITION =
+    buildConf("spark.sql.adaptive.shuffle.sampleSizePerPartition")
+      .doc(s"When '${ADAPTIVE_EXECUTION_ENABLED.key}' are true and sampled data are needed in " +
+        "shuffled join, perform adaptive sampling in the shuffle. This is the number to sample " +
+        "per partition.")
+      .version("3.3.0")
+      .intConf
+      .checkValue(_ > 0, "sample size per partition must be positive")
+      .createWithDefault(100)
+
+  val ADAPTIVE_SHUFFLE_JOIN_DETECT_SKEWNESS =
+    buildConf("spark.sql.adaptive.shuffle.detectSkewness")
+      .doc(s"When '${ADAPTIVE_EXECUTION_ENABLED.key}' are true, detect skewness information " +
+        "(including skewed keys) in shuffled join based on adaptive sampling, and then show " +
+        "it on SparkUI")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SKEW_JOIN_INFLATION_ENABLED =
+    buildConf("spark.sql.adaptive.skewJoin.inflation.enabled")
+      .doc(s"When true and '${ADAPTIVE_EXECUTION_ENABLED.key}' and '${SKEW_JOIN_ENABLED.key}' " +
+        s"are true, Spark takes data inflation into account when dynamically handling skewness.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val SKEW_JOIN_INFLATION_FACTOR =
+    buildConf("spark.sql.adaptive.skewJoin.inflation.factor")
+      .doc("A partition is considered as inflated if its estimated joined size is larger than " +
+        "this factor multiplying the median estimation")
+      .version("3.3.0")
+      .intConf
+      .checkValue(_ > 0, "The data inflation factor must be positive.")
+      .createWithDefault(50)
+
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
       .internal()

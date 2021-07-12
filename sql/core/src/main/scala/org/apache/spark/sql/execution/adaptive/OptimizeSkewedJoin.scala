@@ -23,7 +23,7 @@ import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, ShuffleExchangeExec, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{ENSURE_JOIN_REQUIREMENTS, EnsureRequirements, ShuffleExchangeExec, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -50,7 +50,7 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object OptimizeSkewedJoin extends CustomShuffleReaderRule {
 
-  override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
+  override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_JOIN_REQUIREMENTS)
 
   private val ensureRequirements = EnsureRequirements
 
@@ -68,7 +68,7 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
     val numPartitions = sizes.length
     val bytes = sizes.sorted
     numPartitions match {
-      case _ if (numPartitions % 2 == 0) =>
+      case _ if numPartitions % 2 == 0 =>
         math.max((bytes(numPartitions / 2) + bytes(numPartitions / 2 - 1)) / 2, 1)
       case _ => math.max(bytes(numPartitions / 2), 1)
     }
@@ -144,46 +144,89 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
     val leftTargetSize = targetSize(leftSizes, leftSkewThreshold)
     val rightTargetSize = targetSize(rightSizes, rightSkewThreshold)
 
+    val dataInflations = OptimizeDataInflation.detectDataInflation(conf, left, right, joinType)
+    if (dataInflations.nonEmpty) {
+      logDebug("Data inflations detected: " +
+        s"${dataInflations.toArray.sortBy(-_._2).mkString("[", " ,", "]")}")
+    }
+
     val leftSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
     val rightSidePartitions = mutable.ArrayBuffer.empty[ShufflePartitionSpec]
     var numSkewedLeft = 0
     var numSkewedRight = 0
     for (partitionIndex <- 0 until numPartitions) {
       val leftSize = leftSizes(partitionIndex)
-      val isLeftSkew = canSplitLeft && leftSize > leftSkewThreshold
+      val isLeftSkew = leftSize > leftSkewThreshold
       val rightSize = rightSizes(partitionIndex)
-      val isRightSkew = canSplitRight && rightSize > rightSkewThreshold
-      val leftNoSkewPartitionSpec =
+      val isRightSkew = rightSize > rightSkewThreshold
+      var leftParts: Seq[ShufflePartitionSpec] =
         Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1, leftSize))
-      val rightNoSkewPartitionSpec =
+      var rightParts: Seq[ShufflePartitionSpec] =
         Seq(CoalescedPartitionSpec(partitionIndex, partitionIndex + 1, rightSize))
 
-      val leftParts = if (isLeftSkew) {
+      if (canSplitLeft && isLeftSkew) {
         val skewSpecs = ShufflePartitionsUtil.createSkewPartitionSpecs(
           left.mapStats.get.shuffleId, partitionIndex, leftTargetSize)
         if (skewSpecs.isDefined) {
           logDebug(s"Left side partition $partitionIndex " +
             s"(${FileUtils.byteCountToDisplaySize(leftSize)}) is skewed, " +
             s"split it into ${skewSpecs.get.length} parts.")
+          leftParts = skewSpecs.get
           numSkewedLeft += 1
         }
-        skewSpecs.getOrElse(leftNoSkewPartitionSpec)
-      } else {
-        leftNoSkewPartitionSpec
       }
 
-      val rightParts = if (isRightSkew) {
+      if (canSplitRight && isRightSkew) {
         val skewSpecs = ShufflePartitionsUtil.createSkewPartitionSpecs(
           right.mapStats.get.shuffleId, partitionIndex, rightTargetSize)
         if (skewSpecs.isDefined) {
           logDebug(s"Right side partition $partitionIndex " +
             s"(${FileUtils.byteCountToDisplaySize(rightSize)}) is skewed, " +
             s"split it into ${skewSpecs.get.length} parts.")
+          rightParts = skewSpecs.get
           numSkewedRight += 1
         }
-        skewSpecs.getOrElse(rightNoSkewPartitionSpec)
-      } else {
-        rightNoSkewPartitionSpec
+      }
+
+      // If fail to split partition by skewed size,
+      // try to split based on estimated joined size, by reducing the target size.
+      // TODO: consider re-split partition already split but still maybe inflated
+      if ((canSplitLeft || canSplitRight) &&
+        leftParts.size == 1 && rightParts.size == 1 &&
+        dataInflations.contains(partitionIndex)) {
+        val inflation = dataInflations(partitionIndex)
+        val (leftScale, rightScale) = (canSplitLeft, canSplitRight) match {
+          case (true, true) => (1.0 / math.sqrt(inflation), 1.0 / math.sqrt(inflation))
+          case (true, false) => (1.0 / inflation, 1.0)
+          case (false, true) => (1.0, 1.0 / inflation)
+          case (false, false) => (1.0, 1.0)
+        }
+
+        if (leftScale < 1) {
+          val skewSpecs = ShufflePartitionsUtil.createSkewPartitionSpecs(
+            left.mapStats.get.shuffleId, partitionIndex,
+            (leftTargetSize * leftScale).ceil.toLong)
+          if (skewSpecs.isDefined) {
+            logDebug(s"Left side partition $partitionIndex " +
+              s"(${FileUtils.byteCountToDisplaySize(leftSize)}) is inflated, " +
+              s"split it into ${skewSpecs.get.length} parts.")
+            leftParts = skewSpecs.get
+            numSkewedLeft += 1
+          }
+        }
+
+        if (rightScale < 1) {
+          val skewSpecs = ShufflePartitionsUtil.createSkewPartitionSpecs(
+            right.mapStats.get.shuffleId, partitionIndex,
+            (rightTargetSize * rightScale).ceil.toLong)
+          if (skewSpecs.isDefined) {
+            logDebug(s"Right side partition $partitionIndex " +
+              s"(${FileUtils.byteCountToDisplaySize(rightSize)}) is inflated, " +
+              s"split it into ${skewSpecs.get.length} parts.")
+            rightParts = skewSpecs.get
+            numSkewedRight += 1
+          }
+        }
       }
 
       for {

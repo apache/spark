@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.{CommandResultExec, LocalTableScanExec, Pa
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, KeySketcher, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
@@ -114,6 +114,18 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  private def findTopLevelShuffledJoin(plan: SparkPlan): Seq[ShuffledJoin] = {
+    collect(plan) {
+      case j: ShuffledJoin => j
+    }
+  }
+
+  private def findTopLevelShuffleExchange(plan: SparkPlan): Seq[ShuffleExchangeExec] = {
+    collect(plan) {
+      case j: ShuffleExchangeExec => j
+    }
+  }
+
   private def findTopLevelBaseJoin(plan: SparkPlan): Seq[BaseJoinExec] = {
     collect(plan) {
       case j: BaseJoinExec => j
@@ -178,6 +190,130 @@ class AdaptiveQueryExecSuite
       val bhj = findTopLevelBroadcastHashJoin(adaptivePlan)
       assert(bhj.size == 1)
       checkNumLocalShuffleReaders(adaptivePlan)
+    }
+  }
+
+  test("AQE apply KeySketcher in SMJ and SHJ") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+      SQLConf.SKEW_JOIN_INFLATION_ENABLED.key -> "true",
+      SQLConf.ADAPTIVE_SHUFFLE_SAMPLE_SIZE_PER_PARTITION.key -> "100") {
+
+      withTempView("skewData1", "skewData2") {
+        spark.range(0, 10000, 1, 9)
+          .select(
+            col("id").as("key1"),
+            col("id").as("value1"),
+            abs(hash(col("id"))).mod(100).as("hash1")
+          ).withColumn(
+          "key1", when(col("hash1") === lit(0), lit(0)).otherwise(col("key1"))
+          ).createOrReplaceTempView("skewData1")
+
+        spark.range(0, 100, 1, 7)
+          .select(
+            col("id").as("key2"),
+            col("id").as("value2")
+          ).createOrReplaceTempView("skewData2")
+
+        Seq("MERGE", "SHUFFLE_HASH").foreach { hint =>
+          val query = s"SELECT /*+ $hint(skewData1) */ * FROM skewData1 join skewData2 " +
+            s"ON key1 = key2"
+          val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+
+          val sj = findTopLevelShuffledJoin(adaptivePlan)
+          assert(sj.size === 1)
+
+          val leftShuffle = findTopLevelShuffleExchange(sj.head.left)
+          assert(leftShuffle.size === 1)
+          val leftAcc = leftShuffle.head.shuffleExecAccumulators
+            .find(_.isInstanceOf[KeySketcher])
+          assert(leftAcc.size === 1)
+          val leftKeySketcher = leftAcc.head.asInstanceOf[KeySketcher]
+          assert(leftKeySketcher.count === 10000)
+          // approximately detected, like 10000 > 2304
+          assert(leftKeySketcher.count > leftKeySketcher.sampled)
+
+          val rightShuffle = findTopLevelShuffleExchange(sj.head.right)
+          assert(rightShuffle.size === 1)
+          val rightAcc = rightShuffle.head.shuffleExecAccumulators
+            .find(_.isInstanceOf[KeySketcher])
+          assert(rightAcc.size === 1)
+          val rightKeySketcher = rightAcc.head.asInstanceOf[KeySketcher]
+          assert(rightKeySketcher.count === 100)
+          // exactly detected
+          assert(rightKeySketcher.count === rightKeySketcher.sampled)
+        }
+      }
+    }
+  }
+
+  test("optimizeSkewJoin handle data inflation") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.SKEW_JOIN_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+      SQLConf.ADAPTIVE_SHUFFLE_SAMPLE_SIZE_PER_PARTITION.key -> "100",
+      SQLConf.SKEW_JOIN_INFLATION_FACTOR.key -> "50",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1MB") {
+
+      withTempView("skewData1", "skewData2") {
+        spark.range(0, 100000, 1, 19)
+          .select(
+            col("id").as("key1"),
+            col("id").as("value1"),
+            abs(hash(col("id"))).mod(5).as("hash1")
+          ).withColumn(
+          "key1", when(col("hash1") === lit(0), lit(0)).otherwise(col("key1"))
+          ).createOrReplaceTempView("skewData1")
+
+        spark.range(0, 100, 1, 17)
+          .select(
+            col("id").as("key2"),
+            col("id").as("value2"),
+            abs(hash(col("id"))).mod(5).as("hash2")
+          ).withColumn("key2", when(col("hash2") === lit(0), lit(0)).otherwise(col("key2"))
+          ).createOrReplaceTempView("skewData2")
+
+        // Support inner/left/right join
+        for (hintQuery <- Seq(
+          "SELECT /*+ hint(skewData1) */ * FROM skewData1 join skewData2 ON key1 = key2",
+          "SELECT /*+ hint(skewData1) */ * FROM skewData1 left join skewData2 ON key1 = key2",
+          "SELECT /*+ hint(skewData1) */ * FROM skewData2 right join skewData1 ON key2 = key1"
+        ); hint <- Seq("MERGE", "SHUFFLE_HASH")) {
+          val query = hintQuery.replace("hint", hint)
+
+          var count1 = -1L
+          withSQLConf(SQLConf.SKEW_JOIN_INFLATION_ENABLED.key -> "false") {
+            val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+            val sj = findTopLevelShuffledJoin(adaptivePlan)
+            assert(sj.size === 1)
+            // original optimizeSkewJoin can NOT handle data inflation
+            sj.head match {
+              case smj: SortMergeJoinExec => assert(!smj.isSkewJoin)
+              case shj: ShuffledHashJoinExec => assert(!shj.isSkewJoin)
+            }
+            count1 = spark.sql(query).count()
+          }
+
+          var count2 = -2L
+          withSQLConf(SQLConf.SKEW_JOIN_INFLATION_ENABLED.key -> "true") {
+            val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+            val sj = findTopLevelShuffledJoin(adaptivePlan)
+            assert(sj.size === 1)
+            sj.head match {
+              case smj: SortMergeJoinExec => assert(smj.isSkewJoin)
+              case shj: ShuffledHashJoinExec => assert(shj.isSkewJoin)
+            }
+            count2 = spark.sql(query).count()
+          }
+
+          assert(count1 === count2)
+        }
+      }
     }
   }
 

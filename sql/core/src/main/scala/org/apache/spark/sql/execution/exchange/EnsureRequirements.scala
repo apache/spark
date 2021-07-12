@@ -51,7 +51,12 @@ object EnsureRequirements extends Rule[SparkPlan] {
       case (child, distribution) =>
         val numPartitions = distribution.requiredNumPartitions
           .getOrElse(conf.numShufflePartitions)
-        ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child)
+        val shuffleOrigin = operator match {
+          case _ : SortMergeJoinExec => ENSURE_JOIN_REQUIREMENTS
+          case _ : ShuffledHashJoinExec => ENSURE_JOIN_REQUIREMENTS
+          case _ => ENSURE_REQUIREMENTS
+        }
+        ShuffleExchangeExec(distribution.createPartitioning(numPartitions), child, shuffleOrigin)
     }
 
     // Get the indexes of children which have specified distribution requirements and need to have
@@ -108,7 +113,7 @@ object EnsureRequirements extends Rule[SparkPlan] {
             val defaultPartitioning = distribution.createPartitioning(targetNumPartitions)
             child match {
               // If child is an exchange, we replace it with a new one having defaultPartitioning.
-              case ShuffleExchangeExec(_, c, _) => ShuffleExchangeExec(defaultPartitioning, c)
+              case s: ShuffleExchangeExec => s.copy(outputPartitioning = defaultPartitioning)
               case _ => ShuffleExchangeExec(defaultPartitioning, child)
             }
           }

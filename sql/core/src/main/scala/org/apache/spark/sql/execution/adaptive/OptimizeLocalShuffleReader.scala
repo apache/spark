@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{ENSURE_JOIN_REQUIREMENTS, ENSURE_REQUIREMENTS, EnsureRequirements, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -36,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
-    Seq(ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_NONE)
+    Seq(ENSURE_REQUIREMENTS, ENSURE_JOIN_REQUIREMENTS, REBALANCE_PARTITIONS_BY_NONE)
 
   private val ensureRequirements = EnsureRequirements
 
@@ -142,7 +142,7 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
       s.mapStats.isDefined && supportLocalReader(s.shuffle)
     case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs) =>
       s.mapStats.isDefined && partitionSpecs.nonEmpty && supportLocalReader(s.shuffle) &&
-        s.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS
+        Seq(ENSURE_REQUIREMENTS, ENSURE_JOIN_REQUIREMENTS).contains(s.shuffle.shuffleOrigin)
     case _ => false
   }
 

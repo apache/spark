@@ -89,6 +89,11 @@ sealed trait ShuffleOrigin
 // Spark is free to optimize it as long as the requirements are still ensured.
 case object ENSURE_REQUIREMENTS extends ShuffleOrigin
 
+// Indicates that the shuffle operator was added by the internal `EnsureRequirements` rule
+// for JoinExec. It means that the shuffle operator is used to ensure internal data partitioning
+// requirements and Spark is free to optimize it as long as the requirements are still ensured.
+case object ENSURE_JOIN_REQUIREMENTS extends ShuffleOrigin
+
 // Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
 // can still optimize it via changing shuffle partition number, as data partitioning won't change.
 case object REPARTITION_BY_COL extends ShuffleOrigin
@@ -131,7 +136,39 @@ case class ShuffleExchangeExec(
   private lazy val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
 
-  @transient lazy val inputRDD: RDD[InternalRow] = child.execute()
+  @transient lazy val inputRDD: RDD[InternalRow] = {
+    if (shuffleExecAccumulators.isEmpty) {
+      child.execute()
+    } else if (shuffleExecAccumulators.length == 1) {
+      child.execute().mapPartitionsInternal { iter =>
+        val acc = shuffleExecAccumulators.head
+        acc.onTaskStart()
+        iter.map { row =>
+          acc.add(row)
+          row
+        } ++ {
+          acc.onTaskEnd()
+          Iterator.empty
+        }
+      }
+    } else {
+      child.execute().mapPartitionsInternal { iter =>
+        val accs = shuffleExecAccumulators
+        val n = accs.length
+        var i = 0
+        while (i < n) { accs(i).onTaskStart(); i += 1 }
+        iter.map { row =>
+          i = 0
+          while (i < n) { accs(i).add(row); i += 1 }
+          row
+        } ++ {
+          i = 0
+          while (i < n) { accs(i).onTaskEnd(); i += 1 }
+          Iterator.empty
+        }
+      }
+    }
+  }
 
   // 'mapOutputStatisticsFuture' is only needed when enable AQE.
   @transient
@@ -140,6 +177,47 @@ case class ShuffleExchangeExec(
       Future.successful(null)
     } else {
       sparkContext.submitMapStage(shuffleDependency)
+    }
+  }
+
+  private[sql] lazy val shuffleExecAccumulators: Array[ShuffleExecAccumulator] = {
+    if (SQLConf.get.adaptiveExecutionEnabled &&
+      shuffleOrigin == ENSURE_JOIN_REQUIREMENTS &&
+      outputPartitioning.isInstanceOf[HashPartitioning] &&
+      (SQLConf.get.getConf(SQLConf.ADAPTIVE_SHUFFLE_JOIN_DETECT_SKEWNESS) ||
+        SQLConf.get.getConf(SQLConf.SKEW_JOIN_ENABLED) &&
+          SQLConf.get.getConf(SQLConf.SKEW_JOIN_INFLATION_ENABLED))) {
+
+      val partitioning = outputPartitioning.asInstanceOf[HashPartitioning]
+      val numMappers = child.execute().getNumPartitions
+
+      var totalSize = partitioning.numPartitions *
+        SQLConf.get.getConf(SQLConf.ADAPTIVE_SHUFFLE_SAMPLE_SIZE_PER_PARTITION)
+      totalSize = math.min(totalSize, 1000000)
+      val arraySize = (3.0 * totalSize / numMappers).ceil.toInt
+      val debug = SQLConf.get.getConf(SQLConf.ADAPTIVE_SHUFFLE_JOIN_DETECT_SKEWNESS)
+
+      val acc = new KeySketcher(
+        child.output,
+        partitioning.partitionIdExpression,
+        numMappers,
+        arraySize,
+        id,
+        debug)
+
+      if (debug) {
+        sparkContext.register(acc, s"KeySketcher($nodeName #$id)")
+      } else {
+        sparkContext.register(acc)
+      }
+
+      logInfo(s"KeySketcher ${acc.id} registered for $nodeName #$id, " +
+        s"$numMappers map partitions, ${partitioning.numPartitions} shuffle partitions, " +
+        s"arraySize = $arraySize")
+
+      Array(acc)
+    } else {
+      Array.empty
     }
   }
 
