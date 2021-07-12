@@ -277,7 +277,7 @@ object DateTimeUtils {
       val b = bytes(j)
       val parsedValue = b - '0'.toByte
       if (parsedValue < 0 || parsedValue > 9) {
-        if (j == 0 && b == 'T' && yearSign.isEmpty) {
+        if (j == 0 && b == 'T') {
           justTime = true
           i += 3
         } else if (i < 2) {
