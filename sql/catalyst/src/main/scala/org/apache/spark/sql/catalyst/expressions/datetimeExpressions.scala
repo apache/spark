@@ -2312,7 +2312,8 @@ case class MakeDate(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields.",
+  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields. " +
+    "The result data type is consistent with the value of configuration `spark.sql.timestampType`",
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
@@ -2350,7 +2351,8 @@ case class MakeTimestamp(
     sec: Expression,
     timezone: Option[Expression] = None,
     timeZoneId: Option[String] = None,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    failOnError: Boolean = SQLConf.get.ansiEnabled,
+    override val dataType: DataType = SQLConf.get.timestampType)
   extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
     with NullIntolerant {
 
@@ -2361,7 +2363,8 @@ case class MakeTimestamp(
       hour: Expression,
       min: Expression,
       sec: Expression) = {
-    this(year, month, day, hour, min, sec, None, None, SQLConf.get.ansiEnabled)
+    this(year, month, day, hour, min, sec, None, None, SQLConf.get.ansiEnabled,
+      SQLConf.get.timestampType)
   }
 
   def this(
@@ -2372,7 +2375,8 @@ case class MakeTimestamp(
       min: Expression,
       sec: Expression,
       timezone: Expression) = {
-    this(year, month, day, hour, min, sec, Some(timezone), None, SQLConf.get.ansiEnabled)
+    this(year, month, day, hour, min, sec, Some(timezone), None, SQLConf.get.ansiEnabled,
+      SQLConf.get.timestampType)
   }
 
   override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec) ++ timezone
@@ -2381,7 +2385,6 @@ case class MakeTimestamp(
   override def inputTypes: Seq[AbstractDataType] =
     Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(8, 6)) ++
     timezone.map(_ => StringType)
-  override def dataType: DataType = TimestampType
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -2414,7 +2417,11 @@ case class MakeTimestamp(
       } else {
         LocalDateTime.of(year, month, day, hour, min, seconds, nanos)
       }
-      instantToMicros(ldt.atZone(zoneId).toInstant)
+      if (dataType == TimestampType) {
+        instantToMicros(ldt.atZone(zoneId).toInstant)
+      } else {
+        localDateTimeToMicros(ldt)
+      }
     } catch {
       case _: DateTimeException if !failOnError => null
     }
@@ -2448,6 +2455,14 @@ case class MakeTimestamp(
     val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
     nullSafeCodeGen(ctx, ev, (year, month, day, hour, min, secAndNanos, timezone) => {
       val zoneId = timezone.map(tz => s"$dtu.getZoneId(${tz}.toString())").getOrElse(zid)
+      val toMicrosCode = if (dataType == TimestampType) {
+        s"""
+           |java.time.Instant instant = ldt.atZone($zoneId).toInstant();
+           |${ev.value} = $dtu.instantToMicros(instant);
+           |""".stripMargin
+      } else {
+        s"${ev.value} = $dtu.localDateTimeToMicros(ldt);"
+      }
       s"""
       try {
         org.apache.spark.sql.types.Decimal secFloor = $secAndNanos.floor();
@@ -2465,8 +2480,7 @@ case class MakeTimestamp(
         } else {
           ldt = java.time.LocalDateTime.of($year, $month, $day, $hour, $min, seconds, nanos);
         }
-        java.time.Instant instant = ldt.atZone($zoneId).toInstant();
-        ${ev.value} = $dtu.instantToMicros(instant);
+        $toMicrosCode
       } catch (java.time.DateTimeException e) {
         $failOnErrorBranch
       }"""
