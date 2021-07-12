@@ -351,8 +351,22 @@ object PartitioningUtils {
    */
   def getPathFragment(spec: TablePartitionSpec, partitionSchema: StructType): String = {
     partitionSchema.map { field =>
-      escapePathName(field.name) + "=" + getPartitionValueString(spec(field.name))
+      escapePathName(field.name) + "=" +
+        getPartitionValueString(
+          removeLeadingZerosFromNumberTypePartition(spec(field.name), field.dataType))
     }.mkString("/")
+  }
+
+  def removeLeadingZerosFromNumberTypePartition(value: String, dataType: DataType): String = {
+    dataType match {
+      case ByteType => value.toByte.toString
+      case ShortType => value.toShort.toString
+      case IntegerType => value.toInt.toString
+      case LongType => value.toLong.toString
+      case FloatType => value.toFloat.toString
+      case DoubleType => value.toDouble.toString
+      case _ => value
+    }
   }
 
   def getPathFragment(spec: TablePartitionSpec, partitionColumns: Seq[Attribute]): String = {
