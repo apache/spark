@@ -586,11 +586,10 @@ private[sql] object ParquetSchemaConverter {
 
   def checkFieldName(name: String): Unit = {
     // ,;{}()\n\t= and space are special characters in Parquet schema
-    checkConversionRequirement(
-      !name.matches(".*[ ,;{}()\n\t=].*"),
-      s"""Attribute name "$name" contains invalid character(s) among " ,;{}()\\n\\t=".
-         |Please use alias to rename it.
-       """.stripMargin.split("\n").mkString(" ").trim)
+    if (name.matches(".*[ ,;{}()\n\t=].*")) {
+      throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(
+        name, Some(" ,;{}()\\n\\t="))
+    }
   }
 
   def checkFieldNames(names: Seq[String]): Unit = {

@@ -1730,10 +1730,13 @@ private[spark] object QueryCompilationErrors {
       s"Table or view '$name' already exists. SaveMode: ErrorIfExists.")
   }
 
-  def columnNameContainsInvalidCharactersError(name: String): Throwable = {
+  def columnNameContainsInvalidCharactersError(
+      name: String,
+      characters: Option[String] = None): Throwable = {
     new AnalysisException(
       s"""
-         |Column name "$name" contains invalid character(s).
+         |Column name "$name" contains invalid character(s)
+         |${characters.map(str => s"among \"$str\"").getOrElse("")}".
          |Please use alias to rename it.
        """.stripMargin.replaceAll("\n", " "))
   }
