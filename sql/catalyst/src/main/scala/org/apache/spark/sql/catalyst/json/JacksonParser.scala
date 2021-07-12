@@ -409,7 +409,7 @@ class JacksonParser(
             val fieldValue = fieldConverters(index).apply(parser)
             if (!schema(index).nullable && fieldValue == null) {
               throw new IllegalSchemaArgumentException(
-                s"the null value found when parsing non-nullable field ${schema(index).name}.")
+                s"field ${schema(index).name} is not nullable but the parsed value is null.")
             }
             row.update(index, fieldValue)
             skipRow = structFilters.skipRow(row, index)
@@ -431,7 +431,7 @@ class JacksonParser(
     while (badRecordException.isEmpty && !skipRow && index < schema.length) {
       if (!schema(index).nullable && row.isNullAt(index)) {
         throw new IllegalSchemaArgumentException(
-          s"the null value found when parsing non-nullable field ${schema(index).name}.")
+          s"field ${schema(index).name} is not nullable but it's missing in one record.")
       }
       if (!checkedIndexSet.contains(index)) {
         skipRow = structFilters.skipRow(row, index)

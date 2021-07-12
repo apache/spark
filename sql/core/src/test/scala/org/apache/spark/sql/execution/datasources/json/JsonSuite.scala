@@ -2922,9 +2922,9 @@ abstract class JsonSuite
 
   test("SPARK-35912: nullability with different parse mode -- struct") {
     // JSON field is missing.
-    val input = """{"c1": 1}"""
+    val missingFieldInput = """{"c1": 1}"""
     // JSON filed is null.
-    val input2 =
+    val nullValueInput =
       """
         |{
         |  "c1": 1,
@@ -2940,28 +2940,36 @@ abstract class JsonSuite
         .schema(schema)
         .json(json)
     }
+
     Seq(true, false).foreach { nullable =>
       val schema = StructType(Seq(
-          StructField("c1", IntegerType, nullable = false),
-          StructField("c2", IntegerType, nullable = nullable)))
+        StructField("c1", IntegerType, nullable = true),
+        StructField("c2", IntegerType, nullable = nullable)))
 
-      Seq(input, input2).foreach { jsonString =>
+      Seq(missingFieldInput, nullValueInput).foreach { jsonString =>
         if (nullable) {
           checkAnswer(load("DROPMALFORMED", schema, jsonString), Row(1, null) :: Nil)
           checkAnswer(load("FAILFAST", schema, jsonString), Row(1, null) :: Nil)
           checkAnswer(load("PERMISSIVE", schema, jsonString), Row(1, null) :: Nil)
         } else {
           checkAnswer(load("DROPMALFORMED", schema, jsonString), Seq.empty)
+
           val exceptionMsg1 = intercept[SparkException] {
             load("FAILFAST", schema, jsonString).collect
           }.getMessage
-          assert(exceptionMsg1.contains(
-            "the null value found when parsing non-nullable field c2."))
+          val expectedMsg1 = if (jsonString == missingFieldInput) {
+            "field c2 is not nullable but it's missing in one record."
+          } else {
+            s"field c2 is not nullable but the parsed value is null."
+          }
+          assert(exceptionMsg1.contains(expectedMsg1))
+
           val exceptionMsg2 = intercept[SparkException] {
             load("PERMISSIVE", schema, jsonString).collect
           }
-          assert(exceptionMsg2.getMessage.contains(
-            "the null value found when parsing non-nullable field c2."))
+          val expectedMsg2 =
+            "field c2 is not nullable but the not nullable field is not allowed in PERMISSIVE mode."
+          assert(exceptionMsg2.getMessage.contains(expectedMsg2))
         }
       }
     }

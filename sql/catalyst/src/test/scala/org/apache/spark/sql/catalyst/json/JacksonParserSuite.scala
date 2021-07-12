@@ -57,19 +57,25 @@ class JacksonParserSuite extends SparkFunSuite {
   }
 
   test("35912: nullability with different schema nullable setting") {
-    def assertAction(nullable: Boolean)(action: => Unit): Unit = {
+    val missingFieldInput = """{"c1":1}"""
+    val nullValueInput = """{"c1": 1, "c2": null}"""
+
+    def assertAction(nullable: Boolean, input: String)(action: => Unit): Unit = {
       if (nullable) {
         action
       } else {
         val msg = intercept[IllegalSchemaArgumentException] {
           action
         }.message
-        assert(msg.contains("the null value found when parsing non-nullable field c2."))
+        val expected = if (input == missingFieldInput) {
+          "field c2 is not nullable but it's missing in one record."
+        } else {
+          s"field c2 is not nullable but the parsed value is null."
+        }
+        assert(msg.contains(expected))
       }
     }
 
-    val missingFieldInput = """{"c1":1}"""
-    val nullValueInput = """{"c1": 1, "c2": null}"""
     Seq(true, false).foreach { nullable =>
       val schema = StructType(Seq(
         StructField("c1", IntegerType),
@@ -77,7 +83,7 @@ class JacksonParserSuite extends SparkFunSuite {
       ))
       val expected = Seq(InternalRow(1, null))
       Seq(missingFieldInput, nullValueInput).foreach { input =>
-        assertAction(nullable) {
+        assertAction(nullable, input) {
           check(input = input, schema = schema, filters = Seq.empty, expected = expected)
         }
       }
@@ -90,19 +96,19 @@ class JacksonParserSuite extends SparkFunSuite {
         StructField("c2", IntegerType, nullable = nullable)
       ))
       Seq(missingFieldInput, nullValueInput).foreach { input =>
-        assertAction(nullable) {
+        assertAction(nullable, input) {
           check(input = input, schema = schema, filters = Seq(EqualTo("c2", 1)),
             expected = Seq.empty)
         }
-        assertAction(nullable) {
+        assertAction(nullable, input) {
           check(input = input, schema = schema, filters = Seq(EqualTo("c2", 0)),
             expected = Seq.empty)
         }
-        assertAction(nullable) {
+        assertAction(nullable, input) {
           check(input = input, schema = schema, filters = Seq(IsNotNull("c2")),
             expected = Seq.empty)
         }
-        assertAction(nullable) {
+        assertAction(nullable, input) {
           check(input = input, schema = schema, filters = Seq(IsNull("c2")),
             expected = Seq(InternalRow(1, null)))
         }

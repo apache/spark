@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class FailureSafeParser[IN](
@@ -29,10 +29,29 @@ class FailureSafeParser[IN](
     schema: StructType,
     columnNameOfCorruptRecord: String) {
 
+  disableNotNullableForPermissiveMode
   private val corruptFieldIndex = schema.getFieldIndex(columnNameOfCorruptRecord)
   private val actualSchema = StructType(schema.filterNot(_.name == columnNameOfCorruptRecord))
   private val resultRow = new GenericInternalRow(schema.length)
   private val nullResult = new GenericInternalRow(schema.length)
+
+  // As PERMISSIVE mode should not fail at runtime, so fail if the mode is PERMISSIVE and schema
+  // contains non-nullable fields.
+  private def disableNotNullableForPermissiveMode: Unit = {
+    def checkNotNullableRecursively(schema: StructType): Unit = {
+      schema.fields.foreach {
+        case _ @ StructField(name, _, nullable, _) if (!nullable) =>
+          throw new IllegalSchemaArgumentException(s"field ${name} is not nullable but the " +
+            "not nullable field is not allowed in PERMISSIVE mode.")
+        case _ @ StructField(_, dt: StructType, _, _) => checkNotNullableRecursively(dt)
+        case _ =>
+      }
+    }
+    mode match {
+      case PermissiveMode => checkNotNullableRecursively(schema)
+      case _ =>
+    }
+  }
 
   // This function takes 2 parameters: an optional partial result, and the bad record. If the given
   // schema doesn't contain a field for corrupted record, we just return the partial result or a
