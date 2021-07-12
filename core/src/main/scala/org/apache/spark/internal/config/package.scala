@@ -1382,10 +1382,10 @@ package object config {
         " built-in algorithms of JDK.")
       .version("3.3.0")
       .stringConf
-      .transform(_.toLowerCase(Locale.ROOT))
-      .checkValue(Set("adler32", "crc32").contains, "Shuffle checksum algorithm " +
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValue(Set("ADLER32", "CRC32").contains, "Shuffle checksum algorithm " +
         "should be either Adler32 or CRC32.")
-      .createWithDefault("Adler32")
+      .createWithDefault("ADLER32")
 
   private[spark] val SHUFFLE_COMPRESS =
     ConfigBuilder("spark.shuffle.compress")

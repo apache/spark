@@ -25,16 +25,16 @@ public class ShuffleChecksumHelper {
       return partitionChecksums;
     }
 
-    String checksumAlgo = shuffleChecksumAlgorithm(conf).toLowerCase(Locale.ROOT);
+    String checksumAlgo = shuffleChecksumAlgorithm(conf);
     switch (checksumAlgo) {
-      case "adler32":
+      case "ADLER32":
         partitionChecksums = new Adler32[numPartitions];
         for (int i = 0; i < numPartitions; i ++) {
           partitionChecksums[i] = new Adler32();
         }
         return partitionChecksums;
 
-      case "crc32":
+      case "CRC32":
         partitionChecksums = new CRC32[numPartitions];
         for (int i = 0; i < numPartitions; i ++) {
           partitionChecksums[i] = new CRC32();
