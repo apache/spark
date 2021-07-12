@@ -1350,11 +1350,10 @@ private[spark] object QueryCompilationErrors {
   }
 
   def ambiguousFieldNameError(
-      fieldName: Seq[String], nunMatches: Int, context: Origin): Throwable = {
+      fieldName: Seq[String], numMatches: Int, context: Origin): Throwable = {
     new AnalysisException(
-      errorClass = "INVALID_FIELD_NAME",
-      messageParameters = Array(fieldName.quoted,
-        s"${fieldName.last} is ambiguous and has $nunMatches matching fields in the struct"),
+      errorClass = "AMBIGUOUS_FIELD_NAME",
+      messageParameters = Array(fieldName.quoted, numMatches.toString),
       origin = context)
   }
 
@@ -2000,7 +1999,7 @@ private[spark] object QueryCompilationErrors {
   def invalidFieldName(fieldName: Seq[String], path: Seq[String], context: Origin): Throwable = {
     new AnalysisException(
       errorClass = "INVALID_FIELD_NAME",
-      messageParameters = Array(fieldName.quoted, s"${path.quoted} is not a struct"),
+      messageParameters = Array(fieldName.quoted, path.quoted),
       origin = context)
   }
 }
