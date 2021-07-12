@@ -50,14 +50,14 @@ private[spark] object QueryCompilationErrors {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
-      s"Columns of grouping_id (${groupingID.groupByExprs.mkString(",")}) " +
-        s"does not match grouping columns (${groupByExprs.mkString(",")})")
+      errorClass = "GROUPING_ID_COLUMN_MISMATCH",
+      messageParameters = Array(groupingID.groupByExprs.mkString(","), groupByExprs.mkString(",")))
   }
 
   def groupingColInvalidError(groupingCol: Expression, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
-      s"Column of grouping ($groupingCol) can't be found " +
-        s"in grouping columns ${groupByExprs.mkString(",")}")
+      errorClass = "GROUPING_COLUMN_MISMATCH",
+      messageParameters = Array(groupingCol.toString, groupByExprs.mkString(",")))
   }
 
   def groupingSizeTooLargeError(sizeLimit: Int): Throwable = {
@@ -87,21 +87,20 @@ private[spark] object QueryCompilationErrors {
 
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
-      s"Cannot write, IF NOT EXISTS is not supported for table: $tableName")
+      errorClass = "IF_PARTITION_NOT_EXISTS_UNSUPPORTED",
+      messageParameters = Array(tableName))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
     new AnalysisException(
-      s"PARTITION clause cannot contain a non-partition column name: $partitionName")
+      errorClass = "NON_PARTITION_COLUMN",
+      messageParameters = Array(partitionName))
   }
 
-  def addStaticValToUnknownColError(staticName: String): Throwable = {
+  def missingStaticPartitionColumn(staticName: String): Throwable = {
     new AnalysisException(
-      s"Cannot add static value for unknown column: $staticName")
-  }
-
-  def unknownStaticPartitionColError(name: String): Throwable = {
-    new AnalysisException(s"Unknown static partition column: $name")
+      errorClass = "MISSING_STATIC_PARTITION_COLUMN",
+      messageParameters = Array(staticName))
   }
 
   def nestedGeneratorError(trimmedNestedGenerator: Expression): Throwable = {
