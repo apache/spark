@@ -19,11 +19,15 @@ package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.time.Duration;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
+import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
 import org.junit.Before;
 import org.junit.Test;
@@ -87,11 +91,11 @@ public class ExternalBlockHandlerSuite {
     verify(callback, times(1)).onSuccess(any(ByteBuffer.class));
     verify(callback, never()).onFailure(any(Throwable.class));
     // Verify register executor request latency metrics
-    Timer registerExecutorRequestLatency = (Timer) ((ExternalBlockHandler) handler)
+    Timer registerExecutorRequestLatencyMillis = (Timer) ((ExternalBlockHandler) handler)
         .getAllMetrics()
         .getMetrics()
         .get("registerExecutorRequestLatencyMillis");
-    assertEquals(1, registerExecutorRequestLatency.getCount());
+    assertEquals(1, registerExecutorRequestLatencyMillis.getCount());
   }
 
   @Test
@@ -203,8 +207,8 @@ public class ExternalBlockHandlerSuite {
     Map<String, Metric> metricMap = ((ExternalBlockHandler) handler)
         .getAllMetrics()
         .getMetrics();
-    Timer openBlockRequestLatency = (Timer) metricMap.get("openBlockRequestLatencyMillis");
-    assertEquals(1, openBlockRequestLatency.getCount());
+    Timer openBlockRequestLatencyMillis = (Timer) metricMap.get("openBlockRequestLatencyMillis");
+    assertEquals(1, openBlockRequestLatencyMillis.getCount());
     // Verify block transfer metrics
     Meter blockTransferRate = (Meter) metricMap.get("blockTransferRate");
     assertEquals(blockTransferCount, blockTransferRate.getCount());
@@ -260,11 +264,11 @@ public class ExternalBlockHandlerSuite {
       (MergeStatuses) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
     assertEquals(mergeStatuses, statuses);
 
-    Timer finalizeShuffleMergeLatency = (Timer) ((ExternalBlockHandler) handler)
+    Timer finalizeShuffleMergeLatencyMillis = (Timer) ((ExternalBlockHandler) handler)
         .getAllMetrics()
         .getMetrics()
         .get("finalizeShuffleMergeLatencyMillis");
-    assertEquals(1, finalizeShuffleMergeLatency.getCount());
+    assertEquals(1, finalizeShuffleMergeLatencyMillis.getCount());
   }
 
   @Test
@@ -363,16 +367,44 @@ public class ExternalBlockHandlerSuite {
     verify(mergedShuffleManager, times(1)).getMergedBlockData("app0", 0, 0, 1);
 
     // Verify open block request latency metrics
-    Timer openBlockRequestLatency = (Timer) ((ExternalBlockHandler) handler)
+    Timer openBlockRequestLatencyMillis = (Timer) ((ExternalBlockHandler) handler)
       .getAllMetrics()
       .getMetrics()
       .get("openBlockRequestLatencyMillis");
-    assertEquals(1, openBlockRequestLatency.getCount());
+    assertEquals(1, openBlockRequestLatencyMillis.getCount());
     // Verify block transfer metrics
     Meter blockTransferRateBytes = (Meter) ((ExternalBlockHandler) handler)
       .getAllMetrics()
       .getMetrics()
       .get("blockTransferRateBytes");
     assertEquals(24, blockTransferRateBytes.getCount());
+  }
+
+  @Test
+  public void testTimerWithMillisecondSnapshots() {
+    Timer timer = new ExternalBlockHandler.TimerWithMillisecondSnapshots();
+    Duration[] durations = {
+        Duration.ofNanos(1),
+        Duration.ofMillis(1),
+        Duration.ofMillis(5),
+        Duration.ofMillis(100),
+        Duration.ofSeconds(10)
+    };
+    Arrays.stream(durations).forEach(timer::update);
+
+    double nsPerMs = (double) TimeUnit.MILLISECONDS.toNanos(1);
+    double epsilon = 1 / nsPerMs / nsPerMs;
+    Snapshot snapshot = timer.getSnapshot();
+    assertEquals(0, snapshot.getMin()); // 1 nanosecond rounded down
+    assertEquals(1 / nsPerMs, snapshot.getValue(0), epsilon); // 1 ns as ms (not rounded)
+    assertEquals(durations[2].toMillis(), snapshot.getMedian(), epsilon);
+    assertEquals(durations[3].toMillis(), snapshot.get75thPercentile(), epsilon);
+    assertEquals(TimeUnit.SECONDS.toMillis(10), snapshot.getMax());
+
+    assertArrayEquals(
+        Arrays.stream(durations).mapToLong(Duration::toMillis).toArray(), snapshot.getValues());
+    assertEquals(
+        Arrays.stream(durations).mapToLong(Duration::toNanos).sum() / nsPerMs / durations.length,
+        snapshot.getMean(), epsilon);
   }
 }

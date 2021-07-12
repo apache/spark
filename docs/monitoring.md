@@ -1385,14 +1385,8 @@ Note: applies to the shuffle service
 - numActiveConnections.count
 - numRegisteredConnections.count
 - numCaughtExceptions.count
-- openBlockRequestLatencyMillis (histogram) - Note that the unit for this is actually
-  nanoseconds, not milliseconds, but the name has not been updated for compatibility reasons
-- registerExecutorRequestLatencyMillis (histogram) - Note that the unit for this is actually
-  nanoseconds, not milliseconds, but the name has not been updated for compatibility reasons
-- fetchMergedBlocksMetaLatencyMillis (histogram) - Note that the unit for this is actually
-  nanoseconds, not milliseconds, but the name has not been updated for compatibility reasons
-- finalizeShuffleMergeLatencyMillis (histogram) - Note that the unit for this is actually
-  nanoseconds, not milliseconds, but the name has not been updated for compatibility reasons
+- openBlockRequestLatencyMillis (histogram)
+- registerExecutorRequestLatencyMillis (histogram)
 - registeredExecutorsSize
 - shuffle-server.usedDirectMemory
 - shuffle-server.usedHeapMemory

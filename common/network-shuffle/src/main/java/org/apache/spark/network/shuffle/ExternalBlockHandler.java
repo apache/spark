@@ -20,11 +20,14 @@ package org.apache.spark.network.shuffle;
 import com.google.common.base.Preconditions;
 import java.io.File;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.PrintWriter;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import com.codahale.metrics.Gauge;
@@ -32,6 +35,7 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.MetricSet;
 import com.codahale.metrics.RatioGauge;
+import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.Counter;
 import com.google.common.collect.Sets;
@@ -139,7 +143,7 @@ public class ExternalBlockHandler extends RpcHandler
       TransportClient client,
       RpcResponseCallback callback) {
     if (msgObj instanceof AbstractFetchShuffleBlocks || msgObj instanceof OpenBlocks) {
-      final Timer.Context responseDelayContext = metrics.openBlockRequestLatency.time();
+      final Timer.Context responseDelayContext = metrics.openBlockRequestLatencyMillis.time();
       try {
         int numBlockIds;
         long streamId;
@@ -178,7 +182,7 @@ public class ExternalBlockHandler extends RpcHandler
 
     } else if (msgObj instanceof RegisterExecutor) {
       final Timer.Context responseDelayContext =
-        metrics.registerExecutorRequestLatency.time();
+        metrics.registerExecutorRequestLatencyMillis.time();
       try {
         RegisterExecutor msg = (RegisterExecutor) msgObj;
         checkAuth(client, msg.appId);
@@ -208,7 +212,7 @@ public class ExternalBlockHandler extends RpcHandler
       callback.onSuccess(new LocalDirsForExecutors(localDirs).toByteBuffer());
     } else if (msgObj instanceof FinalizeShuffleMerge) {
       final Timer.Context responseDelayContext =
-          metrics.finalizeShuffleMergeLatency.time();
+          metrics.finalizeShuffleMergeLatencyMillis.time();
       FinalizeShuffleMerge msg = (FinalizeShuffleMerge) msgObj;
       try {
         checkAuth(client, msg.appId);
@@ -230,7 +234,7 @@ public class ExternalBlockHandler extends RpcHandler
       TransportClient client,
       MergedBlockMetaRequest metaRequest,
       MergedBlockMetaResponseCallback callback) {
-    final Timer.Context responseDelayContext = metrics.fetchMergedBlocksMetaLatency.time();
+    final Timer.Context responseDelayContext = metrics.fetchMergedBlocksMetaLatencyMillis.time();
     try {
       checkAuth(client, metaRequest.appId);
       MergedBlockMeta mergedMeta =
@@ -298,14 +302,14 @@ public class ExternalBlockHandler extends RpcHandler
   @VisibleForTesting
   public class ShuffleMetrics implements MetricSet {
     private final Map<String, Metric> allMetrics;
-    // Time latency for open block request in ns
-    private final Timer openBlockRequestLatency = new Timer();
-    // Time latency for executor registration latency in ns
-    private final Timer registerExecutorRequestLatency = new Timer();
-    // Time latency for processing fetch merged blocks meta request latency in ns
-    private final Timer fetchMergedBlocksMetaLatency = new Timer();
-    // Time latency for processing finalize shuffle merge request latency in ns
-    private final Timer finalizeShuffleMergeLatency = new Timer();
+    // Time latency for open block request in ms
+    private final Timer openBlockRequestLatencyMillis = new TimerWithMillisecondSnapshots();
+    // Time latency for executor registration latency in ms
+    private final Timer registerExecutorRequestLatencyMillis = new TimerWithMillisecondSnapshots();
+    // Time latency for processing fetch merged blocks meta request latency in ms
+    private final Timer fetchMergedBlocksMetaLatencyMillis = new TimerWithMillisecondSnapshots();
+    // Time latency for processing finalize shuffle merge request latency in ms
+    private final Timer finalizeShuffleMergeLatencyMillis = new TimerWithMillisecondSnapshots();
     // Block transfer rate in blocks per second
     private final Meter blockTransferRate = new Meter();
     // Block fetch message rate per second. When using non-batch fetches
@@ -323,13 +327,10 @@ public class ExternalBlockHandler extends RpcHandler
 
     public ShuffleMetrics() {
       allMetrics = new HashMap<>();
-      // Note that for the latency metrics, the default unit is actually nanos, not millis.
-      // The variables have been renamed, but to preserve backwards compatibility, the metric
-      // names remain unchanged. See SPARK-35259 for more details.
-      allMetrics.put("openBlockRequestLatencyMillis", openBlockRequestLatency);
-      allMetrics.put("registerExecutorRequestLatencyMillis", registerExecutorRequestLatency);
-      allMetrics.put("fetchMergedBlocksMetaLatencyMillis", fetchMergedBlocksMetaLatency);
-      allMetrics.put("finalizeShuffleMergeLatencyMillis", finalizeShuffleMergeLatency);
+      allMetrics.put("openBlockRequestLatencyMillis", openBlockRequestLatencyMillis);
+      allMetrics.put("registerExecutorRequestLatencyMillis", registerExecutorRequestLatencyMillis);
+      allMetrics.put("fetchMergedBlocksMetaLatencyMillis", fetchMergedBlocksMetaLatencyMillis);
+      allMetrics.put("finalizeShuffleMergeLatencyMillis", finalizeShuffleMergeLatencyMillis);
       allMetrics.put("blockTransferRate", blockTransferRate);
       allMetrics.put("blockTransferMessageRate", blockTransferMessageRate);
       allMetrics.put("blockTransferRateBytes", blockTransferRateBytes);
@@ -604,4 +605,78 @@ public class ExternalBlockHandler extends RpcHandler
     super.channelInactive(client);
   }
 
+  static class TimerWithMillisecondSnapshots extends Timer {
+    @Override
+    public Snapshot getSnapshot() {
+      return new SnapshotWithMilliseconds(super.getSnapshot());
+    }
+  }
+
+  private static final double NANOS_PER_MILLI = TimeUnit.MILLISECONDS.toNanos(1);
+
+  private static class SnapshotWithMilliseconds extends Snapshot {
+
+    private final Snapshot wrappedSnapshot;
+
+    SnapshotWithMilliseconds(Snapshot wrappedSnapshot) {
+      this.wrappedSnapshot = wrappedSnapshot;
+    }
+
+    private double toMillis(double nanos) {
+      return nanos / NANOS_PER_MILLI;
+    }
+
+    private long toMillis(long nanos) {
+      return TimeUnit.NANOSECONDS.toMillis(nanos);
+    }
+
+    @Override
+    public double getValue(double v) {
+      return toMillis(wrappedSnapshot.getValue(v));
+    }
+
+    @Override
+    public long[] getValues() {
+      long[] nanoValues = wrappedSnapshot.getValues();
+      long[] milliValues = new long[nanoValues.length];
+      for (int i = 0; i < nanoValues.length; i++) {
+        milliValues[i] = toMillis(nanoValues[i]);
+      }
+      return milliValues;
+    }
+
+    @Override
+    public int size() {
+      return wrappedSnapshot.size();
+    }
+
+    @Override
+    public long getMax() {
+      return toMillis(wrappedSnapshot.getMax());
+    }
+
+    @Override
+    public double getMean() {
+      return toMillis(wrappedSnapshot.getMean());
+    }
+
+    @Override
+    public long getMin() {
+      return toMillis(wrappedSnapshot.getMin());
+    }
+
+    @Override
+    public double getStdDev() {
+      return toMillis(wrappedSnapshot.getStdDev());
+    }
+
+    @Override
+    public void dump(OutputStream outputStream) {
+      try (PrintWriter writer = new PrintWriter(outputStream)) {
+        for (long value : getValues()) {
+          writer.println(value);
+        }
+      }
+    }
+  }
 }
