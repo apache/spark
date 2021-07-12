@@ -157,7 +157,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("-02015").get === days(-2015, 1, 1))
     assert(toDate("999999-1-28").get === days(999999, 1, 28))
     assert(toDate("-999999-1-28").get === days(-999999, 1, 28))
-    assert(toDate("1-1-28").get === days(1, 1, 28))
+    assert(toDate("0001-1-28").get === days(1, 1, 28))
     // Int.MaxValue and Int.MaxValue + 1 day
     assert(toDate("5881580-7-11").get === days(5881580, 7, 11))
     assert(toDate("5881580-7-12").isEmpty)
