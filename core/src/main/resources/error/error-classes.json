@@ -7,9 +7,25 @@
     "message" : [ "Found duplicate keys '%s'" ],
     "sqlState" : "23000"
   },
+  "GROUPING_SIZE_LIMIT_EXCEEDED" : {
+    "message" : [ "Grouping sets size cannot be greater than %s" ],
+    "sqlState" : "22023"
+  },
+  "INCOMPARABLE_PIVOT_COLUMN" : {
+    "message" : [ "Invalid pivot column '%s'. Pivot columns must be comparable." ],
+    "sqlState" : "22023"
+  },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
     "sqlState" : "42000"
+  },
+  "NON_LITERAL_PIVOT_VALUES" : {
+    "message" : [ "Literal expressions required for pivot values, found '%s'" ],
+    "sqlState" : "22023"
+  },
+  "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
+    "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
+    "sqlState" : "22023"
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],

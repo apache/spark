@@ -62,25 +62,27 @@ private[spark] object QueryCompilationErrors {
 
   def groupingSizeTooLargeError(sizeLimit: Int): Throwable = {
     new AnalysisException(
-      s"Grouping sets size cannot be greater than $sizeLimit")
+      errorClass = "GROUPING_SIZE_LIMIT_EXCEEDED",
+      messageParameters = Array(sizeLimit.toString))
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
-      s"Invalid pivot column '$pivotCol'. Pivot columns must be comparable."
-    )
+      errorClass = "INCOMPARABLE_PIVOT_COLUMN",
+      messageParameters = Array(pivotCol.toString))
   }
 
   def nonLiteralPivotValError(pivotVal: Expression): Throwable = {
     new AnalysisException(
-      s"Literal expressions required for pivot values, found '$pivotVal'")
+      errorClass = "NON_LITERAL_PIVOT_VALUES",
+      messageParameters = Array(pivotVal.toString))
   }
 
   def pivotValDataTypeMismatchError(pivotVal: Expression, pivotCol: Expression): Throwable = {
     new AnalysisException(
-      s"Invalid pivot value '$pivotVal': " +
-        s"value data type ${pivotVal.dataType.simpleString} does not match " +
-        s"pivot column data type ${pivotCol.dataType.catalogString}")
+      errorClass = "PIVOT_VALUE_DATA_TYPE_MISMATCH",
+      messageParameters = Array(
+        pivotVal.toString, pivotVal.dataType.simpleString, pivotCol.dataType.catalogString))
   }
 
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
