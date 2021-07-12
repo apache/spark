@@ -25,6 +25,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 class JacksonParserSuite extends SparkFunSuite {
+  private val missingFieldInput = """{"c1":1}"""
+  private val nullValueInput = """{"c1": 1, "c2": null}"""
+
   private def check(
       input: String = """{"i":1, "s": "a"}""",
       schema: StructType = StructType.fromDDL("i INTEGER"),
@@ -35,6 +38,22 @@ class JacksonParserSuite extends SparkFunSuite {
     val createParser = CreateJacksonParser.string _
     val actual = parser.parse(input, createParser, UTF8String.fromString)
     assert(actual === expected)
+  }
+
+  private def assertAction(nullable: Boolean, input: String)(action: => Unit): Unit = {
+    if (nullable) {
+      action
+    } else {
+      val msg = intercept[IllegalSchemaArgumentException] {
+        action
+      }.message
+      val expected = if (input == missingFieldInput) {
+        "field c2 is not nullable but it's missing in one record."
+      } else {
+        "field c2 is not nullable but the parsed value is null."
+      }
+      assert(msg.contains(expected))
+    }
   }
 
   test("skipping rows using pushdown filters") {
@@ -56,26 +75,7 @@ class JacksonParserSuite extends SparkFunSuite {
       expected = Seq(InternalRow(1, 3.14)))
   }
 
-  test("35912: nullability with different schema nullable setting") {
-    val missingFieldInput = """{"c1":1}"""
-    val nullValueInput = """{"c1": 1, "c2": null}"""
-
-    def assertAction(nullable: Boolean, input: String)(action: => Unit): Unit = {
-      if (nullable) {
-        action
-      } else {
-        val msg = intercept[IllegalSchemaArgumentException] {
-          action
-        }.message
-        val expected = if (input == missingFieldInput) {
-          "field c2 is not nullable but it's missing in one record."
-        } else {
-          s"field c2 is not nullable but the parsed value is null."
-        }
-        assert(msg.contains(expected))
-      }
-    }
-
+  test("SPARK-35912: nullability with different schema nullable setting") {
     Seq(true, false).foreach { nullable =>
       val schema = StructType(Seq(
         StructField("c1", IntegerType),
@@ -88,8 +88,9 @@ class JacksonParserSuite extends SparkFunSuite {
         }
       }
     }
+  }
 
-    // filter by not exist field and filter by null value field.
+  test("SPARK-35912: skipping rows with not exist field and null value field") {
     Seq(true, false).foreach { nullable =>
       val schema = StructType(Seq(
         StructField("c1", IntegerType),

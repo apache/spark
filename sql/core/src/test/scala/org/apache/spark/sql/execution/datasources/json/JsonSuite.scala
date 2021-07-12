@@ -2924,13 +2924,7 @@ abstract class JsonSuite
     // JSON field is missing.
     val missingFieldInput = """{"c1": 1}"""
     // JSON filed is null.
-    val nullValueInput =
-      """
-        |{
-        |  "c1": 1,
-        |  "c2": null
-        |}
-        |""".stripMargin
+    val nullValueInput = """{"c1": 1, "c2": null}"""
 
     val load = (mode: String, schema: StructType, inputJson: String) => {
       val json = spark.createDataset(
