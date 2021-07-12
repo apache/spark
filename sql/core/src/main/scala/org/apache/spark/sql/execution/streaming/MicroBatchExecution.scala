@@ -558,12 +558,12 @@ class MicroBatchExecution(
         // dummy string to prevent UnresolvedException and to prevent to be used in the future.
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           ct.dataType, Some("Dummy TimeZoneId"))
-      case ct: LocalTimestamp =>
+      case lt: LocalTimestamp =>
         // LocalTimestamp is not TimeZoneAwareExpression while CurrentBatchTimestamp is.
         // Without TimeZoneId, CurrentBatchTimestamp is unresolved. Here, we use an explicit
         // dummy string to prevent UnresolvedException and to prevent to be used in the future.
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
-          ct.dataType, Some("Dummy TimeZoneId"))
+          lt.dataType, Some("Dummy TimeZoneId"))
       case cd: CurrentDate =>
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           cd.dataType, cd.timeZoneId)
