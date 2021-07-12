@@ -92,7 +92,7 @@ case class CustomShuffleReaderExec private(
    */
   def hasCoalescedPartition: Boolean = {
     partitionSpecs.exists {
-      case s: CoalescedPartitionSpec => s.endReducerIndex - s.startReducerIndex> 1
+      case s: CoalescedPartitionSpec => s.endReducerIndex - s.startReducerIndex > 1
       case _ => false
     }
   }
