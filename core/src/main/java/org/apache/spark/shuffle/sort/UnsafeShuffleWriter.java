@@ -206,8 +206,6 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       blockManager,
       taskContext,
       initialSortBufferSize,
-      shuffleId,
-      mapId,
       partitioner.numPartitions(),
       sparkConf,
       writeMetrics);
