@@ -206,7 +206,7 @@ SELECT '1' - cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query schema
 struct<(1 - CAST(2017-12-11 09:30:00 AS DATE)):interval day>
 -- !query output
--736673 00:00:00.000000000
+NULL
 
 
 -- !query
@@ -1246,7 +1246,7 @@ SELECT '1' = cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query schema
 struct<(1 = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)):boolean>
 -- !query output
-false
+NULL
 
 
 -- !query
@@ -1254,7 +1254,7 @@ SELECT '1' = cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query schema
 struct<(1 = CAST(2017-12-11 09:30:00 AS DATE)):boolean>
 -- !query output
-false
+NULL
 
 
 -- !query
@@ -1334,7 +1334,7 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) = '1' FROM t
 -- !query schema
 struct<(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = 1):boolean>
 -- !query output
-false
+NULL
 
 
 -- !query
@@ -1342,7 +1342,7 @@ SELECT cast('2017-12-11 09:30:00' as date)        = '1' FROM t
 -- !query schema
 struct<(CAST(2017-12-11 09:30:00 AS DATE) = 1):boolean>
 -- !query output
-false
+NULL
 
 
 -- !query
@@ -1614,7 +1614,7 @@ SELECT '1' < cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query schema
 struct<(1 < CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)):boolean>
 -- !query output
-true
+NULL
 
 
 -- !query
@@ -1622,7 +1622,7 @@ SELECT '1' < cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query schema
 struct<(1 < CAST(2017-12-11 09:30:00 AS DATE)):boolean>
 -- !query output
-true
+NULL
 
 
 -- !query
@@ -1710,7 +1710,7 @@ SELECT '1' <= cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query schema
 struct<(1 <= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)):boolean>
 -- !query output
-true
+NULL
 
 
 -- !query
@@ -1718,7 +1718,7 @@ SELECT '1' <= cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query schema
 struct<(1 <= CAST(2017-12-11 09:30:00 AS DATE)):boolean>
 -- !query output
-true
+NULL
 
 
 -- !query
@@ -1806,7 +1806,7 @@ SELECT '1' > cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query schema
 struct<(1 > CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)):boolean>
 -- !query output
-false
+NULL
 
 
 -- !query
@@ -1814,7 +1814,7 @@ SELECT '1' > cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query schema
 struct<(1 > CAST(2017-12-11 09:30:00 AS DATE)):boolean>
 -- !query output
-false
+NULL
 
 
 -- !query
@@ -1902,7 +1902,7 @@ SELECT '1' >= cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query schema
 struct<(1 >= CAST(2017-12-11 09:30:00.0 AS TIMESTAMP)):boolean>
 -- !query output
-false
+NULL
 
 
 -- !query
@@ -1910,7 +1910,7 @@ SELECT '1' >= cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query schema
 struct<(1 >= CAST(2017-12-11 09:30:00 AS DATE)):boolean>
 -- !query output
-false
+NULL
 
 
 -- !query
@@ -1998,7 +1998,7 @@ SELECT '1' <> cast('2017-12-11 09:30:00.0' as timestamp) FROM t
 -- !query schema
 struct<(NOT (1 = CAST(2017-12-11 09:30:00.0 AS TIMESTAMP))):boolean>
 -- !query output
-true
+NULL
 
 
 -- !query
@@ -2006,7 +2006,7 @@ SELECT '1' <> cast('2017-12-11 09:30:00' as date)        FROM t
 -- !query schema
 struct<(NOT (1 = CAST(2017-12-11 09:30:00 AS DATE))):boolean>
 -- !query output
-true
+NULL
 
 
 -- !query
@@ -2094,7 +2094,7 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) < '1' FROM t
 -- !query schema
 struct<(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) < 1):boolean>
 -- !query output
-false
+NULL
 
 
 -- !query
@@ -2102,7 +2102,7 @@ SELECT cast('2017-12-11 09:30:00' as date)        < '1' FROM t
 -- !query schema
 struct<(CAST(2017-12-11 09:30:00 AS DATE) < 1):boolean>
 -- !query output
-false
+NULL
 
 
 -- !query
@@ -2190,7 +2190,7 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) <= '1' FROM t
 -- !query schema
 struct<(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) <= 1):boolean>
 -- !query output
-false
+NULL
 
 
 -- !query
@@ -2198,7 +2198,7 @@ SELECT cast('2017-12-11 09:30:00' as date)        <= '1' FROM t
 -- !query schema
 struct<(CAST(2017-12-11 09:30:00 AS DATE) <= 1):boolean>
 -- !query output
-false
+NULL
 
 
 -- !query
@@ -2286,7 +2286,7 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) > '1' FROM t
 -- !query schema
 struct<(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) > 1):boolean>
 -- !query output
-true
+NULL
 
 
 -- !query
@@ -2294,7 +2294,7 @@ SELECT cast('2017-12-11 09:30:00' as date)        > '1' FROM t
 -- !query schema
 struct<(CAST(2017-12-11 09:30:00 AS DATE) > 1):boolean>
 -- !query output
-true
+NULL
 
 
 -- !query
@@ -2382,7 +2382,7 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) >= '1' FROM t
 -- !query schema
 struct<(CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) >= 1):boolean>
 -- !query output
-true
+NULL
 
 
 -- !query
@@ -2390,7 +2390,7 @@ SELECT cast('2017-12-11 09:30:00' as date)        >= '1' FROM t
 -- !query schema
 struct<(CAST(2017-12-11 09:30:00 AS DATE) >= 1):boolean>
 -- !query output
-true
+NULL
 
 
 -- !query
@@ -2478,7 +2478,7 @@ SELECT cast('2017-12-11 09:30:00.0' as timestamp) <> '1' FROM t
 -- !query schema
 struct<(NOT (CAST(2017-12-11 09:30:00.0 AS TIMESTAMP) = 1)):boolean>
 -- !query output
-true
+NULL
 
 
 -- !query
@@ -2486,7 +2486,7 @@ SELECT cast('2017-12-11 09:30:00' as date)        <> '1' FROM t
 -- !query schema
 struct<(NOT (CAST(2017-12-11 09:30:00 AS DATE) = 1)):boolean>
 -- !query output
-true
+NULL
 
 
 -- !query
