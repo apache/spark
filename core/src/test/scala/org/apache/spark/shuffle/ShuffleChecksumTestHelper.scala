@@ -21,6 +21,7 @@ import java.io.{DataInputStream, File, FileInputStream}
 import java.util.zip.{Adler32, CheckedInputStream}
 
 import org.apache.spark.network.util.LimitedInputStream
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper
 
 trait ShuffleChecksumTestHelper {
 
@@ -54,8 +55,9 @@ trait ShuffleChecksumTestHelper {
         val curOffset = indexIn.readLong
         val limit = (curOffset - prevOffset).toInt
         val bytes = new Array[Byte](limit)
+        val checksum = ShuffleChecksumHelper.getChecksumByFileExtension(index.getName)
         checkedIn = new CheckedInputStream(
-          new LimitedInputStream(dataIn, curOffset - prevOffset), new Adler32)
+          new LimitedInputStream(dataIn, curOffset - prevOffset), checksum)
         checkedIn.read(bytes, 0, limit)
         prevOffset = curOffset
         // checksum must be consistent at both write and read sides

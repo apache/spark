@@ -26,23 +26,29 @@ public class ShuffleChecksumHelper {
     }
 
     String checksumAlgo = shuffleChecksumAlgorithm(conf);
-    switch (checksumAlgo) {
+    return getChecksumByAlgorithm(numPartitions, checksumAlgo);
+  }
+
+  private static Checksum[] getChecksumByAlgorithm(int num, String algorithm)
+      throws SparkException {
+    Checksum[] checksums;
+    switch (algorithm) {
       case "ADLER32":
-        partitionChecksums = new Adler32[numPartitions];
-        for (int i = 0; i < numPartitions; i ++) {
-          partitionChecksums[i] = new Adler32();
+        checksums = new Adler32[num];
+        for (int i = 0; i < num; i ++) {
+          checksums[i] = new Adler32();
         }
-        return partitionChecksums;
+        return checksums;
 
       case "CRC32":
-        partitionChecksums = new CRC32[numPartitions];
-        for (int i = 0; i < numPartitions; i ++) {
-          partitionChecksums[i] = new CRC32();
+        checksums = new CRC32[num];
+        for (int i = 0; i < num; i ++) {
+          checksums[i] = new CRC32();
         }
-        return partitionChecksums;
+        return checksums;
 
       default:
-        throw new SparkException("Unsupported shuffle checksum algorithm: " + checksumAlgo);
+        throw new SparkException("Unsupported shuffle checksum algorithm: " + algorithm);
     }
   }
 
@@ -57,6 +63,12 @@ public class ShuffleChecksumHelper {
 
   public static String shuffleChecksumAlgorithm(SparkConf conf) {
     return conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
+  }
+
+  public static Checksum getChecksumByFileExtension(String fileName) throws SparkException {
+    int index = fileName.lastIndexOf(".");
+    String algorithm = fileName.substring(index + 1);
+    return getChecksumByAlgorithm(1, algorithm)[1];
   }
 
   public static String getChecksumFileName(ShuffleChecksumBlockId blockId, SparkConf conf) {
