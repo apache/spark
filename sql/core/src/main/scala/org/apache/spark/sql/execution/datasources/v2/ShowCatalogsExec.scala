@@ -21,7 +21,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.util.{escapeSingleQuotedString, StringUtils}
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager
 
 /**
@@ -34,7 +34,7 @@ case class ShowCatalogsExec(
   extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
-    val catalogs = catalogManager.listCatalogs.map(_._1).map(escapeSingleQuotedString(_))
+    val catalogs = catalogManager.listCatalogs.toSeq.sortBy(_._1).map(_._1)
 
     catalogs.map { name =>
       if (pattern.map(StringUtils.filterPattern(Seq(name), _).nonEmpty).getOrElse(true)) {

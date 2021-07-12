@@ -647,8 +647,12 @@ case class ShowCurrentNamespace(catalogManager: CatalogManager) extends LeafComm
  */
 case class ShowCatalogs(
     catalogManager: CatalogManager,
-    pattern: Option[String]) extends LeafCommand {
-  override val output: Seq[Attribute] = Seq(
+    pattern: Option[String],
+    override val output: Seq[Attribute] = ShowCatalogs.getOutputAttrs) extends LeafCommand {
+}
+
+object ShowCatalogs {
+  def getOutputAttrs: Seq[Attribute] = Seq(
     AttributeReference("catalog", StringType, nullable = false)())
 }
 
