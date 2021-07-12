@@ -86,9 +86,11 @@ class ComputeCurrentTimeSuite extends PlanTest {
     val in = Project(Seq(Alias(LocalTimestamp(), "a")(), Alias(LocalTimestamp(), "b")()),
       LocalRelation())
 
-    val min = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now())
+    val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+
+    val min = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))
     val plan = Optimize.execute(in.analyze).asInstanceOf[Project]
-    val max = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now())
+    val max = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))
 
     val lits = new scala.collection.mutable.ArrayBuffer[Long]
     plan.transformAllExpressions { case e: Literal =>

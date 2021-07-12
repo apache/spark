@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import java.time.ZoneOffset
+
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.CurrentUserContext.CURRENT_USER
@@ -80,10 +82,8 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
     val timeExpr = CurrentTimestamp()
     val timestamp = timeExpr.eval(EmptyRow).asInstanceOf[Long]
     val currentTime = Literal.create(timestamp, timeExpr.dataType)
-    val localTimestampExpr = LocalTimestamp()
-    val localTimestamp = localTimestampExpr.eval(EmptyRow).asInstanceOf[Long]
-    val localTime = Literal.create(localTimestamp, localTimestampExpr.dataType)
     val timezone = Literal.create(conf.sessionLocalTimeZone, StringType)
+    val localTimestamps = mutable.Map.empty[String, Literal]
 
     plan.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
       case currentDate @ CurrentDate(Some(timeZoneId)) =>
@@ -94,7 +94,12 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
         })
       case CurrentTimestamp() | Now() => currentTime
       case CurrentTimeZone() => timezone
-      case LocalTimestamp(_) => localTime
+      case localTimestamp @ LocalTimestamp(Some(timeZoneId)) =>
+        localTimestamps.getOrElseUpdate(timeZoneId, {
+          Literal.create(
+            DateTimeUtils.convertTz(timestamp, ZoneOffset.UTC, localTimestamp.zoneId),
+            TimestampNTZType)
+        })
     }
   }
 }

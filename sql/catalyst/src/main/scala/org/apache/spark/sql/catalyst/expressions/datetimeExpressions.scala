@@ -218,10 +218,17 @@ case class Now() extends CurrentTimestampLike {
   """,
   group = "datetime_funcs",
   since = "3.3.0")
-case class LocalTimestamp(timeZoneId: Option[String] = None) extends CurrentTimestampLike
-  with TimeZoneAwareExpression {
+case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
+  with TimeZoneAwareExpression with CodegenFallback {
+
+  def this() = this(None)
+
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
 
   override def dataType: DataType = TimestampNTZType
+
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
