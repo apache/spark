@@ -13,6 +13,7 @@ public class ShuffleChecksumHelper {
 
   /** Used when the checksum is disabled for shuffle. */
   private static final Checksum[] EMPTY_CHECKSUM = new Checksum[0];
+  public static final long[] EMPTY_CHECKSUM_VALUE = new long[0];
 
   public static boolean isShuffleChecksumEnabled(SparkConf conf) {
     return (boolean) conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ENABLED());

@@ -57,6 +57,7 @@ import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
 import org.apache.spark.shuffle.api.SingleSpillShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.WritableByteChannelWrapper;
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.TimeTrackingOutputStream;
 import org.apache.spark.unsafe.Platform;
@@ -269,7 +270,8 @@ public class UnsafeShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     if (spills.length == 0) {
       final ShuffleMapOutputWriter mapWriter = shuffleExecutorComponents
           .createMapOutputWriter(shuffleId, mapId, partitioner.numPartitions());
-      return mapWriter.commitAllPartitions(new long[0]).getPartitionLengths();
+      return mapWriter.commitAllPartitions(
+        ShuffleChecksumHelper.EMPTY_CHECKSUM_VALUE).getPartitionLengths();
     } else if (spills.length == 1) {
       Optional<SingleSpillShuffleMapOutputWriter> maybeSingleFileWriter =
           shuffleExecutorComponents.createSingleFileMapOutputWriter(shuffleId, mapId);

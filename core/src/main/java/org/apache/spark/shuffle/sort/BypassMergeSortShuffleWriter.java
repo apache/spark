@@ -135,7 +135,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         .createMapOutputWriter(shuffleId, mapId, numPartitions);
     try {
       if (!records.hasNext()) {
-        partitionLengths = mapOutputWriter.commitAllPartitions(new long[0]).getPartitionLengths();
+        partitionLengths = mapOutputWriter.commitAllPartitions(
+          ShuffleChecksumHelper.EMPTY_CHECKSUM_VALUE).getPartitionLengths();
         mapStatus = MapStatus$.MODULE$.apply(
           blockManager.shuffleServerId(), partitionLengths, mapId);
         return;
