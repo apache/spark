@@ -673,10 +673,9 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
       assert(rs.getString(1) === "8 10:05:10.000000000")
     }
     withJdbcStatement() { statement =>
-      statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key} = true")
-      val rs = statement.executeQuery("SELECT interval 3 months 1 hours")
+      val rs = statement.executeQuery("SELECT interval 3 days 1 hours")
       assert(rs.next())
-      assert(rs.getString(1) === "3 months 1 hours")
+      assert(rs.getString(1) === "3 01:00:00.000000000")
     }
 
     // Invalid interval value
@@ -694,7 +693,6 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
     }
     withJdbcStatement() { statement =>
       val e = intercept[SQLException] {
-        statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key} = true")
         statement.executeQuery("SELECT interval 3 months 1 hou")
       }
       assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))

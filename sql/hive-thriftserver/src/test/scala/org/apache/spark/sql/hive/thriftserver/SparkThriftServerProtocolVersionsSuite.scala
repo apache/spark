@@ -30,7 +30,6 @@ import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 
 import org.apache.spark.sql.catalyst.util.NumberConverter
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
 
 class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
@@ -39,8 +38,7 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
 
   def testExecuteStatementWithProtocolVersion(
       version: TProtocolVersion,
-      sql: String,
-      conf: (String, String)*)(f: HiveQueryResultSet => Unit): Unit = {
+      sql: String)(f: HiveQueryResultSet => Unit): Unit = {
     val rawTransport = new TSocket("localhost", serverPort)
     val connection = new HiveConnection(s"jdbc:hive2://localhost:$serverPort", new Properties)
     val user = System.getProperty("user.name")
@@ -52,10 +50,6 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
       val clientProtocol = new TOpenSessionReq(version)
       val openResp = client.OpenSession(clientProtocol)
       val sessHandle = openResp.getSessionHandle
-      conf.foreach {
-        case (k, v) =>
-          client.ExecuteStatement(new TExecuteStatementReq(sessHandle, s"SET $k = $v"))
-      }
       val execReq = new TExecuteStatementReq(sessHandle, sql)
       val execResp = client.ExecuteStatement(execReq)
       val stmtHandle = execResp.getOperationHandle
@@ -368,17 +362,26 @@ class SparkThriftServerProtocolVersionsSuite extends HiveThriftServer2TestBase {
     }
 
     test(s"$version get interval type") {
-      testExecuteStatementWithProtocolVersion(
-        version,
-        "SELECT interval '1' year '2' day",
-        SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") { rs =>
+      testExecuteStatementWithProtocolVersion(version,
+        "SELECT interval '1' year '2' month") { rs =>
         assert(rs.next())
-        assert(rs.getString(1) === "1 years 2 days")
+        assert(rs.getString(1) === "1-2")
         val metaData = rs.getMetaData
-        assert(metaData.getColumnName(1) === "INTERVAL '1 years 2 days'")
-        assert(metaData.getColumnTypeName(1) === "string")
-        assert(metaData.getColumnType(1) === java.sql.Types.VARCHAR)
-        assert(metaData.getPrecision(1) === Int.MaxValue)
+        assert(metaData.getColumnName(1) === "INTERVAL '1-2' YEAR TO MONTH")
+        assert(metaData.getColumnTypeName(1) === "interval_year_month")
+        assert(metaData.getColumnType(1) === java.sql.Types.OTHER)
+        assert(metaData.getPrecision(1) === 11)
+        assert(metaData.getScale(1) === 0)
+      }
+      testExecuteStatementWithProtocolVersion(version,
+        "SELECT interval '1' day '2' hour '3' minute '4.005006' second") { rs =>
+        assert(rs.next())
+        assert(rs.getString(1) === "1 02:03:04.005006000")
+        val metaData = rs.getMetaData
+        assert(metaData.getColumnName(1) === "INTERVAL '1 02:03:04.005006' DAY TO SECOND")
+        assert(metaData.getColumnTypeName(1) === "interval_day_time")
+        assert(metaData.getColumnType(1) === java.sql.Types.OTHER)
+        assert(metaData.getPrecision(1) === 29)
         assert(metaData.getScale(1) === 0)
       }
     }
