@@ -122,38 +122,25 @@ class NumericOps(DataTypeOps):
         right = transform_boolean_operand_to_numeric(right)
         return column_op(rmod)(left, right)
 
-    # TODO(SPARK-36003): Implement unary operator `invert` as below
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
-        raise NotImplementedError("Unary ~ can not be applied to %s." % self.pretty_name)
+        return cast(IndexOpsLike, column_op(F.bitwise_not)(operand))
 
     def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
-        from pyspark.pandas.base import column_op
-
         return cast(IndexOpsLike, column_op(Column.__neg__)(operand))
 
     def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
-        from pyspark.pandas.base import column_op
-
         return cast(IndexOpsLike, column_op(F.abs)(operand))
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__gt__)(left, right)
 
 
@@ -316,6 +303,9 @@ class FractionalOps(NumericOps):
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
+
+    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
+        raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
 
     def isnull(self, index_ops: IndexOpsLike) -> IndexOpsLike:
         return index_ops._with_new_scol(
