@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.time.ZoneOffset
+import java.time.LocalDateTime
 
 import scala.collection.mutable
 
@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.localDateTimeToMicros
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -97,7 +98,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
       case localTimestamp @ LocalTimestamp(Some(timeZoneId)) =>
         localTimestamps.getOrElseUpdate(timeZoneId, {
           Literal.create(
-            DateTimeUtils.convertTz(timestamp, ZoneOffset.UTC, localTimestamp.zoneId),
+            localDateTimeToMicros(LocalDateTime.now(localTimestamp.zoneId)),
             TimestampNTZType)
         })
     }
