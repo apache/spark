@@ -178,6 +178,12 @@ abstract class TaskContext extends Serializable {
   def getLocalProperty(key: String): String
 
   /**
+   * CPUs allocated to the task.
+   */
+  @Evolving
+  def cpus(): Int
+
+  /**
    * Resources allocated to the task. The key is the resource name and the value is information
    * about the resource. Please refer to [[org.apache.spark.resource.ResourceInformation]] for
    * specifics.

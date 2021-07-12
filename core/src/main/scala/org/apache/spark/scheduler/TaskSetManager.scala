@@ -429,6 +429,7 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
+      taskCpuAssignments: Int,
       taskResourceAssignments: Map[String, ResourceInformation] = Map.empty)
     : (Option[TaskDescription], Boolean, Int) =
   {
@@ -474,6 +475,7 @@ private[spark] class TaskSetManager(
                 index,
                 taskLocality,
                 speculative,
+                taskCpuAssignments,
                 taskResourceAssignments,
                 curTime)
             }
@@ -495,6 +497,7 @@ private[spark] class TaskSetManager(
       index: Int,
       taskLocality: TaskLocality.Value,
       speculative: Boolean,
+      taskCpuAssignments: Int,
       taskResourceAssignments: Map[String, ResourceInformation],
       launchTime: Long): TaskDescription = {
     // Found a task; do some bookkeeping and return a task description
@@ -548,6 +551,7 @@ private[spark] class TaskSetManager(
       addedJars,
       addedArchives,
       task.localProperties,
+      taskCpuAssignments,
       taskResourceAssignments,
       serializedTask)
   }
