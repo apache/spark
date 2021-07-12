@@ -165,8 +165,8 @@ class StreamingSessionWindowStateManagerImplV1(
     getSessionsWithKeys(store, key).map(_.value)
 
   private def getSessionsWithKeys(
-    store: ReadStateStore,
-    key: UnsafeRow): Iterator[UnsafeRowPair] = {
+      store: ReadStateStore,
+      key: UnsafeRow): Iterator[UnsafeRowPair] = {
     store.prefixScan(key)
   }
 
