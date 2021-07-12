@@ -28,7 +28,8 @@ import java.util.concurrent.TimeoutException
 
 import com.fasterxml.jackson.core.JsonToken
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
-import org.codehaus.commons.compiler.{CompileException, InternalCompilerException}
+import org.codehaus.commons.compiler.CompileException
+import org.codehaus.janino.InternalCompilerException
 
 import org.apache.spark.{Partition, SparkArithmeticException, SparkException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
