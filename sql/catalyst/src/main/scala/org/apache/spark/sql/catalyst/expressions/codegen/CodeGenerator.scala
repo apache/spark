@@ -1249,7 +1249,7 @@ class CodegenContext extends Logging {
       // at least two nodes) as the cost of doing it is expected to be low.
 
       val subExprCode = s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
-      subexprFunctions += s"${addNewFunction(fnName, fn)}($INPUT_ROW);"
+      subexprFunctions += subExprCode
       val state = SubExprEliminationState(
         ExprCode(code"$subExprCode",
           JavaCode.isNullGlobal(isNull),
