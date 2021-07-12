@@ -1091,10 +1091,7 @@ abstract class ToTimestamp
   override protected def formatString: Expression = right
   override protected def isParsing = true
 
-  override def forTimestampNTZ: Boolean = left.dataType match {
-    case TimestampNTZType => true
-    case _ => false
-  }
+  override def forTimestampNTZ: Boolean = left.dataType == TimestampNTZType
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, DateType, TimestampType, TimestampNTZType), StringType)
