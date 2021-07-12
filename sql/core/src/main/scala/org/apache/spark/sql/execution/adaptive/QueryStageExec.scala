@@ -230,9 +230,9 @@ case class BroadcastQueryStageExec(
         promise.tryFailure(QueryExecutionErrors.executeBroadcastTimeoutError(timeout, None))
       }
     }, timeout, TimeUnit.SECONDS)
-    broadcastFuture.onComplete(_ => fail.cancel(false))(AdaptiveSparkPlanExec.executionContext)
+    broadcastFuture.onComplete(_ => fail.cancel(false))(BroadcastExchangeExec.executionContext)
     Future.firstCompletedOf(
-      Seq(broadcastFuture, promise.future))(AdaptiveSparkPlanExec.executionContext)
+      Seq(broadcastFuture, promise.future))(BroadcastExchangeExec.executionContext)
   }
 
   override def doMaterialize(): Future[Any] = {
