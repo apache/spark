@@ -1536,7 +1536,7 @@ class _ImputerParams(HasInputCol, HasInputCols, HasOutputCol, HasOutputCols, Has
 @inherit_doc
 class Imputer(JavaEstimator, _ImputerParams, JavaMLReadable, JavaMLWritable):
     """
-    Imputation estimator for completing missing values, either using the mean or the median
+    Imputation estimator for completing missing values, using the mean, median or mode
     of the columns in which the missing values are located. The input columns should be of
     numeric type. Currently Imputer does not support categorical features and
     possibly creates incorrect values for a categorical feature.
@@ -4682,9 +4682,9 @@ class Word2Vec(JavaEstimator, _Word2VecParams, JavaMLReadable, JavaMLWritable):
     +----+--------------------+
     |word|              vector|
     +----+--------------------+
-    |   a|[0.09511678665876...|
-    |   b|[-1.2028766870498...|
-    |   c|[0.30153277516365...|
+    |   a|[0.0951...
+    |   b|[-1.202...
+    |   c|[0.3015...
     +----+--------------------+
     ...
     >>> model.findSynonymsArray("a", 2)
@@ -5821,9 +5821,12 @@ class UnivariateFeatureSelector(JavaEstimator, _UnivariateFeatureSelectorParams,
 
     The following combination of `featureType` and `labelType` are supported:
 
-    - `featureType` `categorical` and `labelType` `categorical`, Spark uses chi2.
-    - `featureType` `continuous` and `labelType` `categorical`, Spark uses f_classif.
-    - `featureType` `continuous` and `labelType` `continuous`, Spark uses f_regression.
+    - `featureType` `categorical` and `labelType` `categorical`, Spark uses chi-squared,
+      i.e. chi2 in sklearn.
+    - `featureType` `continuous` and `labelType` `categorical`, Spark uses ANOVATest,
+      i.e. f_classif in sklearn.
+    - `featureType` `continuous` and `labelType` `continuous`, Spark uses F-value,
+      i.e. f_regression in sklearn.
 
     The `UnivariateFeatureSelector` supports different selection modes: `numTopFeatures`,
     `percentile`, `fpr`, `fdr`, `fwe`.

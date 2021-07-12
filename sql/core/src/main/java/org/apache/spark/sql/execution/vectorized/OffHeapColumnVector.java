@@ -553,7 +553,8 @@ public final class OffHeapColumnVector extends WritableColumnVector {
         type instanceof DateType || DecimalType.is32BitDecimalType(type)) {
       this.data = Platform.reallocateMemory(data, oldCapacity * 4L, newCapacity * 4L);
     } else if (type instanceof LongType || type instanceof DoubleType ||
-        DecimalType.is64BitDecimalType(type) || type instanceof TimestampType) {
+        DecimalType.is64BitDecimalType(type) || type instanceof TimestampType ||
+        type instanceof TimestampNTZType) {
       this.data = Platform.reallocateMemory(data, oldCapacity * 8L, newCapacity * 8L);
     } else if (childColumns != null) {
       // Nothing to store.

@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXTRACT_VALUE, TreePattern}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericArrayData, MapData, TypeUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -79,18 +79,19 @@ object ExtractValue {
     val checkField = (f: StructField) => resolver(f.name, fieldName)
     val ordinal = fields.indexWhere(checkField)
     if (ordinal == -1) {
-      throw new AnalysisException(
-        s"No such struct field $fieldName in ${fields.map(_.name).mkString(", ")}")
+      throw QueryCompilationErrors.noSuchStructFieldInGivenFieldsError(fieldName, fields)
     } else if (fields.indexWhere(checkField, ordinal + 1) != -1) {
-      throw new AnalysisException(
-        s"Ambiguous reference to fields ${fields.filter(checkField).mkString(", ")}")
+      throw QueryCompilationErrors.ambiguousReferenceToFieldsError(
+        fields.filter(checkField).mkString(", "))
     } else {
       ordinal
     }
   }
 }
 
-trait ExtractValue extends Expression
+trait ExtractValue extends Expression {
+  final override val nodePatterns: Seq[TreePattern] = Seq(EXTRACT_VALUE)
+}
 
 /**
  * Returns the value of fields in the Struct `child`.
@@ -138,6 +139,9 @@ case class GetStructField(child: Expression, ordinal: Int, name: Option[String] 
       }
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): GetStructField =
+    copy(child = newChild)
 }
 
 /**
@@ -212,6 +216,9 @@ case class GetArrayStructFields(
       """
     })
   }
+
+  override protected def withNewChildInternal(newChild: Expression): GetArrayStructFields =
+    copy(child = newChild)
 }
 
 /**
@@ -292,6 +299,10 @@ case class GetArrayItem(
       """
     })
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): GetArrayItem =
+    copy(child = newLeft, ordinal = newRight)
 }
 
 /**
@@ -470,4 +481,8 @@ case class GetMapValue(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     doGetValueGenCode(ctx, ev, child.dataType.asInstanceOf[MapType], failOnError)
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): GetMapValue =
+    copy(child = newLeft, key = newRight)
 }

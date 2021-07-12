@@ -80,7 +80,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     new Array[Byte](Decimal.minBytesForPrecision(DecimalType.MAX_PRECISION))
 
   private val datetimeRebaseMode = LegacyBehaviorPolicy.withName(
-    SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE))
+    SQLConf.get.getConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE))
 
   private val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInWrite(
     datetimeRebaseMode, "Parquet")
@@ -89,7 +89,7 @@ class ParquetWriteSupport extends WriteSupport[InternalRow] with Logging {
     datetimeRebaseMode, "Parquet")
 
   private val int96RebaseMode = LegacyBehaviorPolicy.withName(
-    SQLConf.get.getConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE))
+    SQLConf.get.getConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE))
 
   private val int96RebaseFunc = DataSourceUtils.creteTimestampRebaseFuncInWrite(
     int96RebaseMode, "Parquet INT96")

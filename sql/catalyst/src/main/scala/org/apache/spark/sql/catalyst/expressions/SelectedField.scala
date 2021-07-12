@@ -75,7 +75,11 @@ object SelectedField {
         val field = c.childSchema(c.ordinal)
         val newField = field.copy(dataType = dataTypeOpt.getOrElse(field.dataType))
         selectField(c.child, Option(struct(newField)))
-      case GetArrayStructFields(child, field, _, _, containsNull) =>
+      case GetArrayStructFields(child, _, ordinal, _, containsNull) =>
+        // For case-sensitivity aware field resolution, we should take `ordinal` which
+        // points to correct struct field.
+        val field = child.dataType.asInstanceOf[ArrayType]
+          .elementType.asInstanceOf[StructType](ordinal)
         val newFieldDataType = dataTypeOpt match {
           case None =>
             // GetArrayStructFields is the top level extractor. This means its result is

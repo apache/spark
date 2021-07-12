@@ -46,7 +46,7 @@ case class BroadcastHashJoinExec(
     left: SparkPlan,
     right: SparkPlan,
     isNullAwareAntiJoin: Boolean = false)
-  extends HashJoin with CodegenSupport {
+  extends HashJoin {
 
   if (isNullAwareAntiJoin) {
     require(leftKeys.length == 1, "leftKeys length should be 1")
@@ -71,7 +71,7 @@ case class BroadcastHashJoinExec(
 
   override lazy val outputPartitioning: Partitioning = {
     joinType match {
-      case _: InnerLike if sqlContext.conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
+      case _: InnerLike if conf.broadcastHashJoinOutputPartitioningExpandLimit > 0 =>
         streamedPlan.outputPartitioning match {
           case h: HashPartitioning => expandOutputPartitioning(h)
           case c: PartitioningCollection => expandOutputPartitioning(c)
@@ -112,7 +112,7 @@ case class BroadcastHashJoinExec(
   // Seq("a", "b", "c"), Seq("a", "b", "y"), Seq("a", "x", "c"), Seq("a", "x", "y").
   // The expanded expressions are returned as PartitioningCollection.
   private def expandOutputPartitioning(partitioning: HashPartitioning): PartitioningCollection = {
-    val maxNumCombinations = sqlContext.conf.broadcastHashJoinOutputPartitioningExpandLimit
+    val maxNumCombinations = conf.broadcastHashJoinOutputPartitioningExpandLimit
     var currentNumCombinations = 0
 
     def generateExprCombinations(
@@ -254,4 +254,8 @@ case class BroadcastHashJoinExec(
       super.codegenAnti(ctx, input)
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): BroadcastHashJoinExec =
+    copy(left = newLeft, right = newRight)
 }

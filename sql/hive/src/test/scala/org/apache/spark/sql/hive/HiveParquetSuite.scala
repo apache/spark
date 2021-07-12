@@ -120,7 +120,7 @@ class HiveParquetSuite extends QueryTest with ParquetTest with TestHiveSingleton
              |)
           """.stripMargin)
       }.getMessage
-      assert(msg.contains("cannot resolve '`c3`' given input columns"))
+      assert(msg.contains("cannot resolve 'c3' given input columns"))
     }
   }
 }

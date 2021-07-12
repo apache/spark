@@ -20,15 +20,15 @@ TakeOrderedAndProject [ca_zip,sum(cs_sales_price)]
                                       InputAdapter
                                         Scan parquet default.catalog_sales [cs_bill_customer_sk,cs_sales_price,cs_sold_date_sk]
                                           SubqueryBroadcast [d_date_sk] #1
-                                            ReusedExchange [d_date_sk] #3
+                                            BroadcastExchange #3
+                                              WholeStageCodegen (1)
+                                                Project [d_date_sk]
+                                                  Filter [d_qoy,d_year,d_date_sk]
+                                                    ColumnarToRow
+                                                      InputAdapter
+                                                        Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
                                   InputAdapter
-                                    BroadcastExchange #3
-                                      WholeStageCodegen (1)
-                                        Project [d_date_sk]
-                                          Filter [d_qoy,d_year,d_date_sk]
-                                            ColumnarToRow
-                                              InputAdapter
-                                                Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
+                                    ReusedExchange [d_date_sk] #3
                   InputAdapter
                     WholeStageCodegen (9)
                       Sort [c_customer_sk]

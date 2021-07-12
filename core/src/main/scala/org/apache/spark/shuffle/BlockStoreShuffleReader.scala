@@ -51,15 +51,17 @@ private[spark] class BlockStoreShuffleReader[K, C](
       true
     }
     val useOldFetchProtocol = conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)
+    // SPARK-34790: Fetching continuous blocks in batch is incompatible with io encryption.
+    val ioEncryption = conf.get(config.IO_ENCRYPTION_ENABLED)
 
     val doBatchFetch = shouldBatchFetch && serializerRelocatable &&
-      (!compressed || codecConcatenation) && !useOldFetchProtocol
+      (!compressed || codecConcatenation) && !useOldFetchProtocol && !ioEncryption
     if (shouldBatchFetch && !doBatchFetch) {
       logDebug("The feature tag of continuous shuffle block fetching is set to true, but " +
         "we can not enable the feature because other conditions are not satisfied. " +
         s"Shuffle compress: $compressed, serializer relocatable: $serializerRelocatable, " +
         s"codec concatenation: $codecConcatenation, use old shuffle fetch protocol: " +
-        s"$useOldFetchProtocol.")
+        s"$useOldFetchProtocol, io encryption: $ioEncryption.")
     }
     doBatchFetch
   }
@@ -70,6 +72,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
       context,
       blockManager.blockStoreClient,
       blockManager,
+      mapOutputTracker,
       blocksByAddress,
       serializerManager.wrapStream,
       // Note: we use getSizeAsMb when no suffix is provided for backwards compatibility
@@ -77,6 +80,7 @@ private[spark] class BlockStoreShuffleReader[K, C](
       SparkEnv.get.conf.get(config.REDUCER_MAX_REQS_IN_FLIGHT),
       SparkEnv.get.conf.get(config.REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS),
       SparkEnv.get.conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM),
+      SparkEnv.get.conf.get(config.SHUFFLE_MAX_ATTEMPTS_ON_NETTY_OOM),
       SparkEnv.get.conf.get(config.SHUFFLE_DETECT_CORRUPT),
       SparkEnv.get.conf.get(config.SHUFFLE_DETECT_CORRUPT_MEMORY),
       readMetrics,
@@ -120,20 +124,12 @@ private[spark] class BlockStoreShuffleReader[K, C](
     }
 
     // Sort the output if there is a sort ordering defined.
-    val resultIter = dep.keyOrdering match {
+    val resultIter: Iterator[Product2[K, C]] = dep.keyOrdering match {
       case Some(keyOrd: Ordering[K]) =>
         // Create an ExternalSorter to sort the data.
         val sorter =
           new ExternalSorter[K, C, C](context, ordering = Some(keyOrd), serializer = dep.serializer)
-        sorter.insertAll(aggregatedIter)
-        context.taskMetrics().incMemoryBytesSpilled(sorter.memoryBytesSpilled)
-        context.taskMetrics().incDiskBytesSpilled(sorter.diskBytesSpilled)
-        context.taskMetrics().incPeakExecutionMemory(sorter.peakMemoryUsedBytes)
-        // Use completion callback to stop sorter if task was finished/cancelled.
-        context.addTaskCompletionListener[Unit](_ => {
-          sorter.stop()
-        })
-        CompletionIterator[Product2[K, C], Iterator[Product2[K, C]]](sorter.iterator, sorter.stop())
+        sorter.insertAllAndUpdateMetrics(aggregatedIter)
       case None =>
         aggregatedIter
     }

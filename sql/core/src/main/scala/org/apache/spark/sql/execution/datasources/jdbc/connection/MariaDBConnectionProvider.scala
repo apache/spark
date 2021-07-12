@@ -26,20 +26,5 @@ private[jdbc] class MariaDBConnectionProvider extends SecureConnectionProvider {
 
   override val name: String = "mariadb"
 
-  override def appEntry(driver: Driver, options: JDBCOptions): String =
-    "Krb5ConnectorContext"
-
-  override def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit = {
-    val (parent, configEntry) = getConfigWithAppEntry(driver, options)
-    /**
-     * Couple of things to mention here (v2.5.4 client):
-     * 1. MariaDB doesn't support JAAS application name configuration
-     * 2. MariaDB sets a default JAAS config if "java.security.auth.login.config" is not set
-     */
-    val entryUsesKeytab = configEntry != null &&
-      configEntry.exists(_.getOptions().get("useKeyTab") == "true")
-    if (configEntry == null || configEntry.isEmpty || !entryUsesKeytab) {
-      setAuthenticationConfig(parent, driver, options)
-    }
-  }
+  override def appEntry(driver: Driver, options: JDBCOptions): String = "Krb5ConnectorContext"
 }

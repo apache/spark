@@ -270,6 +270,17 @@ class ExecutorSuite extends SparkFunSuite
     heartbeatZeroAccumulatorUpdateTest(false)
   }
 
+  private def withMockHeartbeatReceiverRef(executor: Executor)
+      (func: RpcEndpointRef => Unit): Unit = {
+    val executorClass = classOf[Executor]
+    val mockReceiverRef = mock[RpcEndpointRef]
+    val receiverRef = executorClass.getDeclaredField("heartbeatReceiverRef")
+    receiverRef.setAccessible(true)
+    receiverRef.set(executor, mockReceiverRef)
+
+    func(mockReceiverRef)
+  }
+
   private def withHeartbeatExecutor(confs: (String, String)*)
       (f: (Executor, ArrayBuffer[Heartbeat]) => Unit): Unit = {
     val conf = new SparkConf
@@ -277,22 +288,18 @@ class ExecutorSuite extends SparkFunSuite
     val serializer = new JavaSerializer(conf)
     val env = createMockEnv(conf, serializer)
     withExecutor("id", "localhost", SparkEnv.get) { executor =>
-      val executorClass = classOf[Executor]
+      withMockHeartbeatReceiverRef(executor) { mockReceiverRef =>
+        // Save all heartbeats sent into an ArrayBuffer for verification
+        val heartbeats = ArrayBuffer[Heartbeat]()
+        when(mockReceiverRef.askSync(any[Heartbeat], any[RpcTimeout])(any))
+          .thenAnswer((invocation: InvocationOnMock) => {
+            val args = invocation.getArguments()
+            heartbeats += args(0).asInstanceOf[Heartbeat]
+            HeartbeatResponse(false)
+          })
 
-      // Save all heartbeats sent into an ArrayBuffer for verification
-      val heartbeats = ArrayBuffer[Heartbeat]()
-      val mockReceiver = mock[RpcEndpointRef]
-      when(mockReceiver.askSync(any[Heartbeat], any[RpcTimeout])(any))
-        .thenAnswer((invocation: InvocationOnMock) => {
-          val args = invocation.getArguments()
-          heartbeats += args(0).asInstanceOf[Heartbeat]
-          HeartbeatResponse(false)
-        })
-      val receiverRef = executorClass.getDeclaredField("heartbeatReceiverRef")
-      receiverRef.setAccessible(true)
-      receiverRef.set(executor, mockReceiver)
-
-      f(executor, heartbeats)
+        f(executor, heartbeats)
+      }
     }
   }
 
@@ -414,6 +421,35 @@ class ExecutorSuite extends SparkFunSuite
     val metrics = taskFailedReason.asInstanceOf[ExceptionFailure].metricPeaks.toArray
     val taskMetrics = new ExecutorMetrics(metrics)
     assert(taskMetrics.getMetricValue("JVMHeapMemory") > 0)
+  }
+
+  test("SPARK-34949: do not re-register BlockManager when executor is shutting down") {
+    val reregisterInvoked = new AtomicBoolean(false)
+    val mockBlockManager = mock[BlockManager]
+    when(mockBlockManager.reregister()).thenAnswer { (_: InvocationOnMock) =>
+      reregisterInvoked.getAndSet(true)
+    }
+    val conf = new SparkConf(false).setAppName("test").setMaster("local[2]")
+    val mockEnv = createMockEnv(conf, new JavaSerializer(conf))
+    when(mockEnv.blockManager).thenReturn(mockBlockManager)
+
+    withExecutor("id", "localhost", mockEnv) { executor =>
+      withMockHeartbeatReceiverRef(executor) { mockReceiverRef =>
+        when(mockReceiverRef.askSync(any[Heartbeat], any[RpcTimeout])(any)).thenAnswer {
+          (_: InvocationOnMock) => HeartbeatResponse(reregisterBlockManager = true)
+        }
+        val reportHeartbeat = PrivateMethod[Unit](Symbol("reportHeartBeat"))
+        executor.invokePrivate(reportHeartbeat())
+        assert(reregisterInvoked.get(), "BlockManager.reregister should be invoked " +
+          "on HeartbeatResponse(reregisterBlockManager = true) when executor is not shutting down")
+
+        reregisterInvoked.getAndSet(false)
+        executor.stop()
+        executor.invokePrivate(reportHeartbeat())
+        assert(!reregisterInvoked.get(),
+          "BlockManager.reregister should not be invoked when executor is shutting down")
+      }
+    }
   }
 
   test("SPARK-33587: isFatalError") {

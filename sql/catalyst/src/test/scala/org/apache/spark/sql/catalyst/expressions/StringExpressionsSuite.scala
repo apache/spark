@@ -28,7 +28,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("concat") {
     def testConcat(inputs: String*): Unit = {
       val expected = if (inputs.contains(null)) null else inputs.mkString
-      checkEvaluation(Concat(inputs.map(Literal.create(_, StringType))), expected, EmptyRow)
+      checkEvaluation(Concat(inputs.map(Literal.create(_, StringType))), expected)
     }
 
     testConcat()
@@ -50,7 +50,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("SPARK-22498: Concat should not generate codes beyond 64KB") {
     val N = 5000
     val strs = (1 to N).map(x => s"s$x")
-    checkEvaluation(Concat(strs.map(Literal.create(_, StringType))), strs.mkString, EmptyRow)
+    checkEvaluation(Concat(strs.map(Literal.create(_, StringType))), strs.mkString)
   }
 
   test("SPARK-22771 Check Concat.checkInputDataTypes results") {
@@ -73,7 +73,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         case s: String => Literal.create(s, StringType)
       }
       val sepExpr = Literal.create(sep, StringType)
-      checkEvaluation(ConcatWs(sepExpr +: inputExprs), expected, EmptyRow)
+      checkEvaluation(ConcatWs(sepExpr +: inputExprs), expected)
     }
 
     // scalastyle:off
@@ -99,12 +99,12 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val sepExpr = Literal.create("#", StringType)
     val strings1 = (1 to N).map(x => s"s$x")
     val inputsExpr1 = strings1.map(Literal.create(_, StringType))
-    checkEvaluation(ConcatWs(sepExpr +: inputsExpr1), strings1.mkString("#"), EmptyRow)
+    checkEvaluation(ConcatWs(sepExpr +: inputsExpr1), strings1.mkString("#"))
 
     val strings2 = (1 to N).map(x => Seq(s"s$x"))
     val inputsExpr2 = strings2.map(Literal.create(_, ArrayType(StringType)))
     checkEvaluation(
-      ConcatWs(sepExpr +: inputsExpr2), strings2.map(s => s(0)).mkString("#"), EmptyRow)
+      ConcatWs(sepExpr +: inputsExpr2), strings2.map(s => s(0)).mkString("#"))
   }
 
   test("elt") {

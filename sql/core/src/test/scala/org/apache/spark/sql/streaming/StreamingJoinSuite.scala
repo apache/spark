@@ -28,9 +28,11 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.streaming.{MemoryStream, StatefulOperatorStateInfo, StreamingSymmetricHashJoinExec, StreamingSymmetricHashJoinHelper}
 import org.apache.spark.sql.execution.streaming.state.{StateStore, StateStoreProviderId}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 abstract class StreamingJoinSuite
@@ -136,7 +138,11 @@ abstract class StreamingJoinSuite
     (leftInput, rightInput, select)
   }
 
-  protected def setupJoinWithRangeCondition(joinType: String)
+  protected def setupJoinWithRangeCondition(
+      joinType: String,
+      watermark: String = "10 seconds",
+      lowerBound: String = "interval 5 seconds",
+      upperBound: String = "interval 5 seconds")
     : (MemoryStream[(Int, Int)], MemoryStream[(Int, Int)], DataFrame) = {
 
     val leftInput = MemoryStream[(Int, Int)]
@@ -144,18 +150,18 @@ abstract class StreamingJoinSuite
 
     val df1 = leftInput.toDF.toDF("leftKey", "time")
       .select('leftKey, timestamp_seconds($"time") as "leftTime", ('leftKey * 2) as "leftValue")
-      .withWatermark("leftTime", "10 seconds")
+      .withWatermark("leftTime", watermark)
 
     val df2 = rightInput.toDF.toDF("rightKey", "time")
       .select('rightKey, timestamp_seconds($"time") as "rightTime",
         ('rightKey * 3) as "rightValue")
-      .withWatermark("rightTime", "10 seconds")
+      .withWatermark("rightTime", watermark)
 
     val joined =
       df1.join(
         df2,
         expr("leftKey = rightKey AND " +
-          "leftTime BETWEEN rightTime - interval 5 seconds AND rightTime + interval 5 seconds"),
+          s"leftTime BETWEEN rightTime - $lowerBound AND rightTime + $upperBound"),
         joinType)
 
     val select = if (joinType == "left_semi") {
@@ -574,7 +580,14 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
     testStream(joined)(
       AddData(input1, 1.to(1000): _*),
       AddData(input2, 1.to(1000): _*),
-      CheckAnswer(1.to(1000): _*))
+      CheckAnswer(1.to(1000): _*),
+      Execute { query =>
+        // Verify the query plan
+        assert(query.lastExecution.executedPlan.collect {
+          case j @ StreamingSymmetricHashJoinExec(_, _, _, _, _, _, _, _,
+            _: ShuffleExchangeExec, ShuffleExchangeExec(_, _: ShuffleExchangeExec, _)) => j
+        }.size == 1)
+      })
   }
 
   test("SPARK-26187 restore the stream-stream inner join query from Spark 2.4") {
@@ -631,6 +644,48 @@ class StreamingInnerJoinSuite extends StreamingJoinSuite {
         assert(f.size == 1)
         assert(f.head.stateFormatVersion == 1)
       }
+    )
+  }
+
+  test("SPARK-35896: metrics in StateOperatorProgress are output correctly") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+
+    val df1 = input1.toDF
+      .select('value as "key", timestamp_seconds($"value") as "timestamp",
+        ('value * 2) as "leftValue")
+      .withWatermark("timestamp", "10 seconds")
+      .select('key, window('timestamp, "10 second"), 'leftValue)
+
+    val df2 = input2.toDF
+      .select('value as "key", timestamp_seconds($"value") as "timestamp",
+        ('value * 3) as "rightValue")
+      .select('key, window('timestamp, "10 second"), 'rightValue)
+
+    val joined = df1.join(df2, Seq("key", "window"))
+      .select('key, $"window.end".cast("long"), 'leftValue, 'rightValue)
+
+    testStream(joined)(
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
+      AddData(input1, 1),
+      CheckAnswer(),
+      assertStateOperatorProgressMetric(operatorName = "symmetricHashJoin",
+        numShufflePartitions = 3, numStateStoreInstances = 3 * 4),
+
+      AddData(input2, 1),
+      CheckAnswer((1, 10, 2, 3)),
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+
+      AddData(input1, 25),
+      CheckNewAnswer(),   // watermark = 15, no-data-batch should remove 2 rows having window=[0,10]
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(2))),
+
+      AddData(input2, 25),
+      CheckNewAnswer((25, 30, 50, 75)),
+      assertNumStateRows(
+        total = Seq(2), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(0)))
     )
   }
 }
@@ -769,6 +824,35 @@ class StreamingOuterJoinSuite extends StreamingJoinSuite {
         CheckNewAnswer(outerResult),
         assertNumStateRows(total = 2, updated = 1)
       )
+
+      Seq(
+        ("10 minutes",
+          "interval 3 minutes 30 seconds"),
+        ("10 minutes",
+          "interval '3:30' minute to second")).foreach { case (watermark, bound) =>
+        val (leftInput2, rightInput2, joined2) =
+          setupJoinWithRangeCondition(
+            joinType,
+            watermark,
+            bound,
+            bound)
+
+        testStream(joined2)(
+          AddData(leftInput2, (1, 210), (3, 5)),
+          CheckAnswer(),
+          AddData(rightInput2, (1, 300), (2, 5)),
+          CheckNewAnswer((1, 1, 210, 300)),
+          AddData(rightInput2, (1, 450)),
+          CheckNewAnswer(),
+          assertNumStateRows(total = 5, updated = 5),
+          AddData(leftInput2, (1, 260), (1, 1800)),
+          CheckNewAnswer((1, 1, 260, 300), (1, 1, 260, 450)),
+          assertNumStateRows(total = 7, updated = 2),
+          AddData(rightInput2, (0, 1800)),
+          CheckNewAnswer(outerResult),
+          assertNumStateRows(total = 2, updated = 1)
+        )
+      }
     }
   }
 

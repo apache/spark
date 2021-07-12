@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.streaming
 
 import java.io.{InputStreamReader, OutputStreamWriter}
 import java.nio.charset.StandardCharsets
-import java.util.ConcurrentModificationException
 
 import scala.util.control.NonFatal
 
@@ -30,6 +29,7 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
 
 /**
@@ -49,11 +49,12 @@ object StreamMetadata extends Logging {
 
   /** Read the metadata from file if it exists */
   def read(metadataFile: Path, hadoopConf: Configuration): Option[StreamMetadata] = {
-    val fs = metadataFile.getFileSystem(hadoopConf)
-    if (fs.exists(metadataFile)) {
+    val fileManager = CheckpointFileManager.create(metadataFile.getParent, hadoopConf)
+
+    if (fileManager.exists(metadataFile)) {
       var input: FSDataInputStream = null
       try {
-        input = fs.open(metadataFile)
+        input = fileManager.open(metadataFile)
         val reader = new InputStreamReader(input, StandardCharsets.UTF_8)
         val metadata = Serialization.read[StreamMetadata](reader)
         Some(metadata)
@@ -84,8 +85,8 @@ object StreamMetadata extends Logging {
         if (output != null) {
           output.cancel()
         }
-        throw new ConcurrentModificationException(
-          s"Multiple streaming queries are concurrently using $metadataFile", e)
+        throw QueryExecutionErrors.multiStreamingQueriesUsingPathConcurrentlyError(
+          metadataFile.getName, e)
       case e: Throwable =>
         if (output != null) {
           output.cancel()

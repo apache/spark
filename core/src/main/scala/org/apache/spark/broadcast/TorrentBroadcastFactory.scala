@@ -19,7 +19,7 @@ package org.apache.spark.broadcast
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.SparkConf
 
 /**
  * A [[org.apache.spark.broadcast.Broadcast]] implementation that uses a BitTorrent-like
@@ -28,8 +28,7 @@ import org.apache.spark.{SecurityManager, SparkConf}
  */
 private[spark] class TorrentBroadcastFactory extends BroadcastFactory {
 
-  override def initialize(isDriver: Boolean, conf: SparkConf,
-      securityMgr: SecurityManager): Unit = { }
+  override def initialize(isDriver: Boolean, conf: SparkConf): Unit = { }
 
   override def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean, id: Long): Broadcast[T] = {
     new TorrentBroadcast[T](value_, id)

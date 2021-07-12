@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+
 import glob
 import os
 import struct
@@ -29,13 +30,13 @@ have_numpy = False
 try:
     import scipy.sparse  # noqa: F401
     have_scipy = True
-except:
+except ImportError:
     # No SciPy, but that's okay, we'll skip those tests
     pass
 try:
     import numpy as np  # noqa: F401
     have_numpy = True
-except:
+except ImportError:
     # No NumPy, but that's okay, we'll skip those tests
     pass
 
@@ -168,6 +169,6 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
     if not jars:
         return None
     elif len(jars) > 1:
-        raise Exception("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
+        raise RuntimeError("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
     else:
         return jars[0]

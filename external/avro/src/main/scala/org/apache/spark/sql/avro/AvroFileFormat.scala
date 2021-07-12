@@ -87,10 +87,11 @@ private[sql] class AvroFileFormat extends FileFormat
     val broadcastedConf =
       spark.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
     val parsedOptions = new AvroOptions(options, hadoopConf)
+    val datetimeRebaseModeInRead = parsedOptions.datetimeRebaseModeInRead
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
-      val userProvidedSchema = parsedOptions.schema.map(new Schema.Parser().parse)
+      val userProvidedSchema = parsedOptions.schema
 
       // TODO Removes this check once `FileFormat` gets a general file filtering interface method.
       // Doing input file filtering is improper because we may generate empty tasks that process no
@@ -125,7 +126,7 @@ private[sql] class AvroFileFormat extends FileFormat
 
         val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
           reader.asInstanceOf[DataFileReader[_]].getMetaString,
-          SQLConf.get.getConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ))
+          datetimeRebaseModeInRead)
 
         val avroFilters = if (SQLConf.get.avroFilterPushDown) {
           new OrderedFilters(filters, requiredSchema)
@@ -138,6 +139,7 @@ private[sql] class AvroFileFormat extends FileFormat
           override val deserializer = new AvroDeserializer(
             userProvidedSchema.getOrElse(reader.getSchema),
             requiredSchema,
+            parsedOptions.positionalFieldMatching,
             datetimeRebaseMode,
             avroFilters)
           override val stopPosition = file.start + file.length

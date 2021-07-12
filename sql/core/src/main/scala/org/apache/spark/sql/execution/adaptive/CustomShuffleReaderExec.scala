@@ -57,9 +57,9 @@ case class CustomShuffleReaderExec private(
         partitionSpecs.map(_.asInstanceOf[PartialMapperPartitionSpec].mapIndex).toSet.size ==
           partitionSpecs.length) {
       child match {
-        case ShuffleQueryStageExec(_, s: ShuffleExchangeLike) =>
+        case ShuffleQueryStageExec(_, s: ShuffleExchangeLike, _) =>
           s.child.outputPartitioning
-        case ShuffleQueryStageExec(_, r @ ReusedExchangeExec(_, s: ShuffleExchangeLike)) =>
+        case ShuffleQueryStageExec(_, r @ ReusedExchangeExec(_, s: ShuffleExchangeLike), _) =>
           s.child.outputPartitioning match {
             case e: Expression => r.updateAttr(e).asInstanceOf[Partitioning]
             case other => other
@@ -103,12 +103,12 @@ case class CustomShuffleReaderExec private(
 
   @transient private lazy val partitionDataSizes: Option[Seq[Long]] = {
     if (partitionSpecs.nonEmpty && !isLocalReader && shuffleStage.get.mapStats.isDefined) {
-      val bytesByPartitionId = shuffleStage.get.mapStats.get.bytesByPartitionId
       Some(partitionSpecs.map {
-        case CoalescedPartitionSpec(startReducerIndex, endReducerIndex) =>
-          startReducerIndex.until(endReducerIndex).map(bytesByPartitionId).sum
+        case p: CoalescedPartitionSpec =>
+          assert(p.dataSize.isDefined)
+          p.dataSize.get
         case p: PartialReducerPartitionSpec => p.dataSize
-        case p => throw new IllegalStateException("unexpected " + p)
+        case p => throw new IllegalStateException(s"unexpected $p")
       })
     } else {
       None
@@ -179,12 +179,12 @@ case class CustomShuffleReaderExec private(
   }
 
   private lazy val shuffleRDD: RDD[_] = {
-    sendDriverMetrics()
-
-    shuffleStage.map { stage =>
-      stage.shuffle.getShuffleRDD(partitionSpecs.toArray)
-    }.getOrElse {
-      throw new IllegalStateException("operating on canonicalized plan")
+    shuffleStage match {
+      case Some(stage) =>
+        sendDriverMetrics()
+        stage.shuffle.getShuffleRDD(partitionSpecs.toArray)
+      case _ =>
+        throw new IllegalStateException("operating on canonicalized plan")
     }
   }
 
@@ -195,4 +195,7 @@ case class CustomShuffleReaderExec private(
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
     shuffleRDD.asInstanceOf[RDD[ColumnarBatch]]
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): CustomShuffleReaderExec =
+    copy(child = newChild)
 }

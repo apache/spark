@@ -26,19 +26,24 @@ import scala.collection.mutable.{ArrayBuffer, WrappedArray}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.api.java._
-import org.apache.spark.sql.catalyst.encoders.OuterScopes
+import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
+import org.apache.spark.sql.catalyst.expressions.{Literal, ScalaUDF}
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.{QueryExecution, SimpleMode}
+import org.apache.spark.sql.execution.aggregate.{ScalaAggregator, ScalaUDAF}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableAsSelectCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.InsertIntoHadoopFsRelationCommand
-import org.apache.spark.sql.expressions.SparkUserDefinedFunction
-import org.apache.spark.sql.functions.{lit, struct, udf}
+import org.apache.spark.sql.expressions.{Aggregator, MutableAggregationBuffer, SparkUserDefinedFunction, UserDefinedAggregateFunction}
+import org.apache.spark.sql.functions.{lit, struct, udaf, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.sql.util.QueryExecutionListener
 
 private case class FunctionResult(f1: String, f2: String)
@@ -341,7 +346,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       Console.withOut(outputStream) {
         spark.sql("SELECT f(a._1) FROM x").show
       }
-      assert(outputStream.toString.contains("f(a._1 AS `_1`)"))
+      assert(outputStream.toString.contains("f(a._1)"))
     }
   }
 
@@ -725,7 +730,7 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .select(lit(50).as("a"))
       .select(struct("a").as("col"))
     val error = intercept[AnalysisException](df.select(myUdf(Column("col"))))
-    assert(error.getMessage.contains("cannot resolve '`b`' given input columns: [a]"))
+    assert(error.getMessage.contains("cannot resolve 'b' given input columns: [a]"))
   }
 
   test("wrong order of input fields for case class") {
@@ -778,13 +783,13 @@ class UDFSuite extends QueryTest with SharedSparkSession {
     assert(e2.getMessage.contains("UDFSuite$MalformedClassObject$MalformedPrimitiveFunction"))
   }
 
-  test("SPARK-32307: Aggression that use map type input UDF as group expression") {
+  test("SPARK-32307: Aggregation that use map type input UDF as group expression") {
     spark.udf.register("key", udf((m: Map[String, String]) => m.keys.head.toInt))
     Seq(Map("1" -> "one", "2" -> "two")).toDF("a").createOrReplaceTempView("t")
     checkAnswer(sql("SELECT key(a) AS k FROM t GROUP BY key(a)"), Row(1) :: Nil)
   }
 
-  test("SPARK-32307: Aggression that use array type input UDF as group expression") {
+  test("SPARK-32307: Aggregation that use array type input UDF as group expression") {
     spark.udf.register("key", udf((m: Array[Int]) => m.head))
     Seq(Array(1)).toDF("a").createOrReplaceTempView("t")
     checkAnswer(sql("SELECT key(a) AS k FROM t GROUP BY key(a)"), Row(1) :: Nil)
@@ -797,5 +802,237 @@ class UDFSuite extends QueryTest with SharedSparkSession {
       .toDF("col")
       .select(myUdf(Column("col"))),
       Row(ArrayBuffer(100)))
+  }
+
+  test("SPARK-34388: UDF name is propagated with registration for ScalaUDF") {
+    spark.udf.register("udf34388", udf((value: Int) => value > 2))
+    spark.sessionState.catalog.lookupFunction(
+      FunctionIdentifier("udf34388"), Seq(Literal(1))) match {
+      case udf: ScalaUDF => assert(udf.name === "udf34388")
+    }
+  }
+
+  test("SPARK-34388: UDF name is propagated with registration for ScalaAggregator") {
+    val agg = new Aggregator[Long, Long, Long] {
+      override def zero: Long = 0L
+      override def reduce(b: Long, a: Long): Long = a + b
+      override def merge(b1: Long, b2: Long): Long = b1 + b2
+      override def finish(reduction: Long): Long = reduction
+      override def bufferEncoder: Encoder[Long] = ExpressionEncoder[Long]()
+      override def outputEncoder: Encoder[Long] = ExpressionEncoder[Long]()
+    }
+
+    spark.udf.register("agg34388", udaf(agg))
+    spark.sessionState.catalog.lookupFunction(
+      FunctionIdentifier("agg34388"), Seq(Literal(1))) match {
+      case agg: ScalaAggregator[_, _, _] => assert(agg.name === "agg34388")
+    }
+  }
+
+  test("SPARK-34388: UDF name is propagated with registration for ScalaUDAF") {
+    val udaf = new UserDefinedAggregateFunction {
+      def inputSchema: StructType = new StructType().add("a", LongType)
+      def bufferSchema: StructType = new StructType().add("product", LongType)
+      def dataType: DataType = LongType
+      def deterministic: Boolean = true
+      def initialize(buffer: MutableAggregationBuffer): Unit = {}
+      def update(buffer: MutableAggregationBuffer, input: Row): Unit = {}
+      def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {}
+      def evaluate(buffer: Row): Any = buffer.getLong(0)
+    }
+    spark.udf.register("udaf34388", udaf)
+    spark.sessionState.catalog.lookupFunction(
+      FunctionIdentifier("udaf34388"), Seq(Literal(1))) match {
+      case udaf: ScalaUDAF => assert(udaf.name === "udaf34388")
+    }
+  }
+
+  test("SPARK-35674: using java.time.LocalDateTime in UDF") {
+    // Regular case
+    val input = Seq(java.time.LocalDateTime.parse("2021-01-01T00:00:00")).toDF("dateTime")
+    val plusYear = udf((l: java.time.LocalDateTime) => l.plusYears(1))
+    val result = input.select(plusYear($"dateTime").as("newDateTime"))
+    checkAnswer(result, Row(java.time.LocalDateTime.parse("2022-01-01T00:00:00")) :: Nil)
+    assert(result.schema === new StructType().add("newDateTime", TimestampNTZType))
+    // UDF produces `null`
+    val nullFunc = udf((_: java.time.LocalDateTime) => null.asInstanceOf[java.time.LocalDateTime])
+    val nullResult = input.select(nullFunc($"dateTime").as("nullDateTime"))
+    checkAnswer(nullResult, Row(null) :: Nil)
+    assert(nullResult.schema === new StructType().add("nullDateTime", TimestampNTZType))
+    // Input parameter of UDF is null
+    val nullInput = Seq(null.asInstanceOf[java.time.LocalDateTime]).toDF("nullDateTime")
+    val constDuration = udf((_: java.time.LocalDateTime) =>
+      java.time.LocalDateTime.parse("2021-01-01T00:00:00"))
+    val constResult = nullInput.select(constDuration($"nullDateTime").as("firstDayOf2021"))
+    checkAnswer(constResult, Row(java.time.LocalDateTime.parse("2021-01-01T00:00:00")) :: Nil)
+    assert(constResult.schema === new StructType().add("firstDayOf2021", TimestampNTZType))
+    // Error in the conversion of UDF result to the internal representation of timestamp without
+    // time zone
+    val overflowFunc = udf((l: java.time.LocalDateTime) => l.plusDays(Long.MaxValue))
+    val e = intercept[SparkException] {
+      input.select(overflowFunc($"dateTime")).collect()
+    }.getCause.getCause
+    assert(e.isInstanceOf[java.lang.ArithmeticException])
+  }
+
+  test("SPARK-34663, SPARK-35730: using java.time.Duration in UDF") {
+    // Regular case
+    val input = Seq(java.time.Duration.ofHours(23)).toDF("d")
+      .select($"d",
+      $"d".cast(DayTimeIntervalType(DAY)).as("d_dd"),
+        $"d".cast(DayTimeIntervalType(DAY, HOUR)).as("d_dh"),
+        $"d".cast(DayTimeIntervalType(DAY, MINUTE)).as("d_dm"),
+        $"d".cast(DayTimeIntervalType(HOUR)).as("d_hh"),
+        $"d".cast(DayTimeIntervalType(HOUR, MINUTE)).as("d_hm"),
+        $"d".cast(DayTimeIntervalType(HOUR, SECOND)).as("d_hs"),
+        $"d".cast(DayTimeIntervalType(MINUTE)).as("d_mm"),
+        $"d".cast(DayTimeIntervalType(MINUTE, SECOND)).as("d_ms"),
+        $"d".cast(DayTimeIntervalType(SECOND)).as("d_ss"))
+    val plusHour = udf((d: java.time.Duration) => d.plusHours(1))
+    val result = input.select(
+      plusHour($"d").as("new_d"),
+      plusHour($"d_dd").as("new_d_dd"),
+      plusHour($"d_dh").as("new_d_dh"),
+      plusHour($"d_dm").as("new_d_dm"),
+      plusHour($"d_hh").as("new_d_hh"),
+      plusHour($"d_hm").as("new_d_hm"),
+      plusHour($"d_hs").as("new_d_hs"),
+      plusHour($"d_mm").as("new_d_mm"),
+      plusHour($"d_ms").as("new_d_ms"),
+      plusHour($"d_ss").as("new_d_ss"))
+    checkAnswer(result, Row(java.time.Duration.ofDays(1), java.time.Duration.ofHours(1),
+      java.time.Duration.ofDays(1), java.time.Duration.ofDays(1),
+      java.time.Duration.ofDays(1), java.time.Duration.ofDays(1),
+      java.time.Duration.ofDays(1), java.time.Duration.ofDays(1),
+      java.time.Duration.ofDays(1), java.time.Duration.ofDays(1)) :: Nil)
+    assert(result.schema === new StructType()
+      .add("new_d", DayTimeIntervalType())
+      .add("new_d_dd", DayTimeIntervalType())
+      .add("new_d_dh", DayTimeIntervalType())
+      .add("new_d_dm", DayTimeIntervalType())
+      .add("new_d_hh", DayTimeIntervalType())
+      .add("new_d_hm", DayTimeIntervalType())
+      .add("new_d_hs", DayTimeIntervalType())
+      .add("new_d_mm", DayTimeIntervalType())
+      .add("new_d_ms", DayTimeIntervalType())
+      .add("new_d_ss", DayTimeIntervalType()))
+    // UDF produces `null`
+    val nullFunc = udf((_: java.time.Duration) => null.asInstanceOf[java.time.Duration])
+    val nullResult = input.select(nullFunc($"d").as("null_d"),
+      nullFunc($"d_dd").as("null_d_dd"),
+      nullFunc($"d_dh").as("null_d_dh"),
+      nullFunc($"d_dm").as("null_d_dm"),
+      nullFunc($"d_hh").as("null_d_hh"),
+      nullFunc($"d_hm").as("null_d_hm"),
+      nullFunc($"d_hs").as("null_d_hs"),
+      nullFunc($"d_mm").as("null_d_mm"),
+      nullFunc($"d_ms").as("null_d_ms"),
+      nullFunc($"d_ss").as("null_d_ss"))
+    checkAnswer(nullResult, Row(null, null, null, null, null, null, null, null, null, null) :: Nil)
+    assert(nullResult.schema === new StructType()
+      .add("null_d", DayTimeIntervalType())
+      .add("null_d_dd", DayTimeIntervalType())
+      .add("null_d_dh", DayTimeIntervalType())
+      .add("null_d_dm", DayTimeIntervalType())
+      .add("null_d_hh", DayTimeIntervalType())
+      .add("null_d_hm", DayTimeIntervalType())
+      .add("null_d_hs", DayTimeIntervalType())
+      .add("null_d_mm", DayTimeIntervalType())
+      .add("null_d_ms", DayTimeIntervalType())
+      .add("null_d_ss", DayTimeIntervalType()))
+    // Input parameter of UDF is null
+    val nullInput = Seq(null.asInstanceOf[java.time.Duration]).toDF("null_d")
+      .select($"null_d",
+        $"null_d".cast(DayTimeIntervalType(DAY)).as("null_d_dd"),
+        $"null_d".cast(DayTimeIntervalType(DAY, HOUR)).as("null_d_dh"),
+        $"null_d".cast(DayTimeIntervalType(DAY, MINUTE)).as("null_d_dm"),
+        $"null_d".cast(DayTimeIntervalType(HOUR)).as("null_d_hh"),
+        $"null_d".cast(DayTimeIntervalType(HOUR, MINUTE)).as("null_d_hm"),
+        $"null_d".cast(DayTimeIntervalType(HOUR, SECOND)).as("null_d_hs"),
+        $"null_d".cast(DayTimeIntervalType(MINUTE)).as("null_d_mm"),
+        $"null_d".cast(DayTimeIntervalType(MINUTE, SECOND)).as("null_d_ms"),
+        $"null_d".cast(DayTimeIntervalType(SECOND)).as("null_d_ss"))
+    val constDuration = udf((_: java.time.Duration) => java.time.Duration.ofMinutes(10))
+    val constResult = nullInput.select(
+      constDuration($"null_d").as("10_min"),
+      constDuration($"null_d_dd").as("10_min_dd"),
+      constDuration($"null_d_dh").as("10_min_dh"),
+      constDuration($"null_d_dm").as("10_min_dm"),
+      constDuration($"null_d_hh").as("10_min_hh"),
+      constDuration($"null_d_hm").as("10_min_hm"),
+      constDuration($"null_d_hs").as("10_min_hs"),
+      constDuration($"null_d_mm").as("10_min_mm"),
+      constDuration($"null_d_ms").as("10_min_ms"),
+      constDuration($"null_d_ss").as("10_min_ss"))
+    checkAnswer(constResult, Row(
+      java.time.Duration.ofMinutes(10), java.time.Duration.ofMinutes(10),
+      java.time.Duration.ofMinutes(10), java.time.Duration.ofMinutes(10),
+      java.time.Duration.ofMinutes(10), java.time.Duration.ofMinutes(10),
+      java.time.Duration.ofMinutes(10), java.time.Duration.ofMinutes(10),
+      java.time.Duration.ofMinutes(10), java.time.Duration.ofMinutes(10)) :: Nil)
+    assert(constResult.schema === new StructType()
+      .add("10_min", DayTimeIntervalType())
+      .add("10_min_dd", DayTimeIntervalType())
+      .add("10_min_dh", DayTimeIntervalType())
+      .add("10_min_dm", DayTimeIntervalType())
+      .add("10_min_hh", DayTimeIntervalType())
+      .add("10_min_hm", DayTimeIntervalType())
+      .add("10_min_hs", DayTimeIntervalType())
+      .add("10_min_mm", DayTimeIntervalType())
+      .add("10_min_ms", DayTimeIntervalType())
+      .add("10_min_ss", DayTimeIntervalType()))
+    // Error in the conversion of UDF result to the internal representation of day-time interval
+    val overflowFunc = udf((d: java.time.Duration) => d.plusDays(Long.MaxValue))
+    val e = intercept[SparkException] {
+      input.select(overflowFunc($"d")).collect()
+    }.getCause.getCause
+    assert(e.isInstanceOf[java.lang.ArithmeticException])
+  }
+
+  test("SPARK-34663, SPARK-35777: using java.time.Period in UDF") {
+    // Regular case
+    val input = Seq(java.time.Period.ofMonths(13)).toDF("p")
+      .select($"p", $"p".cast(YearMonthIntervalType(YEAR)).as("p_y"),
+        $"p".cast(YearMonthIntervalType(MONTH)).as("p_m"))
+    val incMonth = udf((p: java.time.Period) => p.plusMonths(1))
+    val result = input.select(incMonth($"p").as("new_p"),
+      incMonth($"p_y").as("new_p_y"),
+      incMonth($"p_m").as("new_p_m"))
+    checkAnswer(result, Row(java.time.Period.ofMonths(14).normalized(),
+      java.time.Period.ofMonths(13).normalized(),
+      java.time.Period.ofMonths(14).normalized()) :: Nil)
+    assert(result.schema === new StructType()
+      .add("new_p", YearMonthIntervalType())
+      .add("new_p_y", YearMonthIntervalType())
+      .add("new_p_m", YearMonthIntervalType()))
+    // UDF produces `null`
+    val nullFunc = udf((_: java.time.Period) => null.asInstanceOf[java.time.Period])
+    val nullResult = input.select(nullFunc($"p").as("null_p"),
+      nullFunc($"p_y").as("null_p_y"), nullFunc($"p_m").as("null_p_m"))
+    checkAnswer(nullResult, Row(null, null, null) :: Nil)
+    assert(nullResult.schema === new StructType()
+      .add("null_p", YearMonthIntervalType())
+      .add("null_p_y", YearMonthIntervalType())
+      .add("null_p_m", YearMonthIntervalType()))
+    // Input parameter of UDF is null
+    val nullInput = Seq(null.asInstanceOf[java.time.Period]).toDF("null_p")
+      .select($"null_p",
+        $"null_p".cast(YearMonthIntervalType(YEAR)).as("null_p_y"),
+        $"null_p".cast(YearMonthIntervalType(MONTH)).as("null_p_m"))
+    val constPeriod = udf((_: java.time.Period) => java.time.Period.ofYears(10))
+    val constResult = nullInput.select(constPeriod($"null_p").as("10_years"),
+      constPeriod($"null_p_y").as("p_y_10_years"), constPeriod($"null_p_m").as("pm_10_years"))
+    checkAnswer(constResult, Row(java.time.Period.ofYears(10),
+      java.time.Period.ofYears(10), java.time.Period.ofYears(10)) :: Nil)
+    assert(constResult.schema === new StructType()
+      .add("10_years", YearMonthIntervalType())
+      .add("p_y_10_years", YearMonthIntervalType())
+      .add("pm_10_years", YearMonthIntervalType()))
+    // Error in the conversion of UDF result to the internal representation of year-month interval
+    val overflowFunc = udf((p: java.time.Period) => p.plusYears(Long.MaxValue))
+    val e = intercept[SparkException] {
+      input.select(overflowFunc($"p")).collect()
+    }.getCause.getCause
+    assert(e.isInstanceOf[java.lang.ArithmeticException])
   }
 }

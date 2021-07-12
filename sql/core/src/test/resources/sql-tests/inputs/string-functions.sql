@@ -17,9 +17,11 @@ select position('bar' in 'foobarbar'), position(null, 'foobarbar'), position('aa
 
 -- left && right
 select left("abcd", 2), left("abcd", 5), left("abcd", '2'), left("abcd", null);
-select left(null, -2), left("abcd", -2), left("abcd", 0), left("abcd", 'a');
+select left(null, -2);
+select left("abcd", -2), left("abcd", 0), left("abcd", 'a');
 select right("abcd", 2), right("abcd", 5), right("abcd", '2'), right("abcd", null);
-select right(null, -2), right("abcd", -2), right("abcd", 0), right("abcd", 'a');
+select right(null, -2);
+select right("abcd", -2), right("abcd", 0), right("abcd", 'a');
 
 -- split function
 SELECT split('aa1cc2ee3', '[1-9]+');
@@ -49,6 +51,12 @@ SELECT trim(LEADING 'xy' FROM 'xyxXxyLAST WORD');
 SELECT trim(TRAILING 'xyz' FROM 'testxxzx');
 SELECT trim(TRAILING 'xyz' FROM 'xyztestxxzx');
 SELECT trim(TRAILING 'xy' FROM 'TURNERyxXxy');
+
+-- btrim
+SELECT btrim('xyxtrimyyx', 'xy');
+SELECT btrim(encode(" xyz ", 'utf-8'));
+SELECT btrim(encode('yxTomxx', 'utf-8'), encode('xyz', 'utf-8'));
+SELECT btrim(encode('xxxbarxxx', 'utf-8'), encode('x', 'utf-8'));
 
 -- Check lpad/rpad with invalid length parameter
 SELECT lpad('hi', 'invalid_length');

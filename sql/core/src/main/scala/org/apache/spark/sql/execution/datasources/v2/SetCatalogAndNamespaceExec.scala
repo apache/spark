@@ -28,7 +28,7 @@ case class SetCatalogAndNamespaceExec(
     catalogManager: CatalogManager,
     catalogName: Option[String],
     namespace: Option[Seq[String]])
-    extends V2CommandExec {
+    extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     // The catalog is updated first because CatalogManager resets the current namespace
     // when the current catalog is set.

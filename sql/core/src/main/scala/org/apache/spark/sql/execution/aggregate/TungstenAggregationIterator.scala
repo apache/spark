@@ -93,7 +93,8 @@ class TungstenAggregationIterator(
     numOutputRows: SQLMetric,
     peakMemory: SQLMetric,
     spillSize: SQLMetric,
-    avgHashProbe: SQLMetric)
+    avgHashProbe: SQLMetric,
+    numTasksFallBacked: SQLMetric)
   extends AggregationIterator(
     partIndex,
     groupingExpressions,
@@ -277,6 +278,7 @@ class TungstenAggregationIterator(
 
     // Step 7: set sortBased to true.
     sortBased = true
+    numTasksFallBacked += 1
   }
 
   ///////////////////////////////////////////////////////////////////////////

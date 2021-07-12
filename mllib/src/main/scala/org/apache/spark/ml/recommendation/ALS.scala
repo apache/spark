@@ -26,7 +26,6 @@ import scala.reflect.ClassTag
 import scala.util.{Sorting, Try}
 import scala.util.hashing.byteswap64
 
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.google.common.collect.{Ordering => GuavaOrdering}
 import org.apache.hadoop.fs.Path
 import org.json4s.DefaultFormats
@@ -483,7 +482,7 @@ class ALSModel private[ml] (
 
           Iterator.range(0, m).flatMap { i =>
             // scores = i-th vec in srcMat * dstMat
-            BLAS.f2jBLAS.sgemv("T", rank, n, 1.0F, dstMat, 0, rank,
+            BLAS.javaBLAS.sgemv("T", rank, n, 1.0F, dstMat, 0, rank,
               srcMat, i * rank, 1, 0.0F, scores, 0, 1)
 
             val srcId = srcIds(i)
@@ -895,9 +894,9 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
       require(c >= 0.0)
       require(a.length == k)
       copyToDouble(a)
-      blas.dspr(upper, k, c, da, 1, ata)
+      BLAS.nativeBLAS.dspr(upper, k, c, da, 1, ata)
       if (b != 0.0) {
-        blas.daxpy(k, b, da, 1, atb, 1)
+        BLAS.nativeBLAS.daxpy(k, b, da, 1, atb, 1)
       }
       this
     }
@@ -905,8 +904,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     /** Merges another normal equation object. */
     def merge(other: NormalEquation): NormalEquation = {
       require(other.k == k)
-      blas.daxpy(ata.length, 1.0, other.ata, 1, ata, 1)
-      blas.daxpy(atb.length, 1.0, other.atb, 1, atb, 1)
+      BLAS.nativeBLAS.daxpy(ata.length, 1.0, other.ata, 1, ata, 1)
+      BLAS.nativeBLAS.daxpy(atb.length, 1.0, other.atb, 1, atb, 1)
       this
     }
 
@@ -1280,8 +1279,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
           val random = new XORShiftRandom(byteswap64(seed ^ srcBlockId))
           val factors = Array.fill(inBlock.srcIds.length) {
             val factor = Array.fill(rank)(random.nextGaussian().toFloat)
-            val nrm = blas.snrm2(rank, factor, 1)
-            blas.sscal(rank, 1.0f / nrm, factor, 1)
+            val nrm = BLAS.nativeBLAS.snrm2(rank, factor, 1)
+            BLAS.nativeBLAS.sscal(rank, 1.0f / nrm, factor, 1)
             factor
           }
           (srcBlockId, factors)

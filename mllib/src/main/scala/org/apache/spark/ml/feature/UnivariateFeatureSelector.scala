@@ -100,9 +100,12 @@ private[feature] trait UnivariateFeatureSelectorParams extends Params
  * The user can set `featureType` and labelType`, and Spark will pick the score function based on
  * the specified `featureType` and labelType`.
  * The following combination of `featureType` and `labelType` are supported:
- *  - `featureType` `categorical` and `labelType` `categorical`:  Spark uses chi2.
- *  - `featureType` `continuous` and `labelType` `categorical`:  Spark uses f_classif.
- *  - `featureType` `continuous` and `labelType` `continuous`:  Spark uses f_regression.
+ *  - `featureType` `categorical` and `labelType` `categorical`: Spark uses chi-squared,
+ *    i.e. chi2 in sklearn.
+ *  - `featureType` `continuous` and `labelType` `categorical`: Spark uses ANOVATest,
+ *    i.e. f_classif in sklearn.
+ *  - `featureType` `continuous` and `labelType` `continuous`: Spark uses F-value,
+ *    i.e. f_regression in sklearn.
  *
  * The `UnivariateFeatureSelector` supports different selection modes: `numTopFeatures`,
  * `percentile`, `fpr`, `fdr`, `fwe`.

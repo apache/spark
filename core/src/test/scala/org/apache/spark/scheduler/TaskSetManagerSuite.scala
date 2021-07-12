@@ -377,7 +377,7 @@ class TaskSetManagerSuite
 
     // offers not accepted due to task set zombies are not delay schedule rejects
     manager.isZombie = true
-    val (taskDescription, delayReject) = manager.resourceOffer("exec2", "host2", ANY)
+    val (taskDescription, delayReject, _) = manager.resourceOffer("exec2", "host2", ANY)
     assert(taskDescription.isEmpty)
     assert(delayReject === false)
     manager.isZombie = false
@@ -387,7 +387,7 @@ class TaskSetManagerSuite
     val excludelist = mock(classOf[TaskSetExcludelist])
     when(tsmSpy.taskSetExcludelistHelperOpt).thenReturn(Some(excludelist))
     when(excludelist.isNodeExcludedForTaskSet(any())).thenReturn(true)
-    val (task, taskReject) = tsmSpy.resourceOffer("exec2", "host2", ANY)
+    val (task, taskReject, _) = tsmSpy.resourceOffer("exec2", "host2", ANY)
     assert(task.isEmpty)
     assert(taskReject === false)
 
@@ -395,7 +395,7 @@ class TaskSetManagerSuite
     assert(manager.resourceOffer("exec2", "host2", ANY)._1.get.index === 3)
 
     // offers not accepted due to no pending tasks are not delay schedule rejects
-    val (noPendingTask, noPendingReject) = manager.resourceOffer("exec2", "host2", ANY)
+    val (noPendingTask, noPendingReject, _) = manager.resourceOffer("exec2", "host2", ANY)
     assert(noPendingTask.isEmpty)
     assert(noPendingReject === false)
   }
@@ -2226,7 +2226,7 @@ class TaskSetManagerSuite
       numTasks = 2,
       numExecutorCores = 2,
       numCoresPerTask = 1,
-      Some("3000") // spark.speculation.min.threshold
+      Some("3000") // spark.speculation.minTaskRuntime
     )
     // Task duration can't be 0, advance 1 sec
     clock.advance(1000)

@@ -24,8 +24,9 @@ import org.apache.spark.{SparkConf, SparkException, SparkUpgradeException}
 import org.apache.spark.sql.{QueryTest, Row, SPARK_LEGACY_DATETIME, SPARK_LEGACY_INT96}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.{LegacyBehaviorPolicy, ParquetOutputTimestampType}
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.{CORRECTED, EXCEPTION, LEGACY}
-import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
 import org.apache.spark.sql.test.SharedSparkSession
 
 abstract class ParquetRebaseDatetimeSuite
@@ -97,6 +98,27 @@ abstract class ParquetRebaseDatetimeSuite
     }
   }
 
+  private def inReadConfToOptions(
+      conf: String,
+      mode: LegacyBehaviorPolicy.Value): Map[String, String] = conf match {
+    case SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key =>
+      Map(ParquetOptions.INT96_REBASE_MODE -> mode.toString)
+    case _ => Map(ParquetOptions.DATETIME_REBASE_MODE -> mode.toString)
+  }
+
+  private def runInMode(
+      conf: String,
+      modes: Seq[LegacyBehaviorPolicy.Value])(f: Map[String, String] => Unit): Unit = {
+    modes.foreach { mode =>
+      withSQLConf(conf -> mode.toString) { f(Map.empty) }
+    }
+    withSQLConf(conf -> EXCEPTION.toString) {
+      modes.foreach { mode =>
+        f(inReadConfToOptions(conf, mode))
+      }
+    }
+  }
+
   test("SPARK-31159: compatibility with Spark 2.4 in reading dates/timestamps") {
     val N = 8
     // test reading the existing 2.4 files and new 3.0 files (with rebase on/off) together.
@@ -107,8 +129,8 @@ abstract class ParquetRebaseDatetimeSuite
         toJavaType: String => T,
         checkDefaultLegacyRead: String => Unit,
         tsOutputType: String = "TIMESTAMP_MICROS",
-        inWriteConf: String = SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key,
-        inReadConf: String = SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key): Unit = {
+        inWriteConf: String = SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key,
+        inReadConf: String = SQLConf.PARQUET_REBASE_MODE_IN_READ.key): Unit = {
       withTempPaths(2) { paths =>
         paths.foreach(_.delete())
         val path2_4 = getResourceParquetFilePath("test-data/" + fileName)
@@ -118,11 +140,6 @@ abstract class ParquetRebaseDatetimeSuite
           .select($"dict".cast(catalystType), $"plain".cast(catalystType))
         withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsOutputType) {
           checkDefaultLegacyRead(path2_4)
-          // By default we should fail to write ancient datetime values.
-          if (tsOutputType != "INT96") {
-            val e = intercept[SparkException](df.write.parquet(path3_0))
-            assert(e.getCause.getCause.getCause.isInstanceOf[SparkUpgradeException])
-          }
           withSQLConf(inWriteConf -> CORRECTED.toString) {
             df.write.mode("overwrite").parquet(path3_0)
           }
@@ -132,9 +149,9 @@ abstract class ParquetRebaseDatetimeSuite
         }
         // For Parquet files written by Spark 3.0, we know the writer info and don't need the
         // config to guide the rebase behavior.
-        withSQLConf(inReadConf -> LEGACY.toString) {
+        runInMode(inReadConf, Seq(LEGACY)) { options =>
           checkAnswer(
-            spark.read.format("parquet").load(path2_4, path3_0, path3_0_rebase),
+            spark.read.format("parquet").options(options).load(path2_4, path3_0, path3_0_rebase),
             (0 until N).flatMap { i =>
               val (dictS, plainS) = rowFunc(i)
               Seq.tabulate(3) { _ =>
@@ -188,8 +205,8 @@ abstract class ParquetRebaseDatetimeSuite
             java.sql.Timestamp.valueOf,
             checkDefaultRead,
             tsOutputType = "INT96",
-            inWriteConf = SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key,
-            inReadConf = SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key)
+            inWriteConf = SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key,
+            inReadConf = SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key)
         }
       }
     }
@@ -203,20 +220,20 @@ abstract class ParquetRebaseDatetimeSuite
           "TIMESTAMP_MILLIS",
           "1001-01-01 01:02:03.123",
           "1001-01-07 01:09:05.123",
-          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key,
-          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key),
+          SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key,
+          SQLConf.PARQUET_REBASE_MODE_IN_READ.key),
         (
           "TIMESTAMP_MICROS",
           "1001-01-01 01:02:03.123456",
           "1001-01-07 01:09:05.123456",
-          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key,
-          SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_READ.key),
+          SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key,
+          SQLConf.PARQUET_REBASE_MODE_IN_READ.key),
         (
           "INT96",
           "1001-01-01 01:02:03.123456",
           "1001-01-07 01:09:05.123456",
-          SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key,
-          SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_READ.key
+          SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key,
+          SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key
         )
       ).foreach { case (outType, tsStr, nonRebased, inWriteConf, inReadConf) =>
         withClue(s"output type $outType") {
@@ -235,12 +252,10 @@ abstract class ParquetRebaseDatetimeSuite
               withAllParquetReaders {
                 // The file metadata indicates if it needs rebase or not, so we can always get the
                 // correct result regardless of the "rebase mode" config.
-                Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
-                  withSQLConf(inReadConf -> mode.toString) {
-                    checkAnswer(
-                      spark.read.parquet(path),
-                      Seq.tabulate(N)(_ => Row(Timestamp.valueOf(tsStr))))
-                  }
+                runInMode(inReadConf, Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
+                  checkAnswer(
+                    spark.read.options(options).parquet(path),
+                    Seq.tabulate(N)(_ => Row(Timestamp.valueOf(tsStr))))
                 }
 
                 // Force to not rebase to prove the written datetime values are rebased
@@ -263,7 +278,7 @@ abstract class ParquetRebaseDatetimeSuite
     Seq(false, true).foreach { dictionaryEncoding =>
       withTempPath { dir =>
         val path = dir.getAbsolutePath
-        withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+        withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
           Seq.tabulate(N)(_ => "1001-01-01").toDF("dateS")
             .select($"dateS".cast("date").as("date"))
             .repartition(1)
@@ -275,12 +290,12 @@ abstract class ParquetRebaseDatetimeSuite
         withAllParquetReaders {
           // The file metadata indicates if it needs rebase or not, so we can always get the
           // correct result regardless of the "rebase mode" config.
-          Seq(LEGACY, CORRECTED, EXCEPTION).foreach { mode =>
-            withSQLConf(SQLConf.LEGACY_AVRO_REBASE_MODE_IN_READ.key -> mode.toString) {
-              checkAnswer(
-                spark.read.parquet(path),
-                Seq.tabulate(N)(_ => Row(Date.valueOf("1001-01-01"))))
-            }
+          runInMode(
+            SQLConf.PARQUET_REBASE_MODE_IN_READ.key,
+            Seq(LEGACY, CORRECTED, EXCEPTION)) { options =>
+            checkAnswer(
+              spark.read.options(options).parquet(path),
+              Seq.tabulate(N)(_ => Row(Date.valueOf("1001-01-01"))))
           }
 
           // Force to not rebase to prove the written datetime values are rebased and we will get
@@ -311,17 +326,17 @@ abstract class ParquetRebaseDatetimeSuite
         }
       }
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
       withTempPath { dir =>
         checkMetadataKey(dir, exists = true)
       }
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
       withTempPath { dir =>
         checkMetadataKey(dir, exists = false)
       }
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
       withTempPath { dir => intercept[SparkException] { checkMetadataKey(dir, exists = false) } }
     }
   }
@@ -333,26 +348,78 @@ abstract class ParquetRebaseDatetimeSuite
         .write
         .parquet(dir.getAbsolutePath)
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
+    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> LEGACY.toString) {
       withTempPath { dir =>
         saveTs(dir)
         assert(getMetaData(dir)(SPARK_LEGACY_INT96) === "")
       }
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
+    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> CORRECTED.toString) {
       withTempPath { dir =>
         saveTs(dir)
         assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)
       }
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
       withTempPath { dir => intercept[SparkException] { saveTs(dir) } }
     }
-    withSQLConf(SQLConf.LEGACY_PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
       withTempPath { dir =>
         saveTs(dir, "2020-10-22 01:02:03")
         assert(getMetaData(dir).get(SPARK_LEGACY_INT96).isEmpty)
       }
+    }
+  }
+
+  test("SPARK-35427: datetime rebasing in the EXCEPTION mode") {
+    def checkTsWrite(): Unit = {
+      withTempPath { dir =>
+        val df = Seq("1001-01-01 01:02:03.123")
+          .toDF("str")
+          .select($"str".cast("timestamp").as("dt"))
+        val e = intercept[SparkException] {
+          df.write.parquet(dir.getCanonicalPath)
+        }
+        val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(errMsg.contains("You may get a different result due to the upgrading"))
+      }
+    }
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString) {
+      Seq(TIMESTAMP_MICROS, TIMESTAMP_MILLIS).foreach { tsType =>
+        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> tsType.toString) {
+          checkTsWrite()
+        }
+      }
+      withTempPath { dir =>
+        val df = Seq(java.sql.Date.valueOf("1001-01-01")).toDF("dt")
+        val e = intercept[SparkException] {
+          df.write.parquet(dir.getCanonicalPath)
+        }
+        val errMsg = e.getCause.getCause.getCause.asInstanceOf[SparkUpgradeException].getMessage
+        assert(errMsg.contains("You may get a different result due to the upgrading"))
+      }
+    }
+    withSQLConf(
+      SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> EXCEPTION.toString,
+      SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> INT96.toString) {
+      checkTsWrite()
+    }
+
+    def checkRead(fileName: String): Unit = {
+      val e = intercept[SparkException] {
+        spark.read.parquet(getResourceParquetFilePath("test-data/" + fileName)).collect()
+      }
+      val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
+      assert(errMsg.contains("You may get a different result due to the upgrading"))
+    }
+    withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+      Seq(
+        "before_1582_date_v2_4_5.snappy.parquet",
+        "before_1582_timestamp_micros_v2_4_5.snappy.parquet",
+        "before_1582_timestamp_millis_v2_4_5.snappy.parquet").foreach(checkRead)
+    }
+    withSQLConf(SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key -> EXCEPTION.toString) {
+      checkRead("before_1582_timestamp_int96_dict_v2_4_5.snappy.parquet")
     }
   }
 }

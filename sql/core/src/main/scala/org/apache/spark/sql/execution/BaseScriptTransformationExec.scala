@@ -26,28 +26,35 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.{SparkException, SparkFiles, TaskContext}
+import org.apache.spark.{SparkFiles, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
 
 trait BaseScriptTransformationExec extends UnaryExecNode {
-  def input: Seq[Expression]
   def script: String
   def output: Seq[Attribute]
   def child: SparkPlan
   def ioschema: ScriptTransformationIOSchema
 
   protected lazy val inputExpressionsWithoutSerde: Seq[Expression] = {
-    input.map(Cast(_, StringType).withTimeZone(conf.sessionLocalTimeZone))
+    child.output.map { in =>
+      in.dataType match {
+        case _: ArrayType | _: MapType | _: StructType =>
+          new StructsToJson(ioschema.inputSerdeProps.toMap, in)
+            .withTimeZone(conf.sessionLocalTimeZone)
+        case _ => Cast(in, StringType).withTimeZone(conf.sessionLocalTimeZone)
+      }
+    }
   }
 
   override def producedAttributes: AttributeSet = outputSet -- inputSet
@@ -56,7 +63,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
 
   override def doExecute(): RDD[InternalRow] = {
     val broadcastedHadoopConf =
-      new SerializableConfiguration(sqlContext.sessionState.newHadoopConf())
+      new SerializableConfiguration(session.sessionState.newHadoopConf())
 
     child.execute().mapPartitions { iter =>
       if (iter.hasNext) {
@@ -179,8 +186,7 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       val exitCode = proc.exitValue()
       if (exitCode != 0) {
         logError(stderrBuffer.toString) // log the stderr circular buffer
-        throw new SparkException(s"Subprocess exited with status $exitCode. " +
-          s"Error: ${stderrBuffer.toString}", cause)
+        throw QueryExecutionErrors.subprocessExitedError(exitCode, stderrBuffer, cause)
       }
     }
   }
@@ -200,14 +206,11 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case DoubleType => wrapperConvertException(data => data.toDouble, converter)
       case _: DecimalType => wrapperConvertException(data => BigDecimal(data), converter)
       case DateType if conf.datetimeJava8ApiEnabled =>
-        wrapperConvertException(data => DateTimeUtils.stringToDate(
-          UTF8String.fromString(data),
-          DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
+        wrapperConvertException(data => DateTimeUtils.stringToDate(UTF8String.fromString(data))
           .map(DateTimeUtils.daysToLocalDate).orNull, converter)
-      case DateType => wrapperConvertException(data => DateTimeUtils.stringToDate(
-        UTF8String.fromString(data),
-        DateTimeUtils.getZoneId(conf.sessionLocalTimeZone))
-        .map(DateTimeUtils.toJavaDate).orNull, converter)
+      case DateType =>
+        wrapperConvertException(data => DateTimeUtils.stringToDate(UTF8String.fromString(data))
+          .map(DateTimeUtils.toJavaDate).orNull, converter)
       case TimestampType if conf.datetimeJava8ApiEnabled =>
         wrapperConvertException(data => DateTimeUtils.stringToTimestamp(
           UTF8String.fromString(data),
@@ -220,11 +223,15 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case CalendarIntervalType => wrapperConvertException(
         data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
         converter)
+      case _: ArrayType | _: MapType | _: StructType =>
+        val complexTypeFactory = JsonToStructs(attr.dataType,
+          ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
+        wrapperConvertException(data =>
+          complexTypeFactory.nullSafeEval(UTF8String.fromString(data)), any => any)
       case udt: UserDefinedType[_] =>
         wrapperConvertException(data => udt.deserialize(data), converter)
       case dt =>
-        throw new SparkException(s"${nodeName} without serde does not support " +
-          s"${dt.getClass.getSimpleName} as output data type")
+        throw QueryExecutionErrors.outputDataTypeUnsupportedByNodeWithoutSerdeError(nodeName, dt)
     }
   }
 

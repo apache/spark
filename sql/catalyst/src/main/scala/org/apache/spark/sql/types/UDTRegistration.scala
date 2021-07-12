@@ -19,8 +19,9 @@ package org.apache.spark.sql.types
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.util.Utils
 
 /**
@@ -29,7 +30,7 @@ import org.apache.spark.util.Utils
  * However, by doing this, we add SparkSQL dependency on user classes. This object provides
  * alternative approach to register UDTs for user classes.
  */
-private[spark]
+@DeveloperApi
 object UDTRegistration extends Serializable with Logging {
 
   /** The mapping between the Class between UserDefinedType and user classes. */
@@ -76,13 +77,10 @@ object UDTRegistration extends Serializable with Logging {
         if (classOf[UserDefinedType[_]].isAssignableFrom(udtClass)) {
           udtClass
         } else {
-          throw new SparkException(
-            s"${udtClass.getName} is not an UserDefinedType. Please make sure registering " +
-              s"an UserDefinedType for ${userClass}")
+          throw QueryExecutionErrors.notUserDefinedTypeError(udtClass.getName, userClass)
         }
       } else {
-        throw new SparkException(
-          s"Can not load in UserDefinedType ${udtClassName} for user class ${userClass}.")
+        throw QueryExecutionErrors.cannotLoadUserDefinedTypeError(udtClassName, userClass)
       }
     }
   }

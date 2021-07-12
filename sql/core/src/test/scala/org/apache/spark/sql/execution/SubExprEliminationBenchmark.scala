@@ -45,7 +45,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
 
     withTempPath { path =>
       prepareDataInfo(benchmark)
-      val numCols = 1000
+      val numCols = 500
       val schema = writeWideRow(path.getAbsolutePath, rowsNum, numCols)
 
       val cols = (0 until numCols).map { idx =>
@@ -84,7 +84,7 @@ object SubExprEliminationBenchmark extends SqlBasedBenchmark {
 
     withTempPath { path =>
       prepareDataInfo(benchmark)
-      val numCols = 1000
+      val numCols = 500
       val schema = writeWideRow(path.getAbsolutePath, rowsNum, numCols)
 
       val predicate = (0 until numCols).map { idx =>

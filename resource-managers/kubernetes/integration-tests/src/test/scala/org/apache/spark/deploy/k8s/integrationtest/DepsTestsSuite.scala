@@ -24,6 +24,7 @@ import com.amazonaws.auth.BasicAWSCredentials
 import com.amazonaws.services.s3.AmazonS3Client
 import io.fabric8.kubernetes.api.model._
 import io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder
+import org.apache.hadoop.util.VersionInfo
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
 import org.scalatest.time.{Minutes, Span}
 
@@ -246,7 +247,6 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
         appArgs = Array("python3"),
         driverPodChecker = doBasicDriverPyPodCheck,
         executorPodChecker = doBasicExecutorPyPodCheck,
-        appLocator = appLocator,
         isJVM = false,
         pyFiles = depsFile,
         env = env)
@@ -295,7 +295,7 @@ private[spark] trait DepsTestsSuite { k8sSuite: KubernetesSuite =>
       minioUrlStr: String): Unit = {
     val (minioHost, minioPort) = getServiceHostAndPort(minioUrlStr)
     val packages = if (Utils.isHadoop3) {
-      "org.apache.hadoop:hadoop-aws:3.2.0"
+      s"org.apache.hadoop:hadoop-aws:${VersionInfo.getVersion}"
     } else {
       "com.amazonaws:aws-java-sdk:1.7.4,org.apache.hadoop:hadoop-aws:2.7.6"
     }

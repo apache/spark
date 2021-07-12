@@ -202,7 +202,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but 'coursesales.`earnings`' did not appear in any aggregate function.
+Aggregate expression required for pivot, but 'coursesales.earnings' did not appear in any aggregate function.
 
 
 -- !query
@@ -217,7 +217,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-Aggregate expression required for pivot, but '__auto_generated_subquery_name.`year`' did not appear in any aggregate function.
+Aggregate expression required for pivot, but '__auto_generated_subquery_name.year' did not appear in any aggregate function.
 
 
 -- !query
@@ -232,7 +232,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`year`' given input columns: [__auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings]; line 4 pos 0
+cannot resolve 'year' given input columns: [__auto_generated_subquery_name.course, __auto_generated_subquery_name.earnings]; line 4 pos 0
 
 
 -- !query
@@ -326,7 +326,7 @@ PIVOT (
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '`s`' given input columns: [coursesales.course, coursesales.earnings, coursesales.year]; line 4 pos 15
+cannot resolve 's' given input columns: [coursesales.course, coursesales.earnings, coursesales.year]; line 4 pos 15
 
 
 -- !query

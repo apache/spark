@@ -105,13 +105,29 @@ class PandasConversionMixin(object):
                     import pyarrow
                     # Rename columns to avoid duplicated column names.
                     tmp_column_names = ['col_{}'.format(i) for i in range(len(self.columns))]
-                    batches = self.toDF(*tmp_column_names)._collect_as_arrow()
+                    self_destruct = self.sql_ctx._conf.arrowPySparkSelfDestructEnabled()
+                    batches = self.toDF(*tmp_column_names)._collect_as_arrow(
+                        split_batches=self_destruct)
                     if len(batches) > 0:
                         table = pyarrow.Table.from_batches(batches)
+                        # Ensure only the table has a reference to the batches, so that
+                        # self_destruct (if enabled) is effective
+                        del batches
                         # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
                         # values, but we should use datetime.date to match the behavior with when
                         # Arrow optimization is disabled.
-                        pdf = table.to_pandas(date_as_object=True)
+                        pandas_options = {'date_as_object': True}
+                        if self_destruct:
+                            # Configure PyArrow to use as little memory as possible:
+                            # self_destruct - free columns as they are converted
+                            # split_blocks - create a separate Pandas block for each column
+                            # use_threads - convert one column at a time
+                            pandas_options.update({
+                                'self_destruct': True,
+                                'split_blocks': True,
+                                'use_threads': False,
+                            })
+                        pdf = table.to_pandas(**pandas_options)
                         # Rename back to the original column names.
                         pdf.columns = self.columns
                         for field in self.schema:
@@ -225,11 +241,16 @@ class PandasConversionMixin(object):
         else:
             return None
 
-    def _collect_as_arrow(self):
+    def _collect_as_arrow(self, split_batches=False):
         """
         Returns all records as a list of ArrowRecordBatches, pyarrow must be installed
         and available on driver and worker Python environments.
         This is an experimental feature.
+
+        :param split_batches: split batches such that each column is in its own allocation, so
+            that the selfDestruct optimization is effective; default False.
+
+        .. note:: Experimental.
         """
         from pyspark.sql.dataframe import DataFrame
 
@@ -240,7 +261,26 @@ class PandasConversionMixin(object):
 
         # Collect list of un-ordered batches where last element is a list of correct order indices
         try:
-            results = list(_load_from_socket((port, auth_secret), ArrowCollectSerializer()))
+            batch_stream = _load_from_socket((port, auth_secret), ArrowCollectSerializer())
+            if split_batches:
+                # When spark.sql.execution.arrow.pyspark.selfDestruct.enabled, ensure
+                # each column in each record batch is contained in its own allocation.
+                # Otherwise, selfDestruct does nothing; it frees each column as its
+                # converted, but each column will actually be a list of slices of record
+                # batches, and so no memory is actually freed until all columns are
+                # converted.
+                import pyarrow as pa
+                results = []
+                for batch_or_indices in batch_stream:
+                    if isinstance(batch_or_indices, pa.RecordBatch):
+                        batch_or_indices = pa.RecordBatch.from_arrays([
+                            # This call actually reallocates the array
+                            pa.concat_arrays([array])
+                            for array in batch_or_indices
+                        ], schema=batch_or_indices.schema)
+                    results.append(batch_or_indices)
+            else:
+                results = list(batch_stream)
         finally:
             # Join serving thread and raise any exceptions from collectAsArrowToPython
             jsocket_auth_server.getResult()

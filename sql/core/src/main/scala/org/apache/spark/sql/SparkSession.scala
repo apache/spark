@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.Closeable
+import java.util.{ServiceLoader, UUID}
 import java.util.concurrent.TimeUnit._
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
@@ -40,6 +41,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.ExternalCommandRunner
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ExternalCommandExecutor
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
@@ -102,6 +104,8 @@ class SparkSession private(
         new SparkSessionExtensions), Map.empty)
   }
 
+  private[sql] val sessionUUID: String = UUID.randomUUID.toString
+
   sparkContext.assertNotStopped()
 
   // If there is no active SparkSession, uses the default SQL conf. Otherwise, use the session's.
@@ -151,9 +155,8 @@ class SparkSession private(
       .map(_.clone(this))
       .getOrElse {
         val state = SparkSession.instantiateSessionState(
-          SparkSession.sessionStateClassName(sparkContext.conf),
-          self,
-          initialSessionOptions)
+          SparkSession.sessionStateClassName(sharedState.conf),
+          self)
         state
       }
   }
@@ -638,7 +641,7 @@ class SparkSession private(
           source.newInstance().asInstanceOf[ExternalCommandRunner], command, options))
 
       case _ =>
-        throw new AnalysisException(s"Command execution is not supported in runner $runner")
+        throw QueryCompilationErrors.commandExecutionInRunnerUnsupportedError(runner)
     }
   }
 
@@ -947,6 +950,7 @@ object SparkSession extends Logging {
           // Do not update `SparkConf` for existing `SparkContext`, as it's shared by all sessions.
         }
 
+        loadExtensions(extensions)
         applyExtensions(
           sparkContext.getConf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS).getOrElse(Seq.empty),
           extensions)
@@ -962,7 +966,7 @@ object SparkSession extends Logging {
 
     private def applyModifiableSettings(session: SparkSession): Unit = {
       val (staticConfs, otherConfs) =
-        options.partition(kv => SQLConf.staticConfKeys.contains(kv._1))
+        options.partition(kv => SQLConf.isStaticConfigKey(kv._1))
 
       otherConfs.foreach { case (k, v) => session.sessionState.conf.setConfString(k, v) }
 
@@ -1134,16 +1138,14 @@ object SparkSession extends Logging {
    */
   private def instantiateSessionState(
       className: String,
-      sparkSession: SparkSession,
-      options: Map[String, String]): SessionState = {
+      sparkSession: SparkSession): SessionState = {
     try {
       // invoke new [Hive]SessionStateBuilder(
       //   SparkSession,
-      //   Option[SessionState],
-      //   Map[String, String])
+      //   Option[SessionState])
       val clazz = Utils.classForName(className)
       val ctor = clazz.getConstructors.head
-      ctor.newInstance(sparkSession, None, options).asInstanceOf[BaseSessionStateBuilder].build()
+      ctor.newInstance(sparkSession, None).asInstanceOf[BaseSessionStateBuilder].build()
     } catch {
       case NonFatal(e) =>
         throw new IllegalArgumentException(s"Error while instantiating '$className':", e)
@@ -1202,5 +1204,23 @@ object SparkSession extends Logging {
       }
     }
     extensions
+  }
+
+  /**
+   * Load extensions from [[ServiceLoader]] and use them
+   */
+  private def loadExtensions(extensions: SparkSessionExtensions): Unit = {
+    val loader = ServiceLoader.load(classOf[SparkSessionExtensionsProvider],
+      Utils.getContextOrSparkClassLoader)
+    val loadedExts = loader.iterator()
+
+    while (loadedExts.hasNext) {
+      try {
+        val ext = loadedExts.next()
+        ext(extensions)
+      } catch {
+        case e: Throwable => logWarning("Failed to load session extension", e)
+      }
+    }
   }
 }

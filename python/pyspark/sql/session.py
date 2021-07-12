@@ -338,6 +338,10 @@ class SparkSession(SparkConversionMixin):
         This is the interface through which the user can get and set all Spark and Hadoop
         configurations that are relevant to Spark SQL. When getting the value of a config,
         this defaults to the value set in the underlying :class:`SparkContext`, if any.
+
+        Returns
+        -------
+        :class:`pyspark.sql.conf.RuntimeConfig`
         """
         if not hasattr(self, "_conf"):
             self._conf = RuntimeConfig(self._jsparkSession.conf())
@@ -432,7 +436,9 @@ class SparkSession(SparkConversionMixin):
         """
         if not data:
             raise ValueError("can not infer schema from empty dataset")
-        schema = reduce(_merge_type, (_infer_schema(row, names) for row in data))
+        infer_dict_as_struct = self._wrapped._conf.inferDictAsStruct()
+        schema = reduce(_merge_type, (_infer_schema(row, names, infer_dict_as_struct)
+                        for row in data))
         if _has_nulltype(schema):
             raise ValueError("Some of types cannot be determined after inferring")
         return schema
@@ -458,11 +464,13 @@ class SparkSession(SparkConversionMixin):
             raise ValueError("The first row in RDD is empty, "
                              "can not infer schema")
 
+        infer_dict_as_struct = self._wrapped._conf.inferDictAsStruct()
         if samplingRatio is None:
-            schema = _infer_schema(first, names=names)
+            schema = _infer_schema(first, names=names, infer_dict_as_struct=infer_dict_as_struct)
             if _has_nulltype(schema):
                 for row in rdd.take(100)[1:]:
-                    schema = _merge_type(schema, _infer_schema(row, names=names))
+                    schema = _merge_type(schema, _infer_schema(
+                        row, names=names, infer_dict_as_struct=infer_dict_as_struct))
                     if not _has_nulltype(schema):
                         break
                 else:
@@ -471,7 +479,8 @@ class SparkSession(SparkConversionMixin):
         else:
             if samplingRatio < 0.99:
                 rdd = rdd.sample(False, float(samplingRatio))
-            schema = rdd.map(lambda row: _infer_schema(row, names)).reduce(_merge_type)
+            schema = rdd.map(lambda row: _infer_schema(
+                row, names, infer_dict_as_struct=infer_dict_as_struct)).reduce(_merge_type)
         return schema
 
     def _createFromRDD(self, rdd, schema, samplingRatio):
@@ -576,7 +585,7 @@ class SparkSession(SparkConversionMixin):
         Parameters
         ----------
         data : :class:`RDD` or iterable
-            an RDD of any kind of SQL data representation(e.g. :class:`Row`,
+            an RDD of any kind of SQL data representation (:class:`Row`,
             :class:`tuple`, ``int``, ``boolean``, etc.), or :class:`list`, or
             :class:`pandas.DataFrame`.
         schema : :class:`pyspark.sql.types.DataType`, str or list, optional

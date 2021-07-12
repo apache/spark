@@ -21,7 +21,6 @@ import java.util.concurrent.TimeUnit._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.truncatedString
@@ -76,16 +75,15 @@ case class ObjectHashAggregateExec(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "aggTime" -> SQLMetrics.createTimingMetric(sparkContext, "time in aggregation build"),
     "spillSize" -> SQLMetrics.createSizeMetric(sparkContext, "spill size"),
-    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext,
-      "number of tasks fall-backed to sort-based aggregation")
+    "numTasksFallBacked" -> SQLMetrics.createMetric(sparkContext, "number of sort fallback tasks")
   )
 
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+  protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val aggTime = longMetric("aggTime")
     val spillSize = longMetric("spillSize")
     val numTasksFallBacked = longMetric("numTasksFallBacked")
-    val fallbackCountThreshold = sqlContext.conf.objectAggSortBasedFallbackThreshold
+    val fallbackCountThreshold = conf.objectAggSortBasedFallbackThreshold
 
     child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
       val beforeAgg = System.nanoTime()
@@ -139,6 +137,9 @@ case class ObjectHashAggregateExec(
       s"ObjectHashAggregate(keys=$keyString, functions=$functionString)"
     }
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ObjectHashAggregateExec =
+    copy(child = newChild)
 }
 
 object ObjectHashAggregateExec {

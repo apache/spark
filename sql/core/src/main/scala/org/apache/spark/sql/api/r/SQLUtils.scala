@@ -23,7 +23,6 @@ import java.util.{Locale, Map => JMap}
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 
-import org.apache.spark.SparkContext
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
@@ -38,11 +37,6 @@ import org.apache.spark.sql.types._
 
 private[sql] object SQLUtils extends Logging {
   SerDe.setSQLReadObject(readSqlObject).setSQLWriteObject(writeSqlObject)
-
-  private[this] def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
-    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
-    sc
-  }
 
   def getOrCreateSparkSession(
       jsc: JavaSparkContext,
@@ -60,7 +54,7 @@ private[sql] object SQLUtils extends Logging {
           // So, we intentionally check if Hive classes are loadable or not only when
           // Hive support is explicitly enabled by short-circuiting. See also SPARK-26422.
           SparkSession.hiveClassesArePresent) {
-        SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
+        SparkSession.builder().enableHiveSupport().sparkContext(jsc.sc).getOrCreate()
       } else {
         if (enableHiveSupport) {
           logWarning("SparkR: enableHiveSupport is requested for SparkSession but " +

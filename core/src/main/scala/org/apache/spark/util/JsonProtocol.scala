@@ -32,11 +32,12 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.metrics.ExecutorMetricType
-import org.apache.spark.rdd.RDDOperationScope
+import org.apache.spark.rdd.{DeterministicLevel, RDDOperationScope}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, ResourceProfile, TaskResourceRequest}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage._
+import org.apache.spark.util.Utils.weakIntern
 
 /**
  * Serializes SparkListener events to/from JSON.  This protocol provides strong backwards-
@@ -498,6 +499,7 @@ private[spark] object JsonProtocol {
     ("Parent IDs" -> parentIds) ~
     ("Storage Level" -> storageLevel) ~
     ("Barrier" -> rddInfo.isBarrier) ~
+    ("DeterministicLevel" -> rddInfo.outputDeterministicLevel.toString) ~
     ("Number of Partitions" -> rddInfo.numPartitions) ~
     ("Number of Cached Partitions" -> rddInfo.numCachedPartitions) ~
     ("Memory Size" -> rddInfo.memSize) ~
@@ -915,8 +917,8 @@ private[spark] object JsonProtocol {
     val index = (json \ "Index").extract[Int]
     val attempt = jsonOption(json \ "Attempt").map(_.extract[Int]).getOrElse(1)
     val launchTime = (json \ "Launch Time").extract[Long]
-    val executorId = (json \ "Executor ID").extract[String].intern()
-    val host = (json \ "Host").extract[String].intern()
+    val executorId = weakIntern((json \ "Executor ID").extract[String])
+    val host = weakIntern((json \ "Host").extract[String])
     val taskLocality = TaskLocality.withName((json \ "Locality").extract[String])
     val speculative = jsonOption(json \ "Speculative").exists(_.extract[Boolean])
     val gettingResultTime = (json \ "Getting Result Time").extract[Long]
@@ -1136,8 +1138,8 @@ private[spark] object JsonProtocol {
     if (json == JNothing) {
       return null
     }
-    val executorId = (json \ "Executor ID").extract[String].intern()
-    val host = (json \ "Host").extract[String].intern()
+    val executorId = weakIntern((json \ "Executor ID").extract[String])
+    val host = weakIntern((json \ "Host").extract[String])
     val port = (json \ "Port").extract[Int]
     BlockManagerId(executorId, host, port)
   }
@@ -1175,8 +1177,12 @@ private[spark] object JsonProtocol {
     val memSize = (json \ "Memory Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
 
+    val outputDeterministicLevel = DeterministicLevel.withName(
+      jsonOption(json \ "DeterministicLevel").map(_.extract[String]).getOrElse("DETERMINATE"))
+
     val rddInfo =
-      new RDDInfo(rddId, name, numPartitions, storageLevel, isBarrier, parentIds, callsite, scope)
+      new RDDInfo(rddId, name, numPartitions, storageLevel, isBarrier, parentIds, callsite, scope,
+        outputDeterministicLevel)
     rddInfo.numCachedPartitions = numCachedPartitions
     rddInfo.memSize = memSize
     rddInfo.diskSize = diskSize

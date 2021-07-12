@@ -24,11 +24,10 @@ import java.util.concurrent.TimeUnit._
 
 import com.codahale.metrics._
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.metrics.sink.StatsdSink._
 
 class StatsdSinkSuite extends SparkFunSuite {
-  private val securityMgr = new SecurityManager(new SparkConf(false))
   private val defaultProps = Map(
     STATSD_KEY_PREFIX -> "spark",
     STATSD_KEY_PERIOD -> "1",
@@ -61,7 +60,7 @@ class StatsdSinkSuite extends SparkFunSuite {
     defaultProps.foreach(e => props.put(e._1, e._2))
     props.put(STATSD_KEY_PORT, socket.getLocalPort.toString)
     val registry = new MetricRegistry
-    val sink = new StatsdSink(props, registry, securityMgr)
+    val sink = new StatsdSink(props, registry)
     try {
       testCode(socket, sink)
     } finally {

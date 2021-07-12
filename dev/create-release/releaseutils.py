@@ -42,13 +42,6 @@ except ImportError:
     print("Install using 'sudo pip install PyGithub'")
     sys.exit(-1)
 
-try:
-    import unidecode
-except ImportError:
-    print("This tool requires the unidecode library to decode obscure github usernames")
-    print("Install using 'sudo pip install unidecode'")
-    sys.exit(-1)
-
 
 # Contributors list file name
 contributors_file_name = "contributors.txt"
@@ -64,11 +57,11 @@ def yesOrNoPrompt(msg):
 
 # Utility functions run git commands (written with Git 1.8.5)
 def run_cmd(cmd):
-    return Popen(cmd, stdout=PIPE).communicate()[0]
+    return Popen(cmd, stdout=PIPE).communicate()[0].decode("utf8")
 
 
 def run_cmd_error(cmd):
-    return Popen(cmd, stdout=PIPE, stderr=PIPE).communicate()[1]
+    return Popen(cmd, stdout=PIPE, stderr=PIPE).communicate()[1].decode("utf8")
 
 
 def get_date(commit_hash):
@@ -149,9 +142,7 @@ def get_commits(tag):
             # username so we can translate it properly later
             if not is_valid_author(author):
                 author = github_username
-        # Guard against special characters
-        author = str(author)
-        author = unidecode.unidecode(author).strip()
+        author = author.strip()
         commit = Commit(_hash, author, title, pr_number)
         commits.append(commit)
     return commits

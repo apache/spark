@@ -102,26 +102,26 @@ trait ShowTablesSuiteBase extends command.ShowTablesSuiteBase {
     }
   }
 
-  test("SPARK-34157 Unify output of SHOW TABLES and pass output attributes properly") {
+  test("SPARK-34157: Unify output of SHOW TABLES and pass output attributes properly") {
     withNamespace(s"$catalog.ns") {
       sql(s"CREATE NAMESPACE $catalog.ns")
       sql(s"USE $catalog.ns")
       withTable("tbl") {
         sql("CREATE TABLE tbl(col1 int, col2 string) USING parquet")
         checkAnswer(sql("show tables"), Row("ns", "tbl", false))
-        assert(sql("show tables").schema.fieldNames.deep ==
+        assert(sql("show tables").schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary"))
         assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
-        assert(sql("show table extended like 'tbl'").schema.fieldNames.deep ==
+        assert(sql("show table extended like 'tbl'").schema.fieldNames ===
           Seq("namespace", "tableName", "isTemporary", "information"))
 
         // Keep the legacy output schema
         withSQLConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA.key -> "true") {
           checkAnswer(sql("show tables"), Row("ns", "tbl", false))
-          assert(sql("show tables").schema.fieldNames.deep ==
+          assert(sql("show tables").schema.fieldNames ===
             Seq("database", "tableName", "isTemporary"))
           assert(sql("show table extended like 'tbl'").collect()(0).length == 4)
-          assert(sql("show table extended like 'tbl'").schema.fieldNames.deep ==
+          assert(sql("show table extended like 'tbl'").schema.fieldNames ===
             Seq("database", "tableName", "isTemporary", "information"))
         }
       }

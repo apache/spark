@@ -73,6 +73,17 @@ See also :class:`SparkSession`.
     SparkSession.version
 
 
+Configuration
+-------------
+
+.. currentmodule:: pyspark.sql.conf
+
+.. autosummary::
+    :toctree: api/
+
+    RuntimeConfig
+
+
 Input and Output
 ----------------
 
@@ -207,6 +218,7 @@ DataFrame APIs
     DataFrame.write
     DataFrame.writeStream
     DataFrame.writeTo
+    DataFrame.to_pandas_on_spark
     DataFrameNaFunctions.drop
     DataFrameNaFunctions.fill
     DataFrameNaFunctions.replace
@@ -463,6 +475,7 @@ Functions
     posexplode
     posexplode_outer
     pow
+    product
     quarter
     radians
     raise_error
@@ -481,6 +494,7 @@ Functions
     schema_of_csv
     schema_of_json
     second
+    sentences
     sequence
     sha1
     sha2
