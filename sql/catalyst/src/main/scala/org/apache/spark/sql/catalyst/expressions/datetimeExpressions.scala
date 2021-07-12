@@ -1009,7 +1009,7 @@ case class UnixTimestamp(
 }
 
 /**
- * Gets timestamps or dates from strings.
+ * Gets a timestamp from a string or a date.
  */
 case class GetTimestamp(
     left: Expression,
