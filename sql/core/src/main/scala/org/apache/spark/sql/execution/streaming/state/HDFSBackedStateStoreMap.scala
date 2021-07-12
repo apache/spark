@@ -94,12 +94,12 @@ class PrefixScannableHDFSBackedStateStoreMap(
   private val prefixKeyToKeysMap = new java.util.concurrent.ConcurrentHashMap[
     UnsafeRow, mutable.Set[UnsafeRow]]()
 
-  private val groupKeyFieldsWithIdx: Seq[(StructField, Int)] = {
+  private val prefixKeyFieldsWithIdx: Seq[(StructField, Int)] = {
     keySchema.zipWithIndex.take(numColsPrefixKey)
   }
 
   private val prefixKeyProjection: UnsafeProjection = {
-    val refs = groupKeyFieldsWithIdx.map(x => BoundReference(x._2, x._1.dataType, x._1.nullable))
+    val refs = prefixKeyFieldsWithIdx.map(x => BoundReference(x._2, x._1.dataType, x._1.nullable))
     UnsafeProjection.create(refs)
   }
 
