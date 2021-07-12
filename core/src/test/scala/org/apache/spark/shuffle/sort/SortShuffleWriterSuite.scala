@@ -26,7 +26,7 @@ import org.scalatest.matchers.must.Matchers
 import org.apache.spark.{Aggregator, DebugFilesystem, Partitioner, SharedSparkContext, ShuffleDependency, SparkContext, SparkFunSuite}
 import org.apache.spark.memory.MemoryTestingUtils
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleChecksumTester}
+import org.apache.spark.shuffle.{BaseShuffleHandle, IndexShuffleBlockResolver, ShuffleChecksumTestHelper}
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage.BlockManager
@@ -38,7 +38,7 @@ class SortShuffleWriterSuite
     with SharedSparkContext
     with Matchers
     with PrivateMethodTester
-    with ShuffleChecksumTester {
+    with ShuffleChecksumTestHelper {
 
   @Mock(answer = RETURNS_SMART_NULLS)
   private var blockManager: BlockManager = _

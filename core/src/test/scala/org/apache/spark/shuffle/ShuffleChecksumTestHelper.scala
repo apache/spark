@@ -22,7 +22,7 @@ import java.util.zip.{Adler32, CheckedInputStream}
 
 import org.apache.spark.network.util.LimitedInputStream
 
-trait ShuffleChecksumTester {
+trait ShuffleChecksumTestHelper {
 
   /**
    * Ensure that the checksum values are consistent between write and read side.

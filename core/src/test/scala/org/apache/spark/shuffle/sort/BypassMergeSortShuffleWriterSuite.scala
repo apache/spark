@@ -33,7 +33,7 @@ import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleChecksumTester}
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleChecksumTestHelper}
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage._
@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
 class BypassMergeSortShuffleWriterSuite
   extends SparkFunSuite
     with BeforeAndAfterEach
-    with ShuffleChecksumTester {
+    with ShuffleChecksumTestHelper {
 
   @Mock(answer = RETURNS_SMART_NULLS) private var blockManager: BlockManager = _
   @Mock(answer = RETURNS_SMART_NULLS) private var diskBlockManager: DiskBlockManager = _

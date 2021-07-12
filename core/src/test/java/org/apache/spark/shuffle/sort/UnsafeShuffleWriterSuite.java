@@ -23,7 +23,7 @@ import java.nio.file.Files;
 import java.util.*;
 
 import org.apache.spark.*;
-import org.apache.spark.shuffle.ShuffleChecksumTester;
+import org.apache.spark.shuffle.ShuffleChecksumTestHelper;
 import org.mockito.stubbing.Answer;
 import scala.*;
 import scala.collection.Iterator;
@@ -60,7 +60,7 @@ import static org.junit.Assert.*;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
 
-public class UnsafeShuffleWriterSuite implements ShuffleChecksumTester {
+public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
 
   static final int DEFAULT_INITIAL_SORT_BUFFER_SIZE = 4096;
   static final int NUM_PARTITIONS = 4;
