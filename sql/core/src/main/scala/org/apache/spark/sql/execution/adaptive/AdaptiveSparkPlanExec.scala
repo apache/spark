@@ -186,7 +186,9 @@ case class AdaptiveSparkPlanExec(
     // created in the middle of the execution.
     context.session.withActive {
       val executionId = getExecutionId
-      var currentLogicalPlan = currentPhysicalPlan.logicalLink.get
+      // Use inputPlan logicalLink here in case some top level physical nodes may be removed
+      // during `initialPlan`
+      var currentLogicalPlan = inputPlan.logicalLink.get
       var result = createQueryStages(currentPhysicalPlan)
       val events = new LinkedBlockingQueue[StageMaterializationEvent]()
       val errors = new mutable.ArrayBuffer[Throwable]()
