@@ -821,6 +821,16 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       Seq(attrIntSkewHgm -> colStatIntSkewHgm.copy(distinctCount = Some(2))),
       expectedRowCount = 3)
   }
+  test("SPARK-36079: Null count higher than row count") {
+    val colStatNullableString = colStatString.copy(nullCount = Some(15))
+    val condition = Filter(IsNotNull(attrString),
+      childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+        attributeMap = AttributeMap(Seq(attrString -> colStatNullableString))))
+    validateEstimatedStats(
+      condition,
+      Seq(attrString -> colStatNullableString),
+      expectedRowCount = 1)
+  }
 
   test("ColumnStatsMap tests") {
     val attrNoDistinct = AttributeReference("att_without_distinct", IntegerType)()
@@ -848,7 +858,10 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
     assert(!columnStatsMap.hasMinMaxStats(attrNoMinMax))
   }
 
-  private def childStatsTestPlan(outList: Seq[Attribute], tableRowCount: BigInt): StatsTestPlan = {
+  private def childStatsTestPlan(outList: Seq[Attribute],
+                                  tableRowCount: BigInt,
+                                  attributeMap: AttributeMap[ColumnStat] = attributeMap)
+  : StatsTestPlan = {
     StatsTestPlan(
       outputList = outList,
       rowCount = tableRowCount,
