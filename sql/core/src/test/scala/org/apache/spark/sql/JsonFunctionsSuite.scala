@@ -615,10 +615,11 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(exception.getMessage.contains(
         "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
       assert(exception.getMessage.contains(
-        "Failed to parse field name [a], field value [1], [VALUE_STRING] to target spark data type [IntegerType]."))
+        "Failed to parse field name [a], field value [1], " +
+          "[VALUE_STRING] to target spark data type [IntegerType]."))
     }
   }
-  
+
   test("corrupt record column in the middle") {
     val schema = new StructType()
       .add("a", IntegerType)

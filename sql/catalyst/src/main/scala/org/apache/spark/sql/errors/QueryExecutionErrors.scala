@@ -958,7 +958,8 @@ object QueryExecutionErrors {
     new RuntimeException("Parsing JSON arrays as structs is forbidden.")
   }
 
-  def cannotParseStringAsDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType): Throwable = {
+  def cannotParseStringAsDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
+  : Throwable = {
     new RuntimeException(
       s"Cannot parse field name [${parser.getCurrentName}], " +
         s"field value [${parser.getText}], " +
@@ -970,7 +971,8 @@ object QueryExecutionErrors {
       s"Failed to parse an empty string for data type ${dataType.catalogString}")
   }
 
-  def failToParseValueForDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType): Throwable = {
+  def failToParseValueForDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
+  : Throwable = {
     new RuntimeException(
       s"Failed to parse field name [${parser.getCurrentName}], " +
         s"field value [${parser.getText}], " +
