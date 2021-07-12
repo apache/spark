@@ -1,26 +1,23 @@
 # Guidelines
 
-To throw a standardized user-facing exception, developers should specify the error class and
-message parameters rather than an arbitrary error message.
+To throw a standardized user-facing error or exception, developers should specify the error class
+and message parameters rather than an arbitrary error message.
 
 ## Usage
-
-To throw an exception, do the following.
 
 1. Check if an appropriate error class already exists in `error-class.json`.
    If true, skip to step 3. Otherwise, continue to step 2.
 2. Add a new class to `error-class.json`; keep in mind the invariants below.
-3. Check if the exception type already extends `SparkError`.
+3. Check if the exception type already extends `SparkThrowable`.
    If true, skip to step 5. Otherwise, continue to step 4.
-4. Mix `SparkError` into the exception.
+4. Mix `SparkThrowable` into the exception.
 5. Throw the exception with the error class and message parameters.
 
 ### Before
 
-Throw exception:
+Throw with arbitrary error message:
 
     throw new TestException("Problem A because B")
-
 
 ### After
 
@@ -34,26 +31,31 @@ Throw exception:
 `SparkException.scala`
 
     class SparkTestException(
-        val errorClass: String,
-        val messageParameters: Seq[String])
-      extends TestException(SparkError.getMessage(errorClass, messageParameters))
-        with SparkError
+        errorClass: String,
+        messageParameters: Seq[String])
+      extends TestException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
+        with SparkThrowable {
+        
+      def getErrorClass: String = errorClass
+      def getMessageParameters: Array[String] = messageParameters
+      def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+    }
 
-Throw exception:
+Throw with error class and message parameters:
 
     throw new SparkTestException("PROBLEM_BECAUSE", Seq("A", "B"))
 
 ## Access fields
 
-To access error fields, catch exceptions that extend `org.apache.spark.SparkError` and access
-  - Error class with `errorClass`
-  - SQLSTATE with `sqlState`
+To access error fields, catch exceptions that extend `org.apache.spark.SparkThrowable` and access
+  - Error class with `getErrorClass`
+  - SQLSTATE with `getSqlState`
 
 
     try {
         ...
     } catch {
-        case e: SparkError if e.sqlState.forall(_.startsWith("42")) =>
+        case e: SparkThrowable if Option(e.getSqlState).forall(_.startsWith("42")) =>
             warn("Syntax error")
     }
 
@@ -73,6 +75,9 @@ Invariants:
 
 Error messages provide a descriptive, human-readable representation of the error.
 The message format accepts string parameters via the C-style printf syntax.
+
+The quality of the error message should match the
+[guidelines](https://spark.apache.org/error-message-guidelines.html).
 
 Invariants:
 

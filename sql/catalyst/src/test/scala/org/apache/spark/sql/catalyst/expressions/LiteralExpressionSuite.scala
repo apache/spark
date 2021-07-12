@@ -362,6 +362,15 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-36055: TimestampNTZ toString") {
+    assert(Literal.default(TimestampNTZType).toString === "1970-01-01 00:00:00")
+    withTimeZones(sessionTimeZone = "GMT+01:00", systemTimeZone = "GMT-08:00") {
+      val timestamp = LocalDateTime.of(2021, 2, 3, 16, 50, 3, 456000000)
+      val literalStr = Literal.create(timestamp).toString
+      assert(literalStr === "2021-02-03 16:50:03.456")
+    }
+  }
+
   test("SPARK-35664: construct literals from java.time.LocalDateTime") {
     Seq(
       LocalDateTime.of(1, 1, 1, 0, 0, 0, 0),
