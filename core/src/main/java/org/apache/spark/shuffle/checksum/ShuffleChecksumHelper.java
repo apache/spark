@@ -1,6 +1,5 @@
 package org.apache.spark.shuffle.checksum;
 
-import java.util.Locale;
 import java.util.zip.Adler32;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
