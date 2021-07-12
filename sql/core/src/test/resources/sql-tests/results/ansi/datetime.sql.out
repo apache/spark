@@ -365,9 +365,10 @@ struct<2011-11-11 11:11:11 - INTERVAL '2 seconds':string>
 -- !query
 select '1' - interval '2' second
 -- !query schema
-struct<1 - INTERVAL '2 seconds':string>
+struct<>
 -- !query output
-0000-12-31 23:59:58
+java.time.DateTimeException
+Cannot cast 1 to TimestampType.
 
 
 -- !query
@@ -661,9 +662,10 @@ struct<date_sub(DATE '2001-10-01', 7):date>
 -- !query
 select date '2001-10-01' - '7'
 -- !query schema
-struct<(DATE '2001-10-01' - 7):interval day>
+struct<>
 -- !query output
-728567 00:00:00.000000000
+java.time.DateTimeException
+Cannot cast 7 to DateType.
 
 
 -- !query
@@ -1686,9 +1688,10 @@ struct<DATE '0015-01-01':date>
 -- !query
 select cast('015' as date)
 -- !query schema
-struct<CAST(015 AS DATE):date>
+struct<>
 -- !query output
-0015-01-01
+java.time.DateTimeException
+Cannot cast 015 to DateType.
 
 
 -- !query

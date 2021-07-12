@@ -345,7 +345,7 @@ select '1' - interval '2' second
 -- !query schema
 struct<1 - INTERVAL '2 seconds':string>
 -- !query output
-0000-12-31 23:59:58
+NULL
 
 
 -- !query
@@ -1639,7 +1639,7 @@ select cast('015' as date)
 -- !query schema
 struct<CAST(015 AS DATE):date>
 -- !query output
-0015-01-01
+NULL
 
 
 -- !query
