@@ -281,6 +281,10 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     }
   }
 
+  test("SPARK-36076: Cast string to timestamp throw ArrayIndexOutOfBounds") {
+    assert(toTimestamp(":8:434421+ 98:38", UTC) === None)
+  }
+
   test("SPARK-15379: special invalid date string") {
     // Test stringToDate
     assert(toDate("2015-02-29 00:00:00").isEmpty)

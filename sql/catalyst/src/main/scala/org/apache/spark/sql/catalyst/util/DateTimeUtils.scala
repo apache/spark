@@ -282,7 +282,7 @@ object DateTimeUtils {
    *     - +|-hhmmss
    *  - Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
    */
-  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[SQLTimestamp] = {
+  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[SQLTimestamp] = try {
     if (s == null) {
       return None
     }
@@ -390,27 +390,25 @@ object DateTimeUtils {
       segments(6) /= 10
       digitsMilli -= 1
     }
-    try {
-      val zoneId = tz match {
-        case None => timeZoneId
-        case Some("+") => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
-        case Some("-") => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
-        case Some(zoneName: String) => getZoneId(zoneName.trim)
-      }
-      val nanoseconds = MICROSECONDS.toNanos(segments(6))
-      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
-      val localDate = if (justTime) {
-        LocalDate.now(zoneId)
-      } else {
-        LocalDate.of(segments(0), segments(1), segments(2))
-      }
-      val localDateTime = LocalDateTime.of(localDate, localTime)
-      val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
-      val instant = Instant.from(zonedDateTime)
-      Some(instantToMicros(instant))
-    } catch {
-      case NonFatal(_) => None
+    val zoneId = tz match {
+      case None => timeZoneId
+      case Some("+") => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
+      case Some("-") => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
+      case Some(zoneName: String) => getZoneId(zoneName.trim)
     }
+    val nanoseconds = MICROSECONDS.toNanos(segments(6))
+    val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+    val localDate = if (justTime) {
+      LocalDate.now(zoneId)
+    } else {
+      LocalDate.of(segments(0), segments(1), segments(2))
+    }
+    val localDateTime = LocalDateTime.of(localDate, localTime)
+    val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
+    val instant = Instant.from(zonedDateTime)
+    Some(instantToMicros(instant))
+  } catch {
+    case NonFatal(_) => None
   }
 
   // See issue SPARK-35679
