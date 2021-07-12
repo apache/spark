@@ -23,7 +23,6 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.expressions.{Aggregation, Count, FieldReference, LiteralValue, Max, Min}
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownAggregates, SupportsPushDownFilters}
-import org.apache.spark.sql.connector.read.SupportsPushDownAggregates.AggregatePushDownResult
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
@@ -78,10 +77,10 @@ case class ParquetScanBuilder(
 
   private var pushedAggregateSchema = new StructType()
 
-  override def pushAggregation(aggregation: Aggregation): AggregatePushDownResult = {
+  override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!sparkSession.sessionState.conf.parquetAggregatePushDown ||
       aggregation.groupByColumns.nonEmpty || pushedParquetFilters.length > 0) {
-      return new AggregatePushDownResult (0, new StructType())
+      return false
     }
 
     aggregation.aggregateExpressions.foreach {
@@ -91,11 +90,9 @@ case class ParquetScanBuilder(
           field.dataType match {
             // not push down nested column and Timestamp (INT96 sort order is undefined, parquet
             // doesn't return statistics for INT96)
-            case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType =>
-              return new AggregatePushDownResult (0, new StructType())
-            case _ =>
-              pushedAggregateSchema =
-                pushedAggregateSchema.add(field.copy("max(" + field.name + ")"))
+            case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType => return false
+            case _ => pushedAggregateSchema =
+              pushedAggregateSchema.add(field.copy("max(" + field.name + ")"))
           }
         case _ =>
           throw new SparkException("Expression $col is not currently supported.")
@@ -106,30 +103,26 @@ case class ParquetScanBuilder(
           field.dataType match {
             // not push down nested column and Timestamp (INT96 sort order is undefined, parquet
             // doesn't return statistics for INT96)
-            case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType =>
-              return new AggregatePushDownResult (0, new StructType())
-            case _ =>
-              pushedAggregateSchema =
-                pushedAggregateSchema.add(field.copy("min(" + field.name + ")"))
+            case StructType(_) | ArrayType(_, _) | MapType(_, _, _) | TimestampType => return false
+            case _ => pushedAggregateSchema =
+              pushedAggregateSchema.add(field.copy("min(" + field.name + ")"))
           }
         case _ =>
           throw new SparkException("Expression $col is not currently supported.")
       }
       // not push down distinct count
       case Count(col, _, false) => col match {
-        case _: FieldReference =>
-          pushedAggregateSchema =
-            pushedAggregateSchema.add(StructField("count(" + col + ")", LongType))
+        case _: FieldReference => pushedAggregateSchema =
+          pushedAggregateSchema.add(StructField("count(" + col + ")", LongType))
         case LiteralValue(1, _) =>
           pushedAggregateSchema = pushedAggregateSchema.add(StructField("count(*)", LongType))
         case _ =>
           throw new SparkException("Expression $col is not currently supported.")
       }
-      case _ =>
-        return return new AggregatePushDownResult (0, new StructType())
+      case _ => return false
     }
     this.pushedAggregations = aggregation
-    new AggregatePushDownResult (1, pushedAggregateSchema)
+    true
   }
 
   override def build(): Scan = {

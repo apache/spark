@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.{Aggregation, FieldReference}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PushableColumn}
+import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
@@ -89,12 +89,11 @@ object PushDownUtils extends PredicateHelper {
 
     scanBuilder match {
       case r: SupportsPushDownAggregates =>
-        val translatedAggregates = aggregates.map(DataSourceStrategy
-          .translateAggregate(_, PushableColumn(false)))
+        val translatedAggregates = aggregates.map(DataSourceStrategy.translateAggregate)
         val translatedGroupBys = groupBy.map(columnAsString)
 
         val agg = Aggregation(translatedAggregates.flatten, translatedGroupBys.flatten)
-        if (r.pushAggregation(agg).getPushedDownResult > 0) {
+        if (r.pushAggregation(agg)) {
           agg
         } else {
           Aggregation.empty

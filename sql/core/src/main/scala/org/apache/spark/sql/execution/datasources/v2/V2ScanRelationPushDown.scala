@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.{OperationHelper, ScanOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.expressions.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
@@ -44,9 +43,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
 
   private def pushDownFilters(plan: LogicalPlan) = plan.transform {
     // update the scan builder with filter push down and return a new plan with filter pushed
-    case filter @ Filter(_, sHolder: ScanBuilderHolder) =>
-      val (filters, _, _) = collectFilters(filter).get
-
+    case Filter(condition, sHolder: ScanBuilderHolder) =>
+      val filters = splitConjunctivePredicates(condition)
       val normalizedFilters =
         DataSourceStrategy.normalizeExprs(filters, sHolder.relation.output)
       val (normalizedFiltersWithSubquery, normalizedFiltersWithoutSubquery) =
@@ -72,11 +70,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
 
   def pushdownAggregate(plan: LogicalPlan): LogicalPlan = plan.transform {
     // update the scan builder with agg pushdown and return a new plan with agg pushed
-    case aggNode@Aggregate(groupingExpressions, resultExpressions, child) =>
+    case aggNode @ Aggregate(groupingExpressions, resultExpressions, child) =>
       child match {
-        case ScanOperation(project, filters, sHolder: ScanBuilderHolder) =>
+        case ScanOperation(project, filters, sHolder: ScanBuilderHolder)
+          if project.forall(_.isInstanceOf[AttributeReference]) =>
           sHolder.builder match {
-            case r: SupportsPushDownAggregates =>
+            case _: SupportsPushDownAggregates =>
               if (filters.length == 0) { // can't push down aggregate if postScanFilters exist
                 val aggregates = getAggregateExpression(resultExpressions, project, sHolder)
                 val pushedAggregates = PushDownUtils
@@ -92,9 +91,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
                   // == Optimized Logical Plan ==
                   // Aggregate [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
                   // +- RelationV2[min(c1)#21, max(c1)#22] parquet file ...
-                  val output = aggregates.map {
-                    case agg: AggregateExpression =>
-                      AttributeReference(toPrettySQL(agg), agg.dataType)()
+                  var index = 0
+                  val output = resultExpressions.map {
+                    case Alias(_, name) =>
+                      index = index + 1
+                      AttributeReference(name, aggregates(index - 1).dataType)()
+                    case a: AttributeReference => a
                   }
 
                   // No need to do column pruning because only the aggregate columns are used as
@@ -113,7 +115,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
                       """.stripMargin)
 
                   val scanRelation = DataSourceV2ScanRelation(sHolder.relation, scan, output)
-                  val plan = Aggregate(groupingExpressions, resultExpressions, scanRelation)
+                  assert(scanRelation.output.length ==
+                    groupingExpressions.length + aggregates.length)
+
+                  val plan = Aggregate(
+                    output.take(groupingExpressions.length), resultExpressions, scanRelation)
 
                   // Change the optimized logical plan to reflect the pushed down aggregate
                   // e.g. TABLE t (c1 INT, c2 INT, c3 INT)
@@ -122,10 +128,10 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
                   // Aggregate [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
                   // +- RelationV2[c1#9] parquet ...
                   //
-                  // After change the V2ScanRelation output to [min(_1)#21, max(_1)#22]
+                  // After change the V2ScanRelation output to [min(c1)#21, max(c1)#22]
                   // we have the following
-                  // !Aggregate [min(_1#9) AS min(_1)#17, max(_1#9) AS max(_1)#18]
-                  // +- RelationV2[min(_1)#21, max(_1)#22] parquet ...
+                  // !Aggregate [min(c1#9) AS min(c1)#17, max(c1#9) AS max(c1)#18]
+                  // +- RelationV2[min(c1)#21, max(c1)#22] parquet ...
                   //
                   // We want to change it to
                   // == Optimized Logical Plan ==
@@ -146,7 +152,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
                       agg.copy(aggregateFunction = aggFunction, filter = None)
                   }
                 }
-
               } else {
                 aggNode
               }
@@ -216,33 +221,6 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
     }
     DataSourceStrategy.normalizeExprs(aggregates, sHolder.relation.output)
       .asInstanceOf[Seq[AggregateExpression]]
-  }
-
-  private def collectFilters(plan: LogicalPlan):
-    Option[(Seq[Expression], LogicalPlan, AttributeMap[Expression])] = {
-    plan match {
-      case Filter(condition, child) =>
-        collectFilters(child) match {
-          case Some((filters, other, aliases)) =>
-            // Follow CombineFilters and only keep going if 1) the collected Filters
-            // and this filter are all deterministic or 2) if this filter is the first
-            // collected filter and doesn't have common non-deterministic expressions
-            // with lower Project.
-            val substitutedCondition = substitute(aliases)(condition)
-            val canCombineFilters = (filters.nonEmpty && filters.forall(_.deterministic) &&
-              substitutedCondition.deterministic) || filters.isEmpty
-            if (canCombineFilters && !hasCommonNonDeterministic(Seq(condition), aliases)) {
-              Some((filters ++ splitConjunctivePredicates(substitutedCondition),
-                other, aliases))
-            } else {
-              None
-            }
-          case None => None
-        }
-
-      case other =>
-        Some((Nil, other, AttributeMap(Seq())))
-    }
   }
 }
 

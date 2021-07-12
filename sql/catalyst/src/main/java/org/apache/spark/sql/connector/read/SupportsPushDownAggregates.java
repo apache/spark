@@ -19,15 +19,13 @@ package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Aggregation;
-import org.apache.spark.sql.types.StructType;
 
 /**
  * A mix-in interface for {@link ScanBuilder}. Data source can implement this interface to
  * push down aggregates. Depends on the data source implementation, the aggregates may not
- * be able to push down, partially push down and have final aggregate at Spark, or completely
- * push down.
+ * be able to push down, or partially push down and have final aggregate at Spark.
  *
- * When pushing down operators, Spark pushes down filter to the data source first, then push down
+ * When pushing down operators, Spark pushes down filters to the data source first, then push down
  * aggregates or apply column pruning. Depends on data source implementation, aggregates may or
  * may not be able to be pushed down with filters. If pushed filters still need to be evaluated
  * after scanning, aggregates can't be pushed down.
@@ -38,24 +36,9 @@ import org.apache.spark.sql.types.StructType;
 public interface SupportsPushDownAggregates extends ScanBuilder {
 
   /**
-   * Pushes down Aggregation to datasource.
+   * Pushes down Aggregation to datasource. The order of the datasource scan output is:
+   * grouping columns, aggregate columns (in the same order as the aggregate functions in
+   * the given Aggregation.
    */
-  AggregatePushDownResult pushAggregation(Aggregation aggregation);
-
-  class AggregatePushDownResult {
-
-    // 0: aggregates not pushed down
-    // 1: aggregates partially pushed down, need to final aggregate in Spark
-    int pushedDownResult = 0;
-    StructType pushedDownAggSchema;
-
-    public AggregatePushDownResult(int pushedDownResult, StructType pushedDownAggSchema) {
-      this.pushedDownResult = pushedDownResult;
-      this.pushedDownAggSchema = pushedDownAggSchema;
-    }
-
-    public int getPushedDownResult() {
-      return pushedDownResult;
-    }
-  }
+  boolean pushAggregation(Aggregation aggregation);
 }
