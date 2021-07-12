@@ -194,8 +194,9 @@ class JacksonParser(
             case "NaN" => Float.NaN
             case "Infinity" => Float.PositiveInfinity
             case "-Infinity" => Float.NegativeInfinity
-            case other => throw new RuntimeException(
-              s"Cannot parse $other as ${FloatType.catalogString}.")
+            case _ => throw new RuntimeException(
+              s"Cannot parse fieldName: [${parser.getCurrentName}], fieldValue: [${parser.getText}], " +
+                s"[${VALUE_STRING}] as target spark dataType: [${dataType}].")
           }
       }
 
@@ -210,8 +211,9 @@ class JacksonParser(
             case "NaN" => Double.NaN
             case "Infinity" => Double.PositiveInfinity
             case "-Infinity" => Double.NegativeInfinity
-            case other =>
-              throw new RuntimeException(s"Cannot parse $other as ${DoubleType.catalogString}.")
+            case _ => throw new RuntimeException(
+                s"Cannot parse fieldName: [${parser.getCurrentName}], fieldValue: [${parser.getText}], " +
+                  s"[${VALUE_STRING}] as target spark dataType: [${dataType}].")
           }
       }
 
@@ -365,7 +367,8 @@ class JacksonParser(
       // We cannot parse this token based on the given data type. So, we throw a
       // RuntimeException and this exception will be caught by `parse` method.
       throw new RuntimeException(
-        s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
+        s"Failed to parse fieldName: [${parser.getCurrentName}], fieldValue: [${parser.getText}], " +
+          s"[${token.toString}] to target spark dataType: [${dataType}].")
   }
 
   /**
