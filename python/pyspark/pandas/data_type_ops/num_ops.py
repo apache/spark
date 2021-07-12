@@ -126,10 +126,12 @@ class NumericOps(DataTypeOps):
         return cast(IndexOpsLike, column_op(F.bitwise_not)(operand))
 
     def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, column_op(Column.__neg__)(operand))
+        return operand._with_new_scol(-operand.spark.column, field=operand._internal.data_fields[0])
 
     def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, column_op(F.abs)(operand))
+        return operand._with_new_scol(
+            F.abs(operand.spark.column), field=operand._internal.data_fields[0]
+        )
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         return column_op(Column.__lt__)(left, right)
