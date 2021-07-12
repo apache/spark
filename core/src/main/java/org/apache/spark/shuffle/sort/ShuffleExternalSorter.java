@@ -118,8 +118,6 @@ final class ShuffleExternalSorter extends MemoryConsumer {
       BlockManager blockManager,
       TaskContext taskContext,
       int initialSize,
-      int shuffleId,
-      long mapId,
       int numPartitions,
       SparkConf conf,
       ShuffleWriteMetricsReporter writeMetrics) throws SparkException {
