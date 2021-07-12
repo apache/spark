@@ -43,8 +43,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
     val provider = newStoreProvider()
     val store = provider.getStore(0)
-    val keyRow = stringToRow("a")
-    val valueRow = intToRow(1)
+    val keyRow = dataToKeyRow("a", 0)
+    val valueRow = dataToValueRow(1)
     store.put(keyRow, valueRow)
     val iter = provider.rocksDB.iterator()
     assert(iter.hasNext)
@@ -76,7 +76,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
 
       // Create state store in a task and get the RocksDBConf from the instantiated RocksDB instance
       val rocksDBConfInTask: RocksDBConf = testRDD.mapPartitionsWithStateStore[RocksDBConf](
-        spark.sqlContext, testStateInfo, testSchema, testSchema, None) {
+        spark.sqlContext, testStateInfo, testSchema, testSchema, 0) {
           (store: StateStore, _: Iterator[String]) =>
             // Use reflection to get RocksDB instance
             val dbInstanceMethod =
@@ -101,8 +101,8 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
     val provider = newStoreProvider()
     val store = provider.getStore(0)
     // Verify state after updating
-    put(store, "a", 1)
-    assert(get(store, "a") === Some(1))
+    put(store, "a", 0, 1)
+    assert(get(store, "a", 0) === Some(1))
     assert(store.commit() === 1)
     assert(store.hasCommitted)
     val storeMetrics = store.metrics
@@ -118,28 +118,35 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
   }
 
   def newStoreProvider(storeId: StateStoreId): RocksDBStateStoreProvider = {
-    val keySchema = StructType(Seq(StructField("key", StringType, true)))
-    val valueSchema = StructType(Seq(StructField("value", IntegerType, true)))
+    newStoreProvider(storeId, numColsPrefixKey = 0)
+  }
+
+  override def newStoreProvider(numPrefixCols: Int): RocksDBStateStoreProvider = {
+    newStoreProvider(StateStoreId(newDir(), Random.nextInt(), 0), numColsPrefixKey = numPrefixCols)
+  }
+
+  def newStoreProvider(
+      storeId: StateStoreId,
+      numColsPrefixKey: Int): RocksDBStateStoreProvider = {
     val provider = new RocksDBStateStoreProvider()
     provider.init(
-      storeId, keySchema, valueSchema, indexOrdinal = None, new StateStoreConf, new Configuration)
+      storeId, keySchema, valueSchema, numColsPrefixKey = numColsPrefixKey,
+      new StateStoreConf, new Configuration)
     provider
   }
 
-  override def getLatestData(storeProvider: RocksDBStateStoreProvider): Set[(String, Int)] = {
+  override def getLatestData(
+      storeProvider: RocksDBStateStoreProvider): Set[((String, Int), Int)] = {
     getData(storeProvider, version = -1)
   }
 
   override def getData(
       provider: RocksDBStateStoreProvider,
-      version: Int = -1): Set[(String, Int)] = {
+      version: Int = -1): Set[((String, Int), Int)] = {
     val reloadedProvider = newStoreProvider(provider.stateStoreId)
     val versionToRead = if (version < 0) reloadedProvider.latestVersion else version
-    reloadedProvider.getStore(versionToRead).iterator().map(rowsToStringInt).toSet
+    reloadedProvider.getStore(versionToRead).iterator().map(rowPairToDataPair).toSet
   }
-
-  override protected val keySchema = StructType(Seq(StructField("key", StringType, true)))
-  override protected val valueSchema = StructType(Seq(StructField("value", IntegerType, true)))
 
   override def newStoreProvider(
     minDeltasForSnapshot: Int,
