@@ -44,6 +44,8 @@ import org.apache.spark.util.{SparkFatalException, ThreadUtils}
  */
 trait BroadcastExchangeLike extends Exchange {
 
+  def mode: BroadcastMode
+
   /**
    * The broadcast job group ID
    */
