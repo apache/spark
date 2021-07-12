@@ -351,7 +351,7 @@ def _create_tuple_for_frame_type(params: Any) -> object:
     from pyspark.pandas.typedef import NameTypeHolder
 
     if isinstance(params, zip):  # type: ignore
-        params = [slice(name, tpe) for name, tpe in params]
+        params = [slice(name, tpe) for name, tpe in params]  # type: ignore
 
     if isinstance(params, slice):
         params = (params,)
@@ -8802,7 +8802,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 [scol.alias(index_column) for scol, index_column in zip(scols, index_columns)]
             )
         else:
-            psser = ps.Series(list(index))
+            psser = ps.Series(list(index))  # type: ps.Series
             labels = psser._internal.spark_frame.select(psser.spark.column.alias(index_columns[0]))
             index_names = self._internal.index_names
 

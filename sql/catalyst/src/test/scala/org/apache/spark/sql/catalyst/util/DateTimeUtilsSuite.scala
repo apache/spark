@@ -142,6 +142,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("2015.03.18").isEmpty)
     assert(toDate("20150318").isEmpty)
     assert(toDate("2015-031-8").isEmpty)
+    assert(toDate("015-03-18").isEmpty)
+    assert(toDate("015").isEmpty)
     assert(toDate("1999 08 01").isEmpty)
     assert(toDate("1999-08 01").isEmpty)
     assert(toDate("1999 08").isEmpty)
@@ -151,8 +153,6 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
   test("SPARK-35780: support full range of date string") {
     assert(toDate("02015-03-18").get === days(2015, 3, 18))
-    assert(toDate("015-03-18").get === days(15, 3, 18))
-    assert(toDate("015").get === days(15, 1, 1))
     assert(toDate("02015").get === days(2015, 1, 1))
     assert(toDate("-02015").get === days(-2015, 1, 1))
     assert(toDate("999999-1-28").get === days(999999, 1, 28))
@@ -271,6 +271,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       expected = Option(date(2011, 5, 6, 7, 8, 9, 100000, zid = zid))
       checkStringToTimestamp("2011-05-06 07:08:09.1000", expected)
 
+      checkStringToTimestamp("238", None)
       checkStringToTimestamp("2015-03-18 123142", None)
       checkStringToTimestamp("2015-03-18T123123", None)
       checkStringToTimestamp("2015-03-18X", None)
@@ -278,6 +279,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("2015.03.18", None)
       checkStringToTimestamp("20150318", None)
       checkStringToTimestamp("2015-031-8", None)
+      checkStringToTimestamp("015-01-18", None)
       checkStringToTimestamp("2015-03-18T12:03.17-20:0", None)
       checkStringToTimestamp("2015-03-18T12:03.17-0:70", None)
       checkStringToTimestamp("2015-03-18T12:03.17-1:0:0", None)
@@ -307,10 +309,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
 
     checkStringToTimestamp("-1969-12-31 16:00:00", Option(date(-1969, 12, 31, 16, zid = UTC)))
     checkStringToTimestamp("02015-03-18 16:00:00", Option(date(2015, 3, 18, 16, zid = UTC)))
-    checkStringToTimestamp("015-03-18 16:00:00", Option(date(15, 3, 18, 16, zid = UTC)))
     checkStringToTimestamp("000001", Option(date(1, 1, 1, 0, zid = UTC)))
     checkStringToTimestamp("-000001", Option(date(-1, 1, 1, 0, zid = UTC)))
-    checkStringToTimestamp("238", Option(date(238, 1, 1, 0, zid = UTC)))
     checkStringToTimestamp("00238", Option(date(238, 1, 1, 0, zid = UTC)))
     checkStringToTimestamp("99999-03-01T12:03:17", Option(date(99999, 3, 1, 12, 3, 17, zid = UTC)))
     checkStringToTimestamp("+12:12:12", None)

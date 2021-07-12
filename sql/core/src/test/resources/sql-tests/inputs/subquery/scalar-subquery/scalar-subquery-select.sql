@@ -138,3 +138,10 @@ SELECT t1a,
     (SELECT sort_array(collect_set(t2d)) FROM t2 WHERE t2a = t1a) collect_set_t2,
     (SELECT hex(count_min_sketch(t2d, 0.5d, 0.5d, 1)) FROM t2 WHERE t2a = t1a) collect_set_t2
 FROM t1;
+
+-- SPARK-36028: Allow Project to host outer references in scalar subqueries
+SELECT t1c, (SELECT t1c) FROM t1;
+SELECT t1c, (SELECT t1c WHERE t1c = 8) FROM t1;
+SELECT t1c, t1d, (SELECT c + d FROM (SELECT t1c AS c, t1d AS d)) FROM t1;
+SELECT t1c, (SELECT SUM(c) FROM (SELECT t1c AS c)) FROM t1;
+SELECT t1a, (SELECT SUM(t2b) FROM t2 JOIN (SELECT t1a AS a) ON t2a = a) FROM t1;

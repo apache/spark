@@ -1214,7 +1214,7 @@ object EliminateSorts extends Rule[LogicalPlan] {
     _.containsPattern(SORT))(applyLocally)
 
   private val applyLocally: PartialFunction[LogicalPlan, LogicalPlan] = {
-    case Sort(_, _, child) if child.maxRows.exists(_ <= 1L) => child
+    case Sort(_, _, child) if child.maxRows.exists(_ <= 1L) => recursiveRemoveSort(child)
     case s @ Sort(orders, _, child) if orders.isEmpty || orders.exists(_.child.foldable) =>
       val newOrders = orders.filterNot(_.child.foldable)
       if (newOrders.isEmpty) {

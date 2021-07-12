@@ -253,7 +253,7 @@ object DateTimeUtils {
       // A Long is able to represent a timestamp within [+-]200 thousand years
       val maxDigitsYear = 6
       // For the nanosecond part, more than 6 digits is allowed, but will be truncated.
-      segment == 6 || (segment == 0 && digits > 0 && digits <= maxDigitsYear) ||
+      segment == 6 || (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
         (segment != 0 && segment != 6 && digits <= 2)
     }
     if (s == null || s.trimAll().numBytes() == 0) {
@@ -527,7 +527,7 @@ object DateTimeUtils {
     def isValidDigits(segment: Int, digits: Int): Boolean = {
       // An integer is able to represent a date within [+-]5 million years.
       var maxDigitsYear = 7
-      (segment == 0 && digits > 0 && digits <= maxDigitsYear) || (segment != 0 && digits <= 2)
+      (segment == 0 && digits >= 4 && digits <= maxDigitsYear) || (segment != 0 && digits <= 2)
     }
     if (s == null || s.trimAll().numBytes() == 0) {
       return None

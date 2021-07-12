@@ -206,6 +206,35 @@ class WorkerMemoryTest(unittest.TestCase):
     def tearDown(self):
         self.sc.stop()
 
+
+class WorkerSegfaultTest(ReusedPySparkTestCase):
+
+    @classmethod
+    def conf(cls):
+        _conf = super(WorkerSegfaultTest, cls).conf()
+        _conf.set("spark.python.worker.faulthandler.enabled", "true")
+        return _conf
+
+    def test_python_segfault(self):
+        try:
+            def f():
+                import ctypes
+                ctypes.string_at(0)
+
+            self.sc.parallelize([1]).map(lambda x: f()).count()
+        except Py4JJavaError as e:
+            self.assertRegex(str(e), "Segmentation fault")
+
+
+class WorkerSegfaultNonDaemonTest(WorkerSegfaultTest):
+
+    @classmethod
+    def conf(cls):
+        _conf = super(WorkerSegfaultNonDaemonTest, cls).conf()
+        _conf.set("spark.python.use.daemon", "false")
+        return _conf
+
+
 if __name__ == "__main__":
     import unittest
     from pyspark.tests.test_worker import *  # noqa: F401

@@ -16,12 +16,12 @@
 #
 
 from itertools import chain
-from typing import Union
+from typing import Any, Union
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.pandas._typing import Dtype, IndexOpsLike
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
@@ -48,7 +48,7 @@ class CategoricalOps(DataTypeOps):
         return col.cat.codes
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
-        dtype, spark_type = pandas_on_spark_type(dtype)
+        dtype, _ = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype) and dtype.categories is None:
             return index_ops.copy()
@@ -62,6 +62,17 @@ class CategoricalOps(DataTypeOps):
             )
             map_scol = F.create_map(*kvs)
             scol = map_scol.getItem(index_ops.spark.column)
-        return index_ops._with_new_scol(
-            scol.alias(index_ops._internal.data_spark_column_names[0])
-        ).astype(dtype)
+        return index_ops._with_new_scol(scol).astype(dtype)
+
+    # TODO(SPARK-35997): Implement comparison operators below
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise NotImplementedError("< can not be applied to %s." % self.pretty_name)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise NotImplementedError("<= can not be applied to %s." % self.pretty_name)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise NotImplementedError("> can not be applied to %s." % self.pretty_name)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        raise NotImplementedError(">= can not be applied to %s." % self.pretty_name)

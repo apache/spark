@@ -48,10 +48,8 @@ object RemoveRedundantProjects extends Rule[SparkPlan] {
   private def removeProject(plan: SparkPlan, requireOrdering: Boolean): SparkPlan = {
     plan match {
       case p @ ProjectExec(_, child) =>
-        if (isRedundant(p, child, requireOrdering)) {
-          val newPlan = removeProject(child, requireOrdering)
-          newPlan.setLogicalLink(child.logicalLink.get)
-          newPlan
+        if (isRedundant(p, child, requireOrdering) && canRemove(p, child)) {
+          removeProject(child, requireOrdering)
         } else {
           p.mapChildren(removeProject(_, false))
         }
@@ -109,5 +107,12 @@ object RemoveRedundantProjects extends Rule[SparkPlan] {
             checkNullability(orderedProjectOutput, orderedChildOutput)
         }
     }
+  }
+
+  // SPARK-36020: Currently a project can only be removed if (1) its logical link is empty or (2)
+  // its logical link is the same as the child's logical link. This is to ensure the physical
+  // plan node can correctly map to its logical plan node in AQE.
+  private def canRemove(project: ProjectExec, child: SparkPlan): Boolean = {
+    project.logicalLink.isEmpty || project.logicalLink.exists(child.logicalLink.contains)
   }
 }

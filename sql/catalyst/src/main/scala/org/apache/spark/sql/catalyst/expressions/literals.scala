@@ -28,7 +28,7 @@ import java.lang.{Short => JavaShort}
 import java.math.{BigDecimal => JavaBigDecimal}
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
 import java.util
 import java.util.Objects
 import javax.xml.bind.DatatypeConverter
@@ -352,6 +352,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
           DateFormatter().format(value.asInstanceOf[Int])
         case TimestampType =>
           TimestampFormatter.getFractionFormatter(timeZoneId).format(value.asInstanceOf[Long])
+        case TimestampNTZType =>
+          TimestampFormatter.getFractionFormatter(ZoneOffset.UTC).format(value.asInstanceOf[Long])
         case DayTimeIntervalType(startField, endField) =>
           toDayTimeIntervalString(value.asInstanceOf[Long], ANSI_STYLE, startField, endField)
         case YearMonthIntervalType(startField, endField) =>
@@ -473,6 +475,8 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
       s"DATE '$toString'"
     case (v: Long, TimestampType) =>
       s"TIMESTAMP '$toString'"
+    case (v: Long, TimestampNTZType) =>
+      s"TIMESTAMP_NTZ '$toString'"
     case (i: CalendarInterval, CalendarIntervalType) =>
       s"INTERVAL '${i.toString}'"
     case (v: Array[Byte], BinaryType) => s"X'${DatatypeConverter.printHexBinary(v)}'"

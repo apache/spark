@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.catalyst.util.IntervalUtils.microsToDuration
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -137,9 +138,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
       val tz = TimeZone.getTimeZone(zid)
       var c = Calendar.getInstance(tz)
-      checkEvaluation(
-        cast("123", TimestampType, Option(zid.getId)),
-        LocalDateTime.of(123, 1, 1, 0, 0, 0).atZone(zid).toInstant)
       c.set(2015, 0, 1, 0, 0, 0)
       c.set(Calendar.MILLISECOND, 0)
       checkCastStringToTimestamp("2015", new Timestamp(c.getTimeInMillis))
@@ -976,8 +974,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     // The input string can contain date only
     checkEvaluation(cast("2021-06-17", TimestampNTZType),
       LocalDateTime.of(2021, 6, 17, 0, 0))
-    checkEvaluation(cast("123", TimestampNTZType),
-      LocalDateTime.of(123, 1, 1, 0, 0))
   }
 
   test("SPARK-35112: Cast string to day-time interval") {
@@ -1117,17 +1113,23 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(cast(Literal.create(str), dataType), value)
         if (dataType == YearMonthIntervalType(YEAR)) {
           checkEvaluation(cast(Literal.create(s"INTERVAL '$str' YEAR"), dataType), value)
+          checkEvaluation(cast(Literal.create(s"INTERVAL '$str' year"), dataType), value)
         } else {
           checkEvaluation(cast(Literal.create(s"INTERVAL '$str' MONTH"), dataType), value)
+          checkEvaluation(cast(Literal.create(s"INTERVAL '$str' month"), dataType), value)
         }
       }
 
     if (!isTryCast) {
       Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH").foreach { interval =>
+        val dataType = YearMonthIntervalType()
         val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), YearMonthIntervalType()).eval()
+          cast(Literal.create(interval), dataType).eval()
         }.getMessage
-        assert(e.contains("Interval string does not match year-month format"))
+        assert(e.contains(s"Interval string does not match year-month format of " +
+          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+            .map(format => s"`$format`").mkString(", ")} " +
+          s"when cast to ${dataType.typeName}: $interval"))
       }
       Seq(("1", YearMonthIntervalType(YEAR, MONTH)),
         ("1", YearMonthIntervalType(YEAR, MONTH)),
@@ -1143,7 +1145,10 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           val e = intercept[IllegalArgumentException] {
             cast(Literal.create(interval), dataType).eval()
           }.getMessage
-          assert(e.contains("Interval string does not match year-month format"))
+          assert(e.contains(s"Interval string does not match year-month format of " +
+            s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+              .map(format => s"`$format`").mkString(", ")} " +
+            s"when cast to ${dataType.typeName}: $interval"))
         }
     }
   }
@@ -1180,6 +1185,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
 
       ("01", DayTimeIntervalType(MINUTE, MINUTE), (60) * MICROS_PER_SECOND),
       ("-01", DayTimeIntervalType(MINUTE, MINUTE), -(60) * MICROS_PER_SECOND),
+      ("01:01", DayTimeIntervalType(MINUTE, SECOND), ((60 + 1) * MICROS_PER_SECOND)),
       ("01:01.12345", DayTimeIntervalType(MINUTE, SECOND),
         ((60 + 1.12345) * MICROS_PER_SECOND).toLong),
       ("-01:01.12345", DayTimeIntervalType(MINUTE, SECOND),
@@ -1212,6 +1218,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       ("INTERVAL '9223372036854.775807' SECOND", DayTimeIntervalType(SECOND), Long.MaxValue))
       .foreach { case (interval, dataType, dt) =>
         checkEvaluation(cast(Literal.create(interval), dataType), dt)
+        checkEvaluation(cast(Literal.create(interval.toLowerCase(Locale.ROOT)), dataType), dt)
       }
 
     Seq(("INTERVAL '-106751991' DAY", DayTimeIntervalType(DAY), -106751991L * MICROS_PER_DAY),
@@ -1260,7 +1267,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           val e = intercept[IllegalArgumentException] {
             cast(Literal.create(interval), dataType).eval()
           }.getMessage
-          assert(e.contains("Interval string does not match day-time format"))
+          assert(e.contains(s"Interval string does not match day-time format of " +
+            s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+              .map(format => s"`$format`").mkString(", ")} " +
+            s"when cast to ${dataType.typeName}: $interval, " +
+            s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
+            "to restore the behavior before Spark 3.0."))
         }
 
       // Check first field outof bound
@@ -1278,7 +1290,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           val e = intercept[IllegalArgumentException] {
             cast(Literal.create(interval), dataType).eval()
           }.getMessage
-          assert(e.contains("Interval string does not match day-time format"))
+          assert(e.contains(s"Interval string does not match day-time format of " +
+            s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
+              .map(format => s"`$format`").mkString(", ")} " +
+            s"when cast to ${dataType.typeName}: $interval, " +
+            s"set ${SQLConf.LEGACY_FROM_DAYTIME_STRING.key} to true " +
+            "to restore the behavior before Spark 3.0."))
         }
     }
   }
