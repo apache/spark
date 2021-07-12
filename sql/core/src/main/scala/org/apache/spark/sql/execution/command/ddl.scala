@@ -25,10 +25,12 @@ import scala.collection.parallel.ForkJoinTaskSupport
 import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
 
+import org.apache.avro.SchemaParseException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -869,7 +871,7 @@ case class AlterTableSetLocationCommand(
 }
 
 
-object DDLUtils {
+object DDLUtils extends Logging {
   val HIVE_PROVIDER = "hive"
 
   def isHiveTable(table: CatalogTable): Boolean = {
@@ -963,9 +965,17 @@ object DDLUtils {
   }
 
   private[sql] def checkDataColNames(provider: String, colNames: Seq[String]): Unit = {
-    DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance() match {
-      case f: FileFormat => f.checkFieldNames(colNames)
-      case _ =>
+    try {
+      DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance() match {
+        case f: FileFormat => f.checkFieldNames(colNames)
+        case _ =>
+      }
+    } catch {
+      case e: AnalysisException if e.getMessage.contains("contains invalid character") =>
+        throw e
+      case e: SchemaParseException => throw e
+      case e: Throwable =>
+        logError(s"Failed to find data source: $provider when check data column names.", e)
     }
   }
 
