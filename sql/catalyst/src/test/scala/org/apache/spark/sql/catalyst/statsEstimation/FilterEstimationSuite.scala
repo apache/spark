@@ -833,6 +833,17 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 0)
   }
 
+  test("SPARK-36079: Bound selectivity >= 0") {
+    val colStatNullableString = colStatString.copy(nullCount = Some(-1))
+    val condition = Filter(IsNotNull(attrString),
+      childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
+        attributeMap = AttributeMap(Seq(attrString -> colStatNullableString))))
+    validateEstimatedStats(
+      condition,
+      Seq(attrString -> colStatString),
+      expectedRowCount = 10)
+  }
+
   test("ColumnStatsMap tests") {
     val attrNoDistinct = AttributeReference("att_without_distinct", IntegerType)()
     val attrNoCount = AttributeReference("att_without_count", BooleanType)()

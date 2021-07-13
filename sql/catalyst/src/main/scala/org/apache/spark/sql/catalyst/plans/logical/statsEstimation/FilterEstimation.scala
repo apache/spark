@@ -106,7 +106,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
       // The foldable Not has been processed in the ConstantFolding rule
       // This is a top-down traversal. The Not could be pushed down by the above two cases.
       case Not(l @ Literal(null, _)) =>
-        calculateSingleCondition(l, update = false)
+        calculateSingleCondition(l, update = false).map(boundProbability(_))
 
       case Not(cond) =>
         calculateFilterSelectivity(cond, update = false) match {
@@ -115,7 +115,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
         }
 
       case _ =>
-        boundProbability(calculateSingleCondition(condition, update))
+        calculateSingleCondition(condition, update).map(boundProbability(_))
     }
   }
 
