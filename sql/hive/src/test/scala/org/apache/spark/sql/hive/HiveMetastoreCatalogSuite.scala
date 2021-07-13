@@ -406,8 +406,6 @@ class DataSourceWithHiveMetastoreCatalogSuite
               spark.sql("SELECT * FROM t2").count()
             }
           }
-
-
         }
       })
     }
