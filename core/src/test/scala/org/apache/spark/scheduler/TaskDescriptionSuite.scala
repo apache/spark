@@ -76,6 +76,7 @@ class TaskDescriptionSuite extends SparkFunSuite {
       originalJars,
       originalArchives,
       originalProperties,
+      1,
       originalResources,
       taskBuffer
     )
