@@ -23,7 +23,7 @@ import java.util.Optional
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
-import org.apache.spark.errors.ResourceErrors
+import org.apache.spark.errors.{CompilationErrors, ExecutionErrors}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils.executeAndGetOutput
 
@@ -51,13 +51,13 @@ class ResourceDiscoveryScriptPlugin extends ResourceDiscoveryPlugin with Logging
         val output = executeAndGetOutput(Seq(script.get), new File("."))
         ResourceInformation.parseJson(output)
       } else {
-        throw ResourceErrors.notExistResourceScript(scriptFile, resourceName)
+        throw ExecutionErrors.notExistResourceScript(scriptFile, resourceName)
       }
     } else {
-      throw ResourceErrors.specifyADiscoveryScript(resourceName)
+      throw ExecutionErrors.specifyADiscoveryScript(resourceName)
     }
     if (!result.name.equals(resourceName)) {
-      throw ResourceErrors.runningOtherResource(script, result, resourceName)
+      throw ExecutionErrors.runningOtherResource(script, result, resourceName)
     }
     Optional.of(result)
   }

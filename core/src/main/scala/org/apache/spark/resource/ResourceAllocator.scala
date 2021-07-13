@@ -19,7 +19,7 @@ package org.apache.spark.resource
 
 import scala.collection.mutable
 
-import org.apache.spark.errors.ResourceErrors
+import org.apache.spark.errors.CompilationErrors
 
 /**
  * Trait used to help executor/worker allocate resources.
@@ -77,13 +77,13 @@ private[spark] trait ResourceAllocator {
   def acquire(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
       if (!addressAvailabilityMap.contains(address)) {
-        throw ResourceErrors.acquireAnAddressNotExist(resourceName, address)
+        throw CompilationErrors.acquireAnAddressNotExist(resourceName, address)
       }
       val isAvailable = addressAvailabilityMap(address)
       if (isAvailable > 0) {
         addressAvailabilityMap(address) = addressAvailabilityMap(address) - 1
       } else {
-        throw ResourceErrors.acquireAnAddressNotAvailable(resourceName, address)
+        throw CompilationErrors.acquireAnAddressNotAvailable(resourceName, address)
       }
     }
   }
@@ -96,13 +96,13 @@ private[spark] trait ResourceAllocator {
   def release(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
       if (!addressAvailabilityMap.contains(address)) {
-        throw ResourceErrors.releaseAnAddressNotExist(resourceName, address)
+        throw CompilationErrors.releaseAnAddressNotExist(resourceName, address)
       }
       val isAvailable = addressAvailabilityMap(address)
       if (isAvailable < slotsPerAddress) {
         addressAvailabilityMap(address) = addressAvailabilityMap(address) + 1
       } else {
-        throw ResourceErrors.releaseAnAddressNotAssigned(resourceName, address)
+        throw CompilationErrors.releaseAnAddressNotAssigned(resourceName, address)
       }
     }
   }
