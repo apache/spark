@@ -21,13 +21,12 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types._
-
-import org.roaringbitmap.RoaringBitmap
 
 @ExpressionDescription(
  usage = "_FUNC_(expr) - Returns the bitmap from values of a group of the offset.",
