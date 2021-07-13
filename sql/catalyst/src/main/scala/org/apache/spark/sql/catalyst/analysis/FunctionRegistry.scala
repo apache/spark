@@ -542,6 +542,7 @@ object FunctionRegistry {
     expression[ToUnixTimestamp]("to_unix_timestamp"),
     expression[ToUTCTimestamp]("to_utc_timestamp"),
     expression[ParseToTimestampNTZ]("to_timestamp_ntz"),
+    expression[ParseToTimestampLTZ]("to_timestamp_ltz"),
     expression[TruncDate]("trunc"),
     expression[TruncTimestamp]("date_trunc"),
     expression[UnixTimestamp]("unix_timestamp"),
