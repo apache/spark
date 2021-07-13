@@ -47,7 +47,7 @@ class StreamingSessionWindowStateManagerSuite extends StreamTest with BeforeAndA
     keysWithoutSessionAttributes.map(_.dataType).toArray)
 
   before {
-    SparkSession.setActiveSession(spark) // set this before force initializing 'joinExec'
+    SparkSession.setActiveSession(spark)
     spark.streams.stateStoreCoordinator // initialize the lazy coordinator
   }
 

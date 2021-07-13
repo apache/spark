@@ -49,8 +49,8 @@ sealed trait StreamingSessionWindowStateManager extends Serializable {
   def extractKeyWithoutSession(value: UnsafeRow): UnsafeRow
 
   /**
-   * Check whether the given value is a new session, or the session has been
-   * updated.
+   * Returns true if the session of the given value doesn't exist in the store, or the value
+   * in the session is different to the stored value of the session in the store.
    * This can be used to control the output in UPDATE mode.
    */
   def newOrModified(store: ReadStateStore, value: UnsafeRow): Boolean
@@ -71,7 +71,7 @@ sealed trait StreamingSessionWindowStateManager extends Serializable {
    * @param sessions The all sessions including existing sessions if it's active.
    *                 Existing sessions which aren't included in this parameter will be removed.
    */
-  def updateSessions(store: StateStore, key: UnsafeRow, sessions: Seq[UnsafeRow]): Long
+  def updateSessions(store: StateStore, key: UnsafeRow, sessions: Seq[UnsafeRow]): Unit
 
   /**
    * Removes using a predicate on values, with returning removed values via iterator.
@@ -128,9 +128,6 @@ class StreamingSessionWindowStateManagerImplV1(
     valueAttributes: Seq[Attribute])
   extends StreamingSessionWindowStateManager with Logging {
 
-  @transient private lazy val keyWithoutSessionRowGenerator = UnsafeProjection.create(
-    keyWithoutSessionExpressions, valueAttributes)
-
   private val stateKeyStructType = keyWithoutSessionExpressions.toStructType
     .add("sessionStartTime", TimestampType, nullable = false)
 
@@ -151,7 +148,7 @@ class StreamingSessionWindowStateManagerImplV1(
   override def getNumColsForPrefixKey: Int = keyWithoutSessionExpressions.length
 
   override def extractKeyWithoutSession(value: UnsafeRow): UnsafeRow = {
-    keyWithoutSessionRowGenerator(value)
+    keyRowGenerator(value)
   }
 
   override def newOrModified(store: ReadStateStore, value: UnsafeRow): Boolean = {
@@ -173,7 +170,7 @@ class StreamingSessionWindowStateManagerImplV1(
   override def updateSessions(
       store: StateStore,
       key: UnsafeRow,
-      sessions: Seq[UnsafeRow]): Long = {
+      sessions: Seq[UnsafeRow]): Unit = {
     replaceModifyWindow(key, sessions, store)
   }
 
@@ -194,7 +191,7 @@ class StreamingSessionWindowStateManagerImplV1(
 
       override protected def getNext(): UnsafeRow = {
         var removedValueRow: UnsafeRow = null
-        while(rangeIter.hasNext && removedValueRow == null) {
+        while (rangeIter.hasNext && removedValueRow == null) {
           val rowPair = rangeIter.next()
           if (removalCondition(rowPair.value)) {
             store.remove(rowPair.key)
@@ -223,7 +220,8 @@ class StreamingSessionWindowStateManagerImplV1(
   }
 
   /**
-   * add to store, only update the changed window elements
+   * Updates windows from the values overlapped with existing values in the store, and adds
+   * new windows from the values.
    */
   private def replaceModifyWindow(
       key: UnsafeRow,
@@ -286,12 +284,20 @@ class StreamingSessionWindowHelper(sessionExpression: Attribute, inputSchema: Se
   private val sessionProjection: UnsafeProjection =
     GenerateUnsafeProjection.generate(Seq(sessionExpression), inputSchema)
 
-  // extract session_window (start, end) from UnsafeRow
+  /** extract session_window (start, end) from UnsafeRow */
   def extractTimePair(value: InternalRow): (Long, Long) = {
     val window = sessionProjection(value).getStruct(0, 2)
     (window.getLong(0), window.getLong(1))
   }
 
+  /**
+   * Returns the union of windows from old windows and new windows.
+   *
+   * To deduplicate intersection from union of both windows, The method will remove old windows
+   * which overlap with new windows. The approach is safe, as a new window which overlaps with
+   * an old windows "supersedes" the old windows. The window boundary is always "expanded" and
+   * new window has updated values.
+   */
   def removeOverlapWindow(
       newWindows: Seq[UnsafeRow],
       oldWindows: Seq[UnsafeRow]): Seq[UnsafeRow] = {
