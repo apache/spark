@@ -12,6 +12,11 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes
 import org.apache.spark.sql.catalyst.expressions.UnaryExpression
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
+import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
+import java.io.ByteArrayOutputStream
+import java.io.DataOutputStream
+
 
 
 @ExpressionDescription(
@@ -28,9 +33,11 @@ import org.apache.spark.sql.catalyst.expressions.UnaryExpression
 case class BuildBitmap(child: Expression,
                               override val mutableAggBufferOffset: Int = 0,
                               override val inputAggBufferOffset: Int = 0)
-    extends NullableSketchAggregation {
+    extends TypedImperativeAggregate[Option[RoaringBitmap]]  {
 
   def this(child: Expression) = this(child, 0, 0)
+  
+  override def createAggregationBuffer(): Option[RoaringBitmap] = None
   
   override def merge(buffer: Option[RoaringBitmap],
                      other: Option[RoaringBitmap]): Option[RoaringBitmap] =
@@ -42,6 +49,40 @@ case class BuildBitmap(child: Expression,
       case (None, b) => b
       case _         => None
     }
+  
+  override def eval(buffer: Option[RoaringBitmap]): Any = {
+    buffer
+      .map(rbm => {
+        val bos = new ByteArrayOutputStream
+        rbm.serialize(new DataOutputStream(bos))
+        bos.toByteArray
+      })
+      .orNull
+  }
+  
+  override def children: Seq[Expression] = Seq(child)
+
+  override def nullable: Boolean = child.nullable
+
+  override def serialize(buffer: Option[RoaringBitmap]): Array[Byte] = {
+    buffer
+      .map(rbm => {
+        val bos = new ByteArrayOutputStream
+        rbm.serialize(new DataOutputStream(bos))
+        bos.toByteArray
+      })
+      .orNull
+  }
+
+  override def deserialize(bytes: Array[Byte]): Option[RoaringBitmap] = {
+    if (bytes == null) {
+      return None
+    }
+
+    val rbm = new RoaringBitmap
+    rbm.deserialize(new DataInputStream(new ByteArrayInputStream(bytes)))
+    Option(rbm)
+  }
   
 
   override def update(buffer: Option[RoaringBitmap],
