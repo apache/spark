@@ -33,8 +33,3 @@ case class Sum(column: Expression, dataType: DataType, isDistinct: Boolean)
   extends AggregateFunc
 case class Count(column: Expression, dataType: DataType, isDistinct: Boolean)
   extends AggregateFunc
-
-object Aggregation {
-  // Returns an empty Aggregate
-  def empty: Aggregation = Aggregation(Seq.empty[AggregateFunc], Seq.empty[Expression])
-}

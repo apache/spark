@@ -67,10 +67,10 @@ case class ParquetPartitionReaderFactory(
     partitionSchema: StructType,
     aggSchema: StructType,
     filters: Array[Filter],
-    aggregation: Aggregation,
+    aggregation: Option[Aggregation],
     parquetOptions: ParquetOptions) extends FilePartitionReaderFactory with Logging {
   private val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-  private val newReadDataSchema = if (aggregation.aggregateExpressions.isEmpty) {
+  private val newReadDataSchema = if (aggregation.isEmpty) {
     readDataSchema
   } else {
     aggSchema
@@ -96,7 +96,7 @@ case class ParquetPartitionReaderFactory(
 
     val filePath = new Path(new URI(file.filePath))
 
-    if (aggregation.aggregateExpressions.isEmpty) {
+    if (aggregation.isEmpty) {
       ParquetFooterReader.readFooter(conf, filePath, SKIP_ROW_GROUPS)
     } else {
       ParquetFooterReader.readFooter(conf, filePath, NO_FILTER)
@@ -122,7 +122,7 @@ case class ParquetPartitionReaderFactory(
   }
 
   override def buildReader(file: PartitionedFile): PartitionReader[InternalRow] = {
-    val fileReader = if (aggregation.aggregateExpressions.isEmpty) {
+    val fileReader = if (aggregation.isEmpty) {
 
       val reader = if (enableVectorizedReader) {
         createVectorizedReader(file)
@@ -146,8 +146,8 @@ case class ParquetPartitionReaderFactory(
         override def get(): InternalRow = {
           count += 1
           val footer = getFooter(file)
-          ParquetUtils.createInternalRowFromAggResult(footer, dataSchema, aggregation, aggSchema,
-            datetimeRebaseModeInRead)
+          ParquetUtils.createInternalRowFromAggResult(footer, dataSchema, aggregation.get,
+            aggSchema, datetimeRebaseModeInRead)
         }
 
         override def close(): Unit = return
@@ -159,7 +159,7 @@ case class ParquetPartitionReaderFactory(
   }
 
   override def buildColumnarReader(file: PartitionedFile): PartitionReader[ColumnarBatch] = {
-    val fileReader = if (aggregation.aggregateExpressions.isEmpty) {
+    val fileReader = if (aggregation.isEmpty) {
       val vectorizedReader = createVectorizedReader(file)
       vectorizedReader.enableReturningBatches()
 
@@ -180,8 +180,8 @@ case class ParquetPartitionReaderFactory(
         override def get(): ColumnarBatch = {
           count += 1
           val footer = getFooter(file)
-          ParquetUtils.createColumnarBatchFromAggResult(footer, dataSchema, aggregation, aggSchema,
-            enableOffHeapColumnVector, datetimeRebaseModeInRead)
+          ParquetUtils.createColumnarBatchFromAggResult(footer, dataSchema, aggregation.get,
+            aggSchema, enableOffHeapColumnVector, datetimeRebaseModeInRead)
         }
 
         override def close(): Unit = return

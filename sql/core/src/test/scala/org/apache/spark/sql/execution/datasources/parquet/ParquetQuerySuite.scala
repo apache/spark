@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.{SchemaColumnConvertNotSupport
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
+import org.apache.spark.sql.functions.min
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -904,7 +905,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  test("test aggregate push down - nested data ") {
+  test("test aggregate push down - nested data shouldn't be pushed down") {
     val data = (1 to 10).map(i => Tuple1((i, Seq(s"val_$i"))))
     withSQLConf(
       SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
@@ -921,6 +922,42 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("test aggregate push down alias") {
+    val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
+      (9, "mno", 7), (2, null, 6))
+    withParquetTable(data, "t") {
+      withSQLConf(
+        SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
+
+        val selectAgg1 = sql("SELECT min(_1) + max(_1) as res FROM t")
+
+        selectAgg1.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment =
+              "PushedAggregation: [Min(_1,IntegerType), Max(_1,IntegerType)]"
+            checkKeywordsExistsInExplain(selectAgg1, expected_plan_fragment)
+        }
+
+        val selectAgg2 = sql("SELECT min(_1) as minValue, max(_1) as maxValue FROM t")
+        selectAgg2.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment =
+              "PushedAggregation: [Min(_1,IntegerType), Max(_1,IntegerType)]"
+            checkKeywordsExistsInExplain(selectAgg2, expected_plan_fragment)
+        }
+
+        val df = spark.table("t")
+        val query = df.select($"_1".as("col1")).agg(min($"col1"))
+        query.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment =
+              "PushedAggregation: []"  // aggregate alias not pushed down
+            checkKeywordsExistsInExplain(query, expected_plan_fragment)
+        }
+      }
+    }
+  }
+
   test("test aggregate push down") {
     val data = Seq((-2, "abc", 2), (3, "def", 4), (6, "ghi", 2), (0, null, 19),
       (9, "mno", 7), (2, null, 6))
@@ -928,6 +965,7 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
       withSQLConf(
         SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true") {
 
+        // aggregate not pushed down if there is a filter
         val selectAgg1 = sql("SELECT min(_3) FROM t WHERE _1 > 0")
         selectAgg1.queryExecution.optimizedPlan.collect {
           case _: DataSourceV2ScanRelation =>
@@ -940,9 +978,14 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
         val selectAgg2 = sql("SELECT min(_3 + _1), max(_3 + _1) FROM t")
         checkAnswer(selectAgg2, Seq(Row(0, 19)))
 
-        // sum is not pushed down
-        val selectAgg3 = sql("SELECT sum(_3) FROM t")
-        checkAnswer(selectAgg3, Seq(Row(40)))
+        // aggregate not pushed down if one of them can't be pushed down
+        val selectAgg3 = sql("SELECT min(_1), sum(_3) FROM t")
+        selectAgg3.queryExecution.optimizedPlan.collect {
+          case _: DataSourceV2ScanRelation =>
+            val expected_plan_fragment =
+              "PushedAggregation: []"
+            checkKeywordsExistsInExplain(selectAgg3, expected_plan_fragment)
+        }
 
         val selectAgg4 = sql("SELECT min(_3), min(_3), max(_3), min(_1), max(_1), max(_1)," +
           " count(*), count(_1), count(_2), count(_3) FROM t")

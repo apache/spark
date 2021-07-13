@@ -43,7 +43,7 @@ case class ParquetScan(
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     pushedFilters: Array[Filter],
-    pushedAggregations: Aggregation = Aggregation.empty,
+    pushedAggregations: Option[Aggregation],
     pushedDownAggSchema: StructType,
     options: CaseInsensitiveStringMap,
     partitionFilters: Seq[Expression] = Seq.empty,
@@ -96,27 +96,51 @@ case class ParquetScan(
 
   override def equals(obj: Any): Boolean = obj match {
     case p: ParquetScan =>
+      val pushedDownAggEqual = if (pushedAggregations.nonEmpty) {
+        equivalentAggregations(pushedAggregations.get, p.pushedAggregations.get)
+      } else {
+        true
+      }
       super.equals(p) && dataSchema == p.dataSchema && options == p.options &&
-        equivalentFilters(pushedFilters, p.pushedFilters) &&
-        equivalentAggregations(pushedAggregations, p.pushedAggregations)
+        equivalentFilters(pushedFilters, p.pushedFilters) && pushedDownAggEqual
     case _ => false
   }
 
   override def hashCode(): Int = getClass.hashCode()
 
+  lazy private val pushedAggregationsStr = if (pushedAggregations.nonEmpty) {
+    seqToString(pushedAggregations.get.aggregateExpressions)
+  } else {
+    "[]"
+  }
+
+  lazy private val pushedGroupByStr = if (pushedAggregations.nonEmpty) {
+    seqToString(pushedAggregations.get.groupByColumns)
+  } else {
+    "[]"
+  }
+
   override def description(): String = {
     super.description() + ", PushedFilters: " + seqToString(pushedFilters) +
-      ", PushedAggregation: " + seqToString(pushedAggregations.aggregateExpressions)
+      ", PushedAggregation: " + pushedAggregationsStr +
+      ", PushedGroupBy: " + pushedGroupByStr
   }
 
   override def getMetaData(): Map[String, String] = {
     super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters)) ++
-      Map("PushedAggregation" -> seqToString(pushedAggregations.aggregateExpressions))
+      Map("PushedAggregation" -> pushedAggregationsStr) ++
+      Map("PushedGroupBy" -> pushedGroupByStr)
   }
 
   override def withFilters(
       partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): FileScan =
     this.copy(partitionFilters = partitionFilters, dataFilters = dataFilters)
+
+  override def readSchema(): StructType = if (pushedAggregations.nonEmpty) {
+    pushedDownAggSchema
+  } else {
+    StructType(readDataSchema.fields ++ readPartitionSchema.fields)
+  }
 
   // Returns whether the two given [[Aggregation]]s are equivalent.
   private def equivalentAggregations(a: Aggregation, b: Aggregation): Boolean = {

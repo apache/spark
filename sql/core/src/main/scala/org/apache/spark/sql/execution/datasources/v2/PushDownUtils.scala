@@ -80,7 +80,7 @@ object PushDownUtils extends PredicateHelper {
   def pushAggregates(
       scanBuilder: ScanBuilder,
       aggregates: Seq[AggregateExpression],
-      groupBy: Seq[Expression]): Aggregation = {
+      groupBy: Seq[Expression]): Option[Aggregation] = {
 
     def columnAsString(e: Expression): Option[FieldReference] = e match {
       case AttributeReference(name, _, _, _) => Some(FieldReference(Seq(name)))
@@ -89,16 +89,21 @@ object PushDownUtils extends PredicateHelper {
 
     scanBuilder match {
       case r: SupportsPushDownAggregates =>
-        val translatedAggregates = aggregates.map(DataSourceStrategy.translateAggregate)
-        val translatedGroupBys = groupBy.map(columnAsString)
+        val translatedAggregates = aggregates.map(DataSourceStrategy.translateAggregate).flatten
+        val translatedGroupBys = groupBy.map(columnAsString).flatten
 
-        val agg = Aggregation(translatedAggregates.flatten, translatedGroupBys.flatten)
-        if (r.pushAggregation(agg)) {
-          agg
-        } else {
-          Aggregation.empty
+        if (translatedAggregates.length != aggregates.length ||
+          translatedGroupBys.length != groupBy.length) {
+          return None
         }
-      case _ => Aggregation.empty
+
+        val agg = Aggregation(translatedAggregates, translatedGroupBys)
+        if (r.pushAggregation(agg)) {
+          Some(agg)
+        } else {
+          None
+        }
+      case _ => None
     }
   }
 

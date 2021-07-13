@@ -23,7 +23,14 @@ import org.apache.spark.sql.connector.expressions.Aggregation;
 /**
  * A mix-in interface for {@link ScanBuilder}. Data source can implement this interface to
  * push down aggregates. Depends on the data source implementation, the aggregates may not
- * be able to push down, or partially push down and have final aggregate at Spark.
+ * be able to push down, or partially push down and have a final aggregate at Spark.
+ * For example, "SELECT min(_1) FROM t GROUP BY _2" can be pushed down to data source,
+ * the partially aggregated result min(_1) grouped by _2 will be returned to Spark, and
+ * then have a final aggregation.
+ * {{{
+ *   Aggregate [_2#10], [min(_2#10) AS min(_1)#16]
+ *     +- RelationV2[_2#10, min(_1)#18]
+ * }}}
  *
  * When pushing down operators, Spark pushes down filters to the data source first, then push down
  * aggregates or apply column pruning. Depends on data source implementation, aggregates may or
@@ -36,9 +43,9 @@ import org.apache.spark.sql.connector.expressions.Aggregation;
 public interface SupportsPushDownAggregates extends ScanBuilder {
 
   /**
-   * Pushes down Aggregation to datasource. The order of the datasource scan output is:
-   * grouping columns, aggregate columns (in the same order as the aggregate functions in
-   * the given Aggregation.
+   * Pushes down Aggregation to datasource. The order of the datasource scan output columns should
+   * be: grouping columns, aggregate columns (in the same order as the aggregate functions in
+   * the given Aggregation).
    */
   boolean pushAggregation(Aggregation aggregation);
 }

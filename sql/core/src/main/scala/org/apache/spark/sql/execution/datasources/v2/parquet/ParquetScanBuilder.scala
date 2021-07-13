@@ -73,7 +73,7 @@ case class ParquetScanBuilder(
   // All filters that can be converted to Parquet are pushed down.
   override def pushedFilters(): Array[Filter] = pushedParquetFilters
 
-  private var pushedAggregations = Aggregation.empty
+  private var pushedAggregations = Option.empty[Aggregation]
 
   private var pushedAggregateSchema = new StructType()
 
@@ -121,7 +121,7 @@ case class ParquetScanBuilder(
       }
       case _ => return false
     }
-    this.pushedAggregations = aggregation
+    this.pushedAggregations = Some(aggregation)
     true
   }
 
