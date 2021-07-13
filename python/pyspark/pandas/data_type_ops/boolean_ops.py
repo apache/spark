@@ -16,7 +16,7 @@
 #
 
 import numbers
-from typing import cast, Any, Union
+from typing import Any, Union
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -281,29 +281,19 @@ class BooleanOps(DataTypeOps):
         return operand
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__gt__)(left, right)
 
     def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
-        from pyspark.pandas.base import column_op
-
-        return cast(IndexOpsLike, column_op(Column.__invert__)(operand))
+        return operand._with_new_scol(~operand.spark.column, field=operand._internal.data_fields[0])
 
 
 class BooleanExtensionOps(BooleanOps):
