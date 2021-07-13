@@ -363,4 +363,33 @@ class DataSourceWithHiveMetastoreCatalogSuite
       }
     })
   }
+
+  Seq(
+    "parquet" -> "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+    "orc" -> "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
+  ).foreach { case (format, serde) =>
+    test("SPARK-28266: convertToLogicalRelation should not interpret `path` property when " +
+      s"reading Hive tables using $format file format") {
+      withTempPath(dir => {
+        val baseDir = s"${dir.getCanonicalFile.toURI.toString}"
+        spark.range(3).selectExpr("id").write.format(format).save(baseDir)
+        withTable("non_partition_table") {
+          hiveClient.runSqlHive(
+            s"""
+               |CREATE TABLE non_partition_table (id bigint)
+               |ROW FORMAT SERDE '$serde'
+               |WITH SERDEPROPERTIES ('path'='$baseDir')
+               |STORED AS $format LOCATION '$baseDir'
+               |""".stripMargin)
+
+          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true",
+              HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+            assertResult(3) {
+              spark.sql("SELECT * FROM non_partition_table").count()
+            }
+          }
+        }
+      })
+    }
+  }
 }
