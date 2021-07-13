@@ -319,7 +319,7 @@ select timestamp '2019-01-01中文'
 -- !query
 select timestamp'2011-11-11 11:11:11' + interval '2' day
 -- !query schema
-struct<TIMESTAMP '2011-11-11 11:11:11' + INTERVAL '2 days':timestamp>
+struct<TIMESTAMP '2011-11-11 11:11:11' + INTERVAL '2' DAY:timestamp>
 -- !query output
 2011-11-13 11:11:11
 
@@ -327,7 +327,7 @@ struct<TIMESTAMP '2011-11-11 11:11:11' + INTERVAL '2 days':timestamp>
 -- !query
 select timestamp'2011-11-11 11:11:11' - interval '2' day
 -- !query schema
-struct<TIMESTAMP '2011-11-11 11:11:11' - INTERVAL '2 days':timestamp>
+struct<TIMESTAMP '2011-11-11 11:11:11' - INTERVAL '2' DAY:timestamp>
 -- !query output
 2011-11-09 11:11:11
 
@@ -335,23 +335,23 @@ struct<TIMESTAMP '2011-11-11 11:11:11' - INTERVAL '2 days':timestamp>
 -- !query
 select date'2011-11-11 11:11:11' + interval '2' second
 -- !query schema
-struct<DATE '2011-11-11' + INTERVAL '2 seconds':date>
+struct<DATE '2011-11-11' + INTERVAL '02' SECOND:timestamp>
 -- !query output
-2011-11-11
+2011-11-11 00:00:02
 
 
 -- !query
 select date'2011-11-11 11:11:11' - interval '2' second
 -- !query schema
-struct<DATE '2011-11-11' - INTERVAL '2 seconds':date>
+struct<DATE '2011-11-11' - INTERVAL '02' SECOND:timestamp>
 -- !query output
-2011-11-10
+2011-11-10 23:59:58
 
 
 -- !query
 select '2011-11-11' - interval '2' day
 -- !query schema
-struct<2011-11-11 - INTERVAL '2 days':string>
+struct<2011-11-11 - INTERVAL '2' DAY:string>
 -- !query output
 2011-11-09 00:00:00
 
@@ -359,7 +359,7 @@ struct<2011-11-11 - INTERVAL '2 days':string>
 -- !query
 select '2011-11-11 11:11:11' - interval '2' second
 -- !query schema
-struct<2011-11-11 11:11:11 - INTERVAL '2 seconds':string>
+struct<2011-11-11 11:11:11 - INTERVAL '02' SECOND:string>
 -- !query output
 2011-11-11 11:11:09
 
@@ -367,7 +367,7 @@ struct<2011-11-11 11:11:11 - INTERVAL '2 seconds':string>
 -- !query
 select '1' - interval '2' second
 -- !query schema
-struct<1 - INTERVAL '2 seconds':string>
+struct<1 - INTERVAL '02' SECOND:string>
 -- !query output
 NULL
 
@@ -378,7 +378,7 @@ select 1 - interval '2' second
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve '1 + (- INTERVAL '2 seconds')' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, '1' is of int type.; line 1 pos 7
+cannot resolve '1 + (- INTERVAL '02' SECOND)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, '1' is of int type.; line 1 pos 7
 
 
 -- !query
@@ -1469,7 +1469,7 @@ NULL
 -- !query
 select to_timestamp_ntz('2021-06-25 10:11:12') + interval 2 day
 -- !query schema
-struct<to_timestamp_ntz(2021-06-25 10:11:12) + INTERVAL '2 days':timestamp_ntz>
+struct<to_timestamp_ntz(2021-06-25 10:11:12) + INTERVAL '2' DAY:timestamp_ntz>
 -- !query output
 2021-06-27 10:11:12
 
@@ -1541,7 +1541,7 @@ struct<to_timestamp_ntz(2021-06-25 10:11:12) + INTERVAL '20 15:40:32.998999' DAY
 -- !query
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval 2 day
 -- !query schema
-struct<to_timestamp_ntz(2021-06-25 10:11:12) - INTERVAL '2 days':timestamp_ntz>
+struct<to_timestamp_ntz(2021-06-25 10:11:12) - INTERVAL '2' DAY:timestamp_ntz>
 -- !query output
 2021-06-23 10:11:12
 
