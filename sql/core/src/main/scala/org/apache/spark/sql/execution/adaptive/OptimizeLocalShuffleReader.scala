@@ -85,12 +85,24 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
     val expectedParallelism = advisoryParallelism.getOrElse(numReducers)
     val splitPoints = if (numMappers == 0) {
       Seq.empty
-    } else {
-      equallyDivide(numReducers, math.max(1, expectedParallelism / numMappers))
+    } else if (expectedParallelism >= numMappers) {
+      equallyDivide(numReducers, expectedParallelism / numMappers)
     }
-    (0 until numMappers).flatMap { mapIndex =>
-      (splitPoints :+ numReducers).sliding(2).map {
-        case Seq(start, end) => PartialMapperPartitionSpec(mapIndex, start, end)
+    else {
+      equallyDivide(numMappers, expectedParallelism)
+    }
+    if (expectedParallelism >= numMappers) {
+      (0 until numMappers).flatMap { mapIndex =>
+        (splitPoints :+ numReducers).sliding(2).map {
+          case Seq(start, end) => PartialMapperPartitionSpec(mapIndex, start, end)
+        }
+      }
+    }
+    else {
+      (0 until 1).flatMap { _ =>
+        (splitPoints :+ numMappers).sliding(2).map {
+          case Seq(start, end) => CoalescedMapperPartitionSpec(start, end, numReducers)
+        }
       }
     }
   }
