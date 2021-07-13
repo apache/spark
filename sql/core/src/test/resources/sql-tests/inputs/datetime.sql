@@ -260,7 +260,19 @@ select to_timestamp_ntz('2021-06-25 10:11:12') - interval '20 15:40:32.99899999'
 
 -- timestamp numeric fields constructor
 SELECT make_timestamp(2021, 07, 11, 6, 30, 45.678);
+SELECT make_timestamp(2021, 07, 11, 6, 30, 45.678, 'CET');
 SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007);
+
+-- TimestampNTZ numeric fields constructor
+SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678);
+-- make_timestamp_ntz should not accept time zone input
+SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678, 'CET');
+SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 60.007);
+
+-- TimestampLTZ numeric fields constructor
+SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678);
+SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678, 'CET');
+SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 60.007);
 
 -- datetime with year outside [0000-9999]
 select date'999999-03-18';

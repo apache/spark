@@ -16,7 +16,7 @@
 #
 
 import numbers
-from typing import cast, Any, Union
+from typing import Any, Union
 
 import numpy as np
 import pandas as pd
@@ -122,38 +122,24 @@ class NumericOps(DataTypeOps):
         right = transform_boolean_operand_to_numeric(right)
         return column_op(rmod)(left, right)
 
-    # TODO(SPARK-36003): Implement unary operator `invert` as below
-    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
-        raise NotImplementedError("Unary ~ can not be applied to %s." % self.pretty_name)
-
     def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
-        from pyspark.pandas.base import column_op
-
-        return cast(IndexOpsLike, column_op(Column.__neg__)(operand))
+        return operand._with_new_scol(-operand.spark.column, field=operand._internal.data_fields[0])
 
     def abs(self, operand: IndexOpsLike) -> IndexOpsLike:
-        from pyspark.pandas.base import column_op
-
-        return cast(IndexOpsLike, column_op(F.abs)(operand))
+        return operand._with_new_scol(
+            F.abs(operand.spark.column), field=operand._internal.data_fields[0]
+        )
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__le__)(left, right)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__ge__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        from pyspark.pandas.base import column_op
-
         return column_op(Column.__gt__)(left, right)
 
 
@@ -226,6 +212,11 @@ class IntegralOps(NumericOps):
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return numpy_column_op(rfloordiv)(left, right)
+
+    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
+        return operand._with_new_scol(
+            F.bitwise_not(operand.spark.column), field=operand._internal.data_fields[0]
+        )
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
@@ -357,9 +348,6 @@ class DecimalOps(FractionalOps):
     @property
     def pretty_name(self) -> str:
         return "decimal"
-
-    def invert(self, operand: IndexOpsLike) -> IndexOpsLike:
-        raise TypeError("Unary ~ can not be applied to %s." % self.pretty_name)
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("< can not be applied to %s." % self.pretty_name)
