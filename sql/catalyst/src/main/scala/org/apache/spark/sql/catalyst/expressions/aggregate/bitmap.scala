@@ -39,14 +39,14 @@ import org.roaringbitmap.RoaringBitmap
       +---+--------------------+
 """)
 case class BuildBitmap(child: Expression,
-                              override val mutableAggBufferOffset: Int = 0,
-                              override val inputAggBufferOffset: Int = 0)
+				 override val mutableAggBufferOffset: Int = 0,
+                 override val inputAggBufferOffset: Int = 0)
     extends TypedImperativeAggregate[Option[RoaringBitmap]]  {
 
   def this(child: Expression) = this(child, 0, 0)
-  
+ 
   override def createAggregationBuffer(): Option[RoaringBitmap] = None
-  
+
   override def merge(buffer: Option[RoaringBitmap],
                      other: Option[RoaringBitmap]): Option[RoaringBitmap] =
     (buffer, other) match {
@@ -57,7 +57,7 @@ case class BuildBitmap(child: Expression,
       case (None, b) => b
       case _         => None
     }
-  
+
   override def eval(buffer: Option[RoaringBitmap]): Any = {
     buffer
       .map(rbm => {
@@ -67,7 +67,7 @@ case class BuildBitmap(child: Expression,
       })
       .orNull
   }
-  
+
   override def children: Seq[Expression] = Seq(child)
 
   override def nullable: Boolean = child.nullable
@@ -91,7 +91,6 @@ case class BuildBitmap(child: Expression,
     rbm.deserialize(new DataInputStream(new ByteArrayInputStream(bytes)))
     Option(rbm)
   }
-  
 
   override def update(buffer: Option[RoaringBitmap],
                       inputRow: InternalRow): Option[RoaringBitmap] = {
@@ -134,7 +133,6 @@ case class BuildBitmap(child: Expression,
     copy(inputAggBufferOffset = newOffset)
 
   override def prettyName: String = "build_bitmap"
-  
 }
 
 @ExpressionDescription(
