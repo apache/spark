@@ -348,15 +348,21 @@ private[spark] class IndexShuffleBlockResolver(
       // the following check and rename are atomic.
       this.synchronized {
         val existingLengths = checkIndexAndDataFile(indexFile, dataFile, lengths.length)
-        // `existingChecksums` could be null either because we're the first task attempt
-        // reaches here or shuffle checksum is disabled.
-        val existingChecksums = getChecksums(checksumFileOpt.get, checksums.length)
-        if (existingLengths != null && (!checksumEnabled || existingChecksums != null)) {
+        if (existingLengths != null) {
           // Another attempt for the same task has already written our map outputs successfully,
           // so just use the existing partition lengths and delete our temporary map outputs.
           System.arraycopy(existingLengths, 0, lengths, 0, lengths.length)
           if (checksumEnabled) {
-            System.arraycopy(existingChecksums, 0, checksums, 0, lengths.length)
+            val existingChecksums = getChecksums(checksumFileOpt.get, checksums.length)
+            if (existingChecksums != null) {
+              System.arraycopy(existingChecksums, 0, checksums, 0, lengths.length)
+            } else {
+              // It's possible that the previous task attempt succeeded writing the
+              // index file and data file but failed to write the checksum file. In
+              // this case, the current task attempt could write the missing checksum
+              // file by itself.
+              writeMetadataFile(checksums, checksumTmpOpt.get, checksumFileOpt.get, false)
+            }
           }
           if (dataTmp != null && dataTmp.exists()) {
             dataTmp.delete()
@@ -364,27 +370,12 @@ private[spark] class IndexShuffleBlockResolver(
         } else {
           // This is the first successful attempt in writing the map outputs for this task,
           // so override any existing index and data files with the ones we wrote.
-          val out = new DataOutputStream(new BufferedOutputStream(new FileOutputStream(indexTmp)))
-          Utils.tryWithSafeFinally {
-            // We take in lengths of each block, need to convert it to offsets.
-            var offset = 0L
-            out.writeLong(offset)
-            for (length <- lengths) {
-              offset += length
-              out.writeLong(offset)
-            }
-          } {
-            out.close()
-          }
 
-          if (indexFile.exists()) {
-            indexFile.delete()
-          }
+          val offsets = lengths.scanLeft(0L)(_ + _)
+          writeMetadataFile(offsets, indexTmp, indexFile, true)
+
           if (dataFile.exists()) {
             dataFile.delete()
-          }
-          if (!indexTmp.renameTo(indexFile)) {
-            throw new IOException("fail to rename file " + indexTmp + " to " + indexFile)
           }
           if (dataTmp != null && dataTmp.exists() && !dataTmp.renameTo(dataFile)) {
             throw new IOException("fail to rename file " + dataTmp + " to " + dataFile)
@@ -392,24 +383,14 @@ private[spark] class IndexShuffleBlockResolver(
 
           // write the checksum file
           checksumTmpOpt.zip(checksumFileOpt).foreach { case (checksumTmp, checksumFile) =>
-            val out = new DataOutputStream(
-              new BufferedOutputStream(
-                new FileOutputStream(checksumTmp)
-              )
-            )
-            Utils.tryWithSafeFinally {
-              checksums.foreach(out.writeLong)
-            } {
-              out.close()
-            }
-
-            if (checksumFile.exists()) {
-              checksumFile.delete()
-            }
-            if (!checksumTmp.renameTo(checksumFile)) {
-              // It's not worthwhile to fail here after index file and data file are already
-              // successfully stored since checksum is only a best-effort for the corner error case.
-              logWarning("fail to rename file " + checksumTmp + " to " + checksumFile)
+            try {
+              writeMetadataFile(checksums, checksumTmp, checksumFile, false)
+            } catch {
+              case e: Exception =>
+                // It's not worthwhile to fail here after index file and data file are
+                // already successfully stored since checksum is only a best-effort for
+                // the corner error case.
+                logError("Failed to write checksum file", e)
             }
           }
         }
@@ -434,6 +415,47 @@ private[spark] class IndexShuffleBlockResolver(
                 s"at ${checksumTmp.getAbsolutePath}", e)
           }
         }
+      }
+    }
+  }
+
+  /**
+   * Write the metadata file (index or checksum). Metadata values will be firstly write into
+   * the tmp file and the tmp file will be renamed to the target file at the end to avoid dirty
+   * writes.
+   * @param metaValues The metadata values
+   * @param tmpFile The temp file
+   * @param targetFile The target file
+   * @param propagateError Whether to propagate the error for file operation. Unlike index file,
+   *                       checksum is only a best-effort so we won't fail the whole task due to
+   *                       the error from checksum.
+   */
+  private def writeMetadataFile(
+      metaValues: Array[Long],
+      tmpFile: File,
+      targetFile: File,
+      propagateError: Boolean): Unit = {
+    val out = new DataOutputStream(
+      new BufferedOutputStream(
+        new FileOutputStream(tmpFile)
+      )
+    )
+    Utils.tryWithSafeFinally {
+      metaValues.foreach(out.writeLong)
+    } {
+      out.close()
+    }
+
+    if (targetFile.exists()) {
+      targetFile.delete()
+    }
+
+    if (!tmpFile.renameTo(targetFile)) {
+      val errorMsg = s"fail to rename file $tmpFile to $targetFile"
+      if (propagateError) {
+        throw new IOException(errorMsg)
+      } else {
+        logWarning(errorMsg)
       }
     }
   }
