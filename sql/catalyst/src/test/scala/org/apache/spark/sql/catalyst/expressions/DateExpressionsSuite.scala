@@ -98,12 +98,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("datetime function localtimestamp") {
     outstandingTimezonesIds.foreach { zid =>
-      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zid) {
-        val ct = LocalTimestamp().eval(EmptyRow).asInstanceOf[Long]
-        val t1 = DateTimeUtils.localDateTimeToMicros(
-          LocalDateTime.now(DateTimeUtils.getZoneId(zid)))
-        assert(math.abs(t1 - ct) < 5000)
-      }
+      val ct = LocalTimestamp(Some(zid)).eval(EmptyRow).asInstanceOf[Long]
+      val t1 = DateTimeUtils.localDateTimeToMicros(
+        LocalDateTime.now(DateTimeUtils.getZoneId(zid)))
+      assert(math.abs(t1 - ct) < 5000)
     }
   }
 
