@@ -59,9 +59,9 @@ case class PartialMapperPartitionSpec(
     endReducerIndex: Int) extends ShufflePartitionSpec
 
 case class CoalescedMapperPartitionSpec(
-                                         startMapIndex: Int,
-                                         endMapIndex: Int,
-                                         numReducers: Int) extends ShufflePartitionSpec
+    startMapIndex: Int,
+    endMapIndex: Int,
+    numReducers: Int) extends ShufflePartitionSpec
 
 /**
  * The [[Partition]] used by [[ShuffledRowRDD]].
