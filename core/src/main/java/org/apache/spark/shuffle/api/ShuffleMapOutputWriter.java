@@ -59,7 +59,7 @@ public interface ShuffleMapOutputWriter {
    * available to downstream reduce tasks. If this method throws any exception, this module's
    * {@link #abort(Throwable)} method will be invoked before propagating the exception.
    * <p>
-   * Shuffle extension who cares about the cause of shuffle data corruption should store
+   * Shuffle extensions which care about the cause of shuffle data corruption should store
    * the {@param checksums} properly. When corruption happens, Spark would provide the checksum
    * of the fetched partition to the shuffle extension to help diagnose the cause of corruption.
    * <p>
