@@ -1,3 +1,4 @@
+
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
 import java.io.ByteArrayInputStream
@@ -153,4 +154,3 @@ case class BitmapCardinality(override val child: Expression)
 
   override def prettyName: String = "bitmap_cardinality"
 }
-
