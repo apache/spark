@@ -32,7 +32,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
@@ -43,8 +43,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat, HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
-import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils
@@ -954,11 +953,11 @@ object DDLUtils extends Logging {
     try {
       DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance() match {
         case f: FileFormat => f.checkFieldNames(colNames)
+        case f: FileDataSourceV2 => f.checkFieldNames(colNames)
         case _ =>
       }
     } catch {
-      case e: AnalysisException if e.getMessage.contains("contains invalid character") =>
-        throw e
+      case e: AnalysisException if e.getMessage.contains("contains invalid character") => throw e
       case e: SchemaParseException => throw e
       case e: Throwable =>
         logError(s"Failed to find data source: $provider when check data column names.", e)

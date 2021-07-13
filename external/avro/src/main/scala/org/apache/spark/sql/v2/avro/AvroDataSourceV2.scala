@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.v2.avro
 
+import org.apache.avro.SchemaParseException
 import org.apache.spark.sql.avro.AvroFileFormat
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.execution.datasources.FileFormat
@@ -41,5 +42,30 @@ class AvroDataSourceV2 extends FileDataSourceV2 {
     val tableName = getTableName(options, paths)
     val optionsWithoutPaths = getOptionsWithoutPaths(options)
     AvroTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
+  }
+
+  override def checkFieldNames(names: Seq[String]): Unit = {
+    names.foreach(checkFieldName)
+  }
+
+  private def checkFieldName(name: String): Unit = {
+    val length = name.length
+    if (length == 0) {
+      throw new SchemaParseException("Empty name")
+    } else {
+      val first = name.charAt(0)
+      if (!Character.isLetter(first) && first != '_') {
+        throw new SchemaParseException("Illegal initial character: " + name)
+      } else {
+        var i = 1
+        while (i < length) {
+          val c = name.charAt(i)
+          if (!Character.isLetterOrDigit(c) && c != '_') {
+            throw new SchemaParseException("Illegal character in: " + name)
+          }
+          i += 1
+        }
+      }
+    }
   }
 }

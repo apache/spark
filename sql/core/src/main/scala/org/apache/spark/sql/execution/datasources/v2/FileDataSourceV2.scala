@@ -112,4 +112,10 @@ trait FileDataSourceV2 extends TableProvider with DataSourceRegister {
       getTable(new CaseInsensitiveStringMap(properties), schema)
     }
   }
+
+  /**
+   * Check whether target schema field name is valid.
+   * If field name is invalid, will throw [[AnalysisException]].
+   */
+  def checkFieldNames(names: Seq[String]): Unit = {}
 }
