@@ -6,9 +6,14 @@ import java.util.zip.Checksum;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.SparkException;
+import org.apache.spark.annotation.Private;
 import org.apache.spark.internal.config.package$;
 import org.apache.spark.storage.ShuffleChecksumBlockId;
 
+/**
+ * A set of utility functions for the shuffle checksum.
+ */
+@Private
 public class ShuffleChecksumHelper {
 
   /** Used when the checksum is disabled for shuffle. */
