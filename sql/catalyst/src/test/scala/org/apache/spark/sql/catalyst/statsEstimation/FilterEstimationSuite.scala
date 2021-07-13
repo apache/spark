@@ -822,14 +822,14 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 3)
   }
   test("SPARK-36079: Null count higher than row count") {
-    val colStatNullableString = colStatString.copy(nullCount = Some(15))
-    val condition = Filter(IsNotNull(attrString),
-      childStatsTestPlan(Seq(attrString), tableRowCount = 10L,
-        attributeMap = AttributeMap(Seq(attrString -> colStatNullableString))))
+    val colStatNullableInt = colStatInt.copy(nullCount = Some(15))
+    val condition = Filter(IsNotNull(attrInt),
+      childStatsTestPlan(Seq(attrInt), tableRowCount = 10L,
+        attributeMap = AttributeMap(Seq(attrInt -> colStatNullableInt))))
     validateEstimatedStats(
       condition,
-      Seq(attrString -> colStatNullableString),
-      expectedRowCount = 1)
+      Seq(attrInt -> colStatNullableInt),
+      expectedRowCount = 0)
   }
 
   test("ColumnStatsMap tests") {
