@@ -15,21 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd
-
-import scala.reflect.ClassTag
-
-import org.apache.spark.{Partition, SparkContext, TaskContext}
-import org.apache.spark.errors.ExecutionErrors
+package org.apache.spark.errors
 
 /**
- * An RDD that has no partitions and no elements.
+ * Object for grouping error messages from exceptions thrown during compilation.
+ * As commands are executed eagerly, this also includes errors thrown during the execution of
+ * commands, which users can see immediately.
  */
-private[spark] class EmptyRDD[T: ClassTag](sc: SparkContext) extends RDD[T](sc, Nil) {
+private[spark] object CompilationErrors {
 
-  override def getPartitions: Array[Partition] = Array.empty
-
-  override def compute(split: Partition, context: TaskContext): Iterator[T] = {
-    throw ExecutionErrors.emptyRDDError()
-  }
 }
