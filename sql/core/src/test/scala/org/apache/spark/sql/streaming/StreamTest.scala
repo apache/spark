@@ -283,7 +283,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
 
   /** Assert that a condition on the active query is true */
   class AssertOnQuery(val condition: StreamExecution => Boolean, val message: String)
-    extends StreamAction {
+    extends StreamAction with StreamMustBeRunning {
     override def toString: String = s"AssertOnQuery(<condition>, $message)"
   }
 
@@ -871,6 +871,9 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
 
           case r if r < 0.7 => // AddData
             addRandomData()
+            // Must check data after adding data in case we delete the topic with added data
+            // before next check.
+            addCheck()
 
           case _ => // StopStream
             addCheck()
