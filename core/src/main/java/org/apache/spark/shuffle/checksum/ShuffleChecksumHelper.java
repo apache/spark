@@ -26,11 +26,8 @@ public class ShuffleChecksumHelper {
 
   public static Checksum[] createPartitionChecksumsIfEnabled(int numPartitions, SparkConf conf)
     throws SparkException {
-    Checksum[] partitionChecksums;
-
     if (!isShuffleChecksumEnabled(conf)) {
-      partitionChecksums = EMPTY_CHECKSUM;
-      return partitionChecksums;
+      return EMPTY_CHECKSUM;
     }
 
     String checksumAlgo = shuffleChecksumAlgorithm(conf);
