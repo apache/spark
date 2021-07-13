@@ -11,7 +11,6 @@ import org.roaringbitmap.RoaringBitmap
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes
 import org.apache.spark.sql.catalyst.expressions.UnaryExpression
-import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
 
