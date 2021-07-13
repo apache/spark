@@ -26,8 +26,11 @@ import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.ExpressionDescription
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes
+import org.apache.spark.sql.catalyst.expressions.UnaryExpression
 import org.apache.spark.sql.types._
 
 @ExpressionDescription(
