@@ -29,7 +29,7 @@ class FailureSafeParser[IN](
     schema: StructType,
     columnNameOfCorruptRecord: String) {
 
-  disableNotNullableForPermissiveMode
+  disableNotNullableForPermissiveMode()
   private val corruptFieldIndex = schema.getFieldIndex(columnNameOfCorruptRecord)
   private val actualSchema = StructType(schema.filterNot(_.name == columnNameOfCorruptRecord))
   private val resultRow = new GenericInternalRow(schema.length)
@@ -37,12 +37,12 @@ class FailureSafeParser[IN](
 
   // As PERMISSIVE mode should not fail at runtime, so fail if the mode is PERMISSIVE and schema
   // contains non-nullable fields.
-  private def disableNotNullableForPermissiveMode: Unit = {
+  private def disableNotNullableForPermissiveMode(): Unit = {
     def checkNotNullableRecursively(schema: StructType): Unit = {
       schema.fields.foreach {
         case _ @ StructField(name, _, nullable, _) if (!nullable) =>
-          throw new IllegalSchemaArgumentException(s"field ${name} is not nullable but the " +
-            "not nullable field is not allowed in PERMISSIVE mode.")
+          throw new IllegalSchemaArgumentException(s"Field ${name} is not nullable but " +
+            "PERMISSIVE mode only works with nullable fields.")
         case _ @ StructField(_, dt: StructType, _, _) => checkNotNullableRecursively(dt)
         case _ =>
       }

@@ -2962,7 +2962,7 @@ abstract class JsonSuite
             load("PERMISSIVE", schema, jsonString).collect
           }
           val expectedMsg2 =
-            "field c2 is not nullable but the not nullable field is not allowed in PERMISSIVE mode."
+            "Field c2 is not nullable but PERMISSIVE mode only works with nullable fields."
           assert(exceptionMsg2.getMessage.contains(expectedMsg2))
         }
       }
