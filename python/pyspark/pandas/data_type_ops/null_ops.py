@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from typing import Union
+from typing import Any, Union
 
 from pandas.api.types import CategoricalDtype
 
@@ -27,7 +27,9 @@ from pyspark.pandas.data_type_ops.base import (
     _as_other_type,
     _as_string_type,
 )
+from pyspark.pandas._typing import SeriesOrIndex
 from pyspark.pandas.typedef import pandas_on_spark_type
+from pyspark.sql import Column
 from pyspark.sql.types import BooleanType, StringType
 
 
@@ -39,6 +41,26 @@ class NullOps(DataTypeOps):
     @property
     def pretty_name(self) -> str:
         return "nulls"
+
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__lt__)(left, right)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__le__)(left, right)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__ge__)(left, right)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        return column_op(Column.__gt__)(left, right)
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)

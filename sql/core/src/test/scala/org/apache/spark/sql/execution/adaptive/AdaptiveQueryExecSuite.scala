@@ -1929,6 +1929,69 @@ class AdaptiveQueryExecSuite
       }
     }
   }
+
+  test("SPARK-36020: Check logical link in remove redundant projects") {
+    withTempView("t") {
+      spark.range(10).selectExpr("id % 10 as key", "cast(id * 2 as int) as a",
+        "cast(id * 3 as int) as b", "array(id, id + 1, id + 3) as c").createOrReplaceTempView("t")
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "800") {
+        val query =
+          """
+            |WITH tt AS (
+            | SELECT key, a, b, explode(c) AS c FROM t
+            |)
+            |SELECT t1.key, t1.c, t2.key, t2.c
+            |FROM (SELECT a, b, c, key FROM tt WHERE a > 1) t1
+            |JOIN (SELECT a, b, c, key FROM tt) t2
+            |  ON t1.key = t2.key
+            |""".stripMargin
+        val (origin, adaptive) = runAdaptiveAndVerifyResult(query)
+        assert(findTopLevelSortMergeJoin(origin).size == 1)
+        assert(findTopLevelBroadcastHashJoin(adaptive).size == 1)
+      }
+    }
+  }
+
+  test("SPARK-35874: AQE Shuffle should wait for its subqueries to finish before materializing") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val query = "SELECT b FROM testData2 DISTRIBUTE BY (b, (SELECT max(key) FROM testData))"
+      runAdaptiveAndVerifyResult(query)
+    }
+  }
+
+  test("SPARK-36032: Use inputPlan instead of currentPhysicalPlan to initialize logical link") {
+    withTempView("v") {
+      spark.sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString)), 2)
+        .toDF("c1", "c2").createOrReplaceTempView("v")
+
+      Seq("-1", "10000").foreach { aqeBhj =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> aqeBhj,
+          SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+          val (origin, adaptive) = runAdaptiveAndVerifyResult(
+            """
+              |SELECT * FROM v t1 JOIN (
+              | SELECT c1 + 1 as c3 FROM v
+              |)t2 ON t1.c1 = t2.c3
+              |SORT BY c1
+          """.stripMargin)
+          if (aqeBhj.toInt < 0) {
+            // 1 sort since spark plan has no shuffle for SMJ
+            assert(findTopLevelSort(origin).size == 1)
+            // 2 sorts in SMJ
+            assert(findTopLevelSort(adaptive).size == 2)
+          } else {
+            assert(findTopLevelSort(origin).size == 1)
+            // 1 sort at top node and BHJ has no sort
+            assert(findTopLevelSort(adaptive).size == 1)
+          }
+        }
+      }
+    }
+  }
 }
 
 /**

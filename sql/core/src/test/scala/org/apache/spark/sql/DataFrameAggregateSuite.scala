@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalDateTime, Period}
 
 import scala.util.Random
 
@@ -1397,6 +1397,17 @@ class DataFrameAggregateSuite extends QueryTest
     checkAnswer(df1, Row(Duration.ofDays(1), 1))
     val df2 = Seq(Period.ofYears(1)).toDF("a").groupBy("a").count()
     checkAnswer(df2, Row(Period.ofYears(1), 1))
+  }
+
+  test("SPARK-36054: Support group by TimestampNTZ column") {
+    val ts1 = "2021-01-01T00:00:00"
+    val ts2 = "2021-01-01T00:00:01"
+    val localDateTime = Seq(ts1, ts1, ts2).map(LocalDateTime.parse)
+    val df = localDateTime.toDF("ts").groupBy("ts").count().orderBy("ts")
+    val expectedSchema =
+      new StructType().add(StructField("ts", TimestampNTZType)).add("count", LongType, false)
+    assert (df.schema == expectedSchema)
+    checkAnswer(df, Seq(Row(LocalDateTime.parse(ts1), 2), Row(LocalDateTime.parse(ts2), 1)))
   }
 }
 

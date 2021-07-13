@@ -222,6 +222,11 @@ class UnivocityParser(
         Cast(Literal(datum), ym).eval(EmptyRow)
       }
 
+    case dt: DayTimeIntervalType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        Cast(Literal(datum), dt).eval(EmptyRow)
+      }
+
     case udt: UserDefinedType[_] =>
       makeConverter(name, udt.sqlType, nullable)
 

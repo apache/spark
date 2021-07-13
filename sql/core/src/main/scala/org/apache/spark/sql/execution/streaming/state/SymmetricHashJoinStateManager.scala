@@ -364,7 +364,7 @@ class SymmetricHashJoinStateManager(
       val storeProviderId = StateStoreProviderId(
         stateInfo.get, partitionId, getStateStoreName(joinSide, stateStoreType))
       val store = StateStore.get(
-        storeProviderId, keySchema, valueSchema, None,
+        storeProviderId, keySchema, valueSchema, numColsPrefixKey = 0,
         stateInfo.get.storeVersion, storeConf, hadoopConf)
       logInfo(s"Loaded store ${store.id}")
       store
@@ -410,7 +410,7 @@ class SymmetricHashJoinStateManager(
 
     def iterator: Iterator[KeyAndNumValues] = {
       val keyAndNumValues = new KeyAndNumValues()
-      stateStore.getRange(None, None).map { case pair =>
+      stateStore.iterator().map { pair =>
         keyAndNumValues.withNew(pair.key, pair.value.getLong(0))
       }
     }
@@ -605,7 +605,7 @@ class SymmetricHashJoinStateManager(
 
     def iterator: Iterator[KeyWithIndexAndValue] = {
       val keyWithIndexAndValue = new KeyWithIndexAndValue()
-      stateStore.getRange(None, None).map { pair =>
+      stateStore.iterator().map { pair =>
         val valuePair = valueRowConverter.convertValue(pair.value)
         keyWithIndexAndValue.withNew(
           keyRowGenerator(pair.key), pair.key.getLong(indexOrdinalInKeyWithIndexRow), valuePair)

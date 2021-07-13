@@ -20,6 +20,7 @@ package org.apache.spark
 import java.io.File
 import java.util.IllegalFormatException
 
+import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.core.JsonParser.Feature.STRICT_DUPLICATE_DETECTION
 import com.fasterxml.jackson.core.`type`.TypeReference
 import com.fasterxml.jackson.databind.SerializationFeature
@@ -27,12 +28,12 @@ import com.fasterxml.jackson.databind.json.JsonMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.apache.commons.io.IOUtils
 
-import org.apache.spark.SparkError._
+import org.apache.spark.SparkThrowableHelper._
 
 /**
- * Test suite for Spark errors.
+ * Test suite for Spark Throwables.
  */
-class SparkErrorSuite extends SparkFunSuite {
+class SparkThrowableSuite extends SparkFunSuite {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -65,6 +66,7 @@ class SparkErrorSuite extends SparkFunSuite {
       .enable(SerializationFeature.INDENT_OUTPUT)
       .build()
     val rewrittenString = mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
+      .setSerializationInclusion(Include.NON_ABSENT)
       .writeValueAsString(errorClassToInfoMap)
     assert(rewrittenString == errorClassFileContents)
   }
@@ -94,12 +96,12 @@ class SparkErrorSuite extends SparkFunSuite {
 
   test("Check if error class is missing") {
     val ex1 = intercept[IllegalArgumentException] {
-      getMessage("", Seq.empty)
+      getMessage("", Array.empty)
     }
     assert(ex1.getMessage == "Cannot find error class ''")
 
     val ex2 = intercept[IllegalArgumentException] {
-      getMessage("LOREM_IPSUM", Seq.empty)
+      getMessage("LOREM_IPSUM", Array.empty)
     }
     assert(ex2.getMessage == "Cannot find error class 'LOREM_IPSUM'")
   }
@@ -107,28 +109,41 @@ class SparkErrorSuite extends SparkFunSuite {
   test("Check if message parameters match message format") {
     // Requires 2 args
     intercept[IllegalFormatException] {
-      getMessage("MISSING_COLUMN", Seq.empty)
+      getMessage("MISSING_COLUMN", Array.empty)
     }
 
     // Does not fail with too many args (expects 0 args)
-    assert(getMessage("DIVIDE_BY_ZERO", Seq("foo", "bar")) == "divide by zero")
+    assert(getMessage("DIVIDE_BY_ZERO", Array("foo", "bar")) == "divide by zero")
   }
 
   test("Error message is formatted") {
-    assert(getMessage("MISSING_COLUMN", Seq("foo", "bar")) ==
+    assert(getMessage("MISSING_COLUMN", Array("foo", "bar")) ==
       "cannot resolve 'foo' given input columns: [bar]")
   }
 
-  test("Try catching SparkError") {
+  test("Try catching legacy SparkError") {
+    try {
+      throw new SparkException("Arbitrary legacy message")
+    } catch {
+      case e: SparkThrowable =>
+        assert(e.getErrorClass == null)
+        assert(e.getSqlState == null)
+      case _: Throwable =>
+        // Should not end up here
+        assert(false)
+    }
+  }
+
+  test("Try catching SparkError with error class") {
     try {
       throw new SparkException(
         errorClass = "WRITING_JOB_ABORTED",
-        messageParameters = Seq.empty,
+        messageParameters = Array.empty,
         cause = null)
     } catch {
-      case e: SparkError =>
-        assert(e.errorClass.contains("WRITING_JOB_ABORTED"))
-        assert(e.sqlState.contains("40000"))
+      case e: SparkThrowable =>
+        assert(e.getErrorClass == "WRITING_JOB_ABORTED")
+        assert(e.getSqlState == "40000")
       case _: Throwable =>
         // Should not end up here
         assert(false)

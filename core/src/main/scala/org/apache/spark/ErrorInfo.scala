@@ -42,10 +42,10 @@ private[spark] case class ErrorInfo(message: Seq[String], sqlState: Option[Strin
 }
 
 /**
- * Companion object used by instances of [[SparkError]] to access error class information and
+ * Companion object used by instances of [[SparkThrowable]] to access error class information and
  * construct error messages.
  */
-private[spark] object SparkError {
+private[spark] object SparkThrowableHelper {
   val errorClassesUrl: URL =
     Utils.getSparkClassLoader.getResource("error/error-classes.json")
   val errorClassToInfoMap: SortedMap[String, ErrorInfo] = {
@@ -55,29 +55,13 @@ private[spark] object SparkError {
     mapper.readValue(errorClassesUrl, new TypeReference[SortedMap[String, ErrorInfo]]() {})
   }
 
-  def getMessage(errorClass: String, messageParameters: Seq[String]): String = {
+  def getMessage(errorClass: String, messageParameters: Array[String]): String = {
     val errorInfo = errorClassToInfoMap.getOrElse(errorClass,
       throw new IllegalArgumentException(s"Cannot find error class '$errorClass'"))
     String.format(errorInfo.messageFormat, messageParameters: _*)
   }
-}
 
-/**
- * Trait mixed into exceptions thrown from Spark.
- * - For backwards compatibility, existing exception types can be thrown with an arbitrary error
- *   message with no error class. See [[SparkException]].
- * - To promote standardization, exceptions should be thrown with an error class and message
- *   parameters to construct an error message with SparkError.getMessage(). New exception types
- *   should not accept arbitrary error messages. See [[SparkArithmeticException]].
- */
-trait SparkError extends Throwable {
-  // Should be provided during Exception invocation
-  val errorClass: Option[String]
-  protected val messageParameters: Seq[String]
-
-  // Derived from error class
-  private val errorInfo: Option[ErrorInfo] =
-    errorClass.flatMap(SparkError.errorClassToInfoMap.get)
-  // None if the error class or SQLSTATE are not set
-  val sqlState: Option[String] = errorInfo.flatMap(_.sqlState)
+  def getSqlState(errorClass: String): String = {
+    Option(errorClass).flatMap(errorClassToInfoMap.get).flatMap(_.sqlState).orNull
+  }
 }
