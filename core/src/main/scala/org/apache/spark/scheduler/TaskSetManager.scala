@@ -429,7 +429,7 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
-      taskCpuAssignments: Int,
+      taskCpuAssignments: Int = 1,
       taskResourceAssignments: Map[String, ResourceInformation] = Map.empty)
     : (Option[TaskDescription], Boolean, Int) =
   {

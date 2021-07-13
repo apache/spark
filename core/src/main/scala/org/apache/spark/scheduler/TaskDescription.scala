@@ -114,6 +114,9 @@ private[spark] object TaskDescription {
       dataOut.write(bytes)
     }
 
+    // Write cpus.
+    dataOut.writeInt(taskDescription.cpus)
+
     // Write resources.
     serializeResources(taskDescription.resources, dataOut)
 
