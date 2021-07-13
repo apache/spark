@@ -137,6 +137,9 @@ override val inputAggBufferOffset: Int = 0)
 
   override def withNewInputAggBufferOffset(newOffset: Int): BuildBitmap =
     copy(inputAggBufferOffset = newOffset)
+	
+  override protected def withNewChildInternal(newChild: Expression): BuildBitmap =
+    copy(child = newChild)
 
   override def prettyName: String = "build_bitmap"
 }
@@ -165,6 +168,8 @@ case class BitmapCardinality(override val child: Expression)
     rbm.getLongCardinality
 
   }
+  
+  override protected def withNewChildInternal(newChild: Expression): BitmapCardinality = copy(child = newChild)
 
   override def prettyName: String = "bitmap_cardinality"
 }
