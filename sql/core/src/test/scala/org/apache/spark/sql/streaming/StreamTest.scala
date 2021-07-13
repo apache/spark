@@ -871,8 +871,9 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
 
           case r if r < 0.7 => // AddData
             addRandomData()
-            // Must check data after adding data in case we delete the topic with added data
-            // before next check.
+            // In some suites, e.g. `KafkaSourceStressSuite`, we delete Kafka topic in the
+            // `addData` closure. In the case, the topic with added data might be deleted
+            // before next check. So we must check data after adding data here.
             addCheck()
 
           case _ => // StopStream
