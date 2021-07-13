@@ -22,6 +22,7 @@ import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
+import scala.collection.JavaConverters._
 import scala.ref.WeakReference
 import scala.util.Try
 
@@ -91,6 +92,9 @@ class RocksDB(
 
   @GuardedBy("acquireLock")
   @volatile private var acquiredThreadInfo: AcquiredThreadInfo = _
+
+  private val prefixScanReuseIter =
+    new java.util.concurrent.ConcurrentHashMap[Long, RocksIterator]()
 
   /**
    * Load the given version of data in a native RocksDB instance.
@@ -185,6 +189,33 @@ class RocksDB(
     }
   }
 
+  def prefixScan(prefix: Array[Byte]): Iterator[ByteArrayPair] = {
+    val threadId = Thread.currentThread().getId
+    val iter = prefixScanReuseIter.computeIfAbsent(threadId, tid => {
+      val it = writeBatch.newIteratorWithBase(db.newIterator())
+      logInfo(s"Getting iterator from version $loadedVersion for prefix scan on " +
+        s"thread ID $tid")
+      it
+    })
+
+    iter.seek(prefix)
+
+    new NextIterator[ByteArrayPair] {
+      override protected def getNext(): ByteArrayPair = {
+        if (iter.isValid && iter.key().take(prefix.length).sameElements(prefix)) {
+          byteArrayPair.set(iter.key, iter.value)
+          iter.next()
+          byteArrayPair
+        } else {
+          finished = true
+          null
+        }
+      }
+
+      override protected def close(): Unit = {}
+    }
+  }
+
   /**
    * Commit all the updates made as a version to DFS. The steps it needs to do to commits are:
    * - Write all the updates to the native RocksDB
@@ -254,6 +285,8 @@ class RocksDB(
    * Drop uncommitted changes, and roll back to previous version.
    */
   def rollback(): Unit = {
+    prefixScanReuseIter.entrySet().asScala.foreach(_.getValue.close())
+    prefixScanReuseIter.clear()
     writeBatch.clear()
     numKeysOnWritingVersion = numKeysOnLoadedVersion
     release()
@@ -269,6 +302,8 @@ class RocksDB(
 
   /** Release all resources */
   def close(): Unit = {
+    prefixScanReuseIter.entrySet().asScala.foreach(_.getValue.close())
+    prefixScanReuseIter.clear()
     try {
       closeDB()
 

@@ -326,6 +326,8 @@ license: |
 
   - In Spark 3.0, when Avro files are written with user provided non-nullable schema, even the catalyst schema is nullable, Spark is still able to write the files. However, Spark throws runtime NullPointerException if any of the records contains null.
 
+  - In Spark version 2.4 and below, CSV datasource can detect encoding of input files automatically when the files have BOM at the beginning. For instance, CSV datasource can recognize UTF-8, UTF-16BE, UTF-16LE, UTF-32BE and UTF-32LE in the multi-line mode (the CSV option `multiLine` is set to `true`). In Spark 3.0, CSV datasource reads input files in encoding specified via the CSV option `encoding` which has the default value of UTF-8. In this way, if file encoding doesn't match to the encoding specified via the CSV option, Spark loads the file incorrectly. To solve the issue, users should either set correct encoding via the CSV option `encoding` or set the option to `null` which fallbacks to encoding auto-detection as in Spark versions before 3.0. 
+
 ### Others
 
   - In Spark version 2.4, when a Spark session is created via `cloneSession()`, the newly created Spark session inherits its configuration from its parent `SparkContext` even though the same configuration may exist with a different value in its parent Spark session. In Spark 3.0, the configurations of a parent `SparkSession` have a higher precedence over the parent `SparkContext`. You can restore the old behavior by setting `spark.sql.legacy.sessionInitWithConfigDefaults` to `true`.

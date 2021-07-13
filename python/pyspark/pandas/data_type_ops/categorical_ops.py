@@ -48,7 +48,7 @@ class CategoricalOps(DataTypeOps):
         return col.cat.codes
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
-        dtype, spark_type = pandas_on_spark_type(dtype)
+        dtype, _ = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype) and dtype.categories is None:
             return index_ops.copy()
@@ -62,9 +62,7 @@ class CategoricalOps(DataTypeOps):
             )
             map_scol = F.create_map(*kvs)
             scol = map_scol.getItem(index_ops.spark.column)
-        return index_ops._with_new_scol(
-            scol.alias(index_ops._internal.data_spark_column_names[0])
-        ).astype(dtype)
+        return index_ops._with_new_scol(scol).astype(dtype)
 
     # TODO(SPARK-35997): Implement comparison operators below
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:

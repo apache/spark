@@ -17,12 +17,15 @@
 
 package org.apache.spark.sql.errors
 
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchNamespaceException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
 import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, Join, LogicalPlan, SerdeInfo, Window}
@@ -1694,6 +1697,369 @@ private[spark] object QueryCompilationErrors {
   def foundDuplicateColumnError(colType: String, duplicateCol: Seq[String]): Throwable = {
     new AnalysisException(
       s"Found duplicate column(s) $colType: ${duplicateCol.sorted.mkString(", ")}")
+  }
+
+  def noSuchTableError(db: String, table: String): Throwable = {
+    new NoSuchTableException(db = db, table = table)
+  }
+
+  def tempViewNotCachedForAnalyzingColumnsError(tableIdent: TableIdentifier): Throwable = {
+    new AnalysisException(s"Temporary view $tableIdent is not cached for analyzing columns.")
+  }
+
+  def columnTypeNotSupportStatisticsCollectionError(
+      name: String,
+      tableIdent: TableIdentifier,
+      dataType: DataType): Throwable = {
+    new AnalysisException(s"Column $name in table $tableIdent is of type $dataType, " +
+      "and Spark does not support statistics collection on this column type.")
+  }
+
+  def analyzeTableNotSupportedOnViewsError(): Throwable = {
+    new AnalysisException("ANALYZE TABLE is not supported on views.")
+  }
+
+  def unexpectedPartitionColumnPrefixError(
+      table: String,
+      database: String,
+      schemaColumns: String,
+      specColumns: String): Throwable = {
+    new AnalysisException(
+      s"""
+         |The list of partition columns with values
+         |in partition specification for table '${table}'
+         |in database '${database}' is not a prefix of the list of
+         |partition columns defined in the table schema.
+         |Expected a prefix of [${schemaColumns}], but got [${specColumns}].
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def noSuchPartitionError(
+      db: String,
+      table: String,
+      partition: TablePartitionSpec): Throwable = {
+    new NoSuchPartitionException(db, table, partition)
+  }
+
+  def analyzingColumnStatisticsNotSupportedForColumnTypeError(
+      name: String,
+      dataType: DataType): Throwable = {
+    new AnalysisException("Analyzing column statistics is not supported for column " +
+      s"$name of data type: $dataType.")
+  }
+
+  def tableAlreadyExistsError(table: String, guide: String = ""): Throwable = {
+    new AnalysisException(s"Table $table already exists." + guide)
+  }
+
+  def createTableAsSelectWithNonEmptyDirectoryError(tablePath: String): Throwable = {
+    new AnalysisException(
+      s"CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory " +
+        s"${tablePath} . To allow overwriting the existing non-empty directory, " +
+        s"set '${SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key}' to true.")
+  }
+
+  def tableOrViewNotFoundError(table: String): Throwable = {
+    new AnalysisException(s"Table or view not found: $table")
+  }
+
+  def unsetNonExistentPropertyError(property: String, table: TableIdentifier): Throwable = {
+    new AnalysisException(s"Attempted to unset non-existent property '$property' in table '$table'")
+  }
+
+  def alterTableChangeColumnNotSupportedForColumnTypeError(
+      originColumn: StructField,
+      newColumn: StructField): Throwable = {
+    new AnalysisException("ALTER TABLE CHANGE COLUMN is not supported for changing column " +
+      s"'${originColumn.name}' with type '${originColumn.dataType}' to " +
+      s"'${newColumn.name}' with type '${newColumn.dataType}'")
+  }
+
+  def cannotFindColumnError(name: String, fieldNames: Array[String]): Throwable = {
+    new AnalysisException(s"Can't find column `$name` given table data columns " +
+      s"${fieldNames.mkString("[`", "`, `", "`]")}")
+  }
+
+  def alterTableSetSerdeForSpecificPartitionNotSupportedError(): Throwable = {
+    new AnalysisException("Operation not allowed: ALTER TABLE SET " +
+      "[SERDE | SERDEPROPERTIES] for a specific partition is not supported " +
+      "for tables created with the datasource API")
+  }
+
+  def alterTableSetSerdeNotSupportedError(): Throwable = {
+    new AnalysisException("Operation not allowed: ALTER TABLE SET SERDE is " +
+      "not supported for tables created with the datasource API")
+  }
+
+  def cmdOnlyWorksOnPartitionedTablesError(cmd: String, tableIdentWithDB: String): Throwable = {
+    new AnalysisException(
+      s"Operation not allowed: $cmd only works on partitioned tables: $tableIdentWithDB")
+  }
+
+  def cmdOnlyWorksOnTableWithLocationError(cmd: String, tableIdentWithDB: String): Throwable = {
+    new AnalysisException(s"Operation not allowed: $cmd only works on table with " +
+      s"location provided: $tableIdentWithDB")
+  }
+
+  def actionNotAllowedOnTableWithFilesourcePartitionManagementDisabledError(
+      action: String,
+      tableName: String): Throwable = {
+    new AnalysisException(
+      s"$action is not allowed on $tableName since filesource partition management is " +
+        "disabled (spark.sql.hive.manageFilesourcePartitions = false).")
+  }
+
+  def actionNotAllowedOnTableSincePartitionMetadataNotStoredError(
+     action: String,
+     tableName: String): Throwable = {
+    new AnalysisException(
+      s"$action is not allowed on $tableName since its partition metadata is not stored in " +
+        "the Hive metastore. To import this information into the metastore, run " +
+        s"`msck repair table $tableName`")
+  }
+
+  def cannotAlterViewWithAlterTableError(): Throwable = {
+    new AnalysisException(
+      "Cannot alter a view with ALTER TABLE. Please use ALTER VIEW instead")
+  }
+
+  def cannotAlterTableWithAlterViewError(): Throwable = {
+    new AnalysisException(
+      "Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
+  }
+
+  def cannotOverwritePathBeingReadFromError(): Throwable = {
+    new AnalysisException("Cannot overwrite a path that is also being read from.")
+  }
+
+  def createFuncWithBothIfNotExistsAndReplaceError(): Throwable = {
+    new AnalysisException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE is not allowed.")
+  }
+
+  def defineTempFuncWithIfNotExistsError(): Throwable = {
+    new AnalysisException("It is not allowed to define a TEMPORARY function with IF NOT EXISTS.")
+  }
+
+  def specifyingDBInCreateTempFuncError(databaseName: String): Throwable = {
+    new AnalysisException(
+      s"Specifying a database in CREATE TEMPORARY FUNCTION is not allowed: '$databaseName'")
+  }
+
+  def specifyingDBInDropTempFuncError(databaseName: String): Throwable = {
+    new AnalysisException(
+      s"Specifying a database in DROP TEMPORARY FUNCTION is not allowed: '$databaseName'")
+  }
+
+  def cannotDropNativeFuncError(functionName: String): Throwable = {
+    new AnalysisException(s"Cannot drop native function '$functionName'")
+  }
+
+  def cannotRefreshBuiltInFuncError(functionName: String): Throwable = {
+    new AnalysisException(s"Cannot refresh built-in function $functionName")
+  }
+
+  def cannotRefreshTempFuncError(functionName: String): Throwable = {
+    new AnalysisException(s"Cannot refresh temporary function $functionName")
+  }
+
+  def noSuchFunctionError(identifier: FunctionIdentifier): Throwable = {
+    new NoSuchFunctionException(identifier.database.get, identifier.funcName)
+  }
+
+  def alterAddColNotSupportViewError(table: TableIdentifier): Throwable = {
+    new AnalysisException(
+      s"""
+         |ALTER ADD COLUMNS does not support views.
+         |You must drop and re-create the views for adding the new columns. Views: $table
+       """.stripMargin)
+  }
+
+  def alterAddColNotSupportDatasourceTableError(
+      tableType: Any,
+      table: TableIdentifier): Throwable = {
+    new AnalysisException(
+      s"""
+         |ALTER ADD COLUMNS does not support datasource table with type $tableType.
+         |You must drop and re-create the table for adding the new columns. Tables: $table
+       """.stripMargin)
+  }
+
+  def loadDataNotSupportedForDatasourceTablesError(tableIdentWithDB: String): Throwable = {
+    new AnalysisException(s"LOAD DATA is not supported for datasource tables: $tableIdentWithDB")
+  }
+
+  def loadDataWithoutPartitionSpecProvidedError(tableIdentWithDB: String): Throwable = {
+    new AnalysisException(s"LOAD DATA target table $tableIdentWithDB is partitioned, " +
+      s"but no partition spec is provided")
+  }
+
+  def loadDataPartitionSizeNotMatchNumPartitionColumnsError(
+      tableIdentWithDB: String,
+      partitionSize: Int,
+      targetTableSize: Int): Throwable = {
+    new AnalysisException(
+      s"""
+         |LOAD DATA target table $tableIdentWithDB is partitioned,
+         |but number of columns in provided partition spec ($partitionSize)
+         |do not match number of partitioned columns in table ($targetTableSize)
+       """.stripMargin.replaceAll("\n", " "))
+  }
+
+  def loadDataTargetTableNotPartitionedButPartitionSpecWasProvidedError(
+      tableIdentWithDB: String): Throwable = {
+    new AnalysisException(s"LOAD DATA target table $tableIdentWithDB is not " +
+      s"partitioned, but a partition spec was provided.")
+  }
+
+  def loadDataInputPathNotExistError(path: String): Throwable = {
+    new AnalysisException(s"LOAD DATA input path does not exist: $path")
+  }
+
+  def truncateTableOnExternalTablesError(tableIdentWithDB: String): Throwable = {
+    new AnalysisException(
+      s"Operation not allowed: TRUNCATE TABLE on external tables: $tableIdentWithDB")
+  }
+
+  def truncateTablePartitionNotSupportedForNotPartitionedTablesError(
+      tableIdentWithDB: String): Throwable = {
+    new AnalysisException(s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported" +
+      s" for tables that are not partitioned: $tableIdentWithDB")
+  }
+
+  def failToTruncateTableWhenRemovingDataError(
+      tableIdentWithDB: String,
+      path: Path,
+      e: Throwable): Throwable = {
+    new AnalysisException(s"Failed to truncate table $tableIdentWithDB when " +
+        s"removing data of the path: $path because of ${e.toString}")
+  }
+
+  def descPartitionNotAllowedOnTempView(table: String): Throwable = {
+    new AnalysisException(s"DESC PARTITION is not allowed on a temporary view: $table")
+  }
+
+  def descPartitionNotAllowedOnView(table: String): Throwable = {
+    new AnalysisException(s"DESC PARTITION is not allowed on a view: $table")
+  }
+
+  def showPartitionNotAllowedOnTableNotPartitionedError(tableIdentWithDB: String): Throwable = {
+    new AnalysisException(
+      s"SHOW PARTITIONS is not allowed on a table that is not partitioned: $tableIdentWithDB")
+  }
+
+  def showCreateTableNotSupportedOnTempView(table: String): Throwable = {
+    new AnalysisException(s"SHOW CREATE TABLE is not supported on a temporary view: $table")
+  }
+
+  def showCreateTableFailToExecuteUnsupportedFeatureError(table: CatalogTable): Throwable = {
+    new AnalysisException("Failed to execute SHOW CREATE TABLE against table " +
+      s"${table.identifier}, which is created by Hive and uses the " +
+      s"following unsupported feature(s)\n" +
+      table.unsupportedFeatures.map(" - " + _).mkString("\n") + ". " +
+      s"Please use `SHOW CREATE TABLE ${table.identifier} AS SERDE` to show Hive DDL instead.")
+  }
+
+  def showCreateTableNotSupportTransactionalHiveTableError(table: CatalogTable): Throwable = {
+    new AnalysisException("SHOW CREATE TABLE doesn't support transactional Hive table. " +
+      s"Please use `SHOW CREATE TABLE ${table.identifier} AS SERDE` " +
+      "to show Hive DDL instead.")
+  }
+
+  def showCreateTableFailToExecuteUnsupportedConfError(
+      table: TableIdentifier,
+      builder: mutable.StringBuilder): Throwable = {
+    new AnalysisException("Failed to execute SHOW CREATE TABLE against table " +
+        s"${table.identifier}, which is created by Hive and uses the " +
+        "following unsupported serde configuration\n" +
+        builder.toString()
+    )
+  }
+
+  def descPartitionNotAllowedOnViewError(table: String): Throwable = {
+    new AnalysisException(s"DESC PARTITION is not allowed on a view: $table")
+  }
+
+  def showCreateTableAsSerdeNotAllowedOnSparkDataSourceTableError(
+      table: TableIdentifier): Throwable = {
+    new AnalysisException(
+      s"$table is a Spark data source table. Use `SHOW CREATE TABLE` without `AS SERDE` instead.")
+  }
+
+  def showCreateTableOrViewFailToExecuteUnsupportedFeatureError(
+      table: CatalogTable,
+      features: Seq[String]): Throwable = {
+    new AnalysisException(
+      s"Failed to execute SHOW CREATE TABLE against table/view ${table.identifier}, " +
+        "which is created by Hive and uses the following unsupported feature(s)\n" +
+        features.map(" - " + _).mkString("\n"))
+  }
+
+  def createViewWithBothIfNotExistsAndReplaceError(): Throwable = {
+    new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
+  }
+
+  def defineTempViewWithIfNotExistsError(): Throwable = {
+    new AnalysisException("It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
+  }
+
+  def notAllowedToAddDBPrefixForTempViewError(database: String): Throwable = {
+    new AnalysisException(
+      s"It is not allowed to add database prefix `$database` for the TEMPORARY view name.")
+  }
+
+  def logicalPlanForViewNotAnalyzedError(): Throwable = {
+    new AnalysisException("The logical plan that represents the view is not analyzed.")
+  }
+
+  def createViewNumColumnsMismatchUserSpecifiedColumnLengthError(
+      analyzedPlanLength: Int,
+      userSpecifiedColumnsLength: Int): Throwable = {
+    new AnalysisException(s"The number of columns produced by the SELECT clause " +
+      s"(num: `$analyzedPlanLength`) does not match the number of column names " +
+      s"specified by CREATE VIEW (num: `$userSpecifiedColumnsLength`).")
+  }
+
+  def tableIsNotViewError(name: TableIdentifier): Throwable = {
+    new AnalysisException(s"$name is not a view")
+  }
+
+  def viewAlreadyExistsError(name: TableIdentifier): Throwable = {
+    new AnalysisException(
+      s"View $name already exists. If you want to update the view definition, " +
+        "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
+  }
+
+  def createPersistedViewFromDatasetAPINotAllowedError(): Throwable = {
+    new AnalysisException("It is not allowed to create a persisted view from the Dataset API")
+  }
+
+  def recursiveViewDetectedError(
+      viewIdent: TableIdentifier,
+      newPath: Seq[TableIdentifier]): Throwable = {
+    new AnalysisException(s"Recursive view $viewIdent detected " +
+      s"(cycle: ${newPath.mkString(" -> ")})")
+  }
+
+  def notAllowedToCreatePermanentViewWithoutAssigningAliasForExpressionError(
+      name: TableIdentifier,
+      attrName: String): Throwable = {
+    new AnalysisException(s"Not allowed to create a permanent view $name without " +
+      s"explicitly assigning an alias for expression $attrName")
+  }
+
+  def notAllowedToCreatePermanentViewByReferencingTempViewError(
+      name: TableIdentifier,
+      nameParts: String): Throwable = {
+    new AnalysisException(s"Not allowed to create a permanent view $name by " +
+      s"referencing a temporary view $nameParts. " +
+      "Please create a temp view instead by CREATE TEMP VIEW")
+  }
+
+  def notAllowedToCreatePermanentViewByReferencingTempFuncError(
+      name: TableIdentifier,
+      funcName: String): Throwable = {
+    new AnalysisException(s"Not allowed to create a permanent view $name by " +
+      s"referencing a temporary function `$funcName`")
   }
 
   def queryFromRawFilesIncludeCorruptRecordColumnError(): Throwable = {
