@@ -365,7 +365,6 @@ object DateTimeUtils {
     case NonFatal(_) => None
   }
 
-
   def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Long = {
     val timestamp = stringToTimestamp(s, timeZoneId)
     if (timestamp.isEmpty) {
