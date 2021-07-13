@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.sql.{AnalysisException, Column, Row, SparkSession}
+import org.apache.spark.sql.{Column, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{NoSuchPartitionException, UnresolvedAttribute}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, EqualTo, Literal}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.util.PartitioningUtils
 
 /**
@@ -58,11 +59,8 @@ case class AnalyzePartitionCommand(
       val tableId = table.identifier
       val schemaColumns = table.partitionColumnNames.mkString(",")
       val specColumns = normalizedPartitionSpec.keys.mkString(",")
-      throw new AnalysisException("The list of partition columns with values " +
-        s"in partition specification for table '${tableId.table}' " +
-        s"in database '${tableId.database.get}' is not a prefix of the list of " +
-        "partition columns defined in the table schema. " +
-        s"Expected a prefix of [${schemaColumns}], but got [${specColumns}].")
+      throw QueryCompilationErrors.unexpectedPartitionColumnPrefixError(
+        tableId.table, tableId.database.get, schemaColumns, specColumns)
     }
 
     val filteredSpec = normalizedPartitionSpec.filter(_._2.isDefined).mapValues(_.get)
@@ -79,7 +77,7 @@ case class AnalyzePartitionCommand(
     val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
     val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
     if (tableMeta.tableType == CatalogTableType.VIEW) {
-      throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+      throw QueryCompilationErrors.analyzeTableNotSupportedOnViewsError()
     }
 
     val partitionValueSpec = getPartitionSpec(tableMeta)
@@ -88,7 +86,8 @@ case class AnalyzePartitionCommand(
 
     if (partitions.isEmpty) {
       if (partitionValueSpec.isDefined) {
-        throw new NoSuchPartitionException(db, tableIdent.table, partitionValueSpec.get)
+        throw QueryCompilationErrors.noSuchPartitionError(
+          db, tableIdent.table, partitionValueSpec.get)
       } else {
         // the user requested to analyze all partitions for a table which has no partitions
         // return normally, since there is nothing to do
