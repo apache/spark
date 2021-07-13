@@ -17,6 +17,7 @@
 package org.apache.spark.sql.v2.avro
 
 import org.apache.avro.SchemaParseException
+
 import org.apache.spark.sql.avro.AvroFileFormat
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.execution.datasources.FileFormat
