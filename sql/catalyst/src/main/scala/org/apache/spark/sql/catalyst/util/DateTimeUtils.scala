@@ -236,136 +236,135 @@ object DateTimeUtils {
    *     - +|-hhmmss
    *  - Region-based zone IDs in the form `area/city`, such as `Europe/Paris`
    */
-  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[Long] = {
-    try {
-      if (s == null) {
-        return None
-      }
-      var tz: Option[String] = None
-      val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
-      var i = 0
-      var currentSegmentValue = 0
-      val bytes = s.trimAll().getBytes
-      val specialTimestamp = convertSpecialTimestamp(bytes, timeZoneId)
-      if (specialTimestamp.isDefined) return specialTimestamp
-      var j = 0
-      var digitsMilli = 0
-      var justTime = false
-      while (j < bytes.length) {
-        val b = bytes(j)
-        val parsedValue = b - '0'.toByte
-        if (parsedValue < 0 || parsedValue > 9) {
-          if (j == 0 && b == 'T') {
+  def stringToTimestamp(s: UTF8String, timeZoneId: ZoneId): Option[Long] = try {
+    if (s == null) {
+      return None
+    }
+    var tz: Option[String] = None
+    val segments: Array[Int] = Array[Int](1, 1, 1, 0, 0, 0, 0, 0, 0)
+    var i = 0
+    var currentSegmentValue = 0
+    val bytes = s.trimAll().getBytes
+    val specialTimestamp = convertSpecialTimestamp(bytes, timeZoneId)
+    if (specialTimestamp.isDefined) return specialTimestamp
+    var j = 0
+    var digitsMilli = 0
+    var justTime = false
+    while (j < bytes.length) {
+      val b = bytes(j)
+      val parsedValue = b - '0'.toByte
+      if (parsedValue < 0 || parsedValue > 9) {
+        if (j == 0 && b == 'T') {
+          justTime = true
+          i += 3
+        } else if (i < 2) {
+          if (b == '-') {
+            if (i == 0 && j != 4) {
+              // year should have exact four digits
+              return None
+            }
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else if (i == 0 && b == ':') {
             justTime = true
-            i += 3
-          } else if (i < 2) {
-            if (b == '-') {
-              if (i == 0 && j != 4) {
-                // year should have exact four digits
-                return None
-              }
-              segments(i) = currentSegmentValue
-              currentSegmentValue = 0
-              i += 1
-            } else if (i == 0 && b == ':') {
-              justTime = true
-              segments(3) = currentSegmentValue
-              currentSegmentValue = 0
-              i = 4
-            } else {
-              return None
-            }
-          } else if (i == 2) {
-            if (b == ' ' || b == 'T') {
-              segments(i) = currentSegmentValue
-              currentSegmentValue = 0
-              i += 1
-            } else {
-              return None
-            }
-          } else if (i == 3 || i == 4) {
-            if (b == ':') {
-              segments(i) = currentSegmentValue
-              currentSegmentValue = 0
-              i += 1
-            } else {
-              return None
-            }
-          } else if (i == 5 || i == 6) {
-            if (b == '-' || b == '+') {
-              segments(i) = currentSegmentValue
-              currentSegmentValue = 0
-              i += 1
-              tz = Some(new String(bytes, j, 1))
-            } else if (b == '.' && i == 5) {
-              segments(i) = currentSegmentValue
-              currentSegmentValue = 0
-              i += 1
-            } else {
-              segments(i) = currentSegmentValue
-              currentSegmentValue = 0
-              i += 1
-              tz = Some(new String(bytes, j, bytes.length - j))
-              j = bytes.length - 1
-            }
-            if (i == 6  && b != '.') {
-              i += 1
-            }
+            segments(3) = currentSegmentValue
+            currentSegmentValue = 0
+            i = 4
           } else {
-            if (i < segments.length && (b == ':' || b == ' ')) {
-              segments(i) = currentSegmentValue
-              currentSegmentValue = 0
-              i += 1
-            } else {
-              return None
-            }
+            return None
+          }
+        } else if (i == 2) {
+          if (b == ' ' || b == 'T') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else {
+            return None
+          }
+        } else if (i == 3 || i == 4) {
+          if (b == ':') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else {
+            return None
+          }
+        } else if (i == 5 || i == 6) {
+          if (b == '-' || b == '+') {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+            tz = Some(new String(bytes, j, 1))
+          } else if (b == '.' && i == 5) {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+            tz = Some(new String(bytes, j, bytes.length - j))
+            j = bytes.length - 1
+          }
+          if (i == 6  && b != '.') {
+            i += 1
           }
         } else {
-          if (i == 6) {
-            digitsMilli += 1
+          if (i < segments.length && (b == ':' || b == ' ')) {
+            segments(i) = currentSegmentValue
+            currentSegmentValue = 0
+            i += 1
+          } else {
+            return None
           }
-          currentSegmentValue = currentSegmentValue * 10 + parsedValue
         }
-        j += 1
-      }
-
-      segments(i) = currentSegmentValue
-      if (!justTime && i == 0 && j != 4) {
-        // year should have exact four digits
-        return None
-      }
-
-      while (digitsMilli < 6) {
-        segments(6) *= 10
-        digitsMilli += 1
-      }
-
-      // We are truncating the nanosecond part, which results in loss of precision
-      while (digitsMilli > 6) {
-        segments(6) /= 10
-        digitsMilli -= 1
-      }
-      val zoneId = tz match {
-        case None => timeZoneId
-        case Some("+") => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
-        case Some("-") => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
-        case Some(zoneName: String) => getZoneId(zoneName.trim)
-      }
-      val nanoseconds = MICROSECONDS.toNanos(segments(6))
-      val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
-      val localDate = if (justTime) {
-        LocalDate.now(zoneId)
       } else {
-        LocalDate.of(segments(0), segments(1), segments(2))
+        if (i == 6) {
+          digitsMilli += 1
+        }
+        currentSegmentValue = currentSegmentValue * 10 + parsedValue
       }
-      val localDateTime = LocalDateTime.of(localDate, localTime)
-      val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
-      val instant = Instant.from(zonedDateTime)
-      Some(instantToMicros(instant))
-    } catch {
-      case NonFatal(_) => None
+      j += 1
     }
+
+    segments(i) = currentSegmentValue
+    if (!justTime && i == 0 && j != 4) {
+      // year should have exact four digits
+      return None
+    }
+
+    while (digitsMilli < 6) {
+      segments(6) *= 10
+      digitsMilli += 1
+    }
+
+    // We are truncating the nanosecond part, which results in loss of precision
+    while (digitsMilli > 6) {
+      segments(6) /= 10
+      digitsMilli -= 1
+    }
+    val zoneId = tz match {
+      case None => timeZoneId
+      case Some("+") => ZoneOffset.ofHoursMinutes(segments(7), segments(8))
+      case Some("-") => ZoneOffset.ofHoursMinutes(-segments(7), -segments(8))
+      case Some(zoneName: String) => getZoneId(zoneName.trim)
+    }
+    val nanoseconds = MICROSECONDS.toNanos(segments(6))
+    val localTime = LocalTime.of(segments(3), segments(4), segments(5), nanoseconds.toInt)
+    val localDate = if (justTime) {
+      LocalDate.now(zoneId)
+    } else {
+      LocalDate.of(segments(0), segments(1), segments(2))
+    }
+    val localDateTime = LocalDateTime.of(localDate, localTime)
+    val zonedDateTime = ZonedDateTime.of(localDateTime, zoneId)
+    val instant = Instant.from(zonedDateTime)
+    Some(instantToMicros(instant))
+  } catch {
+    case NonFatal(_) => None
   }
+
 
   def stringToTimestampAnsi(s: UTF8String, timeZoneId: ZoneId): Long = {
     val timestamp = stringToTimestamp(s, timeZoneId)
