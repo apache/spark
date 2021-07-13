@@ -518,6 +518,8 @@ object DecorrelateInnerQuery extends PredicateHelper {
                     // left outer join.
                     a.toAttribute.withNullability(true)
                   case Some(default) =>
+                    assert(a.isInstanceOf[Alias], s"Cannot have non-aliased expression $a in " +
+                      s"aggregate that evaluates to non-null value with zero tuples.")
                     val newAttr = a.newInstance()
                     val ref = newAttr.toAttribute.withNullability(true)
                     expressions += newAttr
