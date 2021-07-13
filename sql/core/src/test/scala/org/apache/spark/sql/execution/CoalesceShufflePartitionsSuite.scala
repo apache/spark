@@ -323,8 +323,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
       //   ReusedQueryStage 0
       //   ReusedQueryStage 0
       val resultDf = df.join(df, "key").join(df, "key")
-      QueryTest.checkAnswer(resultDf, Row(0, 0, 0, 0) :: Row(1, 1, 1, 1) :: Row(2, 2, 2, 2) ::
-        Row(3, 3, 3, 3) :: Row(4, 4, 4, 4) :: Row(5, 5, 5, 5) :: Nil)
+      QueryTest.checkAnswer(resultDf, (0 to 5).map(i => Row(i, i, i, i)))
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       assert(finalPlan.collect {
@@ -363,7 +362,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
 
       level1Stages.foreach(qs =>
         assert(qs.plan.collect {
-          case r@CoalescedShuffleReader() => r
+          case r @ CoalescedShuffleReader() => r
         }.length == 1,
           "Wrong CoalescedShuffleReader below " + qs.simpleString(3)))
 
