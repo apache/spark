@@ -78,6 +78,8 @@ license: |
 
 - In Spark 3.0, JSON datasource and JSON function `schema_of_json` infer TimestampType from string values if they match to the pattern defined by the JSON option `timestampFormat`. Since version 3.0.1, the timestamp type inference is disabled by default. Set the JSON option `inferTimestamp` to `true` to enable such type inference.
 
+- In Spark 3.0, when casting string to integral types(tinyint, smallint, int and bigint), datetime types(date, timestamp and interval) and boolean type, the leading and trailing characters (<= ASCII 32) will be trimmed. For example, `cast('\b1\b' as int)` results `1`. Since Spark 3.0.1, only the leading and trailing whitespace ASCII characters will be trimmed. For example, `cast('\t1\t' as int)` results `1` but `cast('\b1\b' as int)` results `NULL`.
+
 ## Upgrading from Spark SQL 2.4 to 3.0
 
 ### Dataset/DataFrame APIs
