@@ -47,7 +47,7 @@ import org.apache.spark.sql.types._
 case class BuildBitmap(child: Expression,
 override val mutableAggBufferOffset: Int = 0,
 override val inputAggBufferOffset: Int = 0)
-    extends TypedImperativeAggregate[Option[RoaringBitmap]]  {
+    extends TypedImperativeAggregate[Option[RoaringBitmap]] {
 
   def this(child: Expression) = this(child, 0, 0)
 
@@ -73,8 +73,6 @@ override val inputAggBufferOffset: Int = 0)
       })
       .orNull
   }
-
-  override def children: Seq[Expression] = Seq(child)
 
   override def nullable: Boolean = child.nullable
 
@@ -138,7 +136,7 @@ override val inputAggBufferOffset: Int = 0)
   override def withNewInputAggBufferOffset(newOffset: Int): BuildBitmap =
     copy(inputAggBufferOffset = newOffset)
 
-  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): BuildBitmap =
+  override protected def withNewChildInternal(newChild: Expression): BuildBitmap =
     copy(child = newChild)
 
   override def prettyName: String = "build_bitmap"
