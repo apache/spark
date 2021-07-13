@@ -21,10 +21,8 @@ import java.io.File
 import java.util.{Locale, TimeZone}
 
 import scala.annotation.tailrec
-
 import org.apache.commons.io.FileUtils
 import org.scalatest.Assertions
-
 import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.rdd.BlockRDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Row, SparkSession}
@@ -40,7 +38,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode._
 import org.apache.spark.sql.streaming.util.{MockSourceProvider, StreamManualClock}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{StructType, TimestampType}
 import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.Utils
 
@@ -78,6 +76,58 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
         executeFuncWithStateVersionSQLConf(version, confPairs, func)
       }
     }
+  }
+
+  testWithAllStateVersions("prune results by localtimestamp, complete mode") {
+    import testImplicits._
+    val clock = new StreamManualClock
+    val inputData = MemoryStream[Long]
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .where('value >= localtimestamp().cast(TimestampType).cast("long") - 10L)
+
+    testStream(aggregated, Complete)(
+      StartStream(Trigger.ProcessingTime("10 seconds"), triggerClock = clock),
+
+      // advance clock to 10 seconds, all keys retained
+      AddData(inputData, 0L, 5L, 5L, 10L),
+      AdvanceManualClock(10 * 1000),
+      CheckLastBatch((0L, 1), (5L, 2), (10L, 1)),
+
+      // advance clock to 20 seconds, should retain keys >= 10
+      AddData(inputData, 15L, 15L, 20L),
+      AdvanceManualClock(10 * 1000),
+      CheckLastBatch((10L, 1), (15L, 2), (20L, 1)),
+
+      // advance clock to 30 seconds, should retain keys >= 20
+      AddData(inputData, 0L, 85L),
+      AdvanceManualClock(10 * 1000),
+      CheckLastBatch((20L, 1), (85L, 1)),
+
+      // bounce stream and ensure correct batch timestamp is used
+      // i.e., we don't take it from the clock, which is at 90 seconds.
+      StopStream,
+      AssertOnQuery { q => // clear the sink
+        q.sink.asInstanceOf[MemorySink].clear()
+        q.commitLog.purge(3)
+        // advance by a minute i.e., 90 seconds total
+        clock.advance(60 * 1000L)
+        true
+      },
+      StartStream(Trigger.ProcessingTime("10 seconds"), triggerClock = clock),
+      // The commit log blown, causing the last batch to re-run
+      CheckLastBatch((20L, 1), (85L, 1)),
+      AssertOnQuery { q =>
+        clock.getTimeMillis() == 90000L
+      },
+
+      // advance clock to 100 seconds, should retain keys >= 90
+      AddData(inputData, 85L, 90L, 100L, 105L),
+      AdvanceManualClock(10 * 1000),
+      CheckLastBatch((90L, 1), (100L, 1), (105L, 1))
+    )
   }
 
   testWithAllStateVersions("simple count, update mode") {
