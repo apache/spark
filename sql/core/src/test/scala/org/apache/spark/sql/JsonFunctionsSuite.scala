@@ -595,7 +595,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("[SPARK-36069] from_json invalid json schema - check field name and field value") {
+  test("SPARK-36069: from_json invalid json schema - check field name and field value") {
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
       val schema = new StructType()
         .add("a", IntegerType)
