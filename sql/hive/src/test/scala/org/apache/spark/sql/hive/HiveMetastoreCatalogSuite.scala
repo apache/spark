@@ -365,29 +365,49 @@ class DataSourceWithHiveMetastoreCatalogSuite
   }
 
   Seq(
-    "parquet" -> "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
-    "orc" -> "org.apache.hadoop.hive.ql.io.orc.OrcSerde"
-  ).foreach { case (format, serde) =>
+    "parquet" -> (
+      "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+      HiveUtils.CONVERT_METASTORE_PARQUET.key),
+    "orc" -> (
+      "org.apache.hadoop.hive.ql.io.orc.OrcSerde",
+      HiveUtils.CONVERT_METASTORE_ORC.key)
+  ).foreach { case (format, (serde, formatConvertConf)) =>
     test("SPARK-28266: convertToLogicalRelation should not interpret `path` property when " +
       s"reading Hive tables using $format file format") {
       withTempPath(dir => {
-        val baseDir = s"${dir.getCanonicalFile.toURI.toString}"
-        spark.range(3).selectExpr("id").write.format(format).save(baseDir)
-        withTable("non_partition_table") {
-          hiveClient.runSqlHive(
-            s"""
-               |CREATE TABLE non_partition_table (id bigint)
-               |ROW FORMAT SERDE '$serde'
-               |WITH SERDEPROPERTIES ('path'='$baseDir')
-               |STORED AS $format LOCATION '$baseDir'
-               |""".stripMargin)
+        val baseDir = dir.getAbsolutePath
+        withSQLConf(formatConvertConf -> "true") {
 
-          withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true",
-              HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
-            assertResult(3) {
-              spark.sql("SELECT * FROM non_partition_table").count()
+          withTable("t1") {
+            hiveClient.runSqlHive(
+              s"""
+                 |CREATE TABLE t1 (id bigint)
+                 |ROW FORMAT SERDE '$serde'
+                 |WITH SERDEPROPERTIES ('path'='someNonLocationValue')
+                 |STORED AS $format LOCATION '$baseDir'
+                 |""".stripMargin)
+
+            assertResult(0) {
+              spark.sql("SELECT * FROM t1").count()
             }
           }
+
+          spark.range(3).selectExpr("id").write.format(format).save(baseDir)
+          withTable("t2") {
+            hiveClient.runSqlHive(
+              s"""
+                 |CREATE TABLE t2 (id bigint)
+                 |ROW FORMAT SERDE '$serde'
+                 |WITH SERDEPROPERTIES ('path'='$baseDir')
+                 |STORED AS $format LOCATION '$baseDir'
+                 |""".stripMargin)
+
+            assertResult(3) {
+              spark.sql("SELECT * FROM t2").count()
+            }
+          }
+
+
         }
       })
     }
