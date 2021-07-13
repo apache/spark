@@ -961,9 +961,9 @@ object QueryExecutionErrors {
   def cannotParseStringAsDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
   : Throwable = {
     new RuntimeException(
-      s"Cannot parse field name [${parser.getCurrentName}], " +
-        s"field value [${parser.getText}], " +
-        s"[${token.toString}] as target spark data type [${dataType}].")
+      s"Cannot parse field name ${parser.getCurrentName}, " +
+        s"field value ${parser.getText}, " +
+        s"[$token] as target spark data type [$dataType].")
   }
 
   def failToParseEmptyStringForDataTypeError(dataType: DataType): Throwable = {
@@ -974,9 +974,9 @@ object QueryExecutionErrors {
   def failToParseValueForDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
   : Throwable = {
     new RuntimeException(
-      s"Failed to parse field name [${parser.getCurrentName}], " +
-        s"field value [${parser.getText}], " +
-        s"[${token.toString}] to target spark data type [${dataType}].")
+      s"Failed to parse field name ${parser.getCurrentName}, " +
+        s"field value ${parser.getText}, " +
+        s"[$token] to target spark data type [$dataType].")
   }
 
   def rootConverterReturnNullError(): Throwable = {

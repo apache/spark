@@ -595,7 +595,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("[SPARK-36069] from_json invalid json schema - check field name and field value") {
+  test("SPARK-36069: from_json invalid json schema - check field name and field value") {
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
       val schema = new StructType()
         .add("a", IntegerType)
@@ -608,14 +608,14 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         df.select(from_json($"value", schema, Map("mode" -> "PERMISSIVE"))),
         Row(Row(null, 11, badRec)) :: Row(Row(2, 12, null)) :: Nil)
 
-      val exception = intercept[SparkException] {
+      val errMsg = intercept[SparkException] {
         df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
-      }
-      exception.printStackTrace()
-      assert(exception.getMessage.contains(
+      }.getMessage
+      
+      assert(errMsg.contains(
         "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
-      assert(exception.getMessage.contains(
-        "Failed to parse field name [a], field value [1], " +
+      assert(errMsg.contains(
+        "Failed to parse field name a, field value 1, " +
           "[VALUE_STRING] to target spark data type [IntegerType]."))
     }
   }
