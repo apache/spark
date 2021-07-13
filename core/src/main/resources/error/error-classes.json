@@ -1,4 +1,8 @@
 {
+  "AMBIGUOUS_FIELD_NAME" : {
+    "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
+    "sqlState" : "42000"
+  },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
     "sqlState" : "22012"
@@ -25,6 +29,10 @@
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [ "Invalid pivot column '%s'. Pivot columns must be comparable." ],
     "sqlState" : "22023"
+  },
+  "INVALID_FIELD_NAME" : {
+    "message" : [ "Field name %s is invalid: %s is not a struct." ],
+    "sqlState" : "42000"
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],

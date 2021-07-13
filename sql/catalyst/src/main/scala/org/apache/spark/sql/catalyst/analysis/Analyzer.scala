@@ -3613,7 +3613,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         table: ResolvedTable,
         fieldName: Seq[String],
         context: Expression): ResolvedFieldName = {
-      table.schema.findNestedField(fieldName, includeCollections = true, conf.resolver).map {
+      table.schema.findNestedField(
+        fieldName, includeCollections = true, conf.resolver, context.origin
+      ).map {
         case (path, field) => ResolvedFieldName(path, field)
       }.getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context))
     }

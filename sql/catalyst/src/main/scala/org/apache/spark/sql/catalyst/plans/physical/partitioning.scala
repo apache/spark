@@ -347,6 +347,7 @@ case class BroadcastPartitioning(mode: BroadcastMode) extends Partitioning {
   override val numPartitions: Int = 1
 
   override def satisfies0(required: Distribution): Boolean = required match {
+    case UnspecifiedDistribution => true
     case BroadcastDistribution(m) if m == mode => true
     case _ => false
   }
