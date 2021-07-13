@@ -126,8 +126,9 @@ public class OneForOneBlockPusher {
         throw new IllegalArgumentException(
           "Unexpected shuffle push block id format: " + blockIds[i]);
       }
-      ByteBuffer header = new PushBlockStream(appId, appAttemptId, Integer.parseInt(blockIdParts[1]),
-        Integer.parseInt(blockIdParts[2]), Integer.parseInt(blockIdParts[3]) , i).toByteBuffer();
+      ByteBuffer header =
+        new PushBlockStream(appId, appAttemptId, Integer.parseInt(blockIdParts[1]),
+          Integer.parseInt(blockIdParts[2]), Integer.parseInt(blockIdParts[3]) , i).toByteBuffer();
       client.uploadStream(new NioManagedBuffer(header), buffers.get(blockIds[i]),
         new BlockPushCallback(i, blockIds[i]));
     }
