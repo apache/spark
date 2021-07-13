@@ -48,7 +48,7 @@ import org.apache.spark.sql.types._
 case class BuildBitmap(child: Expression,
 override val mutableAggBufferOffset: Int = 0,
 override val inputAggBufferOffset: Int = 0)
-    extends TypedImperativeAggregate[Option[RoaringBitmap]] 
+    extends TypedImperativeAggregate[Option[RoaringBitmap]]
     with UnaryLike[Expression] {
 
   def this(child: Expression) = this(child, 0, 0)
