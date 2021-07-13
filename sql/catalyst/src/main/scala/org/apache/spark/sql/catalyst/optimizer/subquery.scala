@@ -296,9 +296,12 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
       if (newCond.isEmpty) oldCond else newCond
     }
 
-    def decorrelate(sub: LogicalPlan, outer: LogicalPlan): (LogicalPlan, Seq[Expression]) = {
+    def decorrelate(
+        sub: LogicalPlan,
+        outer: LogicalPlan,
+        handleCountBug: Boolean = false): (LogicalPlan, Seq[Expression]) = {
       if (SQLConf.get.decorrelateInnerQueryEnabled) {
-        DecorrelateInnerQuery(sub, outer)
+        DecorrelateInnerQuery(sub, outer, handleCountBug)
       } else {
         pullOutCorrelatedPredicates(sub, outer)
       }
@@ -315,7 +318,7 @@ object PullupCorrelatedPredicates extends Rule[LogicalPlan] with PredicateHelper
         val (newPlan, newCond) = pullOutCorrelatedPredicates(sub, plan)
         ListQuery(newPlan, children, exprId, childOutputs, getJoinCondition(newCond, conditions))
       case LateralSubquery(sub, children, exprId, conditions) if children.nonEmpty =>
-        val (newPlan, newCond) = decorrelate(sub, plan)
+        val (newPlan, newCond) = decorrelate(sub, plan, handleCountBug = true)
         LateralSubquery(newPlan, children, exprId, getJoinCondition(newCond, conditions))
     }
   }
@@ -396,7 +399,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
   /**
    * Statically evaluate an expression containing one or more aggregates on an empty input.
    */
-  private def evalAggOnZeroTups(expr: Expression) : Expression = {
+  private def evalAggExprOnZeroTups(expr: Expression) : Expression = {
     // AggregateExpressions are Unevaluable, so we need to replace all aggregates
     // in the expression with the value they would return for zero input tuples.
     // Also replace attribute refs (for example, for grouping columns) with NULL.
@@ -408,6 +411,24 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
     }
 
     tryEvalExpr(rewrittenExpr)
+  }
+
+  /**
+   * Statically evaluate an [[Aggregate]] on an empty input and return a mapping
+   * between its output attribute expression ID and evaluated result.
+   */
+  def evalAggregateOnZeroTups(a: Aggregate): Map[ExprId, Expression] = {
+    // Some of the expressions under the Aggregate node are the join columns
+    // for joining with the outer query block. Fill those expressions in with
+    // nulls and statically evaluate the remainder.
+    a.aggregateExpressions.map {
+      case ref: AttributeReference => (ref.exprId, Literal.create(null, ref.dataType))
+      case alias @ Alias(_: AttributeReference, _) =>
+        (alias.exprId, Literal.create(null, alias.dataType))
+      case alias @ Alias(l: Literal, _) =>
+        (alias.exprId, l.copy(value = null))
+      case ne => (ne.exprId, evalAggExprOnZeroTups(ne))
+    }.toMap
   }
 
   /**
@@ -454,18 +475,8 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] with AliasHelpe
           projectList.map(ne => (ne.exprId, bindingExpr(ne, bindings))).toMap
         }
 
-      case Aggregate(_, aggExprs, _) =>
-        // Some of the expressions under the Aggregate node are the join columns
-        // for joining with the outer query block. Fill those expressions in with
-        // nulls and statically evaluate the remainder.
-        aggExprs.map {
-          case ref: AttributeReference => (ref.exprId, Literal.create(null, ref.dataType))
-          case alias @ Alias(_: AttributeReference, _) =>
-            (alias.exprId, Literal.create(null, alias.dataType))
-          case alias @ Alias(l: Literal, _) =>
-            (alias.exprId, l.copy(value = null))
-          case ne => (ne.exprId, evalAggOnZeroTups(ne))
-        }.toMap
+      case a: Aggregate =>
+        evalAggregateOnZeroTups(a)
 
       case l: LeafNode =>
         l.output.map(a => (a.exprId, Literal.create(null, a.dataType))).toMap
@@ -695,7 +706,6 @@ object RewriteLateralSubquery extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsPattern(LATERAL_JOIN)) {
     case LateralJoin(left, LateralSubquery(sub, _, _, joinCond), joinType, condition) =>
-      // TODO(SPARK-35551): handle the COUNT bug
       val newRight = DecorrelateInnerQuery.rewriteDomainJoins(left, sub, joinCond)
       val newCond = (condition ++ joinCond).reduceOption(And)
       Join(left, newRight, joinType, newCond, JoinHint.NONE)

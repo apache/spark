@@ -1079,6 +1079,53 @@ case class ParseToTimestampNTZ(
     copy(child = newChild)
 }
 
+/**
+ * Parses a column to a timestamp with local time zone based on the supplied format.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
+      to a timestamp with local time zone. Returns null with invalid input. By default, it follows casting rules to
+      a timestamp if the `fmt` is omitted.
+  """,
+  arguments = """
+    Arguments:
+      * timestamp_str - A string to be parsed to timestamp with local time zone.
+      * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
+              date and time format patterns.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2016-12-31 00:12:00');
+       2016-12-31 00:12:00
+      > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
+       2016-12-31 00:00:00
+  """,
+  group = "datetime_funcs",
+  since = "3.2.0")
+// scalastyle:on line.size.limit
+case class ParseToTimestampLTZ(
+    left: Expression,
+    format: Option[Expression],
+    child: Expression) extends RuntimeReplaceable {
+
+  def this(left: Expression, format: Expression) = {
+    this(left, Option(format), GetTimestamp(left, format, TimestampType))
+  }
+
+  def this(left: Expression) = this(left, None, Cast(left, TimestampType))
+
+  override def flatArguments: Iterator[Any] = Iterator(left, format)
+  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
+
+  override def prettyName: String = "to_timestamp_ltz"
+  override def dataType: DataType = TimestampType
+
+  override protected def withNewChildInternal(newChild: Expression): ParseToTimestampLTZ =
+    copy(child = newChild)
+}
+
 abstract class ToTimestamp
   extends BinaryExpression with TimestampFormatterHelper with ExpectsInputTypes {
 
@@ -2648,7 +2695,7 @@ object DatePart {
        224
       > SELECT _FUNC_('SECONDS', timestamp'2019-10-01 00:00:01.000001');
        1.000001
-      > SELECT _FUNC_('days', interval 1 year 10 months 5 days);
+      > SELECT _FUNC_('days', interval 5 days 3 hours 7 minutes);
        5
       > SELECT _FUNC_('seconds', interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001
@@ -2717,7 +2764,7 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
        224
       > SELECT _FUNC_(SECONDS FROM timestamp'2019-10-01 00:00:01.000001');
        1.000001
-      > SELECT _FUNC_(days FROM interval 1 year 10 months 5 days);
+      > SELECT _FUNC_(days FROM interval 5 days 3 hours 7 minutes);
        5
       > SELECT _FUNC_(seconds FROM interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001

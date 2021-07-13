@@ -562,10 +562,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Trims whitespaces ({@literal <=} ASCII 32) from both ends of this string.
+   * Trims whitespace ASCII characters from both ends of this string.
    *
-   * Note that, this method is the same as java's {@link String#trim}, and different from
-   * {@link UTF8String#trim()} which remove only spaces(= ASCII 32) from both ends.
+   * Note that, this method is different from {@link UTF8String#trim()} which removes
+   * only spaces(= ASCII 32) from both ends.
    *
    * @return A UTF8String whose value is this UTF8String, with any leading and trailing white
    * space removed, or this UTF8String if it has no leading or trailing whitespace.
@@ -573,13 +573,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public UTF8String trimAll() {
     int s = 0;
-    // skip all of the whitespaces (<=0x20) in the left side
+    // skip all of the whitespaces in the left side
     while (s < this.numBytes && Character.isWhitespace(getByte(s))) s++;
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
-    // skip all of the whitespaces (<=0x20) in the right side
+    // skip all of the whitespaces in the right side
     int e = this.numBytes - 1;
     while (e > s && Character.isWhitespace(getByte(e))) e--;
     if (s == 0 && e == numBytes - 1) {

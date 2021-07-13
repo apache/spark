@@ -33,6 +33,10 @@ select to_timestamp_ntz(null), to_timestamp_ntz('2016-12-31 00:12:00'), to_times
 select to_timestamp_ntz(to_date(null)), to_timestamp_ntz(to_date('2016-12-31')), to_timestamp_ntz(to_date('2016-12-31', 'yyyy-MM-dd'));
 select to_timestamp_ntz(to_timestamp(null)), to_timestamp_ntz(to_timestamp('2016-12-31 00:12:00')), to_timestamp_ntz(to_timestamp('2016-12-31', 'yyyy-MM-dd'));
 
+select to_timestamp_ltz(null), to_timestamp_ltz('2016-12-31 00:12:00'), to_timestamp_ltz('2016-12-31', 'yyyy-MM-dd');
+select to_timestamp_ltz(to_date(null)), to_timestamp_ltz(to_date('2016-12-31')), to_timestamp_ltz(to_date('2016-12-31', 'yyyy-MM-dd'));
+select to_timestamp_ltz(to_timestamp(null)), to_timestamp_ltz(to_timestamp('2016-12-31 00:12:00')), to_timestamp_ltz(to_timestamp('2016-12-31', 'yyyy-MM-dd'));
+
 select dayofweek('2007-02-03'), dayofweek('2009-07-30'), dayofweek('2017-05-27'), dayofweek(null), dayofweek('1582-10-15 13:10:15');
 
 -- [SPARK-22333]: timeFunctionCall has conflicts with columnReference

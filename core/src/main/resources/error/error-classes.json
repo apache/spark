@@ -1,4 +1,8 @@
 {
+  "AMBIGUOUS_FIELD_NAME" : {
+    "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
+    "sqlState" : "42000"
+  },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
     "sqlState" : "22012"
@@ -6,6 +10,10 @@
   "DUPLICATE_KEY" : {
     "message" : [ "Found duplicate keys '%s'" ],
     "sqlState" : "23000"
+  },
+  "INVALID_FIELD_NAME" : {
+    "message" : [ "Field name %s is invalid: %s is not a struct." ],
+    "sqlState" : "42000"
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
