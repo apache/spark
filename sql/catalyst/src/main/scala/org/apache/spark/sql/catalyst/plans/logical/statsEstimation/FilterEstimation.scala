@@ -115,7 +115,7 @@ case class FilterEstimation(plan: Filter) extends Logging {
         }
 
       case _ =>
-        calculateSingleCondition(condition, update)
+        boundProbability(calculateSingleCondition(condition, update))
     }
   }
 
@@ -856,6 +856,10 @@ case class FilterEstimation(plan: Filter) extends Logging {
     Some(percent)
   }
 
+  // Bound result in [0, 1]
+  private def boundProbability(p: Double): Double = {
+    Math.max(0.0, Math.min(1.0, p))
+  }
 }
 
 /**
