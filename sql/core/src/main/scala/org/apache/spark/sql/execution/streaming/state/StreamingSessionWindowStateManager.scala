@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Literal, UnsafeProjection, UnsafeRow}
@@ -171,7 +169,11 @@ class StreamingSessionWindowStateManagerImplV1(
       store: StateStore,
       key: UnsafeRow,
       sessions: Seq[UnsafeRow]): Unit = {
-    replaceModifyWindow(key, sessions, store)
+    // Below two will be used multiple times - need to make sure this is not a stream or iterator.
+    val newValues = sessions.toList
+    val savedStates = getSessionsWithKeys(store, key)
+      .map(pair => (pair.key.copy(), pair.value.copy())).toList
+    putRows(store, key, savedStates, newValues)
   }
 
   override def commit(store: StateStore): Long = store.commit()
@@ -219,31 +221,6 @@ class StreamingSessionWindowStateManagerImplV1(
     stateKey.copy()
   }
 
-  /**
-   * Updates windows from the values overlapped with existing values in the store, and adds
-   * new windows from the values.
-   */
-  private def replaceModifyWindow(
-      key: UnsafeRow,
-      values: Seq[UnsafeRow],
-      store: StateStore): Long = {
-    // Below two will be used multiple times - need to make sure this is not a stream or iterator.
-    val newValues = values.toList
-    val savedStates = getSessionsWithKeys(store, key)
-      .map(pair => (pair.key.copy(), pair.value.copy())).toList
-
-    if (savedStates.isEmpty) {
-      putRows(store, key, savedStates, newValues)
-      newValues.length
-    } else {
-      // get origin state from state store by specified key
-      // filter out the window which have overlapped with new state
-      val newStates = helper.removeOverlapWindow(newValues, savedStates.map(_._2)).toList
-      putRows(store, key, savedStates, newStates)
-      newStates.length
-    }
-  }
-
   private def putRows(
       store: StateStore,
       key: UnsafeRow,
@@ -288,89 +265,5 @@ class StreamingSessionWindowHelper(sessionExpression: Attribute, inputSchema: Se
   def extractTimePair(value: InternalRow): (Long, Long) = {
     val window = sessionProjection(value).getStruct(0, 2)
     (window.getLong(0), window.getLong(1))
-  }
-
-  /**
-   * Returns the union of windows from old windows and new windows.
-   *
-   * To deduplicate intersection from union of both windows, The method will remove old windows
-   * which overlap with new windows. The approach is safe, as a new window which overlaps with
-   * an old windows "supersedes" the old windows. The window boundary is always "expanded" and
-   * new window has updated values.
-   */
-  def removeOverlapWindow(
-      newWindows: Seq[UnsafeRow],
-      oldWindows: Seq[UnsafeRow]): Seq[UnsafeRow] = {
-    assert(newWindows.nonEmpty && oldWindows.nonEmpty,
-      "new windows & old windows must be nonEmpty")
-
-    val buffer = new ArrayBuffer[WindowRecord]()
-    newWindows.foreach { window =>
-      val times = extractTimePair(window)
-      buffer += WindowRecord(times._1, times._2, true, window)
-    }
-    oldWindows.foreach { window =>
-      val times = extractTimePair(window)
-      buffer += WindowRecord(times._1, times._2, false, window)
-    }
-
-    // sort the buffer by startTime and endTime
-    val sorted = buffer.sorted(WindowOrdering)
-    val result = new ArrayBuffer[UnsafeRow]
-
-    // the latest record in result buffer
-    var latestValidRecord: WindowRecord = null
-
-    // filter out the old windows that have overlap with new windows
-    (0 to sorted.size - 1).foreach { i =>
-      val record = sorted(i)
-      if (record.isNew) { // record belong to new windows
-        latestValidRecord = record
-        result += record.row
-      } else if (checkNoOverlap(i, latestValidRecord, sorted)) {
-        // record belong to old windows and no overlap
-        latestValidRecord = record
-        result += record.row
-      }
-    }
-    result.toSeq
-  }
-
-  private def checkNoOverlap(
-      index: Int,
-      latestValidRecord: WindowRecord,
-      sorted: ArrayBuffer[WindowRecord]): Boolean = {
-    val current = sorted(index)
-    if (0 < index && index < sorted.size - 1) {
-      checkNoOverlapBetweenRecord(current, sorted(index - 1)) &&
-        checkNoOverlapBetweenRecord(current, sorted(index + 1)) &&
-        (latestValidRecord == null || checkNoOverlapBetweenRecord(current, latestValidRecord))
-    } else if (index == 0) { // first record
-      checkNoOverlapBetweenRecord(current, sorted(index + 1))
-    } else { // last record
-      checkNoOverlapBetweenRecord(current, sorted(index - 1)) &&
-        (latestValidRecord == null || checkNoOverlapBetweenRecord(current, latestValidRecord))
-    }
-  }
-
-  private def checkNoOverlapBetweenRecord(a: WindowRecord, b: WindowRecord): Boolean = {
-    (a.end < b.start || a.start > b.end)
-  }
-
-  /**
-   * @param start  window's startTime which the row belong to
-   * @param end    window's endTime which the row belong to
-   * @param isNew  whether the row is belong to new windows
-   */
-  case class WindowRecord(start: Long, end: Long, isNew: Boolean, row: UnsafeRow)
-
-  object WindowOrdering extends Ordering[WindowRecord] {
-    def compare(a: WindowRecord, b: WindowRecord): Int = {
-      var res = a.start compare b.start
-      if (res == 0) {
-        res = a.end compare b.end
-      }
-      res
-    }
   }
 }
