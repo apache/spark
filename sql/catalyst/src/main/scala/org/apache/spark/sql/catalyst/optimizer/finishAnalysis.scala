@@ -97,9 +97,7 @@ object ComputeCurrentTime extends Rule[LogicalPlan] {
       case CurrentTimeZone() => timezone
       case localTimestamp @ LocalTimestamp(Some(timeZoneId)) =>
         localTimestamps.getOrElseUpdate(timeZoneId, {
-          Literal.create(
-            localDateTimeToMicros(LocalDateTime.now(localTimestamp.zoneId)),
-            TimestampNTZType)
+          Literal.create(localTimestamp.eval().asInstanceOf[Long], TimestampNTZType)
         })
     }
   }
