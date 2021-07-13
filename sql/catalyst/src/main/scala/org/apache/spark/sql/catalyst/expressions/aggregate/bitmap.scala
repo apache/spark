@@ -48,22 +48,21 @@ case class BuildBitmap(child: Expression,
                       inputRow: InternalRow): Option[RoaringBitmap] = {
     val value = child.eval(inputRow)
     if (value != null) {
-      val rbm1 = value match {
-        case b: Array[Byte] =>
+      val bitmap = value match {
+        case bytes: Array[Byte] =>
           val rbm = new RoaringBitmap
-          rbm.deserialize(new DataInputStream(new ByteArrayInputStream(b)))
+          rbm.deserialize(new DataInputStream(new ByteArrayInputStream(bytes)))
           rbm
         case _ =>
           throw new IllegalStateException(
-            s"$prettyName only supports Array[Byte]")
+            s"$prettyName only supports array of bytes")
       }
-      buffer
-        .map(buf => {
-          buf.or(rbm1)
+      buffer.map(buf => {
+          buf.or(bitmap)
           buf
         })
-        .orElse(Option(rbm1))
-    } else {
+        .orElse(Option(bitmap))
+      } else {
       buffer
     }
   }
@@ -73,7 +72,7 @@ case class BuildBitmap(child: Expression,
       case BinaryType => TypeCheckResult.TypeCheckSuccess
       case _ =>
         TypeCheckResult.TypeCheckFailure(
-          s"$prettyName only supports binary input")
+          s"Type error, $prettyName only supports binary type")
     }
   }
 
@@ -89,7 +88,6 @@ case class BuildBitmap(child: Expression,
   
 }
 
-
 @ExpressionDescription(
   usage =
      "_FUNC_(expr) - Returns the cardinality of the bitmap from values of a group of the offset.",
@@ -99,7 +97,7 @@ case class BuildBitmap(child: Expression,
     3
   """)
 case class BitmapCardinality(override val child: Expression)
-    extends UnaryExpression
+    extends UnaryExpression 
     with ExpectsInputTypes
     with CodegenFallback {
 
@@ -108,9 +106,9 @@ case class BitmapCardinality(override val child: Expression)
   override def dataType: DataType = LongType
 
   override def nullSafeEval(input: Any): Long = {
-    val data = input.asInstanceOf[Array[Byte]]
+    val bytes = input.asInstanceOf[Array[Byte]]
     val rbm = new RoaringBitmap
-    rbm.deserialize(new DataInputStream(new ByteArrayInputStream(data)))
+    rbm.deserialize(new DataInputStream(new ByteArrayInputStream(bytes)))
     rbm.getLongCardinality
 
   }
