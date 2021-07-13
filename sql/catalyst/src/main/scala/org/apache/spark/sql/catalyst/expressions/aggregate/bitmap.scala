@@ -8,11 +8,9 @@ import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.expressions.ExpressionDescription
 import org.apache.spark.sql.types._
 import org.roaringbitmap.RoaringBitmap
-import scala.util.{Failure, Success, Try}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.ExpectsInputTypes
 import org.apache.spark.sql.catalyst.expressions.UnaryExpression
-import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateFunction
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import java.io.ByteArrayOutputStream
 import java.io.DataOutputStream
@@ -156,3 +154,4 @@ case class BitmapCardinality(override val child: Expression)
 
   override def prettyName: String = "bitmap_cardinality"
 }
+
