@@ -611,7 +611,7 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       val errMsg = intercept[SparkException] {
         df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
       }.getMessage
-      
+
       assert(errMsg.contains(
         "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
       assert(errMsg.contains(
