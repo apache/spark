@@ -74,8 +74,6 @@ class ShuffleExternalSorterSuite extends SparkFunSuite with LocalSparkContext wi
       sc.env.blockManager,
       taskContext,
       100, // initialSize - This will require ShuffleInMemorySorter to acquire at least 800 bytes
-      0,
-      0,
       1, // numPartitions
       conf,
       new ShuffleWriteMetrics)
