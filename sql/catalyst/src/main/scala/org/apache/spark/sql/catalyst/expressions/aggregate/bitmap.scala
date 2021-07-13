@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.io.ByteArrayInputStream
-import java.io.DataInputStream
-import java.io.ByteArrayOutputStream
-import java.io.DataOutputStream
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions._
+
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
+
 import org.roaringbitmap.RoaringBitmap
 
 @ExpressionDescription(
@@ -39,12 +41,12 @@ import org.roaringbitmap.RoaringBitmap
       +---+--------------------+
 """)
 case class BuildBitmap(child: Expression,
-				 override val mutableAggBufferOffset: Int = 0,
-                 override val inputAggBufferOffset: Int = 0)
+override val mutableAggBufferOffset: Int = 0,
+override val inputAggBufferOffset: Int = 0)
     extends TypedImperativeAggregate[Option[RoaringBitmap]]  {
 
   def this(child: Expression) = this(child, 0, 0)
- 
+
   override def createAggregationBuffer(): Option[RoaringBitmap] = None
 
   override def merge(buffer: Option[RoaringBitmap],
@@ -55,7 +57,7 @@ case class BuildBitmap(child: Expression,
         Some(a)
       case (a, None) => a
       case (None, b) => b
-      case _         => None
+      case _ => None
     }
 
   override def eval(buffer: Option[RoaringBitmap]): Any = {
@@ -144,7 +146,7 @@ case class BuildBitmap(child: Expression,
     3
   """)
 case class BitmapCardinality(override val child: Expression)
-    extends UnaryExpression 
+    extends UnaryExpression
     with ExpectsInputTypes
     with CodegenFallback {
 
