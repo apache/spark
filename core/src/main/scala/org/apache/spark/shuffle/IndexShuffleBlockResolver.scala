@@ -420,8 +420,19 @@ private[spark] class IndexShuffleBlockResolver(
         logError(s"Failed to delete temporary index file at ${indexTmp.getAbsolutePath}")
       }
       checksumTmpOpt.foreach { checksumTmp =>
-        if (checksumTmp.exists() && !checksumTmp.delete()) {
-          logError(s"Failed to delete temporary checksum file at ${checksumTmp.getAbsolutePath}")
+        if (checksumTmp.exists()) {
+          try {
+            if (!checksumTmp.delete()) {
+              logError(s"Failed to delete temporary checksum file " +
+                s"at ${checksumTmp.getAbsolutePath}")
+            }
+          } catch {
+            case e: Exception =>
+              // Unlike index deletion, we won't propagate the error for the checksum file since
+              // checksum is only a best-effort.
+              logError(s"Failed to delete temporary checksum file " +
+                s"at ${checksumTmp.getAbsolutePath}", e)
+          }
         }
       }
     }
