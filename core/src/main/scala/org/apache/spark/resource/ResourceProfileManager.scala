@@ -23,6 +23,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.errors.ResourceErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Tests._
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerResourceProfileAdded}
@@ -69,8 +70,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     // to skip throwing the exception so that we can test in other modes to make testing easier.
     if ((notRunningUnitTests || testExceptionThrown) &&
         (notYarnOrK8sAndNotDefaultProfile || YarnOrK8sNotDynAllocAndNotDefaultProfile)) {
-      throw new SparkException("ResourceProfiles are only supported on YARN and Kubernetes " +
-        "with dynamic allocation enabled.")
+      throw ResourceErrors.resourceProfileSupport()
     }
     true
   }
@@ -104,7 +104,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     readLock.lock()
     try {
       resourceProfileIdToResourceProfile.get(rpId).getOrElse(
-        throw new SparkException(s"ResourceProfileId $rpId not found!")
+        throw ResourceErrors.resourceProfile(rpId)
       )
     } finally {
       readLock.unlock()
