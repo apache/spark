@@ -359,12 +359,8 @@ object PartitioningUtils {
 
   def removeLeadingZerosFromNumberTypePartition(value: String, dataType: DataType): String = {
     dataType match {
-      case ByteType => value.toByte.toString
-      case ShortType => value.toShort.toString
-      case IntegerType => value.toInt.toString
-      case LongType => value.toLong.toString
-      case FloatType => value.toFloat.toString
-      case DoubleType => value.toDouble.toString
+      case ByteType | ShortType | IntegerType | LongType => value.toLong.toString
+      case FloatType | DoubleType => value.toDouble.toString
       case _ => value
     }
   }
