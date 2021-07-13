@@ -168,8 +168,9 @@ case class BitmapCardinality(override val child: Expression)
     rbm.getLongCardinality
 
   }
-  
-  override protected def withNewChildInternal(newChild: Expression): BitmapCardinality = copy(child = newChild)
+
+  override protected def withNewChildInternal(newChild: Expression): BitmapCardinality =
+    copy(child = newChild)
 
   override def prettyName: String = "bitmap_cardinality"
 }
