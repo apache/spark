@@ -270,7 +270,8 @@ private[spark] class BasicExecutorFeatureStep(
 
     // We're going with a statefulSet or direct for now since we want to support PVC templates.
     // This does force us into a restart policy of "Always" which isn't ideal.
-    // Jobs would give us flexibility around restart policy, but not scaling up after success + no support of PVC templates is probably not idea.
+    // Jobs would give us flexibility around restart policy, but not scaling up after success
+    // and no support of PVC templates is probably not idea.
     val policy = kubernetesConf.get(KUBERNETES_ALLOCATION_REPLICASET) match {
       case true => "Always"
       case _ => "Never"
@@ -279,7 +280,7 @@ private[spark] class BasicExecutorFeatureStep(
       .editOrNewMetadata()
         .withName(name)
         .addToLabels(kubernetesConf.labels.asJava)
-        .addToLabels(RESOURCE_PROFILE_LABEL, resourceProfileId.toString)
+        .addToLabels(SPARK_RESOURCE_PROFILE_ID_LABEL, resourceProfile.id.toString)
         .addToAnnotations(kubernetesConf.annotations.asJava)
         .addToOwnerReferences(ownerReference.toSeq: _*)
         .endMetadata()
