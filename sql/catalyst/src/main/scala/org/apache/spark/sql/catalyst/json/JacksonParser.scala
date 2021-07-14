@@ -426,7 +426,7 @@ class JacksonParser(
 
     // When the input schema is setting to `nullable = false`, make sure the field is not null.
     // As PERMISSIVE mode only works with nullable fields, we can skip this not nullable check when
-    // the mode is PERMISSIVE. (see FailureSafeParser.disableNotNullableForPermissiveMode)
+    // the mode is PERMISSIVE. (see FailureSafeParser.checkNullabilityForPermissiveMode)
     val checkNotNullable =
       badRecordException.isEmpty && !skipRow && options.parseMode != PermissiveMode
     if (checkNotNullable) {
