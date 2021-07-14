@@ -27,6 +27,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -284,7 +285,7 @@ public class RemoteBlockPushResolverSuite {
     validateChunks(TEST_APP, 0, 0, blockMeta, new int[]{9}, new int[][]{{0}});
   }
 
-  @Test (expected = RuntimeException.class)
+  @Test(expected = RuntimeException.class)
   public void testBlockReceivedAfterMergeFinalize() throws IOException {
     ByteBuffer[] blocks = new ByteBuffer[]{
       ByteBuffer.wrap(new byte[4]),
@@ -307,45 +308,6 @@ public class RemoteBlockPushResolverSuite {
         "Block shufflePush_0_1_0 received after merged shuffle is finalized", re.getMessage());
       MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0);
       validateChunks(TEST_APP, 0, 0, blockMeta, new int[]{9}, new int[][]{{0}});
-      throw re;
-    }
-  }
-
-  @Test (expected = IllegalArgumentException.class)
-  public void testBlockReceivedAfterNewAttemptRegistered() throws IOException {
-    String testApp = "updateLocalDirsTwiceWithTwoAttempts";
-    Path[] attempt1LocalDirs = createLocalDirs(1);
-    registerExecutor(testApp,
-      prepareLocalDirs(attempt1LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_1),
-      MERGE_DIRECTORY_META_1);
-    ByteBuffer[] blocks = new ByteBuffer[]{
-      ByteBuffer.wrap(new byte[4]),
-      ByteBuffer.wrap(new byte[5])
-    };
-    StreamCallbackWithID stream1 = pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(testApp, 1, 0, 0, 0, 0));
-    for (ByteBuffer block : blocks) {
-      stream1.onData(stream1.getID(), block);
-    }
-    stream1.onComplete(stream1.getID());
-    Path[] attempt2LocalDirs = createLocalDirs(2);
-    registerExecutor(testApp,
-      prepareLocalDirs(attempt2LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_2),
-      MERGE_DIRECTORY_META_2);
-    StreamCallbackWithID stream2 = pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(testApp, 2, 0, 1, 0, 0));
-    for (ByteBuffer block : blocks) {
-      stream2.onData(stream2.getID(), block);
-    }
-    stream2.onComplete(stream2.getID());
-    try {
-      StreamCallbackWithID stream3 = pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(testApp, 1, 0, 1, 0, 0));
-    } catch (IllegalArgumentException re) {
-      assertEquals(
-        "The attempt id 1 in this PushBlockStream message does not match " +
-          "with the current attempt id 2 stored in shuffle service for application " +
-          "updateLocalDirsTwiceWithTwoAttempts", re.getMessage());
       throw re;
     }
   }
@@ -384,7 +346,7 @@ public class RemoteBlockPushResolverSuite {
     assertArrayEquals(expectedBytes, mb.nioByteBuffer().array());
   }
 
-  @Test (expected = RuntimeException.class)
+  @Test(expected = RuntimeException.class)
   public void testCollision() throws IOException {
     StreamCallbackWithID stream1 =
       pushResolver.receiveBlockDataAsStream(
@@ -406,7 +368,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test (expected = RuntimeException.class)
+  @Test(expected = RuntimeException.class)
   public void testFailureInAStreamDoesNotInterfereWithStreamWhichIsWriting() throws IOException {
     StreamCallbackWithID stream1 =
       pushResolver.receiveBlockDataAsStream(
@@ -686,7 +648,7 @@ public class RemoteBlockPushResolverSuite {
     validateChunks(TEST_APP, 0, 0, blockMeta, new int[] {4, 5}, new int[][] {{0}, {1}});
   }
 
-  @Test (expected = RuntimeException.class)
+  @Test(expected = RuntimeException.class)
   public void testIOExceptionsExceededThreshold() throws IOException {
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
       (RemoteBlockPushResolver.PushBlockStreamCallback) pushResolver.receiveBlockDataAsStream(
@@ -721,7 +683,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test (expected = RuntimeException.class)
+  @Test(expected = RuntimeException.class)
   public void testIOExceptionsDuringMetaUpdateIncreasesExceptionCount() throws IOException {
     useTestFiles(true, false);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
@@ -756,7 +718,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test (expected = RuntimeException.class)
+  @Test(expected = RuntimeException.class)
   public void testRequestForAbortedShufflePartitionThrowsException() {
     try {
       testIOExceptionsDuringMetaUpdateIncreasesExceptionCount();
@@ -773,7 +735,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test (expected = RuntimeException.class)
+  @Test(expected = RuntimeException.class)
   public void testPendingBlockIsAbortedImmediately() throws IOException {
     useTestFiles(true, false);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
@@ -806,7 +768,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test (expected = RuntimeException.class)
+  @Test(expected = RuntimeException.class)
   public void testWritingPendingBufsIsAbortedImmediatelyDuringComplete() throws IOException {
     useTestFiles(true, false);
     RemoteBlockPushResolver.PushBlockStreamCallback callback =
@@ -907,7 +869,7 @@ public class RemoteBlockPushResolverSuite {
     removeApplication(TEST_APP);
   }
 
-  @Test (expected = RuntimeException.class)
+  @Test(expected = RuntimeException.class)
   public void testFailureAfterDuplicateBlockDoesNotInterfereActiveStream() throws IOException {
     StreamCallbackWithID stream1 =
       pushResolver.receiveBlockDataAsStream(
@@ -950,6 +912,106 @@ public class RemoteBlockPushResolverSuite {
     if (failedEx != null) {
       throw failedEx;
     }
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testBlockReceivedAfterNewAttemptRegistered() throws IOException {
+    String testApp = "updateLocalDirsTwiceWithTwoAttempts";
+    Path[] attempt1LocalDirs = createLocalDirs(1);
+    registerExecutor(testApp,
+      prepareLocalDirs(attempt1LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_1),
+      MERGE_DIRECTORY_META_1);
+    ByteBuffer[] blocks = new ByteBuffer[]{
+      ByteBuffer.wrap(new byte[4]),
+      ByteBuffer.wrap(new byte[5])
+    };
+    StreamCallbackWithID stream1 = pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(testApp, 1, 0, 0, 0, 0));
+    for (ByteBuffer block : blocks) {
+      stream1.onData(stream1.getID(), block);
+    }
+    stream1.onComplete(stream1.getID());
+    RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo =
+      pushResolver.validateAndGetAppShuffleInfo(testApp);
+    Map<Integer, Map<Integer, RemoteBlockPushResolver.AppShufflePartitionInfo>> partitions =
+      appShuffleInfo.getPartitions();
+    for (Map<Integer, RemoteBlockPushResolver.AppShufflePartitionInfo> partitionMap :
+        partitions.values()) {
+      for (RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo : partitionMap.values()) {
+        assertTrue(partitionInfo.getDataChannel().isOpen());
+        assertTrue(partitionInfo.getMetaFile().getChannel().isOpen());
+        assertTrue(partitionInfo.getIndexFile().getChannel().isOpen());
+      }
+    }
+    Path[] attempt2LocalDirs = createLocalDirs(2);
+    registerExecutor(testApp,
+      prepareLocalDirs(attempt2LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_2),
+      MERGE_DIRECTORY_META_2);
+    StreamCallbackWithID stream2 = pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(testApp, 2, 0, 1, 0, 0));
+    for (ByteBuffer block : blocks) {
+      stream2.onData(stream2.getID(), block);
+    }
+    stream2.onComplete(stream2.getID());
+    // Check if all the file channels created for the first attempt are safely closed.
+    for (Map<Integer, RemoteBlockPushResolver.AppShufflePartitionInfo> partitionMap :
+        partitions.values()) {
+      for (RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo : partitionMap.values()) {
+        assertNull(partitionInfo.getDataChannel());
+        assertNull(partitionInfo.getMetaFile());
+        assertNull(partitionInfo.getIndexFile());
+      }
+    }
+    try {
+      pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, 1, 0, 1, 0, 0));
+    } catch (IllegalArgumentException re) {
+      assertEquals(
+        "The attempt id 1 in this PushBlockStream message does not match " +
+          "with the current attempt id 2 stored in shuffle service for application " +
+          "updateLocalDirsTwiceWithTwoAttempts", re.getMessage());
+      throw re;
+    }
+  }
+
+  @Test(expected = NullPointerException.class)
+  public void testPushBlockStreamCallBackWhileNewAttemptRegistered()
+    throws IOException, InterruptedException {
+    Semaphore closed = new Semaphore(0);
+    pushResolver = new RemoteBlockPushResolver(conf) {
+      @Override
+      void closeAndDeletePartitionFilesIfNeeded(
+        AppShuffleInfo appShuffleInfo,
+        boolean cleanupLocalDirs) {
+        super.closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs);
+        closed.release();
+      }
+    };
+    String testApp = "testPushBlockStreamCallBackWhileNewAttemptRegisters";
+    Path[] attempt1LocalDirs = createLocalDirs(1);
+    registerExecutor(testApp,
+      prepareLocalDirs(attempt1LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_1),
+      MERGE_DIRECTORY_META_1);
+    ByteBuffer[] blocks = new ByteBuffer[]{
+      ByteBuffer.wrap(new byte[4]),
+      ByteBuffer.wrap(new byte[5]),
+      ByteBuffer.wrap(new byte[6]),
+      ByteBuffer.wrap(new byte[7])
+    };
+    StreamCallbackWithID stream1 = pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(testApp, 1, 0, 0, 0, 0));
+    // The onData callback should be called 4 times here before the onComplete callback. But a
+    // register executor message arrives in shuffle service after the 2nd onData callback. The 3rd
+    // onData callback should all throw NullPointerException as their channels are set to null.
+    stream1.onData(stream1.getID(), blocks[0]);
+    stream1.onData(stream1.getID(), blocks[1]);
+    Path[] attempt2LocalDirs = createLocalDirs(2);
+    registerExecutor(testApp,
+      prepareLocalDirs(attempt2LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_2),
+      MERGE_DIRECTORY_META_2);
+    closed.acquire();
+    // Should throw NullPointerException here.
+    stream1.onData(stream1.getID(), blocks[3]);
   }
 
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {

@@ -111,7 +111,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     this.errorHandler = new ErrorHandler.BlockPushErrorHandler();
   }
 
-  private AppShuffleInfo validateAndGetAppShuffleInfo(String appId) {
+  @VisibleForTesting
+  protected AppShuffleInfo validateAndGetAppShuffleInfo(String appId) {
     // TODO: [SPARK-33236] Change the message when this service is able to handle NM restart
     AppShuffleInfo appShuffleInfo =
       Preconditions.checkNotNull(appsShuffleInfo.get(appId),
@@ -262,7 +263,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * If cleanupLocalDirs is true, the merged shuffle files will also be deleted.
    * The cleanup will be executed in a separate thread.
    */
-  private void closeAndDeletePartitionFilesIfNeeded(
+  @VisibleForTesting
+  void closeAndDeletePartitionFilesIfNeeded(
       AppShuffleInfo appShuffleInfo,
       boolean cleanupLocalDirs) {
     for (Map<Integer, AppShufflePartitionInfo> partitionMap : appShuffleInfo.partitions.values()) {
@@ -391,7 +393,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
   }
 
-  @SuppressWarnings("SynchronizationOnLocalVariableOrMethodParameter")
   @Override
   public MergeStatuses finalizeShuffleMerge(FinalizeShuffleMerge msg) throws IOException {
     logger.info("Finalizing shuffle {} from Application {}_{}.",
@@ -1077,6 +1078,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       this.attemptId = attemptId;
       this.appPathsInfo = appPathsInfo;
       partitions = new ConcurrentHashMap<>();
+    }
+
+    @VisibleForTesting
+    public ConcurrentMap<Integer, Map<Integer, AppShufflePartitionInfo>> getPartitions() {
+      return partitions;
     }
 
     /**
