@@ -227,22 +227,22 @@ struct<four:string,f1:float>
 SELECT '' AS three, f.f1, f.f1 * '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0'
 -- !query schema
-struct<three:string,f1:float,x:double>
+struct<three:string,f1:float,x:float>
 -- !query output
-	1.2345679E-20	-1.2345678720289608E-19
-	1.2345679E20	-1.2345678955701443E21
-	1004.3	-10042.999877929688
+	1.2345679E-20	-1.2345678E-19
+	1.2345679E20	-1.2345678E21
+	1004.3	-10043.0
 
 
 -- !query
 SELECT '' AS three, f.f1, f.f1 + '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0'
 -- !query schema
-struct<three:string,f1:float,x:double>
+struct<three:string,f1:float,x:float>
 -- !query output
 	1.2345679E-20	-10.0
-	1.2345679E20	1.2345678955701443E20
-	1004.3	994.2999877929688
+	1.2345679E20	1.2345679E20
+	1004.3	994.3
 
 
 -- !query
@@ -260,11 +260,11 @@ struct<three:string,f1:float,x:double>
 SELECT '' AS three, f.f1, f.f1 - '-10' AS x FROM FLOAT4_TBL f
    WHERE f.f1 > '0.0'
 -- !query schema
-struct<three:string,f1:float,x:double>
+struct<three:string,f1:float,x:float>
 -- !query output
 	1.2345679E-20	10.0
-	1.2345679E20	1.2345678955701443E20
-	1004.3	1014.2999877929688
+	1.2345679E20	1.2345679E20
+	1004.3	1014.3
 
 
 -- !query

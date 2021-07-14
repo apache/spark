@@ -276,7 +276,8 @@ under-reported with Hadoop versions before 3.3.1.
 Here is the documentation on the standard connectors both from Apache and the cloud providers.
 
 * [OpenStack Swift](https://hadoop.apache.org/docs/current/hadoop-openstack/index.html).
-* [Azure Blob Storage and Azure Datalake Gen 2](https://hadoop.apache.org/docs/current/hadoop-aws/tools/hadoop-aws/index.html).
+* [Azure Blob Storage](https://hadoop.apache.org/docs/current/hadoop-azure/index.html).
+* [Azure Blob Filesystem (ABFS) and Azure Datalake Gen 2](https://hadoop.apache.org/docs/current/hadoop-azure/abfs.html).
 * [Azure Data Lake Gen 1](https://hadoop.apache.org/docs/current/hadoop-azure-datalake/index.html).
 * [Amazon S3 Strong Consistency](https://aws.amazon.com/s3/consistency/)
 * [Hadoop-AWS module (Hadoop 3.x)](https://hadoop.apache.org/docs/current3/hadoop-aws/tools/hadoop-aws/index.html).
@@ -287,4 +288,4 @@ Here is the documentation on the standard connectors both from Apache and the cl
 * [The Azure Blob Filesystem driver (ABFS)](https://docs.microsoft.com/en-us/azure/storage/blobs/data-lake-storage-abfs-driver)
 * IBM Cloud Object Storage connector for Apache Spark: [Stocator](https://github.com/CODAIT/stocator),
   [IBM Object Storage](https://www.ibm.com/cloud/object-storage). From IBM.
-
+* [Using JindoFS SDK to access Alibaba Cloud OSS](https://github.com/aliyun/alibabacloud-jindofs).

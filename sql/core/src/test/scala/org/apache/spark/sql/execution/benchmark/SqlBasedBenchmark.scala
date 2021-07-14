@@ -89,4 +89,8 @@ trait SqlBasedBenchmark extends BenchmarkBase with SQLHelper {
 
     schema
   }
+
+  override def afterAll(): Unit = {
+    spark.stop()
+  }
 }

@@ -240,6 +240,40 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
     assert(ThreadUtils.awaitResult(t2Result2, 200.millis) === 0L)
   }
 
+  test("SPARK-35486: memory freed by self-spilling is taken by another task") {
+    val memoryManager = createMemoryManager(1000L)
+    val t1MemManager = new TaskMemoryManager(memoryManager, 1)
+    val t2MemManager = new TaskMemoryManager(memoryManager, 2)
+    val c1 = new TestPartialSpillingMemoryConsumer(t1MemManager)
+    val c2 = new TestMemoryConsumer(t2MemManager)
+    val futureTimeout: Duration = 20.seconds
+
+    // t1 acquires 1000 bytes. This should succeed immediately.
+    val t1Result1 = Future { c1.acquireMemory(1000L) }
+    assert(ThreadUtils.awaitResult(t1Result1, futureTimeout) === 1000L)
+    assert(c1.getUsed() === 1000L)
+    assert(c1.getSpilledBytes() === 0L)
+
+    // t2 attempts to acquire 500 bytes. This should block since there is no memory available.
+    val t2Result1 = Future { c2.acquireMemory(500L) }
+    Thread.sleep(300)
+    assert(!t2Result1.isCompleted)
+    assert(c2.getUsed() === 0L)
+
+    // t1 attempts to acquire 500 bytes, causing its existing reservation to spill partially. After
+    // the spill, t1 is still at its fair share of 500 bytes, so it cannot acquire memory and t2
+    // gets the freed memory instead. t1 must try again, causing the rest of the reservation to
+    // spill.
+    val t1Result2 = Future { c1.acquireMemory(500L) }
+
+    // The spill should release enough memory for both t1's and t2's reservations to be satisfied.
+    assert(ThreadUtils.awaitResult(t2Result1, futureTimeout) === 500L)
+    assert(ThreadUtils.awaitResult(t1Result2, futureTimeout) === 500L)
+    assert(c1.getSpilledBytes() === 1000L)
+    assert(c1.getUsed() === 500L)
+    assert(c2.getUsed() === 500L)
+  }
+
   test("TaskMemoryManager.cleanUpAllAllocatedMemory") {
     val memoryManager = createMemoryManager(1000L)
     val t1MemManager = new TaskMemoryManager(memoryManager, 1)

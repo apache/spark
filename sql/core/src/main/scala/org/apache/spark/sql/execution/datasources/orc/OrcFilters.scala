@@ -25,8 +25,8 @@ import org.apache.hadoop.hive.ql.io.sarg.SearchArgument.Builder
 import org.apache.hadoop.hive.ql.io.sarg.SearchArgumentFactory.newBuilder
 import org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateToDays, toJavaDate, toJavaTimestamp}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -70,7 +70,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   def createFilter(schema: StructType, filters: Seq[Filter]): Option[SearchArgument] = {
     val dataTypeMap = OrcFilters.getSearchableTypeMap(schema, SQLConf.get.caseSensitiveAnalysis)
     // Combines all convertible filters using `And` to produce a single conjunction
-    val conjunctionOptional = buildTree(convertibleFilters(schema, dataTypeMap, filters))
+    val conjunctionOptional = buildTree(convertibleFilters(dataTypeMap, filters))
     conjunctionOptional.map { conjunction =>
       // Then tries to build a single ORC `SearchArgument` for the conjunction predicate.
       // The input predicate is fully convertible. There should not be any empty result in the
@@ -80,7 +80,6 @@ private[sql] object OrcFilters extends OrcFiltersBase {
   }
 
   def convertibleFilters(
-      schema: StructType,
       dataTypeMap: Map[String, OrcPrimitiveField],
       filters: Seq[Filter]): Seq[Filter] = {
     import org.apache.spark.sql.sources._
@@ -147,7 +146,7 @@ private[sql] object OrcFilters extends OrcFiltersBase {
     case DateType => PredicateLeaf.Type.DATE
     case TimestampType => PredicateLeaf.Type.TIMESTAMP
     case _: DecimalType => PredicateLeaf.Type.DECIMAL
-    case _ => throw new UnsupportedOperationException(s"DataType: ${dataType.catalogString}")
+    case _ => throw QueryExecutionErrors.unsupportedOperationForDataTypeError(dataType)
   }
 
   /**
@@ -200,8 +199,8 @@ private[sql] object OrcFilters extends OrcFiltersBase {
 
       case other =>
         buildLeafSearchArgument(dataTypeMap, other, builder).getOrElse {
-          throw new SparkException(
-            "The input filter of OrcFilters.buildSearchArgument should be fully convertible.")
+          throw QueryExecutionErrors.inputFilterNotFullyConvertibleError(
+            "OrcFilters.buildSearchArgument")
         }
     }
   }

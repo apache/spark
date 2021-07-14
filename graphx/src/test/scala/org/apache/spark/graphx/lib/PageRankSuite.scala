@@ -233,7 +233,37 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       assert(totalIters == 19)
       assert(iterAfterHalfCheckPoint == 18)
     }
-  } // end of Grid PageRank
+  } // end of Grid PageRank with checkpoint
+
+  test("Grid PageRank with checkpoint without intermediate normalization") {
+    withSpark { sc =>
+      // Check that 6 iterations in a row are equivalent
+      // to 3 times 2 iterations without intermediate normalization
+      val rows = 10
+      val cols = 10
+      val resetProb = 0.15
+      val gridGraph = GraphGenerators.gridGraph(sc, rows, cols).cache()
+
+      val ranksA: Array[(VertexId, Double)] = PageRank.runWithOptions(
+        gridGraph, numIter = 6, resetProb, srcId = None, normalized = true
+      ).vertices.collect()
+
+      val preRankGraph1 = PageRank.runWithOptions(
+        gridGraph, numIter = 2, resetProb, srcId = None, normalized = false
+      )
+
+      val preRankGraph2 = PageRank.runWithOptionsWithPreviousPageRank(
+        gridGraph, numIter = 2, resetProb, srcId = None, normalized = false, preRankGraph1
+      )
+
+      val ranksB: Array[(VertexId, Double)] = PageRank.runWithOptionsWithPreviousPageRank(
+        gridGraph, numIter = 2, resetProb, srcId = None, normalized = true, preRankGraph2
+      ).vertices.collect()
+
+      // assert that all scores are equal
+      assert(ranksA.zip(ranksB).forall { case(rankA, rankB) => rankA == rankB })
+    }
+  } // end of Grid PageRank with checkpoint without intermediate normalization
 
   test("Chain PageRank") {
     withSpark { sc =>

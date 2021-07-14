@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.assertNoNullTypeInSchema
 import org.apache.spark.sql.connector.expressions.{FieldReference, RewritableTransform}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.sources.InsertableRelation
@@ -56,8 +57,8 @@ class ResolveSQLOnFile(sparkSession: SparkSession) extends Rule[LogicalPlan] {
         val isFileFormat = classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
         if (!isFileFormat ||
             dataSource.className.toLowerCase(Locale.ROOT) == DDLUtils.HIVE_PROVIDER) {
-          throw new AnalysisException("Unsupported data source type for direct query on files: " +
-            s"${dataSource.className}")
+          throw QueryCompilationErrors.unsupportedDataSourceTypeForDirectQueryOnFilesError(
+            dataSource.className)
         }
         LogicalRelation(dataSource.resolveRelation())
       } catch {
@@ -107,7 +108,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       val existingTable = catalog.getTableMetadata(tableIdentWithDB)
 
       if (existingTable.tableType == CatalogTableType.VIEW) {
-        throw new AnalysisException("Saving data into a view is not allowed.")
+        throw QueryCompilationErrors.saveDataIntoViewNotAllowedError()
       }
 
       // Check if the specified data source match the data source of the existing table.
@@ -118,24 +119,19 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       // If the one of the provider is [[FileDataSourceV2]] and the other one is its corresponding
       // [[FileFormat]], the two providers are considered compatible.
       if (fallBackV2ToV1(existingProvider) != fallBackV2ToV1(specifiedProvider)) {
-        throw new AnalysisException(s"The format of the existing table $tableName is " +
-          s"`${existingProvider.getSimpleName}`. It doesn't match the specified format " +
-          s"`${specifiedProvider.getSimpleName}`.")
+        throw QueryCompilationErrors.mismatchedTableFormatError(
+          tableName, existingProvider, specifiedProvider)
       }
       tableDesc.storage.locationUri match {
         case Some(location) if location.getPath != existingTable.location.getPath =>
-          throw new AnalysisException(
-            s"The location of the existing table ${tableIdentWithDB.quotedString} is " +
-              s"`${existingTable.location}`. It doesn't match the specified location " +
-              s"`${tableDesc.location}`.")
+          throw QueryCompilationErrors.mismatchedTableLocationError(
+            tableIdentWithDB, existingTable, tableDesc)
         case _ =>
       }
 
       if (query.schema.length != existingTable.schema.length) {
-        throw new AnalysisException(
-          s"The column number of the existing table $tableName" +
-            s"(${existingTable.schema.catalogString}) doesn't match the data schema" +
-            s"(${query.schema.catalogString})")
+        throw QueryCompilationErrors.mismatchedTableColumnNumberError(
+          tableName, existingTable, query)
       }
 
       val resolver = conf.resolver
@@ -147,8 +143,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
       val adjustedColumns = tableCols.map { col =>
         query.resolve(Seq(col), resolver).getOrElse {
           val inputColumns = query.schema.map(_.name).mkString(", ")
-          throw new AnalysisException(
-            s"cannot resolve '$col' given input columns: [$inputColumns]")
+          throw QueryCompilationErrors.cannotResolveColumnGivenInputColumnsError(col, inputColumns)
         }
       }
 
@@ -157,12 +152,8 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
         tableName, tableCols, tableDesc.partitionColumnNames, resolver)
       if (specifiedPartCols != existingTable.partitionColumnNames) {
         val existingPartCols = existingTable.partitionColumnNames.mkString(", ")
-        throw new AnalysisException(
-          s"""
-             |Specified partitioning does not match that of the existing table $tableName.
-             |Specified partition columns: [${specifiedPartCols.mkString(", ")}]
-             |Existing partition columns: [$existingPartCols]
-          """.stripMargin)
+        throw QueryCompilationErrors.mismatchedTablePartitionColumnError(
+          tableName, specifiedPartCols, existingPartCols)
       }
 
       // Check if the specified bucketing match the existing table.
@@ -174,12 +165,8 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
           specifiedBucketSpec.map(_.toString).getOrElse("not bucketed")
         val existingBucketString =
           existingTable.bucketSpec.map(_.toString).getOrElse("not bucketed")
-        throw new AnalysisException(
-          s"""
-             |Specified bucketing does not match that of the existing table $tableName.
-             |Specified bucketing: $specifiedBucketString
-             |Existing bucketing: $existingBucketString
-          """.stripMargin)
+        throw QueryCompilationErrors.mismatchedTableBucketingError(
+          tableName, specifiedBucketString, existingBucketString)
       }
 
       val newQuery = if (adjustedColumns != query.output) {
@@ -257,8 +244,7 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
       if (schema.isEmpty) {
         if (partitioning.nonEmpty) {
-          throw new AnalysisException("It is not allowed to specify partitioning when the " +
-            "table schema is not defined.")
+          throw QueryCompilationErrors.specifyPartitionNotAllowedWhenTableSchemaNotDefinedError()
         }
 
         create
@@ -298,12 +284,12 @@ case class PreprocessTableCreation(sparkSession: SparkSession) extends Rule[Logi
 
     normalizedBucketSpec.foreach { spec =>
       for (bucketCol <- spec.bucketColumnNames if normalizedPartCols.contains(bucketCol)) {
-        throw new AnalysisException(s"bucketing column '$bucketCol' should not be part of " +
-          s"partition columns '${normalizedPartCols.mkString(", ")}'")
+        throw QueryCompilationErrors.bucketingColumnCannotBePartOfPartitionColumnsError(
+          bucketCol, normalizedPartCols)
       }
       for (sortCol <- spec.sortColumnNames if normalizedPartCols.contains(sortCol)) {
-        throw new AnalysisException(s"bucket sorting column '$sortCol' should not be part of " +
-          s"partition columns '${normalizedPartCols.mkString(", ")}'")
+        throw QueryCompilationErrors.bucketSortingColumnCannotBePartOfPartitionColumnsError(
+          sortCol, normalizedPartCols)
       }
     }
 
@@ -394,11 +380,8 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
     val expectedColumns = insert.table.output.filterNot(a => staticPartCols.contains(a.name))
 
     if (expectedColumns.length != insert.query.schema.length) {
-      throw new AnalysisException(
-        s"$tblName requires that the data to be inserted have the same number of columns as the " +
-          s"target table: target table has ${insert.table.output.size} column(s) but the " +
-          s"inserted data has ${insert.query.output.length + staticPartCols.size} column(s), " +
-          s"including ${staticPartCols.size} partition column(s) having constant value(s).")
+      throw QueryCompilationErrors.mismatchedInsertedDataColumnNumberError(
+        tblName, insert, staticPartCols)
     }
 
     val partitionsTrackedByCatalog = catalogTable.isDefined &&
@@ -408,8 +391,8 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
       // empty partition column value
       if (normalizedPartSpec.values.flatten.exists(v => v != null && v.isEmpty)) {
         val spec = normalizedPartSpec.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-        throw new AnalysisException(
-          s"Partition spec is invalid. The spec ($spec) contains an empty partition column value")
+        throw QueryCompilationErrors.invalidPartitionSpecError(
+          s"The spec ($spec) contains an empty partition column value")
       }
     }
 
@@ -417,12 +400,8 @@ object PreprocessTableInsertion extends Rule[LogicalPlan] {
       tblName, expectedColumns, insert.query, byName = false, conf)
     if (normalizedPartSpec.nonEmpty) {
       if (normalizedPartSpec.size != partColNames.length) {
-        throw new AnalysisException(
-          s"""
-             |Requested partitioning does not match the table $tblName:
-             |Requested partitions: ${normalizedPartSpec.keys.mkString(",")}
-             |Table partitions: ${partColNames.mkString(",")}
-           """.stripMargin)
+        throw QueryCompilationErrors.requestedPartitionsMismatchTablePartitionsError(
+          tblName, normalizedPartSpec, partColNames)
       }
 
       insert.copy(query = newQuery, partitionSpec = normalizedPartSpec)
@@ -458,10 +437,11 @@ object HiveOnlyCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = {
     plan.foreach {
       case CreateTable(tableDesc, _, _) if DDLUtils.isHiveTable(tableDesc) =>
-        throw new AnalysisException("Hive support is required to CREATE Hive TABLE (AS SELECT)")
+        throw QueryCompilationErrors.ddlWithoutHiveSupportEnabledError(
+          "CREATE Hive TABLE (AS SELECT)")
       case i: InsertIntoDir if DDLUtils.isHiveTable(i.provider) =>
-        throw new AnalysisException(
-          "Hive support is required to INSERT OVERWRITE DIRECTORY with the Hive format")
+        throw QueryCompilationErrors.ddlWithoutHiveSupportEnabledError(
+          "INSERT OVERWRITE DIRECTORY with the Hive format")
       case _ => // OK
     }
   }

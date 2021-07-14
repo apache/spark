@@ -859,7 +859,7 @@ class FilterPushdownSuite extends PlanTest {
 
   test("expand") {
     val agg = testRelation
-      .groupBy(Cube(Seq('a, 'b)))('a, 'b, sum('c))
+      .groupBy(Cube(Seq(Seq('a), Seq('b))))('a, 'b, sum('c))
       .analyze
       .asInstanceOf[Aggregate]
 

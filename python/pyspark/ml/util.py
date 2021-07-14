@@ -152,7 +152,7 @@ class GeneralMLWriter(MLWriter):
 
     def format(self, source):
         """
-        Specifies the format of ML export (e.g. "pmml", "internal", or the fully qualified class
+        Specifies the format of ML export ("pmml", "internal", or the fully qualified class
         name for export).
         """
         self.source = source
@@ -202,7 +202,7 @@ class GeneralJavaMLWriter(JavaMLWriter):
 
     def format(self, source):
         """
-        Specifies the format of ML export (e.g. "pmml", "internal", or the fully qualified class
+        Specifies the format of ML export ("pmml", "internal", or the fully qualified class
         name for export).
         """
         self._jwrite.format(source)

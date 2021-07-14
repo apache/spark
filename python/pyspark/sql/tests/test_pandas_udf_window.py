@@ -43,7 +43,11 @@ class WindowPandasUDFTests(ReusedSQLTestCase):
 
     @property
     def python_plus_one(self):
-        return udf(lambda v: v + 1, 'double')
+        @udf('double')
+        def plus_one(v):
+            assert isinstance(v, float)
+            return v + 1
+        return plus_one
 
     @property
     def pandas_scalar_time_two(self):

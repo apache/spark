@@ -18,8 +18,11 @@
 package org.apache.spark.sql.types
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DayTimeIntervalType => DT}
+import org.apache.spark.sql.types.{YearMonthIntervalType => YM}
 import org.apache.spark.sql.types.StructType.fromDDL
 
 class StructTypeSuite extends SparkFunSuite with SQLHelper {
@@ -95,6 +98,12 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-33846: round trip toDDL -> fromDDL - nested struct") {
     assert(StructType.fromDDL(nestedStruct.toDDL) == nestedStruct)
+  }
+
+  test("SPARK-35706: make the ':' in STRUCT data type definition optional") {
+    val ddl = "`a` STRUCT<`b` STRUCT<`c` STRING COMMENT 'Deep Nested comment'> " +
+      "COMMENT 'Nested comment'> COMMENT 'comment'"
+    assert(StructType.fromDDL(ddl) == nestedStruct)
   }
 
   private val structWithEmptyString = new StructType()
@@ -233,6 +242,35 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
       val missing4 = StructType.fromDDL("c2 STRUCT<C4: STRUCT<c6: INT>>")
       assert(StructType.findMissingFields(source4, schema, resolver)
         .exists(_.sameType(missing4)))
+    }
+  }
+
+  test("SPARK-35285: ANSI interval types in schema") {
+    val yearMonthInterval = "`ymi` INTERVAL YEAR TO MONTH"
+    assert(fromDDL(yearMonthInterval).toDDL === yearMonthInterval)
+
+    val dayTimeInterval = "`dti` INTERVAL DAY TO SECOND"
+    assert(fromDDL(dayTimeInterval).toDDL === dayTimeInterval)
+  }
+
+  test("SPARK-35774: Prohibit the case start/end are the same with unit-to-unit interval syntax") {
+    def checkIntervalDDL(start: Byte, end: Byte, fieldToString: Byte => String): Unit = {
+      val startUnit = fieldToString(start)
+      val endUnit = fieldToString(end)
+      if (start < end) {
+        fromDDL(s"x INTERVAL $startUnit TO $endUnit")
+      } else {
+        intercept[ParseException] {
+          fromDDL(s"x INTERVAL $startUnit TO $endUnit")
+        }
+      }
+    }
+
+    for (start <- YM.yearMonthFields; end <- YM.yearMonthFields) {
+      checkIntervalDDL(start, end, YM.fieldToString)
+    }
+    for (start <- DT.dayTimeFields; end <- DT.dayTimeFields) {
+      checkIntervalDDL(start, end, DT.fieldToString)
     }
   }
 }

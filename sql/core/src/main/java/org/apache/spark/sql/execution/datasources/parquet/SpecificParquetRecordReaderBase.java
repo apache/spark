@@ -39,18 +39,11 @@ import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.parquet.HadoopReadOptions;
 import org.apache.parquet.ParquetReadOptions;
-import org.apache.parquet.bytes.BytesInput;
-import org.apache.parquet.bytes.BytesUtils;
-import org.apache.parquet.column.ColumnDescriptor;
-import org.apache.parquet.column.values.ValuesReader;
-import org.apache.parquet.column.values.rle.RunLengthBitPackingHybridDecoder;
 import org.apache.parquet.hadoop.BadConfigurationException;
 import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.ParquetInputFormat;
 import org.apache.parquet.hadoop.api.InitContext;
 import org.apache.parquet.hadoop.api.ReadSupport;
-import org.apache.parquet.hadoop.metadata.BlockMetaData;
-import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.hadoop.util.HadoopInputFile;
 import org.apache.parquet.schema.MessageType;
@@ -102,6 +95,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
         taskAttemptContext.getConfiguration(), toSetMultiMap(fileMetadata), fileSchema));
     this.requestedSchema = readContext.getRequestedSchema();
+    reader.setRequestedSchema(requestedSchema);
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
     this.sparkSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
@@ -156,19 +150,13 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
 
     this.file = new Path(path);
     long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
+
     ParquetReadOptions options = HadoopReadOptions
       .builder(config)
       .withRange(0, length)
       .build();
-
-    ParquetMetadata footer;
-    try (ParquetFileReader reader = ParquetFileReader
-        .open(HadoopInputFile.fromPath(file, config), options)) {
-      footer = reader.getFooter();
-    }
-
-    List<BlockMetaData> blocks = footer.getBlocks();
-    this.fileSchema = footer.getFileMetaData().getSchema();
+    this.reader = ParquetFileReader.open(HadoopInputFile.fromPath(file, config), options);
+    this.fileSchema = reader.getFooter().getFileMetaData().getSchema();
 
     if (columns == null) {
       this.requestedSchema = fileSchema;
@@ -187,11 +175,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
         this.requestedSchema = ParquetSchemaConverter.EMPTY_MESSAGE();
       }
     }
+    reader.setRequestedSchema(requestedSchema);
     this.sparkSchema = new ParquetToSparkSchemaConverter(config).convert(requestedSchema);
-    // unfortunately we'd have to create the reader again since there is no column projection
-    // in the new API.
-    this.reader = new ParquetFileReader(
-        config, footer.getFileMetaData(), file, blocks, requestedSchema.getColumns());
     this.totalRowCount = reader.getFilteredRecordCount();
   }
 
@@ -205,62 +190,6 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     if (reader != null) {
       reader.close();
       reader = null;
-    }
-  }
-
-  /**
-   * Utility classes to abstract over different way to read ints with different encodings.
-   * TODO: remove this layer of abstraction?
-   */
-  abstract static class IntIterator {
-    abstract int nextInt() throws IOException;
-  }
-
-  protected static final class ValuesReaderIntIterator extends IntIterator {
-    ValuesReader delegate;
-
-    public ValuesReaderIntIterator(ValuesReader delegate) {
-      this.delegate = delegate;
-    }
-
-    @Override
-    int nextInt() {
-      return delegate.readInteger();
-    }
-  }
-
-  protected static final class RLEIntIterator extends IntIterator {
-    RunLengthBitPackingHybridDecoder delegate;
-
-    public RLEIntIterator(RunLengthBitPackingHybridDecoder delegate) {
-      this.delegate = delegate;
-    }
-
-    @Override
-    int nextInt() throws IOException {
-      return delegate.readInt();
-    }
-  }
-
-  protected static final class NullIntIterator extends IntIterator {
-    @Override
-    int nextInt() { return 0; }
-  }
-
-  /**
-   * Creates a reader for definition and repetition levels, returning an optimized one if
-   * the levels are not needed.
-   */
-  protected static IntIterator createRLEIterator(
-      int maxLevel, BytesInput bytes, ColumnDescriptor descriptor) throws IOException {
-    try {
-      if (maxLevel == 0) return new NullIntIterator();
-      return new RLEIntIterator(
-          new RunLengthBitPackingHybridDecoder(
-              BytesUtils.getWidthFromMaxInt(maxLevel),
-              bytes.toInputStream()));
-    } catch (IOException e) {
-      throw new IOException("could not read levels in page for col " + descriptor, e);
     }
   }
 

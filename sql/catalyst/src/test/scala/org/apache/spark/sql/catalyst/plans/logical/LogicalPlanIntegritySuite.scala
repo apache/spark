@@ -28,6 +28,8 @@ class LogicalPlanIntegritySuite extends PlanTest {
 
   case class OutputTestPlan(child: LogicalPlan, output: Seq[Attribute]) extends UnaryNode {
     override val analyzed = true
+    override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
+      copy(child = newChild)
   }
 
   test("Checks if the same `ExprId` refers to a semantically-equal attribute in a plan output") {

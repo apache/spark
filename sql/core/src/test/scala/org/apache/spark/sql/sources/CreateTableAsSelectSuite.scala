@@ -235,10 +235,10 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
   }
 
   test("create table using as select - with overridden max number of buckets") {
-    def createTableSql(numBuckets: Int): String =
+    def createTableSql(tablePath: String, numBuckets: Int): String =
       s"""
          |CREATE TABLE t USING PARQUET
-         |OPTIONS (PATH '${path.toURI}')
+         |OPTIONS (PATH '$tablePath')
          |CLUSTERED BY (a) SORTED BY (b) INTO $numBuckets BUCKETS
          |AS SELECT 1 AS a, 2 AS b
        """.stripMargin
@@ -249,16 +249,19 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSparkSession {
 
       // Within the new limit
       Seq(100001, maxNrBuckets).foreach(numBuckets => {
-        withTable("t") {
-          sql(createTableSql(numBuckets))
-          val table = catalog.getTableMetadata(TableIdentifier("t"))
-          assert(table.bucketSpec == Option(BucketSpec(numBuckets, Seq("a"), Seq("b"))))
+        withTempDir { tempDir =>
+          withTable("t") {
+            sql(createTableSql(tempDir.toURI.toString, numBuckets))
+            val table = catalog.getTableMetadata(TableIdentifier("t"))
+            assert(table.bucketSpec == Option(BucketSpec(numBuckets, Seq("a"), Seq("b"))))
+          }
         }
       })
 
       // Over the new limit
       withTable("t") {
-        val e = intercept[AnalysisException](sql(createTableSql(maxNrBuckets + 1)))
+        val e = intercept[AnalysisException](
+          sql(createTableSql(path.toURI.toString, maxNrBuckets + 1)))
         assert(
           e.getMessage.contains("Number of buckets should be greater than 0 but less than "))
       }

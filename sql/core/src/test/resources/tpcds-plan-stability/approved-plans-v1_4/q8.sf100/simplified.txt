@@ -22,15 +22,15 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                           InputAdapter
                                             Scan parquet default.store_sales [ss_store_sk,ss_net_profit,ss_sold_date_sk]
                                               SubqueryBroadcast [d_date_sk] #1
-                                                ReusedExchange [d_date_sk] #3
+                                                BroadcastExchange #3
+                                                  WholeStageCodegen (1)
+                                                    Project [d_date_sk]
+                                                      Filter [d_qoy,d_year,d_date_sk]
+                                                        ColumnarToRow
+                                                          InputAdapter
+                                                            Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
                                       InputAdapter
-                                        BroadcastExchange #3
-                                          WholeStageCodegen (1)
-                                            Project [d_date_sk]
-                                              Filter [d_qoy,d_year,d_date_sk]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.date_dim [d_date_sk,d_year,d_qoy]
+                                        ReusedExchange [d_date_sk] #3
                                   InputAdapter
                                     BroadcastExchange #4
                                       WholeStageCodegen (2)
@@ -59,8 +59,8 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                               BroadcastExchange #7
                                                 WholeStageCodegen (10)
                                                   Project [ca_zip]
-                                                    Filter [count(1)]
-                                                      HashAggregate [ca_zip,count] [count(1),ca_zip,count(1),count]
+                                                    Filter [cnt]
+                                                      HashAggregate [ca_zip,count] [count(1),ca_zip,cnt,count]
                                                         InputAdapter
                                                           Exchange [ca_zip] #8
                                                             WholeStageCodegen (9)

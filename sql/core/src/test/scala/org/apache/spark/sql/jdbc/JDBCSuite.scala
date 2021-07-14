@@ -20,17 +20,20 @@ package org.apache.spark.sql.jdbc
 import java.math.BigDecimal
 import java.sql.{Date, DriverManager, SQLException, Timestamp}
 import java.time.{Instant, LocalDate}
-import java.util.{Calendar, GregorianCalendar, Properties}
+import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
 
 import scala.collection.JavaConverters._
 
 import org.h2.jdbc.JdbcSQLException
+import org.mockito.ArgumentMatchers._
+import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeTestUtils}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
@@ -428,6 +431,36 @@ class JDBCSuite extends QueryTest
     assert(ids(0) === 1)
     assert(ids(1) === 2)
     assert(ids(2) === 3)
+  }
+
+  test("SPARK-34843: columnPartition should generate the correct stride size" +
+    " and also realign the first partition for better distribution") {
+    val schema = StructType(Seq(
+      StructField("PartitionColumn", DateType)
+    ))
+
+    val numPartitions = 1000
+    val partitionConfig = Map(
+      "lowerBound" -> "1930-01-01",
+      "upperBound" -> "2020-12-31",
+      "numPartitions" -> numPartitions.toString,
+      "partitionColumn" -> "PartitionColumn"
+    )
+
+    val partitions = JDBCRelation.columnPartition(
+      schema,
+      analysis.caseInsensitiveResolution,
+      TimeZone.getDefault.toZoneId.toString,
+      new JDBCOptions(url, "table", partitionConfig)
+    )
+
+    val firstPredicate = partitions.head.asInstanceOf[JDBCPartition].whereClause
+    val lastPredicate = partitions(numPartitions - 1).asInstanceOf[JDBCPartition].whereClause
+
+    // 152 days (exclusive) to lower bound
+    assert(firstPredicate == """"PartitionColumn" < '1930-06-02' or "PartitionColumn" is null""")
+    // 152 days (inclusive) to upper bound
+    assert(lastPredicate == """"PartitionColumn" >= '2020-08-02'""")
   }
 
   test("overflow of partition bound difference does not give negative stride") {
@@ -866,6 +899,22 @@ class JDBCSuite extends QueryTest
       Option(TimestampType))
   }
 
+  test("MySQLDialect catalyst type mapping") {
+    val mySqlDialect = JdbcDialects.get("jdbc:mysql")
+    val metadata = new MetadataBuilder()
+    assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 2, metadata) ==
+      Some(LongType))
+    assert(metadata.build().contains("binarylong"))
+    assert(mySqlDialect.getCatalystType(java.sql.Types.VARBINARY, "BIT", 1, metadata) == None)
+    assert(mySqlDialect.getCatalystType(java.sql.Types.BIT, "TINYINT", 1, metadata) ==
+      Some(BooleanType))
+  }
+
+  test("SPARK-35446: MySQLDialect type mapping of float") {
+    val mySqlDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    assert(mySqlDialect.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT")
+  }
+
   test("PostgresDialect type mapping") {
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
     val md = new MetadataBuilder().putLong("scale", 0)
@@ -1099,7 +1148,7 @@ class JDBCSuite extends QueryTest
            | password '$password')
          """.stripMargin)
 
-      val show = ShowCreateTableCommand(TableIdentifier(tableName))
+      val show = ShowCreateTableCommand(TableIdentifier(tableName), ShowCreateTable.getoutputAttrs)
       spark.sessionState.executePlan(show).executedPlan.executeCollect().foreach { r =>
         assert(!r.toString.contains(password))
         assert(r.toString.contains(dbTable))
@@ -1607,9 +1656,9 @@ class JDBCSuite extends QueryTest
       case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
-          """"D" < '2018-07-10' or "D" is null""",
-          """"D" >= '2018-07-10' AND "D" < '2018-07-14'""",
-          """"D" >= '2018-07-14'"""))
+          """"D" < '2018-07-11' or "D" is null""",
+          """"D" >= '2018-07-11' AND "D" < '2018-07-15'""",
+          """"D" >= '2018-07-15'"""))
     }
     checkAnswer(df1, expectedResult)
 
@@ -1781,4 +1830,28 @@ class JDBCSuite extends QueryTest
     assert(options.asProperties.get("url") == url)
     assert(options.asProperties.get("dbtable") == "table3")
   }
+
+  test("SPARK-34379: Map JDBC RowID to StringType rather than LongType") {
+    val mockRsmd = mock(classOf[java.sql.ResultSetMetaData])
+    when(mockRsmd.getColumnCount).thenReturn(1)
+    when(mockRsmd.getColumnLabel(anyInt())).thenReturn("rowid")
+    when(mockRsmd.getColumnType(anyInt())).thenReturn(java.sql.Types.ROWID)
+    when(mockRsmd.getColumnTypeName(anyInt())).thenReturn("rowid")
+    when(mockRsmd.getPrecision(anyInt())).thenReturn(0)
+    when(mockRsmd.getScale(anyInt())).thenReturn(0)
+    when(mockRsmd.isSigned(anyInt())).thenReturn(false)
+    when(mockRsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNoNulls)
+
+    val mockRs = mock(classOf[java.sql.ResultSet])
+    when(mockRs.getMetaData).thenReturn(mockRsmd)
+
+    val mockDialect = mock(classOf[JdbcDialect])
+    when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
+      .thenReturn(None)
+
+    val schema = JdbcUtils.getSchema(mockRs, mockDialect)
+    val fields = schema.fields
+    assert(fields.length === 1)
+    assert(fields(0).dataType === StringType)
+   }
 }

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{execution, AnalysisException, Strategy}
+import org.apache.spark.sql.{execution, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
@@ -27,12 +27,12 @@ import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelec
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.streaming.{InternalOutputModes, StreamingRelationV2}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.exchange.{REPARTITION, REPARTITION_WITH_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
@@ -211,13 +211,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         def createJoinWithoutHint() = {
           createBroadcastHashJoin(false)
-            .orElse {
-              if (!conf.preferSortMergeJoin) {
-                createShuffleHashJoin(false)
-              } else {
-                None
-              }
-            }
+            .orElse(createShuffleHashJoin(false))
             .orElse(createSortMergeJoin())
             .orElse(createCartesianProduct())
             .getOrElse {
@@ -327,8 +321,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
         if (aggregateExpressions.exists(PythonUDF.isGroupedAggPandasUDF)) {
-          throw new AnalysisException(
-            "Streaming aggregation doesn't support group aggregate pandas UDF")
+          throw QueryCompilationErrors.groupAggPandasUDFUnsupportedByStreamingAggError()
         }
 
         val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
@@ -413,8 +406,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             stateVersion, planLater(left), planLater(right)) :: Nil
 
         case Join(left, right, _, _, _) if left.isStreaming && right.isStreaming =>
-          throw new AnalysisException(
-            "Stream-stream join without equality predicate is not supported", plan = Some(plan))
+          throw QueryCompilationErrors.streamJoinStreamWithoutEqualityPredicateUnsupportedError(
+            plan)
 
         case _ => Nil
       }
@@ -506,8 +499,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case PhysicalAggregation(_, _, _, _) =>
         // If cannot match the two cases above, then it's an error
-        throw new AnalysisException(
-          "Cannot use a mixture of aggregate function and group aggregate pandas UDF")
+        throw QueryCompilationErrors.cannotUseMixtureOfAggFunctionAndGroupAggPandasUDFError()
 
       case _ => Nil
     }
@@ -569,11 +561,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case FlatMapGroupsWithState(
         func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, stateEnc, outputMode, _,
-        timeout, child) =>
+        timeout, hasInitialState, stateGroupAttr, sda, sDeser, initialState, child) =>
         val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
         val execPlan = FlatMapGroupsWithStateExec(
-          func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateEnc, stateVersion,
-          outputMode, timeout, batchTimestampMs = None, eventTimeWatermark = None, planLater(child))
+          func, keyDeser, valueDeser, sDeser, groupAttr, stateGroupAttr, dataAttr, sda, outputAttr,
+          None, stateEnc, stateVersion, outputMode, timeout, batchTimestampMs = None,
+          eventTimeWatermark = None, planLater(initialState), hasInitialState, planLater(child)
+        )
         execPlan :: Nil
       case _ =>
         Nil
@@ -596,9 +590,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object SparkScripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.ScriptTransformation(input, script, output, child, ioschema) =>
+      case logical.ScriptTransformation(script, output, child, ioschema) =>
         SparkScriptTransformationExec(
-          input,
           script,
           output,
           planLater(child),
@@ -663,9 +656,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           f, p, b, is, ot, planLater(child)) :: Nil
       case logical.FlatMapGroupsInPandas(grouping, func, output, child) =>
         execution.python.FlatMapGroupsInPandasExec(grouping, func, output, planLater(child)) :: Nil
-      case logical.FlatMapCoGroupsInPandas(leftGroup, rightGroup, func, output, left, right) =>
+      case f @ logical.FlatMapCoGroupsInPandas(_, _, func, output, left, right) =>
         execution.python.FlatMapCoGroupsInPandasExec(
-          leftGroup, rightGroup, func, output, planLater(left), planLater(right)) :: Nil
+          f.leftAttributes, f.rightAttributes,
+          func, output, planLater(left), planLater(right)) :: Nil
       case logical.MapInPandas(func, output, child) =>
         execution.python.MapInPandasExec(func, output, planLater(child)) :: Nil
       case logical.MapElements(f, _, _, objAttr, child) =>
@@ -677,7 +671,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.MapGroups(f, key, value, grouping, data, objAttr, child) =>
         execution.MapGroupsExec(f, key, value, grouping, data, objAttr, planLater(child)) :: Nil
       case logical.FlatMapGroupsWithState(
-          f, key, value, grouping, data, output, _, _, _, timeout, child) =>
+          f, key, value, grouping, data, output, _, _, _, timeout, _, _, _, _, _, child) =>
         execution.MapGroupsExec(
           f, key, value, grouping, data, output, timeout, planLater(child)) :: Nil
       case logical.CoGroup(f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr, left, right) =>
@@ -685,10 +679,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr,
           planLater(left), planLater(right)) :: Nil
 
-      case logical.Repartition(numPartitions, shuffle, child) =>
+      case r @ logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
-          ShuffleExchangeExec(RoundRobinPartitioning(numPartitions),
-            planLater(child), REPARTITION_WITH_NUM) :: Nil
+          ShuffleExchangeExec(r.partitioning, planLater(child), REPARTITION_BY_NUM) :: Nil
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
@@ -706,6 +699,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data, _) =>
         LocalTableScanExec(output, data) :: Nil
+      case CommandResult(output, _, plan, data) => CommandResultExec(output, plan, data) :: Nil
       case logical.LocalLimit(IntegerLiteral(limit), child) =>
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
@@ -721,19 +715,28 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        val shuffleOrigin = if (r.optNumPartitions.isEmpty) {
-          REPARTITION
+        val shuffleOrigin = if (r.partitionExpressions.isEmpty && r.optNumPartitions.isEmpty) {
+          REBALANCE_PARTITIONS_BY_NONE
+        } else if (r.optNumPartitions.isEmpty) {
+          REPARTITION_BY_COL
         } else {
-          REPARTITION_WITH_NUM
+          REPARTITION_BY_NUM
+        }
+        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
+      case r: logical.RebalancePartitions =>
+        val shuffleOrigin = if (r.partitionExpressions.isEmpty) {
+          REBALANCE_PARTITIONS_BY_NONE
+        } else {
+          REBALANCE_PARTITIONS_BY_COL
         }
         exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil
       case r: LogicalRDD =>
         RDDScanExec(r.output, r.rdd, "ExistingRDD", r.outputPartitioning, r.outputOrdering) :: Nil
       case _: UpdateTable =>
-        throw new UnsupportedOperationException(s"UPDATE TABLE is not supported temporarily.")
+        throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("UPDATE TABLE")
       case _: MergeIntoTable =>
-        throw new UnsupportedOperationException(s"MERGE INTO TABLE is not supported temporarily.")
+        throw QueryExecutionErrors.ddlUnsupportedTemporarilyError("MERGE INTO TABLE")
       case logical.CollectMetrics(name, metrics, child) =>
         execution.CollectMetricsExec(name, metrics, planLater(child)) :: Nil
       case _ => Nil

@@ -17,13 +17,15 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{FileInputStream, InputStream}
+import java.io.InputStream
 import java.util.{Locale, NoSuchElementException, Properties}
 
 import scala.util.control.NonFatal
 import scala.xml.{Node, XML}
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.SparkContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.SCHEDULER_ALLOCATION_FILE
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
@@ -54,10 +56,10 @@ private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
   }
 }
 
-private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
+private[spark] class FairSchedulableBuilder(val rootPool: Pool, sc: SparkContext)
   extends SchedulableBuilder with Logging {
 
-  val schedulerAllocFile = conf.get(SCHEDULER_ALLOCATION_FILE)
+  val schedulerAllocFile = sc.conf.get(SCHEDULER_ALLOCATION_FILE)
   val DEFAULT_SCHEDULER_FILE = "fairscheduler.xml"
   val FAIR_SCHEDULER_PROPERTIES = SparkContext.SPARK_SCHEDULER_POOL
   val DEFAULT_POOL_NAME = "default"
@@ -74,7 +76,8 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     var fileData: Option[(InputStream, String)] = None
     try {
       fileData = schedulerAllocFile.map { f =>
-        val fis = new FileInputStream(f)
+        val filePath = new Path(f)
+        val fis = filePath.getFileSystem(sc.hadoopConfiguration).open(filePath)
         logInfo(s"Creating Fair Scheduler pools from $f")
         Some((fis, f))
       }.getOrElse {

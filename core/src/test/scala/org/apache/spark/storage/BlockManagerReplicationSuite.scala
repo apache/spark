@@ -55,7 +55,7 @@ trait BlockManagerReplicationBehavior extends SparkFunSuite
   protected var rpcEnv: RpcEnv = null
   protected var master: BlockManagerMaster = null
   protected lazy val securityMgr = new SecurityManager(conf)
-  protected lazy val bcastManager = new BroadcastManager(true, conf, securityMgr)
+  protected lazy val bcastManager = new BroadcastManager(true, conf)
   protected lazy val mapOutputTracker = new MapOutputTrackerMaster(conf, bcastManager, true)
   protected lazy val shuffleManager = new SortShuffleManager(conf)
 

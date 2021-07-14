@@ -17,10 +17,6 @@
 
 package org.apache.spark.sql.execution.command.v1
 
-import java.io.File
-
-import org.apache.commons.io.FileUtils
-
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.internal.SQLConf
@@ -45,24 +41,6 @@ trait AlterTableAddPartitionSuiteBase extends command.AlterTableAddPartitionSuit
       assert(errMsg.contains("Partition spec is invalid. " +
         "The spec ([p1=]) contains an empty partition column value"))
     }
-  }
-
-  private def copyPartition(tableName: String, from: String, to: String): String = {
-    val idents = tableName.split('.')
-    val table = idents.last
-    val catalogAndNs = idents.init
-    val in = if (catalogAndNs.isEmpty) "" else s"IN ${catalogAndNs.mkString(".")}"
-    val information = sql(s"SHOW TABLE EXTENDED $in LIKE '$table' PARTITION ($from)")
-      .select("information")
-      .first().getString(0)
-    val part0Loc = information
-      .split("\\r?\\n")
-      .filter(_.startsWith("Location:"))
-      .head
-      .replace("Location: file:", "")
-    val part1Loc = part0Loc.replace(from, to)
-    FileUtils.copyDirectory(new File(part0Loc), new File(part1Loc))
-    part1Loc
   }
 
   test("SPARK-34055: refresh cache in partition adding") {

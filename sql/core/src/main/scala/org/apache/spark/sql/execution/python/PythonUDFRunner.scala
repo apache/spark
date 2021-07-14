@@ -62,9 +62,11 @@ class PythonUDFRunner(
       startTime: Long,
       env: SparkEnv,
       worker: Socket,
+      pid: Option[Int],
       releasedOrClosed: AtomicBoolean,
       context: TaskContext): Iterator[Array[Byte]] = {
-    new ReaderIterator(stream, writerThread, startTime, env, worker, releasedOrClosed, context) {
+    new ReaderIterator(
+      stream, writerThread, startTime, env, worker, pid, releasedOrClosed, context) {
 
       protected override def read(): Array[Byte] = {
         if (writerThread.exception.isDefined) {

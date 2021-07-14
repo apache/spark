@@ -32,11 +32,11 @@ import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce._
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -48,10 +48,7 @@ private[sql] object OrcFileFormat {
       TypeDescription.fromString(s"struct<`$name`:int>")
     } catch {
       case _: IllegalArgumentException =>
-        throw new AnalysisException(
-          s"""Column name "$name" contains invalid character(s).
-             |Please use alias to rename it.
-           """.stripMargin.split("\n").mkString(" ").trim)
+        throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
     }
   }
 
@@ -131,11 +128,27 @@ class OrcFileFormat
     }
   }
 
+  private def supportBatchForNestedColumn(
+      sparkSession: SparkSession,
+      schema: StructType): Boolean = {
+    val hasNestedColumn = schema.map(_.dataType).exists {
+      case _: ArrayType | _: MapType | _: StructType => true
+      case _ => false
+    }
+    if (hasNestedColumn) {
+      sparkSession.sessionState.conf.orcVectorizedReaderNestedColumnEnabled
+    } else {
+      true
+    }
+  }
+
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
     val conf = sparkSession.sessionState.conf
     conf.orcVectorizedReaderEnabled && conf.wholeStageEnabled &&
       schema.length <= conf.wholeStageMaxNumFields &&
-      schema.forall(_.dataType.isInstanceOf[AtomicType])
+      schema.forall(s => supportDataType(s.dataType) &&
+        !s.dataType.isInstanceOf[UserDefinedType[_]]) &&
+      supportBatchForNestedColumn(sparkSession, schema)
   }
 
   override def isSplitable(
@@ -199,6 +212,8 @@ class OrcFileFormat
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)
 
+        val includeColumns = requestedColIds.filter(_ != -1).sorted.mkString(",")
+        taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute, includeColumns)
         val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
         val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
@@ -230,7 +245,7 @@ class OrcFileFormat
 
           val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
           val unsafeProjection = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
-          val deserializer = new OrcDeserializer(dataSchema, requiredSchema, requestedColIds)
+          val deserializer = new OrcDeserializer(requiredSchema, requestedColIds)
 
           if (partitionSchema.length == 0) {
             iter.map(value => unsafeProjection(deserializer.deserialize(value)))

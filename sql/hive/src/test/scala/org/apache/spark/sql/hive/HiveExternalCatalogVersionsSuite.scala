@@ -60,7 +60,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       .map(new File(_)).getOrElse(Utils.createTempDir(namePrefix = "test-spark"))
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
   val hiveVersion = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-    "2.3.8"
+    HiveUtils.builtinHiveVersion
   } else {
     "1.2.1"
   }
@@ -194,7 +194,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
     // scalastyle:on line.size.limit
 
     if (PROCESS_TABLES.testingVersions.isEmpty) {
-      fail("Fail to get the lates Spark versions to test.")
+      logError("Fail to get the latest Spark versions to test.")
     }
 
     PROCESS_TABLES.testingVersions.zipWithIndex.foreach { case (version, index) =>
@@ -203,12 +203,14 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
       }
 
+      // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.9 and Java 11.
+      val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
       val args = Seq(
         "--name", "prepare testing tables",
         "--master", "local[2]",
         "--conf", s"${UI_ENABLED.key}=false",
         "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
-        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveVersion",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveMetastoreVersion",
         "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",
@@ -232,7 +234,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
       "--driver-java-options", s"-Dderby.system.home=${wareHousePath.getCanonicalPath}",
       unusedJar.toString)
-    runSparkSubmit(args)
+    if (PROCESS_TABLES.testingVersions.nonEmpty) runSparkSubmit(args)
   }
 }
 
@@ -251,8 +253,8 @@ object PROCESS_TABLES extends QueryTest with SQLTestUtils {
         .map("""<a href="spark-(\d.\d.\d)/">""".r.findFirstMatchIn(_).get.group(1))
         .filter(_ < org.apache.spark.SPARK_VERSION)
     } catch {
-      // do not throw exception during object initialization.
-      case NonFatal(_) => Seq("3.0.1", "2.4.7") // A temporary fallback to use a specific version
+      // Do not throw exception during object initialization.
+      case NonFatal(_) => Nil
     }
     versions
       .filter(v => v.startsWith("3") || !TestUtils.isPythonVersionAtLeast38())

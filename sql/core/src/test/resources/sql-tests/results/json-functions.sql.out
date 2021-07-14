@@ -393,7 +393,7 @@ SELECT schema_of_json(jsonField) FROM jsonTable
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'schema_of_json(jsontable.`jsonField`)' due to data type mismatch: The input json should be a foldable string expression and not null; however, got jsontable.`jsonField`.; line 1 pos 7
+cannot resolve 'schema_of_json(jsontable.jsonField)' due to data type mismatch: The input json should be a foldable string expression and not null; however, got jsontable.jsonField.; line 1 pos 7
 
 
 -- !query

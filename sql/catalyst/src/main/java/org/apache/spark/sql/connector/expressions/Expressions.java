@@ -177,4 +177,17 @@ public class Expressions {
   public static SortOrder sort(Expression expr, SortDirection direction, NullOrdering nullOrder) {
     return LogicalExpressions.sort(expr, direction, nullOrder);
   }
+
+  /**
+   * Create a sort expression.
+   *
+   * @param expr an expression to produce values to sort
+   * @param direction direction of the sort
+   * @return a SortOrder
+   *
+   * @since 3.2.0
+   */
+  public static SortOrder sort(Expression expr, SortDirection direction) {
+    return LogicalExpressions.sort(expr, direction, direction.defaultNullOrdering());
+  }
 }

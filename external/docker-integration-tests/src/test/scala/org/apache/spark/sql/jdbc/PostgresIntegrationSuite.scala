@@ -31,7 +31,7 @@ import org.apache.spark.tags.DockerTest
 /**
  * To run this test suite for a specific version (e.g., postgres:13.0):
  * {{{
- *   POSTGRES_DOCKER_IMAGE_NAME=postgres:13.0
+ *   ENABLE_DOCKER_INTEGRATION_TESTS=1 POSTGRES_DOCKER_IMAGE_NAME=postgres:13.0
  *     ./build/sbt -Pdocker-integration-tests
  *     "testOnly org.apache.spark.sql.jdbc.PostgresIntegrationSuite"
  * }}}
@@ -304,8 +304,8 @@ class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getSeq(21) == Seq("<(500.0,200.0),100.0>"))
     assert(rows(0).getSeq(22) == Seq("16/B374D848"))
     assert(rows(0).getSeq(23) == Seq("101010"))
-    assert(rows(0).getSeq(24) == Seq("0 years 0 mons 1 days 0 hours 0 mins 0.00 secs",
-      "0 years 0 mons 0 days 0 hours 2 mins 0.00 secs"))
+    assert(rows(0).getSeq(24) == Seq("0 years 0 mons 1 days 0 hours 0 mins 0.0 secs",
+      "0 years 0 mons 0 days 0 hours 2 mins 0.0 secs"))
     assert(rows(0).getSeq(25) == Seq("08:00:2b:01:02:03:04:05"))
     assert(rows(0).getSeq(26) == Seq("10:20:10,14,15"))
   }

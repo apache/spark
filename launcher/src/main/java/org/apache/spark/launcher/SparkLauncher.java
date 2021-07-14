@@ -92,8 +92,18 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
   /**
    * Maximum time (in ms) to wait for a child process to connect back to the launcher server
    * when using @link{#start()}.
+   *
+   * @deprecated use `CHILD_CONNECTION_TIMEOUT`
+   * @since 1.6.0
    */
-  public static final String CHILD_CONNECTION_TIMEOUT = "spark.launcher.childConectionTimeout";
+  public static final String DEPRECATED_CHILD_CONNECTION_TIMEOUT =
+    "spark.launcher.childConectionTimeout";
+
+  /**
+   * Maximum time (in ms) to wait for a child process to connect back to the launcher server
+   * when using @link{#start()}.
+   */
+  public static final String CHILD_CONNECTION_TIMEOUT = "spark.launcher.childConnectionTimeout";
 
   /** Used internally to create unique logger names. */
   private static final AtomicInteger COUNTER = new AtomicInteger();

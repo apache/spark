@@ -22,7 +22,6 @@ import java.util.{Arrays, Random}
 import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, HashSet => MHashSet}
 
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.annotation.Since
 
@@ -457,7 +456,7 @@ class DenseMatrix @Since("2.0.0") (
     if (isTransposed) {
       Iterator.tabulate(numCols) { j =>
         val col = new Array[Double](numRows)
-        blas.dcopy(numRows, values, j, numCols, col, 0, 1)
+        BLAS.nativeBLAS.dcopy(numRows, values, j, numCols, col, 0, 1)
         new DenseVector(col)
       }
     } else {

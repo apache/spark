@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -82,8 +83,7 @@ object SchemaMergeUtils extends Logging {
               try {
                 mergedSchema = mergedSchema.merge(schema)
               } catch { case cause: SparkException =>
-                throw new SparkException(
-                  s"Failed merging schema:\n${schema.treeString}", cause)
+                throw QueryExecutionErrors.failedMergingSchemaError(schema, cause)
               }
             }
             Iterator.single(mergedSchema)
@@ -98,8 +98,7 @@ object SchemaMergeUtils extends Logging {
         try {
           finalSchema = finalSchema.merge(schema)
         } catch { case cause: SparkException =>
-          throw new SparkException(
-            s"Failed merging schema:\n${schema.treeString}", cause)
+          throw QueryExecutionErrors.failedMergingSchemaError(schema, cause)
         }
       }
       Some(finalSchema)

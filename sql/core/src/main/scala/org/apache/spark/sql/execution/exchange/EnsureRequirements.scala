@@ -231,17 +231,18 @@ object EnsureRequirements extends Rule[SparkPlan] {
    */
   private def reorderJoinPredicates(plan: SparkPlan): SparkPlan = {
     plan match {
-      case ShuffledHashJoinExec(leftKeys, rightKeys, joinType, buildSide, condition, left, right) =>
+      case ShuffledHashJoinExec(
+        leftKeys, rightKeys, joinType, buildSide, condition, left, right, isSkew) =>
         val (reorderedLeftKeys, reorderedRightKeys) =
           reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
         ShuffledHashJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, buildSide, condition,
-          left, right)
+          left, right, isSkew)
 
-      case SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right, isPartial) =>
+      case SortMergeJoinExec(leftKeys, rightKeys, joinType, condition, left, right, isSkew) =>
         val (reorderedLeftKeys, reorderedRightKeys) =
           reorderJoinKeys(leftKeys, rightKeys, left.outputPartitioning, right.outputPartitioning)
         SortMergeJoinExec(reorderedLeftKeys, reorderedRightKeys, joinType, condition,
-          left, right, isPartial)
+          left, right, isSkew)
 
       case other => other
     }
@@ -249,11 +250,26 @@ object EnsureRequirements extends Rule[SparkPlan] {
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
     // TODO: remove this after we create a physical operator for `RepartitionByExpression`.
-    case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, _) =>
-      child.outputPartitioning match {
-        case lower: HashPartitioning if upper.semanticEquals(lower) => child
-        case _ => operator
+    // SPARK-35989: AQE will change the partition number so we should retain the REPARTITION_BY_NUM
+    // shuffle which is specified by user. And also we can not remove REBALANCE_PARTITIONS_BY_COL,
+    // it is a special shuffle used to rebalance partitions.
+    // So, here we only remove REPARTITION_BY_COL in AQE.
+    case operator @ ShuffleExchangeExec(upper: HashPartitioning, child, shuffleOrigin)
+        if shuffleOrigin == REPARTITION_BY_COL || !conf.adaptiveExecutionEnabled =>
+      def hasSemanticEqualPartitioning(partitioning: Partitioning): Boolean = {
+        partitioning match {
+          case lower: HashPartitioning if upper.semanticEquals(lower) => true
+          case lower: PartitioningCollection =>
+            lower.partitionings.exists(hasSemanticEqualPartitioning)
+          case _ => false
+        }
       }
+      if (hasSemanticEqualPartitioning(child.outputPartitioning)) {
+        child
+      } else {
+        operator
+      }
+
     case operator: SparkPlan =>
       ensureDistributionAndOrdering(reorderJoinPredicates(operator))
   }

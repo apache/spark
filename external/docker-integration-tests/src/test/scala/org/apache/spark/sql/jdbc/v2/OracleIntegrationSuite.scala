@@ -41,10 +41,11 @@ import org.apache.spark.tags.DockerTest
  * An actual sequence of commands to run the test is as follows
  *
  *  $ git clone https://github.com/oracle/docker-images.git
- *  // Head SHA: 3e352a22618070595f823977a0fd1a3a8071a83c
+ *  // Head SHA: 3f422c4a35b423dfcdbcc57a84f01db6c82eb6c1
  *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
- *  $ ./buildDockerImage.sh -v 18.4.0 -x
+ *  $ ./buildContainerImage.sh -v 18.4.0 -x
  *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe
+ *  $ export ENABLE_DOCKER_INTEGRATION_TESTS=1
  *  $ cd $SPARK_HOME
  *  $ ./build/sbt -Pdocker-integration-tests
  *    "testOnly org.apache.spark.sql.jdbc.v2.OracleIntegrationSuite"
@@ -55,7 +56,7 @@ import org.apache.spark.tags.DockerTest
 class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest {
   override val catalogName: String = "oracle"
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env("ORACLE_DOCKER_IMAGE_NAME")
+    lazy override val imageName = sys.env("ORACLE_DOCKER_IMAGE_NAME")
     override val env = Map(
       "ORACLE_PWD" -> "oracle"
     )
@@ -85,6 +86,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
     val msg1 = intercept[AnalysisException] {
       sql(s"ALTER TABLE $tbl ALTER COLUMN id TYPE INTEGER")
     }.getMessage
-    assert(msg1.contains("Cannot update alt_table field ID: string cannot be cast to int"))
+    assert(msg1.contains(
+      s"Cannot update $catalogName.alt_table field ID: string cannot be cast to int"))
   }
 }

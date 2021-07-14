@@ -24,14 +24,14 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Stable
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction}
+import org.apache.spark.sql.catalyst.analysis.{Star, UnresolvedAlias, UnresolvedFunction}
 import org.apache.spark.sql.catalyst.encoders.encoderFor
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{NumericType, StructType}
 
 /**
@@ -69,10 +69,12 @@ class RelationalGroupedDataset protected[sql](
         Dataset.ofRows(df.sparkSession, Aggregate(groupingExprs, aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.RollupType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(Seq(Rollup(groupingExprs)), aliasedAgg, df.logicalPlan))
+          df.sparkSession, Aggregate(Seq(Rollup(groupingExprs.map(Seq(_)))),
+            aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.CubeType =>
         Dataset.ofRows(
-          df.sparkSession, Aggregate(Seq(Cube(groupingExprs)), aliasedAgg, df.logicalPlan))
+          df.sparkSession, Aggregate(Seq(Cube(groupingExprs.map(Seq(_)))),
+            aliasedAgg, df.logicalPlan))
       case RelationalGroupedDataset.PivotType(pivotCol, values) =>
         val aliasedGrps = groupingExprs.map(alias)
         Dataset.ofRows(
@@ -80,11 +82,7 @@ class RelationalGroupedDataset protected[sql](
     }
   }
 
-  // Wrap UnresolvedAttribute with UnresolvedAlias, as when we resolve UnresolvedAttribute, we
-  // will remove intermediate Alias for ExtractValue chain, and we need to alias it again to
-  // make it a NamedExpression.
   private[this] def alias(expr: Expression): NamedExpression = expr match {
-    case u: UnresolvedAttribute => UnresolvedAlias(u)
     case expr: NamedExpression => expr
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
@@ -102,9 +100,7 @@ class RelationalGroupedDataset protected[sql](
       colNames.map { colName =>
         val namedExpr = df.resolve(colName)
         if (!namedExpr.dataType.isInstanceOf[NumericType]) {
-          throw new AnalysisException(
-            s""""$colName" is not a numeric column. """ +
-            "Aggregation function can only be applied on a numeric column.")
+          throw QueryCompilationErrors.aggregationFunctionAppliedOnNonNumericColumnError(colName)
         }
         namedExpr
       }
@@ -280,7 +276,7 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def mean(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Average)
+    aggregateNumericColumns(colNames : _*)(Average(_))
   }
 
   /**
@@ -304,7 +300,7 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def avg(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Average)
+    aggregateNumericColumns(colNames : _*)(Average(_))
   }
 
   /**
@@ -328,7 +324,7 @@ class RelationalGroupedDataset protected[sql](
    */
   @scala.annotation.varargs
   def sum(colNames: String*): DataFrame = {
-    aggregateNumericColumns(colNames : _*)(Sum)
+    aggregateNumericColumns(colNames : _*)(Sum(_))
   }
 
   /**
@@ -431,11 +427,8 @@ class RelationalGroupedDataset protected[sql](
       .toSeq
 
     if (values.length > maxValues) {
-      throw new AnalysisException(
-        s"The pivot column $pivotColumn has more than $maxValues distinct values, " +
-          "this could indicate an error. " +
-          s"If this was intended, set ${SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key} " +
-          "to at least the number of distinct values of the pivot column.")
+      throw QueryCompilationErrors.aggregationFunctionAppliedOnNonNumericColumnError(
+        pivotColumn.toString, maxValues)
     }
 
     pivot(pivotColumn, values)
@@ -466,9 +459,9 @@ class RelationalGroupedDataset protected[sql](
           groupingExprs,
           RelationalGroupedDataset.PivotType(pivotColumn.expr, valueExprs))
       case _: RelationalGroupedDataset.PivotType =>
-        throw new UnsupportedOperationException("repeated pivots are not supported")
+        throw QueryExecutionErrors.repeatedPivotsUnsupportedError()
       case _ =>
-        throw new UnsupportedOperationException("pivot is only supported after a groupBy")
+        throw QueryExecutionErrors.pivotNotAfterGroupByUnsupportedError()
     }
   }
 
@@ -595,11 +588,10 @@ class RelationalGroupedDataset protected[sql](
     val right = r.df.sparkSession.sessionState.executePlan(
       Project(rightGroupingNamedExpressions ++ rightChild.output, rightChild)).analyzed
 
-    val leftAttributes = left.output.take(leftGroupingNamedExpressions.length)
-    val rightAttributes = right.output.take(rightGroupingNamedExpressions.length)
-
     val output = expr.dataType.asInstanceOf[StructType].toAttributes
-    val plan = FlatMapCoGroupsInPandas(leftAttributes, rightAttributes, expr, output, left, right)
+    val plan = FlatMapCoGroupsInPandas(
+      leftGroupingNamedExpressions.length, rightGroupingNamedExpressions.length,
+      expr, output, left, right)
     Dataset.ofRows(df.sparkSession, plan)
   }
 

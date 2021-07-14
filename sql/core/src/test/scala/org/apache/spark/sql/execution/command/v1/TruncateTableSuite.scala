@@ -24,7 +24,6 @@ import org.apache.hadoop.fs.permission.{AclEntry, AclEntryScope, AclEntryType, F
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException
 import org.apache.spark.sql.execution.command
 import org.apache.spark.sql.execution.command.FakeLocalFsFileSystem
 import org.apache.spark.sql.internal.SQLConf
@@ -39,99 +38,8 @@ import org.apache.spark.sql.internal.SQLConf
  */
 trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
 
-  test("table does not exist") {
-    withNamespaceAndTable("ns", "does_not_exist") { t =>
-      val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t")
-      }.getMessage
-      assert(errMsg.contains("Table not found"))
-    }
-  }
-
-  test("truncate non-partitioned table") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (c0 INT, c1 INT) $defaultUsing")
-      sql(s"INSERT INTO $t SELECT 0, 1")
-
-      sql(s"TRUNCATE TABLE $t")
-      checkAnswer(sql(s"SELECT * FROM $t"), Nil)
-
-      // not supported since the table is not partitioned
-      val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (width=1)")
-      }.getMessage
-      assert(errMsg.contains(
-        "TRUNCATE TABLE ... PARTITION is not supported for tables that are not partitioned"))
-    }
-  }
-
-  private def createPartTable(t: String): Unit = {
-    sql(s"""
-      |CREATE TABLE $t (width INT, length INT, height INT)
-      |$defaultUsing
-      |PARTITIONED BY (width, length)""".stripMargin)
-    sql(s"INSERT INTO $t PARTITION (width = 0, length = 0) SELECT 0")
-    sql(s"INSERT INTO $t PARTITION (width = 1, length = 1) SELECT 1")
-    sql(s"INSERT INTO $t PARTITION (width = 1, length = 2) SELECT 3")
-  }
-
-  test("SPARK-34418: truncate partitioned tables") {
-    withNamespaceAndTable("ns", "partTable") { t =>
-      createPartTable(t)
-      sql(s"TRUNCATE TABLE $t PARTITION (width = 1, length = 1)")
-      checkAnswer(sql(s"SELECT width, length, height FROM $t"), Seq(Row(0, 0, 0), Row(1, 2, 3)))
-      checkPartitions(t,
-        Map("width" -> "0", "length" -> "0"),
-        Map("width" -> "1", "length" -> "1"),
-        Map("width" -> "1", "length" -> "2"))
-    }
-
-    withNamespaceAndTable("ns", "partTable") { t =>
-      createPartTable(t)
-      // support partial partition spec
-      sql(s"TRUNCATE TABLE $t PARTITION (width = 1)")
-      checkAnswer(sql(s"SELECT * FROM $t"), Row(0, 0, 0))
-      checkPartitions(t,
-        Map("width" -> "0", "length" -> "0"),
-        Map("width" -> "1", "length" -> "1"),
-        Map("width" -> "1", "length" -> "2"))
-    }
-
-    withNamespaceAndTable("ns", "partTable") { t =>
-      createPartTable(t)
-      // do nothing if no partition is matched for the given partial partition spec
-      sql(s"TRUNCATE TABLE $t PARTITION (width = 100)")
-      checkAnswer(
-        sql(s"SELECT width, length, height FROM $t"),
-        Seq(Row(0, 0, 0), Row(1, 1, 1), Row(1, 2, 3)))
-
-      // throw exception if no partition is matched for the given non-partial partition spec.
-      intercept[NoSuchPartitionException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (width = 100, length = 100)")
-      }
-
-      // throw exception if the column in partition spec is not a partition column.
-      val errMsg = intercept[AnalysisException] {
-        sql(s"TRUNCATE TABLE $t PARTITION (unknown = 1)")
-      }.getMessage
-      assert(errMsg.contains("unknown is not a valid partition column"))
-    }
-  }
-
-  test("SPARK-34418: preserve partitions in truncated table") {
-    withNamespaceAndTable("ns", "partTable") { t =>
-      createPartTable(t)
-      checkAnswer(
-        sql(s"SELECT width, length, height FROM $t"),
-        Seq(Row(0, 0, 0), Row(1, 1, 1), Row(1, 2, 3)))
-      sql(s"TRUNCATE TABLE $t")
-      checkAnswer(sql(s"SELECT width, length, height FROM $t"), Nil)
-      checkPartitions(t,
-        Map("width" -> "0", "length" -> "0"),
-        Map("width" -> "1", "length" -> "1"),
-        Map("width" -> "1", "length" -> "2"))
-    }
-  }
+  override val invalidPartColumnError =
+    "TRUNCATE TABLE ... PARTITION is not supported for tables that are not partitioned"
 
   test("SPARK-30312: truncate table - keep acl/permission") {
     Seq(true, false).foreach { ignore =>
@@ -246,24 +154,6 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
     }
   }
 
-  test("case sensitivity in resolving partition specs") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing PARTITIONED BY (id)")
-      sql(s"INSERT INTO $t PARTITION (id=0) SELECT 'abc'")
-      sql(s"INSERT INTO $t PARTITION (id=1) SELECT 'def'")
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
-        val errMsg = intercept[AnalysisException] {
-          sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
-        }.getMessage
-        assert(errMsg.contains("ID is not a valid partition column"))
-      }
-      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
-        sql(s"TRUNCATE TABLE $t PARTITION (ID=1)")
-        checkAnswer(sql(s"SELECT id, data FROM $t"), Row(0, "abc"))
-      }
-    }
-  }
-
   test("change stats after truncate command") {
     withNamespaceAndTable("ns", "tbl") { t =>
       sql(s"CREATE TABLE $t (id INT, value INT) $defaultUsing")
@@ -290,82 +180,6 @@ trait TruncateTableSuiteBase extends command.TruncateTableSuiteBase {
         sql(s"TRUNCATE TABLE $t PARTITION (part=1)")
         val sizeOfOnePart = getTableSize(t)
         assert(0 < sizeOfOnePart && sizeOfOnePart < sizeOfTwoParts)
-      }
-    }
-  }
-
-  test("SPARK-34215: keep table cached after truncation") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (c0 int) $defaultUsing")
-      sql(s"INSERT INTO $t SELECT 0")
-      sql(s"CACHE TABLE $t")
-      assert(spark.catalog.isCached(t))
-      checkAnswer(sql(s"SELECT * FROM $t"), Row(0))
-      sql(s"TRUNCATE TABLE $t")
-      assert(spark.catalog.isCached(t))
-      checkAnswer(sql(s"SELECT * FROM $t"), Seq.empty)
-    }
-  }
-
-  test("keep dependents as cached after table truncation") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      createPartTable(t)
-      cacheRelation(t)
-      checkCachedRelation(t, Seq(Row(0, 0, 0), Row(1, 1, 1), Row(3, 1, 2)))
-
-      withView("v0") {
-        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
-        cacheRelation("v0")
-        sql(s"TRUNCATE TABLE $t PARTITION (width = 1, length = 2)")
-        checkCachedRelation("v0", Seq(Row(0, 0, 0), Row(1, 1, 1)))
-      }
-
-      withTempView("v1") {
-        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
-        cacheRelation("v1")
-        sql(s"TRUNCATE TABLE $t PARTITION (width = 1, length = 1)")
-        checkCachedRelation("v1", Seq(Row(0, 0, 0)))
-      }
-
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
-      withGlobalTempView("v2") {
-        sql(s"INSERT INTO $t PARTITION (width = 10, length = 10) SELECT 10")
-        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
-        cacheRelation(v2)
-        sql(s"TRUNCATE TABLE $t PARTITION (width = 10, length = 10)")
-        checkCachedRelation(v2, Seq(Row(0, 0, 0)))
-      }
-    }
-  }
-
-  test("truncation of views is not allowed") {
-    withNamespaceAndTable("ns", "tbl") { t =>
-      sql(s"CREATE TABLE $t (id int, part int) $defaultUsing PARTITIONED BY (part)")
-      sql(s"INSERT INTO $t PARTITION (part=0) SELECT 0")
-
-      withView("v0") {
-        sql(s"CREATE VIEW v0 AS SELECT * FROM $t")
-        val errMsg = intercept[AnalysisException] {
-          sql("TRUNCATE TABLE v0")
-        }.getMessage
-        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
-      }
-
-      withTempView("v1") {
-        sql(s"CREATE TEMP VIEW v1 AS SELECT * FROM $t")
-        val errMsg = intercept[AnalysisException] {
-          sql("TRUNCATE TABLE v1")
-        }.getMessage
-        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
-      }
-
-      val v2 = s"${spark.sharedState.globalTempViewManager.database}.v2"
-      withGlobalTempView("v2") {
-        sql(s"CREATE GLOBAL TEMP VIEW v2 AS SELECT * FROM $t")
-        val errMsg = intercept[AnalysisException] {
-          sql(s"TRUNCATE TABLE $v2")
-        }.getMessage
-        assert(errMsg.contains("'TRUNCATE TABLE' expects a table"))
       }
     }
   }

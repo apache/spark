@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.{DataFrame, Row, SaveMode}
-import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, Table, TableCatalog}
 
 class DataSourceV2SQLSessionCatalogSuite
   extends InsertIntoTests(supportsDynamicOverwrite = true, includeSQLOnlyTests = true)

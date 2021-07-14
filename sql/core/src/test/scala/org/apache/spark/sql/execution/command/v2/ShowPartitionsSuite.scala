@@ -33,8 +33,7 @@ class ShowPartitionsSuite extends command.ShowPartitionsSuiteBase with CommandSu
       val errMsg = intercept[AnalysisException] {
         sql(s"SHOW PARTITIONS $table")
       }.getMessage
-      assert(errMsg.contains(
-        "SHOW PARTITIONS cannot run for a table which does not support partitioning"))
+      assert(errMsg.contains(s"Table $table does not support partition management"))
     }
   }
 

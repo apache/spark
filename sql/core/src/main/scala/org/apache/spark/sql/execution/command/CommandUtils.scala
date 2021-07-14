@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -197,6 +197,41 @@ object CommandUtils extends Logging {
       }
     }
     newStats
+  }
+
+  def analyzeTable(
+      sparkSession: SparkSession,
+      tableIdent: TableIdentifier,
+      noScan: Boolean): Unit = {
+    val sessionState = sparkSession.sessionState
+    val db = tableIdent.database.getOrElse(sessionState.catalog.getCurrentDatabase)
+    val tableIdentWithDB = TableIdentifier(tableIdent.table, Some(db))
+    val tableMeta = sessionState.catalog.getTableMetadata(tableIdentWithDB)
+    if (tableMeta.tableType == CatalogTableType.VIEW) {
+      // Analyzes a catalog view if the view is cached
+      val table = sparkSession.table(tableIdent.quotedString)
+      val cacheManager = sparkSession.sharedState.cacheManager
+      if (cacheManager.lookupCachedData(table.logicalPlan).isDefined) {
+        if (!noScan) {
+          // To collect table stats, materializes an underlying columnar RDD
+          table.count()
+        }
+      } else {
+        throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+      }
+    } else {
+      // Compute stats for the whole table
+      val newTotalSize = CommandUtils.calculateTotalSize(sparkSession, tableMeta)
+      val newRowCount =
+        if (noScan) None else Some(BigInt(sparkSession.table(tableIdentWithDB).count()))
+
+      // Update the metastore if the above statistics of the table are different from those
+      // recorded in the metastore.
+      val newStats = CommandUtils.compareAndGetNewStats(tableMeta.stats, newTotalSize, newRowCount)
+      if (newStats.isDefined) {
+        sessionState.catalog.alterTableStats(tableIdentWithDB, newStats)
+      }
+    }
   }
 
   /**

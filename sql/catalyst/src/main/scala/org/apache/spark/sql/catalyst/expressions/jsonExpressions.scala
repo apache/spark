@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -335,6 +336,10 @@ case class GetJsonObject(json: Expression, path: Expression)
         false
     }
   }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): GetJsonObject =
+    copy(json = newLeft, path = newRight)
 }
 
 // scalastyle:off line.size.limit line.contains.tab
@@ -498,6 +503,9 @@ case class JsonTuple(children: Seq[Expression])
         generator.copyCurrentStructure(parser)
     }
   }
+
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): JsonTuple =
+    copy(children = newChildren)
 }
 
 /**
@@ -531,6 +539,8 @@ case class JsonToStructs(
   val nullableSchema = schema.asNullable
 
   override def nullable: Boolean = true
+
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(JSON_TO_STRUCT)
 
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
@@ -609,6 +619,9 @@ case class JsonToStructs(
   }
 
   override def prettyName: String = "from_json"
+
+  override protected def withNewChildInternal(newChild: Expression): JsonToStructs =
+    copy(child = newChild)
 }
 
 /**
@@ -731,6 +744,9 @@ case class StructsToJson(
   override def inputTypes: Seq[AbstractDataType] = TypeCollection(ArrayType, StructType) :: Nil
 
   override def prettyName: String = "to_json"
+
+  override protected def withNewChildInternal(newChild: Expression): StructsToJson =
+    copy(child = newChild)
 }
 
 /**
@@ -805,6 +821,9 @@ case class SchemaOfJson(
   }
 
   override def prettyName: String = "schema_of_json"
+
+  override protected def withNewChildInternal(newChild: Expression): SchemaOfJson =
+    copy(child = newChild)
 }
 
 /**
@@ -874,6 +893,9 @@ case class LengthOfJsonArray(child: Expression) extends UnaryExpression
     }
     length
   }
+
+  override protected def withNewChildInternal(newChild: Expression): LengthOfJsonArray =
+    copy(child = newChild)
 }
 
 /**
@@ -943,4 +965,7 @@ case class JsonObjectKeys(child: Expression) extends UnaryExpression with Codege
     }
     new GenericArrayData(arrayBufferOfKeys.toArray)
   }
+
+  override protected def withNewChildInternal(newChild: Expression): JsonObjectKeys =
+    copy(child = newChild)
 }

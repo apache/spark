@@ -27,8 +27,8 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
-import org.apache.spark.sql.catalyst.util.IntervalUtils.IntervalUnit._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -425,7 +425,7 @@ class ExpressionParserSuite extends AnalysisTest {
     assertEqual("(a + b).b", ('a + 'b).getField("b")) // This will fail analysis.
     assertEqual(
       "struct(a, b).b",
-      namedStruct(NamePlaceholder, 'a, NamePlaceholder, 'b).getField("b"))
+      namedStruct(Literal("a"), 'a, Literal("b"), 'b).getField("b"))
   }
 
   test("reference") {
@@ -454,6 +454,17 @@ class ExpressionParserSuite extends AnalysisTest {
   }
 
   test("type constructors") {
+    def checkTimestampNTZAndLTZ(): Unit = {
+      // Timestamp with local time zone
+      assertEqual("tImEstAmp_LTZ '2016-03-11 20:54:00.000'",
+        Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
+      intercept("timestamP_LTZ '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP_LTZ value")
+      // Timestamp without time zone
+      assertEqual("tImEstAmp_Ntz '2016-03-11 20:54:00.000'",
+        Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
+      intercept("tImEstAmp_Ntz '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP_NTZ value")
+    }
+
     // Dates.
     assertEqual("dAte '2016-03-11'", Literal(Date.valueOf("2016-03-11")))
     intercept("DAtE 'mar 11 2016'", "Cannot parse the DATE value")
@@ -463,6 +474,20 @@ class ExpressionParserSuite extends AnalysisTest {
       Literal(Timestamp.valueOf("2016-03-11 20:54:00.000")))
     intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
 
+    checkTimestampNTZAndLTZ()
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
+      assertEqual("tImEstAmp '2016-03-11 20:54:00.000'",
+        Literal(LocalDateTime.parse("2016-03-11T20:54:00.000")))
+
+      intercept("timestamP '2016-33-11 20:54:00.000'", "Cannot parse the TIMESTAMP value")
+
+      // If the timestamp string contains time zone, return a timestamp with local time zone literal
+      assertEqual("tImEstAmp '1970-01-01 00:00:00.000 +01:00'",
+        Literal(-3600000000L, TimestampType))
+
+      // The behavior of TIMESTAMP_NTZ and TIMESTAMP_LTZ is independent of SQLConf.TIMESTAMP_TYPE
+      checkTimestampNTZAndLTZ()
+    }
     // Interval.
     val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
     assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
@@ -653,18 +678,7 @@ class ExpressionParserSuite extends AnalysisTest {
     }
   }
 
-  val intervalUnits = Seq(
-    YEAR,
-    MONTH,
-    WEEK,
-    DAY,
-    HOUR,
-    MINUTE,
-    SECOND,
-    MILLISECOND,
-    MICROSECOND)
-
-  def intervalLiteral(u: IntervalUnit, s: String): Literal = {
+  def intervalLiteral(u: UTF8String, s: String): Literal = {
     Literal(IntervalUtils.stringToInterval(s + " " + u.toString))
   }
 
@@ -684,18 +698,19 @@ class ExpressionParserSuite extends AnalysisTest {
     // Single Intervals.
     val forms = Seq("", "s")
     val values = Seq("0", "10", "-7", "21")
-    intervalUnits.foreach { unit =>
-      forms.foreach { form =>
-         values.foreach { value =>
-           val expected = intervalLiteral(unit, value)
-           checkIntervals(s"$value $unit$form", expected)
-           checkIntervals(s"'$value' $unit$form", expected)
-         }
+    Seq("year", "month", "week", "day", "hour", "minute", "second", "millisecond", "microsecond")
+      .foreach { unit =>
+        forms.foreach { form =>
+          values.foreach { value =>
+            val expected = intervalLiteral(unit, value)
+            checkIntervals(s"$value $unit$form", expected)
+            checkIntervals(s"'$value' $unit$form", expected)
+          }
+        }
       }
-    }
 
     // Hive nanosecond notation.
-    checkIntervals("13.123456789 seconds", intervalLiteral(SECOND, "13.123456789"))
+    checkIntervals("13.123456789 seconds", intervalLiteral("second", "13.123456789"))
     checkIntervals(
       "-13.123456789 second",
       Literal(new CalendarInterval(
@@ -714,37 +729,40 @@ class ExpressionParserSuite extends AnalysisTest {
     // Non Existing unit
     intercept("interval 10 nanoseconds", "invalid unit 'nanoseconds'")
 
-    // Year-Month intervals.
-    val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0", "\t -1-2\t")
-    yearMonthValues.foreach { value =>
-      val result = Literal(IntervalUtils.fromYearMonthString(value))
-      checkIntervals(s"'$value' year to month", result)
-    }
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      // Year-Month intervals.
+      val yearMonthValues = Seq("123-10", "496-0", "-2-3", "-123-0", "\t -1-2\t")
+      yearMonthValues.foreach { value =>
+        val result = Literal(IntervalUtils.fromYearMonthString(value))
+        checkIntervals(s"'$value' year to month", result)
+      }
 
-    // Day-Time intervals.
-    val datTimeValues = Seq(
-      "99 11:22:33.123456789",
-      "-99 11:22:33.123456789",
-      "10 9:8:7.123456789",
-      "1 0:0:0",
-      "-1 0:0:0",
-      "1 0:0:1",
-      "\t 1 0:0:1 ")
-    datTimeValues.foreach { value =>
-      val result = Literal(IntervalUtils.fromDayTimeString(value))
-      checkIntervals(s"'$value' day to second", result)
-    }
+      // Day-Time intervals.
+      val datTimeValues = Seq(
+        "99 11:22:33.123456789",
+        "-99 11:22:33.123456789",
+        "10 9:8:7.123456789",
+        "1 0:0:0",
+        "-1 0:0:0",
+        "1 0:0:1",
+        "\t 1 0:0:1 ")
+      datTimeValues.foreach { value =>
+        val result = Literal(IntervalUtils.fromDayTimeString(value))
+        checkIntervals(s"'$value' day to second", result)
+      }
 
-    // Hour-Time intervals.
-    val hourTimeValues = Seq(
-      "11:22:33.123456789",
-      "9:8:7.123456789",
-      "-19:18:17.123456789",
-      "0:0:0",
-      "0:0:1")
-    hourTimeValues.foreach { value =>
-      val result = Literal(IntervalUtils.fromDayTimeString(value, HOUR, SECOND))
-      checkIntervals(s"'$value' hour to second", result)
+      // Hour-Time intervals.
+      val hourTimeValues = Seq(
+        "11:22:33.123456789",
+        "9:8:7.123456789",
+        "-19:18:17.123456789",
+        "0:0:0",
+        "0:0:1")
+      hourTimeValues.foreach { value =>
+        val result = Literal(IntervalUtils.fromDayTimeString(
+          value, DayTimeIntervalType.HOUR, DayTimeIntervalType.SECOND))
+        checkIntervals(s"'$value' hour to second", result)
+      }
     }
 
     // Unknown FROM TO intervals
@@ -778,11 +796,11 @@ class ExpressionParserSuite extends AnalysisTest {
 
   test("SPARK-17832 function identifier contains backtick") {
     val complexName = FunctionIdentifier("`ba`r", Some("`fo`o"))
-    assertEqual(complexName.quotedString, UnresolvedAttribute("`fo`o.`ba`r"))
+    assertEqual(complexName.quotedString, UnresolvedAttribute(Seq("`fo`o", "`ba`r")))
     intercept(complexName.unquotedString, "mismatched input")
     // Function identifier contains continuous backticks should be treated correctly.
     val complexName2 = FunctionIdentifier("ba``r", Some("fo``o"))
-    assertEqual(complexName2.quotedString, UnresolvedAttribute("fo``o.ba``r"))
+    assertEqual(complexName2.quotedString, UnresolvedAttribute(Seq("fo``o", "ba``r")))
   }
 
   test("SPARK-19526 Support ignore nulls keywords for first and last") {

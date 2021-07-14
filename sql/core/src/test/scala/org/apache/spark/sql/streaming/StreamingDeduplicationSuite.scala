@@ -80,6 +80,38 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
     )
   }
 
+  test("SPARK-35896: metrics in StateOperatorProgress are output correctly") {
+    val inputData = MemoryStream[Int]
+    val result = inputData.toDS()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .withWatermark("eventTime", "10 seconds")
+      .dropDuplicates()
+      .select($"eventTime".cast("long").as[Long])
+
+    testStream(result, Append)(
+      StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "2")),
+      AddData(inputData, (1 to 5).flatMap(_ => (10 to 15)): _*),
+      CheckAnswer(10 to 15: _*),
+      assertNumStateRows(
+        total = Seq(6), updated = Seq(6), droppedByWatermark = Seq(0), removed = Some(Seq(0))),
+
+      AddData(inputData, 25), // Advance watermark to 15 secs, no-data-batch drops rows <= 15
+      CheckNewAnswer(25),
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(1), droppedByWatermark = Seq(0), removed = Some(Seq(6))),
+
+      AddData(inputData, 10), // Should not emit anything as data less than watermark
+      CheckNewAnswer(),
+      assertNumStateRows(
+        total = Seq(1), updated = Seq(0), droppedByWatermark = Seq(1), removed = Some(Seq(0))),
+
+      AddData(inputData, 10),
+      CheckNewAnswer(),
+      assertStateOperatorProgressMetric(
+        operatorName = "dedupe", numShufflePartitions = 2, numStateStoreInstances = 2)
+    )
+  }
+
   test("deduplicate with watermark") {
     val inputData = MemoryStream[Int]
     val result = inputData.toDS()
@@ -134,7 +166,7 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
       AddData(inputData, 10), // Should not emit anything as data less than watermark
       CheckLastBatch(),
       assertNumStateRows(total = Seq(2L, 1L), updated = Seq(0L, 0L),
-        droppedByWatermark = Seq(0L, 1L)),
+        droppedByWatermark = Seq(0L, 1L), None),
 
       AddData(inputData, 40), // Advance watermark to 30 seconds
       CheckLastBatch((15 -> 1), (25 -> 1)),
@@ -332,4 +364,53 @@ class StreamingDeduplicationSuite extends StateStoreMetricsTest {
     }
   }
 
+  test("SPARK-35880: custom metric numDroppedDuplicateRows in state operator progress") {
+    val dedupeInputData = MemoryStream[(String, Int)]
+    val dedupe = dedupeInputData.toDS().dropDuplicates("_1")
+
+    testStream(dedupe, Append)(
+      AddData(dedupeInputData, "a" -> 1),
+      CheckLastBatch("a" -> 1),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 0),
+
+      AddData(dedupeInputData, "a" -> 2, "b" -> 3),
+      CheckLastBatch("b" -> 3),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 1),
+
+      AddData(dedupeInputData, "a" -> 5, "b" -> 2, "c" -> 9),
+      CheckLastBatch("c" -> 9),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 2)
+    )
+
+    // with watermark
+    val dedupeWithWMInputData = MemoryStream[Int]
+    val dedupeWithWatermark = dedupeWithWMInputData.toDS()
+      .withColumn("eventTime", timestamp_seconds($"value"))
+      .withWatermark("eventTime", "10 seconds")
+      .dropDuplicates()
+      .select($"eventTime".cast("long").as[Long])
+
+    testStream(dedupeWithWatermark, Append)(
+      AddData(dedupeWithWMInputData, (1 to 5).flatMap(_ => (10 to 15)): _*),
+      CheckAnswer(10 to 15: _*),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 24),
+
+      AddData(dedupeWithWMInputData, 14),
+      CheckNewAnswer(),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 1),
+
+      // Advance watermark to 15 secs, no-data-batch drops rows <= 15
+      AddData(dedupeWithWMInputData, 25),
+      CheckNewAnswer(25),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 0),
+
+      AddData(dedupeWithWMInputData, 10), // Should not emit anything as data less than watermark
+      CheckNewAnswer(),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 0),
+
+      AddData(dedupeWithWMInputData, 26, 26),
+      CheckNewAnswer(26),
+      assertStateOperatorCustomMetric("numDroppedDuplicateRows", expected = 1)
+    )
+  }
 }

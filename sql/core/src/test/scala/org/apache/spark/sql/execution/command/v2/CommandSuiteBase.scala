@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.command.v2
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.analysis.ResolvePartitionSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.connector.{InMemoryPartitionTable, InMemoryPartitionTableCatalog, InMemoryTableCatalog}
-import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Implicits, Identifier, InMemoryPartitionTable, InMemoryPartitionTableCatalog, InMemoryTableCatalog}
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**

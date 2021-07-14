@@ -680,6 +680,16 @@ package object config {
   private[spark] val SHUFFLE_SERVICE_PORT =
     ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)
 
+  private[spark] val SHUFFLE_SERVICE_NAME =
+    ConfigBuilder("spark.shuffle.service.name")
+      .doc("The configured name of the Spark shuffle service the client should communicate with. " +
+        "This must match the name used to configure the Shuffle within the YARN NodeManager " +
+        "configuration (`yarn.nodemanager.aux-services`). Only takes effect when " +
+        s"$SHUFFLE_SERVICE_ENABLED is set to true.")
+      .version("3.2.0")
+      .stringConf
+      .createWithDefault("spark_shuffle")
+
   private[spark] val KEYTAB = ConfigBuilder("spark.kerberos.keytab")
     .doc("Location of user's keytab.")
     .version("3.0.0")
@@ -715,6 +725,18 @@ package object config {
     .stringConf
     .toSequence
     .createWithDefault(Nil)
+
+  private[spark] val YARN_KERBEROS_FILESYSTEM_RENEWAL_EXCLUDE =
+    ConfigBuilder("spark.yarn.kerberos.renewal.excludeHadoopFileSystems")
+      .doc("The list of Hadoop filesystem URLs whose hosts will be excluded from " +
+        "delegation token renewal at resource scheduler. Currently this is known to " +
+        "work under YARN, so YARN Resource Manager won't renew tokens for the application. " +
+        "Note that as resource scheduler does not renew token, so any application running " +
+        "longer than the original token expiration that tries to use that token will likely fail.")
+      .version("3.2.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .version("1.0.0")
@@ -1037,7 +1059,7 @@ package object config {
       .doc("When true, HadoopRDD/NewHadoopRDD will not create partitions for empty input splits.")
       .version("2.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   private[spark] val SECRET_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.regex")
@@ -1047,7 +1069,7 @@ package object config {
         "like YARN and event logs.")
       .version("2.1.2")
       .regexConf
-      .createWithDefault("(?i)secret|password|token".r)
+      .createWithDefault("(?i)secret|password|token|access[.]key".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
@@ -1170,6 +1192,15 @@ package object config {
       .version("2.3.0")
       .intConf
       .createWithDefault(3)
+
+  private[spark] val SHUFFLE_MAX_ATTEMPTS_ON_NETTY_OOM =
+    ConfigBuilder("spark.shuffle.maxAttemptsOnNettyOOM")
+      .doc("The max attempts of a shuffle block would retry on Netty OOM issue before throwing " +
+        "the shuffle fetch failure.")
+      .version("3.2.0")
+      .internal()
+      .intConf
+      .createWithDefault(10)
 
   private[spark] val REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS =
     ConfigBuilder("spark.reducer.maxBlocksInFlightPerAddress")
@@ -1726,9 +1757,10 @@ package object config {
     ConfigBuilder("spark.eventLog.compression.codec")
       .doc("The codec used to compress event log. By default, Spark provides four codecs: " +
         "lz4, lzf, snappy, and zstd. You can also use fully qualified class names to specify " +
-        "the codec. If this is not given, spark.io.compression.codec will be used.")
+        "the codec.")
       .version("3.0.0")
-      .fallbackConf(IO_COMPRESSION_CODEC)
+      .stringConf
+      .createWithDefault("zstd")
 
   private[spark] val BUFFER_SIZE =
     ConfigBuilder("spark.buffer.size")
@@ -1929,7 +1961,7 @@ package object config {
       .createWithDefault(0.75)
 
   private[spark] val SPECULATION_MIN_THRESHOLD =
-    ConfigBuilder("spark.speculation.min.threshold")
+    ConfigBuilder("spark.speculation.minTaskRuntime")
       .doc("Minimum amount of time a task runs before being considered for speculation. " +
         "This can be used to avoid launching speculative copies of tasks that are very short.")
       .version("3.2.0")
@@ -2052,6 +2084,27 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT =
+    ConfigBuilder("spark.shuffle.push.merge.results.timeout")
+      .doc("Specify the max amount of time DAGScheduler waits for the merge results from " +
+        "all remote shuffle services for a given shuffle. DAGScheduler will start to submit " +
+        "following stages if not all results are received within the timeout.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0L, "Timeout must be >= 0.")
+      .createWithDefaultString("10s")
+
+  private[spark] val PUSH_BASED_SHUFFLE_MERGE_FINALIZE_TIMEOUT =
+    ConfigBuilder("spark.shuffle.push.merge.finalize.timeout")
+      .doc("Specify the amount of time DAGScheduler waits after all mappers finish for " +
+        "a given shuffle map stage before it starts sending merge finalize requests to " +
+        "remote shuffle services. This allows the shuffle services some extra time to " +
+        "merge as many blocks as possible.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0L, "Timeout must be >= 0.")
+      .createWithDefaultString("10s")
+
   private[spark] val SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS =
     ConfigBuilder("spark.shuffle.push.maxRetainedMergerLocations")
       .doc("Maximum number of shuffle push merger locations cached for push based shuffle. " +
@@ -2085,7 +2138,7 @@ package object config {
         s"${SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO.key} set to 0.05, we would need " +
         "at least 50 mergers to enable push based shuffle for that stage.")
       .version("3.1.0")
-      .doubleConf
+      .intConf
       .createWithDefault(5)
 
   private[spark] val SHUFFLE_NUM_PUSH_THREADS =
@@ -2116,4 +2169,60 @@ package object config {
       // batch of block will be loaded in memory with memory mapping, which has higher overhead
       // with small MB sized chunk of data.
       .createWithDefaultString("3m")
+
+  private[spark] val JAR_IVY_REPO_PATH =
+    ConfigBuilder("spark.jars.ivy")
+      .doc("Path to specify the Ivy user directory, used for the local Ivy cache and " +
+        "package files from spark.jars.packages. " +
+        "This will override the Ivy property ivy.default.ivy.user.dir " +
+        "which defaults to ~/.ivy2.")
+      .version("1.3.0")
+      .stringConf
+      .createOptional
+
+  private[spark] val JAR_IVY_SETTING_PATH =
+    ConfigBuilder("spark.jars.ivySettings")
+      .doc("Path to an Ivy settings file to customize resolution of jars specified " +
+        "using spark.jars.packages instead of the built-in defaults, such as maven central. " +
+        "Additional repositories given by the command-line option --repositories " +
+        "or spark.jars.repositories will also be included. " +
+        "Useful for allowing Spark to resolve artifacts from behind a firewall " +
+        "e.g. via an in-house artifact server like Artifactory. " +
+        "Details on the settings file format can be found at Settings Files")
+      .version("2.2.0")
+      .stringConf
+      .createOptional
+
+  private[spark] val JAR_PACKAGES =
+    ConfigBuilder("spark.jars.packages")
+      .doc("Comma-separated list of Maven coordinates of jars to include " +
+        "on the driver and executor classpaths. The coordinates should be " +
+        "groupId:artifactId:version. If spark.jars.ivySettings is given artifacts " +
+        "will be resolved according to the configuration in the file, otherwise artifacts " +
+        "will be searched for in the local maven repo, then maven central and finally " +
+        "any additional remote repositories given by the command-line option --repositories. " +
+        "For more details, see Advanced Dependency Management.")
+      .version("1.5.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  private[spark] val JAR_PACKAGES_EXCLUSIONS =
+    ConfigBuilder("spark.jars.excludes")
+      .doc("Comma-separated list of groupId:artifactId, " +
+        "to exclude while resolving the dependencies provided in spark.jars.packages " +
+        "to avoid dependency conflicts.")
+      .version("1.5.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  private[spark] val JAR_REPOSITORIES =
+    ConfigBuilder("spark.jars.repositories")
+      .doc("Comma-separated list of additional remote repositories to search " +
+        "for the maven coordinates given with --packages or spark.jars.packages.")
+      .version("2.3.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
 }

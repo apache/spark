@@ -61,7 +61,7 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
 
   override def getConnection(driver: Driver, options: Map[String, String]): Connection = {
     val jdbcOptions = new JDBCOptions(options)
-    setAuthenticationConfigIfNeeded(driver, jdbcOptions)
+    setAuthenticationConfig(driver, jdbcOptions)
     UserGroupInformation.loginUserFromKeytabAndReturnUGI(jdbcOptions.principal, jdbcOptions.keytab)
       .doAs(
         new PrivilegedExceptionAction[Connection]() {
@@ -78,19 +78,5 @@ private[sql] class MSSQLConnectionProvider extends SecureConnectionProvider {
     result.put("integratedSecurity", "true")
     result.put("authenticationScheme", "JavaKerberos")
     result
-  }
-
-  override def setAuthenticationConfigIfNeeded(driver: Driver, options: JDBCOptions): Unit = {
-    val (parent, configEntry) = getConfigWithAppEntry(driver, options)
-    /**
-     * Couple of things to mention here (v8.2.2 client):
-     * 1. MS SQL supports JAAS application name configuration
-     * 2. MS SQL sets a default JAAS config if "java.security.auth.login.config" is not set
-     */
-    val entryUsesKeytab = configEntry != null &&
-      configEntry.exists(_.getOptions().get("useKeyTab") == "true")
-    if (configEntry == null || configEntry.isEmpty || !entryUsesKeytab) {
-      setAuthenticationConfig(parent, driver, options)
-    }
   }
 }

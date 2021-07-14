@@ -60,4 +60,5 @@ case class LeafOp(override val supportsColumnar: Boolean) extends LeafExecNode {
 case class UnaryOp(child: SparkPlan, override val supportsColumnar: Boolean) extends UnaryExecNode {
   override protected def doExecute(): RDD[InternalRow] = throw new UnsupportedOperationException()
   override def output: Seq[Attribute] = child.output
+  override protected def withNewChildInternal(newChild: SparkPlan): UnaryOp = copy(child = newChild)
 }
