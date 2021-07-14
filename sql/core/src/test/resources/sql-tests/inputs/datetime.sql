@@ -278,3 +278,18 @@ SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 60.007);
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678);
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678, 'CET');
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 60.007);
+
+-- datetime with year outside [0000-9999]
+select date'999999-03-18';
+select date'-0001-1-28';
+select date'0015';
+select cast('015' as date);
+select cast('2021-4294967297-11' as date);
+
+select timestamp'-1969-12-31 16:00:00';
+select timestamp'0015-03-18 16:00:00';
+select timestamp'-000001';
+select timestamp'99999-03-18T12:03:17';
+select cast('4294967297' as timestamp);
+select cast('2021-01-01T12:30:4294967297.123456' as timestamp);
+

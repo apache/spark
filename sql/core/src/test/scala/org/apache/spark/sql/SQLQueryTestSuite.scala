@@ -143,6 +143,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected override def sparkConf: SparkConf = super.sparkConf
     // Fewer shuffle partitions to speed up testing.
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
+    // use Java 8 time API to handle negative years properly
+    .set(SQLConf.DATETIME_JAVA8API_ENABLED, true)
 
   // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
   // here we need to ignore it.
