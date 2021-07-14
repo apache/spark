@@ -49,10 +49,6 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         return pd.Series([1, 2, 3]).astype(CategoricalDtype([3, 2, 1], ordered=True))
 
     @property
-    def disordered_psser(self):
-        return ps.Series([1, 2, 3]).astype(CategoricalDtype([3, 2, 1]))
-
-    @property
     def ordered_psser(self):
         return ps.from_pandas(self.ordered_pser)
 
@@ -63,6 +59,10 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
     def other_ordered_psser(self):
         return ps.from_pandas(self.other_ordered_pser)
+
+    @property
+    def unordered_psser(self):
+        return ps.Series([1, 2, 3]).astype(CategoricalDtype([3, 2, 1]))
 
     def test_add(self):
         self.assertRaises(TypeError, lambda: self.psser + "x")
@@ -228,12 +228,12 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assertRaisesRegex(
                 TypeError,
                 "Unordered Categoricals can only compare equality or not",
-                lambda: self.disordered_psser < ordered_psser,
+                lambda: self.unordered_psser < ordered_psser,
             )
             self.assertRaisesRegex(
                 TypeError,
                 "Categoricals can only be compared if 'categories' are the same",
-                lambda: ordered_psser < self.disordered_psser,
+                lambda: ordered_psser < self.unordered_psser,
             )
             self.assertRaisesRegex(
                 TypeError,
@@ -261,12 +261,12 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assertRaisesRegex(
                 TypeError,
                 "Unordered Categoricals can only compare equality or not",
-                lambda: self.disordered_psser <= ordered_psser,
+                lambda: self.unordered_psser <= ordered_psser,
             )
             self.assertRaisesRegex(
                 TypeError,
                 "Categoricals can only be compared if 'categories' are the same",
-                lambda: ordered_psser <= self.disordered_psser,
+                lambda: ordered_psser <= self.unordered_psser,
             )
             self.assertRaisesRegex(
                 TypeError,
@@ -295,12 +295,12 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assertRaisesRegex(
                 TypeError,
                 "Unordered Categoricals can only compare equality or not",
-                lambda: self.disordered_psser > ordered_psser,
+                lambda: self.unordered_psser > ordered_psser,
             )
             self.assertRaisesRegex(
                 TypeError,
                 "Categoricals can only be compared if 'categories' are the same",
-                lambda: ordered_psser > self.disordered_psser,
+                lambda: ordered_psser > self.unordered_psser,
             )
             self.assertRaisesRegex(
                 TypeError,
@@ -327,12 +327,12 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assertRaisesRegex(
                 TypeError,
                 "Unordered Categoricals can only compare equality or not",
-                lambda: self.disordered_psser >= ordered_psser,
+                lambda: self.unordered_psser >= ordered_psser,
             )
             self.assertRaisesRegex(
                 TypeError,
                 "Categoricals can only be compared if 'categories' are the same",
-                lambda: ordered_psser >= self.disordered_psser,
+                lambda: ordered_psser >= self.unordered_psser,
             )
             self.assertRaisesRegex(
                 TypeError,
