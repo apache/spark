@@ -652,6 +652,8 @@ $(document).ready(function () {
           });
 
         // Prepare data for speculation metrics
+        $("#speculationSummaryTitle").hide()
+        $("#speculationSummary").hide()
         var speculationMetricsEndpoint = endPoint + '/' + stageAttemptId + '/speculationSummary';
         $.getJSON(speculationMetricsEndpoint, function(specResponse, status, jqXHR) {
           var speculationData = [[
@@ -661,6 +663,11 @@ $(document).ready(function () {
             specResponse.numFailedTasks,
             specResponse.numKilledTasks
           ]];
+          if (specResponse.numTasks > 0) {
+            // Show speculationSummary if there is atleast one speculated task ran
+            $("#speculationSummaryTitle").show()
+            $("#speculationSummary").show()
+          }
           var speculationMetricsTableConf = {
             "data": speculationData,
             "paging": false,
