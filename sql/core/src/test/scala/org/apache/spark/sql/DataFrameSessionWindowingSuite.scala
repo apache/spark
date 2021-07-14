@@ -93,7 +93,6 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
     )
   }
 
-  // FIXME: fix the failing test - check if it still fails or not
   test("session window groupBy with multiple keys statement - one distinct") {
     val df = Seq(
       ("2016-03-27 19:39:34", 1, "a"),

@@ -191,19 +191,21 @@ class UpdatingSessionsIterator(
   }
 
   private def closeCurrentSession(keyChanged: Boolean): Unit = {
-    assert(returnRowsIter == null || !returnRowsIter.hasNext)
-
     returnRows = rowsForCurrentSession
     rowsForCurrentSession = null
 
-    val groupingKey = generateGroupingKey()
+    val groupingKey = generateGroupingKey().copy()
 
     val currentRowsIter = returnRows.generateIterator().map { internalRow =>
       val valueRow = valueProj(internalRow)
       restoreProj(join2(groupingKey, valueRow)).copy()
     }
 
-    returnRowsIter = currentRowsIter
+    if (returnRowsIter != null && returnRowsIter.hasNext) {
+      returnRowsIter = returnRowsIter ++ currentRowsIter
+    } else {
+      returnRowsIter = currentRowsIter
+    }
 
     if (keyChanged) processedKeys.add(currentKeys)
 
