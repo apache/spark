@@ -24,8 +24,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolumeClaim,
-  PersistentVolumeClaimBuilder, Pod, PodBuilder, PodSpec, PodSpecBuilder, PodTemplateSpec}
+import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolumeClaim, Pod, PodBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -44,7 +43,8 @@ private[spark] class ExecutorPodsAllocator(
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
-    clock: Clock) extends Logging {
+    clock: Clock) extends AbstractPodsAllocator(
+    conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, clock) with Logging {
 
   private val EXECUTOR_ID_COUNTER = new AtomicInteger(0)
 
@@ -57,9 +57,6 @@ private[spark] class ExecutorPodsAllocator(
   private val podAllocationSize = conf.get(KUBERNETES_ALLOCATION_BATCH_SIZE)
 
   private val podAllocationDelay = conf.get(KUBERNETES_ALLOCATION_BATCH_DELAY)
-
-  // TODO: Change to statefulSet?
-  private val useReplicasets = conf.get(KUBERNETES_ALLOCATION_REPLICASET)
 
   private val podCreationTimeout = math.max(
     podAllocationDelay * 5,
@@ -115,10 +112,8 @@ private[spark] class ExecutorPodsAllocator(
           .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
       }
     }
-    if (!useReplicasets) {
-      snapshotsStore.addSubscriber(podAllocationDelay) {
-        onNewSnapshots(applicationId, schedulerBackend, _)
-      }
+    snapshotsStore.addSubscriber(podAllocationDelay) {
+      onNewSnapshots(applicationId, schedulerBackend, _)
     }
   }
 
@@ -128,9 +123,6 @@ private[spark] class ExecutorPodsAllocator(
     resourceProfileToTotalExecs.foreach { case (rp, numExecs) =>
       rpIdToResourceProfile.getOrElseUpdate(rp.id, rp)
       totalExpectedExecutorsPerResourceProfileId.put(rp.id, numExecs)
-      if (useReplicasets) {
-        setTargetExecutorsReplicaset(numExecs, applicationId, rp.id)
-      }
     }
     logDebug(s"Set total expected execs to $totalExpectedExecutorsPerResourceProfileId")
     if (numOutstandingPods.get() == 0) {
@@ -310,8 +302,8 @@ private[spark] class ExecutorPodsAllocator(
       }
 
       if (newlyCreatedExecutorsForRpId.isEmpty
-        && knownPodCount < targetNum && !useReplicasets) {
-        requestNewExecutorsDirect(targetNum, knownPodCount, applicationId, rpId, k8sKnownPVCNames)
+        && knownPodCount < targetNum) {
+        requestNewExecutors(targetNum, knownPodCount, applicationId, rpId, k8sKnownPVCNames)
       }
 
       totalPendingCount += knownPendingCount
@@ -358,73 +350,7 @@ private[spark] class ExecutorPodsAllocator(
     }
   }
 
-  // For now just track the sets created, in the future maybe track requested value too.
-  val setsCreated = new mutable.HashSet[Int]()
-
-  private def setTargetExecutorsReplicaset(
-      expected: Int,
-      applicationId: String,
-      resourceProfileId: Int): Unit = {
-    val setName = s"spark-s-${applicationId}-${resourceProfileId}"
-    if (setsCreated.contains(resourceProfileId)) {
-      // TODO Update the replicaset with our new target.
-    } else {
-      // We need to make the new replicaset which is going to involve building
-      // a pod.
-      val executorConf = KubernetesConf.createExecutorConf(
-        conf,
-        "EXECID",// template exec IDs
-        applicationId,
-        driverPod,
-        resourceProfileId)
-      val resolvedExecutorSpec = executorBuilder.buildFromFeatures(executorConf, secMgr,
-        kubernetesClient, rpIdToResourceProfile(resourceProfileId))
-      val executorPod = resolvedExecutorSpec.pod
-      val podWithAttachedContainer: PodSpec = new PodSpecBuilder(executorPod.pod.getSpec())
-        .addToContainers(executorPod.container)
-        .build()
-
-      val meta = executorPod.pod.getMetadata()
-
-      // Create a pod template spec from the pod.
-      val podTemplateSpec = new PodTemplateSpec(meta, podWithAttachedContainer)
-      // Resources that need to be created, volumes are per-pod which is all we care about here.
-      val resources = resolvedExecutorSpec.executorKubernetesResources
-      // We'll let PVCs be handled by the statefulset, we need
-      val volumes = resources
-        .filter(_.getKind == "PersistentVolumeClaim")
-        .map { hm =>
-          val v = hm.asInstanceOf[PersistentVolumeClaim]
-          new PersistentVolumeClaimBuilder(v)
-            .editMetadata()
-              .withName(v.getMetadata().getName().replace("EXECID", ""))
-            .endMetadata()
-            .build()
-        }.asJava
-
-      val statefulSet = new io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder()
-        .withNewMetadata()
-          .withName(setName)
-          .withNamespace(conf.get(KUBERNETES_NAMESPACE))
-        .endMetadata()
-        .withNewSpec()
-          .withPodManagementPolicy("Parallel")
-          .withReplicas(expected)
-          .withNewSelector()
-            .addToMatchLabels(SPARK_APP_ID_LABEL, applicationId)
-            .addToMatchLabels(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-            .addToMatchLabels(SPARK_RESOURCE_PROFILE_ID_LABEL, resourceProfileId.toString)
-          .endSelector()
-          .withTemplate(podTemplateSpec)
-          .addAllToVolumeClaimTemplates(volumes)
-        .endSpec()
-        .build()
-
-      kubernetesClient.apps().statefulSets().create(statefulSet)
-    }
-  }
-
-  private def requestNewExecutorsDirect(
+  private def requestNewExecutors(
       expected: Int,
       running: Int,
       applicationId: String,
@@ -516,5 +442,8 @@ private[spark] class ExecutorPodsAllocator(
         logDebug(s"Cannot get startTime of pod ${state.pod}")
         true
     }
+  }
+
+  override def stop(applicationId: String): Unit = {
   }
 }

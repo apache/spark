@@ -62,7 +62,7 @@ object ExecutorPodsSnapshot extends Logging {
   private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, ExecutorPodState] = {
     executorPods.map { pod =>
       pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) match {
-        case "EXECID" | null=>
+        case "EXECID" | null =>
           // The pod has been created by something other than Spark and we should process
           // pod the name to get the ID instead of the label.
           val execIdRE = ".+-([0-9]+)".r
