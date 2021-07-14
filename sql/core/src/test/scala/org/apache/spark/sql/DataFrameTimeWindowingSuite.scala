@@ -45,19 +45,21 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-21590: tumbling window using negative start time") {
-    val df = Seq(
-      ("2016-03-27 19:39:30", 1, "a"),
-      ("2016-03-27 19:39:25", 2, "a")).toDF("time", "value", "id")
-
-    checkAnswer(
-      df.groupBy(window($"time", "10 seconds", "10 seconds", "-5 seconds"))
-        .agg(count("*").as("counts"))
-        .orderBy($"window.start".asc)
-        .select($"window.start".cast("string"), $"window.end".cast("string"), $"counts"),
-      Seq(
-        Row("2016-03-27 19:39:25", "2016-03-27 19:39:35", 2)
+    def doTest(df: DataFrame): Unit = {
+      checkAnswer(
+        df.groupBy(window($"time", "10 seconds", "10 seconds", "-5 seconds"))
+          .agg(count("*").as("counts"))
+          .orderBy($"window.start".asc)
+          .select($"window.start".cast("string"), $"window.end".cast("string"), $"counts"),
+        Seq(
+          Row("2016-03-27 19:39:25", "2016-03-27 19:39:35", 2)
+        )
       )
-    )
+    }
+    doTest(Seq(("2016-03-27 19:39:30", 1, "a"),
+      ("2016-03-27 19:39:25", 2, "a")).toDF("time", "value", "id"))
+    doTest(Seq((LocalDateTime.parse("2016-03-27T19:39:30"), 1, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:25"), 2, "a")).toDF("time", "value", "id"))
   }
 
   test("tumbling window groupBy statement") {
