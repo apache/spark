@@ -399,7 +399,6 @@ class JacksonParser(
     val row = new GenericInternalRow(schema.length)
     var badRecordException: Option[Throwable] = None
     var skipRow = false
-    var checkedIndexSet = Set.empty[Int]
 
     structFilters.reset()
     while (!skipRow && nextUntil(parser, JsonToken.END_OBJECT)) {
@@ -413,7 +412,6 @@ class JacksonParser(
             }
             row.update(index, fieldValue)
             skipRow = structFilters.skipRow(row, index)
-            checkedIndexSet += index
           } catch {
             case e: SparkUpgradeException => throw e
             case e: IllegalSchemaArgumentException => throw e
@@ -427,16 +425,19 @@ class JacksonParser(
     }
 
     // When the input schema is setting to `nullable = false`, make sure the field is not null.
-    var index = 0
-    while (badRecordException.isEmpty && !skipRow && index < schema.length) {
-      if (!schema(index).nullable && row.isNullAt(index)) {
-        throw new IllegalSchemaArgumentException(
-          s"field ${schema(index).name} is not nullable but it's missing in one record.")
+    // As PERMISSIVE mode only works with nullable fields, we can skip this not nullable check when
+    // the mode is PERMISSIVE. (see FailureSafeParser.disableNotNullableForPermissiveMode)
+    val checkNotNullable =
+      badRecordException.isEmpty && !skipRow && options.parseMode != PermissiveMode
+    if (checkNotNullable) {
+      var index = 0
+      while (index < schema.length) {
+        if (!schema(index).nullable && row.isNullAt(index)) {
+          throw new IllegalSchemaArgumentException(
+            s"field ${schema(index).name} is not nullable but it's missing in one record.")
+        }
+        index += 1
       }
-      if (!checkedIndexSet.contains(index)) {
-        skipRow = structFilters.skipRow(row, index)
-      }
-      index += 1
     }
 
     if (skipRow) {
