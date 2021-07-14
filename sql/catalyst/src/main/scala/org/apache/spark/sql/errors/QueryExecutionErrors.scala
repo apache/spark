@@ -26,7 +26,7 @@ import java.time.temporal.ChronoField
 import java.util.ConcurrentModificationException
 import java.util.concurrent.TimeoutException
 
-import com.fasterxml.jackson.core.JsonToken
+import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
@@ -960,8 +960,12 @@ object QueryExecutionErrors {
     new RuntimeException("Parsing JSON arrays as structs is forbidden.")
   }
 
-  def cannotParseStringAsDataTypeError(str: String, dataType: DataType): Throwable = {
-    new RuntimeException(s"Cannot parse $str as ${dataType.catalogString}.")
+  def cannotParseStringAsDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
+  : Throwable = {
+    new RuntimeException(
+      s"Cannot parse field name ${parser.getCurrentName}, " +
+        s"field value ${parser.getText}, " +
+        s"[$token] as target spark data type [$dataType].")
   }
 
   def failToParseEmptyStringForDataTypeError(dataType: DataType): Throwable = {
@@ -969,9 +973,12 @@ object QueryExecutionErrors {
       s"Failed to parse an empty string for data type ${dataType.catalogString}")
   }
 
-  def failToParseValueForDataTypeError(dataType: DataType, token: JsonToken): Throwable = {
+  def failToParseValueForDataTypeError(parser: JsonParser, token: JsonToken, dataType: DataType)
+  : Throwable = {
     new RuntimeException(
-      s"Failed to parse a value for data type ${dataType.catalogString} (current token: $token).")
+      s"Failed to parse field name ${parser.getCurrentName}, " +
+        s"field value ${parser.getText}, " +
+        s"[$token] to target spark data type [$dataType].")
   }
 
   def rootConverterReturnNullError(): Throwable = {
