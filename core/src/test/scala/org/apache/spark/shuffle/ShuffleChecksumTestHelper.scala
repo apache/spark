@@ -18,7 +18,7 @@
 package org.apache.spark.shuffle
 
 import java.io.{DataInputStream, File, FileInputStream}
-import java.util.zip.{Adler32, CheckedInputStream}
+import java.util.zip.CheckedInputStream
 
 import org.apache.spark.network.util.LimitedInputStream
 import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper
