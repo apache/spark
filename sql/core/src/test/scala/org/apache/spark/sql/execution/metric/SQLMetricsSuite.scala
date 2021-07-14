@@ -789,15 +789,20 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
   }
 
   test("SPARK-34399: Add job commit duration metrics for DataWritingCommand") {
-    withTable("t") {
+    withTable("t", "t2") {
       sql("CREATE TABLE t(id STRING) USING PARQUET")
-      val df = sql("INSErT INTO TABLE t SELECT 'abc'")
+      sql("INSERT INTO TABLE t SELECT 'abc'")
+      sql("INSERT INTO TABLE t SELECT 'abc'")
+      sql("INSERT INTO TABLE t SELECT 'abc'")
+      sql("CREATE TABLE t2(id STRING) USING PARQUET")
+      val df = sql("INSERT INTO TABLE t2 SELECT * FROM  t")
       val insert = df.queryExecution.executedPlan.collect {
-        case dataWriting: DataWritingCommandExec => dataWriting.cmd
+        case CommandResultExec(_, dataWriting: DataWritingCommandExec, _) => dataWriting.cmd
       }
       assert(insert.size == 1)
       assert(insert.head.metrics.contains("jobCommitDuration"))
       assert(insert.head.metrics("jobCommitDuration").value > 1)
+      assert(insert.head.metrics("taskWriteAndCommitDuration").value > 1)
     }
   }
 

@@ -44,7 +44,6 @@ case class BasicWriteTaskStats(
     numRows: Long)
   extends WriteTaskStats
 
-
 /**
  * Simple [[WriteTaskStatsTracker]] implementation that produces [[BasicWriteTaskStats]].
  */
@@ -183,7 +182,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
  */
 class BasicWriteJobStatsTracker(
     serializableHadoopConf: SerializableConfiguration,
-    @transient val metrics: Map[String, SQLMetric])
+    val metrics: Map[String, SQLMetric])
   extends WriteJobStatsTracker {
 
   override def newTaskInstance(): WriteTaskStatsTracker = {
@@ -215,6 +214,10 @@ class BasicWriteJobStatsTracker(
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toList)
   }
+
+  override def updateTaskWriteAndCommitDuration(duration: Long): Unit = {
+    metrics(BasicWriteJobStatsTracker.DURATION_OF_TASK_WRITE_AND_COMMIT) += duration
+  }
 }
 
 object BasicWriteJobStatsTracker {
@@ -222,6 +225,7 @@ object BasicWriteJobStatsTracker {
   private val NUM_OUTPUT_BYTES_KEY = "numOutputBytes"
   private val NUM_OUTPUT_ROWS_KEY = "numOutputRows"
   private val NUM_PARTS_KEY = "numParts"
+  private val DURATION_OF_TASK_WRITE_AND_COMMIT = "taskWriteAndCommitDuration"
   private val DURATION_JOB_COMMIT = "jobCommitDuration"
   /** XAttr key of the data length header added in HADOOP-17414. */
   val FILE_LENGTH_XATTR = "header.x-hadoop-s3a-magic-data-length"
@@ -233,6 +237,8 @@ object BasicWriteJobStatsTracker {
       NUM_OUTPUT_BYTES_KEY -> SQLMetrics.createSizeMetric(sparkContext, "written output"),
       NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
+      DURATION_OF_TASK_WRITE_AND_COMMIT ->
+        SQLMetrics.createTimingMetric(sparkContext, "duration of task write and commit"),
       DURATION_JOB_COMMIT->
         SQLMetrics.createTimingMetric(sparkContext, "duration of committing the job")
     )

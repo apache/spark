@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * Abstract class for writing out data in a single Spark task.
@@ -96,6 +96,15 @@ abstract class FileFormatDataWriter(
       updatedPartitions = updatedPartitions.toSet,
       stats = statsTrackers.map(_.getFinalStats()))
     WriteTaskResult(committer.commitTask(taskAttemptContext), summary)
+  }
+
+  def writeAndCommit(iterator: Iterator[InternalRow]): WriteTaskResult = {
+    val (res, timeCost) = Utils.timeTakenMs {
+      writeWithIterator(iterator)
+      commit()
+    }
+    description.statsTrackers.foreach(_.updateTaskWriteAndCommitDuration(timeCost))
+    res
   }
 
   def abort(): Unit = {

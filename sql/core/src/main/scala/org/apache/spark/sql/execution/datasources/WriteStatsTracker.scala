@@ -104,4 +104,6 @@ trait WriteJobStatsTracker extends Serializable {
    * The framework will make sure to call this with the right arguments.
    */
   def processStats(stats: Seq[WriteTaskStats], jobCommitDuration: Long): Unit
+
+  def updateTaskWriteAndCommitDuration(duration: Long): Unit
 }
