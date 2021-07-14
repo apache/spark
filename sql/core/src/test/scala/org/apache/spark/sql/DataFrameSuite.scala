@@ -2413,16 +2413,18 @@ class DataFrameSuite extends QueryTest
     checkMetrics(namedObservation.get, unnamedObservation.get)
 
     // an observation can be used only once
-    assertThrows[IllegalStateException] {
+    val err = intercept[IllegalArgumentException] {
       spark.range(100).observe(namedObservation, sum($"id").as("sum_val"))
     }
+    assert(err.getMessage.contains("An Observation can be used with a Dataset only once"))
 
     // streaming datasets are not supported
     val streamDf = new MemoryStream[Int](0, sqlContext).toDF()
     val streamObservation = Observation("stream")
-    assertThrows[IllegalArgumentException] {
+    val streamErr = intercept[IllegalArgumentException] {
       streamDf.observe(streamObservation, avg($"value").cast("int").as("avg_val"))
     }
+    assert(streamErr.getMessage.contains("Observation does not support streaming Datasets"))
   }
 
   test("SPARK-25159: json schema inference should only trigger one job") {

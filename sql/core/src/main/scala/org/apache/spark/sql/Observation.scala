@@ -94,7 +94,7 @@ class Observation(name: String) {
     // all other threads will see the exception, as it is only allowed to do this once
     synchronized {
       if (this.sparkSession.isDefined) {
-        throw new IllegalStateException("An Observation can be used with a Dataset only once")
+        throw new IllegalArgumentException("An Observation can be used with a Dataset only once")
       }
       this.sparkSession = Some(sparkSession)
     }
