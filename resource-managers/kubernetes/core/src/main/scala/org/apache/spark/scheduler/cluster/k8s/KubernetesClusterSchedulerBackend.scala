@@ -46,7 +46,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     kubernetesClient: KubernetesClient,
     executorService: ScheduledExecutorService,
     snapshotsStore: ExecutorPodsSnapshotsStore,
-    podAllocator: ExecutorPodsAllocator,
+    podAllocator: AbstractPodsAllocator,
     lifecycleEventHandler: ExecutorPodsLifecycleManager,
     watchEvents: ExecutorPodsWatchSnapshotSource,
     pollEvents: ExecutorPodsPollingSnapshotSource)

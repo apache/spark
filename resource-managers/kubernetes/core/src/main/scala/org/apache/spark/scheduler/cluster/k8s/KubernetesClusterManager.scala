@@ -109,13 +109,24 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       kubernetesClient,
       snapshotsStore)
 
-    val executorPodsAllocator = new ExecutorPodsAllocator(
-      sc.conf,
-      sc.env.securityManager,
-      new KubernetesExecutorBuilder(),
-      kubernetesClient,
-      snapshotsStore,
-      new SystemClock())
+    val executorPodsAllocator = sc.conf.get(KUBERNETES_ALLOCATION_PODSALLOCATOR) match {
+      case "statefulset" =>
+        new StatefulsetPodsAllocator(
+          sc.conf,
+          sc.env.securityManager,
+          new KubernetesExecutorBuilder(),
+          kubernetesClient,
+          snapshotsStore,
+          new SystemClock())
+      case "direct" =>
+        new ExecutorPodsAllocator(
+          sc.conf,
+          sc.env.securityManager,
+          new KubernetesExecutorBuilder(),
+          kubernetesClient,
+          snapshotsStore,
+          new SystemClock())
+    }
 
     val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
       snapshotsStore,
