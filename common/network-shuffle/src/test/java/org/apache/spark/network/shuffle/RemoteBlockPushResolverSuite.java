@@ -915,7 +915,18 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test(expected = IllegalArgumentException.class)
-  public void testBlockReceivedAfterNewAttemptRegistered() throws IOException {
+  public void testBlockReceivedAfterNewAttemptRegistered()
+      throws IOException, InterruptedException {
+    Semaphore closed = new Semaphore(0);
+    pushResolver = new RemoteBlockPushResolver(conf) {
+      @Override
+      void closeAndDeletePartitionFilesIfNeeded(
+        AppShuffleInfo appShuffleInfo,
+        boolean cleanupLocalDirs) {
+        super.closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs);
+        closed.release();
+      }
+    };
     String testApp = "updateLocalDirsTwiceWithTwoAttempts";
     Path[] attempt1LocalDirs = createLocalDirs(1);
     registerExecutor(testApp,
@@ -953,6 +964,7 @@ public class RemoteBlockPushResolverSuite {
       stream2.onData(stream2.getID(), block);
     }
     stream2.onComplete(stream2.getID());
+    closed.acquire();
     // Check if all the file channels created for the first attempt are safely closed.
     for (Map<Integer, RemoteBlockPushResolver.AppShufflePartitionInfo> partitionMap :
         partitions.values()) {
