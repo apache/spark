@@ -1692,7 +1692,9 @@ class AdaptiveQueryExecSuite
         val (_, adaptive) = runAdaptiveAndVerifyResult("SELECT c1, count(*) FROM t GROUP BY c1")
         assert(
           collect(adaptive) {
-            case c @ CustomShuffleReaderExec(_, partitionSpecs) if partitionSpecs.length == 1 => c
+            case c @ CustomShuffleReaderExec(_, partitionSpecs) if partitionSpecs.length == 1 =>
+              assert(c.hasCoalescedPartition)
+              c
           }.length == 1
         )
       }
