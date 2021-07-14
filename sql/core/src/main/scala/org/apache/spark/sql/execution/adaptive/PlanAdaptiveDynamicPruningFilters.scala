@@ -72,7 +72,7 @@ case class PlanAdaptiveDynamicPruningFilters(
 
           val session = adaptivePlan.context.session
           val planner = adaptivePlan.context.session.sessionState.planner
-          val sparkPlan = QueryExecution.createSparkPlan(session, planner, aggregate)
+          val sparkPlan = QueryExecution.prepareExecutedPlan(session, aggregate)
           val newAdaptivePlan = adaptivePlan.copy(inputPlan = sparkPlan)
           val values = SubqueryExec(name, newAdaptivePlan)
           DynamicPruningExpression(InSubqueryExec(value, values, exprId))
