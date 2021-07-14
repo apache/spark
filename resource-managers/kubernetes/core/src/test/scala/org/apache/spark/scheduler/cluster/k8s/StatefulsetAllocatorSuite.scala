@@ -53,7 +53,9 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     .set(KUBERNETES_DRIVER_POD_NAME, driverPodName)
     .set(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT.key, "10s")
 
+
   private val defaultProfile: ResourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf)
+  private val secondProfile: ResourceProfile = ResourceProfile.getOrCreateDefaultProfile(conf)
 
   private val secMgr = new SecurityManager(conf)
 
@@ -67,6 +69,9 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   @Mock
   private var statefulSetOperations: MixedOperation[
     apps.StatefulSet, apps.StatefulSetList, RollableScalableResource[apps.StatefulSet]] = _
+
+  @Mock
+  private var editableSet: RollableScalableResource[apps.StatefulSet] = _
 
   @Mock
   private var podOperations: PODS = _
@@ -99,6 +104,7 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(kubernetesClient.pods()).thenReturn(podOperations)
     when(kubernetesClient.apps()).thenReturn(appOperations)
     when(appOperations.statefulSets()).thenReturn(statefulSetOperations)
+    when(statefulSetOperations.withName(any())).thenReturn(editableSet)
     when(podOperations.withName(driverPodName)).thenReturn(driverPodOperations)
     when(driverPodOperations.get).thenReturn(driverPod)
     when(driverPodOperations.waitUntilReady(any(), any())).thenReturn(driverPod)
@@ -111,19 +117,35 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
   }
 
-  test("Validate initial statefulSet creation with scale") {
+  test("Validate initial statefulSet creation with two resource profiles") {
+    val rprof = new ResourceProfileBuilder()
+    val taskReq = new TaskResourceRequests().resource("gpu", 1)
+    val execReq =
+      new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
+    rprof.require(taskReq).require(execReq)
+    val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
+    podsAllocatorUnderTest.setTotalExpectedExecutors(appId,
+      Map(defaultProfile -> (10),
+          immrprof -> (420)))
+    val captor = ArgumentCaptor.forClass(classOf[StatefulSet])
+    verify(statefulSetOperations, times(2)).create(any())
+  }
+
+  test("Validate statefulSet scale up") {
     podsAllocatorUnderTest.setTotalExpectedExecutors(appId,
       Map(defaultProfile -> (10)))
     val captor = ArgumentCaptor.forClass(classOf[StatefulSet])
     verify(statefulSetOperations, times(1)).create(captor.capture())
     val set = captor.getValue()
     val setName = set.getMetadata().getName()
-    assert(setName.endsWith("-0")) // Resource profile
     val namespace = set.getMetadata().getNamespace()
     assert(namespace === "default")
     val spec = set.getSpec()
     assert(spec.getReplicas() === 10)
     assert(spec.getPodManagementPolicy() === "Parallel")
     verify(podOperations, never()).create(any())
+    podsAllocatorUnderTest.setTotalExpectedExecutors(appId,
+      Map(defaultProfile -> (20)))
+    verify(editableSet, times(1)).scale(any(), any())
   }
 }

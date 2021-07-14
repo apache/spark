@@ -97,7 +97,7 @@ private[spark] class StatefulsetPodsAllocator(
     if (setsCreated.contains(resourceProfileId)) {
       val statefulset = kubernetesClient.apps().statefulSets().withName(
         setName(applicationId, resourceProfileId: Int))
-      statefulset.scale(expected)
+      statefulset.scale(expected, false /* wait */)
     } else {
       // We need to make the new replicaset which is going to involve building
       // a pod.
@@ -151,6 +151,7 @@ private[spark] class StatefulsetPodsAllocator(
         .build()
 
       kubernetesClient.apps().statefulSets().create(statefulSet)
+      setsCreated += (resourceProfileId)
     }
   }
 
