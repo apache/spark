@@ -25,8 +25,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import io.fabric8.kubernetes.api.model.{HasMetadata, PersistentVolumeClaim,
-  PersistentVolumeClaimBuilder, Pod, PodBuilder, PodSpec, PodSpecBuilder, PodTemplateSpec,
-  PodTemplateSpecBuilder}
+  PersistentVolumeClaimBuilder, Pod, PodBuilder, PodSpec, PodSpecBuilder, PodTemplateSpec}
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException}
@@ -416,14 +415,13 @@ private[spark] class ExecutorPodsAllocator(
           .withNewSelector()
             .addToMatchLabels(SPARK_APP_ID_LABEL, applicationId)
             .addToMatchLabels(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-            .addToMatchLabels(RESOURCE_PROFILE_LABEL, resourceProfileId.toString)
+            .addToMatchLabels(SPARK_RESOURCE_PROFILE_ID_LABEL, resourceProfileId.toString)
           .endSelector()
           .withTemplate(podTemplateSpec)
           .addAllToVolumeClaimTemplates(volumes)
         .endSpec()
         .build()
 
-      addOwnerReference(driverPod.get, statefulSet)
       kubernetesClient.apps().statefulSets().create(statefulSet)
     }
   }
