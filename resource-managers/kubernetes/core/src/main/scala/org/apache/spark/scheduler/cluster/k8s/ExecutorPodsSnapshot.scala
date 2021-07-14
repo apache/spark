@@ -61,7 +61,22 @@ object ExecutorPodsSnapshot extends Logging {
 
   private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, ExecutorPodState] = {
     executorPods.map { pod =>
-      (pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL).toLong, toState(pod))
+      pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) match {
+        case "EXECID" | null=>
+          // The pod has been created by something other than Spark and we should process
+          // pod the name to get the ID instead of the label.
+          val execIdRE = ".+-([0-9]+)".r
+          val podName = pod.getMetadata.getName
+          podName match {
+            case execIdRE(id) =>
+              (id.toLong, toState(pod))
+            case _ =>
+              throw new Exception(s"Failed to parse podname ${podName}")
+          }
+        case id =>
+          // We have a "real" id label
+          (id.toLong, toState(pod))
+      }
     }.toMap
   }
 
