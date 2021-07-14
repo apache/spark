@@ -117,7 +117,7 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
   }
 
-  test("Validate initial statefulSet creation with two resource profiles") {
+  test("Validate initial statefulSet creation & cleanup with two resource profiles") {
     val rprof = new ResourceProfileBuilder()
     val taskReq = new TaskResourceRequests().resource("gpu", 1)
     val execReq =
@@ -129,6 +129,8 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
           immrprof -> (420)))
     val captor = ArgumentCaptor.forClass(classOf[StatefulSet])
     verify(statefulSetOperations, times(2)).create(any())
+    podsAllocatorUnderTest.stop(appId)
+    verify(editableSet, times(2)).delete()
   }
 
   test("Validate statefulSet scale up") {
