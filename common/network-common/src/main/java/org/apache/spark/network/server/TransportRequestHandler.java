@@ -62,16 +62,21 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   /** The max number of chunks being transferred and not finished yet. */
   private final long maxChunksBeingTransferred;
 
+  /** The dedicated ChannelHandler for ChunkFetchRequest messages. */
+  private final ChunkFetchRequestHandler chunkFetchRequestHandler;
+
   public TransportRequestHandler(
       Channel channel,
       TransportClient reverseClient,
       RpcHandler rpcHandler,
-      Long maxChunksBeingTransferred) {
+      Long maxChunksBeingTransferred,
+      ChunkFetchRequestHandler chunkFetchRequestHandler) {
     this.channel = channel;
     this.reverseClient = reverseClient;
     this.rpcHandler = rpcHandler;
     this.streamManager = rpcHandler.getStreamManager();
     this.maxChunksBeingTransferred = maxChunksBeingTransferred;
+    this.chunkFetchRequestHandler = chunkFetchRequestHandler;
   }
 
   @Override
@@ -97,8 +102,10 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
   }
 
   @Override
-  public void handle(RequestMessage request) {
-    if (request instanceof RpcRequest) {
+  public void handle(RequestMessage request) throws Exception {
+    if (request instanceof ChunkFetchRequest) {
+      chunkFetchRequestHandler.processFetchRequest(channel, (ChunkFetchRequest) request);
+    } else if (request instanceof RpcRequest) {
       processRpcRequest((RpcRequest) request);
     } else if (request instanceof OneWayMessage) {
       processOneWayMessage((OneWayMessage) request);
@@ -106,6 +113,8 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       processStreamRequest((StreamRequest) request);
     } else if (request instanceof UploadStream) {
       processStreamUpload((UploadStream) request);
+    } else if (request instanceof MergedBlockMetaRequest) {
+      processMergedBlockMetaRequest((MergedBlockMetaRequest) request);
     } else {
       throw new IllegalArgumentException("Unknown request type: " + request);
     }
@@ -117,12 +126,14 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         req.streamId);
     }
 
-    long chunksBeingTransferred = streamManager.chunksBeingTransferred();
-    if (chunksBeingTransferred >= maxChunksBeingTransferred) {
-      logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
-        chunksBeingTransferred, maxChunksBeingTransferred);
-      channel.close();
-      return;
+    if (maxChunksBeingTransferred < Long.MAX_VALUE) {
+      long chunksBeingTransferred = streamManager.chunksBeingTransferred();
+      if (chunksBeingTransferred >= maxChunksBeingTransferred) {
+        logger.warn("The number of chunks being transferred {} is above {}, close the connection.",
+          chunksBeingTransferred, maxChunksBeingTransferred);
+        channel.close();
+        return;
+      }
     }
     ManagedBuffer buf;
     try {
@@ -248,6 +259,30 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
       logger.error("Error while invoking RpcHandler#receive() for one-way message.", e);
     } finally {
       req.body().release();
+    }
+  }
+
+  private void processMergedBlockMetaRequest(final MergedBlockMetaRequest req) {
+    try {
+      rpcHandler.getMergedBlockMetaReqHandler().receiveMergeBlockMetaReq(reverseClient, req,
+        new MergedBlockMetaResponseCallback() {
+
+          @Override
+          public void onSuccess(int numChunks, ManagedBuffer buffer) {
+            logger.trace("Sending meta for request {} numChunks {}", req, numChunks);
+            respond(new MergedBlockMetaSuccess(req.requestId, numChunks, buffer));
+          }
+
+          @Override
+          public void onFailure(Throwable e) {
+            logger.trace("Failed to send meta for {}", req);
+            respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+          }
+      });
+    } catch (Exception e) {
+      logger.error("Error while invoking receiveMergeBlockMetaReq() for appId {} shuffleId {} "
+        + "reduceId {}", req.appId, req.shuffleId, req.appId, e);
+      respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
     }
   }
 

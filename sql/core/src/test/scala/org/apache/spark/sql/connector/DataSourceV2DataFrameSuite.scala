@@ -22,8 +22,10 @@ import java.util.Collections
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan}
-import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog}
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.QueryExecutionListener
 
@@ -141,7 +143,7 @@ class DataSourceV2DataFrameSuite
       override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {
         plan = qe.analyzed
       }
-      override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
+      override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
     }
 
     try {
@@ -170,20 +172,39 @@ class DataSourceV2DataFrameSuite
   }
 
   test("Cannot write data with intervals to v2") {
-    withTable("testcat.table_name") {
-      val testCatalog = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
-      testCatalog.createTable(
-        Identifier.of(Array(), "table_name"),
-        new StructType().add("i", "interval"),
-        Array.empty, Collections.emptyMap[String, String])
-      val df = sql("select interval 1 day as i")
-      val v2Writer = df.writeTo("testcat.table_name")
-      val e1 = intercept[AnalysisException](v2Writer.append())
-      assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
-      val e2 = intercept[AnalysisException](v2Writer.overwrite(df("i")))
-      assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
-      val e3 = intercept[AnalysisException](v2Writer.overwritePartitions())
-      assert(e3.getMessage.contains(s"Cannot use interval type in the table schema."))
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      withTable("testcat.table_name") {
+        val testCatalog = spark.sessionState.catalogManager.catalog("testcat").asTableCatalog
+        testCatalog.createTable(
+          Identifier.of(Array(), "table_name"),
+          new StructType().add("i", "interval"),
+          Array.empty, Collections.emptyMap[String, String])
+        val df = sql(s"select interval 1 millisecond as i")
+        val v2Writer = df.writeTo("testcat.table_name")
+        val e1 = intercept[AnalysisException](v2Writer.append())
+        assert(e1.getMessage.contains(s"Cannot use interval type in the table schema."))
+        val e2 = intercept[AnalysisException](v2Writer.overwrite(df("i")))
+        assert(e2.getMessage.contains(s"Cannot use interval type in the table schema."))
+        val e3 = intercept[AnalysisException](v2Writer.overwritePartitions())
+        assert(e3.getMessage.contains(s"Cannot use interval type in the table schema."))
+      }
+    }
+  }
+
+  test("options to scan v2 table should be passed to DataSourceV2Relation") {
+    val t1 = "testcat.ns1.ns2.tbl"
+    withTable(t1) {
+      val df1 = Seq((1L, "a"), (2L, "b"), (3L, "c")).toDF("id", "data")
+      df1.write.saveAsTable(t1)
+
+      val optionName = "fakeOption"
+      val df2 = spark.read
+        .option(optionName, false)
+        .table(t1)
+      val options = df2.queryExecution.analyzed.collectFirst {
+        case d: DataSourceV2Relation => d.options
+      }.get
+      assert(options.get(optionName) === "false")
     }
   }
 }

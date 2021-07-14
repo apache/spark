@@ -91,7 +91,7 @@ class KinesisBackedBlockRDD[T: ClassTag](
   require(_blockIds.length == arrayOfseqNumberRanges.length,
     "Number of blockIds is not equal to the number of sequence number ranges")
 
-  override def isValid(): Boolean = true
+  override def isValid: Boolean = true
 
   override def getPartitions: Array[Partition] = {
     Array.tabulate(_blockIds.length) { i =>

@@ -19,10 +19,10 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStatistics, CatalogTableType}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 
@@ -34,7 +34,7 @@ import org.apache.spark.sql.types._
 case class AnalyzeColumnCommand(
     tableIdent: TableIdentifier,
     columnNames: Option[Seq[String]],
-    allColumns: Boolean) extends RunnableCommand {
+    allColumns: Boolean) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     require(columnNames.isDefined ^ allColumns, "Parameter `columnNames` or `allColumns` are " +
@@ -44,7 +44,7 @@ case class AnalyzeColumnCommand(
     tableIdent.database match {
       case Some(db) if db == sparkSession.sharedState.globalTempViewManager.database =>
         val plan = sessionState.catalog.getGlobalTempView(tableIdent.identifier).getOrElse {
-          throw new NoSuchTableException(db = db, table = tableIdent.identifier)
+          throw QueryCompilationErrors.noSuchTableError(db, tableIdent.identifier)
         }
         analyzeColumnInTempView(plan, sparkSession)
       case Some(_) =>
@@ -61,9 +61,10 @@ case class AnalyzeColumnCommand(
 
   private def analyzeColumnInCachedData(plan: LogicalPlan, sparkSession: SparkSession): Boolean = {
     val cacheManager = sparkSession.sharedState.cacheManager
-    cacheManager.lookupCachedData(plan).map { cachedData =>
+    val planToLookup = sparkSession.sessionState.executePlan(plan).analyzed
+    cacheManager.lookupCachedData(planToLookup).map { cachedData =>
       val columnsToAnalyze = getColumnsToAnalyze(
-        tableIdent, cachedData.plan, columnNames, allColumns)
+        tableIdent, cachedData.cachedRepresentation, columnNames, allColumns)
       cacheManager.analyzeColumnCacheQuery(sparkSession, cachedData, columnsToAnalyze)
       cachedData
     }.isDefined
@@ -71,9 +72,7 @@ case class AnalyzeColumnCommand(
 
   private def analyzeColumnInTempView(plan: LogicalPlan, sparkSession: SparkSession): Unit = {
     if (!analyzeColumnInCachedData(plan, sparkSession)) {
-      val catalog = sparkSession.sessionState.catalog
-      val db = tableIdent.database.getOrElse(catalog.getCurrentDatabase)
-      throw new NoSuchTableException(db = db, table = tableIdent.identifier)
+      throw QueryCompilationErrors.tempViewNotCachedForAnalyzingColumnsError(tableIdent)
     }
   }
 
@@ -87,15 +86,14 @@ case class AnalyzeColumnCommand(
     } else {
       columnNames.get.map { col =>
         val exprOption = relation.output.find(attr => conf.resolver(attr.name, col))
-        exprOption.getOrElse(throw new AnalysisException(s"Column $col does not exist."))
+        exprOption.getOrElse(throw QueryCompilationErrors.columnDoesNotExistError(col))
       }
     }
     // Make sure the column types are supported for stats gathering.
     columnsToAnalyze.foreach { attr =>
       if (!supportsType(attr.dataType)) {
-        throw new AnalysisException(
-          s"Column ${attr.name} in table $tableIdent is of type ${attr.dataType}, " +
-            "and Spark does not support statistics collection on this column type.")
+        throw QueryCompilationErrors.columnTypeNotSupportStatisticsCollectionError(
+          attr.name, tableIdent, attr.dataType)
       }
     }
     columnsToAnalyze
@@ -108,7 +106,7 @@ case class AnalyzeColumnCommand(
       // Analyzes a catalog view if the view is cached
       val plan = sparkSession.table(tableIdent.quotedString).logicalPlan
       if (!analyzeColumnInCachedData(plan, sparkSession)) {
-        throw new AnalysisException("ANALYZE TABLE is not supported on views.")
+        throw QueryCompilationErrors.analyzeTableNotSupportedOnViewsError()
       }
     } else {
       val sizeInBytes = CommandUtils.calculateTotalSize(sparkSession, tableMeta)

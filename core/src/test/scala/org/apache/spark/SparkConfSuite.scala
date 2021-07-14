@@ -221,7 +221,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.registerKryoClasses(Array(classOf[Class1]))
     assert(conf.get(KRYO_CLASSES_TO_REGISTER).toSet === Seq(classOf[Class1].getName).toSet)
 
-    conf.set(KRYO_USER_REGISTRATORS, classOf[CustomRegistrator].getName)
+    conf.set(KRYO_USER_REGISTRATORS, Seq(classOf[CustomRegistrator].getName))
 
     // Kryo doesn't expose a way to discover registered classes, but at least make sure this doesn't
     // blow up.
@@ -461,7 +461,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     val conf = new SparkConf()
     conf.set(TASK_GPU_ID.amountConf, "2")
     conf.set(TASK_FPGA_ID.amountConf, "0")
-    var taskResourceRequirement =
+    val taskResourceRequirement =
       parseResourceRequirements(conf, SPARK_TASK_PREFIX)
         .map(req => (req.resourceName, req.amount)).toMap
 

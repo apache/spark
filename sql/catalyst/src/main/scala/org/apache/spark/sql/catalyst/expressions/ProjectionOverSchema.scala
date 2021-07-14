@@ -34,14 +34,22 @@ case class ProjectionOverSchema(schema: StructType) {
     expr match {
       case a: AttributeReference if fieldNames.contains(a.name) =>
         Some(a.copy(dataType = schema(a.name).dataType)(a.exprId, a.qualifier))
-      case GetArrayItem(child, arrayItemOrdinal) =>
-        getProjection(child).map { projection => GetArrayItem(projection, arrayItemOrdinal) }
+      case GetArrayItem(child, arrayItemOrdinal, failOnError) =>
+        getProjection(child).map {
+          projection => GetArrayItem(projection, arrayItemOrdinal, failOnError)
+        }
       case a: GetArrayStructFields =>
         getProjection(a.child).map(p => (p, p.dataType)).map {
           case (projection, ArrayType(projSchema @ StructType(_), _)) =>
+            // For case-sensitivity aware field resolution, we should take `ordinal` which
+            // points to correct struct field, because `ExtractValue` actually does column
+            // name resolving correctly.
+            val selectedField = a.child.dataType.asInstanceOf[ArrayType]
+              .elementType.asInstanceOf[StructType](a.ordinal)
+            val prunedField = projSchema(selectedField.name)
             GetArrayStructFields(projection,
-              projSchema(a.field.name),
-              projSchema.fieldIndex(a.field.name),
+              prunedField.copy(name = a.field.name),
+              projSchema.fieldIndex(selectedField.name),
               projSchema.size,
               a.containsNull)
           case (_, projSchema) =>
@@ -53,8 +61,8 @@ case class ProjectionOverSchema(schema: StructType) {
         getProjection(child).map { projection => MapKeys(projection) }
       case MapValues(child) =>
         getProjection(child).map { projection => MapValues(projection) }
-      case GetMapValue(child, key) =>
-        getProjection(child).map { projection => GetMapValue(projection, key) }
+      case GetMapValue(child, key, failOnError) =>
+        getProjection(child).map { projection => GetMapValue(projection, key, failOnError) }
       case GetStructFieldObject(child, field: StructField) =>
         getProjection(child).map(p => (p, p.dataType)).map {
           case (projection, projSchema: StructType) =>

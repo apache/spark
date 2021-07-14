@@ -59,12 +59,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] {
 
       val wrappedScan = scan match {
         case v1: V1Scan =>
-          val translated = filters.flatMap(DataSourceStrategy.translateFilter)
+          val translated = filters.flatMap(DataSourceStrategy.translateFilter(_, true))
           V1ScanWrapper(v1, translated, pushedFilters)
         case _ => scan
       }
 
-      val scanRelation = DataSourceV2ScanRelation(relation.table, wrappedScan, output)
+      val scanRelation = DataSourceV2ScanRelation(relation, wrappedScan, output)
 
       val projectionOverSchema = ProjectionOverSchema(output.toStructType)
       val projectionFunc = (expr: Expression) => expr transformDown {

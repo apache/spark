@@ -40,11 +40,11 @@ private[spark] class ApplicationMasterSource(prefix: String, yarnAllocator: Yarn
   })
 
   metricRegistry.register(MetricRegistry.name("numLocalityAwareTasks"), new Gauge[Int] {
-    override def getValue: Int = yarnAllocator.numLocalityAwareTasks
+    override def getValue: Int = yarnAllocator.getNumLocalityAwareTasks
   })
 
   metricRegistry.register(MetricRegistry.name("numContainersPendingAllocate"), new Gauge[Int] {
-    override def getValue: Int = yarnAllocator.numContainersPendingAllocate
+    override def getValue: Int = yarnAllocator.getNumContainersPendingAllocate
   })
 
 }

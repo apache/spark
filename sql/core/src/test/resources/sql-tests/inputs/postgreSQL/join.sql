@@ -13,12 +13,18 @@
 
 --CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=10485760
 --CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=true
---CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.preferSortMergeJoin=false
+--CONFIG_DIM1 spark.sql.autoBroadcastJoinThreshold=-1,spark.sql.join.forceApplyShuffledHashJoin=true
 
 --CONFIG_DIM2 spark.sql.codegen.wholeStage=true
 --CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=CODEGEN_ONLY
 --CONFIG_DIM2 spark.sql.codegen.wholeStage=false,spark.sql.codegen.factoryMode=NO_CODEGEN
 
+CREATE OR REPLACE TEMPORARY VIEW INT2_TBL(f1) AS VALUES
+  (smallint(trim('0   '))),
+  (smallint(trim('  1234 '))),
+  (smallint(trim('    -1234'))),
+  (smallint('32767')),
+  (smallint('-32767'));
 CREATE OR REPLACE TEMPORARY VIEW INT4_TBL AS SELECT * FROM
   (VALUES (0), (123456), (-123456), (2147483647), (-2147483647))
   AS v(f1);
@@ -743,20 +749,25 @@ select * from a left join b on i = x and i = y and x = i;
 --
 -- test NULL behavior of whole-row Vars, per bug #5025
 --
-select t1.q2, count(t2.*)
+--- [SPARK-34199] changed the `count(t2.*)` to `count(t2.q1, t2.q2)` since we have
+--- blocked `count(tblName.*)`. Besides this, in pgsql, `count(t2.*)` of outter join
+--- means how many matching rows produced by t2 while Spark SQL doesn't have this semantic.
+--- So here we use `count(t2.q1, t2.q2)` instead of `count(1)` to keep the query output
+--- unchanged.
+select t1.q2, count(t2.q1, t2.q2)
 from int8_tbl t1 left join int8_tbl t2 on (t1.q2 = t2.q1)
 group by t1.q2 order by 1;
 
-select t1.q2, count(t2.*)
+select t1.q2, count(t2.q1, t2.q2)
 from int8_tbl t1 left join (select * from int8_tbl) t2 on (t1.q2 = t2.q1)
 group by t1.q2 order by 1;
 
 -- [SPARK-28330] Enhance query limit
--- select t1.q2, count(t2.*)
+-- select t1.q2, count(t2.q1, t2.q2)
 -- from int8_tbl t1 left join (select * from int8_tbl offset 0) t2 on (t1.q2 = t2.q1)
 -- group by t1.q2 order by 1;
 
-select t1.q2, count(t2.*)
+select t1.q2, count(t2.q1, t2.q2)
 from int8_tbl t1 left join
   (select q1, case when q2=1 then 1 else q2 end as q2 from int8_tbl) t2
   on (t1.q2 = t2.q1)
@@ -884,7 +895,7 @@ from nt3 as nt3
     on ss2.id = nt3.nt2_id
 where nt3.id = 1 and ss2.b3;
 
--- [SPARK-28379] Correlated scalar subqueries must be aggregated
+-- Accessing outer query column is not allowed in LocalLimit
 --
 -- test case where a PlaceHolderVar is propagated into a subquery
 --
@@ -1612,22 +1623,21 @@ select uunique1 from
 --
 -- Test LATERAL
 --
-
--- select unique2, x.*
--- from tenk1 a, lateral (select * from int4_tbl b where f1 = a.unique1) x;
+select unique2, x.*
+from tenk1 a, lateral (select * from int4_tbl b where f1 = a.unique1) x;
 -- explain (costs off)
 --   select unique2, x.*
 --   from tenk1 a, lateral (select * from int4_tbl b where f1 = a.unique1) x;
--- select unique2, x.*
--- from int4_tbl x, lateral (select unique2 from tenk1 where f1 = unique1) ss;
+select unique2, x.*
+from int4_tbl x, lateral (select unique2 from tenk1 where f1 = unique1) ss;
 -- explain (costs off)
 --   select unique2, x.*
 --   from int4_tbl x, lateral (select unique2 from tenk1 where f1 = unique1) ss;
 -- explain (costs off)
 --   select unique2, x.*
 --   from int4_tbl x cross join lateral (select unique2 from tenk1 where f1 = unique1) ss;
--- select unique2, x.*
--- from int4_tbl x left join lateral (select unique1, unique2 from tenk1 where f1 = unique1) ss on true;
+select unique2, x.*
+from int4_tbl x left join lateral (select unique1, unique2 from tenk1 where f1 = unique1) ss on true;
 -- explain (costs off)
 --   select unique2, x.*
 --   from int4_tbl x left join lateral (select unique1, unique2 from tenk1 where f1 = unique1) ss on true;
@@ -1635,6 +1645,7 @@ select uunique1 from
 -- [SPARK-27877] ANSI SQL: LATERAL derived table(T491)
 -- check scoping of lateral versus parent references
 -- the first of these should return int8_tbl.q2, the second int8_tbl.q1
+-- Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses
 -- select *, (select r from (select q1 as q2) x, (select q2 as r) y) from int8_tbl;
 -- select *, (select r from (select q1 as q2) x, lateral (select q2 as r) y) from int8_tbl;
 
@@ -1683,12 +1694,12 @@ select uunique1 from
 --   order by a.q1, a.q2, x.q1, x.q2, ss.z;
 
 -- lateral reference to a join alias variable
--- select * from (select f1/2 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1,
---   lateral (select x) ss2(y);
+ select * from (select f1/2 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1,
+   lateral (select x) ss2(y);
 -- select * from (select f1 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1,
 --   lateral (values(x)) ss2(y);
--- select * from ((select f1/2 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1) j,
---   lateral (select x) ss2(y);
+ select * from ((select f1/2 as x from int4_tbl) ss1 join int4_tbl i4 on x = f1) j,
+   lateral (select x) ss2(y);
 
 -- lateral references requiring pullup
 -- select * from (values(1)) x(lb),
@@ -1702,20 +1713,23 @@ select uunique1 from
 -- select * from
 --   int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
 --   lateral (values(x.q1,y.q1,y.q2)) v(xq1,yq1,yq2);
--- select * from
---   int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
---   lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2);
--- select x.* from
---   int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
---   lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2);
+select * from
+  int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
+  lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2);
+select x.* from
+  int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1,
+  lateral (select x.q1,y.q1,y.q2) v(xq1,yq1,yq2);
+-- Accessing outer query column is not allowed in Union
 -- select v.* from
 --   (int8_tbl x left join (select q1,coalesce(q2,0) q2 from int8_tbl) y on x.q2 = y.q1)
 --   left join int4_tbl z on z.f1 = x.q2,
 --   lateral (select x.q1,y.q1 union all select x.q2,y.q2) v(vx,vy);
+-- Accessing outer query column is not allowed in Union
 -- select v.* from
 --   (int8_tbl x left join (select q1,(select coalesce(q2,0)) q2 from int8_tbl) y on x.q2 = y.q1)
 --   left join int4_tbl z on z.f1 = x.q2,
 --   lateral (select x.q1,y.q1 union all select x.q2,y.q2) v(vx,vy);
+-- Expressions referencing the outer query are not supported outside of WHERE/HAVING clauses
 -- select v.* from
 --   (int8_tbl x left join (select q1,(select coalesce(q2,0)) q2 from int8_tbl) y on x.q2 = y.q1)
 --   left join int4_tbl z on z.f1 = x.q2,
@@ -1725,24 +1739,24 @@ select uunique1 from
 -- select * from
 --   int8_tbl a left join
 --   lateral (select *, a.q2 as x from int8_tbl b) ss on a.q2 = ss.q1;
--- select * from
---   int8_tbl a left join
---   lateral (select *, a.q2 as x from int8_tbl b) ss on a.q2 = ss.q1;
+select * from
+  int8_tbl a left join
+  lateral (select *, a.q2 as x from int8_tbl b) ss on a.q2 = ss.q1;
 -- explain (verbose, costs off)
 -- select * from
 --   int8_tbl a left join
 --   lateral (select *, coalesce(a.q2, 42) as x from int8_tbl b) ss on a.q2 = ss.q1;
--- select * from
---   int8_tbl a left join
---   lateral (select *, coalesce(a.q2, 42) as x from int8_tbl b) ss on a.q2 = ss.q1;
+select * from
+  int8_tbl a left join
+  lateral (select *, coalesce(a.q2, 42) as x from int8_tbl b) ss on a.q2 = ss.q1;
 
 -- lateral can result in join conditions appearing below their
 -- real semantic level
 -- explain (verbose, costs off)
 -- select * from int4_tbl i left join
 --   lateral (select * from int2_tbl j where i.f1 = j.f1) k on true;
--- select * from int4_tbl i left join
---   lateral (select * from int2_tbl j where i.f1 = j.f1) k on true;
+select * from int4_tbl i left join
+  lateral (select * from int2_tbl j where i.f1 = j.f1) k on true;
 -- explain (verbose, costs off)
 -- select * from int4_tbl i left join
 --   lateral (select coalesce(i) from int2_tbl j where i.f1 = j.f1) k on true;
@@ -1765,11 +1779,11 @@ select uunique1 from
 --   (select b.q1 as bq1, c.q1 as cq1, least(a.q1,b.q1,c.q1) from
 --    int8_tbl b cross join int8_tbl c) ss
 --   on a.q2 = ss.bq1;
--- select * from
---   int8_tbl a left join lateral
---   (select b.q1 as bq1, c.q1 as cq1, least(a.q1,b.q1,c.q1) from
---    int8_tbl b cross join int8_tbl c) ss
---   on a.q2 = ss.bq1;
+select * from
+  int8_tbl a left join lateral
+  (select b.q1 as bq1, c.q1 as cq1, least(a.q1,b.q1,c.q1) from
+   int8_tbl b cross join int8_tbl c) ss
+  on a.q2 = ss.bq1;
 
 -- case requiring nested PlaceHolderVars
 -- explain (verbose, costs off)

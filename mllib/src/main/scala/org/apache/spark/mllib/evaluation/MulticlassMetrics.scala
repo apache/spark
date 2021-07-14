@@ -283,7 +283,8 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[_ <: Product])
         (loss * weight, weight)
 
       case other =>
-        throw new IllegalArgumentException(s"Expected quadruples, got $other")
+        throw new IllegalArgumentException(s"Invalid RDD value for MulticlassMetrics.logLoss. " +
+          s"Expected quadruples, got $other")
     }.treeReduce { case ((l1, w1), (l2, w2)) =>
       (l1 + l2, w1 + w2)
     }

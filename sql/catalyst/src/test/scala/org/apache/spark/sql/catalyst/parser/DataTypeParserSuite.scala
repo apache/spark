@@ -18,9 +18,12 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
 
-class DataTypeParserSuite extends SparkFunSuite {
+class DataTypeParserSuite extends SparkFunSuite with SQLHelper {
 
   def parse(sql: String): DataType = CatalystSqlParser.parseDataType(sql)
 
@@ -55,13 +58,18 @@ class DataTypeParserSuite extends SparkFunSuite {
   checkDataType("deC", DecimalType.USER_DEFAULT)
   checkDataType("DATE", DateType)
   checkDataType("timestamp", TimestampType)
+  checkDataType("timestamp_ntz", TimestampNTZType)
+  checkDataType("timestamp_ltz", TimestampType)
   checkDataType("string", StringType)
-  checkDataType("ChaR(5)", StringType)
-  checkDataType("ChaRacter(5)", StringType)
-  checkDataType("varchAr(20)", StringType)
-  checkDataType("cHaR(27)", StringType)
+  checkDataType("ChaR(5)", CharType(5))
+  checkDataType("ChaRacter(5)", CharType(5))
+  checkDataType("varchAr(20)", VarcharType(20))
+  checkDataType("cHaR(27)", CharType(27))
   checkDataType("BINARY", BinaryType)
+  checkDataType("void", NullType)
   checkDataType("interval", CalendarIntervalType)
+  checkDataType("INTERVAL YEAR TO MONTH", YearMonthIntervalType())
+  checkDataType("interval day to second", DayTimeIntervalType())
 
   checkDataType("array<doublE>", ArrayType(DoubleType, true))
   checkDataType("Array<map<int, tinYint>>", ArrayType(MapType(IntegerType, ByteType, true), true))
@@ -102,9 +110,9 @@ class DataTypeParserSuite extends SparkFunSuite {
         StructType(
           StructField("deciMal", DecimalType.USER_DEFAULT, true) ::
           StructField("anotherDecimal", DecimalType(5, 2), true) :: Nil), true) ::
-      StructField("MAP", MapType(TimestampType, StringType), true) ::
+      StructField("MAP", MapType(TimestampType, VarcharType(10)), true) ::
       StructField("arrAy", ArrayType(DoubleType, true), true) ::
-      StructField("anotherArray", ArrayType(StringType, true), true) :: Nil)
+      StructField("anotherArray", ArrayType(CharType(9), true), true) :: Nil)
   )
   // Use backticks to quote column names having special characters.
   checkDataType(
@@ -112,19 +120,33 @@ class DataTypeParserSuite extends SparkFunSuite {
     StructType(
       StructField("x+y", IntegerType, true) ::
       StructField("!@#$%^&*()", StringType, true) ::
-      StructField("1_2.345<>:\"", StringType, true) :: Nil)
+      StructField("1_2.345<>:\"", VarcharType(20), true) :: Nil)
   )
   // Empty struct.
   checkDataType("strUCt<>", StructType(Nil))
+  // struct data type definition without ":"
+  checkDataType("struct<x int, y string>",
+    StructType(
+      StructField("x", IntegerType, true) ::
+      StructField("y", StringType, true) :: Nil)
+  )
 
   unsupported("it is not a data type")
   unsupported("struct<x+y: int, 1.1:timestamp>")
   unsupported("struct<x: int")
-  unsupported("struct<x int, y string>")
 
   test("Do not print empty parentheses for no params") {
-    assert(intercept("unkwon").getMessage.contains("unkwon is not supported"))
-    assert(intercept("unkwon(1,2,3)").getMessage.contains("unkwon(1,2,3) is not supported"))
+    assert(intercept("unknown").getMessage.contains("unknown is not supported"))
+    assert(intercept("unknown(1,2,3)").getMessage.contains("unknown(1,2,3) is not supported"))
+  }
+
+  test("Set default timestamp type") {
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_NTZ.toString) {
+      assert(parse("timestamp") === TimestampNTZType)
+    }
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> TimestampTypes.TIMESTAMP_LTZ.toString) {
+      assert(parse("timestamp") === TimestampType)
+    }
   }
 
   // DataType parser accepts certain reserved keywords.

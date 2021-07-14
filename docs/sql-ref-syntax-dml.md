@@ -21,5 +21,5 @@ license: |
 
 Data Manipulation Statements are used to add, change, or delete data. Spark SQL supports the following Data Manipulation Statements:
 
-- [INSERT](sql-ref-syntax-dml-insert.html)
-- [LOAD](sql-ref-syntax-dml-load.html)
+* [INSERT](sql-ref-syntax-dml-insert.html)
+* [LOAD](sql-ref-syntax-dml-load.html)

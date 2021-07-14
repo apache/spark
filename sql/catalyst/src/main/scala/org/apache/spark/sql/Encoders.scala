@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.{BoundReference, Cast}
 import org.apache.spark.sql.catalyst.expressions.objects.{DecodeUsingSerializer, EncodeUsingSerializer}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -114,6 +115,14 @@ object Encoders {
   def LOCALDATE: Encoder[java.time.LocalDate] = ExpressionEncoder()
 
   /**
+   * Creates an encoder that serializes instances of the `java.time.LocalDateTime` class
+   * to the internal representation of nullable Catalyst's TimestampNTZType.
+   *
+   * @since 3.2.0
+   */
+  def LOCALDATETIME: Encoder[java.time.LocalDateTime] = ExpressionEncoder()
+
+  /**
    * An encoder for nullable timestamp type.
    *
    * @since 1.6.0
@@ -136,6 +145,22 @@ object Encoders {
   def BINARY: Encoder[Array[Byte]] = ExpressionEncoder()
 
   /**
+   * Creates an encoder that serializes instances of the `java.time.Duration` class
+   * to the internal representation of nullable Catalyst's DayTimeIntervalType.
+   *
+   * @since 3.2.0
+   */
+  def DURATION: Encoder[java.time.Duration] = ExpressionEncoder()
+
+  /**
+   * Creates an encoder that serializes instances of the `java.time.Period` class
+   * to the internal representation of nullable Catalyst's YearMonthIntervalType.
+   *
+   * @since 3.2.0
+   */
+  def PERIOD: Encoder[java.time.Period] = ExpressionEncoder()
+
+  /**
    * Creates an encoder for Java Bean of type T.
    *
    * T must be publicly accessible.
@@ -146,7 +171,7 @@ object Encoders {
    *  - String
    *  - java.math.BigDecimal, java.math.BigInteger
    *  - time related: java.sql.Date, java.sql.Timestamp, java.time.LocalDate, java.time.Instant
-   *  - collection types: only array and java.util.List currently, map support is in progress
+   *  - collection types: array, java.util.List, and map
    *  - nested java bean.
    *
    * @since 1.6.0
@@ -200,16 +225,14 @@ object Encoders {
   /** Throws an exception if T is not a public class. */
   private def validatePublicClass[T: ClassTag](): Unit = {
     if (!Modifier.isPublic(classTag[T].runtimeClass.getModifiers)) {
-      throw new UnsupportedOperationException(
-        s"${classTag[T].runtimeClass.getName} is not a public class. " +
-          "Only public classes are supported.")
+      throw QueryExecutionErrors.notPublicClassError(classTag[T].runtimeClass.getName)
     }
   }
 
   /** A way to construct encoders using generic serializers. */
   private def genericSerializer[T: ClassTag](useKryo: Boolean): Encoder[T] = {
     if (classTag[T].runtimeClass.isPrimitive) {
-      throw new UnsupportedOperationException("Primitive types are not supported.")
+      throw QueryExecutionErrors.primitiveTypesNotSupportedError()
     }
 
     validatePublicClass[T]()

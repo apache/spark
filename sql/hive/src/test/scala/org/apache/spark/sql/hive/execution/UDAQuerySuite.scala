@@ -17,23 +17,15 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.lang.{Double => jlDouble, Integer => jlInt, Long => jlLong}
-
-import scala.collection.JavaConverters._
-import scala.util.Random
-
-import test.org.apache.spark.sql.MyDoubleAvg
-import test.org.apache.spark.sql.MyDoubleSum
+import java.lang.{Double => jlDouble, Long => jlLong}
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
-import org.apache.spark.sql.catalyst.expressions.UnsafeRow
-import org.apache.spark.sql.expressions.{Aggregator}
+import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 
@@ -119,6 +111,27 @@ object CountSerDeAgg extends Aggregator[Int, CountSerDeSQL, CountSerDeSQL] {
   def outputEncoder: Encoder[CountSerDeSQL] = ExpressionEncoder[CountSerDeSQL]()
 }
 
+object ArrayDataAgg extends Aggregator[Array[Double], Array[Double], Array[Double]] {
+  def zero: Array[Double] = Array(0.0, 0.0, 0.0)
+  def reduce(s: Array[Double], array: Array[Double]): Array[Double] = {
+    require(s.length == array.length)
+    for ( j <- 0 until s.length ) {
+      s(j) += array(j)
+    }
+    s
+  }
+  def merge(s1: Array[Double], s2: Array[Double]): Array[Double] = {
+    require(s1.length == s2.length)
+    for ( j <- 0 until s1.length ) {
+      s1(j) += s2(j)
+    }
+    s1
+  }
+  def finish(s: Array[Double]): Array[Double] = s
+  def bufferEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]
+  def outputEncoder: Encoder[Array[Double]] = ExpressionEncoder[Array[Double]]
+}
+
 abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import testImplicits._
 
@@ -156,20 +169,11 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
       (3, null, null)).toDF("key", "value1", "value2")
     data2.write.saveAsTable("agg2")
 
-    val data3 = Seq[(Seq[Integer], Integer, Integer)](
-      (Seq[Integer](1, 1), 10, -10),
-      (Seq[Integer](null), -60, 60),
-      (Seq[Integer](1, 1), 30, -30),
-      (Seq[Integer](1), 30, 30),
-      (Seq[Integer](2), 1, 1),
-      (null, -10, 10),
-      (Seq[Integer](2, 3), -1, null),
-      (Seq[Integer](2, 3), 1, 1),
-      (Seq[Integer](2, 3, 4), null, 1),
-      (Seq[Integer](null), 100, -10),
-      (Seq[Integer](3), null, 3),
-      (null, null, null),
-      (Seq[Integer](3), null, null)).toDF("key", "value1", "value2")
+    val data3 = Seq[(Seq[Double], Int)](
+      (Seq(1.0, 2.0, 3.0), 0),
+      (Seq(4.0, 5.0, 6.0), 0),
+      (Seq(7.0, 8.0, 9.0), 0)
+    ).toDF("data", "dummy")
     data3.write.saveAsTable("agg3")
 
     val data4 = Seq[Boolean](true, false, true).toDF("boolvalues")
@@ -184,6 +188,7 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
     spark.udf.register("mydoublesum", udaf(MyDoubleSumAgg))
     spark.udf.register("mydoubleavg", udaf(MyDoubleAvgAgg))
     spark.udf.register("longProductSum", udaf(LongProductSumAgg))
+    spark.udf.register("arraysum", udaf(ArrayDataAgg))
   }
 
   override def afterAll(): Unit = {
@@ -352,6 +357,12 @@ abstract class UDAQuerySuite extends QueryTest with SQLTestUtils with TestHiveSi
         Row(1, 2, 40, 3, -10, 3, -100, 3, 70, 3, -10, -100, 3, 3) ::
         Row(2, 2, 0, 1, 1, 1, 1, 3, 1, 3, 3, 2, 4, 4) ::
         Row(3, 0, null, 1, 3, 0, 0, 0, null, 1, 3, 0, 2, 2) :: Nil)
+  }
+
+  test("SPARK-32159: array encoders should be resolved in analyzer") {
+    checkAnswer(
+      spark.sql("SELECT arraysum(data) FROM agg3"),
+      Row(Seq(12.0, 15.0, 18.0)) :: Nil)
   }
 
   test("verify aggregator ser/de behavior") {

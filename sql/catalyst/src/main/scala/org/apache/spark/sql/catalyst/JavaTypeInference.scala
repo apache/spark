@@ -21,6 +21,7 @@ import java.beans.{Introspector, PropertyDescriptor}
 import java.lang.{Iterable => JIterable}
 import java.lang.reflect.Type
 import java.util.{Iterator => JIterator, List => JList, Map => JMap}
+import javax.annotation.Nonnull
 
 import scala.language.existentials
 
@@ -32,6 +33,7 @@ import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.ArrayBasedMapData
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -117,6 +119,9 @@ object JavaTypeInference {
       case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
       case c: Class[_] if c == classOf[java.time.Instant] => (TimestampType, true)
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
+      case c: Class[_] if c == classOf[java.time.LocalDateTime] => (TimestampNTZType, true)
+      case c: Class[_] if c == classOf[java.time.Duration] => (DayTimeIntervalType(), true)
+      case c: Class[_] if c == classOf[java.time.Period] => (YearMonthIntervalType(), true)
 
       case _ if typeToken.isArray =>
         val (dataType, nullable) = inferDataType(typeToken.getComponentType, seenTypeSet)
@@ -137,9 +142,7 @@ object JavaTypeInference {
 
       case other =>
         if (seenTypeSet.contains(other)) {
-          throw new UnsupportedOperationException(
-            "Cannot have circular references in bean class, but got the circular reference " +
-              s"of class $other")
+          throw QueryExecutionErrors.cannotHaveCircularReferencesInBeanClassError(other)
         }
 
         // TODO: we should only collect properties that have getter and setter. However, some tests
@@ -148,7 +151,9 @@ object JavaTypeInference {
         val fields = properties.map { property =>
           val returnType = typeToken.method(property.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(returnType, seenTypeSet + other)
-          new StructField(property.getName, dataType, nullable)
+          // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
+          val hasNonNull = property.getReadMethod.isAnnotationPresent(classOf[Nonnull])
+          new StructField(property.getName, dataType, nullable && !hasNonNull)
         }
         (new StructType(fields), true)
     }
@@ -246,6 +251,15 @@ object JavaTypeInference {
       case c if c == classOf[java.sql.Timestamp] =>
         createDeserializerForSqlTimestamp(path)
 
+      case c if c == classOf[java.time.LocalDateTime] =>
+        createDeserializerForLocalDateTime(path)
+
+      case c if c == classOf[java.time.Duration] =>
+        createDeserializerForDuration(path)
+
+      case c if c == classOf[java.time.Period] =>
+        createDeserializerForPeriod(path)
+
       case c if c == classOf[java.lang.String] =>
         createDeserializerForString(path, returnNullable = true)
 
@@ -340,10 +354,12 @@ object JavaTypeInference {
           val fieldType = typeToken.method(p.getReadMethod).getReturnType
           val (dataType, nullable) = inferDataType(fieldType)
           val newTypePath = walkedTypePath.recordField(fieldType.getType.getTypeName, fieldName)
+          // The existence of `javax.annotation.Nonnull`, means this field is not nullable.
+          val hasNonNull = p.getReadMethod.isAnnotationPresent(classOf[Nonnull])
           val setter = expressionWithNullSafety(
             deserializerFor(fieldType, addToPath(path, fieldName, dataType, newTypePath),
               newTypePath),
-            nullable = nullable,
+            nullable = nullable && !hasNonNull,
             newTypePath)
           p.getWriteMethod.getName -> setter
         }.toMap
@@ -397,9 +413,16 @@ object JavaTypeInference {
 
         case c if c == classOf[java.sql.Timestamp] => createSerializerForSqlTimestamp(inputObject)
 
+        case c if c == classOf[java.time.LocalDateTime] =>
+          createSerializerForLocalDateTime(inputObject)
+
         case c if c == classOf[java.time.LocalDate] => createSerializerForJavaLocalDate(inputObject)
 
         case c if c == classOf[java.sql.Date] => createSerializerForSqlDate(inputObject)
+
+        case c if c == classOf[java.time.Duration] => createSerializerForJavaDuration(inputObject)
+
+        case c if c == classOf[java.time.Period] => createSerializerForJavaPeriod(inputObject)
 
         case c if c == classOf[java.math.BigDecimal] =>
           createSerializerForJavaBigDecimal(inputObject)
@@ -442,10 +465,13 @@ object JavaTypeInference {
           val fields = properties.map { p =>
             val fieldName = p.getName
             val fieldType = typeToken.method(p.getReadMethod).getReturnType
+            val hasNonNull = p.getReadMethod.isAnnotationPresent(classOf[Nonnull])
             val fieldValue = Invoke(
               inputObject,
               p.getReadMethod.getName,
-              inferExternalType(fieldType.getRawType))
+              inferExternalType(fieldType.getRawType),
+              propagateNull = !hasNonNull,
+              returnNullable = !hasNonNull)
             (fieldName, serializerFor(fieldValue, fieldType))
           }
           createSerializerForObject(inputObject, fields)

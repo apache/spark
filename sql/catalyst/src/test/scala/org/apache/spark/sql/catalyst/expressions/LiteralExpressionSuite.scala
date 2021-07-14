@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
-import java.time.{Instant, LocalDate, LocalDateTime, ZoneOffset}
+import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneOffset}
+import java.time.temporal.ChronoUnit
 import java.util.TimeZone
 
 import scala.reflect.runtime.universe.TypeTag
@@ -31,6 +32,8 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.DayTimeIntervalType._
+import org.apache.spark.sql.types.YearMonthIntervalType._
 import org.apache.spark.unsafe.types.CalendarInterval
 
 class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -49,6 +52,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create(null, DateType), null)
     checkEvaluation(Literal.create(null, TimestampType), null)
     checkEvaluation(Literal.create(null, CalendarIntervalType), null)
+    checkEvaluation(Literal.create(null, YearMonthIntervalType()), null)
+    checkEvaluation(Literal.create(null, DayTimeIntervalType()), null)
     checkEvaluation(Literal.create(null, ArrayType(ByteType, true)), null)
     checkEvaluation(Literal.create(null, ArrayType(StringType, true)), null)
     checkEvaluation(Literal.create(null, MapType(StringType, IntegerType)), null)
@@ -76,6 +81,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(Literal.default(TimestampType), Instant.ofEpochSecond(0))
     }
     checkEvaluation(Literal.default(CalendarIntervalType), new CalendarInterval(0, 0, 0L))
+    checkEvaluation(Literal.default(YearMonthIntervalType()), 0)
+    checkEvaluation(Literal.default(DayTimeIntervalType()), 0L)
     checkEvaluation(Literal.default(ArrayType(StringType)), Array())
     checkEvaluation(Literal.default(MapType(IntegerType, StringType)), Map())
     checkEvaluation(Literal.default(StructType(StructField("a", StringType) :: Nil)), Row(""))
@@ -187,20 +194,21 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkArrayLiteral(Array(1, 2, 3))
     checkArrayLiteral(Array("a", "b", "c"))
     checkArrayLiteral(Array(1.0, 4.0))
-    checkArrayLiteral(Array(MICROS_PER_DAY, MICROS_PER_HOUR))
+    checkArrayLiteral(Array(new CalendarInterval(1, 0, 0), new CalendarInterval(0, 1, 0)))
     val arr = collection.mutable.WrappedArray.make(Array(1.0, 4.0))
     checkEvaluation(Literal(arr), toCatalyst(arr))
   }
 
   test("seq") {
-    def checkSeqLiteral[T: TypeTag](a: Seq[T], elementType: DataType): Unit = {
+    def checkSeqLiteral[T: TypeTag](a: Seq[T]): Unit = {
       checkEvaluation(Literal.create(a), toCatalyst(a))
     }
-    checkSeqLiteral(Seq(1, 2, 3), IntegerType)
-    checkSeqLiteral(Seq("a", "b", "c"), StringType)
-    checkSeqLiteral(Seq(1.0, 4.0), DoubleType)
-    checkSeqLiteral(Seq(MICROS_PER_DAY, MICROS_PER_HOUR),
-      CalendarIntervalType)
+    checkSeqLiteral(Seq(1, 2, 3))
+    checkSeqLiteral(Seq("a", "b", "c"))
+    checkSeqLiteral(Seq(1.0, 4.0))
+    checkSeqLiteral(Seq(new CalendarInterval(1, 0, 0), new CalendarInterval(0, 1, 0)))
+    checkSeqLiteral(Seq(Period.ZERO, Period.ofMonths(1)))
+    checkSeqLiteral(Seq(Duration.ZERO, Duration.ofDays(1)))
   }
 
   test("map") {
@@ -209,6 +217,8 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
     checkMapLiteral(Map("a" -> 1, "b" -> 2, "c" -> 3))
     checkMapLiteral(Map("1" -> 1.0, "2" -> 2.0, "3" -> 3.0))
+    checkMapLiteral(Map(Period.ofMonths(1) -> Duration.ZERO))
+    assert(Literal.create(Map("a" -> 1)).toString === "map(keys: [a], values: [1])")
   }
 
   test("struct") {
@@ -218,6 +228,7 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkStructLiteral((1, 3.0, "abcde"))
     checkStructLiteral(("de", 1, 2.0f))
     checkStructLiteral((1, ("fgh", 3.0)))
+    checkStructLiteral((Period.ZERO, ("abc", Duration.ofDays(1))))
   }
 
   test("unsupported types (map and struct) in Literal.apply") {
@@ -236,6 +247,15 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Literal.create('0'), "0")
     checkEvaluation(Literal('\u0000'), "\u0000")
     checkEvaluation(Literal.create('\n'), "\n")
+  }
+
+  test("SPARK-33390: Make Literal support char array") {
+    checkEvaluation(Literal(Array('h', 'e', 'l', 'l', 'o')), "hello")
+    checkEvaluation(Literal(Array("hello".toCharArray)), Array("hello"))
+    // scalastyle:off
+    checkEvaluation(Literal(Array('测','试')), "测试")
+    checkEvaluation(Literal(Array('a', '测', 'b', '试', 'c')), "a测b试c")
+    // scalastyle:on
   }
 
   test("construct literals from java.time.LocalDate") {
@@ -314,6 +334,135 @@ class LiteralExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       val expected = "DATE '2019-03-21'"
       val literalStr = Literal.create(date).sql
       assert(literalStr === expected)
+    }
+  }
+
+  test("SPARK-33860: Make CatalystTypeConverters.convertToCatalyst match special Array value") {
+    assert(Literal(Array(1, 2, 3)) == Literal.create(Array(1, 2, 3), ArrayType(IntegerType)))
+    assert(Literal(Array(1L, 2L, 3L)) == Literal.create(Array(1L, 2L, 3L), ArrayType(LongType)))
+    assert(Literal(Array(1D, 2D, 3D)) == Literal.create(Array(1D, 2D, 3D), ArrayType(DoubleType)))
+    assert(Literal("123") == Literal.create(Array('1', '2', '3'), StringType))
+    assert(Literal(Array(1.toByte, 2.toByte, 3.toByte)) ==
+      Literal.create(Array(1.toByte, 2.toByte, 3.toByte), BinaryType))
+    assert(Literal(Array("1", "2", "3")) ==
+      Literal.create(Array("1", "2", "3"), ArrayType(StringType)))
+    assert(Literal(Array(Period.ofMonths(1))) ==
+      Literal.create(Array(Period.ofMonths(1)), ArrayType(YearMonthIntervalType())))
+  }
+
+  test("SPARK-34342: Date/Timestamp toString") {
+    assert(Literal.default(DateType).toString === "1970-01-01")
+    assert(Literal.default(TimestampType).toString === "1969-12-31 16:00:00")
+    withTimeZones(sessionTimeZone = "GMT+01:00", systemTimeZone = "GMT-08:00") {
+      val timestamp = LocalDateTime.of(2021, 2, 3, 16, 50, 3, 456000000)
+        .atZone(ZoneOffset.UTC)
+        .toInstant
+      val literalStr = Literal.create(timestamp).toString
+      assert(literalStr === "2021-02-03 17:50:03.456")
+    }
+  }
+
+  test("SPARK-36055: TimestampNTZ toString") {
+    assert(Literal.default(TimestampNTZType).toString === "1970-01-01 00:00:00")
+    withTimeZones(sessionTimeZone = "GMT+01:00", systemTimeZone = "GMT-08:00") {
+      val timestamp = LocalDateTime.of(2021, 2, 3, 16, 50, 3, 456000000)
+      val literalStr = Literal.create(timestamp).toString
+      assert(literalStr === "2021-02-03 16:50:03.456")
+    }
+  }
+
+  test("SPARK-35664: construct literals from java.time.LocalDateTime") {
+    Seq(
+      LocalDateTime.of(1, 1, 1, 0, 0, 0, 0),
+      LocalDateTime.of(2021, 5, 31, 23, 59, 59, 100),
+      LocalDateTime.of(2020, 2, 29, 23, 50, 57, 9999),
+      LocalDateTime.parse("9999-12-31T23:59:59.999999")
+    ).foreach { dateTime =>
+      checkEvaluation(Literal(dateTime), dateTime)
+    }
+  }
+
+  test("SPARK-34605: construct literals from java.time.Duration") {
+    Seq(
+      Duration.ofNanos(0),
+      Duration.ofSeconds(-1),
+      Duration.ofNanos(123456000),
+      Duration.ofDays(106751991),
+      Duration.ofDays(-106751991)).foreach { duration =>
+      checkEvaluation(Literal(duration), duration)
+    }
+  }
+
+  test("SPARK-34605: construct literals from arrays of java.time.Duration") {
+    val duration0 = Duration.ofDays(2).plusHours(3).plusMinutes(4)
+    checkEvaluation(Literal(Array(duration0)), Array(duration0))
+    val duration1 = Duration.ofHours(-1024)
+    checkEvaluation(Literal(Array(duration0, duration1)), Array(duration0, duration1))
+  }
+
+  test("SPARK-34615: construct literals from java.time.Period") {
+    Seq(
+      Period.ofYears(0),
+      Period.of(-1, 11, 0),
+      Period.of(1, -11, 0),
+      Period.ofMonths(Int.MaxValue),
+      Period.ofMonths(Int.MinValue)).foreach { period =>
+      checkEvaluation(Literal(period), period)
+    }
+  }
+
+  test("SPARK-34615: construct literals from arrays of java.time.Period") {
+    val period0 = Period.ofYears(123).withMonths(456)
+    checkEvaluation(Literal(Array(period0)), Array(period0))
+    val period1 = Period.ofMonths(-1024)
+    checkEvaluation(Literal(Array(period0, period1)), Array(period0, period1))
+  }
+
+  test("SPARK-35099: convert a literal of day-time interval to SQL string") {
+    Seq(
+      Duration.ofDays(-1) -> "-1 00:00:00",
+      Duration.of(10, ChronoUnit.MICROS) -> "0 00:00:00.00001",
+      Duration.of(MICROS_PER_DAY - 1, ChronoUnit.MICROS) -> "0 23:59:59.999999"
+    ).foreach { case (duration, intervalPayload) =>
+      val literal = Literal.apply(duration)
+      val expected = s"INTERVAL '$intervalPayload' DAY TO SECOND"
+      assert(literal.sql === expected)
+      assert(literal.toString === expected)
+    }
+  }
+
+  test("SPARK-35099: convert a literal of year-month interval to SQL string") {
+    Seq(
+      Period.ofYears(-1) -> "-1-0",
+      Period.of(9999, 11, 0) -> "9999-11",
+      Period.ofMonths(-11) -> "-0-11"
+    ).foreach { case (period, intervalPayload) =>
+      val literal = Literal.apply(period)
+      val expected = s"INTERVAL '$intervalPayload' YEAR TO MONTH"
+      assert(literal.sql === expected)
+      assert(literal.toString === expected)
+    }
+  }
+
+  test("SPARK-35871: Literal.create(value, dataType) should support fields") {
+    val period = Period.ofMonths(13)
+    DataTypeTestUtils.yearMonthIntervalTypes.foreach { dt =>
+      val result = dt.endField match {
+        case YEAR => 12
+        case MONTH => 13
+      }
+      checkEvaluation(Literal.create(period, dt), result)
+    }
+
+    val duration = Duration.ofSeconds(86400 + 3600 + 60 + 1)
+    DataTypeTestUtils.dayTimeIntervalTypes.foreach { dt =>
+      val result = dt.endField match {
+        case DAY => 86400000000L
+        case HOUR => 90000000000L
+        case MINUTE => 90060000000L
+        case SECOND => 90061000000L
+      }
+      checkEvaluation(Literal.create(duration, dt), result)
     }
   }
 }

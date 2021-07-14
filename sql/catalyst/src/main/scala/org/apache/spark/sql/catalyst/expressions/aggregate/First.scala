@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, TypeCheckResult}
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{TypeCheckFailure, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckSuccess
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.UnaryLike
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
 
 /**
@@ -47,13 +49,16 @@ import org.apache.spark.sql.types._
     The function is non-deterministic because its results depends on the order of the rows
     which may be non-deterministic after a shuffle.
   """,
+  group = "agg_funcs",
   since = "2.0.0")
-case class First(child: Expression, ignoreNullsExpr: Expression)
-  extends DeclarativeAggregate with ExpectsInputTypes {
+case class First(child: Expression, ignoreNulls: Boolean)
+  extends DeclarativeAggregate with ExpectsInputTypes with UnaryLike[Expression] {
 
-  def this(child: Expression) = this(child, Literal.create(false, BooleanType))
+  def this(child: Expression) = this(child, false)
 
-  override def children: Seq[Expression] = child :: ignoreNullsExpr :: Nil
+  def this(child: Expression, ignoreNullsExpr: Expression) = {
+    this(child, FirstLast.validateIgnoreNullExpr(ignoreNullsExpr, "first"))
+  }
 
   override def nullable: Boolean = true
 
@@ -70,15 +75,10 @@ case class First(child: Expression, ignoreNullsExpr: Expression)
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
-    } else if (!ignoreNullsExpr.foldable) {
-      TypeCheckFailure(
-        s"The second argument of First must be a boolean literal, but got: ${ignoreNullsExpr.sql}")
     } else {
       TypeCheckSuccess
     }
   }
-
-  private def ignoreNulls: Boolean = ignoreNullsExpr.eval().asInstanceOf[Boolean]
 
   private lazy val first = AttributeReference("first", child.dataType)()
 
@@ -117,7 +117,15 @@ case class First(child: Expression, ignoreNullsExpr: Expression)
 
   override lazy val evaluateExpression: AttributeReference = first
 
-  override def prettyName: String = getTagValue(FunctionRegistry.FUNC_ALIAS).getOrElse("first")
-
   override def toString: String = s"$prettyName($child)${if (ignoreNulls) " ignore nulls"}"
+
+  override protected def withNewChildInternal(newChild: Expression): First = copy(child = newChild)
+}
+
+object FirstLast {
+  def validateIgnoreNullExpr(exp: Expression, funcName: String): Boolean = exp match {
+    case Literal(b: Boolean, BooleanType) => b
+    case _ => throw QueryCompilationErrors.secondArgumentInFunctionIsNotBooleanLiteralError(
+      funcName)
+  }
 }

@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.sources.SimpleInsertSource
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.util.Utils
 
@@ -155,16 +156,19 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
       val ex = intercept[AnalysisException] {
         sql(s"SHOW CREATE TABLE $viewName")
       }
-      assert(ex.getMessage.contains("SHOW CREATE TABLE is not supported on a temporary view"))
+      assert(ex.getMessage.contains(
+        s"$viewName is a temp view. 'SHOW CREATE TABLE' expects a table or permanent view."))
     }
 
     withGlobalTempView(viewName) {
       sql(s"CREATE GLOBAL TEMPORARY VIEW $viewName AS SELECT 1 AS a")
+      val globalTempViewDb = spark.sessionState.catalog.globalTempViewManager.database
       val ex = intercept[AnalysisException] {
-        val globalTempViewDb = spark.sessionState.catalog.globalTempViewManager.database
         sql(s"SHOW CREATE TABLE $globalTempViewDb.$viewName")
       }
-      assert(ex.getMessage.contains("SHOW CREATE TABLE is not supported on a temporary view"))
+      assert(ex.getMessage.contains(
+        s"$globalTempViewDb.$viewName is a temp view. " +
+          "'SHOW CREATE TABLE' expects a table or permanent view."))
     }
   }
 
@@ -173,33 +177,53 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
       val createTable = "CREATE TABLE `t1` (`a` STRUCT<`b`: STRING>)"
       sql(s"$createTable USING json")
       val shownDDL = getShowDDL("SHOW CREATE TABLE t1")
-      assert(shownDDL == "CREATE TABLE `default`.`t1` (`a` STRUCT<`b`: STRING>)")
+      assert(shownDDL == "CREATE TABLE `default`.`t1` ( `a` STRUCT<`b`: STRING>) USING json")
 
       checkCreateTable("t1")
     }
   }
 
+  test("SPARK-36012: Add NULL flag when SHOW CREATE TABLE") {
+    val t = "SPARK_36012"
+    withTable(t) {
+      sql(
+        s"""
+           |CREATE TABLE $t (
+           |  a bigint NOT NULL,
+           |  b bigint
+           |)
+           |USING ${classOf[SimpleInsertSource].getName}
+        """.stripMargin)
+      val showDDL = getShowDDL(s"SHOW CREATE TABLE $t")
+      assert(showDDL == s"CREATE TABLE `default`.`$t` ( `a` BIGINT NOT NULL," +
+        s" `b` BIGINT) USING ${classOf[SimpleInsertSource].getName}")
+    }
+  }
+
   protected def getShowDDL(showCreateTableSql: String): String = {
-    val result = sql(showCreateTableSql)
-      .head()
-      .getString(0)
-      .split("\n")
-      .map(_.trim)
-    if (result.length > 1) result(0) + result(1) else result.head
+    sql(showCreateTableSql).head().getString(0).split("\n").map(_.trim).mkString(" ")
   }
 
-  protected def checkCreateTable(table: String): Unit = {
-    checkCreateTableOrView(TableIdentifier(table, Some("default")), "TABLE")
+  protected def checkCreateTable(table: String, serde: Boolean = false): Unit = {
+    checkCreateTableOrView(TableIdentifier(table, Some("default")), "TABLE", serde)
   }
 
-  protected def checkCreateView(table: String): Unit = {
-    checkCreateTableOrView(TableIdentifier(table, Some("default")), "VIEW")
+  protected def checkCreateView(table: String, serde: Boolean = false): Unit = {
+    checkCreateTableOrView(TableIdentifier(table, Some("default")), "VIEW", serde)
   }
 
-  private def checkCreateTableOrView(table: TableIdentifier, checkType: String): Unit = {
+  protected def checkCreateTableOrView(
+      table: TableIdentifier,
+      checkType: String,
+      serde: Boolean): Unit = {
     val db = table.database.getOrElse("default")
     val expected = spark.sharedState.externalCatalog.getTable(db, table.table)
-    val shownDDL = sql(s"SHOW CREATE TABLE ${table.quotedString}").head().getString(0)
+    val shownDDL = if (serde) {
+      sql(s"SHOW CREATE TABLE ${table.quotedString} AS SERDE").head().getString(0)
+    } else {
+      sql(s"SHOW CREATE TABLE ${table.quotedString}").head().getString(0)
+    }
+
     sql(s"DROP $checkType ${table.quotedString}")
 
     try {
@@ -212,29 +236,6 @@ abstract class ShowCreateTableSuite extends QueryTest with SQLTestUtils {
   }
 
   protected def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
-    def normalize(table: CatalogTable): CatalogTable = {
-      val nondeterministicProps = Set(
-        "CreateTime",
-        "transient_lastDdlTime",
-        "grantTime",
-        "lastUpdateTime",
-        "last_modified_by",
-        "last_modified_time",
-        "Owner:",
-        // The following are hive specific schema parameters which we do not need to match exactly.
-        "totalNumberFiles",
-        "maxFileSize",
-        "minFileSize"
-      )
-
-      table.copy(
-        createTime = 0L,
-        lastAccessTime = 0L,
-        properties = table.properties.filterKeys(!nondeterministicProps.contains(_)),
-        stats = None,
-        ignoredProperties = Map.empty
-      )
-    }
-    assert(normalize(actual) == normalize(expected))
+    assert(CatalogTable.normalize(actual) == CatalogTable.normalize(expected))
   }
 }

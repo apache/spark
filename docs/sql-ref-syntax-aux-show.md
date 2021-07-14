@@ -18,11 +18,13 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
-* [SHOW COLUMNS](sql-ref-syntax-aux-show-columns.html)
-* [SHOW DATABASES](sql-ref-syntax-aux-show-databases.html)
-* [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
-* [SHOW TABLE EXTENDED](sql-ref-syntax-aux-show-table.html)
-* [SHOW TABLES](sql-ref-syntax-aux-show-tables.html)
-* [SHOW TBLPROPERTIES](sql-ref-syntax-aux-show-tblproperties.html)
-* [SHOW PARTITIONS](sql-ref-syntax-aux-show-partitions.html)
-* [SHOW CREATE TABLE](sql-ref-syntax-aux-show-create-table.html)
+
+ * [SHOW COLUMNS](sql-ref-syntax-aux-show-columns.html)
+ * [SHOW CREATE TABLE](sql-ref-syntax-aux-show-create-table.html)
+ * [SHOW DATABASES](sql-ref-syntax-aux-show-databases.html)
+ * [SHOW FUNCTIONS](sql-ref-syntax-aux-show-functions.html)
+ * [SHOW PARTITIONS](sql-ref-syntax-aux-show-partitions.html)
+ * [SHOW TABLE EXTENDED](sql-ref-syntax-aux-show-table.html)
+ * [SHOW TABLES](sql-ref-syntax-aux-show-tables.html)
+ * [SHOW TBLPROPERTIES](sql-ref-syntax-aux-show-tblproperties.html)
+ * [SHOW VIEWS](sql-ref-syntax-aux-show-views.html)

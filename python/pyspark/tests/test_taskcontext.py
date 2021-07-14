@@ -16,7 +16,6 @@
 #
 import os
 import random
-import shutil
 import stat
 import sys
 import tempfile
@@ -24,10 +23,7 @@ import time
 import unittest
 
 from pyspark import SparkConf, SparkContext, TaskContext, BarrierTaskContext
-from pyspark.testing.utils import PySparkTestCase, SPARK_HOME
-
-if sys.version_info[0] >= 3:
-    xrange = range
+from pyspark.testing.utils import PySparkTestCase, SPARK_HOME, eventually
 
 
 class TaskContextTests(PySparkTestCase):
@@ -83,7 +79,7 @@ class TaskContextTests(PySparkTestCase):
             partition_id = tc.partitionId()
             attempt_id = tc.taskAttemptId()
             if attempt_number == 0 and partition_id == 0:
-                raise Exception("Failing on first attempt")
+                raise RuntimeError("Failing on first attempt")
             else:
                 return [x, partition_id, attempt_number, attempt_id]
         result = rdd.map(fail_on_first).collect()
@@ -128,12 +124,12 @@ class TaskContextTests(PySparkTestCase):
 
         def context_barrier(x):
             tc = BarrierTaskContext.get()
-            time.sleep(random.randint(1, 10))
+            time.sleep(random.randint(1, 5) * 2)
             tc.barrier()
             return time.time()
 
         times = rdd.barrier().mapPartitions(f).map(context_barrier).collect()
-        self.assertTrue(max(times) - min(times) < 1)
+        self.assertTrue(max(times) - min(times) < 2)
 
     def test_all_gather(self):
         """
@@ -236,7 +232,7 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
 
         def context_barrier(x):
             tc = BarrierTaskContext.get()
-            time.sleep(random.randint(1, 10))
+            time.sleep(random.randint(1, 5) * 2)
             tc.barrier()
             return (time.time(), os.getpid())
 
@@ -244,16 +240,16 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         times = list(map(lambda x: x[0], result))
         pids = list(map(lambda x: x[1], result))
         # check both barrier and worker reuse effect
-        self.assertTrue(max(times) - min(times) < 1)
+        self.assertTrue(max(times) - min(times) < 2)
         for pid in pids:
             self.assertTrue(pid in worker_pids)
 
-    def test_task_context_correct_with_python_worker_reuse(self):
+    def check_task_context_correct_with_python_worker_reuse(self):
         """Verify the task context correct when reused python worker"""
         # start a normal job first to start all workers and get all worker pids
-        worker_pids = self.sc.parallelize(xrange(2), 2).map(lambda x: os.getpid()).collect()
+        worker_pids = self.sc.parallelize(range(2), 2).map(lambda x: os.getpid()).collect()
         # the worker will reuse in this barrier job
-        rdd = self.sc.parallelize(xrange(10), 2)
+        rdd = self.sc.parallelize(range(10), 2)
 
         def context(iterator):
             tp = TaskContext.get().partitionId()
@@ -267,7 +263,6 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         # normal stage after normal stage
         normal_result = rdd.mapPartitions(context).collect()
         tps, bps, pids = zip(*normal_result)
-        print(tps)
         self.assertTrue(tps == (0, 1))
         self.assertTrue(bps == (-1, -1))
         for pid in pids:
@@ -286,6 +281,14 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         self.assertTrue(bps == (-1, -1))
         for pid in pids:
             self.assertTrue(pid in worker_pids)
+        return True
+
+    def test_task_context_correct_with_python_worker_reuse(self):
+        # Retrying the check as the PIDs from Python workers might be different even
+        # when reusing Python workers is enabled if a Python worker is dead for some reasons
+        # (e.g., socket connection failure) and new Python worker is created.
+        eventually(
+            self.check_task_context_correct_with_python_worker_reuse, catch_assertions=True)
 
     def tearDown(self):
         self.sc.stop()
@@ -304,7 +307,6 @@ class TaskContextTestsWithResources(unittest.TestCase):
         os.chmod(self.tempFile.name, stat.S_IRWXU | stat.S_IXGRP | stat.S_IRGRP |
                  stat.S_IROTH | stat.S_IXOTH)
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
-        conf = conf.set("spark.resources.dir", self.tempdir.name)
         conf = conf.set("spark.worker.resource.gpu.discoveryScript", self.tempFile.name)
         conf = conf.set("spark.worker.resource.gpu.amount", 1)
         conf = conf.set("spark.task.resource.gpu.amount", "1")
@@ -322,15 +324,14 @@ class TaskContextTestsWithResources(unittest.TestCase):
 
     def tearDown(self):
         os.unlink(self.tempFile.name)
-        shutil.rmtree(self.tempdir.name)
         self.sc.stop()
 
 if __name__ == "__main__":
     import unittest
-    from pyspark.tests.test_taskcontext import *
+    from pyspark.tests.test_taskcontext import *  # noqa: F401
 
     try:
-        import xmlrunner
+        import xmlrunner  # type: ignore[import]
         testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
     except ImportError:
         testRunner = None

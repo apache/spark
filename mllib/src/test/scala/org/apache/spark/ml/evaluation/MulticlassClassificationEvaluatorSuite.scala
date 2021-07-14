@@ -80,4 +80,33 @@ class MulticlassClassificationEvaluatorSuite
       .setMetricName("logLoss")
     assert(evaluator.evaluate(df) ~== 0.9682005730687164 absTol 1e-5)
   }
+
+  test("getMetrics") {
+    val predictionAndLabels = Seq((0.0, 0.0), (0.0, 1.0),
+      (0.0, 0.0), (1.0, 0.0), (1.0, 1.0),
+      (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)).toDF("prediction", "label")
+
+    val evaluator = new MulticlassClassificationEvaluator()
+
+    val metrics = evaluator.getMetrics(predictionAndLabels)
+    val f1 = metrics.weightedFMeasure
+    val accuracy = metrics.accuracy
+    val precisionByLabel = metrics.precision(evaluator.getMetricLabel)
+
+    // default = f1
+    assert(evaluator.evaluate(predictionAndLabels) == f1)
+
+    // accuracy
+    evaluator.setMetricName("accuracy")
+    assert(evaluator.evaluate(predictionAndLabels) == accuracy)
+
+    // precisionByLabel
+    evaluator.setMetricName("precisionByLabel")
+    assert(evaluator.evaluate(predictionAndLabels) == precisionByLabel)
+
+    // truePositiveRateByLabel
+    evaluator.setMetricName("truePositiveRateByLabel").setMetricLabel(1.0)
+    assert(evaluator.evaluate(predictionAndLabels) ==
+      metrics.truePositiveRate(evaluator.getMetricLabel))
+  }
 }

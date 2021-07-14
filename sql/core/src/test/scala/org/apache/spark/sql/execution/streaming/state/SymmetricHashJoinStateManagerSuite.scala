@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
+import java.sql.Timestamp
 import java.util.UUID
 
 import org.apache.hadoop.conf.Configuration
@@ -30,6 +31,7 @@ import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper.LeftSide
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter {
 
@@ -43,6 +45,29 @@ class SymmetricHashJoinStateManagerSuite extends StreamTest with BeforeAndAfter 
       testAllOperations(version)
     }
   }
+
+  SymmetricHashJoinStateManager.supportedVersions.foreach { version =>
+    test(s"SPARK-35689: StreamingJoinStateManager V${version} - " +
+        "printable key of keyWithIndexToValue") {
+
+      val keyExprs = Seq[Expression](
+        Literal(false),
+        Literal(10.0),
+        Literal("string"),
+        Literal(Timestamp.valueOf("2021-6-8 10:25:50")))
+      val keyGen = UnsafeProjection.create(keyExprs.map(_.dataType).toArray)
+
+      withJoinStateManager(inputValueAttribs, keyExprs, version) { manager =>
+        val currentKey = keyGen.apply(new GenericInternalRow(Array[Any](
+          false, 10.0, UTF8String.fromString("string"),
+          Timestamp.valueOf("2021-6-8 10:25:50").getTime)))
+
+        val projectedRow = manager.getInternalRowOfKeyWithIndex(currentKey)
+        assert(s"$projectedRow" == "[false,10.0,string,1623173150000]")
+      }
+    }
+  }
+
 
   private def testAllOperations(stateFormatVersion: Int): Unit = {
     withJoinStateManager(inputValueAttribs, joinKeyExprs, stateFormatVersion) { manager =>

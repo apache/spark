@@ -18,18 +18,19 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{FileSystem => _, _}
-import java.net.{InetAddress, UnknownHostException, URI}
+import java.net.{InetAddress, UnknownHostException, URI, URL}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 import java.util.{Locale, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scala.collection.JavaConverters._
+import scala.collection.immutable.{Map => IMap}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.control.NonFatal
 
 import com.google.common.base.Objects
-import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -57,8 +58,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle, YarnCommandBuilderUtils}
+import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.util.{CallerContext, Utils}
+import org.apache.spark.util.{CallerContext, Utils, YarnContainerInfoHelper}
 
 private[spark] class Client(
     val args: ClientArguments,
@@ -87,7 +89,8 @@ private[spark] class Client(
   private val amMemoryOverhead = {
     val amMemoryOverheadEntry = if (isClusterMode) DRIVER_MEMORY_OVERHEAD else AM_MEMORY_OVERHEAD
     sparkConf.get(amMemoryOverheadEntry).getOrElse(
-      math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toLong, MEMORY_OVERHEAD_MIN)).toInt
+      math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toLong,
+        ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)).toInt
   }
   private val amCores = if (isClusterMode) {
     sparkConf.get(DRIVER_CORES)
@@ -98,9 +101,10 @@ private[spark] class Client(
   // Executor related configurations
   private val executorMemory = sparkConf.get(EXECUTOR_MEMORY)
   // Executor offHeap memory in MiB.
-  protected val executorOffHeapMemory = YarnSparkHadoopUtil.executorOffHeapMemorySizeAsMb(sparkConf)
+  protected val executorOffHeapMemory = Utils.executorOffHeapMemorySizeAsMb(sparkConf)
   private val executorMemoryOverhead = sparkConf.get(EXECUTOR_MEMORY_OVERHEAD).getOrElse(
-    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toLong, MEMORY_OVERHEAD_MIN)).toInt
+    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toLong,
+      ResourceProfile.MEMORY_OVERHEAD_MIN_MIB)).toInt
 
   private val isPython = sparkConf.get(IS_PYTHON_APP)
   private val pysparkWorkerMemory: Int = if (isPython) {
@@ -181,10 +185,12 @@ private[spark] class Client(
 
       // The app staging dir based on the STAGING_DIR configuration if configured
       // otherwise based on the users home directory.
+      // scalastyle:off FileSystemGet
       val appStagingBaseDir = sparkConf.get(STAGING_DIR)
         .map { new Path(_, UserGroupInformation.getCurrentUser.getShortUserName) }
         .getOrElse(FileSystem.get(hadoopConf).getHomeDirectory())
       stagingDirPath = new Path(appStagingBaseDir, getAppStagingDir(appId))
+      // scalastyle:on FileSystemGet
 
       new CallerContext("CLIENT", sparkConf.get(APP_CALLER_CONTEXT),
         Option(appId.toString)).setCurrentContext()
@@ -256,7 +262,7 @@ private[spark] class Client(
     appContext.setApplicationName(sparkConf.get("spark.app.name", "Spark"))
     appContext.setQueue(sparkConf.get(QUEUE_NAME))
     appContext.setAMContainerSpec(containerContext)
-    appContext.setApplicationType("SPARK")
+    appContext.setApplicationType(sparkConf.get(APPLICATION_TYPE))
 
     sparkConf.get(APPLICATION_TAGS).foreach { tags =>
       appContext.setApplicationTags(new java.util.HashSet[String](tags.asJava))
@@ -395,7 +401,13 @@ private[spark] class Client(
     if (force || !compareFs(srcFs, destFs) || "file".equals(srcFs.getScheme)) {
       destPath = new Path(destDir, destName.getOrElse(srcPath.getName()))
       logInfo(s"Uploading resource $srcPath -> $destPath")
-      FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
+      try {
+        FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
+      } catch {
+        // HADOOP-16878 changes the behavior to throw exceptions when src equals to dest
+        case e: PathOperationException
+            if srcFs.makeQualified(srcPath).equals(destFs.makeQualified(destPath)) =>
+      }
       destFs.setReplication(destPath, replication)
       destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
     } else {
@@ -512,6 +524,32 @@ private[spark] class Client(
       require(localizedPath != null, "Keytab file already distributed.")
     }
 
+    // If we passed in a ivySettings file, make sure we copy the file to the distributed cache
+    // in cluster mode so that the driver can access it
+    val ivySettings = sparkConf.getOption("spark.jars.ivySettings")
+    val ivySettingsLocalizedPath: Option[String] = ivySettings match {
+      case Some(ivySettingsPath) if isClusterMode =>
+        val uri = new URI(ivySettingsPath)
+        Option(uri.getScheme).getOrElse("file") match {
+          case "file" =>
+            val ivySettingsFile = new File(uri.getPath)
+            require(ivySettingsFile.exists(), s"Ivy settings file $ivySettingsFile not found")
+            require(ivySettingsFile.isFile(), s"Ivy settings file $ivySettingsFile is not a" +
+              "normal file")
+            // Generate a file name that can be used for the ivySettings file, that does not
+            // conflict with any user file.
+            val localizedFileName = Some(ivySettingsFile.getName() + "-" +
+              UUID.randomUUID().toString)
+            val (_, localizedPath) = distribute(ivySettingsPath, destName = localizedFileName)
+            require(localizedPath != null, "IvySettings file already distributed.")
+            Some(localizedPath)
+          case scheme =>
+            throw new IllegalArgumentException(s"Scheme $scheme not supported in " +
+              "spark.jars.ivySettings")
+        }
+      case _ => None
+    }
+
     /**
      * Add Spark to the cache. There are two settings that control what files to add to the cache:
      * - if a Spark archive is defined, use the archive. The archive is expected to contain
@@ -553,7 +591,7 @@ private[spark] class Client(
           }
 
           // Propagate the local URIs to the containers using the configuration.
-          sparkConf.set(SPARK_JARS, localJars)
+          sparkConf.set(SPARK_JARS, localJars.toSeq)
 
         case None =>
           // No configuration, so fall back to uploading local jar files.
@@ -570,7 +608,7 @@ private[spark] class Client(
             jarsDir.listFiles().foreach { f =>
               if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
                 jarsStream.putNextEntry(new ZipEntry(f.getName))
-                Files.copy(f, jarsStream)
+                Files.copy(f.toPath, jarsStream)
                 jarsStream.closeEntry()
               }
             }
@@ -628,14 +666,19 @@ private[spark] class Client(
       }
     }
     if (cachedSecondaryJarLinks.nonEmpty) {
-      sparkConf.set(SECONDARY_JARS, cachedSecondaryJarLinks)
+      sparkConf.set(SECONDARY_JARS, cachedSecondaryJarLinks.toSeq)
     }
 
     if (isClusterMode && args.primaryPyFile != null) {
       distribute(args.primaryPyFile, appMasterOnly = true)
     }
 
-    pySparkArchives.foreach { f => distribute(f) }
+    pySparkArchives.foreach { f =>
+      val uri = Utils.resolveURI(f)
+      if (uri.getScheme != Utils.LOCAL_SCHEME) {
+        distribute(f)
+      }
+    }
 
     // The python files list needs to be treated especially. All files that are not an
     // archive need to be placed in a subdirectory that will be added to PYTHONPATH.
@@ -661,7 +704,18 @@ private[spark] class Client(
     val remoteFs = FileSystem.get(remoteConfArchivePath.toUri(), hadoopConf)
     cachedResourcesConf.set(CACHED_CONF_ARCHIVE, remoteConfArchivePath.toString())
 
-    val localConfArchive = new Path(createConfArchive().toURI())
+    val confsToOverride = Map.empty[String, String]
+    // If propagating the keytab to the AM, override the keytab name with the name of the
+    // distributed file.
+    amKeytabFileName.foreach { kt => confsToOverride.put(KEYTAB.key, kt) }
+
+    // If propagating the ivySettings file to the distributed cache, override the ivySettings
+    // file name with the name of the distributed file.
+    ivySettingsLocalizedPath.foreach { path =>
+      confsToOverride.put("spark.jars.ivySettings", path)
+    }
+
+    val localConfArchive = new Path(createConfArchive(confsToOverride).toURI())
     copyFileToRemote(destDir, localConfArchive, replication, symlinkCache, force = true,
       destName = Some(LOCALIZED_CONF_ARCHIVE))
 
@@ -690,8 +744,10 @@ private[spark] class Client(
    *
    * The archive also contains some Spark configuration. Namely, it saves the contents of
    * SparkConf in a file to be loaded by the AM process.
+   *
+   * @param confsToOverride configs that should overriden when creating the final spark conf file
    */
-  private def createConfArchive(): File = {
+  private def createConfArchive(confsToOverride: Map[String, String]): File = {
     val hadoopConfFiles = new HashMap[String, File]()
 
     // SPARK_CONF_DIR shows up in the classpath before HADOOP_CONF_DIR/YARN_CONF_DIR
@@ -753,7 +809,7 @@ private[spark] class Client(
             if url.getProtocol == "file" } {
         val file = new File(url.getPath())
         confStream.putNextEntry(new ZipEntry(file.getName()))
-        Files.copy(file, confStream)
+        Files.copy(file.toPath, confStream)
         confStream.closeEntry()
       }
 
@@ -764,7 +820,7 @@ private[spark] class Client(
       hadoopConfFiles.foreach { case (name, file) =>
         if (file.canRead()) {
           confStream.putNextEntry(new ZipEntry(s"$LOCALIZED_HADOOP_CONF_DIR/$name"))
-          Files.copy(file, confStream)
+          Files.copy(file.toPath, confStream)
           confStream.closeEntry()
         }
       }
@@ -777,11 +833,7 @@ private[spark] class Client(
 
       // Save Spark configuration to a file in the archive.
       val props = confToProperties(sparkConf)
-
-      // If propagating the keytab to the AM, override the keytab name with the name of the
-      // distributed file.
-      amKeytabFileName.foreach { kt => props.setProperty(KEYTAB.key, kt) }
-
+      confsToOverride.foreach { case (k, v) => props.setProperty(k, v)}
       writePropertiesToArchive(props, SPARK_CONF_FILE, confStream)
 
       // Write the distributed cache config to the archive.
@@ -1058,7 +1110,7 @@ private[spark] class Client(
             logError(s"Application $appId not found.")
             cleanupStagingDir()
             return YarnAppReport(YarnApplicationState.KILLED, FinalApplicationStatus.KILLED, None)
-          case NonFatal(e) =>
+          case NonFatal(e) if !e.isInstanceOf[InterruptedIOException] =>
             val msg = s"Failed to contact YARN for application $appId."
             logError(msg, e)
             // Don't necessarily clean up staging dir because status is unknown
@@ -1073,9 +1125,9 @@ private[spark] class Client(
         // If DEBUG is enabled, log report details every iteration
         // Otherwise, log them every time the application changes state
         if (log.isDebugEnabled) {
-          logDebug(formatReportDetails(report))
+          logDebug(formatReportDetails(report, getDriverLogsLink(report)))
         } else if (lastState != state) {
-          logInfo(formatReportDetails(report))
+          logInfo(formatReportDetails(report, getDriverLogsLink(report)))
         }
       }
 
@@ -1145,7 +1197,17 @@ private[spark] class Client(
     appMaster
   }
 
-  private def formatReportDetails(report: ApplicationReport): String = {
+  /**
+   * Format an application report and optionally, links to driver logs, in a human-friendly manner.
+   *
+   * @param report The application report from YARN.
+   * @param driverLogsLinks A map of driver log files and their links. Keys are the file names
+   *                        (e.g. `stdout`), and values are the links. If empty, nothing will be
+   *                        printed.
+   * @return Human-readable version of the input data.
+   */
+  private def formatReportDetails(report: ApplicationReport,
+    driverLogsLinks: IMap[String, String]): String = {
     val details = Seq[(String, String)](
       ("client token", getClientToken(report)),
       ("diagnostics", report.getDiagnostics),
@@ -1156,13 +1218,42 @@ private[spark] class Client(
       ("final status", report.getFinalApplicationStatus.toString),
       ("tracking URL", report.getTrackingUrl),
       ("user", report.getUser)
-    )
+    ) ++ driverLogsLinks.map { case (fname, link) => (s"Driver Logs ($fname)", link) }
 
     // Use more loggable format if value is null or empty
     details.map { case (k, v) =>
       val newValue = Option(v).filter(_.nonEmpty).getOrElse("N/A")
       s"\n\t $k: $newValue"
     }.mkString("")
+  }
+
+  /**
+   * Fetch links to the logs of the driver for the given application report. This requires
+   * query the ResourceManager via RPC. Returns an empty map if the links could not be fetched.
+   * If this feature is disabled via [[CLIENT_INCLUDE_DRIVER_LOGS_LINK]], or if the application
+   * report indicates that the driver container isn't currently running, an empty map is
+   * returned immediately.
+   */
+  private def getDriverLogsLink(appReport: ApplicationReport): IMap[String, String] = {
+    if (!sparkConf.get(CLIENT_INCLUDE_DRIVER_LOGS_LINK)
+      || appReport.getYarnApplicationState != YarnApplicationState.RUNNING) {
+      return IMap.empty
+    }
+    try {
+      Option(appReport.getCurrentApplicationAttemptId)
+        .flatMap(attemptId => Option(yarnClient.getApplicationAttemptReport(attemptId)))
+        .flatMap(attemptReport => Option(attemptReport.getAMContainerId))
+        .flatMap(amContainerId => Option(yarnClient.getContainerReport(amContainerId)))
+        .flatMap(containerReport => Option(containerReport.getLogUrl))
+        .map(YarnContainerInfoHelper.getLogUrlsFromBaseUrl)
+        .getOrElse(IMap.empty)
+    } catch {
+      case e: Exception =>
+        logWarning(s"Unable to get driver log links for $appId: $e")
+        // Include the full stack trace only at DEBUG level to reduce verbosity
+        logDebug(s"Unable to get driver log links for $appId", e)
+        IMap.empty
+    }
   }
 
   /**
@@ -1179,7 +1270,7 @@ private[spark] class Client(
       val report = getApplicationReport(appId)
       val state = report.getYarnApplicationState
       logInfo(s"Application report for $appId (state: $state)")
-      logInfo(formatReportDetails(report))
+      logInfo(formatReportDetails(report, getDriverLogsLink(report)))
       if (state == YarnApplicationState.FAILED || state == YarnApplicationState.KILLED) {
         throw new SparkException(s"Application $appId finished with status: $state")
       }
@@ -1217,7 +1308,7 @@ private[spark] class Client(
 
 }
 
-private object Client extends Logging {
+private[spark] object Client extends Logging {
 
   // Alias for the user jar
   val APP_JAR_NAME: String = "__app__.jar"
@@ -1353,7 +1444,10 @@ private object Client extends Logging {
       }
     }
 
-    populateHadoopClasspath(conf, env)
+    if (sparkConf.get(POPULATE_HADOOP_CLASSPATH)) {
+      populateHadoopClasspath(conf, env)
+    }
+
     sys.env.get(ENV_DIST_CLASSPATH).foreach { cp =>
       addClasspathEntry(getClusterPath(sparkConf, cp), env)
     }
@@ -1374,6 +1468,32 @@ private object Client extends Logging {
     val mainUri = getMainJarUri(conf.get(APP_JAR))
     val secondaryUris = getSecondaryJarUris(conf.get(SECONDARY_JARS))
     (mainUri ++ secondaryUris).toArray
+  }
+
+  /**
+   * Returns a list of local, absolute file URLs representing the user classpath. Note that this
+   * must be executed on the same host which will access the URLs, as it will resolve relative
+   * paths based on the current working directory.
+   *
+   * @param conf Spark configuration.
+   * @param useClusterPath Whether to use the 'cluster' path when resolving paths with the
+   *                       `local` scheme. This should be used when running on the cluster, but
+   *                       not when running on the gateway (i.e. for the driver in `client` mode).
+   * @return Array of local URLs ready to be passed to a [[java.net.URLClassLoader]].
+   */
+  def getUserClasspathUrls(conf: SparkConf, useClusterPath: Boolean): Array[URL] = {
+    Client.getUserClasspath(conf).map { uri =>
+      val inputPath = uri.getPath
+      val replacedFilePath = if (Utils.isLocalUri(uri.toString) && useClusterPath) {
+        Client.getClusterPath(conf, inputPath)
+      } else {
+        // Any other URI schemes should have been resolved by this point
+        assert(uri.getScheme == null || uri.getScheme == "file" || Utils.isLocalUri(uri.toString),
+          "getUserClasspath should only return 'file' or 'local' URIs but found: " + uri)
+        inputPath
+      }
+      Paths.get(replacedFilePath).toAbsolutePath.toUri.toURL
+    }
   }
 
   private def getMainJarUri(mainJar: Option[String]): Option[URI] = {
@@ -1576,6 +1696,7 @@ private[spark] class YarnClusterApplication extends SparkApplication {
     // so remove them from sparkConf here for yarn mode.
     conf.remove(JARS)
     conf.remove(FILES)
+    conf.remove(ARCHIVES)
 
     new Client(new ClientArguments(args), conf, null).run()
   }

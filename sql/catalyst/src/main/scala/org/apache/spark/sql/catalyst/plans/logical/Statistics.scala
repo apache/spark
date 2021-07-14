@@ -20,18 +20,10 @@ package org.apache.spark.sql.catalyst.plans.logical
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 import java.math.{MathContext, RoundingMode}
 
-import scala.util.control.NonFatal
-
 import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
 
-import org.apache.spark.internal.Logging
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -55,11 +47,14 @@ object Statistics {
  *                    defaults to the product of children's `sizeInBytes`.
  * @param rowCount Estimated number of rows.
  * @param attributeStats Statistics for Attributes.
+ * @param isRuntime Whether the statistics is inferred from query stage runtime statistics during
+ *                  adaptive query execution.
  */
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
-    attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil)) {
+    attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil),
+    isRuntime: Boolean = false) {
 
   override def toString: String = "Statistics(" + simpleString + ")"
 

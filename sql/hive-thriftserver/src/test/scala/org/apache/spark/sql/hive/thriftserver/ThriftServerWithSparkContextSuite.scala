@@ -17,7 +17,20 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-class ThriftServerWithSparkContextSuite extends SharedThriftServer {
+import java.sql.SQLException
+import java.util.concurrent.atomic.AtomicBoolean
+
+import org.apache.hive.service.cli.{HiveSQLException, OperationHandle}
+
+import org.apache.spark.TaskKilled
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
+import org.apache.spark.sql.internal.SQLConf
+
+trait ThriftServerWithSparkContextSuite extends SharedThriftServer {
+
+  test("the scratch dir will not be exist") {
+    assert(!tempScratchDir.exists())
+  }
 
   test("SPARK-29911: Uncache cached tables when session closed") {
     val cacheManager = spark.sharedState.cacheManager
@@ -41,4 +54,105 @@ class ThriftServerWithSparkContextSuite extends SharedThriftServer {
       assert(cacheManager.isEmpty)
     }
   }
+
+  test("Full stack traces as error message for jdbc or thrift client") {
+    val sql = "select date_sub(date'2011-11-11', '1.2')"
+    withCLIServiceClient() { client =>
+      val sessionHandle = client.openSession(user, "")
+
+      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val e = intercept[HiveSQLException] {
+        client.executeStatement(
+          sessionHandle,
+          sql,
+          confOverlay)
+      }
+
+      assert(e.getMessage
+        .contains("The second argument of 'date_sub' function needs to be an integer."))
+      assert(!e.getMessage.contains("" +
+        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      assert(e.getSQLState == "22023")
+    }
+
+    withJdbcStatement { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery(sql)
+      }
+      assert(e.getMessage
+        .contains("The second argument of 'date_sub' function needs to be an integer."))
+      assert(e.getMessage.contains("[SECOND_FUNCTION_ARGUMENT_NOT_INTEGER]"))
+      assert(e.getMessage.contains("" +
+        "java.lang.NumberFormatException: invalid input syntax for type numeric: 1.2"))
+      assert(e.getSQLState == "22023")
+    }
+  }
+
+  test("SPARK-33526: Add config to control if cancel invoke interrupt task on thriftserver") {
+    withJdbcStatement { statement =>
+      val forceCancel = new AtomicBoolean(false)
+      val listener = new SparkListener {
+        override def onTaskEnd(taskEnd: SparkListenerTaskEnd): Unit = {
+          assert(taskEnd.reason.isInstanceOf[TaskKilled])
+          if (forceCancel.get()) {
+            assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime < 1000)
+          } else {
+            // avoid accuracy, we check 2s instead of 3s.
+            assert(System.currentTimeMillis() - taskEnd.taskInfo.launchTime >= 2000)
+          }
+        }
+      }
+
+      spark.sparkContext.addSparkListener(listener)
+      try {
+        Seq(true, false).foreach { force =>
+          statement.setQueryTimeout(0)
+          statement.execute(s"SET ${SQLConf.THRIFTSERVER_FORCE_CANCEL.key}=$force")
+          statement.setQueryTimeout(1)
+          forceCancel.set(force)
+          val e = intercept[SQLException] {
+            statement.execute("select java_method('java.lang.Thread', 'sleep', 3000L)")
+          }.getMessage
+          assert(e.contains("Query timed out"))
+        }
+      } finally {
+        spark.sparkContext.removeSparkListener(listener)
+      }
+    }
+  }
+
+  test("SPARK-21957: get current_user through thrift server") {
+    val clientUser = "storm_earth_fire_heed_my_call"
+    val sql = "select current_user()"
+
+    withCLIServiceClient(clientUser) { client =>
+      val sessionHandle = client.openSession(clientUser, "")
+      val confOverlay = new java.util.HashMap[java.lang.String, java.lang.String]
+      val exec: String => OperationHandle = client.executeStatement(sessionHandle, _, confOverlay)
+
+      exec(s"set ${SQLConf.ANSI_ENABLED.key}=false")
+
+      val opHandle1 = exec("select current_user(), current_user")
+      val rowSet1 = client.fetchResults(opHandle1)
+      rowSet1.toTRowSet.getColumns.forEach { col =>
+        assert(col.getStringVal.getValues.get(0) === clientUser)
+      }
+
+      exec(s"set ${SQLConf.ANSI_ENABLED.key}=true")
+      val opHandle2 = exec("select current_user")
+      assert(client.fetchResults(opHandle2).toTRowSet.getColumns.get(0)
+        .getStringVal.getValues.get(0) === clientUser)
+
+      val e = intercept[HiveSQLException](exec("select current_user()"))
+      assert(e.getMessage.contains("current_user"))
+    }
+  }
+}
+
+class ThriftServerWithSparkContextInBinarySuite extends ThriftServerWithSparkContextSuite {
+  override def mode: ServerMode.Value = ServerMode.binary
+}
+
+class ThriftServerWithSparkContextInHttpSuite extends ThriftServerWithSparkContextSuite {
+  override def mode: ServerMode.Value = ServerMode.http
 }

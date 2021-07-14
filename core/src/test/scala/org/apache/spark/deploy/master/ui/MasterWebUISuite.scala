@@ -28,7 +28,7 @@ import org.mockito.Mockito.{mock, times, verify, when}
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
-import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, RequestKillDriver}
+import org.apache.spark.deploy.DeployMessages.{DecommissionWorkersOnHosts, KillDriverResponse, RequestKillDriver}
 import org.apache.spark.deploy.DeployTestUtils._
 import org.apache.spark.deploy.master._
 import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
@@ -36,7 +36,7 @@ import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv}
 
 class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
 
-  val conf = new SparkConf
+  val conf = new SparkConf()
   val securityMgr = new SecurityManager(conf)
   val rpcEnv = mock(classOf[RpcEnv])
   val master = mock(classOf[Master])
@@ -88,8 +88,30 @@ class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
     verify(masterEndpointRef, times(1)).ask[KillDriverResponse](RequestKillDriver(activeDriverId))
   }
 
-  private def convPostDataToString(data: Map[String, String]): String = {
+  private def testKillWorkers(hostnames: Seq[String]): Unit = {
+    val url = s"http://localhost:${masterWebUI.boundPort}/workers/kill/"
+    val body = convPostDataToString(hostnames.map(("host", _)))
+    val conn = sendHttpRequest(url, "POST", body)
+    // The master is mocked here, so cannot assert on the response code
+    conn.getResponseCode
+    // Verify that master was asked to kill driver with the correct id
+    verify(masterEndpointRef).askSync[Integer](DecommissionWorkersOnHosts(hostnames))
+  }
+
+  test("Kill one host") {
+    testKillWorkers(Seq("localhost"))
+  }
+
+  test("Kill multiple hosts") {
+    testKillWorkers(Seq("noSuchHost", "LocalHost"))
+  }
+
+  private def convPostDataToString(data: Seq[(String, String)]): String = {
     (for ((name, value) <- data) yield s"$name=$value").mkString("&")
+  }
+
+  private def convPostDataToString(data: Map[String, String]): String = {
+    convPostDataToString(data.toSeq)
   }
 
   /**

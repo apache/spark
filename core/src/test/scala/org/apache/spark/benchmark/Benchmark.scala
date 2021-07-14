@@ -26,7 +26,6 @@ import scala.util.Try
 
 import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.SystemUtils
-import org.scalatest.Assertions._
 
 import org.apache.spark.util.Utils
 
@@ -112,11 +111,12 @@ private[spark] class Benchmark(
     // The results are going to be processor specific so it is useful to include that.
     out.println(Benchmark.getJVMOSInfo())
     out.println(Benchmark.getProcessorName())
-    out.printf("%-40s %14s %14s %11s %12s %13s %10s\n", name + ":", "Best Time(ms)", "Avg Time(ms)", "Stdev(ms)", "Rate(M/s)",
-      "Per Row(ns)", "Relative")
-    out.println("-" * 120)
+    val nameLen = Math.max(40, Math.max(name.length, benchmarks.map(_.name.length).max))
+    out.printf(s"%-${nameLen}s %14s %14s %11s %12s %13s %10s\n",
+      name + ":", "Best Time(ms)", "Avg Time(ms)", "Stdev(ms)", "Rate(M/s)", "Per Row(ns)", "Relative")
+    out.println("-" * (nameLen + 80))
     results.zip(benchmarks).foreach { case (result, benchmark) =>
-      out.printf("%-40s %14s %14s %11s %12s %13s %10s\n",
+      out.printf(s"%-${nameLen}s %14s %14s %11s %12s %13s %10s\n",
         benchmark.name,
         "%5.0f" format result.bestMs,
         "%4.0f" format result.avgMs,

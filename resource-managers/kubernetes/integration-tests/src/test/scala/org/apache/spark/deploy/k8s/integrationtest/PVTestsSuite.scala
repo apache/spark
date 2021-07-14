@@ -56,7 +56,8 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
                 .withMatchExpressions(new NodeSelectorRequirementBuilder()
                   .withKey("kubernetes.io/hostname")
                   .withOperator("In")
-                  .withValues("minikube", "docker-for-desktop", "docker-desktop").build()).build())
+                  .withValues("minikube", "m01", "docker-for-desktop", "docker-desktop")
+                  .build()).build())
             .endRequired()
           .endNodeAffinity()
       .endSpec()
@@ -121,7 +122,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test("PVs with local storage", k8sTestTag, MinikubeTag) {
+  test("PVs with local storage", pvTestTag, MinikubeTag) {
     sparkAppConf
       .set(s"spark.kubernetes.driver.volumes.persistentVolumeClaim.data.mount.path",
         CONTAINER_MOUNT_PATH)

@@ -22,6 +22,8 @@ import java.io.File
 import org.scalatest.Suite
 
 import org.apache.spark.SparkContext
+import org.apache.spark.ml.feature._
+import org.apache.spark.ml.stat.Summarizer
 import org.apache.spark.ml.util.TempDirectory
 import org.apache.spark.sql.{SparkSession, SQLContext, SQLImplicits}
 import org.apache.spark.util.Utils
@@ -65,5 +67,14 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
    */
   protected object testImplicits extends SQLImplicits {
     protected override def _sqlContext: SQLContext = self.spark.sqlContext
+  }
+
+  private[spark] def standardize(instances: Array[Instance]): Array[Instance] = {
+    val (featuresSummarizer, _) =
+      Summarizer.getClassificationSummarizers(sc.parallelize(instances))
+    val inverseStd = featuresSummarizer.std.toArray
+      .map { std => if (std != 0) 1.0 / std else 0.0 }
+    val func = StandardScalerModel.getTransformFunc(Array.empty, inverseStd, false, true)
+    instances.map { case Instance(label, weight, vec) => Instance(label, weight, func(vec)) }
   }
 }

@@ -23,7 +23,7 @@ import numpy as np
 from pyspark import RDD, since
 from pyspark.streaming.dstream import DStream
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector
+from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.util import Saveable, Loader
 
 __all__ = ['LabeledPoint', 'LinearModel',
@@ -39,15 +39,19 @@ class LabeledPoint(object):
     """
     Class that represents the features and labels of a data point.
 
-    :param label:
-      Label for this data point.
-    :param features:
-      Vector of features for this point (NumPy array, list,
-      pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix).
-
-    .. note:: 'label' and 'features' are accessible as class attributes.
-
     .. versionadded:: 1.0.0
+
+    Parameters
+    ----------
+    label : int
+        Label for this data point.
+    features : :py:class:`pyspark.mllib.linalg.Vector` or convertible
+        Vector of features for this point (NumPy array, list,
+        pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix).
+
+    Notes
+    -----
+    'label' and 'features' are accessible as class attributes.
     """
 
     def __init__(self, label, features):
@@ -69,12 +73,14 @@ class LinearModel(object):
     """
     A linear model that has a vector of coefficients and an intercept.
 
-    :param weights:
-      Weights computed for every feature.
-    :param intercept:
-      Intercept computed for this model.
-
     .. versionadded:: 0.9.0
+
+    Parameters
+    ----------
+    weights : :py:class:`pyspark.mllib.linalg.Vector`
+        Weights computed for every feature.
+    intercept : float
+      Intercept computed for this model.
     """
 
     def __init__(self, weights, intercept):
@@ -102,13 +108,16 @@ class LinearRegressionModelBase(LinearModel):
 
     """A linear regression model.
 
+    .. versionadded:: 0.9.0
+
+    Examples
+    --------
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> lrmb = LinearRegressionModelBase(np.array([1.0, 2.0]), 0.1)
     >>> abs(lrmb.predict(np.array([-1.03, 7.777])) - 14.624) < 1e-6
     True
     >>> abs(lrmb.predict(SparseVector(2, {0: -1.03, 1: 7.777})) - 14.624) < 1e-6
     True
-
-    .. versionadded:: 0.9.0
     """
 
     @since("0.9.0")
@@ -128,6 +137,11 @@ class LinearRegressionModel(LinearRegressionModelBase):
 
     """A linear regression model derived from a least-squares fit.
 
+    .. versionadded:: 0.9.0
+
+    Examples
+    --------
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> from pyspark.mllib.regression import LabeledPoint
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),
@@ -179,8 +193,6 @@ class LinearRegressionModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
-
-    .. versionadded:: 0.9.0
     """
     @since("1.4.0")
     def save(self, sc, path):
@@ -222,11 +234,13 @@ def _regression_train_wrapper(train_func, modelClass, data, initial_weights):
 
 class LinearRegressionWithSGD(object):
     """
+    Train a linear regression model with no regularization using Stochastic Gradient Descent.
+
     .. versionadded:: 0.9.0
-    .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression.
+    .. deprecated:: 2.0.0
+        Use :py:class:`pyspark.ml.regression.LinearRegression`.
     """
     @classmethod
-    @since("0.9.0")
     def train(cls, data, iterations=100, step=1.0, miniBatchFraction=1.0,
               initialWeights=None, regParam=0.0, regType=None, intercept=False,
               validateData=True, convergenceTol=0.001):
@@ -242,45 +256,50 @@ class LinearRegressionWithSGD(object):
         corresponding right hand side label y.
         See also the documentation for the precise formulation.
 
-        :param data:
-          The training data, an RDD of LabeledPoint.
-        :param iterations:
-          The number of iterations.
-          (default: 100)
-        :param step:
-          The step parameter used in SGD.
-          (default: 1.0)
-        :param miniBatchFraction:
-          Fraction of data to be used for each SGD iteration.
-          (default: 1.0)
-        :param initialWeights:
-          The initial weights.
-          (default: None)
-        :param regParam:
-          The regularizer parameter.
-          (default: 0.0)
-        :param regType:
-          The type of regularizer used for training our model.
-          Supported values:
+        .. versionadded:: 0.9.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            The training data, an RDD of LabeledPoint.
+        iterations : int, optional
+            The number of iterations.
+            (default: 100)
+        step : float, optional
+            The step parameter used in SGD.
+            (default: 1.0)
+        miniBatchFraction : float, optional
+            Fraction of data to be used for each SGD iteration.
+            (default: 1.0)
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
+            The initial weights.
+            (default: None)
+        regParam : float, optional
+            The regularizer parameter.
+            (default: 0.0)
+        regType : str, optional
+            The type of regularizer used for training our model.
+            Supported values:
 
             - "l1" for using L1 regularization
             - "l2" for using L2 regularization
             - None for no regularization (default)
-        :param intercept:
-          Boolean parameter which indicates the use or not of the
-          augmented representation for training data (i.e., whether bias
-          features are activated or not).
-          (default: False)
-        :param validateData:
-          Boolean parameter which indicates if the algorithm should
-          validate data before training.
-          (default: True)
-        :param convergenceTol:
-          A condition which decides iteration termination.
-          (default: 0.001)
+
+        intercept : bool, optional
+            Boolean parameter which indicates the use or not of the
+            augmented representation for training data (i.e., whether bias
+            features are activated or not).
+            (default: False)
+        validateData : bool, optional
+            Boolean parameter which indicates if the algorithm should
+            validate data before training.
+            (default: True)
+        convergenceTol : float, optional
+            A condition which decides iteration termination.
+            (default: 0.001)
         """
         warnings.warn(
-            "Deprecated in 2.0.0. Use ml.regression.LinearRegression.", DeprecationWarning)
+            "Deprecated in 2.0.0. Use ml.regression.LinearRegression.", FutureWarning)
 
         def train(rdd, i):
             return callMLlibFunc("trainLinearRegressionModelWithSGD", rdd, int(iterations),
@@ -297,6 +316,11 @@ class LassoModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit with
     an l_1 penalty term.
 
+    .. versionadded:: 0.9.0
+
+    Examples
+    --------
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> from pyspark.mllib.regression import LabeledPoint
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),
@@ -348,8 +372,6 @@ class LassoModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
-
-    .. versionadded:: 0.9.0
     """
     @since("1.4.0")
     def save(self, sc, path):
@@ -372,12 +394,14 @@ class LassoModel(LinearRegressionModelBase):
 
 class LassoWithSGD(object):
     """
+    Train a regression model with L1-regularization using Stochastic Gradient Descent.
+
     .. versionadded:: 0.9.0
-    .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0.
-            Note the default regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.
+    .. deprecated:: 2.0.0
+        Use :py:class:`pyspark.ml.regression.LinearRegression` with elasticNetParam = 1.0.
+        Note the default regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.
     """
     @classmethod
-    @since("0.9.0")
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, intercept=False,
               validateData=True, convergenceTol=0.001):
@@ -392,40 +416,45 @@ class LassoWithSGD(object):
         of rows of A, each with its corresponding right hand side label y.
         See also the documentation for the precise formulation.
 
-        :param data:
-          The training data, an RDD of LabeledPoint.
-        :param iterations:
-          The number of iterations.
-          (default: 100)
-        :param step:
-          The step parameter used in SGD.
-          (default: 1.0)
-        :param regParam:
-          The regularizer parameter.
-          (default: 0.01)
-        :param miniBatchFraction:
-          Fraction of data to be used for each SGD iteration.
-          (default: 1.0)
-        :param initialWeights:
-          The initial weights.
-          (default: None)
-        :param intercept:
-          Boolean parameter which indicates the use or not of the
-          augmented representation for training data (i.e. whether bias
-          features are activated or not).
-          (default: False)
-        :param validateData:
-          Boolean parameter which indicates if the algorithm should
-          validate data before training.
-          (default: True)
-        :param convergenceTol:
-          A condition which decides iteration termination.
-          (default: 0.001)
+        .. versionadded:: 0.9.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            The training data, an RDD of LabeledPoint.
+        iterations : int, optional
+            The number of iterations.
+            (default: 100)
+        step : float, optional
+            The step parameter used in SGD.
+            (default: 1.0)
+        regParam : float, optional
+            The regularizer parameter.
+            (default: 0.01)
+        miniBatchFraction : float, optional
+            Fraction of data to be used for each SGD iteration.
+            (default: 1.0)
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
+            The initial weights.
+            (default: None)
+        intercept : bool, optional
+            Boolean parameter which indicates the use or not of the
+            augmented representation for training data (i.e. whether bias
+            features are activated or not).
+            (default: False)
+        validateData : bool, optional
+            Boolean parameter which indicates if the algorithm should
+            validate data before training.
+            (default: True)
+        convergenceTol : float, optional
+            A condition which decides iteration termination.
+            (default: 0.001)
         """
         warnings.warn(
             "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 1.0. "
             "Note the default regParam is 0.01 for LassoWithSGD, but is 0.0 for LinearRegression.",
-            DeprecationWarning)
+            FutureWarning
+        )
 
         def train(rdd, i):
             return callMLlibFunc("trainLassoModelWithSGD", rdd, int(iterations), float(step),
@@ -441,6 +470,11 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit with
     an l_2 penalty term.
 
+    .. versionadded:: 0.9.0
+
+    Examples
+    --------
+    >>> from pyspark.mllib.linalg import SparseVector
     >>> from pyspark.mllib.regression import LabeledPoint
     >>> data = [
     ...     LabeledPoint(0.0, [0.0]),
@@ -492,8 +526,6 @@ class RidgeRegressionModel(LinearRegressionModelBase):
     True
     >>> abs(lrm.predict(SparseVector(1, {0: 1.0})) - 1) < 0.5
     True
-
-    .. versionadded:: 0.9.0
     """
     @since("1.4.0")
     def save(self, sc, path):
@@ -516,13 +548,15 @@ class RidgeRegressionModel(LinearRegressionModelBase):
 
 class RidgeRegressionWithSGD(object):
     """
+    Train a regression model with L2-regularization using Stochastic Gradient Descent.
+
     .. versionadded:: 0.9.0
-    .. note:: Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0.
-            Note the default regParam is 0.01 for RidgeRegressionWithSGD, but is 0.0 for
-            LinearRegression.
+    .. deprecated:: 2.0.0
+        Use :py:class:`pyspark.ml.regression.LinearRegression` with elasticNetParam = 0.0.
+        Note the default regParam is 0.01 for RidgeRegressionWithSGD, but is 0.0 for
+        LinearRegression.
     """
     @classmethod
-    @since("0.9.0")
     def train(cls, data, iterations=100, step=1.0, regParam=0.01,
               miniBatchFraction=1.0, initialWeights=None, intercept=False,
               validateData=True, convergenceTol=0.001):
@@ -537,40 +571,44 @@ class RidgeRegressionWithSGD(object):
         of rows of A, each with its corresponding right hand side label y.
         See also the documentation for the precise formulation.
 
-        :param data:
-          The training data, an RDD of LabeledPoint.
-        :param iterations:
-          The number of iterations.
-          (default: 100)
-        :param step:
-          The step parameter used in SGD.
-          (default: 1.0)
-        :param regParam:
-          The regularizer parameter.
-          (default: 0.01)
-        :param miniBatchFraction:
-          Fraction of data to be used for each SGD iteration.
-          (default: 1.0)
-        :param initialWeights:
-          The initial weights.
-          (default: None)
-        :param intercept:
-          Boolean parameter which indicates the use or not of the
-          augmented representation for training data (i.e. whether bias
-          features are activated or not).
-          (default: False)
-        :param validateData:
-          Boolean parameter which indicates if the algorithm should
-          validate data before training.
-          (default: True)
-        :param convergenceTol:
-          A condition which decides iteration termination.
-          (default: 0.001)
+        .. versionadded:: 0.9.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            The training data, an RDD of LabeledPoint.
+        iterations : int, optional
+            The number of iterations.
+            (default: 100)
+        step : float, optional
+            The step parameter used in SGD.
+            (default: 1.0)
+        regParam : float, optional
+            The regularizer parameter.
+            (default: 0.01)
+        miniBatchFraction : float, optional
+            Fraction of data to be used for each SGD iteration.
+            (default: 1.0)
+        initialWeights : :py:class:`pyspark.mllib.linalg.Vector` or convertible, optional
+            The initial weights.
+            (default: None)
+        intercept : bool, optional
+            Boolean parameter which indicates the use or not of the
+            augmented representation for training data (i.e. whether bias
+            features are activated or not).
+            (default: False)
+        validateData : bool, optional
+            Boolean parameter which indicates if the algorithm should
+            validate data before training.
+            (default: True)
+        convergenceTol : float, optional
+            A condition which decides iteration termination.
+            (default: 0.001)
         """
         warnings.warn(
             "Deprecated in 2.0.0. Use ml.regression.LinearRegression with elasticNetParam = 0.0. "
             "Note the default regParam is 0.01 for RidgeRegressionWithSGD, but is 0.0 for "
-            "LinearRegression.", DeprecationWarning)
+            "LinearRegression.", FutureWarning)
 
         def train(rdd, i):
             return callMLlibFunc("trainRidgeModelWithSGD", rdd, int(iterations), float(step),
@@ -585,15 +623,21 @@ class IsotonicRegressionModel(Saveable, Loader):
     """
     Regression model for isotonic regression.
 
-    :param boundaries:
-      Array of boundaries for which predictions are known. Boundaries
-      must be sorted in increasing order.
-    :param predictions:
-      Array of predictions associated to the boundaries at the same
-      index. Results of isotonic regression and therefore monotone.
-    :param isotonic:
-      Indicates whether this is isotonic or antitonic.
+    .. versionadded:: 1.4.0
 
+    Parameters
+    ----------
+    boundaries : ndarray
+        Array of boundaries for which predictions are known. Boundaries
+        must be sorted in increasing order.
+    predictions : ndarray
+        Array of predictions associated to the boundaries at the same
+        index. Results of isotonic regression and therefore monotone.
+    isotonic : true
+        Indicates whether this is isotonic or antitonic.
+
+    Examples
+    --------
     >>> data = [(1, 0, 1), (2, 1, 1), (3, 2, 1), (1, 3, 1), (6, 4, 1), (17, 5, 1), (16, 6, 1)]
     >>> irm = IsotonicRegression.train(sc.parallelize(data))
     >>> irm.predict(3)
@@ -615,8 +659,6 @@ class IsotonicRegressionModel(Saveable, Loader):
     ...     rmtree(path)
     ... except OSError:
     ...     pass
-
-    .. versionadded:: 1.4.0
     """
 
     def __init__(self, boundaries, predictions, isotonic):
@@ -624,7 +666,6 @@ class IsotonicRegressionModel(Saveable, Loader):
         self.predictions = predictions
         self.isotonic = isotonic
 
-    @since("1.4.0")
     def predict(self, x):
         """
         Predict labels for provided features.
@@ -643,8 +684,13 @@ class IsotonicRegressionModel(Saveable, Loader):
         values with the same boundary then the same rules as in 2)
         are used.
 
-        :param x:
-          Feature or RDD of Features to be labeled.
+
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        x : :py:class:`pyspark.mllib.linalg.Vector` or :py:class:`pyspark.RDD`
+            Feature or RDD of Features to be labeled.
         """
         if isinstance(x, RDD):
             return x.map(lambda v: self.predict(v))
@@ -676,35 +722,42 @@ class IsotonicRegression(object):
     Currently implemented using parallelized pool adjacent violators
     algorithm. Only univariate (single feature) algorithm supported.
 
-    Sequential PAV implementation based on:
+    .. versionadded:: 1.4.0
 
-      Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
-      "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
-      Available from http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf
+    Notes
+    -----
+    Sequential PAV implementation based on
+    Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani (2011) [1]_
 
-    Sequential PAV parallelization based on:
+    Sequential PAV parallelization based on
+    Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset (1996) [2]_
 
-        Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset.
+    See also
+    `Isotonic regression (Wikipedia) <http://en.wikipedia.org/wiki/Isotonic_regression>`_.
+
+    .. [1] Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
+        "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
+        Available from http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf
+    .. [2] Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset
         "An approach to parallelizing isotonic regression."
         Applied Mathematics and Parallel Computing. Physica-Verlag HD, 1996. 141-147.
         Available from http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf
-
-    See `Isotonic regression (Wikipedia) <http://en.wikipedia.org/wiki/Isotonic_regression>`_.
-
-    .. versionadded:: 1.4.0
     """
 
     @classmethod
-    @since("1.4.0")
     def train(cls, data, isotonic=True):
         """
         Train an isotonic regression model on the given data.
 
-        :param data:
-          RDD of (label, feature, weight) tuples.
-        :param isotonic:
-          Whether this is isotonic (which is default) or antitonic.
-          (default: True)
+        .. versionadded:: 1.4.0
+
+        Parameters
+        ----------
+        data : :py:class:`pyspark.RDD`
+            RDD of (label, feature, weight) tuples.
+        isotonic : bool, optional
+            Whether this is isotonic (which is default) or antitonic.
+            (default: True)
         """
         boundaries, predictions = callMLlibFunc("trainIsotonicRegressionModel",
                                                 data.map(_convert_to_vector), bool(isotonic))
@@ -735,28 +788,34 @@ class StreamingLinearAlgorithm(object):
                 "dstream should be a DStream object, got %s" % type(dstream))
         if not self._model:
             raise ValueError(
-                "Model must be intialized using setInitialWeights")
+                "Model must be initialized using setInitialWeights")
 
-    @since("1.5.0")
     def predictOn(self, dstream):
         """
         Use the model to make predictions on batches of data from a
         DStream.
 
-        :return:
-          DStream containing predictions.
+        .. versionadded:: 1.5.0
+
+        Returns
+        -------
+        :py:class:`pyspark.streaming.DStream`
+            DStream containing predictions.
         """
         self._validate(dstream)
         return dstream.map(lambda x: self._model.predict(x))
 
-    @since("1.5.0")
     def predictOnValues(self, dstream):
         """
         Use the model to make predictions on the values of a DStream and
         carry over its keys.
 
-        :return:
-          DStream containing the input keys and the predictions as values.
+        .. versionadded:: 1.5.0
+
+        Returns
+        -------
+        :py:class:`pyspark.streaming.DStream`
+            DStream containing predictions.
         """
         self._validate(dstream)
         return dstream.mapValues(lambda x: self._model.predict(x))
@@ -775,20 +834,22 @@ class StreamingLinearRegressionWithSGD(StreamingLinearAlgorithm):
     of features must be constant. An initial weight vector must
     be provided.
 
-    :param stepSize:
-      Step size for each iteration of gradient descent.
-      (default: 0.1)
-    :param numIterations:
-      Number of iterations run for each batch of data.
-      (default: 50)
-    :param miniBatchFraction:
-      Fraction of each batch of data to use for updates.
-      (default: 1.0)
-    :param convergenceTol:
-      Value used to determine when to terminate iterations.
-      (default: 0.001)
-
     .. versionadded:: 1.5.0
+
+    Parameters
+    ----------
+    stepSize : float, optional
+        Step size for each iteration of gradient descent.
+        (default: 0.1)
+    numIterations : int, optional
+        Number of iterations run for each batch of data.
+        (default: 50)
+    miniBatchFraction : float, optional
+        Fraction of each batch of data to use for updates.
+        (default: 1.0)
+    convergenceTol : float, optional
+        Value used to determine when to terminate iterations.
+        (default: 0.001)
     """
     def __init__(self, stepSize=0.1, numIterations=50, miniBatchFraction=1.0, convergenceTol=0.001):
         self.stepSize = stepSize

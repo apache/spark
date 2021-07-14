@@ -103,11 +103,11 @@ case class AggregateInPandasExec(
     // Schema of input rows to the python runner
     val aggInputSchema = StructType(dataTypes.zipWithIndex.map { case (dt, i) =>
       StructField(s"_$i", dt)
-    })
+    }.toSeq)
 
     // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
-      val prunedProj = UnsafeProjection.create(allInputs, child.output)
+      val prunedProj = UnsafeProjection.create(allInputs.toSeq, child.output)
 
       val grouped = if (groupingExpressions.isEmpty) {
         // Use an empty unsafe row as a place holder for the grouping key
@@ -154,4 +154,7 @@ case class AggregateInPandasExec(
       }
     }}
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): SparkPlan =
+    copy(child = newChild)
 }

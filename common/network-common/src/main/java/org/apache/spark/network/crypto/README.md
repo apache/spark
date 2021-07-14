@@ -155,4 +155,4 @@ server will be able to understand. This will cause the server to close the conne
 attacker tries to send any command to the server. The attacker can just hold the channel open for
 some time, which will be closed when the server times out the channel. These issues could be
 separately mitigated by adding a shorter timeout for the first message after authentication, and
-potentially by adding host blacklists if a possible attack is detected from a particular host.
+potentially by adding host reject-lists if a possible attack is detected from a particular host.

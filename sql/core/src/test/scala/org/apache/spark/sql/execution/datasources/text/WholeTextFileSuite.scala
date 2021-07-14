@@ -19,12 +19,13 @@ package org.apache.spark.sql.execution.datasources.text
 
 import java.io.File
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{StringType, StructType}
 
-class WholeTextFileSuite extends QueryTest with SharedSparkSession {
+abstract class WholeTextFileSuite extends QueryTest with SharedSparkSession {
 
   // Hadoop's FileSystem caching does not use the Configuration as part of its cache key, which
   // can cause Filesystem.get(Configuration) to return a cached instance created with a different
@@ -102,4 +103,18 @@ class WholeTextFileSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+}
+
+class WholeTextFileV1Suite extends WholeTextFileSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "text")
+}
+
+class WholeTextFileV2Suite extends WholeTextFileSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "")
 }

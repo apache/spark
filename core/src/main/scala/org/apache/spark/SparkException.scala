@@ -17,10 +17,28 @@
 
 package org.apache.spark
 
-class SparkException(message: String, cause: Throwable)
-  extends Exception(message, cause) {
+class SparkException(
+    message: String,
+    cause: Throwable,
+    errorClass: Option[String],
+    messageParameters: Array[String])
+  extends Exception(message, cause) with SparkThrowable {
 
-  def this(message: String) = this(message, null)
+  def this(message: String, cause: Throwable) =
+    this(message = message, cause = cause, errorClass = None, messageParameters = Array.empty)
+
+  def this(message: String) =
+    this(message = message, cause = null)
+
+  def this(errorClass: String, messageParameters: Array[String], cause: Throwable) =
+    this(
+      message = SparkThrowableHelper.getMessage(errorClass, messageParameters),
+      cause = cause,
+      errorClass = Some(errorClass),
+      messageParameters = messageParameters)
+
+  override def getErrorClass: String = errorClass.orNull
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass.orNull)
 }
 
 /**
@@ -43,3 +61,21 @@ private[spark] case class SparkUserAppException(exitCode: Int)
  */
 private[spark] case class ExecutorDeadException(message: String)
   extends SparkException(message)
+
+/**
+ * Exception thrown when Spark returns different result after upgrading to a new version.
+ */
+private[spark] class SparkUpgradeException(version: String, message: String, cause: Throwable)
+  extends RuntimeException("You may get a different result due to the upgrading of Spark" +
+    s" $version: $message", cause)
+
+/**
+ * Arithmetic exception thrown from Spark with an error class.
+ */
+class SparkArithmeticException(errorClass: String, messageParameters: Array[String])
+  extends ArithmeticException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}

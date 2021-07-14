@@ -20,15 +20,19 @@ license: |
 ---
 
 ### Description
+
 `LIST JAR` lists the JARs added by [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html).
 
 ### Syntax
-{% highlight sql %}
-LIST JAR
-{% endhighlight %}
+
+```sql
+LIST { JAR | JARS } file_name [ ... ]
+
+```
 
 ### Examples
-{% highlight sql %}
+
+```sql
 ADD JAR /tmp/test.jar;
 ADD JAR /tmp/test_2.jar;
 LIST JAR;
@@ -39,10 +43,12 @@ spark://192.168.1.112:62859/jars/test_2.jar
 LIST JAR /tmp/test.jar /some/random.jar /another/random.jar;
 -- output
 spark://192.168.1.112:62859/jars/test.jar
-{% endhighlight %}
+```
 
 ### Related Statements
- * [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
- * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
- * [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
 
+* [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
+* [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
+* [ADD ARCHIVE](sql-ref-syntax-aux-resource-mgmt-add-archive.html)
+* [LIST FILE](sql-ref-syntax-aux-resource-mgmt-list-file.html)
+* [LIST ARCHIVE](sql-ref-syntax-aux-resource-mgmt-list-archive.html)

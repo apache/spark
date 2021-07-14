@@ -18,6 +18,8 @@
 package test.org.apache.spark.sql;
 
 import java.io.Serializable;
+import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.*;
@@ -210,6 +212,17 @@ public class JavaBeanDeserializationSuite implements Serializable {
     return new GenericRow(values);
   }
 
+  private static String timestampToString(Timestamp ts) {
+    String timestampString = String.valueOf(ts);
+    String formatted = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(ts);
+
+    if (timestampString.length() > 19 && !timestampString.substring(19).equals(".0")) {
+      return formatted + timestampString.substring(19);
+    } else {
+      return formatted;
+    }
+  }
+
   private static RecordSpark22000 createRecordSpark22000(Row recordRow) {
     RecordSpark22000 record = new RecordSpark22000();
     record.setShortField(String.valueOf(recordRow.getShort(0)));
@@ -219,7 +232,7 @@ public class JavaBeanDeserializationSuite implements Serializable {
     record.setDoubleField(String.valueOf(recordRow.getDouble(4)));
     record.setStringField(recordRow.getString(5));
     record.setBooleanField(String.valueOf(recordRow.getBoolean(6)));
-    record.setTimestampField(String.valueOf(recordRow.getTimestamp(7)));
+    record.setTimestampField(timestampToString(recordRow.getTimestamp(7)));
     // This would figure out that null value will not become "null".
     record.setNullIntField(null);
     return record;

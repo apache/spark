@@ -27,9 +27,10 @@ import scala.collection.mutable.ListBuffer
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.encoderFor
+import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, Scan, ScanBuilder}
@@ -57,6 +58,8 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
   val encoder = encoderFor[A]
   protected val attributes = encoder.schema.toAttributes
 
+  protected lazy val toRow: ExpressionEncoder.Serializer[A] = encoder.createSerializer()
+
   def toDS(): Dataset[A] = {
     Dataset[A](sqlContext.sparkSession, logicalPlan)
   }
@@ -75,12 +78,14 @@ abstract class MemoryStreamBase[A : Encoder](sqlContext: SQLContext) extends Spa
 
   protected val logicalPlan: LogicalPlan = {
     StreamingRelationV2(
-      MemoryStreamTableProvider,
+      Some(MemoryStreamTableProvider),
       "memory",
       new MemoryStreamTable(this),
       CaseInsensitiveStringMap.empty(),
       attributes,
-      None)(sqlContext.sparkSession)
+      None,
+      None,
+      None)
   }
 
   override def initialOffset(): OffsetV2 = {
@@ -176,7 +181,7 @@ case class MemoryStream[A : Encoder](
 
   def addData(data: TraversableOnce[A]): Offset = {
     val objects = data.toSeq
-    val rows = objects.iterator.map(d => encoder.toRow(d).copy().asInstanceOf[UnsafeRow]).toArray
+    val rows = objects.iterator.map(d => toRow(d).copy().asInstanceOf[UnsafeRow]).toArray
     logDebug(s"Adding: $objects")
     this.synchronized {
       currentOffset = currentOffset + 1
@@ -213,7 +218,7 @@ case class MemoryStream[A : Encoder](
         batches.slice(sliceStart, sliceEnd)
       }
 
-      logDebug(generateDebugString(newBlocks.flatten, startOrdinal, endOrdinal))
+      logDebug(generateDebugString(newBlocks.flatten.toSeq, startOrdinal, endOrdinal))
 
       numPartitions match {
         case Some(numParts) =>
@@ -243,7 +248,7 @@ case class MemoryStream[A : Encoder](
       rows: Seq[UnsafeRow],
       startOrdinal: Int,
       endOrdinal: Int): String = {
-    val fromRow = encoder.resolveAndBind().fromRow _
+    val fromRow = encoder.resolveAndBind().createDeserializer()
     s"MemoryBatch [$startOrdinal, $endOrdinal]: " +
         s"${rows.map(row => fromRow(row)).mkString(", ")}"
   }

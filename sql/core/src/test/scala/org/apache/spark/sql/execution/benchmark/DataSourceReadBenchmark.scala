@@ -23,7 +23,6 @@ import scala.util.Random
 
 import org.apache.spark.SparkConf
 import org.apache.spark.benchmark.Benchmark
-import org.apache.spark.internal.config.UI._
 import org.apache.spark.sql.{DataFrame, DataFrameWriter, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.parquet.{SpecificParquetRecordReaderBase, VectorizedParquetRecordReader}
@@ -52,7 +51,6 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
       .set("spark.master", "local[1]")
       .setIfMissing("spark.driver.memory", "3g")
       .setIfMissing("spark.executor.memory", "3g")
-      .setIfMissing(UI_ENABLED, false)
 
     val sparkSession = SparkSession.builder.config(conf).getOrCreate()
 
@@ -169,7 +167,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new VectorizedParquetRecordReader(
-              null, enableOffHeapColumnVector, vectorizedReaderBatchSize)
+              enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
               reader.initialize(p, ("id" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -203,7 +201,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
 
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new VectorizedParquetRecordReader(
-              null, enableOffHeapColumnVector, vectorizedReaderBatchSize)
+              enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
               reader.initialize(p, ("id" :: Nil).asJava)
               val batch = reader.resultBatch()
@@ -458,7 +456,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
           var sum = 0
           files.map(_.asInstanceOf[String]).foreach { p =>
             val reader = new VectorizedParquetRecordReader(
-              null, enableOffHeapColumnVector, vectorizedReaderBatchSize)
+              enableOffHeapColumnVector, vectorizedReaderBatchSize)
             try {
               reader.initialize(p, ("c1" :: "c2" :: Nil).asJava)
               val batch = reader.resultBatch()

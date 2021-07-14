@@ -37,7 +37,7 @@ private[deploy] class DriverInfo(
   @transient var worker: Option[WorkerInfo] = None
   // resources(e.f. gpu/fpga) allocated to this driver
   // map from resource name to ResourceInformation
-  private var _resources: Map[String, ResourceInformation] = _
+  private var _resources: Map[String, ResourceInformation] = Map.empty
 
   init()
 

@@ -85,7 +85,7 @@ data into two clusters. The number of desired clusters is passed to the algorith
 Within Set Sum of Squared Error (WSSSE). You can reduce this error measure by increasing *k*. In
 fact the optimal *k* is usually one where there is an "elbow" in the WSSSE graph.
 
-Refer to the [`KMeans` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.KMeans) and [`KMeansModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.KMeansModel) for more details on the API.
+Refer to the [`KMeans` Python docs](api/python/reference/api/pyspark.mllib.clustering.KMeans.html) and [`KMeansModel` Python docs](api/python/reference/api/pyspark.mllib.clustering.KMeansModel.html) for more details on the API.
 
 {% include_example python/mllib/k_means_example.py %}
 </div>
@@ -134,11 +134,11 @@ Refer to the [`GaussianMixture` Java docs](api/java/org/apache/spark/mllib/clust
 
 <div data-lang="python" markdown="1">
 In the following example after loading and parsing data, we use a
-[GaussianMixture](api/python/pyspark.mllib.html#pyspark.mllib.clustering.GaussianMixture)
+[GaussianMixture](api/python/reference/api/pyspark.mllib.clustering.GaussianMixture.html)
 object to cluster the data into two clusters. The number of desired clusters is passed
 to the algorithm. We then output the parameters of the mixture model.
 
-Refer to the [`GaussianMixture` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.GaussianMixture) and [`GaussianMixtureModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.GaussianMixtureModel) for more details on the API.
+Refer to the [`GaussianMixture` Python docs](api/python/reference/api/pyspark.mllib.clustering.GaussianMixture.html) and [`GaussianMixtureModel` Python docs](api/python/reference/api/pyspark.mllib.clustering.GaussianMixtureModel.html) for more details on the API.
 
 {% include_example python/mllib/gaussian_mixture_example.py %}
 </div>
@@ -189,7 +189,7 @@ Refer to the [`PowerIterationClustering` Scala docs](api/scala/org/apache/spark/
 
 [`PowerIterationClustering`](api/java/org/apache/spark/mllib/clustering/PowerIterationClustering.html)
 implements the PIC algorithm.
-It takes an `JavaRDD` of `(srcId: Long, dstId: Long, similarity: Double)` tuples representing the
+It takes a `JavaRDD` of `(srcId: Long, dstId: Long, similarity: Double)` tuples representing the
 affinity matrix.
 Calling `PowerIterationClustering.run` returns a
 [`PowerIterationClusteringModel`](api/java/org/apache/spark/mllib/clustering/PowerIterationClusteringModel.html)
@@ -202,15 +202,15 @@ Refer to the [`PowerIterationClustering` Java docs](api/java/org/apache/spark/ml
 
 <div data-lang="python" markdown="1">
 
-[`PowerIterationClustering`](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering)
+[`PowerIterationClustering`](api/python/reference/api/pyspark.mllib.clustering.PowerIterationClustering.html)
 implements the PIC algorithm.
 It takes an `RDD` of `(srcId: Long, dstId: Long, similarity: Double)` tuples representing the
 affinity matrix.
 Calling `PowerIterationClustering.run` returns a
-[`PowerIterationClusteringModel`](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering),
+[`PowerIterationClusteringModel`](api/python/reference/api/pyspark.mllib.clustering.PowerIterationClustering.html),
 which contains the computed clustering assignments.
 
-Refer to the [`PowerIterationClustering` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClustering) and [`PowerIterationClusteringModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.PowerIterationClusteringModel) for more details on the API.
+Refer to the [`PowerIterationClustering` Python docs](api/python/reference/api/pyspark.mllib.clustering.PowerIterationClustering.html) and [`PowerIterationClusteringModel` Python docs](api/python/reference/api/pyspark.mllib.clustering.PowerIterationClusteringModel.html) for more details on the API.
 
 {% include_example python/mllib/power_iteration_clustering_example.py %}
 </div>
@@ -368,7 +368,7 @@ Refer to the [`LDA` Java docs](api/java/org/apache/spark/mllib/clustering/LDA.ht
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`LDA` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.LDA) and [`LDAModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.LDAModel) for more details on the API.
+Refer to the [`LDA` Python docs](api/python/reference/api/pyspark.mllib.clustering.LDA.html) and [`LDAModel` Python docs](api/python/reference/api/pyspark.mllib.clustering.LDAModel.html) for more details on the API.
 
 {% include_example python/mllib/latent_dirichlet_allocation_example.py %}
 </div>
@@ -410,7 +410,7 @@ Refer to the [`BisectingKMeans` Java docs](api/java/org/apache/spark/mllib/clust
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`BisectingKMeans` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.BisectingKMeans) and [`BisectingKMeansModel` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.BisectingKMeansModel) for more details on the API.
+Refer to the [`BisectingKMeans` Python docs](api/python/reference/api/pyspark.mllib.clustering.BisectingKMeans.html) and [`BisectingKMeansModel` Python docs](api/python/reference/api/pyspark.mllib.clustering.BisectingKMeansModel.html) for more details on the API.
 
 {% include_example python/mllib/bisecting_k_means_example.py %}
 </div>
@@ -458,7 +458,7 @@ And Refer to [Spark Streaming Programming Guide](streaming-programming-guide.htm
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [`StreamingKMeans` Python docs](api/python/pyspark.mllib.html#pyspark.mllib.clustering.StreamingKMeans) for more details on the API.
+Refer to the [`StreamingKMeans` Python docs](api/python/reference/api/pyspark.mllib.clustering.StreamingKMeans.html) for more details on the API.
 And Refer to [Spark Streaming Programming Guide](streaming-programming-guide.html#initializing) for details on StreamingContext.
 
 {% include_example python/mllib/streaming_k_means_example.py %}

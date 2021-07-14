@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, Generator}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -304,7 +305,7 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
 
   test("outer generator()") {
     spark.sessionState.functionRegistry
-      .createOrReplaceTempFunction("empty_gen", _ => EmptyGenerator())
+      .createOrReplaceTempFunction("empty_gen", _ => EmptyGenerator(), "scala_udf")
     checkAnswer(
       sql("select * from values 1, 2 lateral view outer empty_gen() a as b"),
       Row(1, null) :: Row(2, null) :: Nil)
@@ -343,10 +344,22 @@ class GeneratorFunctionSuite extends QueryTest with SharedSparkSession {
       assert(msg2.contains("Only one generator allowed per aggregate clause"))
     }
   }
+
+  test("SPARK-30998: Unsupported nested inner generators") {
+    val errMsg = intercept[AnalysisException] {
+      sql("SELECT array(array(1, 2), array(3)) v").select(explode(explode($"v"))).collect
+    }.getMessage
+    assert(errMsg.contains("Generators are not supported when it's nested in expressions, " +
+      "but got: explode(explode(v))"))
+  }
+
+  test("SPARK-30997: generators in aggregate expressions for dataframe") {
+    val df = Seq(1, 2, 3).toDF("v")
+    checkAnswer(df.select(explode(array(min($"v"), max($"v")))), Row(1) :: Row(3) :: Nil)
+  }
 }
 
-case class EmptyGenerator() extends Generator {
-  override def children: Seq[Expression] = Nil
+case class EmptyGenerator() extends Generator with LeafLike[Expression] {
   override def elementSchema: StructType = new StructType().add("id", IntegerType)
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = Seq.empty
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.debug.codegenStringSeq
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.test.SQLTestUtils
@@ -98,16 +99,16 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
     }
   }
 
-  test("SPARK-22219: refactor to control to generate comment") {
+  test("SPARK-22219: refactor to control to generate comment",
+    DisableAdaptiveExecution("WSCG rule is applied later in AQE")) {
     Seq(true, false).foreach { flag =>
-      withSQLConf(StaticSQLConf.CODEGEN_COMMENTS.key -> flag.toString,
-        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      withSQLConf(StaticSQLConf.CODEGEN_COMMENTS.key -> flag.toString) {
         // with AQE on, the WholeStageCodegen rule is applied when running QueryStageExec.
         val res = codegenStringSeq(spark.range(10).groupBy(col("id") * 2).count()
           .queryExecution.executedPlan)
         assert(res.length == 2)
         assert(res.forall { case (_, code, _) =>
-          (code.contains("* Codegend pipeline") == flag) &&
+          (code.contains("* Codegened pipeline") == flag) &&
             (code.contains("// input[") == flag)
         })
       }
@@ -174,7 +175,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
         df.hint("broadcast")
       }
 
-      // set local propert and assert
+      // set local property and assert
       val df2 = generateBroadcastDataFrame(confKey, confValue1)
       spark.sparkContext.setLocalProperty(confKey, confValue1)
       val checks = df1.join(df2).collect()
@@ -191,8 +192,7 @@ class ExecutorSideSQLConfSuite extends SparkFunSuite with SQLTestUtils {
 
 case class SQLConfAssertPlan(confToCheck: Seq[(String, String)]) extends LeafExecNode {
   override protected def doExecute(): RDD[InternalRow] = {
-    sqlContext
-      .sparkContext
+    sparkContext
       .parallelize(0 until 2, 2)
       .mapPartitions { it =>
         val confs = SQLConf.get

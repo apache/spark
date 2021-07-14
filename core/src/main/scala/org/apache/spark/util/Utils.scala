@@ -28,10 +28,10 @@ import java.nio.channels.{Channels, FileChannel, WritableByteChannel}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.security.SecureRandom
-import java.util.{Arrays, Locale, Properties, Random, UUID}
+import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
-import java.util.zip.GZIPInputStream
+import java.util.zip.{GZIPInputStream, ZipInputStream}
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -45,14 +45,17 @@ import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.codec.binary.Hex
+import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.util.{RunJar, StringUtils}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.eclipse.jetty.util.MultiException
 import org.slf4j.Logger
@@ -100,6 +103,8 @@ private[spark] object Utils extends Logging {
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
   val LOCAL_SCHEME = "local"
+
+  private val weakStringInterner = Interners.newWeakInterner[String]()
 
   private val PATTERN_FOR_COMMAND_LINE_ARG = "-D(.+?)=(.+)".r
 
@@ -171,6 +176,11 @@ private[spark] object Utils extends Logging {
     } finally {
       isWrapper.close()
     }
+  }
+
+  /** String interning to reduce the memory usage. */
+  def weakIntern(s: String): String = {
+    weakStringInterner.intern(s)
   }
 
   /**
@@ -275,9 +285,11 @@ private[spark] object Utils extends Logging {
    */
   def createDirectory(dir: File): Boolean = {
     try {
-      // This sporadically fails - not sure why ... !dir.exists() && !dir.mkdirs()
-      // So attempting to create and then check if directory was created or not.
-      dir.mkdirs()
+      // SPARK-35907: The check was required by File.mkdirs() because it could sporadically
+      // fail silently. After switching to Files.createDirectories(), ideally, there should
+      // no longer be silent fails. But the check is kept for the safety concern. We can
+      // remove the check when we're sure that Files.createDirectories() would never fail silently.
+      Files.createDirectories(dir.toPath)
       if ( !dir.exists() || !dir.isDirectory) {
         logError(s"Failed to create directory " + dir)
       }
@@ -305,10 +317,14 @@ private[spark] object Utils extends Logging {
       }
       try {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
-        if (dir.exists() || !dir.mkdirs()) {
+        // SPARK-35907:
+        // This could throw more meaningful exception information if directory creation failed.
+        Files.createDirectories(dir.toPath)
+      } catch {
+        case e @ (_ : IOException | _ : SecurityException) =>
+          logError(s"Failed to create directory $dir", e)
           dir = null
-        }
-      } catch { case e: SecurityException => dir = null; }
+      }
     }
 
     dir.getCanonicalFile
@@ -376,7 +392,7 @@ private[spark] object Utils extends Logging {
    * This returns a new InputStream which contains the same data as the original input stream.
    * It may be entirely on in-memory buffer, or it may be a combination of in-memory data, and then
    * continue to read from the original stream. The only real use of this is if the original input
-   * stream will potentially detect corruption while the data is being read (eg. from compression).
+   * stream will potentially detect corruption while the data is being read (e.g. from compression).
    * This allows for an eager check of corruption in the first maxSize bytes of data.
    *
    * @return An InputStream which includes all data from the original stream (combining buffered
@@ -486,15 +502,19 @@ private[spark] object Utils extends Logging {
    *
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
+   *
+   * If `shouldUntar` is true, it untars the given url if it is a tar.gz or tgz into `targetDir`.
+   * This is a legacy behavior, and users should better use `spark.archives` configuration or
+   * `SparkContext.addArchive`
    */
   def fetchFile(
       url: String,
       targetDir: File,
       conf: SparkConf,
-      securityMgr: SecurityManager,
       hadoopConf: Configuration,
       timestamp: Long,
-      useCache: Boolean): File = {
+      useCache: Boolean,
+      shouldUntar: Boolean = true): File = {
     val fileName = decodeFileNameInURI(new URI(url))
     val targetFile = new File(targetDir, fileName)
     val fetchCacheEnabled = conf.getBoolean("spark.files.useFetchCache", defaultValue = true)
@@ -519,7 +539,7 @@ private[spark] object Utils extends Logging {
       val cachedFile = new File(localDir, cachedFileName)
       try {
         if (!cachedFile.exists()) {
-          doFetchFile(url, localDir, cachedFileName, conf, securityMgr, hadoopConf)
+          doFetchFile(url, localDir, cachedFileName, conf, hadoopConf)
         }
       } finally {
         lock.release()
@@ -532,16 +552,26 @@ private[spark] object Utils extends Logging {
         conf.getBoolean("spark.files.overwrite", false)
       )
     } else {
-      doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
+      doFetchFile(url, targetDir, fileName, conf, hadoopConf)
     }
 
-    // Decompress the file if it's a .tar or .tar.gz
-    if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
-      logInfo("Untarring " + fileName)
-      executeAndGetOutput(Seq("tar", "-xzf", fileName), targetDir)
-    } else if (fileName.endsWith(".tar")) {
-      logInfo("Untarring " + fileName)
-      executeAndGetOutput(Seq("tar", "-xf", fileName), targetDir)
+    if (shouldUntar) {
+      // Decompress the file if it's a .tar or .tar.gz
+      if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
+        logWarning(
+          "Untarring behavior will be deprecated at spark.files and " +
+            "SparkContext.addFile. Consider using spark.archives or SparkContext.addArchive " +
+            "instead.")
+        logInfo("Untarring " + fileName)
+        executeAndGetOutput(Seq("tar", "-xzf", fileName), targetDir)
+      } else if (fileName.endsWith(".tar")) {
+        logWarning(
+          "Untarring behavior will be deprecated at spark.files and " +
+            "SparkContext.addFile. Consider using spark.archives or SparkContext.addArchive " +
+            "instead.")
+        logInfo("Untarring " + fileName)
+        executeAndGetOutput(Seq("tar", "-xf", fileName), targetDir)
+      }
     }
     // Make the file executable - That's necessary for scripts
     FileUtil.chmod(targetFile.getAbsolutePath, "a+x")
@@ -553,6 +583,26 @@ private[spark] object Utils extends Logging {
     }
 
     targetFile
+  }
+
+  /**
+   * Unpacks an archive file into the specified directory. It expects .jar, .zip, .tar.gz, .tgz
+   * and .tar files. This behaves same as Hadoop's archive in distributed cache. This method is
+   * basically copied from `org.apache.hadoop.yarn.util.FSDownload.unpack`.
+   */
+  def unpack(source: File, dest: File): Unit = {
+    val lowerSrc = StringUtils.toLowerCase(source.getName)
+    if (lowerSrc.endsWith(".jar")) {
+      RunJar.unJar(source, dest, RunJar.MATCH_ANY)
+    } else if (lowerSrc.endsWith(".zip")) {
+      FileUtil.unZip(source, dest)
+    } else if (
+      lowerSrc.endsWith(".tar.gz") || lowerSrc.endsWith(".tgz") || lowerSrc.endsWith(".tar")) {
+      FileUtil.unTar(source, dest)
+    } else {
+      logWarning(s"Cannot unpack $source, just copying it to $dest.")
+      copyRecursive(source, dest)
+    }
   }
 
   /** Records the duration of running `body`. */
@@ -705,7 +755,6 @@ private[spark] object Utils extends Logging {
       targetDir: File,
       filename: String,
       conf: SparkConf,
-      securityMgr: SecurityManager,
       hadoopConf: Configuration): File = {
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
@@ -1026,13 +1075,27 @@ private[spark] object Utils extends Logging {
     customHostname.getOrElse(InetAddresses.toUriString(localIpAddress))
   }
 
+  /**
+   * Checks if the host contains only valid hostname/ip without port
+   * NOTE: Incase of IPV6 ip it should be enclosed inside []
+   */
   def checkHost(host: String): Unit = {
-    assert(host != null && host.indexOf(':') == -1, s"Expected hostname (not IP) but got $host")
+    if (host != null && host.split(":").length > 2) {
+      assert(host.startsWith("[") && host.endsWith("]"),
+        s"Expected hostname or IPv6 IP enclosed in [] but got $host")
+    } else {
+      assert(host != null && host.indexOf(':') == -1, s"Expected hostname or IP but got $host")
+    }
   }
 
   def checkHostPort(hostPort: String): Unit = {
-    assert(hostPort != null && hostPort.indexOf(':') != -1,
-      s"Expected host and port but got $hostPort")
+    if (hostPort != null && hostPort.split(":").length > 2) {
+      assert(hostPort != null && hostPort.indexOf("]:") != -1,
+        s"Expected host and port but got $hostPort")
+    } else {
+      assert(hostPort != null && hostPort.indexOf(':') != -1,
+        s"Expected host and port but got $hostPort")
+    }
   }
 
   // Typically, this will be of order of number of nodes in cluster
@@ -1046,18 +1109,30 @@ private[spark] object Utils extends Logging {
       return cached
     }
 
-    val indx: Int = hostPort.lastIndexOf(':')
-    // This is potentially broken - when dealing with ipv6 addresses for example, sigh ...
-    // but then hadoop does not support ipv6 right now.
-    // For now, we assume that if port exists, then it is valid - not check if it is an int > 0
-    if (-1 == indx) {
+    def setDefaultPortValue: (String, Int) = {
       val retval = (hostPort, 0)
       hostPortParseResults.put(hostPort, retval)
-      return retval
+      retval
+    }
+    // checks if the hostport contains IPV6 ip and parses the host, port
+    if (hostPort != null && hostPort.split(":").length > 2) {
+      val index: Int = hostPort.lastIndexOf("]:")
+      if (-1 == index) {
+        return setDefaultPortValue
+      }
+      val port = hostPort.substring(index + 2).trim()
+      val retval = (hostPort.substring(0, index + 1).trim(), if (port.isEmpty) 0 else port.toInt)
+      hostPortParseResults.putIfAbsent(hostPort, retval)
+    } else {
+      val index: Int = hostPort.lastIndexOf(':')
+      if (-1 == index) {
+        return setDefaultPortValue
+      }
+      val port = hostPort.substring(index + 1).trim()
+      val retval = (hostPort.substring(0, index).trim(), if (port.isEmpty) 0 else port.toInt)
+      hostPortParseResults.putIfAbsent(hostPort, retval)
     }
 
-    val retval = (hostPort.substring(0, indx).trim(), hostPort.substring(indx + 1).trim().toInt)
-    hostPortParseResults.putIfAbsent(hostPort, retval)
     hostPortParseResults.get(hostPort)
   }
 
@@ -1067,6 +1142,22 @@ private[spark] object Utils extends Logging {
    */
   def getUsedTimeNs(startTimeNs: Long): String = {
     s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms"
+  }
+
+  /**
+   * Lists files recursively.
+   */
+  def recursiveList(f: File): Array[File] = {
+    require(f.isDirectory)
+    val result = f.listFiles.toBuffer
+    val dirList = result.filter(_.isDirectory)
+    while (dirList.nonEmpty) {
+      val curDir = dirList.remove(0)
+      val files = curDir.listFiles()
+      result ++= files
+      dirList ++= files.filter(_.isDirectory)
+    }
+    result.toArray
   }
 
   /**
@@ -1716,7 +1807,7 @@ private[spark] object Utils extends Logging {
     if (inWord || inDoubleQuote || inSingleQuote) {
       endWord()
     }
-    buf
+    buf.toSeq
   }
 
  /* Calculates 'x' modulo 'mod', takes to consideration sign of x,
@@ -1879,7 +1970,9 @@ private[spark] object Utils extends Logging {
    * Indicates whether Spark is currently running unit tests.
    */
   def isTesting: Boolean = {
-    sys.env.contains("SPARK_TESTING") || sys.props.contains(IS_TESTING.key)
+    // Scala's `sys.env` creates a ton of garbage by constructing Scala immutable maps, so
+    // we directly use the Java APIs instead.
+    System.getenv("SPARK_TESTING") != null || System.getProperty(IS_TESTING.key) != null
   }
 
   /**
@@ -1989,7 +2082,7 @@ private[spark] object Utils extends Logging {
     } catch {
       case e: URISyntaxException =>
     }
-    new File(path).getAbsoluteFile().toURI()
+    new File(path).getCanonicalFile().toURI()
   }
 
   /** Resolve a comma-separated list of paths. */
@@ -1998,6 +2091,17 @@ private[spark] object Utils extends Logging {
       ""
     } else {
       paths.split(",").filter(_.trim.nonEmpty).map { p => Utils.resolveURI(p) }.mkString(",")
+    }
+  }
+
+  /** Check whether a path is an absolute URI. */
+  def isAbsoluteURI(path: String): Boolean = {
+    try {
+      val uri = new URI(path: String)
+      uri.isAbsolute
+    } catch {
+      case _: URISyntaxException =>
+        false
     }
   }
 
@@ -2493,6 +2597,36 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Push based shuffle can only be enabled when the application is submitted
+   * to run in YARN mode, with external shuffle service enabled and
+   * spark.yarn.maxAttempts or the yarn cluster default max attempts is set to 1.
+   * TODO: Remove the requirement on spark.yarn.maxAttempts after SPARK-35546
+   * Support push based shuffle with multiple app attempts
+   */
+  def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
+    conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
+      (conf.get(IS_TESTING).getOrElse(false) ||
+        (conf.get(SHUFFLE_SERVICE_ENABLED) &&
+          conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn" &&
+          getYarnMaxAttempts(conf) == 1))
+  }
+
+  /**
+   * Returns the maximum number of attempts to register the AM in YARN mode.
+   * TODO: Remove this method after SPARK-35546 Support push based shuffle
+   * with multiple app attempts
+   */
+  def getYarnMaxAttempts(conf: SparkConf): Int = {
+    val sparkMaxAttempts = conf.getOption("spark.yarn.maxAttempts").map(_.toInt)
+    val yarnMaxAttempts = getSparkOrYarnConfig(conf, YarnConfiguration.RM_AM_MAX_ATTEMPTS,
+      YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS.toString).toInt
+    sparkMaxAttempts match {
+      case Some(x) => if (x <= yarnMaxAttempts) x else yarnMaxAttempts
+      case None => yarnMaxAttempts
+    }
+  }
+
+  /**
    * Return whether dynamic allocation is enabled in the given conf.
    */
   def isDynamicAllocationEnabled(conf: SparkConf): Boolean = {
@@ -2544,28 +2678,6 @@ private[spark] object Utils extends Logging {
    */
   def tempFileWith(path: File): File = {
     new File(path.getAbsolutePath + "." + UUID.randomUUID())
-  }
-
-  /**
-   * Given a process id, return true if the process is still running.
-   */
-  def isProcessRunning(pid: Int): Boolean = {
-    val process = executeCommand(Seq("kill", "-0", pid.toString))
-    process.waitFor(10, TimeUnit.SECONDS)
-    process.exitValue() == 0
-  }
-
-  /**
-   * Returns the pid of this JVM process.
-   */
-  def getProcessId: Int = {
-    val PROCESS = "(\\d+)@(.*)".r
-    val name = getProcessName()
-    name match {
-      case PROCESS(pid, _) => pid.toInt
-      case _ =>
-        throw new SparkException(s"Unexpected process name: $name, expected to be PID@hostname.")
-    }
   }
 
   /**
@@ -2772,19 +2884,16 @@ private[spark] object Utils extends Logging {
     }
 
     val masterScheme = new URI(masterWithoutK8sPrefix).getScheme
-    val resolvedURL = masterScheme.toLowerCase(Locale.ROOT) match {
-      case "https" =>
+
+    val resolvedURL = Option(masterScheme).map(_.toLowerCase(Locale.ROOT)) match {
+      case Some("https") =>
         masterWithoutK8sPrefix
-      case "http" =>
+      case Some("http") =>
         logWarning("Kubernetes master URL uses HTTP instead of HTTPS.")
         masterWithoutK8sPrefix
-      case null =>
-        val resolvedURL = s"https://$masterWithoutK8sPrefix"
-        logInfo("No scheme specified for kubernetes master URL, so defaulting to https. Resolved " +
-          s"URL is $resolvedURL.")
-        resolvedURL
       case _ =>
-        throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme)
+        throw new IllegalArgumentException("Invalid Kubernetes master scheme: " + masterScheme
+          + " found in URL: " + masterWithoutK8sPrefix)
     }
 
     s"k8s://$resolvedURL"
@@ -2811,6 +2920,34 @@ private[spark] object Utils extends Logging {
     val secretBytes = new Array[Byte](bits / JByte.SIZE)
     rnd.nextBytes(secretBytes)
     Hex.encodeHexString(secretBytes)
+  }
+
+  /**
+   * Returns true if and only if the underlying class is a member class.
+   *
+   * Note: jdk8u throws a "Malformed class name" error if a given class is a deeply-nested
+   * inner class (See SPARK-34607 for details). This issue has already been fixed in jdk9+, so
+   * we can remove this helper method safely if we drop the support of jdk8u.
+   */
+  def isMemberClass(cls: Class[_]): Boolean = {
+    try {
+      cls.isMemberClass
+    } catch {
+      case _: InternalError =>
+        // We emulate jdk8u `Class.isMemberClass` below:
+        //   public boolean isMemberClass() {
+        //     return getSimpleBinaryName() != null && !isLocalOrAnonymousClass();
+        //   }
+        // `getSimpleBinaryName()` returns null if a given class is a top-level class,
+        // so we replace it with `cls.getEnclosingClass != null`. The second condition checks
+        // if a given class is not a local or an anonymous class, so we replace it with
+        // `cls.getEnclosingMethod == null` because `cls.getEnclosingMethod()` return a value
+        // only in either case (JVM Spec 4.8.6).
+        //
+        // Note: The newer jdk evaluates `!isLocalOrAnonymousClass()` first,
+        // we reorder the conditions to follow it.
+        cls.getEnclosingMethod == null && cls.getEnclosingClass != null
+    }
   }
 
   /**
@@ -2845,11 +2982,11 @@ private[spark] object Utils extends Logging {
     if (lastDollarIndex < s.length - 1) {
       // The last char is not a dollar sign
       if (lastDollarIndex == -1 || !s.contains("$iw")) {
-        // The name does not have dollar sign or is not an intepreter
+        // The name does not have dollar sign or is not an interpreter
         // generated class, so we should return the full string
         s
       } else {
-        // The class name is intepreter generated,
+        // The class name is interpreter generated,
         // return the part after the last dollar sign
         // This is the same behavior as getClass.getSimpleName
         s.substring(lastDollarIndex + 1)
@@ -2882,14 +3019,14 @@ private[spark] object Utils extends Logging {
    */
   private val fullWidthRegex = ("""[""" +
     // scalastyle:off nonascii
-    """\u1100-\u115F""" +
-    """\u2E80-\uA4CF""" +
-    """\uAC00-\uD7A3""" +
-    """\uF900-\uFAFF""" +
-    """\uFE10-\uFE19""" +
-    """\uFE30-\uFE6F""" +
-    """\uFF00-\uFF60""" +
-    """\uFFE0-\uFFE6""" +
+    "\u1100-\u115F" +
+    "\u2E80-\uA4CF" +
+    "\uAC00-\uD7A3" +
+    "\uF900-\uFAFF" +
+    "\uFE10-\uFE19" +
+    "\uFE30-\uFE6F" +
+    "\uFF00-\uFF60" +
+    "\uFFE0-\uFFE6" +
     // scalastyle:on nonascii
     """]""").r
 
@@ -2925,9 +3062,103 @@ private[spark] object Utils extends Logging {
 
   /** Create a new properties object with the same values as `props` */
   def cloneProperties(props: Properties): Properties = {
+    if (props == null) {
+      return props
+    }
     val resultProps = new Properties()
     props.forEach((k, v) => resultProps.put(k, v))
     resultProps
+  }
+
+  /**
+   * Convert a sequence of `Path`s to a metadata string. When the length of metadata string
+   * exceeds `stopAppendingThreshold`, stop appending paths for saving memory.
+   */
+  def buildLocationMetadata(paths: Seq[Path], stopAppendingThreshold: Int): String = {
+    val metadata = new StringBuilder(s"(${paths.length} paths)[")
+    var index: Int = 0
+    while (index < paths.length && metadata.length < stopAppendingThreshold) {
+      if (index > 0) {
+        metadata.append(", ")
+      }
+      metadata.append(paths(index).toString)
+      index += 1
+    }
+    if (paths.length > index) {
+      if (index > 0) {
+        metadata.append(", ")
+      }
+      metadata.append("...")
+    }
+    metadata.append("]")
+    metadata.toString
+  }
+
+  /**
+   * Convert MEMORY_OFFHEAP_SIZE to MB Unit, return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def executorOffHeapMemorySizeAsMb(sparkConf: SparkConf): Int = {
+    val sizeInMB = Utils.memoryStringToMb(sparkConf.get(MEMORY_OFFHEAP_SIZE).toString)
+    checkOffHeapEnabled(sparkConf, sizeInMB).toInt
+  }
+
+  /**
+   * return 0 if MEMORY_OFFHEAP_ENABLED is false.
+   */
+  def checkOffHeapEnabled(sparkConf: SparkConf, offHeapSize: Long): Long = {
+    if (sparkConf.get(MEMORY_OFFHEAP_ENABLED)) {
+      require(offHeapSize > 0,
+        s"${MEMORY_OFFHEAP_SIZE.key} must be > 0 when ${MEMORY_OFFHEAP_ENABLED.key} == true")
+      offHeapSize
+    } else {
+      0
+    }
+  }
+
+  def executorTimeoutMs(conf: SparkConf): Long = {
+    // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
+    // "milliseconds"
+    conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
+      .getOrElse(Utils.timeStringAsMs(s"${conf.get(Network.NETWORK_TIMEOUT)}s"))
+  }
+
+  /** Returns a string message about delegation token generation failure */
+  def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): String = {
+    val message = "Failed to get token from service %s due to %s. " +
+      "If %s is not used, set spark.security.credentials.%s.enabled to false."
+    message.format(serviceName, e, serviceName, serviceName)
+  }
+
+  /**
+   * Decompress a zip file into a local dir. File names are read from the zip file. Note, we skip
+   * addressing the directory here. Also, we rely on the caller side to address any exceptions.
+   */
+  def unzipFilesFromFile(fs: FileSystem, dfsZipFile: Path, localDir: File): Seq[File] = {
+    val files = new ArrayBuffer[File]()
+    val in = new ZipInputStream(fs.open(dfsZipFile))
+    var out: OutputStream = null
+    try {
+      var entry = in.getNextEntry()
+      while (entry != null) {
+        if (!entry.isDirectory) {
+          val fileName = localDir.toPath.resolve(entry.getName).getFileName.toString
+          val outFile = new File(localDir, fileName)
+          files += outFile
+          out = new FileOutputStream(outFile)
+          IOUtils.copy(in, out)
+          out.close()
+          in.closeEntry()
+        }
+        entry = in.getNextEntry()
+      }
+      in.close() // so that any error in closing does not get ignored
+      logInfo(s"Unzipped from $dfsZipFile\n\t${files.mkString("\n\t")}")
+    } finally {
+      // Close everything no matter what happened
+      IOUtils.closeQuietly(in)
+      IOUtils.closeQuietly(out)
+    }
+    files.toSeq
   }
 }
 

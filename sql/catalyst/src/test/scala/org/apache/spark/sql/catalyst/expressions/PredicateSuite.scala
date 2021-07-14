@@ -522,37 +522,9 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(expression == expected)
   }
 
-  val row0 = create_row(null)
-  val row1 = create_row(false)
-  val row2 = create_row(true)
-
-  test("istrue and isnottrue") {
-    checkEvaluation(IsTrue(Literal.create(null, BooleanType)), false, row0)
-    checkEvaluation(IsNotTrue(Literal.create(null, BooleanType)), true, row0)
-    checkEvaluation(IsTrue(Literal.create(false, BooleanType)), false, row1)
-    checkEvaluation(IsNotTrue(Literal.create(false, BooleanType)), true, row1)
-    checkEvaluation(IsTrue(Literal.create(true, BooleanType)), true, row2)
-    checkEvaluation(IsNotTrue(Literal.create(true, BooleanType)), false, row2)
-    IsTrue(Literal.create(null, IntegerType)).checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("argument 1 requires boolean type"))
-    }
-  }
-
-  test("isfalse and isnotfalse") {
-    checkEvaluation(IsFalse(Literal.create(null, BooleanType)), false, row0)
-    checkEvaluation(IsNotFalse(Literal.create(null, BooleanType)), true, row0)
-    checkEvaluation(IsFalse(Literal.create(false, BooleanType)), true, row1)
-    checkEvaluation(IsNotFalse(Literal.create(false, BooleanType)), false, row1)
-    checkEvaluation(IsFalse(Literal.create(true, BooleanType)), false, row2)
-    checkEvaluation(IsNotFalse(Literal.create(true, BooleanType)), true, row2)
-    IsFalse(Literal.create(null, IntegerType)).checkInputDataTypes() match {
-      case TypeCheckResult.TypeCheckFailure(msg) =>
-        assert(msg.contains("argument 1 requires boolean type"))
-    }
-  }
-
   test("isunknown and isnotunknown") {
+    val row0 = create_row(null)
+
     checkEvaluation(IsUnknown(Literal.create(null, BooleanType)), true, row0)
     checkEvaluation(IsNotUnknown(Literal.create(null, BooleanType)), false, row0)
     IsUnknown(Literal.create(null, IntegerType)).checkInputDataTypes() match {
@@ -565,5 +537,111 @@ class PredicateSuite extends SparkFunSuite with ExpressionEvalHelper {
     val row = create_row(1)
     val inSet = InSet(BoundReference(0, IntegerType, true), Set.empty)
     checkEvaluation(inSet, false, row)
+  }
+
+  test("SPARK-32764: compare special double/float values") {
+    checkEvaluation(EqualTo(Literal(Double.NaN), Literal(Double.NaN)), true)
+    checkEvaluation(EqualTo(Literal(Double.NaN), Literal(Double.PositiveInfinity)), false)
+    checkEvaluation(EqualTo(Literal(0.0D), Literal(-0.0D)), true)
+    checkEvaluation(GreaterThan(Literal(Double.NaN), Literal(Double.PositiveInfinity)), true)
+    checkEvaluation(GreaterThan(Literal(Double.NaN), Literal(Double.NaN)), false)
+    checkEvaluation(GreaterThan(Literal(0.0D), Literal(-0.0D)), false)
+
+    checkEvaluation(EqualTo(Literal(Float.NaN), Literal(Float.NaN)), true)
+    checkEvaluation(EqualTo(Literal(Float.NaN), Literal(Float.PositiveInfinity)), false)
+    checkEvaluation(EqualTo(Literal(0.0F), Literal(-0.0F)), true)
+    checkEvaluation(GreaterThan(Literal(Float.NaN), Literal(Float.PositiveInfinity)), true)
+    checkEvaluation(GreaterThan(Literal(Float.NaN), Literal(Float.NaN)), false)
+    checkEvaluation(GreaterThan(Literal(0.0F), Literal(-0.0F)), false)
+  }
+
+  test("SPARK-32110: compare special double/float values in array") {
+    def createUnsafeDoubleArray(d: Double): Literal = {
+      Literal(UnsafeArrayData.fromPrimitiveArray(Array(d)), ArrayType(DoubleType))
+    }
+    def createSafeDoubleArray(d: Double): Literal = {
+      Literal(new GenericArrayData(Array(d)), ArrayType(DoubleType))
+    }
+    def createUnsafeFloatArray(d: Double): Literal = {
+      Literal(UnsafeArrayData.fromPrimitiveArray(Array(d.toFloat)), ArrayType(FloatType))
+    }
+    def createSafeFloatArray(d: Double): Literal = {
+      Literal(new GenericArrayData(Array(d.toFloat)), ArrayType(FloatType))
+    }
+    def checkExpr(
+        exprBuilder: (Expression, Expression) => Expression,
+        left: Double,
+        right: Double,
+        expected: Any): Unit = {
+      // test double
+      checkEvaluation(
+        exprBuilder(createUnsafeDoubleArray(left), createUnsafeDoubleArray(right)), expected)
+      checkEvaluation(
+        exprBuilder(createUnsafeDoubleArray(left), createSafeDoubleArray(right)), expected)
+      checkEvaluation(
+        exprBuilder(createSafeDoubleArray(left), createSafeDoubleArray(right)), expected)
+      // test float
+      checkEvaluation(
+        exprBuilder(createUnsafeFloatArray(left), createUnsafeFloatArray(right)), expected)
+      checkEvaluation(
+        exprBuilder(createUnsafeFloatArray(left), createSafeFloatArray(right)), expected)
+      checkEvaluation(
+        exprBuilder(createSafeFloatArray(left), createSafeFloatArray(right)), expected)
+    }
+
+    checkExpr(EqualTo, Double.NaN, Double.NaN, true)
+    checkExpr(EqualTo, Double.NaN, Double.PositiveInfinity, false)
+    checkExpr(EqualTo, 0.0, -0.0, true)
+    checkExpr(GreaterThan, Double.NaN, Double.PositiveInfinity, true)
+    checkExpr(GreaterThan, Double.NaN, Double.NaN, false)
+    checkExpr(GreaterThan, 0.0, -0.0, false)
+  }
+
+  test("SPARK-32110: compare special double/float values in struct") {
+    def createUnsafeDoubleRow(d: Double): Literal = {
+      val dt = new StructType().add("d", "double")
+      val converter = UnsafeProjection.create(dt)
+      val unsafeRow = converter.apply(InternalRow(d))
+      Literal(unsafeRow, dt)
+    }
+    def createSafeDoubleRow(d: Double): Literal = {
+      Literal(InternalRow(d), new StructType().add("d", "double"))
+    }
+    def createUnsafeFloatRow(d: Double): Literal = {
+      val dt = new StructType().add("f", "float")
+      val converter = UnsafeProjection.create(dt)
+      val unsafeRow = converter.apply(InternalRow(d.toFloat))
+      Literal(unsafeRow, dt)
+    }
+    def createSafeFloatRow(d: Double): Literal = {
+      Literal(InternalRow(d.toFloat), new StructType().add("f", "float"))
+    }
+    def checkExpr(
+        exprBuilder: (Expression, Expression) => Expression,
+        left: Double,
+        right: Double,
+        expected: Any): Unit = {
+      // test double
+      checkEvaluation(
+        exprBuilder(createUnsafeDoubleRow(left), createUnsafeDoubleRow(right)), expected)
+      checkEvaluation(
+        exprBuilder(createUnsafeDoubleRow(left), createSafeDoubleRow(right)), expected)
+      checkEvaluation(
+        exprBuilder(createSafeDoubleRow(left), createSafeDoubleRow(right)), expected)
+      // test float
+      checkEvaluation(
+        exprBuilder(createUnsafeFloatRow(left), createUnsafeFloatRow(right)), expected)
+      checkEvaluation(
+        exprBuilder(createUnsafeFloatRow(left), createSafeFloatRow(right)), expected)
+      checkEvaluation(
+        exprBuilder(createSafeFloatRow(left), createSafeFloatRow(right)), expected)
+    }
+
+    checkExpr(EqualTo, Double.NaN, Double.NaN, true)
+    checkExpr(EqualTo, Double.NaN, Double.PositiveInfinity, false)
+    checkExpr(EqualTo, 0.0, -0.0, true)
+    checkExpr(GreaterThan, Double.NaN, Double.PositiveInfinity, true)
+    checkExpr(GreaterThan, Double.NaN, Double.NaN, false)
+    checkExpr(GreaterThan, 0.0, -0.0, false)
   }
 }

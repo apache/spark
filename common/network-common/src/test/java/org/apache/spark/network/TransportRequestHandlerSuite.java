@@ -17,6 +17,7 @@
 
 package org.apache.spark.network;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,22 +25,25 @@ import io.netty.channel.Channel;
 import org.junit.Assert;
 import org.junit.Test;
 
+import static org.junit.Assert.*;
 import static org.mockito.Mockito.*;
 
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.protocol.*;
 import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.server.TransportRequestHandler;
 
 public class TransportRequestHandlerSuite {
 
   @Test
-  public void handleStreamRequest() {
+  public void handleStreamRequest() throws Exception {
     RpcHandler rpcHandler = new NoOpRpcHandler();
     OneForOneStreamManager streamManager = (OneForOneStreamManager) (rpcHandler.getStreamManager());
     Channel channel = mock(Channel.class);
@@ -66,7 +70,7 @@ public class TransportRequestHandlerSuite {
 
     TransportClient reverseClient = mock(TransportClient.class);
     TransportRequestHandler requestHandler = new TransportRequestHandler(channel, reverseClient,
-      rpcHandler, 2L);
+      rpcHandler, 2L, null);
 
     RequestMessage request0 = new StreamRequest(String.format("%d_%d", streamId, 0));
     requestHandler.handle(request0);
@@ -108,5 +112,56 @@ public class TransportRequestHandlerSuite {
 
     streamManager.connectionTerminated(channel);
     Assert.assertEquals(0, streamManager.numStreamStates());
+  }
+
+  @Test
+  public void handleMergedBlockMetaRequest() throws Exception {
+    RpcHandler.MergedBlockMetaReqHandler metaHandler = (client, request, callback) -> {
+      if (request.shuffleId != -1 && request.reduceId != -1) {
+        callback.onSuccess(2, mock(ManagedBuffer.class));
+      } else {
+        callback.onFailure(new RuntimeException("empty block"));
+      }
+    };
+    RpcHandler rpcHandler = new RpcHandler() {
+      @Override
+      public void receive(
+          TransportClient client,
+          ByteBuffer message,
+          RpcResponseCallback callback) {}
+
+      @Override
+      public StreamManager getStreamManager() {
+        return null;
+      }
+
+      @Override
+      public MergedBlockMetaReqHandler getMergedBlockMetaReqHandler() {
+        return metaHandler;
+      }
+    };
+    Channel channel = mock(Channel.class);
+    List<Pair<Object, ExtendedChannelPromise>> responseAndPromisePairs = new ArrayList<>();
+    when(channel.writeAndFlush(any())).thenAnswer(invocationOnMock0 -> {
+      Object response = invocationOnMock0.getArguments()[0];
+      ExtendedChannelPromise channelFuture = new ExtendedChannelPromise(channel);
+      responseAndPromisePairs.add(ImmutablePair.of(response, channelFuture));
+      return channelFuture;
+    });
+
+    TransportClient reverseClient = mock(TransportClient.class);
+    TransportRequestHandler requestHandler = new TransportRequestHandler(channel, reverseClient,
+      rpcHandler, 2L, null);
+    MergedBlockMetaRequest validMetaReq = new MergedBlockMetaRequest(19, "app1", 0, 0);
+    requestHandler.handle(validMetaReq);
+    assertEquals(1, responseAndPromisePairs.size());
+    assertTrue(responseAndPromisePairs.get(0).getLeft() instanceof MergedBlockMetaSuccess);
+    assertEquals(2,
+      ((MergedBlockMetaSuccess) (responseAndPromisePairs.get(0).getLeft())).getNumChunks());
+
+    MergedBlockMetaRequest invalidMetaReq = new MergedBlockMetaRequest(21, "app1", -1, 1);
+    requestHandler.handle(invalidMetaReq);
+    assertEquals(2, responseAndPromisePairs.size());
+    assertTrue(responseAndPromisePairs.get(1).getLeft() instanceof RpcFailure);
   }
 }

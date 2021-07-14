@@ -16,6 +16,8 @@
  */
 package org.apache.spark.sql.execution.streaming
 
+import scala.collection.mutable
+
 import org.apache.spark.SparkEnv
 import org.apache.spark.rpc.{RpcCallContext, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -33,7 +35,7 @@ case class GetRecord(offset: ContinuousRecordPartitionOffset)
  *                to the number of partitions.
  * @param lock a lock object for locking the buckets for read
  */
-class ContinuousRecordEndpoint(buckets: Seq[Seq[UnsafeRow]], lock: Object)
+class ContinuousRecordEndpoint(buckets: Seq[mutable.Seq[UnsafeRow]], lock: Object)
   extends ThreadSafeRpcEndpoint {
 
   private var startOffsets: Seq[Int] = List.fill(buckets.size)(0)

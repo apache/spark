@@ -76,19 +76,17 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
   private def formatMasterResourcesInUse(aliveWorkers: Array[WorkerInfo]): String = {
     val totalInfo = aliveWorkers.map(_.resourcesInfo)
-      .map(resources => toMutable(resources))
       .flatMap(_.toIterator)
       .groupBy(_._1) // group by resource name
       .map { case (rName, rInfoArr) =>
-        rName -> rInfoArr.map(_._2).reduce(_ + _)
-      }.map { case (k, v) => (k, v.toResourceInformation) }
+      rName -> rInfoArr.map(_._2.addresses.size).sum
+    }
     val usedInfo = aliveWorkers.map(_.resourcesInfoUsed)
-      .map (resources => toMutable(resources))
       .flatMap(_.toIterator)
       .groupBy(_._1) // group by resource name
       .map { case (rName, rInfoArr) =>
-      rName -> rInfoArr.map(_._2).reduce(_ + _)
-    }.map { case (k, v) => (k, v.toResourceInformation) }
+      rName -> rInfoArr.map(_._2.addresses.size).sum
+    }
     formatResourcesUsed(totalInfo, usedInfo)
   }
 
@@ -125,9 +123,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     def hasDrivers: Boolean = activeDrivers.length > 0 || completedDrivers.length > 0
 
     val content =
-        <div class="row-fluid">
-          <div class="span12">
-            <ul class="unstyled">
+        <div class="row">
+          <div class="col-12">
+            <ul class="list-unstyled">
               <li><strong>URL:</strong> {state.uri}</li>
               {
                 state.restUri.map { uri =>
@@ -156,8 +154,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           </div>
         </div>
 
-        <div class="row-fluid">
-          <div class="span12">
+        <div class="row">
+          <div class="col-12">
             <span class="collapse-aggregated-workers collapse-table"
                 onClick="collapseTable('collapse-aggregated-workers','aggregated-workers')">
               <h4>
@@ -171,8 +169,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           </div>
         </div>
 
-        <div class="row-fluid">
-          <div class="span12">
+        <div class="row">
+          <div class="col-12">
             <span id="running-app" class="collapse-aggregated-activeApps collapse-table"
                 onClick="collapseTable('collapse-aggregated-activeApps','aggregated-activeApps')">
               <h4>
@@ -188,8 +186,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div>
           {if (hasDrivers) {
-             <div class="row-fluid">
-               <div class="span12">
+             <div class="row">
+               <div class="col-12">
                  <span class="collapse-aggregated-activeDrivers collapse-table"
                      onClick="collapseTable('collapse-aggregated-activeDrivers',
                      'aggregated-activeDrivers')">
@@ -207,8 +205,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           }
         </div>
 
-        <div class="row-fluid">
-          <div class="span12">
+        <div class="row">
+          <div class="col-12">
             <span id="completed-app" class="collapse-aggregated-completedApps collapse-table"
                 onClick="collapseTable('collapse-aggregated-completedApps',
                 'aggregated-completedApps')">
@@ -226,8 +224,8 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         <div>
           {
             if (hasDrivers) {
-              <div class="row-fluid">
-                <div class="span12">
+              <div class="row">
+                <div class="col-12">
                   <span class="collapse-aggregated-completedDrivers collapse-table"
                       onClick="collapseTable('collapse-aggregated-completedDrivers',
                       'aggregated-completedDrivers')">
@@ -286,7 +284,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     }
     <tr>
       <td>
-        <a href={"app?appId=" + app.id}>{app.id}</a>
+        <a href={"app/?appId=" + app.id}>{app.id}</a>
         {killLink}
       </td>
       <td>
@@ -311,7 +309,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
       <td>{UIUtils.formatDate(app.submitDate)}</td>
       <td>{app.desc.user}</td>
       <td>{app.state.toString}</td>
-      <td>{UIUtils.formatDuration(app.duration)}</td>
+      <td sorttable_customkey={app.duration.toString}>
+        {UIUtils.formatDuration(app.duration)}
+      </td>
     </tr>
   }
 

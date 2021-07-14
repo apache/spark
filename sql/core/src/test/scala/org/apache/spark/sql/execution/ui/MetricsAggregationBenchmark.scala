@@ -39,7 +39,8 @@ import org.apache.spark.util.kvstore.InMemoryStore
  * Benchmark for metrics aggregation in the SQL listener.
  * {{{
  *   To run this benchmark:
- *   1. without sbt: bin/spark-submit --class <this class> --jars <core test jar>
+ *   1. without sbt:
+ *      bin/spark-submit --class <this class> --jars <core test jar> <spark sql test jar>
  *   2. build/sbt "core/test:runMain <this class>"
  *   3. generate result: SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
  *      Results will be written to "benchmarks/MetricsAggregationBenchmark-results.txt".

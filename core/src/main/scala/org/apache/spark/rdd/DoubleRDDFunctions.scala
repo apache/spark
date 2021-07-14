@@ -173,7 +173,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
     if (buckets.length < 2) {
       throw new IllegalArgumentException("buckets array must have at least two elements")
     }
-    // The histogramPartition function computes the partail histogram for a given
+    // The histogramPartition function computes the partial histogram for a given
     // partition. The provided bucketFunction determines which bucket in the array
     // to increment or returns None if there is no bucket. This is done so we can
     // specialize for uniformly distributed buckets and save the O(log n) binary

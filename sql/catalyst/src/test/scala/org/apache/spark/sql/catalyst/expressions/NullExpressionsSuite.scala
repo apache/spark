@@ -160,6 +160,12 @@ class NullExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(AtLeastNNonNulls(4, nullOnly), false, EmptyRow)
   }
 
+  test("SPARK-34857: AtLeastNNonNulls toString") {
+    val e = AtLeastNNonNulls(2,
+      Seq(Literal(42), Literal("test"), Literal.create(null, DoubleType)))
+    assert(e.toString == "atleastnnonnulls(2, 42, test, null)")
+  }
+
   test("Coalesce should not throw 64KiB exception") {
     val inputs = (1 to 2500).map(x => Literal(s"x_$x"))
     checkEvaluation(Coalesce(inputs), "x_1")

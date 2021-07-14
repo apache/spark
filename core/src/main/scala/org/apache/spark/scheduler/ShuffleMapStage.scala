@@ -52,7 +52,7 @@ private[spark] class ShuffleMapStage(
    * Partitions that either haven't yet been computed, or that were computed on an executor
    * that has since been lost, so should be re-computed.  This variable is used by the
    * DAGScheduler to determine when a stage has completed. Task successes in both the active
-   * attempt for the stage or in earlier attempts for this stage can cause paritition ids to get
+   * attempt for the stage or in earlier attempts for this stage can cause partition ids to get
    * removed from pendingPartitions. As a result, this variable may be inconsistent with the pending
    * tasks in the TaskSetManager for the active attempt for the stage (the partitions stored here
    * will always be a subset of the partitions that the TaskSetManager thinks are pending).

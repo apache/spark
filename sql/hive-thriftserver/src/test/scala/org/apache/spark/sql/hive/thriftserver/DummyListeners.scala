@@ -17,7 +17,7 @@
 
 /**
  * These classes in this package are intentionally placed to the outer package of spark,
- * because IsolatedClientLoader leverages Spark classloader for shared classess including
+ * because IsolatedClientLoader leverages Spark classloader for shared classes including
  * spark package, and the test should fail if Spark initializes these listeners with
  * IsolatedClientLoader.
  */
@@ -29,7 +29,7 @@ import org.apache.spark.sql.util.QueryExecutionListener
 
 class DummyQueryExecutionListener extends QueryExecutionListener {
   override def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit = {}
-  override def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit = {}
+  override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
 }
 
 class DummyStreamingQueryListener extends StreamingQueryListener {

@@ -19,7 +19,9 @@ license: |
   limitations under the License.
 ---
 
-* [CACHE TABLE statement](sql-ref-syntax-aux-cache-cache-table.html)
-* [UNCACHE TABLE statement](sql-ref-syntax-aux-cache-uncache-table.html)
-* [CLEAR CACHE statement](sql-ref-syntax-aux-cache-clear-cache.html)
-* [REFRESH TABLE statement](sql-ref-syntax-aux-refresh-table.html)
+ * [CACHE TABLE statement](sql-ref-syntax-aux-cache-cache-table.html)
+ * [UNCACHE TABLE statement](sql-ref-syntax-aux-cache-uncache-table.html)
+ * [CLEAR CACHE statement](sql-ref-syntax-aux-cache-clear-cache.html)
+ * [REFRESH TABLE statement](sql-ref-syntax-aux-cache-refresh-table.html)
+ * [REFRESH statement](sql-ref-syntax-aux-cache-refresh.html)
+ * [REFRESH FUNCTION statement](sql-ref-syntax-aux-cache-refresh-function.html)

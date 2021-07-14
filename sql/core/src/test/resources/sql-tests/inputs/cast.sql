@@ -59,7 +59,11 @@ DESC FUNCTION EXTENDED boolean;
 
 -- cast string to interval and interval to string
 SELECT CAST('interval 3 month 1 hour' AS interval);
+SELECT CAST("interval '3-1' year to month" AS interval year to month);
+SELECT CAST("interval '3 00:00:01' day to second" AS interval day to second);
 SELECT CAST(interval 3 month 1 hour AS string);
+SELECT CAST(interval 3 year 1 month AS string);
+SELECT CAST(interval 3 day 1 second AS string);
 
 -- trim string before cast to numeric
 select cast(' 1' as tinyint);
@@ -70,6 +74,11 @@ select cast(' 1' as bigint);
 select cast(' 1' as float);
 select cast(' 1 ' as DOUBLE);
 select cast('1.0 ' as DEC);
+select cast('1中文' as tinyint);
+select cast('1中文' as smallint);
+select cast('1中文' as INT);
+select cast('中文1' as bigint);
+select cast('1中文' as bigint);
 
 -- trim string before cast to boolean
 select cast('\t\t true \n\r ' as boolean);

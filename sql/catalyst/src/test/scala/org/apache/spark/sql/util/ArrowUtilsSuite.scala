@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.util
 
+import java.time.ZoneId
+
 import org.apache.arrow.vector.types.pojo.ArrowType
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.LA
 import org.apache.spark.sql.types._
 
 class ArrowUtilsSuite extends SparkFunSuite {
@@ -46,6 +48,8 @@ class ArrowUtilsSuite extends SparkFunSuite {
     roundtrip(BinaryType)
     roundtrip(DecimalType.SYSTEM_DEFAULT)
     roundtrip(DateType)
+    roundtrip(YearMonthIntervalType())
+    roundtrip(DayTimeIntervalType())
     val tsExMsg = intercept[UnsupportedOperationException] {
       roundtrip(TimestampType)
     }
@@ -62,10 +66,10 @@ class ArrowUtilsSuite extends SparkFunSuite {
       assert(ArrowUtils.fromArrowSchema(arrowSchema) === schema)
     }
 
-    roundtripWithTz(DateTimeUtils.defaultTimeZone().getID)
+    roundtripWithTz(ZoneId.systemDefault().getId)
     roundtripWithTz("Asia/Tokyo")
     roundtripWithTz("UTC")
-    roundtripWithTz("America/Los_Angeles")
+    roundtripWithTz(LA.getId)
   }
 
   test("array") {

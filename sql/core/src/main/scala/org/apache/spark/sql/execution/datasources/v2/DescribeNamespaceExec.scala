@@ -21,10 +21,8 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SupportsNamespaces}
-import org.apache.spark.sql.types.StructType
 
 /**
  * Physical plan node for describing a namespace.
@@ -33,9 +31,7 @@ case class DescribeNamespaceExec(
     output: Seq[Attribute],
     catalog: SupportsNamespaces,
     namespace: Seq[String],
-    isExtended: Boolean) extends V2CommandExec {
-  private val encoder = RowEncoder(StructType.fromAttributes(output)).resolveAndBind()
-
+    isExtended: Boolean) extends LeafV2CommandExec {
   override protected def run(): Seq[InternalRow] = {
     val rows = new ArrayBuffer[InternalRow]()
     val ns = namespace.toArray
@@ -53,10 +49,6 @@ case class DescribeNamespaceExec(
         rows += toCatalystRow("Properties", properties.toSeq.mkString("(", ",", ")"))
       }
     }
-    rows
-  }
-
-  private def toCatalystRow(strs: String*): InternalRow = {
-    encoder.toRow(new GenericRowWithSchema(strs.toArray, schema)).copy()
+    rows.toSeq
   }
 }

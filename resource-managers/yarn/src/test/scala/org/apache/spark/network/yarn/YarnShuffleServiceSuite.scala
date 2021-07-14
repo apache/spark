@@ -23,21 +23,29 @@ import java.nio.file.attribute.PosixFilePermission._
 import java.util.EnumSet
 
 import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 
+import com.codahale.metrics.MetricSet
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.metrics2.impl.MetricsSystemImpl
+import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem
 import org.apache.hadoop.service.ServiceStateException
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.api.{ApplicationInitializationContext, ApplicationTerminationContext}
-import org.scalatest.{BeforeAndAfterEach, Matchers}
+import org.mockito.Mockito.{mock, when}
+import org.scalatest.BeforeAndAfterEach
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
+import org.scalatest.matchers.should.Matchers._
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config._
-import org.apache.spark.network.shuffle.ShuffleTestAccessor
+import org.apache.spark.network.shuffle.{ExternalBlockHandler, RemoteBlockPushResolver, ShuffleTestAccessor}
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
+import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.Utils
 
 class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
@@ -48,6 +56,9 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
   override def beforeEach(): Unit = {
     super.beforeEach()
+    // Ensure that each test uses a fresh metrics system
+    DefaultMetricsSystem.shutdown()
+    DefaultMetricsSystem.setInstance(new MetricsSystemImpl())
     yarnConfig = new YarnConfiguration()
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICES, "spark_shuffle")
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
@@ -242,7 +253,7 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver2) should be (Some(shuffleInfo2))
     s2.stop()
 
-    // another stop & restart should be fine though (eg., we recover from previous corruption)
+    // another stop & restart should be fine though (e.g., we recover from previous corruption)
     s3 = new YarnShuffleService
     s3.setRecoveryPath(new Path(recoveryLocalDir.toURI))
     s3.init(yarnConfig)
@@ -381,4 +392,66 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     s1.secretsFile should be (null)
   }
 
+  test("SPARK-31646: metrics should be registered into Node Manager's metrics system") {
+    s1 = new YarnShuffleService
+    s1.init(yarnConfig)
+
+    val metricsSource = DefaultMetricsSystem.instance.asInstanceOf[MetricsSystemImpl]
+      .getSource("sparkShuffleService").asInstanceOf[YarnShuffleServiceMetrics]
+    val metricSetRef = classOf[YarnShuffleServiceMetrics].getDeclaredField("metricSet")
+    metricSetRef.setAccessible(true)
+    val metrics = metricSetRef.get(metricsSource).asInstanceOf[MetricSet].getMetrics
+
+    // Use sorted Seq instead of Set for easier comparison when there is a mismatch
+    assert(metrics.keySet().asScala.toSeq.sorted == Seq(
+      "blockTransferRate",
+      "blockTransferMessageRate",
+      "blockTransferRateBytes",
+      "blockTransferAvgSize_1min",
+      "numActiveConnections",
+      "numCaughtExceptions",
+      "numRegisteredConnections",
+      "openBlockRequestLatencyMillis",
+      "registeredExecutorsSize",
+      "registerExecutorRequestLatencyMillis",
+      "finalizeShuffleMergeLatencyMillis",
+      "shuffle-server.usedDirectMemory",
+      "shuffle-server.usedHeapMemory",
+      "fetchMergedBlocksMetaLatencyMillis"
+    ).sorted)
+  }
+
+  test("SPARK-34828: metrics should be registered with configured name") {
+    s1 = new YarnShuffleService
+    yarnConfig.set(YarnShuffleService.SPARK_SHUFFLE_SERVICE_METRICS_NAMESPACE_KEY, "fooMetrics")
+    s1.init(yarnConfig)
+
+    assert(DefaultMetricsSystem.instance.getSource("sparkShuffleService") === null)
+    assert(DefaultMetricsSystem.instance.getSource("fooMetrics")
+        .isInstanceOf[YarnShuffleServiceMetrics])
+  }
+
+  test("create default merged shuffle file manager instance") {
+    val mockConf = mock(classOf[TransportConf])
+    when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
+      "org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager")
+    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf)
+    assert(mergeMgr.isInstanceOf[ExternalBlockHandler.NoOpMergedShuffleFileManager])
+  }
+
+  test("create remote block push resolver instance") {
+    val mockConf = mock(classOf[TransportConf])
+    when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
+      "org.apache.spark.network.shuffle.RemoteBlockPushResolver")
+    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf)
+    assert(mergeMgr.isInstanceOf[RemoteBlockPushResolver])
+  }
+
+  test("invalid class name of merge manager will use noop instance") {
+    val mockConf = mock(classOf[TransportConf])
+    when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
+      "org.apache.spark.network.shuffle.NotExistent")
+    val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf)
+    assert(mergeMgr.isInstanceOf[ExternalBlockHandler.NoOpMergedShuffleFileManager])
+  }
 }

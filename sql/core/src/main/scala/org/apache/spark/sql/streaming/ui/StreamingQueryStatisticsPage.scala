@@ -19,21 +19,31 @@ package org.apache.spark.sql.streaming.ui
 
 import java.{util => ju}
 import java.lang.{Long => JLong}
-import java.text.SimpleDateFormat
-import java.util.UUID
+import java.util.{Locale, UUID}
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{Node, Unparsed}
+import scala.collection.JavaConverters._
+import scala.xml.{Node, NodeBuffer, Unparsed}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.util.DateTimeUtils.getTimeZone
+import org.apache.spark.sql.execution.streaming.state.StateStoreProvider
+import org.apache.spark.sql.internal.SQLConf.STATE_STORE_PROVIDER_CLASS
+import org.apache.spark.sql.internal.StaticSQLConf.ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST
 import org.apache.spark.sql.streaming.ui.UIUtils._
 import org.apache.spark.ui.{GraphUIData, JsCollector, UIUtils => SparkUIUtils, WebUIPage}
 
 private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
   extends WebUIPage("statistics") with Logging {
-  val df = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'")
-  df.setTimeZone(getTimeZone("UTC"))
+
+  // State store provider implementation mustn't do any heavyweight initialiation in constructor
+  // but in its init method.
+  private val supportedCustomMetrics = StateStoreProvider.create(
+    parent.parent.conf.get(STATE_STORE_PROVIDER_CLASS)).supportedCustomMetrics
+  logDebug(s"Supported custom metrics: $supportedCustomMetrics")
+
+  private val enabledCustomMetrics =
+    parent.parent.conf.get(ENABLED_STREAMING_UI_CUSTOM_METRIC_LIST).map(_.toLowerCase(Locale.ROOT))
+  logDebug(s"Enabled custom metrics: $enabledCustomMetrics")
 
   def generateLoadResources(request: HttpServletRequest): Seq[Node] = {
     // scalastyle:off
@@ -48,8 +58,8 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     val parameterId = request.getParameter("id")
     require(parameterId != null && parameterId.nonEmpty, "Missing id parameter")
 
-    val query = parent.statusListener.allQueryStatus.find { case q =>
-      q.runId.equals(UUID.fromString(parameterId))
+    val query = parent.store.allQueryUIData.find { uiData =>
+      uiData.summary.runId.equals(UUID.fromString(parameterId))
     }.getOrElse(throw new IllegalArgumentException(s"Failed to find streaming query $parameterId"))
 
     val resources = generateLoadResources(request)
@@ -70,54 +80,295 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     <script>{Unparsed(js)}</script>
   }
 
-  def generateVar(values: Array[(Long, ju.Map[String, JLong])]): Seq[Node] = {
-    val durationDataPadding = SparkUIUtils.durationDataPadding(values)
-    val js = "var timeToValues = {};\n" + durationDataPadding.map { case (x, y) =>
-      val s = y.toSeq.sortBy(_._1).map(e => s""""${e._2}"""").mkString("[", ",", "]")
-      s"""timeToValues["${SparkUIUtils.formatBatchTime(x, 1, showYYYYMMSS = false)}"] = $s;"""
+  def generateTimeTipStrings(values: Array[(Long, Long)]): Seq[Node] = {
+    val js = "var timeTipStrings = {};\n" + values.map { case (batchId, time) =>
+      val formattedTime = SparkUIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
+      s"timeTipStrings[$time] = 'batch $batchId ($formattedTime)';"
     }.mkString("\n")
 
     <script>{Unparsed(js)}</script>
   }
 
-  def generateBasicInfo(query: StreamingQueryUIData): Seq[Node] = {
-    val duration = if (query.isActive) {
-      SparkUIUtils.formatDurationVerbose(System.currentTimeMillis() - query.submissionTime)
+  def generateFormattedTimeTipStrings(values: Array[(Long, Long)]): Seq[Node] = {
+    val js = "var formattedTimeTipStrings = {};\n" + values.map { case (batchId, time) =>
+      val formattedTime = SparkUIUtils.formatBatchTime(time, 1, showYYYYMMSS = false)
+      s"""formattedTimeTipStrings["$formattedTime"] = 'batch $batchId ($formattedTime)';"""
+    }.mkString("\n")
+
+    <script>{Unparsed(js)}</script>
+  }
+
+  def generateTimeToValues(values: Array[(Long, ju.Map[String, JLong])]): Seq[Node] = {
+    val durationDataPadding = SparkUIUtils.durationDataPadding(values)
+    val js = "var formattedTimeToValues = {};\n" + durationDataPadding.map { case (x, y) =>
+      val s = y.toSeq.sortBy(_._1).map(e => s""""${e._2}"""").mkString("[", ",", "]")
+      val formattedTime = SparkUIUtils.formatBatchTime(x, 1, showYYYYMMSS = false)
+      s"""formattedTimeToValues["$formattedTime"] = $s;"""
+    }.mkString("\n")
+
+    <script>{Unparsed(js)}</script>
+  }
+
+  def generateBasicInfo(uiData: StreamingQueryUIData): Seq[Node] = {
+    val duration = if (uiData.summary.isActive) {
+      val durationMs = System.currentTimeMillis() - uiData.summary.startTimestamp
+      SparkUIUtils.formatDurationVerbose(durationMs)
     } else {
-      withNoProgress(query, {
-        val end = query.lastProgress.timestamp
-        val start = query.recentProgress.head.timestamp
+      withNoProgress(uiData, {
+        val end = uiData.lastProgress.timestamp
+        val start = uiData.recentProgress.head.timestamp
         SparkUIUtils.formatDurationVerbose(
-          df.parse(end).getTime - df.parse(start).getTime)
+          parseProgressTimestamp(end) - parseProgressTimestamp(start))
       }, "-")
     }
 
-    val name = UIUtils.getQueryName(query)
-    val numBatches = withNoProgress(query, { query.lastProgress.batchId + 1L }, 0)
+    val name = UIUtils.getQueryName(uiData)
+    val numBatches = withNoProgress(uiData, { uiData.lastProgress.batchId + 1L }, 0)
     <div>Running batches for
       <strong>
         {duration}
       </strong>
       since
       <strong>
-        {SparkUIUtils.formatDate(query.submissionTime)}
+        {SparkUIUtils.formatDate(uiData.summary.startTimestamp)}
       </strong>
       (<strong>{numBatches}</strong> completed batches)
     </div>
     <br />
     <div><strong>Name: </strong>{name}</div>
-    <div><strong>Id: </strong>{query.id}</div>
-    <div><strong>RunId: </strong>{query.runId}</div>
+    <div><strong>Id: </strong>{uiData.summary.id}</div>
+    <div><strong>RunId: </strong>{uiData.summary.runId}</div>
     <br />
   }
 
+  def generateWatermark(
+      query: StreamingQueryUIData,
+      minBatchTime: Long,
+      maxBatchTime: Long,
+      jsCollector: JsCollector): Seq[Node] = {
+    // This is made sure on caller side but put it here to be defensive
+    require(query.lastProgress != null)
+    if (query.lastProgress.eventTime.containsKey("watermark")) {
+      val watermarkData = query.recentProgress.flatMap { p =>
+        val batchTimestamp = parseProgressTimestamp(p.timestamp)
+        val watermarkValue = parseProgressTimestamp(p.eventTime.get("watermark"))
+        if (watermarkValue > 0L) {
+          // seconds
+          Some((batchTimestamp, ((batchTimestamp - watermarkValue) / 1000.0)))
+        } else {
+          None
+        }
+      }
+
+      if (watermarkData.nonEmpty) {
+        val maxWatermark = watermarkData.maxBy(_._2)._2
+        val graphUIDataForWatermark =
+          new GraphUIData(
+            "watermark-gap-timeline",
+            "watermark-gap-histogram",
+            watermarkData,
+            minBatchTime,
+            maxBatchTime,
+            0,
+            maxWatermark,
+            "seconds")
+        graphUIDataForWatermark.generateDataJs(jsCollector)
+
+        // scalastyle:off
+        <tr>
+          <td style="vertical-align: middle;">
+            <div style="width: 160px;">
+              <div><strong>Global Watermark Gap {SparkUIUtils.tooltip("The gap between batch timestamp and global watermark for the batch.", "right")}</strong></div>
+            </div>
+          </td>
+          <td class="watermark-gap-timeline">{graphUIDataForWatermark.generateTimelineHtml(jsCollector)}</td>
+          <td class="watermark-gap-histogram">{graphUIDataForWatermark.generateHistogramHtml(jsCollector)}</td>
+        </tr>
+        // scalastyle:on
+      } else {
+        Seq.empty[Node]
+      }
+    } else {
+      Seq.empty[Node]
+    }
+  }
+
+  def generateAggregatedStateOperators(
+      query: StreamingQueryUIData,
+      minBatchTime: Long,
+      maxBatchTime: Long,
+      jsCollector: JsCollector): NodeBuffer = {
+    // This is made sure on caller side but put it here to be defensive
+    require(query.lastProgress != null)
+    if (query.lastProgress.stateOperators.nonEmpty) {
+      val numRowsTotalData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        p.stateOperators.map(_.numRowsTotal).sum.toDouble))
+      val maxNumRowsTotal = numRowsTotalData.maxBy(_._2)._2
+
+      val numRowsUpdatedData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        p.stateOperators.map(_.numRowsUpdated).sum.toDouble))
+      val maxNumRowsUpdated = numRowsUpdatedData.maxBy(_._2)._2
+
+      val memoryUsedBytesData = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+        p.stateOperators.map(_.memoryUsedBytes).sum.toDouble))
+      val maxMemoryUsedBytes = memoryUsedBytesData.maxBy(_._2)._2
+
+      val numRowsDroppedByWatermarkData = query.recentProgress
+        .map(p => (parseProgressTimestamp(p.timestamp),
+          p.stateOperators.map(_.numRowsDroppedByWatermark).sum.toDouble))
+      val maxNumRowsDroppedByWatermark = numRowsDroppedByWatermarkData.maxBy(_._2)._2
+
+      val graphUIDataForNumberTotalRows =
+        new GraphUIData(
+          "aggregated-num-total-state-rows-timeline",
+          "aggregated-num-total-state-rows-histogram",
+          numRowsTotalData,
+          minBatchTime,
+          maxBatchTime,
+          0,
+          maxNumRowsTotal,
+          "records")
+      graphUIDataForNumberTotalRows.generateDataJs(jsCollector)
+
+      val graphUIDataForNumberUpdatedRows =
+        new GraphUIData(
+          "aggregated-num-updated-state-rows-timeline",
+          "aggregated-num-updated-state-rows-histogram",
+          numRowsUpdatedData,
+          minBatchTime,
+          maxBatchTime,
+          0,
+          maxNumRowsUpdated,
+          "records")
+      graphUIDataForNumberUpdatedRows.generateDataJs(jsCollector)
+
+      val graphUIDataForMemoryUsedBytes =
+        new GraphUIData(
+          "aggregated-state-memory-used-bytes-timeline",
+          "aggregated-state-memory-used-bytes-histogram",
+          memoryUsedBytesData,
+          minBatchTime,
+          maxBatchTime,
+          0,
+          maxMemoryUsedBytes,
+          "bytes")
+      graphUIDataForMemoryUsedBytes.generateDataJs(jsCollector)
+
+      val graphUIDataForNumRowsDroppedByWatermark =
+        new GraphUIData(
+          "aggregated-num-rows-dropped-by-watermark-timeline",
+          "aggregated-num-rows-dropped-by-watermark-histogram",
+          numRowsDroppedByWatermarkData,
+          minBatchTime,
+          maxBatchTime,
+          0,
+          maxNumRowsDroppedByWatermark,
+          "records")
+      graphUIDataForNumRowsDroppedByWatermark.generateDataJs(jsCollector)
+
+      val result =
+        // scalastyle:off
+        <tr>
+          <td style="vertical-align: middle;">
+            <div style="width: 160px;">
+              <div><strong>Aggregated Number Of Total State Rows {SparkUIUtils.tooltip("Aggregated number of total state rows.", "right")}</strong></div>
+            </div>
+          </td>
+          <td class={"aggregated-num-total-state-rows-timeline"}>{graphUIDataForNumberTotalRows.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-num-total-state-rows-histogram"}>{graphUIDataForNumberTotalRows.generateHistogramHtml(jsCollector)}</td>
+        </tr>
+        <tr>
+          <td style="vertical-align: middle;">
+            <div style="width: 160px;">
+              <div><strong>Aggregated Number Of Updated State Rows {SparkUIUtils.tooltip("Aggregated number of updated state rows.", "right")}</strong></div>
+            </div>
+          </td>
+          <td class={"aggregated-num-updated-state-rows-timeline"}>{graphUIDataForNumberUpdatedRows.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-num-updated-state-rows-histogram"}>{graphUIDataForNumberUpdatedRows.generateHistogramHtml(jsCollector)}</td>
+        </tr>
+        <tr>
+          <td style="vertical-align: middle;">
+            <div style="width: 160px;">
+              <div><strong>Aggregated State Memory Used In Bytes {SparkUIUtils.tooltip("Aggregated state memory used in bytes.", "right")}</strong></div>
+            </div>
+          </td>
+          <td class={"aggregated-state-memory-used-bytes-timeline"}>{graphUIDataForMemoryUsedBytes.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-state-memory-used-bytes-histogram"}>{graphUIDataForMemoryUsedBytes.generateHistogramHtml(jsCollector)}</td>
+        </tr>
+        <tr>
+          <td style="vertical-align: middle;">
+            <div style="width: 160px;">
+              <div><strong>Aggregated Number Of Rows Dropped By Watermark {SparkUIUtils.tooltip("Accumulates all input rows being dropped in stateful operators by watermark. 'Inputs' are relative to operators.", "right")}</strong></div>
+            </div>
+          </td>
+          <td class={"aggregated-num-rows-dropped-by-watermark-timeline"}>{graphUIDataForNumRowsDroppedByWatermark.generateTimelineHtml(jsCollector)}</td>
+          <td class={"aggregated-num-rows-dropped-by-watermark-histogram"}>{graphUIDataForNumRowsDroppedByWatermark.generateHistogramHtml(jsCollector)}</td>
+        </tr>
+        // scalastyle:on
+
+      if (enabledCustomMetrics.nonEmpty) {
+        result ++= generateAggregatedCustomMetrics(query, minBatchTime, maxBatchTime, jsCollector)
+      }
+      result
+    } else {
+      new NodeBuffer()
+    }
+  }
+
+  def generateAggregatedCustomMetrics(
+      query: StreamingQueryUIData,
+      minBatchTime: Long,
+      maxBatchTime: Long,
+      jsCollector: JsCollector): NodeBuffer = {
+    val result: NodeBuffer = new NodeBuffer
+
+    // This is made sure on caller side but put it here to be defensive
+    require(query.lastProgress.stateOperators.nonEmpty)
+    query.lastProgress.stateOperators.head.customMetrics.keySet().asScala
+      .filter(m => enabledCustomMetrics.contains(m.toLowerCase(Locale.ROOT))).map { metricName =>
+        val data = query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
+          p.stateOperators.map(_.customMetrics.get(metricName).toDouble).sum))
+        val max = data.maxBy(_._2)._2
+        val metric = supportedCustomMetrics.find(_.name.equalsIgnoreCase(metricName)).get
+
+        val graphUIData =
+          new GraphUIData(
+            s"aggregated-$metricName-timeline",
+            s"aggregated-$metricName-histogram",
+            data,
+            minBatchTime,
+            maxBatchTime,
+            0,
+            max,
+            "")
+        graphUIData.generateDataJs(jsCollector)
+
+        result ++=
+          // scalastyle:off
+          <tr>
+            <td style="vertical-align: middle;">
+              <div style="width: 240px;">
+                <div><strong>Aggregated Custom Metric {s"$metricName"} {SparkUIUtils.tooltip(metric.desc, "right")}</strong></div>
+              </div>
+            </td>
+            <td class={s"aggregated-$metricName-timeline"}>{graphUIData.generateTimelineHtml(jsCollector)}</td>
+            <td class={s"aggregated-$metricName-histogram"}>{graphUIData.generateHistogramHtml(jsCollector)}</td>
+          </tr>
+          // scalastyle:on
+      }
+
+    result
+  }
+
   def generateStatTable(query: StreamingQueryUIData): Seq[Node] = {
-    val batchTimes = withNoProgress(query,
-      query.recentProgress.map(p => df.parse(p.timestamp).getTime), Array.empty[Long])
+    val batchToTimestamps = withNoProgress(query,
+      query.recentProgress.map(p => (p.batchId, parseProgressTimestamp(p.timestamp))),
+      Array.empty[(Long, Long)])
+    val batchTimes = batchToTimestamps.map(_._2)
     val minBatchTime =
-      withNoProgress(query, df.parse(query.recentProgress.head.timestamp).getTime, 0L)
+      withNoProgress(query, parseProgressTimestamp(query.recentProgress.head.timestamp), 0L)
     val maxBatchTime =
-      withNoProgress(query, df.parse(query.lastProgress.timestamp).getTime, 0L)
+      withNoProgress(query, parseProgressTimestamp(query.lastProgress.timestamp), 0L)
     val maxRecordRate =
       withNoProgress(query, query.recentProgress.map(_.inputRowsPerSecond).max, 0L)
     val minRecordRate = 0L
@@ -131,22 +382,26 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
     val minBatchDuration = 0L
 
     val inputRateData = withNoProgress(query,
-      query.recentProgress.map(p => (df.parse(p.timestamp).getTime,
+      query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
         withNumberInvalid { p.inputRowsPerSecond })), Array.empty[(Long, Double)])
     val processRateData = withNoProgress(query,
-      query.recentProgress.map(p => (df.parse(p.timestamp).getTime,
+      query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
         withNumberInvalid { p.processedRowsPerSecond })), Array.empty[(Long, Double)])
     val inputRowsData = withNoProgress(query,
-      query.recentProgress.map(p => (df.parse(p.timestamp).getTime,
+      query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
         withNumberInvalid { p.numInputRows })), Array.empty[(Long, Double)])
     val batchDurations = withNoProgress(query,
-      query.recentProgress.map(p => (df.parse(p.timestamp).getTime,
+      query.recentProgress.map(p => (parseProgressTimestamp(p.timestamp),
         withNumberInvalid { p.batchDuration })), Array.empty[(Long, Double)])
-    val operationDurationData = withNoProgress(query, query.recentProgress.map { p =>
-      val durationMs = p.durationMs
-      // remove "triggerExecution" as it count the other operation duration.
-      durationMs.remove("triggerExecution")
-      (df.parse(p.timestamp).getTime, durationMs)}, Array.empty[(Long, ju.Map[String, JLong])])
+    val operationDurationData = withNoProgress(
+      query,
+      query.recentProgress.map { p =>
+        val durationMs = p.durationMs
+        // remove "triggerExecution" as it count the other operation duration.
+        durationMs.remove("triggerExecution")
+        (parseProgressTimestamp(p.timestamp), durationMs)
+      },
+      Array.empty[(Long, ju.Map[String, JLong])])
 
     val jsCollector = new JsCollector
     val graphUIDataForInputRate =
@@ -208,14 +463,15 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
         0L,
         "ms")
 
-    val table =
-    // scalastyle:off
+    val table = if (query.lastProgress != null) {
+      // scalastyle:off
       <table id="stat-table" class="table table-bordered" style="width: auto">
         <thead>
           <tr>
             <th style="width: 160px;"></th>
             <th style="width: 492px;">Timelines</th>
-            <th style="width: 350px;">Histograms</th></tr>
+            <th style="width: 350px;">Histograms</th>
+          </tr>
         </thead>
         <tbody>
           <tr>
@@ -262,10 +518,20 @@ private[ui] class StreamingQueryStatisticsPage(parent: StreamingQueryTab)
             </td>
             <td class="duration-area-stack" colspan="2">{graphUIDataForDuration.generateAreaStackHtmlWithData(jsCollector, operationDurationData)}</td>
           </tr>
+          {generateWatermark(query, minBatchTime, maxBatchTime, jsCollector)}
+          {generateAggregatedStateOperators(query, minBatchTime, maxBatchTime, jsCollector)}
         </tbody>
       </table>
-    // scalastyle:on
+    } else {
+      <div id="empty-streaming-query-message">
+        <b>No visualization information available.</b>
+      </div>
+      // scalastyle:on
+    }
 
-    generateVar(operationDurationData) ++ generateTimeMap(batchTimes) ++ table ++ jsCollector.toHtml
+    generateTimeToValues(operationDurationData) ++
+      generateFormattedTimeTipStrings(batchToTimestamps) ++
+      generateTimeMap(batchTimes) ++ generateTimeTipStrings(batchToTimestamps) ++
+      table ++ jsCollector.toHtml
   }
 }

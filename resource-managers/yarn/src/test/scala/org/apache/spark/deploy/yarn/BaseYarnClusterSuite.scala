@@ -28,8 +28,10 @@ import scala.concurrent.duration._
 import com.google.common.io.Files
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
-import org.scalatest.{BeforeAndAfterAll, Matchers}
+import org.scalactic.source.Position
+import org.scalatest.{BeforeAndAfterAll, Tag}
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.config._
@@ -40,6 +42,7 @@ import org.apache.spark.util.Utils
 
 abstract class BaseYarnClusterSuite
   extends SparkFunSuite with BeforeAndAfterAll with Matchers with Logging {
+  private var isBindSuccessful = true
 
   // log4j configuration for the YARN containers, so that their output is collected
   // by YARN instead of trying to overwrite unit-tests.log.
@@ -63,6 +66,14 @@ abstract class BaseYarnClusterSuite
 
   def newYarnConfig(): YarnConfiguration
 
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Any)
+                             (implicit pos: Position): Unit = {
+    super.test(testName, testTags: _*) {
+      assume(isBindSuccessful, "Mini Yarn cluster should be able to bind.")
+      testFun
+    }
+  }
+
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -79,9 +90,26 @@ abstract class BaseYarnClusterSuite
     yarnConf.set("yarn.nodemanager.disk-health-checker.max-disk-utilization-per-disk-percentage",
       "100.0")
 
-    yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
-    yarnCluster.init(yarnConf)
-    yarnCluster.start()
+    // capacity-scheduler.xml is missing in hadoop-client-minicluster so this is a workaround
+    yarnConf.set("yarn.scheduler.capacity.root.queues", "default")
+    yarnConf.setInt("yarn.scheduler.capacity.root.default.capacity", 100)
+    yarnConf.setFloat("yarn.scheduler.capacity.root.default.user-limit-factor", 1)
+    yarnConf.setInt("yarn.scheduler.capacity.root.default.maximum-capacity", 100)
+    yarnConf.set("yarn.scheduler.capacity.root.default.state", "RUNNING")
+    yarnConf.set("yarn.scheduler.capacity.root.default.acl_submit_applications", "*")
+    yarnConf.set("yarn.scheduler.capacity.root.default.acl_administer_queue", "*")
+    yarnConf.setInt("yarn.scheduler.capacity.node-locality-delay", -1)
+
+    try {
+      yarnCluster = new MiniYARNCluster(getClass().getName(), 1, 1, 1)
+      yarnCluster.init(yarnConf)
+      yarnCluster.start()
+    } catch {
+      case e: Throwable if org.apache.commons.lang3.exception.ExceptionUtils.indexOfThrowable(
+          e, classOf[java.net.BindException]) != -1 =>
+        isBindSuccessful = false
+        return
+    }
 
     // There's a race in MiniYARNCluster in which start() may return before the RM has updated
     // its address in the configuration. You can see this in the logs by noticing that when
@@ -117,7 +145,7 @@ abstract class BaseYarnClusterSuite
 
   override def afterAll(): Unit = {
     try {
-      yarnCluster.stop()
+      if (yarnCluster != null) yarnCluster.stop()
     } finally {
       super.afterAll()
     }

@@ -45,7 +45,7 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     val trainer = new FeedForwardTrainer(topology, 2, 1)
     trainer.setWeights(initialWeights)
     trainer.LBFGSOptimizer.setNumIterations(20)
-    val model = trainer.train(rddData)
+    val (model, _) = trainer.train(rddData)
     val predictionAndLabels = rddData.map { case (input, label) =>
       (model.predict(input)(0), label(0))
     }.collect()
@@ -80,7 +80,7 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     // TODO: add a test for SGD
     trainer.LBFGSOptimizer.setConvergenceTol(1e-4).setNumIterations(20)
     trainer.setWeights(initialWeights).setStackSize(1)
-    val model = trainer.train(rddData)
+    val (model, _) = trainer.train(rddData)
     val predictionAndLabels = rddData.map { case (input, label) =>
       (model.predict(input), label)
     }.collect()

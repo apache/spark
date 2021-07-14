@@ -22,6 +22,7 @@ import java.util.concurrent.{ScheduledFuture, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.util.Try
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -30,15 +31,26 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkContext, SparkEnv}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
+import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.streaming.StatefulOperatorStateInfo
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
- * Base trait for a versioned key-value store. Each instance of a `StateStore` represents a specific
- * version of state data, and such instances are created through a [[StateStoreProvider]].
+ * Base trait for a versioned key-value store which provides read operations. Each instance of a
+ * `ReadStateStore` represents a specific version of state data, and such instances are created
+ * through a [[StateStoreProvider]].
+ *
+ * `abort` method will be called when the task is completed - please clean up the resources in
+ * the method.
+ *
+ * IMPLEMENTATION NOTES:
+ * * The implementation can throw exception on calling prefixScan method if the functionality is
+ *   not supported yet from the implementation. Note that some stateful operations would not work
+ *   on disabling prefixScan functionality.
  */
-trait StateStore {
+trait ReadStateStore {
 
   /** Unique identifier of the store */
   def id: StateStoreId
@@ -53,8 +65,44 @@ trait StateStore {
   def get(key: UnsafeRow): UnsafeRow
 
   /**
-   * Put a new value for a non-null key. Implementations must be aware that the UnsafeRows in
-   * the params can be reused, and must make copies of the data as needed for persistence.
+   * Return an iterator containing all the key-value pairs which are matched with
+   * the given prefix key.
+   *
+   * The operator will provide numColsPrefixKey greater than 0 in StateStoreProvider.init method
+   * if the operator needs to leverage the "prefix scan" feature. The schema of the prefix key
+   * should be same with the leftmost `numColsPrefixKey` columns of the key schema.
+   *
+   * It is expected to throw exception if Spark calls this method without setting numColsPrefixKey
+   * to the greater than 0.
+   */
+  def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair]
+
+  /** Return an iterator containing all the key-value pairs in the StateStore. */
+  def iterator(): Iterator[UnsafeRowPair]
+
+  /**
+   * Clean up the resource.
+   *
+   * The method name is to respect backward compatibility on [[StateStore]].
+   */
+  def abort(): Unit
+}
+
+/**
+ * Base trait for a versioned key-value store which provides both read and write operations. Each
+ * instance of a `StateStore` represents a specific version of state data, and such instances are
+ * created through a [[StateStoreProvider]].
+ *
+ * Unlike [[ReadStateStore]], `abort` method may not be called if the `commit` method succeeds
+ * to commit the change. (`hasCommitted` returns `true`.) Otherwise, `abort` method will be called.
+ * Implementation should deal with resource cleanup in both methods, and also need to guard with
+ * double resource cleanup.
+ */
+trait StateStore extends ReadStateStore {
+
+  /**
+   * Put a new non-null value for a non-null key. Implementations must be aware that the UnsafeRows
+   * in the params can be reused, and must make copies of the data as needed for persistence.
    */
   def put(key: UnsafeRow, value: UnsafeRow): Unit
 
@@ -62,23 +110,6 @@ trait StateStore {
    * Remove a single non-null key.
    */
   def remove(key: UnsafeRow): Unit
-
-  /**
-   * Get key value pairs with optional approximate `start` and `end` extents.
-   * If the State Store implementation maintains indices for the data based on the optional
-   * `keyIndexOrdinal` over fields `keySchema` (see `StateStoreProvider.init()`), then it can use
-   * `start` and `end` to make a best-effort scan over the data. Default implementation returns
-   * the full data scan iterator, which is correct but inefficient. Custom implementations must
-   * ensure that updates (puts, removes) can be made while iterating over this iterator.
-   *
-   * @param start UnsafeRow having the `keyIndexOrdinal` column set with appropriate starting value.
-   * @param end UnsafeRow having the `keyIndexOrdinal` column set with appropriate ending value.
-   * @return An iterator of key-value pairs that is guaranteed not miss any key between start and
-   *         end, both inclusive.
-   */
-  def getRange(start: Option[UnsafeRow], end: Option[UnsafeRow]): Iterator[UnsafeRowPair] = {
-    iterator()
-  }
 
   /**
    * Commit all the updates that have been made to the store, and return the new version.
@@ -91,13 +122,13 @@ trait StateStore {
    * Abort all the updates that have been made to the store. Implementations should ensure that
    * no more updates (puts, removes) can be after an abort in order to avoid incorrect usage.
    */
-  def abort(): Unit
+  override def abort(): Unit
 
   /**
    * Return an iterator containing all the key-value pairs in the StateStore. Implementations must
    * ensure that updates (puts, removes) can be made while iterating over this iterator.
    */
-  def iterator(): Iterator[UnsafeRowPair]
+  override def iterator(): Iterator[UnsafeRowPair]
 
   /** Current metrics of the state store */
   def metrics: StateStoreMetrics
@@ -106,6 +137,22 @@ trait StateStore {
    * Whether all updates have been committed
    */
   def hasCommitted: Boolean
+}
+
+/** Wraps the instance of StateStore to make the instance read-only. */
+class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
+  override def id: StateStoreId = store.id
+
+  override def version: Long = store.version
+
+  override def get(key: UnsafeRow): UnsafeRow = store.get(key)
+
+  override def iterator(): Iterator[UnsafeRowPair] = store.iterator()
+
+  override def abort(): Unit = store.abort()
+
+  override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] =
+    store.prefixScan(prefixKey)
 }
 
 /**
@@ -123,25 +170,63 @@ case class StateStoreMetrics(
 
 object StateStoreMetrics {
   def combine(allMetrics: Seq[StateStoreMetrics]): StateStoreMetrics = {
+    val distinctCustomMetrics = allMetrics.flatMap(_.customMetrics.keys).distinct
+    val customMetrics = allMetrics.flatMap(_.customMetrics)
+    val combinedCustomMetrics = distinctCustomMetrics.map { customMetric =>
+      val sameMetrics = customMetrics.filter(_._1 == customMetric)
+      val sumOfMetrics = sameMetrics.map(_._2).sum
+      customMetric -> sumOfMetrics
+    }.toMap
+
     StateStoreMetrics(
       allMetrics.map(_.numKeys).sum,
       allMetrics.map(_.memoryUsedBytes).sum,
-      allMetrics.flatMap(_.customMetrics).toMap)
+      combinedCustomMetrics)
   }
 }
 
 /**
  * Name and description of custom implementation-specific metrics that a
- * state store may wish to expose.
+ * state store may wish to expose. Also provides [[SQLMetric]] instance to
+ * show the metric in UI and accumulate it at the query level.
  */
 trait StateStoreCustomMetric {
   def name: String
   def desc: String
+  def withNewDesc(desc: String): StateStoreCustomMetric
+  def createSQLMetric(sparkContext: SparkContext): SQLMetric
 }
 
-case class StateStoreCustomSumMetric(name: String, desc: String) extends StateStoreCustomMetric
-case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric
-case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric
+case class StateStoreCustomSumMetric(name: String, desc: String) extends StateStoreCustomMetric {
+  override def withNewDesc(newDesc: String): StateStoreCustomSumMetric = copy(desc = desc)
+
+  override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
+    SQLMetrics.createMetric(sparkContext, desc)
+}
+
+case class StateStoreCustomSizeMetric(name: String, desc: String) extends StateStoreCustomMetric {
+  override def withNewDesc(desc: String): StateStoreCustomSizeMetric = copy(desc = desc)
+
+  override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
+    SQLMetrics.createSizeMetric(sparkContext, desc)
+}
+
+case class StateStoreCustomTimingMetric(name: String, desc: String) extends StateStoreCustomMetric {
+  override def withNewDesc(desc: String): StateStoreCustomTimingMetric = copy(desc = desc)
+
+  override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
+    SQLMetrics.createTimingMetric(sparkContext, desc)
+}
+
+/**
+ * An exception thrown when an invalid UnsafeRow is detected in state store.
+ */
+class InvalidUnsafeRowException
+  extends RuntimeException("The streaming query failed by state format invalidation. " +
+    "The following reasons may cause this: 1. An old Spark version wrote the checkpoint that is " +
+    "incompatible with the current one; 2. Broken checkpoint files; 3. The query is changed " +
+    "among restart. For the first case, you can try to restart the application without " +
+    "checkpoint or use the legacy Spark version to process the streaming state.", null)
 
 /**
  * Trait representing a provider that provide [[StateStore]] instances representing
@@ -170,8 +255,9 @@ trait StateStoreProvider {
    * @param stateStoreId Id of the versioned StateStores that this provider will generate
    * @param keySchema Schema of keys to be stored
    * @param valueSchema Schema of value to be stored
-   * @param keyIndexOrdinal Optional column (represent as the ordinal of the field in keySchema) by
-   *                        which the StateStore implementation could index the data.
+   * @param numColsPrefixKey The number of leftmost columns to be used as prefix key.
+   *                         A value not greater than 0 means the operator doesn't activate prefix
+   *                         key, and the operator should not call prefixScan method in StateStore.
    * @param storeConfs Configurations used by the StateStores
    * @param hadoopConf Hadoop configuration that could be used by StateStore to save state data
    */
@@ -179,7 +265,7 @@ trait StateStoreProvider {
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
-      keyIndexOrdinal: Option[Int], // for sorting the data by their keys
+      numColsPrefixKey: Int,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration): Unit
 
@@ -194,6 +280,15 @@ trait StateStoreProvider {
 
   /** Return an instance of [[StateStore]] representing state data of the given version */
   def getStore(version: Long): StateStore
+
+  /**
+   * Return an instance of [[ReadStateStore]] representing state data of the given version.
+   * By default it will return the same instance as getStore(version) but wrapped to prevent
+   * modification. Providers can override and return optimized version of [[ReadStateStore]]
+   * based on the fact the instance will be only used for reading.
+   */
+  def getReadStore(version: Long): ReadStateStore =
+    new WrappedReadStateStore(getStore(version))
 
   /** Optional method for providers to allow for background maintenance (e.g. compactions) */
   def doMaintenance(): Unit = { }
@@ -220,15 +315,36 @@ object StateStoreProvider {
    * Return a instance of the required provider, initialized with the given configurations.
    */
   def createAndInit(
-      stateStoreId: StateStoreId,
+      providerId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      indexOrdinal: Option[Int], // for sorting the data
+      numColsPrefixKey: Int,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
     val provider = create(storeConf.providerClass)
-    provider.init(stateStoreId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
+    provider.init(providerId.storeId, keySchema, valueSchema, numColsPrefixKey,
+      storeConf, hadoopConf)
     provider
+  }
+
+  /**
+   * Use the expected schema to check whether the UnsafeRow is valid.
+   */
+  def validateStateRowFormat(
+      keyRow: UnsafeRow,
+      keySchema: StructType,
+      valueRow: UnsafeRow,
+      valueSchema: StructType,
+      conf: StateStoreConf): Unit = {
+    if (conf.formatValidationEnabled) {
+      if (!UnsafeRowUtils.validateStructuralIntegrity(keyRow, keySchema)) {
+        throw new InvalidUnsafeRowException
+      }
+      if (conf.formatValidationCheckValue &&
+          !UnsafeRowUtils.validateStructuralIntegrity(valueRow, valueSchema)) {
+        throw new InvalidUnsafeRowException
+      }
+    }
   }
 }
 
@@ -304,11 +420,13 @@ class UnsafeRowPair(var key: UnsafeRow = null, var value: UnsafeRow = null) {
  */
 object StateStore extends Logging {
 
-  val MAINTENANCE_INTERVAL_CONFIG = "spark.sql.streaming.stateStore.maintenanceInterval"
-  val MAINTENANCE_INTERVAL_DEFAULT_SECS = 60
+  val PARTITION_ID_TO_CHECK_SCHEMA = 0
 
   @GuardedBy("loadedProviders")
   private val loadedProviders = new mutable.HashMap[StateStoreProviderId, StateStoreProvider]()
+
+  @GuardedBy("loadedProviders")
+  private val schemaValidated = new mutable.HashMap[StateStoreProviderId, Option[Throwable]]()
 
   /**
    * Runs the `task` periodically and automatically cancels it if there is an exception. `onError`
@@ -348,32 +466,85 @@ object StateStore extends Logging {
   @GuardedBy("loadedProviders")
   private var _coordRef: StateStoreCoordinatorRef = null
 
+  /** Get or create a read-only store associated with the id. */
+  def getReadOnly(
+      storeProviderId: StateStoreProviderId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      numColsPrefixKey: Int,
+      version: Long,
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration): ReadStateStore = {
+    require(version >= 0)
+    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
+      numColsPrefixKey, storeConf, hadoopConf)
+    storeProvider.getReadStore(version)
+  }
+
   /** Get or create a store associated with the id. */
   def get(
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      indexOrdinal: Option[Int],
+      numColsPrefixKey: Int,
       version: Long,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStore = {
     require(version >= 0)
-    val storeProvider = loadedProviders.synchronized {
-      startMaintenanceIfNeeded()
+    val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
+      numColsPrefixKey, storeConf, hadoopConf)
+    storeProvider.getStore(version)
+  }
+
+  private def getStateStoreProvider(
+      storeProviderId: StateStoreProviderId,
+      keySchema: StructType,
+      valueSchema: StructType,
+      numColsPrefixKey: Int,
+      storeConf: StateStoreConf,
+      hadoopConf: Configuration): StateStoreProvider = {
+    loadedProviders.synchronized {
+      startMaintenanceIfNeeded(storeConf)
+
+      if (storeProviderId.storeId.partitionId == PARTITION_ID_TO_CHECK_SCHEMA) {
+        val result = schemaValidated.getOrElseUpdate(storeProviderId, {
+          val checker = new StateSchemaCompatibilityChecker(storeProviderId, hadoopConf)
+          // regardless of configuration, we check compatibility to at least write schema file
+          // if necessary
+          val ret = Try(checker.check(keySchema, valueSchema)).toEither.fold(Some(_), _ => None)
+          if (storeConf.stateSchemaCheckEnabled) {
+            ret
+          } else {
+            None
+          }
+        })
+
+        if (result.isDefined) {
+          throw result.get
+        }
+      }
+
       val provider = loadedProviders.getOrElseUpdate(
         storeProviderId,
         StateStoreProvider.createAndInit(
-          storeProviderId.storeId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
+          storeProviderId, keySchema, valueSchema, numColsPrefixKey, storeConf, hadoopConf)
       )
-      reportActiveStoreInstance(storeProviderId)
+      val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
+      val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)
+      providerIdsToUnload.foreach(unload(_))
       provider
     }
-    storeProvider.getStore(version)
   }
 
   /** Unload a state store provider */
   def unload(storeProviderId: StateStoreProviderId): Unit = loadedProviders.synchronized {
     loadedProviders.remove(storeProviderId).foreach(_.close())
+  }
+
+  /** Unload all state store providers: unit test purpose */
+  private[sql] def unloadAll(): Unit = loadedProviders.synchronized {
+    loadedProviders.keySet.foreach { key => unload(key) }
+    loadedProviders.clear()
   }
 
   /** Whether a state store provider is loaded or not */
@@ -398,19 +569,17 @@ object StateStore extends Logging {
   }
 
   /** Start the periodic maintenance task if not already started and if Spark active */
-  private def startMaintenanceIfNeeded(): Unit = loadedProviders.synchronized {
-    val env = SparkEnv.get
-    if (env != null && !isMaintenanceRunning) {
-      val periodMs = env.conf.getTimeAsMs(
-        MAINTENANCE_INTERVAL_CONFIG, s"${MAINTENANCE_INTERVAL_DEFAULT_SECS}s")
-      maintenanceTask = new MaintenanceTask(
-        periodMs,
-        task = { doMaintenance() },
-        onError = { loadedProviders.synchronized { loadedProviders.clear() } }
-      )
-      logInfo("State Store maintenance task started")
+  private def startMaintenanceIfNeeded(storeConf: StateStoreConf): Unit =
+    loadedProviders.synchronized {
+      if (SparkEnv.get != null && !isMaintenanceRunning) {
+        maintenanceTask = new MaintenanceTask(
+          storeConf.maintenanceInterval,
+          task = { doMaintenance() },
+          onError = { loadedProviders.synchronized { loadedProviders.clear() } }
+        )
+        logInfo("State Store maintenance task started")
+      }
     }
-  }
 
   /**
    * Execute background maintenance task in all the loaded store providers if they are still
@@ -437,12 +606,20 @@ object StateStore extends Logging {
     }
   }
 
-  private def reportActiveStoreInstance(storeProviderId: StateStoreProviderId): Unit = {
+  private def reportActiveStoreInstance(
+      storeProviderId: StateStoreProviderId,
+      otherProviderIds: Seq[StateStoreProviderId]): Seq[StateStoreProviderId] = {
     if (SparkEnv.get != null) {
       val host = SparkEnv.get.blockManager.blockManagerId.host
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
-      coordinatorRef.foreach(_.reportActiveInstance(storeProviderId, host, executorId))
+      val providerIdsToUnload = coordinatorRef
+        .map(_.reportActiveInstance(storeProviderId, host, executorId, otherProviderIds))
+        .getOrElse(Seq.empty[StateStoreProviderId])
       logInfo(s"Reported that the loaded instance $storeProviderId is active")
+      logDebug(s"The loaded instances are going to unload: ${providerIdsToUnload.mkString(", ")}")
+      providerIdsToUnload
+    } else {
+      Seq.empty[StateStoreProviderId]
     }
   }
 

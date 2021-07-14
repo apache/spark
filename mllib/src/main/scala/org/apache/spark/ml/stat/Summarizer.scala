@@ -28,6 +28,7 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ImplicitCastInputTypes}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, TypedImperativeAggregate}
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
 
@@ -208,9 +209,10 @@ object Summarizer extends Logging {
   /** Get regression feature and label summarizers for provided data. */
   private[ml] def getRegressionSummarizers(
       instances: RDD[Instance],
-      aggregationDepth: Int = 2): (SummarizerBuffer, SummarizerBuffer) = {
+      aggregationDepth: Int = 2,
+      requested: Seq[String] = Seq("mean", "std", "count")) = {
     instances.treeAggregate(
-      (Summarizer.createSummarizerBuffer("mean", "std"),
+      (Summarizer.createSummarizerBuffer(requested: _*),
         Summarizer.createSummarizerBuffer("mean", "std", "count")))(
       seqOp = (c: (SummarizerBuffer, SummarizerBuffer), instance: Instance) =>
         (c._1.add(instance.features, instance.weight),
@@ -223,11 +225,12 @@ object Summarizer extends Logging {
   }
 
   /** Get classification feature and label summarizers for provided data. */
-  private[ml] def getClassificationSummarizers(
+  private[spark] def getClassificationSummarizers(
       instances: RDD[Instance],
-      aggregationDepth: Int = 2): (SummarizerBuffer, MultiClassSummarizer) = {
+      aggregationDepth: Int = 2,
+      requested: Seq[String] = Seq("mean", "std", "count")) = {
     instances.treeAggregate(
-      (Summarizer.createSummarizerBuffer("mean", "std", "count"), new MultiClassSummarizer))(
+      (Summarizer.createSummarizerBuffer(requested: _*), new MultiClassSummarizer))(
       seqOp = (c: (SummarizerBuffer, MultiClassSummarizer), instance: Instance) =>
         (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight)),
       combOp = (c1: (SummarizerBuffer, MultiClassSummarizer),
@@ -346,7 +349,9 @@ private[spark] object SummaryBuilderImpl extends Logging {
       weightExpr: Expression,
       mutableAggBufferOffset: Int,
       inputAggBufferOffset: Int)
-    extends TypedImperativeAggregate[SummarizerBuffer] with ImplicitCastInputTypes {
+    extends TypedImperativeAggregate[SummarizerBuffer]
+    with ImplicitCastInputTypes
+    with BinaryLike[Expression] {
 
     override def eval(state: SummarizerBuffer): Any = {
       val metrics = requestedMetrics.map {
@@ -366,7 +371,12 @@ private[spark] object SummaryBuilderImpl extends Logging {
 
     override def inputTypes: Seq[DataType] = vectorUDT :: DoubleType :: Nil
 
-    override def children: Seq[Expression] = featuresExpr :: weightExpr :: Nil
+    override def left: Expression = featuresExpr
+    override def right: Expression = weightExpr
+
+    override protected def withNewChildrenInternal(
+        newLeft: Expression, newRight: Expression): MetricsAggregate =
+      copy(featuresExpr = newLeft, weightExpr = newRight)
 
     override def update(state: SummarizerBuffer, row: InternalRow): SummarizerBuffer = {
       val features = vectorUDT.deserialize(featuresExpr.eval(row))
@@ -433,7 +443,7 @@ private[spark] class SummarizerBuffer(
   private var currMax: Array[Double] = null
   private var currMin: Array[Double] = null
 
-  def this() {
+  def this() = {
     this(
       Seq(
         SummaryBuilderImpl.Mean,

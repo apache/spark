@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
@@ -32,10 +33,12 @@ object SchemaMergeUtils extends Logging {
    */
   def mergeSchemasInParallel(
       sparkSession: SparkSession,
+      parameters: Map[String, String],
       files: Seq[FileStatus],
       schemaReader: (Seq[FileStatus], Configuration, Boolean) => Seq[StructType])
       : Option[StructType] = {
-    val serializedConf = new SerializableConfiguration(sparkSession.sessionState.newHadoopConf())
+    val serializedConf = new SerializableConfiguration(
+      sparkSession.sessionState.newHadoopConfWithOptions(parameters))
 
     // !! HACK ALERT !!
     // Here is a hack for Parquet, but it can be used by Orc as well.
@@ -80,8 +83,7 @@ object SchemaMergeUtils extends Logging {
               try {
                 mergedSchema = mergedSchema.merge(schema)
               } catch { case cause: SparkException =>
-                throw new SparkException(
-                  s"Failed merging schema:\n${schema.treeString}", cause)
+                throw QueryExecutionErrors.failedMergingSchemaError(schema, cause)
               }
             }
             Iterator.single(mergedSchema)
@@ -96,8 +98,7 @@ object SchemaMergeUtils extends Logging {
         try {
           finalSchema = finalSchema.merge(schema)
         } catch { case cause: SparkException =>
-          throw new SparkException(
-            s"Failed merging schema:\n${schema.treeString}", cause)
+          throw QueryExecutionErrors.failedMergingSchemaError(schema, cause)
         }
       }
       Some(finalSchema)

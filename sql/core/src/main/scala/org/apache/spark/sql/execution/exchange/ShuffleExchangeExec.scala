@@ -29,12 +29,11 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleWriteMetricsReporter, ShuffleWriteProcessor}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors._
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, Divide, Literal, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BoundReference, UnsafeProjection, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
+import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.adaptive.LocalShuffledRowRDD
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics, SQLShuffleReadMetricsReporter, SQLShuffleWriteMetricsReporter}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -42,12 +41,82 @@ import org.apache.spark.util.MutablePair
 import org.apache.spark.util.collection.unsafe.sort.{PrefixComparators, RecordComparator}
 
 /**
+ * Common trait for all shuffle exchange implementations to facilitate pattern matching.
+ */
+trait ShuffleExchangeLike extends Exchange {
+
+  /**
+   * Returns the number of mappers of this shuffle.
+   */
+  def numMappers: Int
+
+  /**
+   * Returns the shuffle partition number.
+   */
+  def numPartitions: Int
+
+  /**
+   * The origin of this shuffle operator.
+   */
+  def shuffleOrigin: ShuffleOrigin
+
+  /**
+   * The asynchronous job that materializes the shuffle. It also does the preparations work,
+   * such as waiting for the subqueries.
+   */
+  final def submitShuffleJob: Future[MapOutputStatistics] = executeQuery {
+    mapOutputStatisticsFuture
+  }
+
+  protected def mapOutputStatisticsFuture: Future[MapOutputStatistics]
+
+  /**
+   * Returns the shuffle RDD with specified partition specs.
+   */
+  def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[_]
+
+  /**
+   * Returns the runtime statistics after shuffle materialization.
+   */
+  def runtimeStatistics: Statistics
+}
+
+// Describes where the shuffle operator comes from.
+sealed trait ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the internal `EnsureRequirements` rule. It
+// means that the shuffle operator is used to ensure internal data partitioning requirements and
+// Spark is free to optimize it as long as the requirements are still ensured.
+case object ENSURE_REQUIREMENTS extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified repartition operator. Spark
+// can still optimize it via changing shuffle partition number, as data partitioning won't change.
+case object REPARTITION_BY_COL extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified repartition operator with
+// a certain partition number. Spark can't optimize it.
+case object REPARTITION_BY_NUM extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified rebalance operator.
+// Spark will try to rebalance partitions that make per-partition size not too small and not
+// too big. Local shuffle reader will be used if possible to reduce network traffic.
+case object REBALANCE_PARTITIONS_BY_NONE extends ShuffleOrigin
+
+// Indicates that the shuffle operator was added by the user-specified rebalance operator with
+// columns. Spark will try to rebalance partitions that make per-partition size not too small and
+// not too big.
+// Different from `REBALANCE_PARTITIONS_BY_NONE`, local shuffle reader cannot be used for it as
+// the output needs to be partitioned by the given columns.
+case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
+
+/**
  * Performs a shuffle that will result in the desired partitioning.
  */
 case class ShuffleExchangeExec(
     override val outputPartitioning: Partitioning,
     child: SparkPlan,
-    canChangeNumPartitions: Boolean = true) extends Exchange {
+    shuffleOrigin: ShuffleOrigin = ENSURE_REQUIREMENTS)
+  extends ShuffleExchangeLike {
 
   private lazy val writeMetrics =
     SQLShuffleWriteMetricsReporter.createShuffleWriteMetrics(sparkContext)
@@ -59,18 +128,33 @@ case class ShuffleExchangeExec(
 
   override def nodeName: String = "Exchange"
 
-  private val serializer: Serializer =
+  private lazy val serializer: Serializer =
     new UnsafeRowSerializer(child.output.size, longMetric("dataSize"))
 
   @transient lazy val inputRDD: RDD[InternalRow] = child.execute()
 
   // 'mapOutputStatisticsFuture' is only needed when enable AQE.
-  @transient lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
+  @transient
+  override lazy val mapOutputStatisticsFuture: Future[MapOutputStatistics] = {
     if (inputRDD.getNumPartitions == 0) {
       Future.successful(null)
     } else {
       sparkContext.submitMapStage(shuffleDependency)
     }
+  }
+
+  override def numMappers: Int = shuffleDependency.rdd.getNumPartitions
+
+  override def numPartitions: Int = shuffleDependency.partitioner.numPartitions
+
+  override def getShuffleRDD(partitionSpecs: Array[ShufflePartitionSpec]): RDD[InternalRow] = {
+    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionSpecs)
+  }
+
+  override def runtimeStatistics: Statistics = {
+    val dataSize = metrics("dataSize").value
+    val rowCount = metrics(SQLShuffleWriteMetricsReporter.SHUFFLE_RECORDS_WRITTEN).value
+    Statistics(dataSize, Some(rowCount))
   }
 
   /**
@@ -88,27 +172,21 @@ case class ShuffleExchangeExec(
       writeMetrics)
   }
 
-  def createShuffledRDD(partitionStartIndices: Option[Array[Int]]): ShuffledRowRDD = {
-    new ShuffledRowRDD(shuffleDependency, readMetrics, partitionStartIndices)
-  }
-
-  def createLocalShuffleRDD(
-      partitionStartIndicesPerMapper: Array[Array[Int]]): LocalShuffledRowRDD = {
-    new LocalShuffledRowRDD(shuffleDependency, readMetrics, partitionStartIndicesPerMapper)
-  }
-
   /**
    * Caches the created ShuffleRowRDD so we can reuse that.
    */
   private var cachedShuffleRDD: ShuffledRowRDD = null
 
-  protected override def doExecute(): RDD[InternalRow] = attachTree(this, "execute") {
+  protected override def doExecute(): RDD[InternalRow] = {
     // Returns the same ShuffleRowRDD if this plan is used by multiple plans.
     if (cachedShuffleRDD == null) {
-      cachedShuffleRDD = createShuffledRDD(None)
+      cachedShuffleRDD = new ShuffledRowRDD(shuffleDependency, readMetrics)
     }
     cachedShuffleRDD
   }
+
+  override protected def withNewChildInternal(newChild: SparkPlan): ShuffleExchangeExec =
+    copy(child = newChild)
 }
 
 object ShuffleExchangeExec {

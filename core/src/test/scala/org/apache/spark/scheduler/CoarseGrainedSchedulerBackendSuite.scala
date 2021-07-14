@@ -72,7 +72,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       // Ensure all executors have been launched.
       assert(sc.getExecutorIds().length == 4)
     }
-    assert(sc.maxNumConcurrentTasks() == 12)
+    assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 12)
   }
 
   test("compute max number of concurrent tasks can be launched when spark.task.cpus > 1") {
@@ -86,7 +86,7 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       assert(sc.getExecutorIds().length == 4)
     }
     // Each executor can only launch one task since `spark.task.cpus` is 2.
-    assert(sc.maxNumConcurrentTasks() == 4)
+    assert(sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 4)
   }
 
   test("compute max number of concurrent tasks can be launched when some executors are busy") {
@@ -99,8 +99,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       Thread.sleep(5000)
       iter
     }
-    var taskStarted = new AtomicBoolean(false)
-    var taskEnded = new AtomicBoolean(false)
+    val taskStarted = new AtomicBoolean(false)
+    val taskEnded = new AtomicBoolean(false)
     val listener = new SparkListener() {
       override def onTaskStart(taskStart: SparkListenerTaskStart): Unit = {
         taskStarted.set(true)
@@ -126,7 +126,8 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
         assert(taskStarted.get())
         assert(taskEnded.get() == false)
         // Assert we count in slots on both busy and free executors.
-        assert(sc.maxNumConcurrentTasks() == 4)
+        assert(
+          sc.maxNumConcurrentTasks(ResourceProfile.getOrCreateDefaultProfile(conf)) == 4)
       }
     } finally {
       sc.removeSparkListener(listener)
@@ -187,8 +188,10 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
   }
 
   test("extra resources from executor") {
+
+    val execCores = 3
     val conf = new SparkConf()
-      .set(EXECUTOR_CORES, 1)
+      .set(EXECUTOR_CORES, execCores)
       .set(SCHEDULER_REVIVE_INTERVAL.key, "1m") // don't let it auto revive during test
       .set(EXECUTOR_INSTANCES, 0) // avoid errors about duplicate executor registrations
       .setMaster(
@@ -236,15 +239,16 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
     var execResources = backend.getExecutorAvailableResources("1")
     assert(execResources(GPU).availableAddrs.sorted === Array("0", "1", "3"))
 
-    var exec3ResourceProfileId = backend.getExecutorResourceProfileId("3")
+    val exec3ResourceProfileId = backend.getExecutorResourceProfileId("3")
     assert(exec3ResourceProfileId === rp.id)
 
     val taskResources = Map(GPU -> new ResourceInformation(GPU, Array("0")))
-    var taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
-      "t1", 0, 1, mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
+    val taskDescs: Seq[Seq[TaskDescription]] = Seq(Seq(new TaskDescription(1, 0, "1",
+      "t1", 0, 1, mutable.Map.empty[String, Long],
+      mutable.Map.empty[String, Long], mutable.Map.empty[String, Long],
       new Properties(), taskResources, bytebuffer)))
     val ts = backend.getTaskSchedulerImpl()
-    when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]])).thenReturn(taskDescs)
+    when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(taskDescs)
 
     backend.driverEndpoint.send(ReviveOffers)
 
@@ -254,6 +258,9 @@ class CoarseGrainedSchedulerBackendSuite extends SparkFunSuite with LocalSparkCo
       assert(execResources(GPU).assignedAddrs === Array("0"))
     }
 
+    // To avoid allocating any resources immediately after releasing the resource from the task to
+    // make sure that `availableAddrs` below won't change
+    when(ts.resourceOffers(any[IndexedSeq[WorkerOffer]], any[Boolean])).thenReturn(Seq.empty)
     backend.driverEndpoint.send(
       StatusUpdate("1", 1, TaskState.FINISHED, buffer, taskResources))
 
@@ -293,8 +300,7 @@ private class CSMockExternalClusterManager extends ExternalClusterManager {
     when(ts.applicationId()).thenReturn("appid1")
     when(ts.applicationAttemptId()).thenReturn(Some("attempt1"))
     when(ts.schedulingMode).thenReturn(SchedulingMode.FIFO)
-    when(ts.nodeBlacklist()).thenReturn(Set.empty[String])
-    when(ts.resourcesReqsPerTask).thenReturn(Seq.empty)
+    when(ts.excludedNodes()).thenReturn(Set.empty[String])
     ts
   }
 

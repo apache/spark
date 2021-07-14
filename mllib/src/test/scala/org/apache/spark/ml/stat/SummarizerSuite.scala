@@ -29,7 +29,6 @@ class SummarizerSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   import testImplicits._
   import Summarizer._
-  import SummaryBuilderImpl._
 
   private case class ExpectedMetrics(
       mean: Vector,

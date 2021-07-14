@@ -234,8 +234,8 @@ gapplyInternal <- function(x, func, schema) {
     if (inherits(schema, "structType")) {
       checkSchemaInArrow(schema)
     } else if (is.null(schema)) {
-      stop(paste0("Arrow optimization does not support 'gapplyCollect' yet. Please disable ",
-                  "Arrow optimization or use 'collect' and 'gapply' APIs instead."))
+      stop("Arrow optimization does not support 'gapplyCollect' yet. Please disable ",
+           "Arrow optimization or use 'collect' and 'gapply' APIs instead.")
     } else {
       stop("'schema' should be DDL-formatted string or structType.")
     }

@@ -22,10 +22,9 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConverters._
 
 import org.apache.spark._
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.Logging
 import org.apache.spark.shuffle._
-import org.apache.spark.shuffle.api.{ShuffleDataIO, ShuffleExecutorComponents}
-import org.apache.spark.util.Utils
+import org.apache.spark.shuffle.api.ShuffleExecutorComponents
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -115,23 +114,14 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
   }
 
   /**
-   * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive).
+   * Get a reader for a range of reduce partitions (startPartition to endPartition-1, inclusive) to
+   * read from a range of map outputs(startMapIndex to endMapIndex-1, inclusive).
+   * If endMapIndex=Int.MaxValue, the actual endMapIndex will be changed to the length of total map
+   * outputs of the shuffle in `getMapSizesByExecutorId`.
+   *
    * Called on executors by reduce tasks.
    */
   override def getReader[K, C](
-      handle: ShuffleHandle,
-      startPartition: Int,
-      endPartition: Int,
-      context: TaskContext,
-      metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
-    val blocksByAddress = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(
-      handle.shuffleId, startPartition, endPartition)
-    new BlockStoreShuffleReader(
-      handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress, context, metrics,
-      shouldBatchFetch = canUseBatchFetch(startPartition, endPartition, context))
-  }
-
-  override def getReaderForRange[K, C](
       handle: ShuffleHandle,
       startMapIndex: Int,
       endMapIndex: Int,
@@ -139,7 +129,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       endPartition: Int,
       context: TaskContext,
       metrics: ShuffleReadMetricsReporter): ShuffleReader[K, C] = {
-    val blocksByAddress = SparkEnv.get.mapOutputTracker.getMapSizesByRange(
+    val blocksByAddress = SparkEnv.get.mapOutputTracker.getMapSizesByExecutorId(
       handle.shuffleId, startMapIndex, endMapIndex, startPartition, endPartition)
     new BlockStoreShuffleReader(
       handle.asInstanceOf[BaseShuffleHandle[K, _, C]], blocksByAddress, context, metrics,
@@ -154,7 +144,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
       metrics: ShuffleWriteMetricsReporter): ShuffleWriter[K, V] = {
     val mapTaskIds = taskIdMapsForShuffle.computeIfAbsent(
       handle.shuffleId, _ => new OpenHashSet[Long](16))
-    mapTaskIds.synchronized { mapTaskIds.add(context.taskAttemptId()) }
+    mapTaskIds.synchronized { mapTaskIds.add(mapId) }
     val env = SparkEnv.get
     handle match {
       case unsafeShuffleHandle: SerializedShuffleHandle[K @unchecked, V @unchecked] =>
@@ -176,8 +166,7 @@ private[spark] class SortShuffleManager(conf: SparkConf) extends ShuffleManager 
           metrics,
           shuffleExecutorComponents)
       case other: BaseShuffleHandle[K @unchecked, V @unchecked, _] =>
-        new SortShuffleWriter(
-          shuffleBlockResolver, other, mapId, context, shuffleExecutorComponents)
+        new SortShuffleWriter(other, mapId, context, shuffleExecutorComponents)
     }
   }
 

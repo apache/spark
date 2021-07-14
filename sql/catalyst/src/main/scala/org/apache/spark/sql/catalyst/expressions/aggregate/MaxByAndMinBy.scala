@@ -20,25 +20,26 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
 /**
  * The shared abstract superclass for `MaxBy` and `MinBy` SQL aggregate functions.
  */
-abstract class MaxMinBy extends DeclarativeAggregate {
+abstract class MaxMinBy extends DeclarativeAggregate with BinaryLike[Expression] {
 
   def valueExpr: Expression
   def orderingExpr: Expression
 
-  protected def funcName: String
   // The predicate compares two ordering values.
   protected def predicate(oldExpr: Expression, newExpr: Expression): Expression
   // The arithmetic expression returns greatest/least value of all parameters.
   // Used to pick up updated ordering value.
   protected def orderingUpdater(oldExpr: Expression, newExpr: Expression): Expression
 
-  override def children: Seq[Expression] = valueExpr :: orderingExpr :: Nil
+  override def left: Expression = valueExpr
+  override def right: Expression = orderingExpr
 
   override def nullable: Boolean = true
 
@@ -46,7 +47,7 @@ abstract class MaxMinBy extends DeclarativeAggregate {
   override def dataType: DataType = valueExpr.dataType
 
   override def checkInputDataTypes(): TypeCheckResult =
-    TypeUtils.checkForOrderingExpr(orderingExpr.dataType, s"function $funcName")
+    TypeUtils.checkForOrderingExpr(orderingExpr.dataType, s"function $prettyName")
 
   // The attributes used to keep extremum (max or min) and associated aggregated values.
   private lazy val extremumOrdering =
@@ -98,15 +99,20 @@ abstract class MaxMinBy extends DeclarativeAggregate {
       > SELECT _FUNC_(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y);
        b
   """,
+  group = "agg_funcs",
   since = "3.0.0")
 case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMinBy {
-  override protected def funcName: String = "max_by"
+
+  override def prettyName: String = "max_by"
 
   override protected def predicate(oldExpr: Expression, newExpr: Expression): Expression =
     oldExpr > newExpr
 
   override protected def orderingUpdater(oldExpr: Expression, newExpr: Expression): Expression =
     greatest(oldExpr, newExpr)
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): MaxBy =
+    copy(valueExpr = newLeft, orderingExpr = newRight)
 }
 
 @ExpressionDescription(
@@ -116,13 +122,18 @@ case class MaxBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMin
       > SELECT _FUNC_(x, y) FROM VALUES (('a', 10)), (('b', 50)), (('c', 20)) AS tab(x, y);
        a
   """,
+  group = "agg_funcs",
   since = "3.0.0")
 case class MinBy(valueExpr: Expression, orderingExpr: Expression) extends MaxMinBy {
-  override protected def funcName: String = "min_by"
+
+  override def prettyName: String = "min_by"
 
   override protected def predicate(oldExpr: Expression, newExpr: Expression): Expression =
     oldExpr < newExpr
 
   override protected def orderingUpdater(oldExpr: Expression, newExpr: Expression): Expression =
     least(oldExpr, newExpr)
+
+  override protected def withNewChildrenInternal(newLeft: Expression, newRight: Expression): MinBy =
+    copy(valueExpr = newLeft, orderingExpr = newRight)
 }

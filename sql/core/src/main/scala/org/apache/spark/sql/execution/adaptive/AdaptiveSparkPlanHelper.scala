@@ -63,7 +63,7 @@ trait AdaptiveSparkPlanHelper {
   def mapPlans[A](p: SparkPlan)(f: SparkPlan => A): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(p)(ret += f(_))
-    ret
+    ret.toSeq
   }
 
   /**
@@ -73,7 +73,7 @@ trait AdaptiveSparkPlanHelper {
   def flatMap[A](p: SparkPlan)(f: SparkPlan => TraversableOnce[A]): Seq[A] = {
     val ret = new collection.mutable.ArrayBuffer[A]()
     foreach(p)(ret ++= f(_))
-    ret
+    ret.toSeq
   }
 
   /**
@@ -84,7 +84,7 @@ trait AdaptiveSparkPlanHelper {
     val ret = new collection.mutable.ArrayBuffer[B]()
     val lifted = pf.lift
     foreach(p)(node => lifted(node).foreach(ret.+=))
-    ret
+    ret.toSeq
   }
 
   /**
@@ -109,13 +109,13 @@ trait AdaptiveSparkPlanHelper {
    * Returns a sequence containing the result of applying a partial function to all elements in this
    * plan, also considering all the plans in its (nested) subqueries
    */
-  def collectInPlanAndSubqueries[B](p: SparkPlan)(f: PartialFunction[SparkPlan, B]): Seq[B] = {
+  def collectWithSubqueries[B](p: SparkPlan)(f: PartialFunction[SparkPlan, B]): Seq[B] = {
     (p +: subqueriesAll(p)).flatMap(collect(_)(f))
   }
 
   /**
    * Returns a sequence containing the subqueries in this plan, also including the (nested)
-   * subquries in its children
+   * subqueries in its children
    */
   def subqueriesAll(p: SparkPlan): Seq[SparkPlan] = {
     val subqueries = flatMap(p)(_.subqueries)
@@ -135,4 +135,4 @@ trait AdaptiveSparkPlanHelper {
     case a: AdaptiveSparkPlanExec => a.executedPlan
     case other => other
   }
- }
+}

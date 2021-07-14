@@ -421,6 +421,11 @@ class RowMatrix @Since("1.0.0") (
     }
   }
 
+  // The matrix is sparse, if all the rows has sparsity more than 0.5.
+  private def isSparseMatrix: Boolean = {
+    rows.filter(row => row.sparsity() < 0.5).isEmpty()
+  }
+
   /**
    * Computes the covariance matrix, treating each row as an observation.
    *
@@ -438,8 +443,8 @@ class RowMatrix @Since("1.0.0") (
     require(m > 1, s"RowMatrix.computeCovariance called on matrix with only $m rows." +
       "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
     val mean = Vectors.fromML(summary.mean)
-
-    if (rows.first().isInstanceOf[DenseVector]) {
+    // If all the rows are sparse vectors, then compute based on `computeSparseVectorCovariance`.
+    if (!isSparseMatrix) {
       computeDenseVectorCovariance(mean, n, m)
     } else {
       computeSparseVectorCovariance(mean, n, m)
@@ -693,11 +698,11 @@ class RowMatrix @Since("1.0.0") (
     val pBV = sc.broadcast(colMagsCorrected.map(c => sg / c))
     val qBV = sc.broadcast(colMagsCorrected.map(c => math.min(sg, c)))
 
-    val sims = rows.mapPartitionsWithIndex { (indx, iter) =>
+    val sims = rows.mapPartitionsWithIndex { (index, iter) =>
       val p = pBV.value
       val q = qBV.value
 
-      val rand = new XORShiftRandom(indx)
+      val rand = new XORShiftRandom(index)
       val scaled = new Array[Double](p.size)
       iter.flatMap { row =>
         row match {
@@ -748,6 +753,8 @@ class RowMatrix @Since("1.0.0") (
               }
               buf
             }.flatten
+          case v =>
+            throw new IllegalArgumentException(s"Unknown vector type ${v.getClass}.")
         }
       }
     }.reduceByKey(_ + _).map { case ((i, j), sim) =>
@@ -786,11 +793,15 @@ class RowMatrix @Since("1.0.0") (
    * Based on the formulae: (numPartitions)^(1/depth) * objectSize <= DriverMaxResultSize
    * @param aggregatedObjectSizeInBytes the size, in megabytes, of the object being tree aggregated
    */
-  private[spark] def getTreeAggregateIdealDepth(aggregatedObjectSizeInBytes: Long) = {
+  private[spark] def getTreeAggregateIdealDepth(aggregatedObjectSizeInBytes: Long): Int = {
     require(aggregatedObjectSizeInBytes > 0,
       "Cannot compute aggregate depth heuristic based on a zero-size object to aggregate")
 
     val maxDriverResultSizeInBytes = rows.conf.get[Long](MAX_RESULT_SIZE)
+    if (maxDriverResultSizeInBytes <= 0) {
+      // Unlimited result size, so 1 is OK
+      return 1
+    }
 
     require(maxDriverResultSizeInBytes > aggregatedObjectSizeInBytes,
       s"Cannot aggregate object of size $aggregatedObjectSizeInBytes Bytes, "

@@ -146,6 +146,94 @@ class SetOperationSuite extends PlanTest {
     comparePlans(distinctUnionCorrectAnswer2, optimized2)
   }
 
+  test("SPARK-34283: Remove unnecessary deduplicate in multiple unions") {
+    val query1 = OneRowRelation()
+      .select(Literal(1).as('a))
+    val query2 = OneRowRelation()
+      .select(Literal(2).as('b))
+    val query3 = OneRowRelation()
+      .select(Literal(3).as('c))
+
+    // D - U - D - U - query1
+    //     |       |
+    //     query3  query2
+    val unionQuery1 = Deduplicate(query1.output, Union(
+      Deduplicate(query1.output, Union(query1, query2)), query3)).analyze
+    val optimized1 = Optimize.execute(unionQuery1)
+    val deduplicateUnionCorrectAnswer1 = Deduplicate(query1.output,
+      Union(query1 :: query2 :: query3 :: Nil))
+    comparePlans(deduplicateUnionCorrectAnswer1, optimized1)
+
+    //         query1
+    //         |
+    // D - U - U - query2
+    //     |
+    //     D - U - query2
+    //         |
+    //         query3
+    val unionQuery2 = Deduplicate(query1.output, Union(Union(query1, query2),
+      Deduplicate(query2.output, Union(query2, query3)))).analyze
+    val optimized2 = Optimize.execute(unionQuery2)
+    val deduplicateUnionCorrectAnswer2 =
+      Deduplicate(query1.output, Union(query1 :: query2 :: query2 :: query3 :: Nil))
+    comparePlans(deduplicateUnionCorrectAnswer2, optimized2)
+
+    // D  -  U  -  D  -  U  -  testRelation
+    //       |           |
+    //  testRelation  testRelation
+    // Union with the same value of 'byName' and 'allowMissingCol'
+    val unionQuery3 = Deduplicate(testRelation.output,
+      Union(Deduplicate(testRelation.output,
+        Union(testRelation :: testRelation :: Nil, true, false)) :: testRelation :: Nil,
+        true, false))
+    val optimized3 = Optimize.execute(unionQuery3)
+    val deduplicateUnionCorrectAnswer3 =
+      Deduplicate(testRelation.output,
+        Union(testRelation :: testRelation :: testRelation :: Nil, true, false))
+    comparePlans(deduplicateUnionCorrectAnswer3, optimized3, false)
+  }
+
+  test("SPARK-34283: Keep necessary deduplicate in multiple unions") {
+    val query1 = OneRowRelation()
+      .select(Literal(1).as('a))
+    val query2 = OneRowRelation()
+      .select(Literal(2).as('b))
+    val query3 = OneRowRelation()
+      .select(Literal(3).as('c))
+    val query4 = OneRowRelation()
+      .select(Literal(4).as('d))
+
+    // U - D - U - query1
+    // |       |
+    // query3  query2
+    val unionQuery1 = Union(Deduplicate(query1.output, Union(query1, query2)), query3).analyze
+    val optimized1 = Optimize.execute(unionQuery1)
+    comparePlans(unionQuery1, optimized1)
+
+    //         query1
+    //         |
+    // U - D - U - query2
+    // |
+    // D - U - query3
+    //     |
+    //     query4
+    val unionQuery2 = Union(Deduplicate(query1.output, Union(query1, query2)),
+      Deduplicate(query3.output, Union(query3, query4))).analyze
+    val optimized2 = Optimize.execute(unionQuery2)
+    comparePlans(unionQuery2, optimized2)
+
+    // D  -  U  -  D  -  U  -  testRelation
+    //       |           |
+    //  testRelation  testRelation
+    // Union with different value of 'byName' and 'allowMissingCol'
+    val unionQuery3 = Deduplicate(testRelation.output,
+      Union(Deduplicate(testRelation.output,
+        Union(testRelation :: testRelation :: Nil, true, false)) :: testRelation :: Nil,
+        true, true))
+    val optimized3 = Optimize.execute(unionQuery3)
+    comparePlans(unionQuery3, optimized3, false)
+  }
+
   test("EXCEPT ALL rewrite") {
     val input = Except(testRelation, testRelation2, isAll = true)
     val rewrittenPlan = RewriteExceptAll(input)
@@ -154,11 +242,11 @@ class SetOperationSuite extends PlanTest {
       .union(testRelation2.select(Literal(-1L).as("vcol"), 'd, 'e, 'f))
       .groupBy('a, 'b, 'c)('a, 'b, 'c, sum('vcol).as("sum"))
       .where(GreaterThan('sum, Literal(0L))).analyze
-    val multiplerAttr = planFragment.output.last
+    val multiplierAttr = planFragment.output.last
     val output = planFragment.output.dropRight(1)
     val expectedPlan = Project(output,
       Generate(
-        ReplicateRows(Seq(multiplerAttr) ++ output),
+        ReplicateRows(Seq(multiplierAttr) ++ output),
         Nil,
         false,
         None,
@@ -183,11 +271,11 @@ class SetOperationSuite extends PlanTest {
       .select('a, 'b, 'c,
         If(GreaterThan('vcol1_count, 'vcol2_count), 'vcol2_count, 'vcol1_count).as("min_count"))
       .analyze
-    val multiplerAttr = planFragment.output.last
+    val multiplierAttr = planFragment.output.last
     val output = planFragment.output.dropRight(1)
     val expectedPlan = Project(output,
       Generate(
-        ReplicateRows(Seq(multiplerAttr) ++ output),
+        ReplicateRows(Seq(multiplierAttr) ++ output),
         Nil,
         false,
         None,
@@ -222,5 +310,22 @@ class SetOperationSuite extends PlanTest {
     val unionOptimized = Optimize.execute(unionQuery.analyze)
     val unionCorrectAnswer = unionQuery.analyze
     comparePlans(unionOptimized, unionCorrectAnswer)
+  }
+
+  test("CombineUnions only flatten the unions with same byName and allowMissingCol") {
+    val union1 = Union(testRelation :: testRelation :: Nil, true, false)
+    val union2 = Union(testRelation :: testRelation :: Nil, true, true)
+    val union3 = Union(testRelation :: testRelation2 :: Nil, false, false)
+
+    val union4 = Union(union1 :: union2 :: union3 :: Nil)
+    val unionOptimized1 = Optimize.execute(union4)
+    val unionCorrectAnswer1 = Union(union1 :: union2 :: testRelation :: testRelation2 :: Nil)
+    comparePlans(unionOptimized1, unionCorrectAnswer1, false)
+
+    val union5 = Union(union1 :: union1 :: Nil, true, false)
+    val unionOptimized2 = Optimize.execute(union5)
+    val unionCorrectAnswer2 =
+      Union(testRelation :: testRelation :: testRelation :: testRelation :: Nil, true, false)
+    comparePlans(unionOptimized2, unionCorrectAnswer2, false)
   }
 }

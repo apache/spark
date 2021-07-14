@@ -22,7 +22,20 @@ package object client {
   private[hive] sealed abstract class HiveVersion(
       val fullVersion: String,
       val extraDeps: Seq[String] = Nil,
-      val exclusions: Seq[String] = Nil)
+      val exclusions: Seq[String] = Nil) extends Ordered[HiveVersion] {
+    override def compare(that: HiveVersion): Int = {
+      val thisVersionParts = fullVersion.split('.').map(_.toInt)
+      val thatVersionParts = that.fullVersion.split('.').map(_.toInt)
+      assert(thisVersionParts.length == thatVersionParts.length)
+      thisVersionParts.zip(thatVersionParts).foreach { case (l, r) =>
+        val candidate = l - r
+        if (candidate != 0) {
+          return candidate
+        }
+      }
+      0
+    }
+  }
 
   // scalastyle:off
   private[hive] object hive {
@@ -87,11 +100,13 @@ package object client {
         "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
-    // Since HIVE-14496, Hive materialized view need calcite-core.
+    // Since HIVE-23980, calcite-core included in Hive package jar.
     // For spark, only VersionsSuite currently creates a hive materialized view for testing.
-    case object v2_3 extends HiveVersion("2.3.6",
-      exclusions = Seq("org.apache.calcite:calcite-druid",
+    case object v2_3 extends HiveVersion("2.3.9",
+      exclusions = Seq("org.apache.calcite:calcite-core",
+        "org.apache.calcite:calcite-druid",
         "org.apache.calcite.avatica:avatica",
+        "com.fasterxml.jackson.core:*",
         "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
@@ -101,7 +116,6 @@ package object client {
       extraDeps = Seq("org.apache.logging.log4j:log4j-api:2.10.0",
         "org.apache.derby:derby:10.14.1.0"),
       exclusions = Seq("org.apache.calcite:calcite-druid",
-        "org.apache.calcite.avatica:avatica",
         "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 
@@ -111,7 +125,6 @@ package object client {
       extraDeps = Seq("org.apache.logging.log4j:log4j-api:2.10.0",
         "org.apache.derby:derby:10.14.1.0"),
       exclusions = Seq("org.apache.calcite:calcite-druid",
-        "org.apache.calcite.avatica:avatica",
         "org.apache.curator:*",
         "org.pentaho:pentaho-aggdesigner-algorithm"))
 

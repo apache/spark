@@ -50,7 +50,6 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
    */
   @Since("2.2.0")
   val itemsCol: Param[String] = new Param[String](this, "itemsCol", "items column name")
-  setDefault(itemsCol -> "items")
 
   /** @group getParam */
   @Since("2.2.0")
@@ -66,7 +65,6 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
   val minSupport: DoubleParam = new DoubleParam(this, "minSupport",
     "the minimal support level of a frequent pattern",
     ParamValidators.inRange(0.0, 1.0))
-  setDefault(minSupport -> 0.3)
 
   /** @group getParam */
   @Since("2.2.0")
@@ -95,11 +93,12 @@ private[fpm] trait FPGrowthParams extends Params with HasPredictionCol {
   val minConfidence: DoubleParam = new DoubleParam(this, "minConfidence",
     "minimal confidence for generating Association Rule",
     ParamValidators.inRange(0.0, 1.0))
-  setDefault(minConfidence -> 0.8)
 
   /** @group getParam */
   @Since("2.2.0")
   def getMinConfidence: Double = $(minConfidence)
+
+  setDefault(minSupport -> 0.3, itemsCol -> "items", minConfidence -> 0.8)
 
   /**
    * Validates and transforms the input schema.
@@ -244,9 +243,9 @@ class FPGrowthModel private[ml] (
   @transient private var _cachedRules: DataFrame = _
 
   /**
-   * Get association rules fitted using the minConfidence. Returns a dataframe with four fields,
-   * "antecedent", "consequent", "confidence" and "lift", where "antecedent" and "consequent" are
-   * Array[T], whereas "confidence" and "lift" are Double.
+   * Get association rules fitted using the minConfidence. Returns a dataframe with five fields,
+   * "antecedent", "consequent", "confidence", "lift" and "support", where "antecedent" and
+   *  "consequent" are Array[T], whereas "confidence", "lift" and "support" are Double.
    */
   @Since("2.2.0")
   @transient def associationRules: DataFrame = {
@@ -254,7 +253,8 @@ class FPGrowthModel private[ml] (
       _cachedRules
     } else {
       _cachedRules = AssociationRules
-        .getAssociationRulesFromFP(freqItemsets, "items", "freq", $(minConfidence), itemSupport)
+        .getAssociationRulesFromFP(freqItemsets, "items", "freq", $(minConfidence), itemSupport,
+          numTrainingRecords)
       _cachedMinConf = $(minConfidence)
       _cachedRules
     }
@@ -363,7 +363,7 @@ object FPGrowthModel extends MLReadable[FPGrowthModel] {
         Map.empty[Any, Double]
       } else {
         frequentItems.rdd.flatMap {
-            case Row(items: Seq[_], count: Long) if items.length == 1 =>
+            case Row(items: scala.collection.Seq[_], count: Long) if items.length == 1 =>
               Some(items.head -> count.toDouble / numTrainingRecords)
             case _ => None
           }.collectAsMap()
@@ -385,6 +385,7 @@ private[fpm] object AssociationRules {
    * @param freqCol column name for appearance count of the frequent itemsets
    * @param minConfidence minimum confidence for generating the association rules
    * @param itemSupport map containing an item and its support
+   * @param numTrainingRecords count of training Dataset
    * @return a DataFrame("antecedent"[Array], "consequent"[Array], "confidence"[Double],
    *         "lift" [Double]) containing the association rules.
    */
@@ -393,21 +394,23 @@ private[fpm] object AssociationRules {
         itemsCol: String,
         freqCol: String,
         minConfidence: Double,
-        itemSupport: scala.collection.Map[T, Double]): DataFrame = {
-
+        itemSupport: scala.collection.Map[T, Double],
+        numTrainingRecords: Long): DataFrame = {
     val freqItemSetRdd = dataset.select(itemsCol, freqCol).rdd
       .map(row => new FreqItemset(row.getSeq[T](0).toArray, row.getLong(1)))
     val rows = new MLlibAssociationRules()
       .setMinConfidence(minConfidence)
       .run(freqItemSetRdd, itemSupport)
-      .map(r => Row(r.antecedent, r.consequent, r.confidence, r.lift.orNull))
+      .map(r => Row(r.antecedent, r.consequent, r.confidence, r.lift.orNull,
+        r.freqUnion / numTrainingRecords))
 
     val dt = dataset.schema(itemsCol).dataType
     val schema = StructType(Seq(
       StructField("antecedent", dt, nullable = false),
       StructField("consequent", dt, nullable = false),
       StructField("confidence", DoubleType, nullable = false),
-      StructField("lift", DoubleType)))
+      StructField("lift", DoubleType),
+      StructField("support", DoubleType, nullable = false)))
     val rules = dataset.sparkSession.createDataFrame(rows, schema)
     rules
   }

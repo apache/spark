@@ -17,10 +17,13 @@
 package org.apache.spark.sql.avro
 
 import java.io.{FileNotFoundException, IOException}
+import java.util.Locale
+
+import scala.collection.JavaConverters._
 
 import org.apache.avro.Schema
-import org.apache.avro.file.DataFileConstants.{BZIP2_CODEC, DEFLATE_CODEC, SNAPPY_CODEC, XZ_CODEC}
-import org.apache.avro.file.DataFileReader
+import org.apache.avro.file.{DataFileReader, FileReader}
+import org.apache.avro.file.DataFileConstants.{BZIP2_CODEC, DEFLATE_CODEC, SNAPPY_CODEC, XZ_CODEC, ZSTANDARD_CODEC}
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
@@ -32,17 +35,18 @@ import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.avro.AvroOptions.ignoreExtensionKey
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources.OutputWriterFactory
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-object AvroUtils extends Logging {
+private[sql] object AvroUtils extends Logging {
   def inferSchema(
       spark: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val conf = spark.sessionState.newHadoopConf()
+    val conf = spark.sessionState.newHadoopConfWithOptions(options)
     val parsedOptions = new AvroOptions(options, conf)
 
     if (parsedOptions.parameters.contains(ignoreExtensionKey)) {
@@ -51,7 +55,6 @@ object AvroUtils extends Logging {
     }
     // User can specify an optional avro json schema.
     val avroSchema = parsedOptions.schema
-      .map(new Schema.Parser().parse)
       .getOrElse {
         inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
           spark.sessionState.conf.ignoreCorruptFiles)
@@ -91,7 +94,6 @@ object AvroUtils extends Logging {
       dataSchema: StructType): OutputWriterFactory = {
     val parsedOptions = new AvroOptions(options, job.getConfiguration)
     val outputAvroSchema: Schema = parsedOptions.schema
-      .map(new Schema.Parser().parse)
       .getOrElse(SchemaConverters.toAvroType(dataSchema, nullable = false,
         parsedOptions.recordName, parsedOptions.recordNamespace))
 
@@ -108,13 +110,15 @@ object AvroUtils extends Logging {
           logInfo(s"Avro compression level $deflateLevel will be used for $DEFLATE_CODEC codec.")
           job.getConfiguration.setInt(AvroOutputFormat.DEFLATE_LEVEL_KEY, deflateLevel)
           DEFLATE_CODEC
-        case codec @ (SNAPPY_CODEC | BZIP2_CODEC | XZ_CODEC) => codec
+        case codec @ (SNAPPY_CODEC | BZIP2_CODEC | XZ_CODEC | ZSTANDARD_CODEC) => codec
         case unknown => throw new IllegalArgumentException(s"Invalid compression codec: $unknown")
       }
       job.getConfiguration.set(AvroJob.CONF_OUTPUT_CODEC, codec)
     }
 
-    new AvroOutputWriterFactory(dataSchema, outputAvroSchema.toString)
+    new AvroOutputWriterFactory(dataSchema,
+      outputAvroSchema.toString,
+      parsedOptions.positionalFieldMatching)
   }
 
   private def inferAvroSchemaFromFiles(
@@ -160,5 +164,125 @@ object AvroUtils extends Logging {
         throw new FileNotFoundException(
           "No Avro files found. If files don't have .avro extension, set ignoreExtension to true")
     }
+  }
+
+  // The trait provides iterator-like interface for reading records from an Avro file,
+  // deserializing and returning them as internal rows.
+  trait RowReader {
+    protected val fileReader: FileReader[GenericRecord]
+    protected val deserializer: AvroDeserializer
+    protected val stopPosition: Long
+
+    private[this] var completed = false
+    private[this] var currentRow: Option[InternalRow] = None
+
+    def hasNextRow: Boolean = {
+      while (!completed && currentRow.isEmpty) {
+        val r = fileReader.hasNext && !fileReader.pastSync(stopPosition)
+        if (!r) {
+          fileReader.close()
+          completed = true
+          currentRow = None
+        } else {
+          val record = fileReader.next()
+          // the row must be deserialized in hasNextRow, because AvroDeserializer#deserialize
+          // potentially filters rows
+          currentRow = deserializer.deserialize(record).asInstanceOf[Option[InternalRow]]
+        }
+      }
+      currentRow.isDefined
+    }
+
+    def nextRow: InternalRow = {
+      if (currentRow.isEmpty) {
+        hasNextRow
+      }
+      val returnRow = currentRow
+      currentRow = None // free up hasNextRow to consume more Avro records, if not exhausted
+      returnRow.getOrElse {
+        throw new NoSuchElementException("next on empty iterator")
+      }
+    }
+  }
+
+  /**
+   * Wraps an Avro Schema object so that field lookups are faster.
+   *
+   * @param avroSchema The schema in which to search for fields. Must be of type RECORD.
+   * @param avroPath The seq of parent field names leading to `avroSchema`.
+   * @param positionalFieldMatch If true, perform field matching in a positional fashion
+   *                             (structural comparison between schemas, ignoring names);
+   *                             otherwise, perform field matching using field names.
+   */
+  class AvroSchemaHelper(
+      avroSchema: Schema,
+      avroPath: Seq[String],
+      positionalFieldMatch: Boolean) {
+    if (avroSchema.getType != Schema.Type.RECORD) {
+      throw new IncompatibleSchemaException(
+        s"Attempting to treat ${avroSchema.getName} as a RECORD, but it was: ${avroSchema.getType}")
+    }
+
+    private[this] val avroFieldArray = avroSchema.getFields.asScala.toArray
+    private[this] val fieldMap = avroSchema.getFields.asScala
+      .groupBy(_.name.toLowerCase(Locale.ROOT))
+      .mapValues(_.toSeq) // toSeq needed for scala 2.13
+
+    /**
+     * Extract a single field from the contained avro schema which has the desired field name,
+     * performing the matching with proper case sensitivity according to SQLConf.resolver.
+     *
+     * @param name The name of the field to search for.
+     * @return `Some(match)` if a matching Avro field is found, otherwise `None`.
+     */
+    private[avro] def getFieldByName(name: String): Option[Schema.Field] = {
+
+      // get candidates, ignoring case of field name
+      val candidates = fieldMap.getOrElse(name.toLowerCase(Locale.ROOT), Seq.empty)
+
+      // search candidates, taking into account case sensitivity settings
+      candidates.filter(f => SQLConf.get.resolver(f.name(), name)) match {
+        case Seq(avroField) => Some(avroField)
+        case Seq() => None
+        case matches => throw new IncompatibleSchemaException(s"Searching for '$name' in Avro " +
+          s"schema at ${toFieldStr(avroPath)} gave ${matches.size} matches. Candidates: " +
+          matches.map(_.name()).mkString("[", ", ", "]")
+        )
+      }
+    }
+
+    /** Get the Avro field corresponding to the provided Catalyst field name/position, if any. */
+    def getAvroField(fieldName: String, catalystPos: Int): Option[Schema.Field] = {
+      if (positionalFieldMatch) {
+        avroFieldArray.lift(catalystPos)
+      } else {
+        getFieldByName(fieldName)
+      }
+    }
+  }
+
+  /**
+   * Take a field's hierarchical names (see [[toFieldStr]]) and position, and convert it to a
+   * human-readable description of the field. Depending on the value of `positionalFieldMatch`,
+   * either the position or name will be emphasized (for true and false, respectively); both will
+   * be included in either case.
+   */
+  private[avro] def toFieldDescription(
+      names: Seq[String],
+      position: Int,
+      positionalFieldMatch: Boolean): String = if (positionalFieldMatch) {
+    s"field at position $position (${toFieldStr(names)})"
+  } else {
+    s"${toFieldStr(names)} (at position $position)"
+  }
+
+  /**
+   * Convert a sequence of hierarchical field names (like `Seq(foo, bar)`) into a human-readable
+   * string representing the field, like "field 'foo.bar'". If `names` is empty, the string
+   * "top-level record" is returned.
+   */
+  private[avro] def toFieldStr(names: Seq[String]): String = names match {
+    case Seq() => "top-level record"
+    case n => s"field '${n.mkString(".")}'"
   }
 }

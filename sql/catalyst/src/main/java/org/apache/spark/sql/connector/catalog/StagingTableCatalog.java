@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Map;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
@@ -51,7 +51,7 @@ import org.apache.spark.sql.types.StructType;
  *
  * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface StagingTableCatalog extends TableCatalog {
 
   /**

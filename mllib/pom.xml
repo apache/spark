@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.3.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -142,16 +142,28 @@
       <scope>test</scope>
     </dependency>
 
+    <dependency>
+      <groupId>dev.ludovic.netlib</groupId>
+      <artifactId>blas</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>dev.ludovic.netlib</groupId>
+      <artifactId>lapack</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>dev.ludovic.netlib</groupId>
+      <artifactId>arpack</artifactId>
+    </dependency>
+
   </dependencies>
+
   <profiles>
     <profile>
-      <id>netlib-lgpl</id>
+      <id>scala-2.13</id>
       <dependencies>
         <dependency>
-          <groupId>com.github.fommil.netlib</groupId>
-          <artifactId>all</artifactId>
-          <version>${netlib.java.version}</version>
-          <type>pom</type>
+          <groupId>org.scala-lang.modules</groupId>
+          <artifactId>scala-parallel-collections_${scala.binary.version}</artifactId>
         </dependency>
       </dependencies>
     </profile>

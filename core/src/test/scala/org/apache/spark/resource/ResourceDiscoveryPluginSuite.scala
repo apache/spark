@@ -50,13 +50,12 @@ class ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext 
         .set(WORKER_GPU_ID.amountConf, "2")
         .set(TASK_GPU_ID.amountConf, "1")
         .set(EXECUTOR_GPU_ID.amountConf, "1")
-        .set(SPARK_RESOURCES_DIR, dir.getName())
         .set(WORKER_FPGA_ID.amountConf, "2")
         .set(TASK_FPGA_ID.amountConf, "1")
         .set(EXECUTOR_FPGA_ID.amountConf, "1")
 
       sc = new SparkContext(conf)
-      TestUtils.waitUntilExecutorsUp(sc, 2, 10000)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
       eventually(timeout(10.seconds), interval(100.millis)) {
         val children = dir.listFiles()
@@ -81,10 +80,9 @@ class ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext 
         .set(WORKER_GPU_ID.amountConf, "2")
         .set(TASK_GPU_ID.amountConf, "1")
         .set(EXECUTOR_GPU_ID.amountConf, "1")
-        .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
-      TestUtils.waitUntilExecutorsUp(sc, 2, 10000)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
       eventually(timeout(10.seconds), interval(100.millis)) {
         val children = dir.listFiles()
@@ -108,10 +106,9 @@ class ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext 
         .set(WORKER_GPU_ID.amountConf, "2")
         .set(TASK_GPU_ID.amountConf, "1")
         .set(EXECUTOR_GPU_ID.amountConf, "1")
-        .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
-      TestUtils.waitUntilExecutorsUp(sc, 2, 10000)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
       eventually(timeout(10.seconds), interval(100.millis)) {
         val children = dir.listFiles()
@@ -134,10 +131,9 @@ class ResourceDiscoveryPluginSuite extends SparkFunSuite with LocalSparkContext 
         .set(RESOURCES_DISCOVERY_PLUGIN, Seq(classOf[TestResourceDiscoveryPluginEmpty].getName()))
         .set(DRIVER_GPU_ID.discoveryScriptConf, scriptPath)
         .set(DRIVER_GPU_ID.amountConf, "2")
-        .set(SPARK_RESOURCES_DIR, dir.getName())
 
       sc = new SparkContext(conf)
-      TestUtils.waitUntilExecutorsUp(sc, 2, 10000)
+      TestUtils.waitUntilExecutorsUp(sc, 2, 60000)
 
       assert(sc.resources.size === 1)
       assert(sc.resources.get(GPU).get.addresses === Array("5", "6"))

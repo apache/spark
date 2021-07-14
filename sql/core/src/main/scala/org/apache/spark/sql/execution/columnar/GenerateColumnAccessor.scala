@@ -28,7 +28,7 @@ import org.apache.spark.unsafe.types.CalendarInterval
  * An Iterator to walk through the InternalRows from a CachedBatch
  */
 abstract class ColumnarIterator extends Iterator[InternalRow] {
-  def initialize(input: Iterator[CachedBatch], columnTypes: Array[DataType],
+  def initialize(input: Iterator[DefaultCachedBatch], columnTypes: Array[DataType],
     columnIndexes: Array[Int]): Unit
 }
 
@@ -80,8 +80,9 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         case BooleanType => classOf[BooleanColumnAccessor].getName
         case ByteType => classOf[ByteColumnAccessor].getName
         case ShortType => classOf[ShortColumnAccessor].getName
-        case IntegerType | DateType => classOf[IntColumnAccessor].getName
-        case LongType | TimestampType => classOf[LongColumnAccessor].getName
+        case IntegerType | DateType | _: YearMonthIntervalType => classOf[IntColumnAccessor].getName
+        case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+          classOf[LongColumnAccessor].getName
         case FloatType => classOf[FloatColumnAccessor].getName
         case DoubleType => classOf[DoubleColumnAccessor].getName
         case StringType => classOf[StringColumnAccessor].getName
@@ -203,7 +204,8 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
             return false;
           }
 
-          ${classOf[CachedBatch].getName} batch = (${classOf[CachedBatch].getName}) input.next();
+          ${classOf[DefaultCachedBatch].getName} batch =
+              (${classOf[DefaultCachedBatch].getName}) input.next();
           currentRow = 0;
           numRowsInBatch = batch.numRows();
           for (int i = 0; i < columnIndexes.length; i ++) {

@@ -114,11 +114,7 @@ private[spark] class RpcAbortException(message: String) extends Exception(messag
  * A wrapper for [[Future]] but add abort method.
  * This is used in long run RPC and provide an approach to abort the RPC.
  */
-private[spark] class AbortableRpcFuture[T: ClassTag](
-    future: Future[T],
-    onAbort: String => Unit) {
-
-  def abort(reason: String): Unit = onAbort(reason)
-
-  def toFuture: Future[T] = future
+private[spark]
+class AbortableRpcFuture[T: ClassTag](val future: Future[T], onAbort: Throwable => Unit) {
+  def abort(t: Throwable): Unit = onAbort(t)
 }

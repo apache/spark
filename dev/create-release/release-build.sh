@@ -22,7 +22,7 @@ SELF=$(cd $(dirname $0) && pwd)
 
 function exit_with_usage {
   cat << EOF
-usage: release-build.sh <package|docs|publish-snapshot|publish-release>
+usage: release-build.sh <package|docs|publish-snapshot|publish-release|finalize>
 Creates build deliverables from a Spark commit.
 
 Top level targets are
@@ -30,6 +30,7 @@ Top level targets are
   docs: Build docs and commit them to dist.apache.org/repos/dist/dev/spark/
   publish-snapshot: Publish snapshot release to Apache snapshots
   publish-release: Publish a release to Apache release repo
+  finalize: Finalize the release after an RC passes vote
 
 All other inputs are environment variables
 
@@ -83,6 +84,7 @@ export LANG=C.UTF-8
 GIT_REF=${GIT_REF:-master}
 
 RELEASE_STAGING_LOCATION="https://dist.apache.org/repos/dist/dev/spark"
+RELEASE_LOCATION="https://dist.apache.org/repos/dist/release/spark"
 
 GPG="gpg -u $GPG_KEY --no-tty --batch --pinentry-mode loopback"
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
@@ -92,54 +94,105 @@ BASE_DIR=$(pwd)
 init_java
 init_maven_sbt
 
+if [[ "$1" == "finalize" ]]; then
+  if [[ -z "$PYPI_PASSWORD" ]]; then
+    error 'The environment variable PYPI_PASSWORD is not set. Exiting.'
+  fi
+
+  git config --global user.name "$GIT_NAME"
+  git config --global user.email "$GIT_EMAIL"
+
+  # Create the git tag for the new release
+  echo "Creating the git tag for the new release"
+  rm -rf spark
+  git clone "https://$ASF_USERNAME:$ASF_PASSWORD@$ASF_SPARK_REPO" -b master
+  cd spark
+  git tag "v$RELEASE_VERSION" "$RELEASE_TAG"
+  git push origin "v$RELEASE_VERSION"
+  cd ..
+  rm -rf spark
+  echo "git tag v$RELEASE_VERSION created"
+
+  # download PySpark binary from the dev directory and upload to PyPi.
+  echo "Uploading PySpark to PyPi"
+  svn co --depth=empty "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-bin" svn-spark
+  cd svn-spark
+  svn update "pyspark-$RELEASE_VERSION.tar.gz"
+  svn update "pyspark-$RELEASE_VERSION.tar.gz.asc"
+  TWINE_USERNAME=spark-upload TWINE_PASSWORD="$PYPI_PASSWORD" twine upload \
+    --repository-url https://upload.pypi.org/legacy/ \
+    "pyspark-$RELEASE_VERSION.tar.gz" \
+    "pyspark-$RELEASE_VERSION.tar.gz.asc"
+  cd ..
+  rm -rf svn-spark
+  echo "PySpark uploaded"
+
+  # download the docs from the dev directory and upload it to spark-website
+  echo "Uploading docs to spark-website"
+  svn co "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs" docs
+  git clone "https://$ASF_USERNAME:$ASF_PASSWORD@gitbox.apache.org/repos/asf/spark-website.git" -b asf-site
+  mv docs/_site "spark-website/site/docs/$RELEASE_VERSION"
+  cd spark-website
+  git add site/docs/$RELEASE_VERSION
+  git commit -m "Add docs for Apache Spark $RELEASE_VERSION"
+  git push origin HEAD:asf-site
+  cd ..
+  rm -rf spark-website
+  svn rm --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Remove RC artifacts" --no-auth-cache \
+    "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-docs"
+  echo "docs uploaded"
+
+  # Moves the binaries from dev directory to release directory.
+  echo "Moving Spark binaries to the release directory"
+  svn mv --username "$ASF_USERNAME" --password "$ASF_PASSWORD" -m"Apache Spark $RELEASE_VERSION" \
+    --no-auth-cache "$RELEASE_STAGING_LOCATION/$RELEASE_TAG-bin" "$RELEASE_LOCATION/spark-$RELEASE_VERSION"
+  echo "Spark binaries moved"
+
+  # Update the KEYS file.
+  echo "Sync'ing KEYS"
+  svn co --depth=files "$RELEASE_LOCATION" svn-spark
+  curl "$RELEASE_STAGING_LOCATION/KEYS" > svn-spark/KEYS
+  (cd svn-spark && svn ci --username $ASF_USERNAME --password "$ASF_PASSWORD" -m"Update KEYS")
+  echo "KEYS sync'ed"
+  rm -rf svn-spark
+
+  exit 0
+fi
+
 rm -rf spark
 git clone "$ASF_REPO"
 cd spark
 git checkout $GIT_REF
 git_hash=`git rev-parse --short HEAD`
+export GIT_HASH=$git_hash
 echo "Checked out Spark git hash $git_hash"
 
 if [ -z "$SPARK_VERSION" ]; then
   # Run $MVN in a separate command so that 'set -e' does the right thing.
   TMP=$(mktemp)
   $MVN help:evaluate -Dexpression=project.version > $TMP
-  SPARK_VERSION=$(cat $TMP | grep -v INFO | grep -v WARNING | grep -v Download)
+  SPARK_VERSION=$(cat $TMP | grep -v INFO | grep -v WARNING | grep -vi Download)
   rm $TMP
 fi
 
 # Depending on the version being built, certain extra profiles need to be activated, and
 # different versions of Scala are supported.
-BASE_PROFILES="-Pmesos -Pyarn"
-if [[ $SPARK_VERSION > "2.3" ]]; then
-  BASE_PROFILES="$BASE_PROFILES -Pkubernetes"
+BASE_PROFILES="-Pmesos -Pyarn -Pkubernetes"
+
+PUBLISH_SCALA_2_13=1
+SCALA_2_13_PROFILES="-Pscala-2.13"
+if [[ $SPARK_VERSION < "3.2" ]]; then
+  PUBLISH_SCALA_2_13=0
 fi
 
-# TODO: revisit for Scala 2.13
-
-PUBLISH_SCALA_2_11=1
-SCALA_2_11_PROFILES="-Pscala-2.11"
-if [[ $SPARK_VERSION > "2.3" ]]; then
-  if [[ $SPARK_VERSION < "3.0." ]]; then
-    SCALA_2_11_PROFILES="-Pkafka-0-8 -Pflume $SCALA_2_11_PROFILES"
-  else
-    PUBLISH_SCALA_2_11=0
-  fi
-fi
-
-PUBLISH_SCALA_2_12=0
+PUBLISH_SCALA_2_12=1
 SCALA_2_12_PROFILES="-Pscala-2.12"
-if [[ $SPARK_VERSION < "3.0." ]]; then
-  SCALA_2_12_PROFILES="-Pscala-2.12 -Pflume"
-fi
-if [[ $SPARK_VERSION > "2.4" ]]; then
-  PUBLISH_SCALA_2_12=1
-fi
 
 # Hive-specific profiles for some builds
 HIVE_PROFILES="-Phive -Phive-thriftserver"
 # Profiles for publishing snapshots and release to Maven Central
 # We use Apache Hive 2.3 for publishing
-PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Phive-2.3 -Pspark-ganglia-lgpl -Pkinesis-asl"
+PUBLISH_PROFILES="$BASE_PROFILES $HIVE_PROFILES -Phive-2.3 -Pspark-ganglia-lgpl -Pkinesis-asl -Phadoop-cloud"
 # Profiles for building binary releases
 BASE_RELEASE_PROFILES="$BASE_PROFILES -Psparkr"
 
@@ -164,29 +217,25 @@ fi
 DEST_DIR_NAME="$SPARK_PACKAGE_VERSION"
 
 git clean -d -f -x
-rm .gitignore
+rm -f .gitignore
 cd ..
+
+export MAVEN_OPTS="-Xss128m -Xmx12g"
 
 if [[ "$1" == "package" ]]; then
   # Source and binary tarballs
   echo "Packaging release source tarballs"
   cp -r spark spark-$SPARK_VERSION
 
-  # For source release in v2.4+, exclude copy of binary license/notice
-  if [[ $SPARK_VERSION > "2.4" ]]; then
-    rm spark-$SPARK_VERSION/LICENSE-binary
-    rm spark-$SPARK_VERSION/NOTICE-binary
-    rm -r spark-$SPARK_VERSION/licenses-binary
-  fi
+  rm -f spark-$SPARK_VERSION/LICENSE-binary
+  rm -f spark-$SPARK_VERSION/NOTICE-binary
+  rm -rf spark-$SPARK_VERSION/licenses-binary
 
   tar cvzf spark-$SPARK_VERSION.tgz --exclude spark-$SPARK_VERSION/.git spark-$SPARK_VERSION
   echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --armour --output spark-$SPARK_VERSION.tgz.asc \
     --detach-sig spark-$SPARK_VERSION.tgz
-  echo $GPG_PASSPHRASE | $GPG --passphrase-fd 0 --print-md \
-    SHA512 spark-$SPARK_VERSION.tgz > spark-$SPARK_VERSION.tgz.sha512
+  shasum -a 512 spark-$SPARK_VERSION.tgz > spark-$SPARK_VERSION.tgz.sha512
   rm -rf spark-$SPARK_VERSION
-
-  ZINC_PORT=3035
 
   # Updated for each binary build
   make_binary_release() {
@@ -205,17 +254,12 @@ if [[ "$1" == "package" ]]; then
       R_FLAG="--r"
     fi
 
-    # We increment the Zinc port each time to avoid OOM's and other craziness if multiple builds
-    # share the same Zinc server.
-    ZINC_PORT=$((ZINC_PORT + 1))
-
     echo "Building binary dist $NAME"
     cp -r spark spark-$SPARK_VERSION-bin-$NAME
     cd spark-$SPARK_VERSION-bin-$NAME
 
     ./dev/change-scala-version.sh $SCALA_VERSION
 
-    export ZINC_PORT=$ZINC_PORT
     echo "Creating distribution: $NAME ($FLAGS)"
 
     # Write out the VERSION to PySpark version info we rewrite the - into a . and SNAPSHOT
@@ -228,8 +272,7 @@ if [[ "$1" == "package" ]]; then
 
     echo "Creating distribution"
     ./dev/make-distribution.sh --name $NAME --mvn $MVN_HOME/bin/mvn --tgz \
-      $PIP_FLAG $R_FLAG $FLAGS \
-      -DzincPort=$ZINC_PORT 2>&1 >  ../binary-release-$NAME.log
+      $PIP_FLAG $R_FLAG $FLAGS 2>&1 >  ../binary-release-$NAME.log
     cd ..
 
     if [[ -n $R_FLAG ]]; then
@@ -275,26 +318,24 @@ if [[ "$1" == "package" ]]; then
   # In dry run mode, only build the first one. The keys in BINARY_PKGS_ARGS are used as the
   # list of packages to be built, so it's ok for things to be missing in BINARY_PKGS_EXTRA.
 
+  # NOTE: Don't forget to update the valid combinations of distributions at
+  #   'python/pyspark/install.py' and 'python/docs/source/getting_started/install.rst'
+  #   if you're changing them.
   declare -A BINARY_PKGS_ARGS
-  BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
+  BINARY_PKGS_ARGS["hadoop3.2"]="-Phadoop-3.2 $HIVE_PROFILES"
   if ! is_dry_run; then
     BINARY_PKGS_ARGS["without-hadoop"]="-Phadoop-provided"
-    if [[ $SPARK_VERSION < "3.0." ]]; then
-      BINARY_PKGS_ARGS["hadoop2.6"]="-Phadoop-2.6 $HIVE_PROFILES"
-    else
-      BINARY_PKGS_ARGS["hadoop2.7-hive1.2"]="-Phadoop-2.7 -Phive-1.2 $HIVE_PROFILES"
-      BINARY_PKGS_ARGS["hadoop3.2"]="-Phadoop-3.2 $HIVE_PROFILES"
-    fi
+    BINARY_PKGS_ARGS["hadoop2.7"]="-Phadoop-2.7 $HIVE_PROFILES"
   fi
 
   declare -A BINARY_PKGS_EXTRA
-  BINARY_PKGS_EXTRA["hadoop2.7"]="withpip,withr"
+  BINARY_PKGS_EXTRA["hadoop3.2"]="withpip,withr"
 
-  if [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
-    key="without-hadoop-scala-2.11"
-    args="-Phadoop-provided"
+  if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
+    key="hadoop3.2-scala2.13"
+    args="-Phadoop-3.2 $HIVE_PROFILES"
     extra=""
-    if ! make_binary_release "$key" "$SCALA_2_11_PROFILES $args" "$extra" "2.11"; then
+    if ! make_binary_release "$key" "$SCALA_2_13_PROFILES $args" "$extra" "2.13"; then
       error "Failed to build $key package. Check logs for details."
     fi
   fi
@@ -338,7 +379,13 @@ if [[ "$1" == "docs" ]]; then
   echo "Building Spark docs"
   cd docs
   # TODO: Make configurable to add this: PRODUCTION=1
-  PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" jekyll build
+  if [ ! -f "Gemfile" ]; then
+    cp "$SELF/Gemfile" .
+    cp "$SELF/Gemfile.lock" .
+    cp -r "$SELF/.bundle" .
+  fi
+  bundle install
+  PRODUCTION=1 RELEASE_VERSION="$SPARK_VERSION" bundle exec jekyll build
   cd ..
   cd ..
 
@@ -379,10 +426,12 @@ if [[ "$1" == "publish-snapshot" ]]; then
   echo "<password>$ASF_PASSWORD</password>" >> $tmp_settings
   echo "</server></servers></settings>" >> $tmp_settings
 
-  # Generate random point for Zinc
-  export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
+  $MVN --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean deploy
 
-  $MVN -DzincPort=$ZINC_PORT --settings $tmp_settings -DskipTests $SCALA_2_12_PROFILES $PUBLISH_PROFILES deploy
+  if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
+    ./dev/change-scala-version.sh 2.13
+    $MVN --settings $tmp_settings -DskipTests $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean deploy
+  fi
 
   rm $tmp_settings
   cd ..
@@ -411,21 +460,16 @@ if [[ "$1" == "publish-release" ]]; then
 
   tmp_repo=$(mktemp -d spark-repo-XXXXX)
 
-  # Generate random point for Zinc
-  export ZINC_PORT=$(python -S -c "import random; print random.randrange(3030,4030)")
-
-  # TODO: revisit for Scala 2.13 support
-
-  if [[ $PUBLISH_SCALA_2_11 = 1 ]]; then
-    ./dev/change-scala-version.sh 2.11
-    $MVN -DzincPort=$ZINC_PORT -Dmaven.repo.local=$tmp_repo -DskipTests \
-      $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
+  if [[ $PUBLISH_SCALA_2_13 = 1 ]]; then
+    ./dev/change-scala-version.sh 2.13
+    $MVN -Dmaven.repo.local=$tmp_repo -DskipTests \
+      $SCALA_2_13_PROFILES $PUBLISH_PROFILES clean install
   fi
 
   if [[ $PUBLISH_SCALA_2_12 = 1 ]]; then
     ./dev/change-scala-version.sh 2.12
-    $MVN -DzincPort=$((ZINC_PORT + 2)) -Dmaven.repo.local=$tmp_repo -DskipTests \
-      $SCALA_2_11_PROFILES $PUBLISH_PROFILES clean install
+    $MVN -Dmaven.repo.local=$tmp_repo -DskipTests \
+      $SCALA_2_12_PROFILES $PUBLISH_PROFILES clean install
   fi
 
   pushd $tmp_repo/org/apache/spark
@@ -451,7 +495,7 @@ if [[ "$1" == "publish-release" ]]; then
 
   if ! is_dry_run; then
     nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
-    echo "Uplading files to $nexus_upload"
+    echo "Uploading files to $nexus_upload"
     for file in $(find . -type f)
     do
       # strip leading ./
@@ -477,4 +521,4 @@ fi
 
 cd ..
 rm -rf spark
-echo "ERROR: expects to be called with 'package', 'docs', 'publish-release' or 'publish-snapshot'"
+echo "ERROR: expects to be called with 'package', 'docs', 'publish-release', 'publish-snapshot' or 'finalize'"

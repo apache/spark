@@ -95,7 +95,7 @@ SELECT last(ten) OVER (PARTITION BY four), ten, four FROM
 (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten)s
 ORDER BY four, ten;
 
--- [SPARK-27951] ANSI SQL: NTH_VALUE function
+-- [SPARK-30707] Lead/Lag window function throws AnalysisException without ORDER BY clause
 -- SELECT nth_value(ten, four + 1) OVER (PARTITION BY four), ten, four
 -- FROM (SELECT * FROM tenk1 WHERE unique2 < 10 ORDER BY four, ten)s;
 
@@ -135,7 +135,7 @@ FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten);
 -- FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
 
 -- subplan
--- [SPARK-28379] Correlated scalar subqueries must be aggregated
+-- Cannot specify window frame for lead function
 -- SELECT lead(ten, (SELECT two FROM tenk1 WHERE s.unique2 = unique2)) OVER (PARTITION BY four ORDER BY ten)
 -- FROM tenk1 s WHERE unique2 < 10;
 
@@ -146,7 +146,7 @@ SELECT count(*) OVER (PARTITION BY four) FROM (SELECT * FROM tenk1 WHERE FALSE)s
 -- mixture of agg/wfunc in the same window
 -- SELECT sum(salary) OVER w, rank() OVER w FROM empsalary WINDOW w AS (PARTITION BY depname ORDER BY salary DESC);
 
--- Cannot safely cast 'enroll_date': StringType to DateType;
+-- Cannot safely cast 'enroll_date': string to date;
 -- SELECT empno, depname, salary, bonus, depadj, MIN(bonus) OVER (ORDER BY empno), MAX(depadj) OVER () FROM(
 -- SELECT *,
 --   CASE WHEN enroll_date < '2008-01-01' THEN 2008 - extract(year FROM enroll_date) END * 500 AS bonus,
@@ -301,7 +301,7 @@ FROM tenk1 WHERE unique1 < 10;
 -- unique1, four
 -- FROM tenk1 WHERE unique1 < 10 WINDOW w AS (order by four);
 
--- [SPARK-27951] ANSI SQL: NTH_VALUE function
+-- [SPARK-30707] Lead/Lag window function throws AnalysisException without ORDER BY clause
 -- SELECT first_value(unique1) over w,
 -- nth_value(unique1, 2) over w AS nth_2,
 -- last_value(unique1) over w, unique1, four

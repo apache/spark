@@ -23,7 +23,7 @@ import org.apache.spark.sql.connector.read.partitioning.Partitioning;
 /**
  * A mix in interface for {@link Scan}. Data sources can implement this interface to
  * report data partitioning and try to avoid shuffle at Spark side.
- *
+ * <p>
  * Note that, when a {@link Scan} implementation creates exactly one {@link InputPartition},
  * Spark may avoid adding a shuffle even if the reader does not implement this interface.
  *

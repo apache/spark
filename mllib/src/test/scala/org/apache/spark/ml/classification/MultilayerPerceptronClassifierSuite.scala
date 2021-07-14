@@ -240,6 +240,38 @@ class MultilayerPerceptronClassifierSuite extends MLTest with DefaultReadWriteTe
 
     val metadata = spark.read.json(s"$mlpPath/metadata")
     val sparkVersionStr = metadata.select("sparkVersion").first().getString(0)
-    assert(sparkVersionStr == "2.4.4")
+    assert(sparkVersionStr === "2.4.4")
+  }
+
+  test("summary and training summary") {
+    val mlp = new MultilayerPerceptronClassifier()
+    val model = mlp.setMaxIter(5).setLayers(Array(2, 3, 2)).fit(dataset)
+    val summary = model.evaluate(dataset)
+
+    assert(model.summary.truePositiveRateByLabel === summary.truePositiveRateByLabel)
+    assert(model.summary.falsePositiveRateByLabel === summary.falsePositiveRateByLabel)
+    assert(model.summary.precisionByLabel === summary.precisionByLabel)
+    assert(model.summary.recallByLabel === summary.recallByLabel)
+    assert(model.summary.fMeasureByLabel === summary.fMeasureByLabel)
+    assert(model.summary.accuracy === summary.accuracy)
+    assert(model.summary.weightedFalsePositiveRate === summary.weightedFalsePositiveRate)
+    assert(model.summary.weightedTruePositiveRate === summary.weightedTruePositiveRate)
+    assert(model.summary.weightedPrecision === summary.weightedPrecision)
+    assert(model.summary.weightedRecall === summary.weightedRecall)
+    assert(model.summary.weightedFMeasure === summary.weightedFMeasure)
+  }
+
+  test("MultilayerPerceptron training summary totalIterations") {
+    Seq(1, 5, 10, 20, 100).foreach { maxIter =>
+      val trainer = new MultilayerPerceptronClassifier()
+        .setMaxIter(maxIter)
+        .setLayers(Array(2, 3, 2))
+      val model = trainer.fit(dataset)
+      if (maxIter == 1) {
+        assert(model.summary.totalIterations === maxIter)
+      } else {
+        assert(model.summary.totalIterations <= maxIter)
+      }
+    }
   }
 }

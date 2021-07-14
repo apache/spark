@@ -55,6 +55,16 @@ class JoinedRow extends InternalRow {
     this
   }
 
+  /** Gets this JoinedRow's left base row. */
+  def getLeft: InternalRow = {
+    row1
+  }
+
+  /** Gets this JoinedRow's right base row. */
+  def getRight: InternalRow = {
+    row2
+  }
+
   override def toSeq(fieldTypes: Seq[DataType]): Seq[Any] = {
     assert(fieldTypes.length == row1.numFields + row2.numFields)
     val (left, right) = fieldTypes.splitAt(row1.numFields)

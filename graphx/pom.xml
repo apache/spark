@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent_2.12</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>3.3.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -53,16 +53,15 @@
     </dependency>
     <dependency>
       <groupId>org.apache.xbean</groupId>
-      <artifactId>xbean-asm7-shaded</artifactId>
+      <artifactId>xbean-asm9-shaded</artifactId>
     </dependency>
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.github.fommil.netlib</groupId>
-      <artifactId>core</artifactId>
-      <version>${netlib.java.version}</version>
+      <groupId>dev.ludovic.netlib</groupId>
+      <artifactId>blas</artifactId>
     </dependency>
     <dependency>
       <groupId>net.sourceforge.f2j</groupId>

@@ -23,6 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionEnd
 import org.apache.spark.sql.internal.StaticSQLConf._
@@ -55,12 +56,13 @@ trait QueryExecutionListener {
    * @param funcName the name of the action that triggered this query.
    * @param qe the QueryExecution object that carries detail information like logical plan,
    *           physical plan, etc.
-   * @param error the error that failed this query.
-   *
+   * @param exception the exception that failed this query. If `java.lang.Error` is thrown during
+   *                  execution, it will be wrapped with an `Exception` and it can be accessed by
+   *                  `exception.getCause`.
    * @note This can be invoked by multiple different threads.
    */
   @DeveloperApi
-  def onFailure(funcName: String, qe: QueryExecution, error: Throwable): Unit
+  def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit
 }
 
 
@@ -75,7 +77,7 @@ trait QueryExecutionListener {
 class ExecutionListenerManager private[sql](session: SparkSession, loadExtensions: Boolean)
   extends Logging {
 
-  private val listenerBus = new ExecutionListenerBus(session)
+  private val listenerBus = new ExecutionListenerBus(this, session)
 
   if (loadExtensions) {
     val conf = session.sparkContext.conf
@@ -123,10 +125,16 @@ class ExecutionListenerManager private[sql](session: SparkSession, loadExtension
   }
 }
 
-private[sql] class ExecutionListenerBus(session: SparkSession)
+private[sql] class ExecutionListenerBus private(sessionUUID: String)
   extends SparkListener with ListenerBus[QueryExecutionListener, SparkListenerSQLExecutionEnd] {
 
-  session.sparkContext.listenerBus.addToSharedQueue(this)
+  def this(manager: ExecutionListenerManager, session: SparkSession) = {
+    this(session.sessionUUID)
+    session.sparkContext.listenerBus.addToSharedQueue(this)
+    session.sparkContext.cleaner.foreach { cleaner =>
+      cleaner.registerSparkListenerForCleanup(manager, this)
+    }
+  }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
     case e: SparkListenerSQLExecutionEnd => postToAll(e)
@@ -140,7 +148,12 @@ private[sql] class ExecutionListenerBus(session: SparkSession)
       val funcName = event.executionName.get
       event.executionFailure match {
         case Some(ex) =>
-          listener.onFailure(funcName, event.qe, ex)
+          val exception = ex match {
+            case e: Exception => e
+            case other: Throwable =>
+              QueryExecutionErrors.failedToExecuteQueryError(other)
+          }
+          listener.onFailure(funcName, event.qe, exception)
         case _ =>
           listener.onSuccess(funcName, event.qe, event.duration)
       }
@@ -150,6 +163,6 @@ private[sql] class ExecutionListenerBus(session: SparkSession)
   private def shouldReport(e: SparkListenerSQLExecutionEnd): Boolean = {
     // Only catch SQL execution with a name, and triggered by the same spark session that this
     // listener manager belongs.
-    e.executionName.isDefined && e.qe.sparkSession.eq(this.session)
+    e.executionName.isDefined && e.qe.sparkSession.sessionUUID == sessionUUID
   }
 }

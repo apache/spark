@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.errors.attachTree
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral, JavaCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.types._
@@ -72,17 +71,16 @@ object BindReferences extends Logging {
       input: AttributeSeq,
       allowFailures: Boolean = false): A = {
     expression.transform { case a: AttributeReference =>
-      attachTree(a, "Binding attribute") {
-        val ordinal = input.indexOf(a.exprId)
-        if (ordinal == -1) {
-          if (allowFailures) {
-            a
-          } else {
-            sys.error(s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
-          }
+      val ordinal = input.indexOf(a.exprId)
+      if (ordinal == -1) {
+        if (allowFailures) {
+          a
         } else {
-          BoundReference(ordinal, a.dataType, input(ordinal).nullable)
+          throw new IllegalStateException(
+            s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
         }
+      } else {
+        BoundReference(ordinal, a.dataType, input(ordinal).nullable)
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.
   }

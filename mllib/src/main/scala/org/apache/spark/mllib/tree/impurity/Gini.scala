@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.tree.impurity
 
-import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.annotation.Since
 
 /**
  * Class for calculating the Gini impurity
@@ -28,14 +28,12 @@ import org.apache.spark.annotation.{DeveloperApi, Since}
 object Gini extends Impurity {
 
   /**
-   * :: DeveloperApi ::
    * information calculation for multiclass classification
    * @param counts Array[Double] with counts for each label
    * @param totalCount sum of counts for all labels
    * @return information value, or 0 if totalCount = 0
    */
   @Since("1.1.0")
-  @DeveloperApi
   override def calculate(counts: Array[Double], totalCount: Double): Double = {
     if (totalCount == 0) {
       return 0
@@ -52,7 +50,6 @@ object Gini extends Impurity {
   }
 
   /**
-   * :: DeveloperApi ::
    * variance calculation
    * @param count number of instances
    * @param sum sum of labels
@@ -60,7 +57,6 @@ object Gini extends Impurity {
    * @return information value, or 0 if count = 0
    */
   @Since("1.0.0")
-  @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
     throw new UnsupportedOperationException("Gini.calculate")
 
@@ -111,7 +107,7 @@ private[spark] class GiniAggregator(numClasses: Int)
    * @param offset    Start index of stats for this (node, feature, bin).
    */
   def getCalculator(allStats: Array[Double], offset: Int): GiniCalculator = {
-    new GiniCalculator(allStats.view(offset, offset + statsSize - 1).toArray,
+    new GiniCalculator(allStats.view.slice(offset, offset + statsSize - 1).toArray,
       allStats(offset + statsSize - 1).toLong)
   }
 }

@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.UnresolvedSeed
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode, FalseLiteral}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{EXPRESSION_WITH_RANDOM_SEED, TreePattern}
 import org.apache.spark.sql.types._
-import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -32,7 +32,8 @@ import org.apache.spark.util.random.XORShiftRandom
  *
  * Since this expression is stateful, it cannot be a case object.
  */
-abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful {
+abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful
+  with ExpressionWithRandomSeed {
   /**
    * Record ID within each partition. By being transient, the Random Number Generator is
    * reset every time we serialize and deserialize and initialize it.
@@ -43,11 +44,11 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful 
     rng = new XORShiftRandom(seed + partitionIndex)
   }
 
-  @transient protected lazy val seed: Long = child match {
-    case Literal(s, IntegerType) => s.asInstanceOf[Int]
-    case Literal(s, LongType) => s.asInstanceOf[Long]
-    case _ => throw new AnalysisException(
-      s"Input argument to $prettyName must be an integer, long or null literal.")
+  override def seedExpression: Expression = child
+
+  @transient protected lazy val seed: Long = seedExpression match {
+    case e if e.dataType == IntegerType => e.eval().asInstanceOf[Int]
+    case e if e.dataType == LongType => e.eval().asInstanceOf[Long]
   }
 
   override def nullable: Boolean = false
@@ -61,7 +62,10 @@ abstract class RDG extends UnaryExpression with ExpectsInputTypes with Stateful 
  * Represents the behavior of expressions which have a random seed and can renew the seed.
  * Usually the random seed needs to be renewed at each execution under streaming queries.
  */
-trait ExpressionWithRandomSeed {
+trait ExpressionWithRandomSeed extends Expression {
+  override val nodePatterns: Seq[TreePattern] = Seq(EXPRESSION_WITH_RANDOM_SEED)
+
+  def seedExpression: Expression
   def withNewSeed(seed: Long): Expression
 }
 
@@ -74,20 +78,23 @@ trait ExpressionWithRandomSeed {
       > SELECT _FUNC_();
        0.9629742951434543
       > SELECT _FUNC_(0);
-       0.8446490682263027
+       0.7604953758285915
       > SELECT _FUNC_(null);
-       0.8446490682263027
+       0.7604953758285915
   """,
   note = """
     The function is non-deterministic in general case.
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "math_funcs")
 // scalastyle:on line.size.limit
-case class Rand(child: Expression) extends RDG with ExpressionWithRandomSeed {
+case class Rand(child: Expression, hideSeed: Boolean = false) extends RDG {
 
-  def this() = this(Literal(Utils.random.nextLong(), LongType))
+  def this() = this(UnresolvedSeed, true)
 
-  override def withNewSeed(seed: Long): Rand = Rand(Literal(seed, LongType))
+  def this(child: Expression) = this(child, false)
+
+  override def withNewSeed(seed: Long): Rand = Rand(Literal(seed, LongType), hideSeed)
 
   override protected def evalInternal(input: InternalRow): Double = rng.nextDouble()
 
@@ -101,7 +108,14 @@ case class Rand(child: Expression) extends RDG with ExpressionWithRandomSeed {
       isNull = FalseLiteral)
   }
 
-  override def freshCopy(): Rand = Rand(child)
+  override def freshCopy(): Rand = Rand(child, hideSeed)
+
+  override def flatArguments: Iterator[Any] = Iterator(child)
+  override def sql: String = {
+    s"rand(${if (hideSeed) "" else child.sql})"
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): Rand = copy(child = newChild)
 }
 
 object Rand {
@@ -117,20 +131,23 @@ object Rand {
       > SELECT _FUNC_();
        -0.3254147983080288
       > SELECT _FUNC_(0);
-       1.1164209726833079
+       1.6034991609278433
       > SELECT _FUNC_(null);
-       1.1164209726833079
+       1.6034991609278433
   """,
   note = """
     The function is non-deterministic in general case.
   """,
-  since = "1.5.0")
+  since = "1.5.0",
+  group = "math_funcs")
 // scalastyle:on line.size.limit
-case class Randn(child: Expression) extends RDG with ExpressionWithRandomSeed {
+case class Randn(child: Expression, hideSeed: Boolean = false) extends RDG {
 
-  def this() = this(Literal(Utils.random.nextLong(), LongType))
+  def this() = this(UnresolvedSeed, true)
 
-  override def withNewSeed(seed: Long): Randn = Randn(Literal(seed, LongType))
+  def this(child: Expression) = this(child, false)
+
+  override def withNewSeed(seed: Long): Randn = Randn(Literal(seed, LongType), hideSeed)
 
   override protected def evalInternal(input: InternalRow): Double = rng.nextGaussian()
 
@@ -144,7 +161,14 @@ case class Randn(child: Expression) extends RDG with ExpressionWithRandomSeed {
       isNull = FalseLiteral)
   }
 
-  override def freshCopy(): Randn = Randn(child)
+  override def freshCopy(): Randn = Randn(child, hideSeed)
+
+  override def flatArguments: Iterator[Any] = Iterator(child)
+  override def sql: String = {
+    s"randn(${if (hideSeed) "" else child.sql})"
+  }
+
+  override protected def withNewChildInternal(newChild: Expression): Randn = copy(child = newChild)
 }
 
 object Randn {

@@ -19,13 +19,17 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, GenericRowWithSchema}
+import org.apache.spark.sql.catalyst.trees.LeafLike
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.types.StructType
 
 /**
  * A physical operator that executes run() and saves the result to prevent multiple executions.
  * Any V2 commands that do not require triggering a spark job should extend this class.
  */
-abstract class V2CommandExec extends LeafExecNode {
+abstract class V2CommandExec extends SparkPlan {
 
   /**
    * Abstract method that each concrete command needs to implement to compute the result.
@@ -44,13 +48,25 @@ abstract class V2CommandExec extends LeafExecNode {
    */
   override def executeCollect(): Array[InternalRow] = result.toArray
 
-  override def executeToIterator: Iterator[InternalRow] = result.toIterator
+  override def executeToIterator(): Iterator[InternalRow] = result.toIterator
 
   override def executeTake(limit: Int): Array[InternalRow] = result.take(limit).toArray
 
   override def executeTail(limit: Int): Array[InternalRow] = result.takeRight(limit).toArray
 
   protected override def doExecute(): RDD[InternalRow] = {
-    sqlContext.sparkContext.parallelize(result, 1)
+    sparkContext.parallelize(result, 1)
+  }
+
+  override def producedAttributes: AttributeSet = outputSet
+
+  protected def toCatalystRow(values: Any*): InternalRow = {
+    rowSerializer(new GenericRowWithSchema(values.toArray, schema)).copy()
+  }
+
+  private lazy val rowSerializer = {
+    RowEncoder(StructType.fromAttributes(output)).resolveAndBind().createSerializer()
   }
 }
+
+trait LeafV2CommandExec extends V2CommandExec with LeafLike[SparkPlan]

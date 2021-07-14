@@ -18,11 +18,16 @@
 package org.apache.spark.storage
 
 import java.io.{File, FileWriter}
+import java.nio.file.{Files, Paths}
+import java.nio.file.attribute.PosixFilePermissions
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config
 import org.apache.spark.util.Utils
+
 
 class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
   private val testConf = new SparkConf(false)
@@ -51,7 +56,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
   override def beforeEach(): Unit = {
     super.beforeEach()
     val conf = testConf.clone
-    conf.set("spark.local.dir", rootDirs).set("spark.diskStore.subDirectories", "1")
+    conf.set("spark.local.dir", rootDirs)
     diskBlockManager = new DiskBlockManager(conf, deleteFilesOnStop = true)
   }
 
@@ -85,50 +90,43 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     assert(diskBlockManager.getAllBlocks().isEmpty)
   }
 
+  test("should still create merge directories if one already exists under a local dir") {
+    val mergeDir0 = new File(rootDir0, DiskBlockManager.MERGE_MANAGER_DIR)
+    if (!mergeDir0.exists()) {
+      Files.createDirectories(mergeDir0.toPath)
+    }
+    val mergeDir1 = new File(rootDir1, DiskBlockManager.MERGE_MANAGER_DIR)
+    if (mergeDir1.exists()) {
+      Utils.deleteRecursively(mergeDir1)
+    }
+    testConf.set("spark.local.dir", rootDirs)
+    testConf.set("spark.shuffle.push.enabled", "true")
+    testConf.set(config.Tests.IS_TESTING, true)
+    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
+    assert(Utils.getConfiguredLocalDirs(testConf).map(
+      rootDir => new File(rootDir, DiskBlockManager.MERGE_MANAGER_DIR))
+      .filter(mergeDir => mergeDir.exists()).length === 2)
+    // mergeDir0 will be skipped as it already exists
+    assert(mergeDir0.list().length === 0)
+    // Sub directories get created under mergeDir1
+    assert(mergeDir1.list().length === testConf.get(config.DISKSTORE_SUB_DIRECTORIES))
+  }
+
+  test("Test dir creation with permission 770") {
+    val testDir = new File("target/testDir");
+    FileUtils.deleteQuietly(testDir)
+    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
+    diskBlockManager.createDirWithPermission770(testDir)
+    assert(testDir.exists && testDir.isDirectory)
+    val permission = PosixFilePermissions.toString(
+      Files.getPosixFilePermissions(Paths.get("target/testDir")))
+    assert(permission.equals("rwxrwx---"))
+    FileUtils.deleteQuietly(testDir)
+  }
+
   def writeToFile(file: File, numBytes: Int): Unit = {
     val writer = new FileWriter(file, true)
     for (i <- 0 until numBytes) writer.write(i)
     writer.close()
-  }
-
-  test("temporary shuffle/local file should be able to handle disk failures") {
-    try {
-      // the following two lines pre-create subdirectories under each root dir of block manager
-      diskBlockManager.getFile("1")
-      diskBlockManager.getFile("2")
-
-      val tempShuffleFile1 = diskBlockManager.createTempShuffleBlock()._2
-      val tempLocalFile1 = diskBlockManager.createTempLocalBlock()._2
-      assert(tempShuffleFile1.exists(), "There are no bad disks, so temp shuffle file exists")
-      assert(tempLocalFile1.exists(), "There are no bad disks, so temp local file exists")
-
-      // partial disks damaged
-      rootDir0.setExecutable(false)
-      val tempShuffleFile2 = diskBlockManager.createTempShuffleBlock()._2
-      val tempLocalFile2 = diskBlockManager.createTempLocalBlock()._2
-      // It's possible that after 10 retries we still not able to find the healthy disk. we need to
-      // remove the flakiness of these two asserts
-      if (tempShuffleFile2.getParentFile.getParentFile.getParent === rootDir1.getAbsolutePath) {
-        assert(tempShuffleFile2.exists(),
-          "There is only one bad disk, so temp shuffle file should be created")
-      }
-      if (tempLocalFile2.getParentFile.getParentFile.getParent === rootDir1.getAbsolutePath) {
-        assert(tempLocalFile2.exists(),
-          "There is only one bad disk, so temp local file should be created")
-      }
-
-      // all disks damaged
-      rootDir1.setExecutable(false)
-      val tempShuffleFile3 = diskBlockManager.createTempShuffleBlock()._2
-      val tempLocalFile3 = diskBlockManager.createTempLocalBlock()._2
-      assert(!tempShuffleFile3.exists(),
-        "All disks are broken, so there should be no temp shuffle file created")
-      assert(!tempLocalFile3.exists(),
-        "All disks are broken, so there should be no temp local file created")
-    } finally {
-      rootDir0.setExecutable(true)
-      rootDir1.setExecutable(true)
-    }
-
   }
 }

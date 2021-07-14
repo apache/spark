@@ -21,7 +21,7 @@ import java.util.Arrays;
 import java.util.Objects;
 import javax.annotation.Nullable;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.types.DataType;
 
 /**
@@ -39,7 +39,7 @@ import org.apache.spark.sql.types.DataType;
  *
  * @since 3.0.0
  */
-@Experimental
+@Evolving
 public interface TableChange {
 
   /**

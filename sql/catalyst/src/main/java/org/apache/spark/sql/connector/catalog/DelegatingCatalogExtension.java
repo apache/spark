@@ -19,7 +19,7 @@ package org.apache.spark.sql.connector.catalog;
 
 import java.util.Map;
 
-import org.apache.spark.annotation.Experimental;
+import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.NamespaceAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
@@ -36,7 +36,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  *
  * @since 3.0.0
  */
-@Experimental
+@Evolving
 public abstract class DelegatingCatalogExtension implements CatalogExtension {
 
   private CatalogPlugin delegate;
@@ -97,6 +97,11 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   @Override
   public boolean dropTable(Identifier ident) {
     return asTableCatalog().dropTable(ident);
+  }
+
+  @Override
+  public boolean purgeTable(Identifier ident) {
+    return asTableCatalog().purgeTable(ident);
   }
 
   @Override

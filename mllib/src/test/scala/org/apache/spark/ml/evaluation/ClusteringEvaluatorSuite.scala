@@ -19,12 +19,13 @@ package org.apache.spark.ml.evaluation
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.functions.lit
 
 
 class ClusteringEvaluatorSuite
@@ -145,4 +146,60 @@ class ClusteringEvaluatorSuite
     assert(evaluator.evaluate(twoSingleItemClusters) === 0.0)
   }
 
+  test("getMetrics") {
+    val evaluator = new ClusteringEvaluator()
+      .setFeaturesCol("features")
+      .setPredictionCol("label")
+
+    val metrics1 = evaluator.getMetrics(irisDataset)
+    val silhouetteScoreEuclidean = metrics1.silhouette
+
+    assert(evaluator.evaluate(irisDataset) == silhouetteScoreEuclidean)
+
+    evaluator.setDistanceMeasure("cosine")
+    val metrics2 = evaluator.getMetrics(irisDataset)
+    val silhouetteScoreCosin = metrics2.silhouette
+
+    assert(evaluator.evaluate(irisDataset) == silhouetteScoreCosin)
+  }
+
+  test("test weight support") {
+    Seq("squaredEuclidean", "cosine").foreach { distanceMeasure =>
+      val evaluator1 = new ClusteringEvaluator()
+        .setFeaturesCol("features")
+        .setPredictionCol("label")
+        .setDistanceMeasure(distanceMeasure)
+
+      val evaluator2 = new ClusteringEvaluator()
+        .setFeaturesCol("features")
+        .setPredictionCol("label")
+        .setDistanceMeasure(distanceMeasure)
+        .setWeightCol("weight")
+
+      Seq(0.25, 1.0, 10.0, 99.99).foreach { w =>
+        var score1 = evaluator1.evaluate(irisDataset)
+        var score2 = evaluator2.evaluate(irisDataset.withColumn("weight", lit(w)))
+        assert(score1 ~== score2 relTol 1e-6)
+
+        score1 = evaluator1.evaluate(newIrisDataset)
+        score2 = evaluator2.evaluate(newIrisDataset.withColumn("weight", lit(w)))
+        assert(score1 ~== score2 relTol 1e-6)
+      }
+    }
+  }
+
+  test("single-element clusters with weight") {
+    val singleItemClusters = spark.createDataFrame(spark.sparkContext.parallelize(Seq(
+      (0.0, Vectors.dense(5.1, 3.5, 1.4, 0.2), 6.0),
+      (1.0, Vectors.dense(7.0, 3.2, 4.7, 1.4), 0.25),
+      (2.0, Vectors.dense(6.3, 3.3, 6.0, 2.5), 9.99)))).toDF("label", "features", "weight")
+    Seq("squaredEuclidean", "cosine").foreach { distanceMeasure =>
+      val evaluator = new ClusteringEvaluator()
+        .setFeaturesCol("features")
+        .setPredictionCol("label")
+        .setDistanceMeasure(distanceMeasure)
+        .setWeightCol("weight")
+      assert(evaluator.evaluate(singleItemClusters) === 0.0)
+    }
+  }
 }

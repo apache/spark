@@ -19,10 +19,14 @@ package org.apache.spark.deploy.security
 
 import java.security.PrivilegedExceptionAction
 
+import scala.util.control.NonFatal
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION
 import org.apache.hadoop.minikdc.MiniKdc
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -88,8 +92,30 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
       // krb5.conf. MiniKdc sets "java.security.krb5.conf" in start and removes it when stop called.
       val kdcDir = Utils.createTempDir()
       val kdcConf = MiniKdc.createConf()
-      kdc = new MiniKdc(kdcConf, kdcDir)
-      kdc.start()
+      // The port for MiniKdc service gets selected in the constructor, but will be bound
+      // to it later in MiniKdc.start() -> MiniKdc.initKDCServer() -> KdcServer.start().
+      // In meantime, when some other service might capture the port during this progress, and
+      // cause BindException.
+      // This makes our tests which have dedicated JVMs and rely on MiniKDC being flaky
+      //
+      // https://issues.apache.org/jira/browse/HADOOP-12656 get fixed in Hadoop 2.8.0.
+      //
+      // The workaround here is to periodically repeat this process with a timeout , since we are
+      // using Hadoop 2.7.4 as default.
+      // https://issues.apache.org/jira/browse/SPARK-31631
+      eventually(timeout(60.seconds), interval(1.second)) {
+        try {
+          kdc = new MiniKdc(kdcConf, kdcDir)
+          kdc.start()
+        } catch {
+          case NonFatal(e) =>
+            if (kdc != null) {
+              kdc.stop()
+              kdc = null
+            }
+            throw e
+        }
+      }
 
       val krbConf = new Configuration()
       krbConf.set(HADOOP_SECURITY_AUTHENTICATION, "kerberos")

@@ -104,7 +104,7 @@ object ParquetUtils {
           .orElse(filesByType.data.headOption)
           .toSeq
       }
-    ParquetFileFormat.mergeSchemasInParallel(filesToTouch, sparkSession)
+    ParquetFileFormat.mergeSchemasInParallel(parameters, filesToTouch, sparkSession)
   }
 
   case class FileTypes(

@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.ListQuery
-import org.apache.spark.sql.catalyst.plans.{LeftSemi, PlanTest}
+import org.apache.spark.sql.catalyst.expressions.{IsNull, ListQuery, Not}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
@@ -52,4 +53,27 @@ class RewriteSubquerySuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("NOT-IN subquery nested inside OR") {
+    val relation1 = LocalRelation('a.int, 'b.int)
+    val relation2 = LocalRelation('c.int, 'd.int)
+    val exists = 'exists.boolean.notNull
+
+    val query = relation1.where('b === 1 || Not('a.in(ListQuery(relation2.select('c))))).select('a)
+    val correctAnswer = relation1
+      .join(relation2.select('c), ExistenceJoin(exists), Some('a === 'c || IsNull('a === 'c)))
+      .where('b === 1 || Not(exists))
+      .select('a)
+      .analyze
+    val optimized = Optimize.execute(query.analyze)
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-34598: Filters without subquery must not be modified by RewritePredicateSubquery") {
+    val relation = LocalRelation('a.int, 'b.int, 'c.int, 'd.int)
+    val query = relation.where(('a === 1 || 'b === 2) && ('c === 3 && 'd === 4)).select('a)
+    val tracker = new QueryPlanningTracker
+    Optimize.executeAndTrack(query.analyze, tracker)
+    assert(tracker.rules(RewritePredicateSubquery.ruleName).numEffectiveInvocations == 0)
+  }
 }

@@ -64,7 +64,7 @@ struct<>
 -- !query
 select col1, col2, char_length(col3) from inserttest
 -- !query schema
-struct<col1:int,col2:int,length(col3):int>
+struct<col1:int,col2:int,char_length(col3):int>
 -- !query output
 30	50	10000
 NULL	3	7

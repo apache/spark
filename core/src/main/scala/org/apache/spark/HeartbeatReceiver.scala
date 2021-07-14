@@ -67,7 +67,7 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   extends SparkListener with ThreadSafeRpcEndpoint with Logging {
 
-  def this(sc: SparkContext) {
+  def this(sc: SparkContext) = {
     this(sc, new SystemClock)
   }
 
@@ -80,7 +80,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   // executor ID -> timestamp of when the last heartbeat from this executor was received
   private val executorLastSeen = new HashMap[String, Long]
 
-  private val executorTimeoutMs = sc.conf.get(config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT)
+  private val executorTimeoutMs = Utils.executorTimeoutMs(sc.conf)
 
   private val checkTimeoutIntervalMs = sc.conf.get(Network.NETWORK_TIMEOUT_INTERVAL)
 
@@ -88,10 +88,10 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
   require(checkTimeoutIntervalMs <= executorTimeoutMs,
     s"${Network.NETWORK_TIMEOUT_INTERVAL.key} should be less than or " +
-      s"equal to ${config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT.key}.")
+      s"equal to ${config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key}.")
   require(executorHeartbeatIntervalMs <= executorTimeoutMs,
     s"${config.EXECUTOR_HEARTBEAT_INTERVAL.key} should be less than or " +
-      s"equal to ${config.STORAGE_BLOCKMANAGER_SLAVE_TIMEOUT.key}")
+      s"equal to ${config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT.key}")
 
   private var timeoutCheckingTask: ScheduledFuture[_] = null
 
@@ -126,6 +126,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
 
     // Messages received from executors
     case heartbeat @ Heartbeat(executorId, accumUpdates, blockManagerId, executorUpdates) =>
+      var reregisterBlockManager = !sc.isStopped
       if (scheduler != null) {
         if (executorLastSeen.contains(executorId)) {
           executorLastSeen(executorId) = clock.getTimeMillis()
@@ -133,7 +134,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
             override def run(): Unit = Utils.tryLogNonFatalError {
               val unknownExecutor = !scheduler.executorHeartbeatReceived(
                 executorId, accumUpdates, blockManagerId, executorUpdates)
-              val response = HeartbeatResponse(reregisterBlockManager = unknownExecutor)
+              reregisterBlockManager &= unknownExecutor
+              val response = HeartbeatResponse(reregisterBlockManager)
               context.reply(response)
             }
           })
@@ -143,14 +145,14 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
           // not log warning here. Otherwise there may be a lot of noise especially if
           // we explicitly remove executors (SPARK-4134).
           logDebug(s"Received heartbeat from unknown executor $executorId")
-          context.reply(HeartbeatResponse(reregisterBlockManager = true))
+          context.reply(HeartbeatResponse(reregisterBlockManager))
         }
       } else {
         // Because Executor will sleep several seconds before sending the first "Heartbeat", this
         // case rarely happens. However, if it really happens, log it and ask the executor to
         // register itself again.
         logWarning(s"Dropping $heartbeat because TaskScheduler is not ready yet")
-        context.reply(HeartbeatResponse(reregisterBlockManager = true))
+        context.reply(HeartbeatResponse(reregisterBlockManager))
       }
   }
 
@@ -218,7 +220,8 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
             sc.schedulerBackend match {
               case backend: CoarseGrainedSchedulerBackend =>
                 backend.driverEndpoint.send(RemoveExecutor(executorId,
-                  SlaveLost(s"Executor heartbeat timed out after ${now - lastSeenMs} ms")))
+                  ExecutorProcessLost(
+                    s"Executor heartbeat timed out after ${now - lastSeenMs} ms")))
 
               // LocalSchedulerBackend is used locally and only has one single executor
               case _: LocalSchedulerBackend =>

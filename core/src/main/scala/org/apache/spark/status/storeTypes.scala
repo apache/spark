@@ -26,6 +26,7 @@ import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.status.api.v1._
 import org.apache.spark.ui.scope._
+import org.apache.spark.util.Utils
 import org.apache.spark.util.kvstore.KVIndex
 
 private[spark] case class AppStatusStoreMetadata(version: Long)
@@ -57,7 +58,7 @@ private[spark] class ExecutorSummaryWrapper(val info: ExecutorSummary) {
   private def active: Boolean = info.isActive
 
   @JsonIgnore @KVIndex("host")
-  val host: String = info.hostPort.split(":")(0)
+  val host: String = Utils.parseHostPort(info.hostPort)._1
 
 }
 
@@ -154,7 +155,7 @@ private[spark] object TaskIndexNames {
 private[spark] class TaskDataWrapper(
     // Storing this as an object actually saves memory; it's also used as the key in the in-memory
     // store, so in that case you'd save the extra copy of the value here.
-    @KVIndexParam
+    @KVIndexParam(parent = TaskIndexNames.STAGE)
     val taskId: JLong,
     @KVIndexParam(value = TaskIndexNames.TASK_INDEX, parent = TaskIndexNames.STAGE)
     val index: Int,
@@ -374,6 +375,13 @@ private[spark] class RDDStorageInfoWrapper(val info: RDDStorageInfo) {
 
 }
 
+private[spark] class ResourceProfileWrapper(val rpInfo: ResourceProfileInfo) {
+
+  @JsonIgnore @KVIndex
+  def id: Int = rpInfo.id
+
+}
+
 private[spark] class ExecutorStageSummaryWrapper(
     val stageId: Int,
     val stageAttemptId: Int,
@@ -466,6 +474,7 @@ private[spark] class CachedQuantile(
     val taskCount: Long,
 
     // The following fields are an exploded view of a single entry for TaskMetricDistributions.
+    val duration: Double,
     val executorDeserializeTime: Double,
     val executorDeserializeCpuTime: Double,
     val executorRunTime: Double,
@@ -503,5 +512,18 @@ private[spark] class CachedQuantile(
 
   @KVIndex("stage") @JsonIgnore
   def stage: Array[Int] = Array(stageId, stageAttemptId)
+
+}
+
+private[spark] class ProcessSummaryWrapper(val info: ProcessSummary) {
+
+  @JsonIgnore @KVIndex
+  private def id: String = info.id
+
+  @JsonIgnore @KVIndex("active")
+  private def active: Boolean = info.isActive
+
+  @JsonIgnore @KVIndex("host")
+  val host: String = Utils.parseHostPort(info.hostPort)._1
 
 }
