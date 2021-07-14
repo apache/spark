@@ -207,18 +207,6 @@ jobs:
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           pyspark-coursier-
-    - name: Install Python 3.6
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.6
-        architecture: x64
-    # This step takes much less time (~30s) than other Python versions so it is not included
-    # in the Docker image being used. There is also a technical issue to install Python 3.6 on
-    # Ubuntu 20.04. See also SPARK-33162.
-    - name: Install Python packages (Python 3.6)
-      run: |
-        python3.6 -m pip install numpy 'pyarrow<4.0.0' pandas scipy xmlrunner 'plotly>=4.8'
-        python3.6 -m pip list
     - name: List Python packages (Python 3.9)
       run: |
         python3.9 -m pip list
