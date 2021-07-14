@@ -204,6 +204,7 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: ~self.psser)
 
     def test_eq(self):
+        self.assert_eq(self.pser == 1, self.psser == 1)
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
                 self.pser == self.other_pser, (self.psser == self.other_psser).sort_index()
@@ -211,6 +212,7 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(self.pser == self.pser, (self.psser == self.psser).sort_index())
 
     def test_ne(self):
+        self.assert_eq(self.pser != 1, self.psser != 1)
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
                 self.pser != self.other_pser, (self.psser != self.other_psser).sort_index()
