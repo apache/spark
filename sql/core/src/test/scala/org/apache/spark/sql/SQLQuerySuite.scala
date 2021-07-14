@@ -4059,7 +4059,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-36093") {
+  test("SPARK-36093: RemoveRedundantAliases should not change expression's name") {
     withTable("t1", "t2") {
       withView("t1_v") {
         sql("CREATE TABLE t1(cal_dt DATE) USING PARQUET")
