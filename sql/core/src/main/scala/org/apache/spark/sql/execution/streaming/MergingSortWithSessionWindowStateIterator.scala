@@ -65,54 +65,61 @@ class MergingSortWithSessionWindowStateIterator(
     }
   }
 
-  private var currentRow: SessionRowInformation = _
-  private var currentStateRow: SessionRowInformation = _
-  private var currentStateIter: Iterator[InternalRow] = _
-  private var currentStateFetchedKey: UnsafeRow = _
+  // Holds the latest fetched row from input side iterator.
+  private var currentRowFromInput: SessionRowInformation = _
+
+  // Holds the latest fetched row from state side iterator.
+  private var currentRowFromState: SessionRowInformation = _
+
+  // Holds the iterator of rows (sessions) in state for the session key.
+  private var sessionIterFromState: Iterator[InternalRow] = _
+
+  // Holds the current session key.
+  private var currentSessionKey: UnsafeRow = _
 
   override def hasNext: Boolean = {
-    currentRow != null || currentStateRow != null ||
-      (currentStateIter != null && currentStateIter.hasNext) || iter.hasNext
+    currentRowFromInput != null || currentRowFromState != null ||
+      (sessionIterFromState != null && sessionIterFromState.hasNext) || iter.hasNext
   }
 
   override def next(): InternalRow = {
-    if (currentRow == null) {
+    if (currentRowFromInput == null) {
       mayFillCurrentRow()
     }
 
-    if (currentStateRow == null) {
+    if (currentRowFromState == null) {
       mayFillCurrentStateRow()
     }
 
-    if (currentRow == null && currentStateRow == null) {
+    if (currentRowFromInput == null && currentRowFromState == null) {
       throw new IllegalStateException("No Row to provide in next() which should not happen!")
     }
 
     // return current row vs current state row, should return smaller key, earlier session start
     val returnCurrentRow: Boolean = {
-      if (currentRow == null) {
+      if (currentRowFromInput == null) {
         false
-      } else if (currentStateRow == null) {
+      } else if (currentRowFromState == null) {
         true
       } else {
         // compare
-        if (currentRow.keys != currentStateRow.keys) {
+        if (currentRowFromInput.keys != currentRowFromState.keys) {
           // state row cannot advance to row in input, so state row should be lower
           false
         } else {
-          currentRow.sessionStart < currentStateRow.sessionStart
+          currentRowFromInput.sessionStart < currentRowFromState.sessionStart
         }
       }
     }
 
     val ret: SessionRowInformation = {
       if (returnCurrentRow) {
-        val toRet = currentRow
-        currentRow = null
+        val toRet = currentRowFromInput
+        currentRowFromInput = null
         toRet
       } else {
-        val toRet = currentStateRow
-        currentStateRow = null
+        val toRet = currentRowFromState
+        currentRowFromState = null
         toRet
       }
     }
@@ -122,21 +129,21 @@ class MergingSortWithSessionWindowStateIterator(
 
   private def mayFillCurrentRow(): Unit = {
     if (iter.hasNext) {
-      currentRow = SessionRowInformation.of(iter.next())
+      currentRowFromInput = SessionRowInformation.of(iter.next())
     }
   }
 
   private def mayFillCurrentStateRow(): Unit = {
-    if (currentStateIter != null && currentStateIter.hasNext) {
-      currentStateRow = SessionRowInformation.of(currentStateIter.next())
+    if (sessionIterFromState != null && sessionIterFromState.hasNext) {
+      currentRowFromState = SessionRowInformation.of(sessionIterFromState.next())
     } else {
-      currentStateIter = null
+      sessionIterFromState = null
 
-      if (currentRow != null && currentRow.keys != currentStateFetchedKey) {
+      if (currentRowFromInput != null && currentRowFromInput.keys != currentSessionKey) {
         // We expect a small number of sessions per group key, so materializing them
         // and sorting wouldn't hurt much. The important thing is that we shouldn't buffer input
         // rows to sort with existing sessions.
-        val unsortedIter = stateManager.getSessions(store, currentRow.keys)
+        val unsortedIter = stateManager.getSessions(store, currentRowFromInput.keys)
         val unsortedList = unsortedIter.map(_.copy()).toList
 
         val sortedList = unsortedList.sortWith((row1, row2) => {
@@ -149,11 +156,11 @@ class MergingSortWithSessionWindowStateIterator(
           // here sorting is based on the fact that keys are same
           getSessionStart(row1).compareTo(getSessionStart(row2)) < 0
         })
-        currentStateIter = sortedList.iterator
+        sessionIterFromState = sortedList.iterator
 
-        currentStateFetchedKey = currentRow.keys
-        if (currentStateIter.hasNext) {
-          currentStateRow = SessionRowInformation.of(currentStateIter.next())
+        currentSessionKey = currentRowFromInput.keys
+        if (sessionIterFromState.hasNext) {
+          currentRowFromState = SessionRowInformation.of(sessionIterFromState.next())
         }
       }
     }
