@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.planning.{OperationHelper, ScanOperation}
+import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
@@ -27,8 +27,7 @@ import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
 
-object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
-  with OperationHelper with PredicateHelper {
+object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
@@ -106,7 +105,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
                   val newOutput = scan.readSchema().toAttributes
                   val groupAttrs = groupingExpressions.zip(newOutput).map {
                     case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
-                    case other => other.asInstanceOf[AttributeReference]
+                    case (_, b) => b
                   }
                   val output = groupAttrs ++ newOutput.drop(groupAttrs.length)
 
@@ -158,7 +157,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with AliasHelper
                           case _: aggregate.Count => aggregate.Sum(aggOutput(i - 1))
                           case _ => agg.aggregateFunction
                         }
-                      agg.copy(aggregateFunction = aggFunction, filter = None)
+                      agg.copy(aggregateFunction = aggFunction)
                   }
                 }
               } else {
