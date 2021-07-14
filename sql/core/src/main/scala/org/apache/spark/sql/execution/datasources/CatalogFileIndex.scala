@@ -23,7 +23,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTablePartition, ExternalCatalogUtils}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.StructType
 
@@ -70,8 +70,7 @@ class CatalogFileIndex(
   def filterPartitions(filters: Seq[Expression]): InMemoryFileIndex = {
     if (table.partitionColumnNames.nonEmpty) {
       val startTime = System.nanoTime()
-      val selectedPartitions = sparkSession.sessionState.catalog.listPartitionsByFilter(
-        table.identifier, filters)
+      val selectedPartitions = listPartitionsByFilter(table, filters)
       val partitions = selectedPartitions.map { p =>
         val path = new Path(p.location)
         val fs = path.getFileSystem(hadoopConf)
@@ -91,6 +90,19 @@ class CatalogFileIndex(
     } else {
       new InMemoryFileIndex(sparkSession, rootPaths, parameters = table.storage.properties,
         userSpecifiedSchema = None, fileStatusCache = fileStatusCache)
+    }
+  }
+
+  private def listPartitionsByFilter(
+      table: CatalogTable,
+      partitionFilters: Seq[Expression]): Seq[CatalogTablePartition] = {
+    if (sparkSession.sessionState.conf.metastorePartitionPruning) {
+      sparkSession.sessionState.catalog.listPartitionsByFilter(
+        table.identifier, partitionFilters)
+    } else {
+      ExternalCatalogUtils.prunePartitionsByFilter(table,
+        sparkSession.sessionState.catalog.listPartitions(table.identifier),
+        partitionFilters, sparkSession.sessionState.conf.sessionLocalTimeZone)
     }
   }
 
