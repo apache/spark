@@ -45,6 +45,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.{CORRECTED, LEGACY}
 import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -74,11 +75,14 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
   protected def createParquetFilters(
       schema: MessageType,
-      caseSensitive: Option[Boolean] = None): ParquetFilters =
+      caseSensitive: Option[Boolean] = None,
+      datetimeRebaseMode: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED
+    ): ParquetFilters =
     new ParquetFilters(schema, conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
       conf.parquetFilterPushDownInFilterThreshold,
-      caseSensitive.getOrElse(conf.caseSensitiveAnalysis))
+      caseSensitive.getOrElse(conf.caseSensitiveAnalysis),
+      datetimeRebaseMode)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
