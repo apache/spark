@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.time.LocalDateTime
+
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
@@ -27,18 +29,19 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
 
   test("simple tumbling window with record at window start") {
-    val df = Seq(
-      ("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
-
-    checkAnswer(
-      df.groupBy(window($"time", "10 seconds"))
-        .agg(count("*").as("counts"))
-        .orderBy($"window.start".asc)
-        .select($"window.start".cast("string"), $"window.end".cast("string"), $"counts"),
-      Seq(
-        Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 1)
+    def doTest(df: DataFrame): Unit = {
+      checkAnswer(
+        df.groupBy(window($"time", "10 seconds"))
+          .agg(count("*").as("counts"))
+          .orderBy($"window.start".asc)
+          .select($"window.start".cast("string"), $"window.end".cast("string"), $"counts"),
+        Seq(
+          Row("2016-03-27 19:39:30", "2016-03-27 19:39:40", 1)
+        )
       )
-    )
+    }
+    doTest(Seq(("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id"))
+    doTest(Seq((LocalDateTime.parse("2016-03-27T19:39:30"), 1, "a")).toDF("time", "value", "id"))
   }
 
   test("SPARK-21590: tumbling window using negative start time") {
