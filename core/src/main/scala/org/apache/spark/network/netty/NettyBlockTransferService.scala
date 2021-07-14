@@ -119,6 +119,8 @@ private[spark] class NettyBlockTransferService(
       val blockFetchStarter = new RetryingBlockTransferor.BlockTransferStarter {
         override def createAndStart(blockIds: Array[String],
             listener: BlockTransferListener): Unit = {
+          assert(listener.isInstanceOf[BlockFetchingListener],
+            "Expecting a BlockFetchingListener, but got a BlockPushingListener")
           try {
             val client = clientFactory.createClient(host, port, maxRetries > 0)
             new OneForOneBlockFetcher(client, appId, execId, blockIds,

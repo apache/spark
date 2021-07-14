@@ -99,6 +99,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
           (inputBlockId, inputListener) -> {
             // Unless this client is closed.
             if (clientFactory != null) {
+              assert inputListener instanceof BlockFetchingListener :
+                "Expecting a BlockFetchingListener, but got a BlockPushingListener";;
               TransportClient client = clientFactory.createClient(host, port, maxRetries > 0);
               new OneForOneBlockFetcher(client, appId, execId, inputBlockId,
                 (BlockFetchingListener) inputListener, conf, downloadFileManager).start();
@@ -140,9 +142,15 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     try {
       RetryingBlockTransferor.BlockTransferStarter blockPushStarter =
           (inputBlockId, inputListener) -> {
-            TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockPusher(client, appId, inputBlockId,
-              (BlockPushingListener) inputListener, buffersWithId).start();
+            if (clientFactory != null) {
+              assert inputListener instanceof BlockPushingListener :
+                "Expecting a BlockPushingListener, but got a BlockFetchingListener";
+              TransportClient client = clientFactory.createClient(host, port);
+              new OneForOneBlockPusher(client, appId, inputBlockId,
+                (BlockPushingListener) inputListener, buffersWithId).start();
+            } else {
+              logger.info("This clientFactory was closed. Skipping further block push retries.");
+            }
           };
       int maxRetries = conf.maxIORetries();
       if (maxRetries > 0) {

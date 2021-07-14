@@ -19,6 +19,11 @@ package org.apache.spark.network.shuffle;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 
+/**
+ * Callback to handle block push success and failure. This interface and
+ * {@link BlockFetchingListener} are unified under {@link BlockTransferListener} to allow
+ * code reuse for handling block push and fetch retry.
+ */
 public interface BlockPushingListener extends BlockTransferListener  {
   /**
    * Called once per successfully pushed block. After this call returns, data will be released
