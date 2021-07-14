@@ -481,11 +481,15 @@ object PartitioningUtils {
 
     val timestampTry = Try {
       val unescapedRaw = unescapePathName(raw)
-      // try and parse the date, if no exception occurs this is a candidate to be resolved as
-      // TimestampType or TimestampNTZType
-      timestampFormatter.parse(unescapedRaw)
       // the inferred data type is consistent with the default timestamp type
       val timestampType = SQLConf.get.timestampType
+      // try and parse the date, if no exception occurs this is a candidate to be resolved as
+      // TimestampType or TimestampNTZType
+      timestampType match {
+        case TimestampType => timestampFormatter.parse(unescapedRaw)
+        case TimestampNTZType => timestampFormatter.parseWithoutTimeZone(unescapedRaw)
+      }
+
       // SPARK-23436: see comment for date
       val timestampValue = Cast(Literal(unescapedRaw), timestampType, Some(zoneId.getId)).eval()
       // Disallow TimestampType if the cast returned null

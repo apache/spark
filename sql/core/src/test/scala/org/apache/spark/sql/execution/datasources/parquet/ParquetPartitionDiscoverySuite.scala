@@ -657,97 +657,121 @@ abstract class ParquetPartitionDiscoverySuite
   }
 
   test("Various partition value types") {
-    val row =
-      Row(
-        100.toByte,
-        40000.toShort,
-        Int.MaxValue,
-        Long.MaxValue,
-        1.5.toFloat,
-        4.5,
-        new java.math.BigDecimal(new BigInteger("212500"), 5),
-        new java.math.BigDecimal("2.125"),
-        java.sql.Date.valueOf("2015-05-23"),
-        new Timestamp(0),
-        "This is a string, /[]?=:",
-        "This is not a partition column")
+    Seq(TimestampTypes.TIMESTAMP_LTZ, TimestampTypes.TIMESTAMP_NTZ).foreach { tsType =>
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> tsType.toString) {
+        val ts = if (tsType == TimestampTypes.TIMESTAMP_LTZ) {
+          new Timestamp(0)
+        } else {
+          LocalDateTime.parse("1970-01-01T00:00:00")
+        }
+        val row =
+          Row(
+            100.toByte,
+            40000.toShort,
+            Int.MaxValue,
+            Long.MaxValue,
+            1.5.toFloat,
+            4.5,
+            new java.math.BigDecimal(new BigInteger("212500"), 5),
+            new java.math.BigDecimal("2.125"),
+            java.sql.Date.valueOf("2015-05-23"),
+            ts,
+            "This is a string, /[]?=:",
+            "This is not a partition column")
 
-    // BooleanType is not supported yet
-    val partitionColumnTypes =
-      Seq(
-        ByteType,
-        ShortType,
-        IntegerType,
-        LongType,
-        FloatType,
-        DoubleType,
-        DecimalType(10, 5),
-        DecimalType.SYSTEM_DEFAULT,
-        DateType,
-        TimestampType,
-        StringType)
+        // BooleanType is not supported yet
+        val partitionColumnTypes =
+          Seq(
+            ByteType,
+            ShortType,
+            IntegerType,
+            LongType,
+            FloatType,
+            DoubleType,
+            DecimalType(10, 5),
+            DecimalType.SYSTEM_DEFAULT,
+            DateType,
+            SQLConf.get.timestampType,
+            StringType)
 
-    val partitionColumns = partitionColumnTypes.zipWithIndex.map {
-      case (t, index) => StructField(s"p_$index", t)
-    }
+        val partitionColumns = partitionColumnTypes.zipWithIndex.map {
+          case (t, index) => StructField(s"p_$index", t)
+        }
 
-    val schema = StructType(partitionColumns :+ StructField(s"i", StringType))
-    val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+        val schema = StructType(partitionColumns :+ StructField(s"i", StringType))
+        val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
 
-    withTempPath { dir =>
-      df.write.format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
-      val fields = schema.map(f => Column(f.name).cast(f.dataType))
-      checkAnswer(spark.read.load(dir.toString).select(fields: _*), row)
-    }
+        withTempPath { dir =>
+          df.write
+            .format("parquet")
+            .partitionBy(partitionColumns.map(_.name): _*)
+            .save(dir.toString)
+          val fields = schema.map(f => Column(f.name).cast(f.dataType))
+          checkAnswer(spark.read.load(dir.toString).select(fields: _*), row)
+        }
 
-    withTempPath { dir =>
-      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
-        .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
-      val fields = schema.map(f => Column(f.name).cast(f.dataType))
-      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
-        .load(dir.toString).select(fields: _*), row)
+        withTempPath { dir =>
+          df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
+            .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
+          val fields = schema.map(f => Column(f.name).cast(f.dataType))
+          checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
+            .load(dir.toString).select(fields: _*), row)
+        }
+      }
     }
   }
 
   test("Various inferred partition value types") {
-    val row =
-      Row(
-        Long.MaxValue,
-        4.5,
-        new java.math.BigDecimal(new BigInteger("1" * 20)),
-        java.sql.Date.valueOf("2015-05-23"),
-        java.sql.Timestamp.valueOf("1990-02-24 12:00:30"),
-        "This is a string, /[]?=:",
-        "This is not a partition column")
+    Seq(TimestampTypes.TIMESTAMP_LTZ, TimestampTypes.TIMESTAMP_NTZ).foreach { tsType =>
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> tsType.toString) {
+        val ts = if (tsType == TimestampTypes.TIMESTAMP_LTZ) {
+          Timestamp.valueOf("1990-02-24 12:00:30")
+        } else {
+          LocalDateTime.parse("1990-02-24T12:00:30")
+        }
+        val row =
+          Row(
+            Long.MaxValue,
+            4.5,
+            new java.math.BigDecimal(new BigInteger("1" * 20)),
+            java.sql.Date.valueOf("2015-05-23"),
+            ts,
+            "This is a string, /[]?=:",
+            "This is not a partition column")
 
-    val partitionColumnTypes =
-      Seq(
-        LongType,
-        DoubleType,
-        DecimalType(20, 0),
-        DateType,
-        TimestampType,
-        StringType)
+        val partitionColumnTypes =
+          Seq(
+            LongType,
+            DoubleType,
+            DecimalType(20, 0),
+            DateType,
+            SQLConf.get.timestampType,
+            StringType)
 
-    val partitionColumns = partitionColumnTypes.zipWithIndex.map {
-      case (t, index) => StructField(s"p_$index", t)
-    }
+        val partitionColumns = partitionColumnTypes.zipWithIndex.map {
+          case (t, index) => StructField(s"p_$index", t)
+        }
 
-    val schema = StructType(partitionColumns :+ StructField(s"i", StringType))
-    val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+        val schema = StructType(partitionColumns :+ StructField(s"i", StringType))
+        val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
 
-    withTempPath { dir =>
-      df.write.format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
-      val fields = schema.map(f => Column(f.name))
-      checkAnswer(spark.read.load(dir.toString).select(fields: _*), row)
-    }
+        withTempPath { dir =>
+          df.write
+            .format("parquet")
+            .partitionBy(partitionColumns.map(_.name): _*)
+            .save(dir.toString)
+          val fields = schema.map(f => Column(f.name))
+          checkAnswer(spark.read.load(dir.toString).select(fields: _*), row)
+        }
 
-    withTempPath { dir =>
-      df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
-        .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
-      val fields = schema.map(f => Column(f.name))
-      checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
-        .load(dir.toString).select(fields: _*), row)
+        withTempPath { dir =>
+          df.write.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
+            .format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
+          val fields = schema.map(f => Column(f.name))
+          checkAnswer(spark.read.option(DateTimeUtils.TIMEZONE_OPTION, "UTC")
+            .load(dir.toString).select(fields: _*), row)
+        }
+      }
     }
   }
 
