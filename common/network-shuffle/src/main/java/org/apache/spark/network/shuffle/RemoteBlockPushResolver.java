@@ -26,8 +26,15 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -455,8 +462,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         shuffleManagerMeta.substring(shuffleManagerMeta.indexOf(SHUFFLE_META_DELIMITER) + 1);
       try {
         ObjectMapper mapper = new ObjectMapper();
-        TypeReference<HashMap<String, String>> typeRef
-          = new TypeReference<HashMap<String, String>>(){};
+        TypeReference<Map<String, String>> typeRef
+          = new TypeReference<Map<String, String>>(){};
         Map<String, String> metaMap = mapper.readValue(mergeDirInfo, typeRef);
         String mergeDir = metaMap.get(MERGE_DIR_KEY);
         int attemptId = Integer.valueOf(
