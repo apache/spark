@@ -24,6 +24,7 @@ select DATE_FROM_UNIX_DATE(0), DATE_FROM_UNIX_DATE(1000), DATE_FROM_UNIX_DATE(nu
 select UNIX_DATE(DATE('1970-01-01')), UNIX_DATE(DATE('2020-12-04')), UNIX_DATE(null);
 -- [SPARK-16836] current_date and current_timestamp literals
 select current_date = current_date(), current_timestamp = current_timestamp();
+select localtimestamp() = localtimestamp();
 
 select to_date(null), to_date('2016-12-31'), to_date('2016-12-31', 'yyyy-MM-dd');
 
