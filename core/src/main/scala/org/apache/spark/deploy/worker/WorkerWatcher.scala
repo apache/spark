@@ -17,13 +17,10 @@
 
 package org.apache.spark.deploy.worker
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
-import scala.concurrent.duration._
+import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rpc._
-import org.apache.spark.util.ThreadUtils
 
 /**
  * Endpoint which connects to a worker process and terminates the JVM if the
@@ -31,7 +28,10 @@ import org.apache.spark.util.ThreadUtils
  * Provides fate sharing between a worker and its associated child processes.
  */
 private[spark] class WorkerWatcher(
-    override val rpcEnv: RpcEnv, workerUrl: String, isTesting: Boolean = false)
+    override val rpcEnv: RpcEnv,
+    workerUrl: String,
+    isTesting: Boolean = false,
+    isChildProcessStopping: AtomicBoolean = new AtomicBoolean(false))
   extends RpcEndpoint with Logging {
 
   logInfo(s"Connecting to worker $workerUrl")
@@ -53,10 +53,9 @@ private[spark] class WorkerWatcher(
   private def exitNonZero() =
     if (isTesting) {
       isShutDown = true
-    } else {
-      ThreadUtils.awaitResult(Future {
-        System.exit(-1)
-      }, 5.seconds)
+    } else if (isChildProcessStopping.compareAndSet(false, true)) {
+      // SPARK-35714: avoid the duplicate call of `System.exit` to avoid the dead lock
+      System.exit(-1)
     }
 
   override def receive: PartialFunction[Any, Unit] = {
