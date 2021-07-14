@@ -324,6 +324,7 @@ abstract class DynamicPartitionPruningSuiteBase
       }
     }
   }
+  
   test("DPP should not be rewritten as an existential join") {
     withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
       SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "1.5",
