@@ -44,8 +44,12 @@ class CatalogManager(
   import CatalogV2Util._
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
+  private val validNameFormat = "([\\w_]+)".r
 
   def catalog(name: String): CatalogPlugin = synchronized {
+    if (!validNameFormat.pattern.matcher(name).matches()) {
+      throw QueryCompilationErrors.invalidNameForCatalogError(name)
+    }
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
       v2SessionCatalog
     } else {

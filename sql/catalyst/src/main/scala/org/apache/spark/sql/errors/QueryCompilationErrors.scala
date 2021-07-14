@@ -571,6 +571,11 @@ object QueryCompilationErrors {
       "Valid names only contain alphabet characters, numbers and _.")
   }
 
+  def invalidNameForCatalogError(name: String): Throwable = {
+    new AnalysisException(s"`$name` is not a valid name for catalog. " +
+      "Valid names only contain alphabet characters, numbers and _.")
+  }
+
   def cannotCreateDatabaseWithSameNameAsPreservedDatabaseError(database: String): Throwable = {
     new AnalysisException(s"$database is a system preserved database, " +
       "you cannot create a database with this name.")
