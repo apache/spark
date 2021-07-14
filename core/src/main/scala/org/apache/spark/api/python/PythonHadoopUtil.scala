@@ -23,8 +23,8 @@ import scala.util.{Failure, Success, Try}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io._
 
-import org.apache.spark.SparkException
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.errors.ExecutionErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -138,8 +138,7 @@ private[python] class JavaToWritableConverter extends Converter[Any, Writable] {
         val arrayWriteable = new ArrayWritable(classOf[Writable])
         arrayWriteable.set(array.map(convertToWritable(_)))
         arrayWriteable
-      case other => throw new SparkException(
-        s"Data of type ${other.getClass.getName} cannot be used")
+      case other => throw ExecutionErrors.cannotBeUsedDataOfTypeError(other.getClass.getName)
     }
   }
 

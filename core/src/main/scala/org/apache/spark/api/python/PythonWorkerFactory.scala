@@ -27,6 +27,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark._
+import org.apache.spark.errors.ExecutionErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.security.SocketAuthHelper
@@ -185,7 +186,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         return (socket, Some(pid))
       } catch {
         case e: Exception =>
-          throw new SparkException("Python worker failed to connect back.", e)
+          throw ExecutionErrors.failedToConnectBackPythonWorkerError(e)
       }
     } finally {
       if (serverSocket != null) {
@@ -219,12 +220,10 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
           daemonPort = in.readInt()
         } catch {
           case _: EOFException if daemon.isAlive =>
-            throw new SparkException("EOFException occurred while reading the port number " +
-              s"from $daemonModule's stdout")
+            throw ExecutionErrors.eofExceptionWhileReadPortNumberFromAliveDaemonError(daemonModule)
           case _: EOFException =>
-            throw new SparkException(
-              s"EOFException occurred while reading the port number from $daemonModule's" +
-              s" stdout and terminated with code: ${daemon.exitValue}.")
+            throw ExecutionErrors.
+              eofExceptionWhileReadPortNumberError(daemonModule, daemon.exitValue)
         }
 
         // test that the returned port number is within a valid range.
@@ -241,7 +240,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
             |  $pythonPath
             |Also, check if you have a sitecustomize.py module in your python path,
             |or in your python installation, that is printing to standard output"""
-          throw new SparkException(exceptionMessage.stripMargin)
+          throw ExecutionErrors.invalidPortNumberError(exceptionMessage.stripMargin)
         }
 
         // Redirect daemon stdout and stderr

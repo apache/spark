@@ -24,6 +24,8 @@ import java.sql.{Date, Time, Timestamp}
 import scala.collection.JavaConverters._
 import scala.collection.mutable.WrappedArray
 
+import org.apache.spark.errors.ExecutionErrors
+
 /**
  * Utility functions to serialize, deserialize objects to / from R
  */
@@ -205,13 +207,13 @@ private[spark] object SerDe {
         (0 until len).map(_ => readList(dis, jvmObjectTracker)).toArray
       case _ =>
         if (sqlReadObject == null) {
-          throw new IllegalArgumentException (s"Invalid array type $arrType")
+          throw ExecutionErrors.invalidArrayTypeError(arrType)
         } else {
           val len = readInt(dis)
           (0 until len).map { _ =>
             val obj = sqlReadObject(dis, arrType)
             if (obj == null) {
-              throw new IllegalArgumentException (s"Invalid array type $arrType")
+              throw ExecutionErrors.invalidArrayTypeError(arrType)
             } else {
               obj
             }
@@ -287,9 +289,9 @@ private[spark] object SerDe {
       value: Object,
       jvmObjectTracker: JVMObjectTracker): Unit = {
     if (key == null) {
-      throw new IllegalArgumentException("Key in map can't be null.")
+      throw ExecutionErrors.keyInMapCannotBeNullError()
     } else if (!key.isInstanceOf[String]) {
-      throw new IllegalArgumentException(s"Invalid map key type: ${key.getClass.getName}")
+      throw ExecutionErrors.invalidMapKeyTypeError(key.getClass.getName)
     }
 
     writeString(dos, key.asInstanceOf[String])
