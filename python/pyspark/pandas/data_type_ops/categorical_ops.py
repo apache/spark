@@ -22,10 +22,12 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
+from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import DataTypeOps
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql import functions as F
+from pyspark.sql.column import Column
 
 
 class CategoricalOps(DataTypeOps):
@@ -64,15 +66,28 @@ class CategoricalOps(DataTypeOps):
             scol = map_scol.getItem(index_ops.spark.column)
         return index_ops._with_new_scol(scol).astype(dtype)
 
-    # TODO(SPARK-35997): Implement comparison operators below
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise NotImplementedError("< can not be applied to %s." % self.pretty_name)
+        _non_equality_comparison_input_check(left, right)
+        return column_op(Column.__lt__)(left, right)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise NotImplementedError("<= can not be applied to %s." % self.pretty_name)
-
-    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise NotImplementedError("> can not be applied to %s." % self.pretty_name)
+        _non_equality_comparison_input_check(left, right)
+        return column_op(Column.__le__)(left, right)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
-        raise NotImplementedError(">= can not be applied to %s." % self.pretty_name)
+        _non_equality_comparison_input_check(left, right)
+        return column_op(Column.__gt__)(left, right)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _non_equality_comparison_input_check(left, right)
+        return column_op(Column.__ge__)(left, right)
+
+
+def _non_equality_comparison_input_check(left: IndexOpsLike, right: Any) -> None:
+    if not left.dtype.ordered:
+        raise TypeError("Unordered Categoricals can only compare equality or not.")
+    if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, CategoricalDtype):
+        if hash(left.dtype) != hash(right.dtype):
+            raise TypeError("Categoricals can only be compared if 'categories' are the same.")
+    else:
+        raise TypeError("Cannot compare a Categorical with the given type.")
