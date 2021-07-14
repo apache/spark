@@ -592,71 +592,75 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       def date: Date = Date.valueOf(s)
     }
 
-    val data = Seq("2018-03-18", "2018-03-19", "2018-03-20", "2018-03-21")
+    val data = Seq("1000-01-01", "2018-03-19", "2018-03-20", "2018-03-21")
     import testImplicits._
 
     Seq(false, true).foreach { java8Api =>
-      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
-        val dates = data.map(i => Tuple1(Date.valueOf(i))).toDF()
-        withNestedParquetDataFrame(dates) { case (inputDF, colName, fun) =>
-          implicit val df: DataFrame = inputDF
+      Seq(CORRECTED, LEGACY).foreach { rebaseMode =>
+        withSQLConf(
+          SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+          SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> rebaseMode.toString) {
+          val dates = data.map(i => Tuple1(Date.valueOf(i))).toDF()
+          withNestedParquetDataFrame(dates) { case (inputDF, colName, fun) =>
+            implicit val df: DataFrame = inputDF
 
-          def resultFun(dateStr: String): Any = {
-            val parsed = if (java8Api) LocalDate.parse(dateStr) else Date.valueOf(dateStr)
-            fun(parsed)
-          }
+            def resultFun(dateStr: String): Any = {
+              val parsed = if (java8Api) LocalDate.parse(dateStr) else Date.valueOf(dateStr)
+              fun(parsed)
+            }
 
-          val dateAttr: Expression = df(colName).expr
-          assert(df(colName).expr.dataType === DateType)
+            val dateAttr: Expression = df(colName).expr
+            assert(df(colName).expr.dataType === DateType)
 
-          checkFilterPredicate(dateAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
-          checkFilterPredicate(dateAttr.isNotNull, classOf[NotEq[_]],
-            data.map(i => Row.apply(resultFun(i))))
+            checkFilterPredicate(dateAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+            checkFilterPredicate(dateAttr.isNotNull, classOf[NotEq[_]],
+              data.map(i => Row.apply(resultFun(i))))
 
-          checkFilterPredicate(dateAttr === "2018-03-18".date, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr <=> "2018-03-18".date, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr =!= "2018-03-18".date, classOf[NotEq[_]],
-            Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(resultFun(i))))
+            checkFilterPredicate(dateAttr === "1000-01-01".date, classOf[Eq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(dateAttr <=> "1000-01-01".date, classOf[Eq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(dateAttr =!= "1000-01-01".date, classOf[NotEq[_]],
+              Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(resultFun(i))))
 
-          checkFilterPredicate(dateAttr < "2018-03-19".date, classOf[Lt[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr > "2018-03-20".date, classOf[Gt[_]],
-            resultFun("2018-03-21"))
-          checkFilterPredicate(dateAttr <= "2018-03-18".date, classOf[LtEq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr >= "2018-03-21".date, classOf[GtEq[_]],
-            resultFun("2018-03-21"))
+            checkFilterPredicate(dateAttr < "2018-03-19".date, classOf[Lt[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(dateAttr > "2018-03-20".date, classOf[Gt[_]],
+              resultFun("2018-03-21"))
+            checkFilterPredicate(dateAttr <= "1000-01-01".date, classOf[LtEq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(dateAttr >= "2018-03-21".date, classOf[GtEq[_]],
+              resultFun("2018-03-21"))
 
-          checkFilterPredicate(Literal("2018-03-18".date) === dateAttr, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-18".date) <=> dateAttr, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-19".date) > dateAttr, classOf[Lt[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-20".date) < dateAttr, classOf[Gt[_]],
-            resultFun("2018-03-21"))
-          checkFilterPredicate(Literal("2018-03-18".date) >= dateAttr, classOf[LtEq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-21".date) <= dateAttr, classOf[GtEq[_]],
-            resultFun("2018-03-21"))
+            checkFilterPredicate(Literal("1000-01-01".date) === dateAttr, classOf[Eq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(Literal("1000-01-01".date) <=> dateAttr, classOf[Eq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(Literal("2018-03-19".date) > dateAttr, classOf[Lt[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(Literal("2018-03-20".date) < dateAttr, classOf[Gt[_]],
+              resultFun("2018-03-21"))
+            checkFilterPredicate(Literal("1000-01-01".date) >= dateAttr, classOf[LtEq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(Literal("2018-03-21".date) <= dateAttr, classOf[GtEq[_]],
+              resultFun("2018-03-21"))
 
-          checkFilterPredicate(!(dateAttr < "2018-03-21".date), classOf[GtEq[_]],
-            resultFun("2018-03-21"))
-          checkFilterPredicate(
-            dateAttr < "2018-03-19".date || dateAttr > "2018-03-20".date,
-            classOf[Operators.Or],
-            Seq(Row(resultFun("2018-03-18")), Row(resultFun("2018-03-21"))))
+            checkFilterPredicate(!(dateAttr < "2018-03-21".date), classOf[GtEq[_]],
+              resultFun("2018-03-21"))
+            checkFilterPredicate(
+              dateAttr < "2018-03-19".date || dateAttr > "2018-03-20".date,
+              classOf[Operators.Or],
+              Seq(Row(resultFun("1000-01-01")), Row(resultFun("2018-03-21"))))
 
-          Seq(3, 20).foreach { threshold =>
-            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
-              checkFilterPredicate(
-                In(dateAttr, Array("2018-03-19".date, "2018-03-20".date, "2018-03-21".date,
-                  "2018-03-22".date).map(Literal.apply)),
-                if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
-                Seq(Row(resultFun("2018-03-19")), Row(resultFun("2018-03-20")),
-                  Row(resultFun("2018-03-21"))))
+            Seq(3, 20).foreach { threshold =>
+              withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+                checkFilterPredicate(
+                  In(dateAttr, Array("2018-03-19".date, "2018-03-20".date, "2018-03-21".date,
+                    "2018-03-22".date).map(Literal.apply)),
+                  if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+                  Seq(Row(resultFun("2018-03-19")), Row(resultFun("2018-03-20")),
+                    Row(resultFun("2018-03-21"))))
+              }
             }
           }
         }

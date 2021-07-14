@@ -35,7 +35,7 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
-import org.apache.spark.sql.catalyst.util.RebaseDateTime.rebaseGregorianToJulianMicros
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros}
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
 import org.apache.spark.unsafe.types.UTF8String
@@ -132,9 +132,15 @@ class ParquetFilters(
   private val ParquetTimestampMillisType =
     ParquetSchemaType(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS), INT64, 0)
 
-  private def dateToDays(date: Any): Int = date match {
-    case d: Date => DateTimeUtils.fromJavaDate(d)
-    case ld: LocalDate => DateTimeUtils.localDateToDays(ld)
+  private def dateToDays(date: Any): Int = {
+    val gregorianDays = date match {
+      case d: Date => DateTimeUtils.fromJavaDate(d)
+      case ld: LocalDate => DateTimeUtils.localDateToDays(ld)
+    }
+    datetimeRebaseMode match {
+      case LegacyBehaviorPolicy.LEGACY => rebaseGregorianToJulianDays(gregorianDays)
+      case _ => gregorianDays
+    }
   }
 
   private def timestampToMicros(v: Any): JLong = {
