@@ -96,6 +96,15 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(math.abs(t1 - ct.getTime) < 5000)
   }
 
+  test("datetime function localtimestamp") {
+    outstandingTimezonesIds.foreach { zid =>
+      val ct = LocalTimestamp(Some(zid)).eval(EmptyRow).asInstanceOf[Long]
+      val t1 = DateTimeUtils.localDateTimeToMicros(
+        LocalDateTime.now(DateTimeUtils.getZoneId(zid)))
+      assert(math.abs(t1 - ct) < 5000)
+    }
+  }
+
   test("DayOfYear") {
     val sdfDay = new SimpleDateFormat("D", Locale.US)
 

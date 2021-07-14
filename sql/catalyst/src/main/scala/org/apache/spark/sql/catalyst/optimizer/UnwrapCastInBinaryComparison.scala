@@ -141,8 +141,9 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
     // values.
     // 2. this rule only handles the case when both `fromExp` and value in `in.list` are of numeric
     // type.
+    // 3. this rule doesn't optimize In when `in.list` contains an expression that is not literal.
     case in @ In(Cast(fromExp, toType: NumericType, _, _), list @ Seq(firstLit, _*))
-      if canImplicitlyCast(fromExp, toType, firstLit.dataType) =>
+      if canImplicitlyCast(fromExp, toType, firstLit.dataType) && in.inSetConvertible =>
 
       // There are 3 kinds of literals in the list:
       // 1. null literals
