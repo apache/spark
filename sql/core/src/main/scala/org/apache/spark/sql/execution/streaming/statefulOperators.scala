@@ -733,6 +733,7 @@ case class SessionWindowStateStoreSaveExec(
       needFilter: Boolean,
       returnOnlyUpdatedRows: Boolean): Iterator[InternalRow] = {
     val numUpdatedStateRows = longMetric("numUpdatedStateRows")
+    val numRemovedStateRows = longMetric("numRemovedStateRows")
     val iter = if (needFilter) {
       baseIter.filter(row => !watermarkPredicateForData.get.eval(row))
     } else {
@@ -745,8 +746,9 @@ case class SessionWindowStateStoreSaveExec(
 
       private def applyChangesOnKey(): Unit = {
         if (curValuesOnKey.nonEmpty) {
-          val updatedRows = stateManager.updateSessions(store, curKey, curValuesOnKey)
-          numUpdatedStateRows += updatedRows
+          val (upserted, deleted) = stateManager.updateSessions(store, curKey, curValuesOnKey)
+          numUpdatedStateRows += upserted
+          numRemovedStateRows += deleted
           curValuesOnKey.clear
         }
       }
