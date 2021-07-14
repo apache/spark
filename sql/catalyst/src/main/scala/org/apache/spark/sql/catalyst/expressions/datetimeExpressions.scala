@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.ParseException
-import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId}
+import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId, ZoneOffset}
 import java.time.format.DateTimeParseException
 import java.util.Locale
 
@@ -201,6 +201,44 @@ case class Now() extends CurrentTimestampLike {
 }
 
 /**
+ * Returns the current timestamp without time zone at the start of query evaluation.
+ * There is no code generation since this expression should get constant folded by the optimizer.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns the current timestamp without time zone at the start of query evaluation. All calls of localtimestamp within the same query return the same value.
+
+    _FUNC_ - Returns the current local date-time at the session time zone at the start of query evaluation.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25 15:49:11.914
+  """,
+  group = "datetime_funcs",
+  since = "3.2.0")
+case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
+  with TimeZoneAwareExpression with CodegenFallback {
+
+  def this() = this(None)
+
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+
+  override def dataType: DataType = TimestampNTZType
+
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def eval(input: InternalRow): Any = localDateTimeToMicros(LocalDateTime.now(zoneId))
+
+  override def prettyName: String = "localtimestamp"
+}
+
+/**
  * Expression representing the current batch time, which is used by StreamExecution to
  * 1. prevent optimizer from pushing this expression below a stateful operator
  * 2. allow IncrementalExecution to substitute this expression with a Literal(timestamp)
@@ -236,6 +274,8 @@ case class CurrentBatchTimestamp(
     val timestampUs = millisToMicros(timestampMs)
     dataType match {
       case _: TimestampType => Literal(timestampUs, TimestampType)
+      case _: TimestampNTZType =>
+        Literal(convertTz(timestampUs, ZoneOffset.UTC, zoneId), TimestampNTZType)
       case _: DateType => Literal(microsToDays(timestampUs, zoneId), DateType)
     }
   }
