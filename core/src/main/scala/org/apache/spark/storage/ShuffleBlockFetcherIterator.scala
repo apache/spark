@@ -901,9 +901,11 @@ final class ShuffleBlockFetcherIterator(
           // a SuccessFetchResult or a FailureFetchResult.
           result = null
 
-          case PushMergedLocalMetaFetchResult(shuffleId, reduceId, bitmaps, localDirs) =>
+          case PushMergedLocalMetaFetchResult(
+            shuffleId, shuffleSequenceId, reduceId, bitmaps, localDirs) =>
             // Fetch push-merged-local shuffle block data as multiple shuffle chunks
-            val shuffleBlockId = ShuffleBlockId(shuffleId, SHUFFLE_PUSH_MAP_ID, reduceId)
+            val shuffleBlockId = ShufflePushBlockId(shuffleId, shuffleSequenceId,
+              SHUFFLE_PUSH_MAP_ID, reduceId)
             try {
               val bufs: Seq[ManagedBuffer] = blockManager.getLocalMergedBlockData(shuffleBlockId,
                 localDirs)
@@ -1449,12 +1451,14 @@ object ShuffleBlockFetcherIterator {
    * Result of a successful fetch of meta information for a push-merged-local block.
    *
    * @param shuffleId shuffle id.
+   * @param shuffleSequenceId shuffle sequence ID for a shuffle ID.
    * @param reduceId reduce id.
    * @param bitmaps bitmaps for every chunk.
    * @param localDirs local directories where the push-merged shuffle files are storedl
    */
   private[storage] case class PushMergedLocalMetaFetchResult(
       shuffleId: Int,
+      shuffleSequenceId: Int,
       reduceId: Int,
       bitmaps: Array[RoaringBitmap],
       localDirs: Array[String]) extends FetchResult

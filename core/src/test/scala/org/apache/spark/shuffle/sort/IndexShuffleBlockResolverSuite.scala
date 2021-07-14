@@ -186,7 +186,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
     val dirs = Some(Array[String](tempDir.getAbsolutePath))
     val managedBufferList =
-      resolver.getMergedBlockData(ShufflePushMergeBlockId(shuffleId, 0, -1, reduceId), dirs)
+      resolver.getMergedBlockData(ShufflePushBlockId(shuffleId, 0, -1, reduceId), dirs)
     assert(managedBufferList.size === 3)
     assert(managedBufferList(0).size === 10)
     assert(managedBufferList(1).size === 0)
@@ -222,7 +222,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     val dirs = Some(Array[String](tempDir.getAbsolutePath))
     val mergedBlockMeta =
       resolver.getMergedBlockMeta(
-        ShufflePushMergeBlockId(shuffleId, 0, MapOutputTracker.SHUFFLE_PUSH_MAP_ID, reduceId), dirs)
+        ShufflePushBlockId(shuffleId, 0, MapOutputTracker.SHUFFLE_PUSH_MAP_ID, reduceId), dirs)
     assert(mergedBlockMeta.getNumChunks === 3)
     assert(mergedBlockMeta.readChunkBitmaps().size === 3)
     assert(mergedBlockMeta.readChunkBitmaps()(0).contains(1))

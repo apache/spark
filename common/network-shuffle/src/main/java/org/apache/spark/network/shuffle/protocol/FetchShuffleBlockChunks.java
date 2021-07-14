@@ -48,7 +48,7 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
       int[] reduceIds,
       int[][] chunkIds) {
     super(appId, execId, shuffleId);
-    this.shuffleSequenceId = shuffleSequenceId
+    this.shuffleSequenceId = shuffleSequenceId;
     this.reduceIds = reduceIds;
     this.chunkIds = chunkIds;
     assert(reduceIds.length == chunkIds.length);

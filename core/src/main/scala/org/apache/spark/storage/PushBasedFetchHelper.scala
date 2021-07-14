@@ -162,9 +162,9 @@ private class PushBasedFetchHelper(
       }
     }
     req.blocks.foreach { block =>
-      val shuffleBlockId = block.blockId.asInstanceOf[ShuffleBlockId]
+      val shuffleBlockId = block.blockId.asInstanceOf[ShufflePushBlockId]
       shuffleClient.getMergedBlockMeta(address.host, address.port, shuffleBlockId.shuffleId,
-        shuffleBlockId.reduceId, mergedBlocksMetaListener)
+        shuffleBlockId.shuffleSequenceId, shuffleBlockId.reduceId, mergedBlocksMetaListener)
     }
   }
 
@@ -241,11 +241,11 @@ private class PushBasedFetchHelper(
       localDirs: Array[String],
       blockManagerId: BlockManagerId): Unit = {
     try {
-      val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
+      val shuffleBlockId = blockId.asInstanceOf[ShufflePushBlockId]
       val chunksMeta = blockManager.getLocalMergedBlockMeta(shuffleBlockId, localDirs)
       iterator.addToResultsQueue(PushMergedLocalMetaFetchResult(
-        shuffleBlockId.shuffleId, shuffleBlockId.reduceId, chunksMeta.readChunkBitmaps(),
-        localDirs))
+        shuffleBlockId.shuffleId, shuffleBlockId.shuffleSequenceId,
+        shuffleBlockId.reduceId, chunksMeta.readChunkBitmaps(), localDirs))
     } catch {
       case e: Exception =>
         // If we see an exception with reading a push-merged-local meta, we fallback to
