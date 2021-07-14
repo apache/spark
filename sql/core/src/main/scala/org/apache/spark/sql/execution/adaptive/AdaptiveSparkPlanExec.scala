@@ -80,7 +80,7 @@ case class AdaptiveSparkPlanExec(
   @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
 
   // The logical plan optimizer for re-optimizing the current logical plan.
-  @transient val optimizer = new AQEOptimizer(conf)
+  @transient private val optimizer = new AQEOptimizer(conf)
 
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
