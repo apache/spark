@@ -822,6 +822,19 @@ class FilterEstimationSuite extends StatsEstimationTestBase {
       expectedRowCount = 3)
   }
 
+  test("SPARK-36079: Null count should be no higher than row count after filter") {
+    val colStatNullableString = colStatString.copy(nullCount = Some(10))
+    val condition = Filter(EqualTo(attrBool, Literal(true)),
+      childStatsTestPlan(Seq(attrBool, attrString), tableRowCount = 10L,
+        attributeMap = AttributeMap(Seq(
+          attrBool -> colStatBool, attrString -> colStatNullableString))))
+    validateEstimatedStats(
+      condition,
+      Seq(attrBool -> colStatBool.copy(distinctCount = Some(1), min = Some(true)),
+        attrString -> colStatNullableString.copy(distinctCount = Some(5), nullCount = Some(5))),
+      expectedRowCount = 5)
+  }
+
   test("SPARK-36079: Null count higher than row count") {
     val colStatNullableString = colStatString.copy(nullCount = Some(15))
     val condition = Filter(IsNotNull(attrString),

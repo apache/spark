@@ -932,7 +932,12 @@ case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
         // no need to scale down since it is already down to 1 (for skewed distribution case)
         colStat.distinctCount
       }
-      attr -> colStat.copy(distinctCount = newNdv)
+      val newNullCount = if (colStat.nullCount.isEmpty) {
+        None
+      } else {
+        Some(colStat.nullCount.get.min(rowsAfterFilter))
+      }
+      attr -> colStat.copy(distinctCount = newNdv, nullCount = newNullCount)
     }
     AttributeMap(newColumnStats.toSeq)
   }
