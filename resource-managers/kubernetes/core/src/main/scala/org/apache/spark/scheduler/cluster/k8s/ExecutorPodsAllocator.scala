@@ -144,8 +144,6 @@ private[spark] class ExecutorPodsAllocator(
       applicationId: String,
       schedulerBackend: KubernetesClusterSchedulerBackend,
       snapshots: Seq[ExecutorPodsSnapshot]): Unit = {
-    // we don't need to manage snapshots if K8s is doing the scheduling.
-    if (useReplicasets) return;
     val k8sKnownExecIds = snapshots.flatMap(_.executorPods.keys)
     newlyCreatedExecutors --= k8sKnownExecIds
     schedulerKnownNewlyCreatedExecs --= k8sKnownExecIds
