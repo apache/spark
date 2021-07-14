@@ -671,9 +671,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.MapGroups(f, key, value, grouping, data, objAttr, child) =>
         execution.MapGroupsExec(f, key, value, grouping, data, objAttr, planLater(child)) :: Nil
       case logical.FlatMapGroupsWithState(
-          f, key, value, grouping, data, output, _, _, _, timeout, _, _, _, _, _, child) =>
-        execution.MapGroupsExec(
-          f, key, value, grouping, data, output, timeout, planLater(child)) :: Nil
+          f, key, value, grouping, data, output, stateEncoder, outputMode,
+          isFlatMapGroupsWithState, timeout, hasInitialState, initialStateGroupAttrs,
+          initialStateDataAttrs, initialStateDeserializer, initialState, child) =>
+        if (hasInitialState) {
+          execution.MapGroupsWithInitialStateExec(
+            f, key, value, initialStateDeserializer, grouping, initialStateGroupAttrs,
+            data, initialStateDataAttrs, output, planLater(initialState), timeout, planLater(child)
+          ) :: Nil
+        } else {
+          execution.MapGroupsExec(
+            f, key, value, grouping, data, output, timeout, planLater(child)) :: Nil
+        }
       case logical.CoGroup(f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr, left, right) =>
         execution.CoGroupExec(
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr,

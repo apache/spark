@@ -391,6 +391,102 @@ case class AppendColumnsWithObjectExec(
 
 /**
  * Groups the input rows together and calls the function with each group and an iterator containing
+ * all elements in the group.  The result of this function is flattened before being output. This
+ * version of the Physical operator takes a user provided initial state.
+ */
+case class MapGroupsWithInitialStateExec(
+    func: (Any, Iterator[Any], LogicalGroupState[Any]) => TraversableOnce[Any],
+    keyDeserializer: Expression,
+    valueDeserializer: Expression,
+    initialStateDeserializer: Expression,
+    groupingAttributes: Seq[Attribute],
+    initialStateGroupingAttributes: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
+    initialStateDataAttrs: Seq[Attribute],
+    outputObjAttr: Attribute,
+    initialState: SparkPlan,
+    timeoutConf: GroupStateTimeout,
+    child: SparkPlan) extends BinaryExecNode with ObjectProducerExec {
+
+  override def left: SparkPlan = child
+
+  override def right: SparkPlan = initialState
+
+  override def outputPartitioning: Partitioning = child.outputPartitioning
+
+  private val watermarkPresent = child.output.exists {
+    case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => true
+    case _ => false
+  }
+
+  /**
+   * Distribute by grouping attributes - We need the underlying data and the initial state data
+   * to have the same grouping so that the data are co-lacated on the same task.
+   */
+  override def requiredChildDistribution: Seq[Distribution] = {
+    ClusteredDistribution(groupingAttributes) ::
+      ClusteredDistribution(initialStateGroupingAttributes) :: Nil
+  }
+
+  /**
+   * Ordering needed for using GroupingIterator.
+   * We need the initial state to also use the ordering as the data so that we can co-locate the
+   * keys from the underlying data and the initial state.
+   */
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq(
+    groupingAttributes.map(SortOrder(_, Ascending)),
+    initialStateGroupingAttributes.map(SortOrder(_, Ascending)))
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    child.execute().zipPartitions(
+      initialState.execute()
+    ) { case (dataIter, initialStateIter) =>
+      val groupedChildDataIter = GroupedIterator(dataIter, groupingAttributes, child.output)
+      val groupedInitialStateIter = GroupedIterator(
+        initialStateIter, initialStateGroupingAttributes, initialState.output)
+      val getKey = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
+      val getValue = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
+      val outputObject = ObjectOperator.wrapObjectToRow(outputObjectType)
+      val getStateObj =
+        ObjectOperator.deserializeRowToObject(initialStateDeserializer, initialStateDataAttrs)
+
+      new CoGroupedIterator(
+        groupedChildDataIter, groupedInitialStateIter, groupingAttributes).flatMap {
+        case (keyRow, valueRowIter, initialStateRowIter) =>
+          var foundInitialStateForKey = false
+          val optionalState = initialStateRowIter.map { initialStateRow =>
+            if (foundInitialStateForKey) {
+              throw new IllegalArgumentException("The initial state provided contained " +
+                "multiple rows(state) with the same key. Make sure to de-duplicate the " +
+                "initial state before passing it.")
+            }
+            foundInitialStateForKey = true
+            getStateObj(initialStateRow)
+          }.toSeq
+          val groupState = GroupStateImpl.createForStreaming(
+            optionalState.headOption,
+            System.currentTimeMillis,
+            GroupStateImpl.NO_TIMESTAMP,
+            timeoutConf,
+            hasTimedOut = false,
+            watermarkPresent)
+          val result = func(
+              getKey(keyRow),
+              valueRowIter.map(getValue),
+              groupState)
+          result.map(outputObject)
+      }
+    }
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: SparkPlan, newRight: SparkPlan): SparkPlan = {
+    copy(child = newLeft, initialState = newRight)
+  }
+}
+
+/**
+ * Groups the input rows together and calls the function with each group and an iterator containing
  * all elements in the group.  The result of this function is flattened before being output.
  */
 case class MapGroupsExec(

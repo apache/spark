@@ -196,14 +196,7 @@ public class JavaDatasetSuite implements Serializable {
       GroupStateTimeout.NoTimeout(),
       kvInitStateMappedDS);
 
-    Assert.assertThrows(
-      "Initial state is not supported in [flatMap|map]GroupsWithState " +
-              "operation on a batch DataFrame/Dataset",
-      AnalysisException.class,
-      () -> {
-        flatMapped2.collectAsList();
-      }
-    );
+    Assert.assertEquals(asSet("1a", "2", "3foobar"), toSet(flatMapped2.collectAsList()));
     Dataset<String> mapped2 = grouped.mapGroupsWithState(
       (MapGroupsWithStateFunction<Integer, String, Long, String>) (key, values, s) -> {
         StringBuilder sb = new StringBuilder(key.toString());
@@ -216,14 +209,7 @@ public class JavaDatasetSuite implements Serializable {
       Encoders.STRING(),
       GroupStateTimeout.NoTimeout(),
       kvInitStateMappedDS);
-    Assert.assertThrows(
-      "Initial state is not supported in [flatMap|map]GroupsWithState " +
-              "operation on a batch DataFrame/Dataset",
-      AnalysisException.class,
-      () -> {
-        mapped2.collectAsList();
-      }
-    );
+    Assert.assertEquals(asSet("1a", "2", "3foobar"), toSet(mapped2.collectAsList()));
   }
 
   @Test

@@ -1413,6 +1413,41 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
+  Seq("1", "2", "6").foreach { shufflePartitions =>
+    test(s"flatMapGroupsWithState - initial " +
+      s"state - batch mode - shuffle partitions ${shufflePartitions}") {
+      withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> shufflePartitions) {
+        // We will test them on different shuffle partition configuration to make sure the
+        // grouping by key will still work. On higher number of shuffle partitions its possible
+        // that all keys end up on different partitions.
+        val initialState = Seq(
+          ("keyInStateAndData-1", new RunningCount(1)),
+          ("keyInStateAndData-2", new RunningCount(2)),
+          ("keyNoUpdate", new RunningCount(2)), // state.update will not be called
+          ("keyOnlyInState-1", new RunningCount(1))
+        ).toDS().groupByKey(x => x._1).mapValues(_._2)
+
+        val inputData = Seq(
+          ("keyOnlyInData"), ("keyInStateAndData-2")
+        )
+        val result =
+          inputData.toDS()
+            .groupByKey(x => x)
+            .flatMapGroupsWithState(
+              Update, GroupStateTimeout.NoTimeout, initialState)(flatMapGroupsWithStateFunc)
+
+        val expected = Seq(
+          ("keyOnlyInState-1", Seq[String](), "1"),
+          ("keyNoUpdate", Seq[String](), "2"), // update will not be called
+          ("keyInStateAndData-2", Seq[String]("keyInStateAndData-2"), "3"), // inc by 1
+          ("keyInStateAndData-1", Seq[String](), "1"),
+          ("keyOnlyInData", Seq[String]("keyOnlyInData"), "1") // inc by 1
+        ).toDF()
+        checkAnswer(result.toDF(), expected)
+      }
+    }
+  }
+
   testQuietly("flatMapGroupsWithState - initial state - streaming initial state") {
     val initialStateData = MemoryStream[(String, RunningCount)]
     initialStateData.addData(("a", new RunningCount(1)))
