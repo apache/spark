@@ -92,6 +92,8 @@ case class CustomShuffleReaderExec private(
    */
   def hasCoalescedPartition: Boolean = {
     partitionSpecs.exists {
+      // shuffle from empty RDD
+      case CoalescedPartitionSpec(0, 0, _) => true
       case s: CoalescedPartitionSpec => s.endReducerIndex - s.startReducerIndex > 1
       case _ => false
     }
