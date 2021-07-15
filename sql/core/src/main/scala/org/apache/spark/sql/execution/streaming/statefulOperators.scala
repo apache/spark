@@ -746,7 +746,7 @@ case class SessionWindowStateStoreSaveExec(
 
       private def applyChangesOnKey(): Unit = {
         if (curValuesOnKey.nonEmpty) {
-          val (upserted, deleted) = stateManager.updateSessions(store, curKey, curValuesOnKey)
+          val (upserted, deleted) = stateManager.updateSessions(store, curKey, curValuesOnKey.toSeq)
           numUpdatedStateRows += upserted
           numRemovedStateRows += deleted
           curValuesOnKey.clear
