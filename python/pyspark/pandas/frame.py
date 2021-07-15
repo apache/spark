@@ -4966,8 +4966,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
     @staticmethod
     def from_records(
-        data: Union[np.array, List[tuple], dict, pd.DataFrame],
-        index: Union[str, list, np.array] = None,
+        data: Union[np.ndarray, List[tuple], dict, pd.DataFrame],
+        index: Union[str, list, np.ndarray] = None,
         exclude: list = None,
         columns: list = None,
         coerce_float: bool = False,
@@ -7399,7 +7399,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                         SF.lit(False).alias(self._internal.data_spark_column_names[i])
                     )
         elif is_list_like(values):
-            values = values.tolist() if isinstance(values, np.ndarray) else list(values)
+            values = (
+                cast(np.ndarray, values).tolist()
+                if isinstance(values, np.ndarray)
+                else list(values)
+            )
             data_spark_columns += [
                 self._internal.spark_column_for(label)
                 .isin(values)
