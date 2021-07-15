@@ -117,9 +117,10 @@ select map(1, interval 1 week, 2, interval 2 day);
 select map(1, interval 2 millisecond, 3, interval 3 microsecond);
 
 -- typed interval expression
-select interval 'interval 3 year 1 hour';
-select interval '3 year 1 hour';
-SELECT interval '1 year 3 months 2 weeks 2 days 1 hour 3 minutes 2 seconds 100 millisecond 200 microseconds';
+select interval 'interval 3 year 1 month';
+select interval '3 year 1 month';
+SELECT interval 'interval 2 weeks 2 days 1 hour 3 minutes 2 seconds 100 millisecond 200 microseconds';
+SELECT interval '2 weeks 2 days 1 hour 3 minutes 2 seconds 100 millisecond 200 microseconds';
 
 -- malformed interval literal
 select interval;
