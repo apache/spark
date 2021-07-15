@@ -1986,8 +1986,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             subset = [subset]
         elif not isinstance(subset, (list, tuple)):
             raise TypeError("Parameter 'subset' must be a list of columns")
-        else:
-            jdf = self._jdf.dropDuplicates(self._jseq(subset))
+
+        jdf = self._jdf.dropDuplicates(self._jseq(subset))
+
         return DataFrame(jdf, self.sql_ctx)
 
     def dropna(self, how='any', thresh=None, subset=None):
