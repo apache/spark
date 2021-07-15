@@ -185,7 +185,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     super.getExecutorIds()
   }
 
-  private def labelLowPriorityExecs(execIds: Seq[String]) = {
+  private def labelDecommissioningExecs(execIds: Seq[String]) = {
     // Only kick off the labeling task if we have a label.
     conf.get(KUBERNETES_EXECUTOR_POD_DECOMMISSION_LABEL).foreach { label =>
       val labelTask = new Runnable() {
@@ -219,7 +219,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     // If decommissioning is triggered by the executor the K8s cluster manager has already
     // picked the pod to evict so we don't need to update the labels.
     if (!triggeredByExecutor) {
-      labelLowPriorityExecs(executorsAndDecomInfo.map(_._1))
+      labelDecommissioningExecs(executorsAndDecomInfo.map(_._1))
     }
     super.decommissionExecutors(executorsAndDecomInfo, adjustTargetNumExecutors,
       triggeredByExecutor)
@@ -227,7 +227,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = {
     // If we've decided to remove some executors we should tell Kubernetes that we don't care.
-    labelLowPriorityExecs(executorIds)
+    labelDecommissioningExecs(executorIds)
 
     // Tell the executors to exit themselves.
     executorIds.foreach { id =>

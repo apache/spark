@@ -308,18 +308,18 @@ private[spark] object Config extends Logging {
   val KUBERNETES_EXECUTOR_POD_DECOMMISSION_LABEL =
     ConfigBuilder("spark.kubernetes.executor.pod.decommmissionLabel")
       .doc("Label to apply to a pod which is being decommissioned." +
-        " Designed for use with pod disruption budgets and similar mechanism " +
+        " Designed for use with pod disruption budgets and similar mechanism" +
         " such as pod-deletion-cost.")
-      .version("3.2.0")
+      .version("3.3.0")
       .stringConf
       .createOptional
 
   val KUBERNETES_EXECUTOR_POD_DECOMMISSION_LABEL_VALUE =
     ConfigBuilder("spark.kubernetes.executor.pod.decommmissionLabelValue")
       .doc("Label value to apply to a pod which is being decommissioned." +
-        " Designed for use with pod disruption budgets and similar mechanism " +
+        " Designed for use with pod disruption budgets and similar mechanism" +
         " such as pod-deletion-cost.")
-      .version("3.2.0")
+      .version("3.3.0")
       .stringConf
       .createWithDefault("")
 

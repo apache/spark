@@ -19,8 +19,9 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
-import io.fabric8.kubernetes.api.model.{Pod, PodList}
+import io.fabric8.kubernetes.api.model.{ObjectMeta, Pod, PodList}
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.dsl.{NonNamespaceOperation, PodResource}
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
@@ -169,10 +170,8 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   test("Kill executors") {
     schedulerBackendUnderTest.start()
 
-    val operation = mock(classOf[io.fabric8.kubernetes.client.dsl.NonNamespaceOperation[
-      io.fabric8.kubernetes.api.model.Pod,
-      io.fabric8.kubernetes.api.model.PodList,
-      io.fabric8.kubernetes.client.dsl.PodResource[io.fabric8.kubernetes.api.model.Pod]]])
+    val operation = mock(classOf[NonNamespaceOperation[
+      Pod, PodList, PodResource[Pod]]])
 
     when(podOperations.inNamespace(any())).thenReturn(operation)
     when(podOperations.withField(any(), any())).thenReturn(labeledPods)
@@ -182,21 +181,19 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
     when(labeledPods.withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1", "2")).thenReturn(labeledPods)
 
     val pod1 = mock(classOf[Pod])
-    val pod1Metadata = mock(classOf[io.fabric8.kubernetes.api.model.ObjectMeta])
+    val pod1Metadata = mock(classOf[ObjectMeta])
     when(pod1Metadata.getNamespace).thenReturn("coffeeIsLife")
     when(pod1Metadata.getName).thenReturn("pod1")
     when(pod1.getMetadata).thenReturn(pod1Metadata)
 
     val pod2 = mock(classOf[Pod])
-    val pod2Metadata = mock(classOf[io.fabric8.kubernetes.api.model.ObjectMeta])
+    val pod2Metadata = mock(classOf[ObjectMeta])
     when(pod2Metadata.getNamespace).thenReturn("coffeeIsLife")
     when(pod2Metadata.getName).thenReturn("pod2")
     when(pod2.getMetadata).thenReturn(pod2Metadata)
 
-    val pod1op = mock(classOf[
-      io.fabric8.kubernetes.client.dsl.PodResource[io.fabric8.kubernetes.api.model.Pod]])
-    val pod2op = mock(classOf[
-      io.fabric8.kubernetes.client.dsl.PodResource[io.fabric8.kubernetes.api.model.Pod]])
+    val pod1op = mock(classOf[PodResource[Pod]])
+    val pod2op = mock(classOf[PodResource[Pod]])
     when(operation.withName("pod1")).thenReturn(pod1op)
     when(operation.withName("pod2")).thenReturn(pod2op)
 
