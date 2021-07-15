@@ -2129,7 +2129,7 @@ class DataSourceV2SQLSuite
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
         s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
 
-      val properties = sql(s"SHOW TBLPROPERTIES $t").orderBy("key")
+      val properties = sql(s"SHOW TBLPROPERTIES $t")
 
       val schema = new StructType()
         .add("key", StringType, nullable = false)
