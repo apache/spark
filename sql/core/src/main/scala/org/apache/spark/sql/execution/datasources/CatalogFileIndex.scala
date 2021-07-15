@@ -70,7 +70,8 @@ class CatalogFileIndex(
   def filterPartitions(filters: Seq[Expression]): InMemoryFileIndex = {
     if (table.partitionColumnNames.nonEmpty) {
       val startTime = System.nanoTime()
-      val selectedPartitions = listPartitionsByFilter(table, filters)
+      val selectedPartitions = ExternalCatalogUtils.listPartitionsByFilter(
+        sparkSession.sessionState.conf, sparkSession.sessionState.catalog, table, filters)
       val partitions = selectedPartitions.map { p =>
         val path = new Path(p.location)
         val fs = path.getFileSystem(hadoopConf)
@@ -90,19 +91,6 @@ class CatalogFileIndex(
     } else {
       new InMemoryFileIndex(sparkSession, rootPaths, parameters = table.storage.properties,
         userSpecifiedSchema = None, fileStatusCache = fileStatusCache)
-    }
-  }
-
-  private def listPartitionsByFilter(
-      table: CatalogTable,
-      partitionFilters: Seq[Expression]): Seq[CatalogTablePartition] = {
-    if (sparkSession.sessionState.conf.metastorePartitionPruning) {
-      sparkSession.sessionState.catalog.listPartitionsByFilter(
-        table.identifier, partitionFilters)
-    } else {
-      ExternalCatalogUtils.prunePartitionsByFilter(table,
-        sparkSession.sessionState.catalog.listPartitions(table.identifier),
-        partitionFilters, sparkSession.sessionState.conf.sessionLocalTimeZone)
     }
   }
 
