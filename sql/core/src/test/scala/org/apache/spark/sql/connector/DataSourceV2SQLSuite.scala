@@ -1987,9 +1987,10 @@ class DataSourceV2SQLSuite
            |USING foo
            |OPTIONS (
            |  from = 0,
-           |  to = 1)
+           |  to = 1,
+           |  via = 2)
            |COMMENT 'This is a comment'
-           |TBLPROPERTIES ('prop1' = '1')
+           |TBLPROPERTIES ('prop1' = '1', 'prop2' = '2', 'prop3' = 3, 'prop4' = 4)
            |PARTITIONED BY (a)
            |LOCATION '/tmp'
         """.stripMargin)
@@ -2004,12 +2005,16 @@ class DataSourceV2SQLSuite
         "USING foo",
         "OPTIONS(",
         "'from' = '0',",
-        "'to' = '1')",
+        "'to' = '1',",
+        "'via' = '2')",
         "PARTITIONED BY (a)",
         "COMMENT 'This is a comment'",
         "LOCATION '/tmp'",
         "TBLPROPERTIES(",
-        "'prop1' = '1')"
+        "'prop1' = '1',",
+        "'prop2' = '2',",
+        "'prop3' = '3',",
+        "'prop4' = '4')"
       ))
     }
   }
@@ -2124,7 +2129,7 @@ class DataSourceV2SQLSuite
       spark.sql(s"CREATE TABLE $t (id bigint, data string) USING $provider " +
         s"TBLPROPERTIES ('user'='$user', 'status'='$status')")
 
-      val properties = sql(s"SHOW TBLPROPERTIES $t").orderBy("key")
+      val properties = sql(s"SHOW TBLPROPERTIES $t")
 
       val schema = new StructType()
         .add("key", StringType, nullable = false)

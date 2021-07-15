@@ -710,7 +710,7 @@ class ParquetFilters(
           values.distinct.flatMap { v =>
             makeEq.lift(fieldType).map(_(fieldNames, v))
           }.reduceLeftOption(FilterApi.or)
-        } else {
+        } else if (canPartialPushDownConjuncts) {
           val primitiveType = schema.getColumnDescription(fieldNames).getPrimitiveType
           val statistics: ParquetStatistics[_] = ParquetStatistics.createStats(primitiveType)
           if (values.contains(null)) {
@@ -721,6 +721,8 @@ class ParquetFilters(
           } else {
             makeInPredicate.lift(fieldType).map(_(fieldNames, values, statistics))
           }
+        } else {
+          None
         }
 
       case sources.StringStartsWith(name, prefix)

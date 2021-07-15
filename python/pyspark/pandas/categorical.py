@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -79,7 +79,7 @@ class CategoricalAccessor(object):
         >>> s.cat.categories
         Index(['a', 'b', 'c'], dtype='object')
         """
-        return self._data.dtype.categories
+        return cast(CategoricalDtype, self._data.dtype).categories
 
     @categories.setter
     def categories(self, categories: pd.Index) -> None:
@@ -106,7 +106,7 @@ class CategoricalAccessor(object):
         >>> s.cat.ordered
         False
         """
-        return self._data.dtype.ordered
+        return cast(CategoricalDtype, self._data.dtype).ordered
 
     @property
     def codes(self) -> "ps.Series":

@@ -78,7 +78,7 @@ def to_numeric_df(psdf: "ps.DataFrame") -> Tuple[pyspark.sql.DataFrame, List[Lab
     """
     # TODO, it should be more robust.
     accepted_types = {
-        np.dtype(dt)
+        np.dtype(dt)  # type: ignore
         for dt in [np.int8, np.int16, np.int32, np.int64, np.float32, np.float64, np.bool_]
     }
     numeric_column_labels = [
