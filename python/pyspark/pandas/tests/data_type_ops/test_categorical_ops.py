@@ -204,153 +204,215 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: ~self.psser)
 
     def test_eq(self):
-        self.assert_eq(self.pser == 1, self.psser == 1)
+        ordered_pser = self.ordered_pser
+        ordered_psser = self.ordered_psser
+        self.assert_eq(ordered_pser == 1, ordered_psser == 1)
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser == 4,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Categoricals can only be compared if 'categories' are the same",
+            lambda: ordered_psser == self.unordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser == ps.Series([1, 2, 3]),
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser == [1, 2, 3],
+        )
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
                 self.pser == self.other_pser, (self.psser == self.other_psser).sort_index()
             )
             self.assert_eq(self.pser == self.pser, (self.psser == self.psser).sort_index())
+            self.assert_eq(
+                ordered_pser == ordered_pser, (ordered_psser == ordered_psser).sort_index()
+            )
 
     def test_ne(self):
-        self.assert_eq(self.pser != 1, self.psser != 1)
+        ordered_pser = self.ordered_pser
+        ordered_psser = self.ordered_psser
+        self.assert_eq(ordered_pser != 1, ordered_psser != 1)
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser != 4,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Categoricals can only be compared if 'categories' are the same",
+            lambda: ordered_psser != self.unordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser != ps.Series([1, 2, 3]),
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser != [1, 2, 3],
+        )
         with option_context("compute.ops_on_diff_frames", True):
             self.assert_eq(
                 self.pser != self.other_pser, (self.psser != self.other_psser).sort_index()
             )
             self.assert_eq(self.pser != self.pser, (self.psser != self.psser).sort_index())
+            self.assert_eq(
+                ordered_pser != ordered_pser, (ordered_psser != ordered_psser).sort_index()
+            )
 
     def test_lt(self):
         ordered_pser = self.ordered_pser
         ordered_psser = self.ordered_psser
         self.assert_eq(ordered_pser < ordered_pser, ordered_psser < ordered_psser)
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                ordered_pser < self.other_ordered_pser, ordered_psser < self.other_ordered_psser
-            )
-            self.assertRaisesRegex(
-                TypeError,
-                "Unordered Categoricals can only compare equality or not",
-                lambda: self.unordered_psser < ordered_psser,
-            )
-            self.assertRaisesRegex(
-                TypeError,
-                "Categoricals can only be compared if 'categories' are the same",
-                lambda: ordered_psser < self.unordered_psser,
-            )
-            self.assertRaisesRegex(
-                TypeError,
-                "Cannot compare a Categorical with the given type",
-                lambda: ordered_psser < ps.Series([1, 2, 3]),
-            )
+        self.assert_eq(ordered_pser < 1, ordered_psser < 1)
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser < 4,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Unordered Categoricals can only compare equality or not",
+            lambda: self.unordered_psser < ordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Categoricals can only be compared if 'categories' are the same",
+            lambda: ordered_psser < self.unordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser < ps.Series([1, 2, 3]),
+        )
         self.assertRaisesRegex(
             TypeError,
             "Cannot compare a Categorical with the given type",
             lambda: ordered_psser < [1, 2, 3],
         )
-        self.assertRaisesRegex(
-            TypeError, "Cannot compare a Categorical with the given type", lambda: ordered_psser < 1
-        )
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                ordered_pser < self.other_ordered_pser,
+                (ordered_psser < self.other_ordered_psser).sort_index(),
+            )
 
     def test_le(self):
         ordered_pser = self.ordered_pser
         ordered_psser = self.ordered_psser
         self.assert_eq(ordered_pser <= ordered_pser, ordered_psser <= ordered_psser)
-
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                ordered_pser <= self.other_ordered_pser, ordered_psser <= self.other_ordered_psser
-            )
-            self.assertRaisesRegex(
-                TypeError,
-                "Unordered Categoricals can only compare equality or not",
-                lambda: self.unordered_psser <= ordered_psser,
-            )
-            self.assertRaisesRegex(
-                TypeError,
-                "Categoricals can only be compared if 'categories' are the same",
-                lambda: ordered_psser <= self.unordered_psser,
-            )
-            self.assertRaisesRegex(
-                TypeError,
-                "Cannot compare a Categorical with the given type",
-                lambda: ordered_psser <= ps.Series([1, 2, 3]),
-            )
+        self.assert_eq(ordered_pser <= 1, ordered_psser <= 1)
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser <= 4,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Unordered Categoricals can only compare equality or not",
+            lambda: self.unordered_psser <= ordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Categoricals can only be compared if 'categories' are the same",
+            lambda: ordered_psser <= self.unordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser <= ps.Series([1, 2, 3]),
+        )
         self.assertRaisesRegex(
             TypeError,
             "Cannot compare a Categorical with the given type",
             lambda: ordered_psser <= [1, 2, 3],
         )
-        self.assertRaisesRegex(
-            TypeError,
-            "Cannot compare a Categorical with the given type",
-            lambda: ordered_psser <= 1,
-        )
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                ordered_pser <= self.other_ordered_pser,
+                (ordered_psser <= self.other_ordered_psser).sort_index(),
+            )
 
     def test_gt(self):
         ordered_pser = self.ordered_pser
         ordered_psser = self.ordered_psser
         self.assert_eq(ordered_pser > ordered_pser, ordered_psser > ordered_psser)
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                ordered_pser > self.other_ordered_pser, ordered_psser > self.other_ordered_psser
-            )
-            self.assertRaisesRegex(
-                TypeError,
-                "Unordered Categoricals can only compare equality or not",
-                lambda: self.unordered_psser > ordered_psser,
-            )
-            self.assertRaisesRegex(
-                TypeError,
-                "Categoricals can only be compared if 'categories' are the same",
-                lambda: ordered_psser > self.unordered_psser,
-            )
-            self.assertRaisesRegex(
-                TypeError,
-                "Cannot compare a Categorical with the given type",
-                lambda: ordered_psser > ps.Series([1, 2, 3]),
-            )
+        self.assert_eq(ordered_pser > 1, ordered_psser > 1)
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser > 4,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Unordered Categoricals can only compare equality or not",
+            lambda: self.unordered_psser > ordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Categoricals can only be compared if 'categories' are the same",
+            lambda: ordered_psser > self.unordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser > ps.Series([1, 2, 3]),
+        )
         self.assertRaisesRegex(
             TypeError,
             "Cannot compare a Categorical with the given type",
             lambda: ordered_psser > [1, 2, 3],
         )
-        self.assertRaisesRegex(
-            TypeError, "Cannot compare a Categorical with the given type", lambda: ordered_psser > 1
-        )
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                ordered_pser > self.other_ordered_pser,
+                (ordered_psser > self.other_ordered_psser).sort_index(),
+            )
 
     def test_ge(self):
         ordered_pser = self.ordered_pser
         ordered_psser = self.ordered_psser
         self.assert_eq(ordered_pser >= ordered_pser, ordered_psser >= ordered_psser)
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                ordered_pser >= self.other_ordered_pser, ordered_psser >= self.other_ordered_psser
-            )
-            self.assertRaisesRegex(
-                TypeError,
-                "Unordered Categoricals can only compare equality or not",
-                lambda: self.unordered_psser >= ordered_psser,
-            )
-            self.assertRaisesRegex(
-                TypeError,
-                "Categoricals can only be compared if 'categories' are the same",
-                lambda: ordered_psser >= self.unordered_psser,
-            )
-            self.assertRaisesRegex(
-                TypeError,
-                "Cannot compare a Categorical with the given type",
-                lambda: ordered_psser >= ps.Series([1, 2, 3]),
-            )
+        self.assert_eq(ordered_pser >= 1, ordered_psser >= 1)
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser >= 4,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Unordered Categoricals can only compare equality or not",
+            lambda: self.unordered_psser >= ordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Categoricals can only be compared if 'categories' are the same",
+            lambda: ordered_psser >= self.unordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser >= ps.Series([1, 2, 3]),
+        )
         self.assertRaisesRegex(
             TypeError,
             "Cannot compare a Categorical with the given type",
             lambda: ordered_psser >= [1, 2, 3],
         )
-        self.assertRaisesRegex(
-            TypeError,
-            "Cannot compare a Categorical with the given type",
-            lambda: ordered_psser >= 1,
-        )
+
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                ordered_pser >= self.other_ordered_pser,
+                (ordered_psser >= self.other_ordered_psser).sort_index(),
+            )
 
 
 if __name__ == "__main__":
