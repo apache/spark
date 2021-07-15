@@ -3902,8 +3902,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
           val filterExpr = IsNotNull(window.timeColumn)
 
           replacedPlan.withNewChildren(
-            Filter(filterExpr,
-              Project(windowStruct +: child.output, child)) :: Nil)
+            Project(windowStruct +: child.output,
+              Filter(filterExpr, child)) :: Nil)
         } else {
           val overlappingWindows =
             math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
