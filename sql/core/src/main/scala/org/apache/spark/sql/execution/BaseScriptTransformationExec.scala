@@ -241,9 +241,6 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       (data: String) => converter {
         try {
           if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
-            println(data)
-            println("xxxx")
-            println(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL"))
             null
           } else {
             f(data)
