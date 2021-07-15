@@ -727,18 +727,22 @@ object OptimizeOneRowRelationSubquery extends Rule[LogicalPlan] {
     }
   }
 
+  private def hasCorrelatedSubquery(plan: LogicalPlan): Boolean = {
+    plan.find(_.expressions.exists(SubqueryExpression.hasCorrelatedSubquery)).isDefined
+  }
+
   /**
    * Rewrite a subquery expression into one or more expressions. The rewrite can only be done
    * if there is no nested subqueries in the subquery plan.
    */
   private def rewrite(plan: LogicalPlan): LogicalPlan = plan.transformUpWithSubqueries {
     case LateralJoin(left, right @ LateralSubquery(OneRowSubquery(projectList), _, _, _), _, None)
-        if right.plan.subqueries.isEmpty && right.joinCond.isEmpty =>
+        if !hasCorrelatedSubquery(right.plan) && right.joinCond.isEmpty =>
       Project(left.output ++ projectList, left)
     case p: LogicalPlan => p.transformExpressionsUpWithPruning(
       _.containsPattern(SCALAR_SUBQUERY)) {
       case s @ ScalarSubquery(OneRowSubquery(projectList), _, _, _)
-          if s.plan.subqueries.isEmpty && s.joinCond.isEmpty =>
+          if !hasCorrelatedSubquery(s.plan) && s.joinCond.isEmpty =>
         assert(projectList.size == 1)
         projectList.head
     }
