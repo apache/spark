@@ -87,6 +87,8 @@ class StreamingSessionWindowSuite extends StreamTest
         "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
         "numEvents")
 
+    sessionUpdates.explain()
+
     testStream(sessionUpdates, OutputMode.Complete())(
       AddData(inputData,
         ("hello world spark streaming", 40L),

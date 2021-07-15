@@ -2336,7 +2336,7 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
 def session_window(timeColumn, gapDuration):
     """
     Generates session window given a timestamp specifying column.
-    Session window is the one of dynamic windows, which means the length of window is vary
+    Session window is one of dynamic windows, which means the length of window is varying
     according to the given inputs. The length of session window is defined as "the timestamp
     of latest input of the session + gap duration", so when the new inputs are bound to the
     current session window, the end time of session window can be expanded according to the new

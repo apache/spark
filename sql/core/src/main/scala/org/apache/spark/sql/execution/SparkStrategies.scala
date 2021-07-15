@@ -324,8 +324,6 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           throw QueryCompilationErrors.groupAggPandasUDFUnsupportedByStreamingAggError()
         }
 
-        val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
-
         val sessionWindowOption = namedGroupingExpressions.find { p =>
           p.metadata.contains(SessionWindow.marker)
         }

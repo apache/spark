@@ -3633,13 +3633,14 @@ object functions {
   /**
    * Generates session window given a timestamp specifying column.
    *
-   * Session window is the one of dynamic windows, which means the length of window is vary
+   * Session window is one of dynamic windows, which means the length of window is varying
    * according to the given inputs. The length of session window is defined as "the timestamp
    * of latest input of the session + gap duration", so when the new inputs are bound to the
    * current session window, the end time of session window can be expanded according to the new
    * inputs.
    *
-   * Windows can support microsecond precision. Windows in the order of months are not supported.
+   * Windows can support microsecond precision. gapDuration in the order of months are not
+   * supported.
    *
    * For a streaming query, you may use the function `current_timestamp` to generate windows on
    * processing time.

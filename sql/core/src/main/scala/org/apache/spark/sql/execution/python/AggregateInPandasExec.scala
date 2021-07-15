@@ -26,7 +26,7 @@ import org.apache.spark.api.python.{ChainedPythonFunctions, PythonEvalType}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, Partitioning}
 import org.apache.spark.sql.execution.{GroupedIterator, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.aggregate.UpdatingSessionsIterator
 import org.apache.spark.sql.types.{DataType, StructField, StructType}
@@ -63,6 +63,14 @@ case class AggregateInPandasExec(
       groupingExpressions.filterNot { p => p.semanticEquals(sessionExpression) }
 
     case None => groupingExpressions
+  }
+
+  override def requiredChildDistribution: Seq[Distribution] = {
+    if (groupingExpressions.isEmpty) {
+      AllTuples :: Nil
+    } else {
+      ClusteredDistribution(groupingExpressions) :: Nil
+    }
   }
 
   override def requiredChildOrdering: Seq[Seq[SortOrder]] = sessionWindowOption match {
@@ -116,6 +124,10 @@ case class AggregateInPandasExec(
 
     // Map grouped rows to ArrowPythonRunner results, Only execute if partition is not empty
     inputRDD.mapPartitionsInternal { iter => if (iter.isEmpty) iter else {
+      // If we have session window expression in aggregation, we wrap iterator with
+      // UpdatingSessionIterator to calculate sessions for input rows and update
+      // rows' session column, so that further aggregations can aggregate input rows
+      // for the same session.
       val newIter: Iterator[InternalRow] = mayAppendUpdatingSessionIterator(iter)
       val prunedProj = UnsafeProjection.create(allInputs.toSeq, child.output)
 

@@ -1616,6 +1616,7 @@ object SQLConf {
       .doc("When true, streaming session window sorts and merge sessions in local partition " +
         "prior to shuffle. This is to reduce the rows to shuffle, but only beneficial when " +
         "there're lots of rows in a batch being assigned to same sessions.")
+      .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
 

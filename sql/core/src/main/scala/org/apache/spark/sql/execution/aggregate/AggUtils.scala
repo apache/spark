@@ -114,6 +114,8 @@ object AggUtils {
         resultExpressions = partialResultExpressions,
         child = child)
 
+    // If we have session window expression in aggregation, we add MergingSessionExec to
+    // merge sessions with calculating aggregation values.
     val interExec: SparkPlan = mayAppendMergingSessionExec(groupingExpressions,
       aggregateExpressions, partialAggregate)
 
@@ -144,6 +146,9 @@ object AggUtils {
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
 
+    // If we have session window expression in aggregation, we add UpdatingSessionsExec to
+    // calculate sessions for input rows and update rows' session column, so that further
+    // aggregations can aggregate input rows for the same session.
     val maySessionChild = mayAppendUpdatingSessionExec(groupingExpressions, child)
 
     val distinctAttributes = normalizedNamedDistinctExpressions.map(_.toAttribute)
@@ -394,9 +399,7 @@ object AggUtils {
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
-    // we don't do partial aggregate here, because it requires additional shuffle
-    // and there will be less rows which have same session start
-    // here doing partial merge is to have aggregated columns with default value for each row
+    // Here doing partial merge is to have aggregated columns with default value for each row.
     val partialAggregate: SparkPlan = {
       val aggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Partial))
       val aggregateAttributes = aggregateExpressions.map(_.resultAttribute)

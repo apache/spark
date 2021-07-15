@@ -4001,12 +4001,12 @@ object SessionWindowing extends Rule[LogicalPlan] {
           case s: SessionWindow => sessionAttr
         }
 
-        // For backwards compatibility we add a filter to filter out nulls
+        // As same as tumbling window, we add a filter to filter out nulls.
         val filterExpr = IsNotNull(session.timeColumn)
 
         replacedPlan.withNewChildren(
-          Filter(filterExpr,
-            Project(sessionStruct +: child.output, child)) :: Nil)
+          Project(sessionStruct +: child.output,
+            Filter(filterExpr, child)) :: Nil)
       } else if (numWindowExpr > 1) {
         throw QueryCompilationErrors.multiTimeWindowExpressionsNotSupportedError(p)
       } else {
