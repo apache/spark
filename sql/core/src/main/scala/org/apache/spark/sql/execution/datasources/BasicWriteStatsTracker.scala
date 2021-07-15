@@ -213,7 +213,9 @@ class BasicWriteJobStatsTracker(
     metrics(BasicWriteJobStatsTracker.NUM_PARTS_KEY).add(partitionsSet.size)
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, metrics.values.toList)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
+      metrics.filter(_._1 != BasicWriteJobStatsTracker.DURATION_OF_TASK_WRITE_AND_COMMIT)
+        .values.toList)
   }
 
   override def updateTaskWriteAndCommitDuration(duration: Long): Unit = {
