@@ -689,11 +689,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             // If the above doesn't throw a RuntimeException, then we propagate the IOException
             // back to the client so the block could be retried.
             throw ioe;
-          } catch (NullPointerException e) {
-            throw new RuntimeException(
-              String.format("The merged shuffle partition info for appId %s shuffleId %s "
-                + "reduceId %s has been cleaned up", partitionInfo.appId, partitionInfo.shuffleId,
-                partitionInfo.reduceId));
           }
         } else {
           logger.trace("{} shuffleId {} reduceId {} onData deferred",
@@ -778,11 +773,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
               // IOException to the client. This may increase the chunk size however the increase is
               // still limited because of the limit on the number of IOExceptions for a
               // particular shuffle partition.
-            } catch (NullPointerException e) {
-              throw new RuntimeException(
-                String.format("The merged shuffle partition info for appId %s shuffleId %s "
-                  + "reduceId %s has been cleaned up", partitionInfo.appId,
-                  partitionInfo.shuffleId, partitionInfo.reduceId));
             }
           }
           partitionInfo.setDataFilePos(updatedPos);
