@@ -162,7 +162,7 @@ object DecorrelateInnerQuery extends PredicateHelper {
    */
   private def replaceOuterInNamedExpressions(
       expressions: Seq[NamedExpression],
-      outerReferenceMap: Map[Attribute, Attribute]): Seq[NamedExpression] = {
+      outerReferenceMap: AttributeMap[Attribute]): Seq[NamedExpression] = {
     expressions.map { expr =>
       val newExpr = replaceOuterReference(expr, outerReferenceMap)
       if (!newExpr.toAttribute.semanticEquals(expr.toAttribute)) {

@@ -4061,8 +4061,6 @@ class SQLConf extends Serializable with Logging {
 
   def decorrelateInnerQueryEnabled: Boolean = getConf(SQLConf.DECORRELATE_INNER_QUERY_ENABLED)
 
-  def optimizeOneRowRelationSubquery: Boolean = getConf(SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY)
-
   def maxConcurrentOutputFileWriters: Int = getConf(SQLConf.MAX_CONCURRENT_OUTPUT_FILE_WRITERS)
 
   def inferDictAsStruct: Boolean = getConf(SQLConf.INFER_NESTED_DICT_AS_STRUCT)
