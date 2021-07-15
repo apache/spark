@@ -1941,7 +1941,9 @@ def trunc(date, format):
     ----------
     date : :class:`~pyspark.sql.Column` or str
     format : str
-        'year', 'yyyy', 'yy' or 'month', 'mon', 'mm'
+        'year', 'yyyy', 'yy' to truncate by year,
+        or 'month', 'mon', 'mm' to truncate by month
+        Other options are: 'week', 'quarter'
 
     Examples
     --------
@@ -1964,8 +1966,11 @@ def date_trunc(format, timestamp):
     Parameters
     ----------
     format : str
-        'year', 'yyyy', 'yy', 'month', 'mon', 'mm',
-        'day', 'dd', 'hour', 'minute', 'second', 'week', 'quarter'
+        'year', 'yyyy', 'yy' to truncate by year,
+        'month', 'mon', 'mm' to truncate by month,
+        'day', 'dd' to truncate by day,
+        Other options are:
+        'microsecond', 'millisecond', 'second', 'minute', 'hour', 'week', 'quarter'
     timestamp : :class:`~pyspark.sql.Column` or str
 
     Examples
