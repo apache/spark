@@ -19,15 +19,11 @@ package org.apache.spark.network.shuffle;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.time.Duration;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
-import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
 import org.junit.Before;
 import org.junit.Test;
@@ -378,33 +374,5 @@ public class ExternalBlockHandlerSuite {
       .getMetrics()
       .get("blockTransferRateBytes");
     assertEquals(24, blockTransferRateBytes.getCount());
-  }
-
-  @Test
-  public void testTimerWithMillisecondSnapshots() {
-    Timer timer = new ExternalBlockHandler.TimerWithMillisecondSnapshots();
-    Duration[] durations = {
-        Duration.ofNanos(1),
-        Duration.ofMillis(1),
-        Duration.ofMillis(5),
-        Duration.ofMillis(100),
-        Duration.ofSeconds(10)
-    };
-    Arrays.stream(durations).forEach(timer::update);
-
-    double nsPerMs = (double) TimeUnit.MILLISECONDS.toNanos(1);
-    double epsilon = 1 / nsPerMs / nsPerMs;
-    Snapshot snapshot = timer.getSnapshot();
-    assertEquals(0, snapshot.getMin()); // 1 nanosecond rounded down
-    assertEquals(1 / nsPerMs, snapshot.getValue(0), epsilon); // 1 ns as ms (not rounded)
-    assertEquals(durations[2].toMillis(), snapshot.getMedian(), epsilon);
-    assertEquals(durations[3].toMillis(), snapshot.get75thPercentile(), epsilon);
-    assertEquals(TimeUnit.SECONDS.toMillis(10), snapshot.getMax());
-
-    assertArrayEquals(
-        Arrays.stream(durations).mapToLong(Duration::toMillis).toArray(), snapshot.getValues());
-    assertEquals(
-        Arrays.stream(durations).mapToLong(Duration::toNanos).sum() / nsPerMs / durations.length,
-        snapshot.getMean(), epsilon);
   }
 }

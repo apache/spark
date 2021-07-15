@@ -20,8 +20,6 @@ package org.apache.spark.network.shuffle;
 import com.google.common.base.Preconditions;
 import java.io.File;
 import java.io.IOException;
-import java.io.OutputStream;
-import java.io.PrintWriter;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -35,7 +33,6 @@ import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.MetricSet;
 import com.codahale.metrics.RatioGauge;
-import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.Counter;
 import com.google.common.collect.Sets;
@@ -53,6 +50,7 @@ import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.shuffle.protocol.*;
+import org.apache.spark.network.util.TimerWithCustomTimeUnit;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
 
@@ -303,13 +301,17 @@ public class ExternalBlockHandler extends RpcHandler
   public class ShuffleMetrics implements MetricSet {
     private final Map<String, Metric> allMetrics;
     // Time latency for open block request in ms
-    private final Timer openBlockRequestLatencyMillis = new TimerWithMillisecondSnapshots();
+    private final Timer openBlockRequestLatencyMillis =
+        new TimerWithCustomTimeUnit(TimeUnit.MILLISECONDS);
     // Time latency for executor registration latency in ms
-    private final Timer registerExecutorRequestLatencyMillis = new TimerWithMillisecondSnapshots();
+    private final Timer registerExecutorRequestLatencyMillis =
+        new TimerWithCustomTimeUnit(TimeUnit.MILLISECONDS);
     // Time latency for processing fetch merged blocks meta request latency in ms
-    private final Timer fetchMergedBlocksMetaLatencyMillis = new TimerWithMillisecondSnapshots();
+    private final Timer fetchMergedBlocksMetaLatencyMillis =
+        new TimerWithCustomTimeUnit(TimeUnit.MILLISECONDS);
     // Time latency for processing finalize shuffle merge request latency in ms
-    private final Timer finalizeShuffleMergeLatencyMillis = new TimerWithMillisecondSnapshots();
+    private final Timer finalizeShuffleMergeLatencyMillis =
+        new TimerWithCustomTimeUnit(TimeUnit.MILLISECONDS);
     // Block transfer rate in blocks per second
     private final Meter blockTransferRate = new Meter();
     // Block fetch message rate per second. When using non-batch fetches
@@ -605,78 +607,4 @@ public class ExternalBlockHandler extends RpcHandler
     super.channelInactive(client);
   }
 
-  static class TimerWithMillisecondSnapshots extends Timer {
-    @Override
-    public Snapshot getSnapshot() {
-      return new SnapshotWithMilliseconds(super.getSnapshot());
-    }
-  }
-
-  private static final double NANOS_PER_MILLI = TimeUnit.MILLISECONDS.toNanos(1);
-
-  private static class SnapshotWithMilliseconds extends Snapshot {
-
-    private final Snapshot wrappedSnapshot;
-
-    SnapshotWithMilliseconds(Snapshot wrappedSnapshot) {
-      this.wrappedSnapshot = wrappedSnapshot;
-    }
-
-    private double toMillis(double nanos) {
-      return nanos / NANOS_PER_MILLI;
-    }
-
-    private long toMillis(long nanos) {
-      return TimeUnit.NANOSECONDS.toMillis(nanos);
-    }
-
-    @Override
-    public double getValue(double v) {
-      return toMillis(wrappedSnapshot.getValue(v));
-    }
-
-    @Override
-    public long[] getValues() {
-      long[] nanoValues = wrappedSnapshot.getValues();
-      long[] milliValues = new long[nanoValues.length];
-      for (int i = 0; i < nanoValues.length; i++) {
-        milliValues[i] = toMillis(nanoValues[i]);
-      }
-      return milliValues;
-    }
-
-    @Override
-    public int size() {
-      return wrappedSnapshot.size();
-    }
-
-    @Override
-    public long getMax() {
-      return toMillis(wrappedSnapshot.getMax());
-    }
-
-    @Override
-    public double getMean() {
-      return toMillis(wrappedSnapshot.getMean());
-    }
-
-    @Override
-    public long getMin() {
-      return toMillis(wrappedSnapshot.getMin());
-    }
-
-    @Override
-    public double getStdDev() {
-      return toMillis(wrappedSnapshot.getStdDev());
-    }
-
-    @Override
-    public void dump(OutputStream outputStream) {
-      try (PrintWriter writer = new PrintWriter(outputStream)) {
-        for (long value : getValues()) {
-          writer.println(value);
-        }
-      }
-    }
-  }
 }
