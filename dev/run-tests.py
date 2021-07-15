@@ -658,7 +658,7 @@ def main():
         # If we're running the tests in GitHub Actions, attempt to detect and test
         # only the affected modules.
         if test_env == "github_actions":
-            if "APACHE_SPARK_REF" in os.environ:
+            if "APACHE_SPARK_REF" in os.environ and os.environ["APACHE_SPARK_REF"] != "":
                 # Fork repository
                 changed_files = identify_changed_files_from_git_commits(
                     "HEAD", target_ref=os.environ["APACHE_SPARK_REF"])
