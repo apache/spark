@@ -33,12 +33,14 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.{AggregateFunc, Count, FieldReference, LiteralValue, Max, Min}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -690,6 +692,29 @@ object DataSourceStrategy
     val handledFilters = pushedFilters.toSet -- unhandledFilters
 
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
+  }
+
+  protected[sql] def translateAggregate(aggregates: AggregateExpression): Option[AggregateFunc] = {
+    if (aggregates.filter.isEmpty) {
+      aggregates.aggregateFunction match {
+        case min@aggregate.Min(PushableColumnAndNestedColumn(name)) =>
+          Some(Min(FieldReference(Seq(name)), min.dataType))
+        case max@aggregate.Max(PushableColumnAndNestedColumn(name)) =>
+          Some(Max(FieldReference(Seq(name)), max.dataType))
+        case count: aggregate.Count if count.children.length == 1 =>
+          count.children.head match {
+            // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
+            case Literal(_, _) =>
+              Some(Count(LiteralValue(1L, LongType), LongType, aggregates.isDistinct))
+            case PushableColumnAndNestedColumn(name) =>
+              Some(Count(FieldReference(Seq(name)), LongType, aggregates.isDistinct))
+            case _ => None
+          }
+        case _ => None
+      }
+    } else {
+      None
+    }
   }
 
   /**
