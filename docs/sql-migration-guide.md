@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 3.2 to 3.3
+
+  - In Spark 3.3, spark will fail when parsing a JSON/CSV string with `PERMISSIVE` mode and schema contains non-nullable fields. You can set mode to `FAILFAST/DROPMALFORMED` if you want to read JSON/CSV with a schema that contains nullable fields.
+
 ## Upgrading from Spark SQL 3.1 to 3.2
 
   - Since Spark 3.2, ADD FILE/JAR/ARCHIVE commands require each path to be enclosed by `"` or `'` if the path contains whitespaces.
