@@ -1779,7 +1779,8 @@ def month(col):
 
 def dayofweek(col):
     """
-    Extract the day of the week of a given date as integer with Sunday=1, Saturday=7.
+    Extract the day of the week of a given date as integer.
+    Ranges from 1 for a Sunday through to 7 for a Saturday
 
     .. versionadded:: 2.3.0
 
