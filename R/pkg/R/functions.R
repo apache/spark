@@ -1010,7 +1010,7 @@ setMethod("dayofmonth",
 
 #' @details
 #' \code{dayofweek}: Extracts the day of the week as an integer from a
-#' given date/timestamp/string.
+#' given date/timestamp/string with Sunday=1, Saturday=7.
 #'
 #' @rdname column_datetime_functions
 #' @aliases dayofweek dayofweek,Column-method
