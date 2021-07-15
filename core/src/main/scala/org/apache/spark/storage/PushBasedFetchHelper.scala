@@ -110,13 +110,14 @@ private class PushBasedFetchHelper(
    */
   def createChunkBlockInfosFromMetaResponse(
       shuffleId: Int,
+      shuffleSequenceId: Int,
       reduceId: Int,
       blockSize: Long,
       bitmaps: Array[RoaringBitmap]): ArrayBuffer[(BlockId, Long, Int)] = {
     val approxChunkSize = blockSize / bitmaps.length
     val blocksToFetch = new ArrayBuffer[(BlockId, Long, Int)]()
     for (i <- bitmaps.indices) {
-      val blockChunkId = ShuffleBlockChunkId(shuffleId, reduceId, i)
+      val blockChunkId = ShuffleBlockChunkId(shuffleId, shuffleSequenceId, reduceId, i)
       chunksMetaMap.put(blockChunkId, bitmaps(i))
       logDebug(s"adding block chunk $blockChunkId of size $approxChunkSize")
       blocksToFetch += ((blockChunkId, approxChunkSize, SHUFFLE_PUSH_MAP_ID))
@@ -134,31 +135,35 @@ private class PushBasedFetchHelper(
   def sendFetchMergedStatusRequest(req: FetchRequest): Unit = {
     val sizeMap = req.blocks.map {
       case FetchBlockInfo(blockId, size, _) =>
-        val shuffleBlockId = blockId.asInstanceOf[ShuffleBlockId]
+        val shuffleBlockId = blockId.asInstanceOf[ShufflePushBlockId]
         ((shuffleBlockId.shuffleId, shuffleBlockId.reduceId), size)
     }.toMap
     val address = req.address
     val mergedBlocksMetaListener = new MergedBlocksMetaListener {
-      override def onSuccess(shuffleId: Int, reduceId: Int, meta: MergedBlockMeta): Unit = {
-        logInfo(s"Received the meta of push-merged block for ($shuffleId, $reduceId)  " +
-          s"from ${req.address.host}:${req.address.port}")
+      override def onSuccess(shuffleId: Int, shuffleSequenceId: Int, reduceId: Int,
+          meta: MergedBlockMeta): Unit = {
+        logInfo(s"Received the meta of push-merged block for ($shuffleId, $shuffleSequenceId," +
+          s" $reduceId) from ${req.address.host}:${req.address.port}")
         try {
-          iterator.addToResultsQueue(PushMergedRemoteMetaFetchResult(shuffleId, reduceId,
-            sizeMap((shuffleId, reduceId)), meta.readChunkBitmaps(), address))
+          iterator.addToResultsQueue(PushMergedRemoteMetaFetchResult(shuffleId, shuffleSequenceId,
+            reduceId, sizeMap((shuffleId, reduceId)), meta.readChunkBitmaps(), address))
         } catch {
           case exception: Exception =>
             logError(s"Failed to parse the meta of push-merged block for ($shuffleId, " +
-              s"$reduceId) from ${req.address.host}:${req.address.port}", exception)
+              s"$shuffleSequenceId, $reduceId) from" +
+              s" ${req.address.host}:${req.address.port}", exception)
             iterator.addToResultsQueue(
-              PushMergedRemoteMetaFailedFetchResult(shuffleId, reduceId, address))
+              PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleSequenceId, reduceId,
+                address))
         }
       }
 
-      override def onFailure(shuffleId: Int, reduceId: Int, exception: Throwable): Unit = {
+      override def onFailure(shuffleId: Int, shuffleSequenceId: Int, reduceId: Int,
+          exception: Throwable): Unit = {
         logError(s"Failed to get the meta of push-merged block for ($shuffleId, $reduceId) " +
           s"from ${req.address.host}:${req.address.port}", exception)
         iterator.addToResultsQueue(
-          PushMergedRemoteMetaFailedFetchResult(shuffleId, reduceId, address))
+          PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleSequenceId, reduceId, address))
       }
     }
     req.blocks.foreach { block =>
@@ -283,13 +288,13 @@ private class PushBasedFetchHelper(
   def initiateFallbackFetchForPushMergedBlock(
       blockId: BlockId,
       address: BlockManagerId): Unit = {
-    assert(blockId.isInstanceOf[ShuffleBlockId] || blockId.isInstanceOf[ShuffleBlockChunkId])
+    assert(blockId.isInstanceOf[ShufflePushBlockId] || blockId.isInstanceOf[ShuffleBlockChunkId])
     logWarning(s"Falling back to fetch the original blocks for push-merged block $blockId")
     // Increase the blocks processed since we will process another block in the next iteration of
     // the while loop in ShuffleBlockFetcherIterator.next().
     val fallbackBlocksByAddr: Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] =
       blockId match {
-        case shuffleBlockId: ShuffleBlockId =>
+        case shuffleBlockId: ShufflePushBlockId =>
           iterator.decreaseNumBlocksToFetch(1)
           mapOutputTracker.getMapSizesForMergeResult(
             shuffleBlockId.shuffleId, shuffleBlockId.reduceId)

@@ -77,9 +77,11 @@ case class ShuffleBlockBatchId(
 @DeveloperApi
 case class ShuffleBlockChunkId(
     shuffleId: Int,
+    shuffleSequenceId: Int,
     reduceId: Int,
     chunkId: Int) extends BlockId {
-  override def name: String = "shuffleChunk_" + shuffleId  + "_" + reduceId + "_" + chunkId
+  override def name: String =
+    "shuffleChunk_" + shuffleId  + "_" + shuffleSequenceId + "_" + reduceId + "_" + chunkId
 }
 
 @DeveloperApi
@@ -183,13 +185,14 @@ object BlockId {
   val SHUFFLE_BATCH = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
-  val SHUFFLE_PUSH = "shufflePush_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
+  val SHUFFLE_PUSH = "shufflePush_([0-9]+)_(-?[0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_MERGED_DATA =
-    "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_([0-9]+)_([0-9]+).data".r
+    "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_(-?[0-9]+)_([0-9]+).data".r
   val SHUFFLE_MERGED_INDEX =
-    "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_([0-9]+)_([0-9]+).index".r
+    "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_(-?[0-9]+)_([0-9]+).index".r
   val SHUFFLE_MERGED_META =
-    "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_([0-9]+)_([0-9]+).meta".r
+    "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_(-?[0-9]+)_([0-9]+).meta".r
+  val SHUFFLE_CHUNK = "shuffleChunk_([0-9]+)_(-?[0-9]+)_([0-9]+)_([0-9]+)".r
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
@@ -219,6 +222,9 @@ object BlockId {
     case SHUFFLE_MERGED_META(appId, shuffleId, shuffleSequenceId, reduceId) =>
       ShuffleMergedMetaBlockId(appId, shuffleId.toInt, shuffleSequenceId.toInt,
         reduceId.toInt)
+    case SHUFFLE_CHUNK(shuffleId, shuffleSequenceId, reduceId, chunkId) =>
+      ShuffleBlockChunkId(shuffleId.toInt, shuffleSequenceId.toInt, reduceId.toInt,
+        chunkId.toInt)
     case BROADCAST(broadcastId, field) =>
       BroadcastBlockId(broadcastId.toLong, field.stripPrefix("_"))
     case TASKRESULT(taskId) =>

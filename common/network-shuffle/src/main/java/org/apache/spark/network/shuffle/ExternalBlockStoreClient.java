@@ -217,16 +217,16 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
           public void onSuccess(int numChunks, ManagedBuffer buffer) {
             logger.trace("Successfully got merged block meta for shuffleId {} reduceId {}",
               shuffleId, reduceId);
-            listener.onSuccess(shuffleId, reduceId, new MergedBlockMeta(numChunks, buffer));
+            listener.onSuccess(shuffleId, reduceId, shuffleSequenceId, new MergedBlockMeta(numChunks, buffer));
           }
 
           @Override
           public void onFailure(Throwable e) {
-            listener.onFailure(shuffleId, reduceId, e);
+            listener.onFailure(shuffleId, shuffleSequenceId, reduceId, e);
           }
         });
     } catch (Exception e) {
-      listener.onFailure(shuffleId, reduceId, e);
+      listener.onFailure(shuffleId, shuffleSequenceId, reduceId, e);
     }
   }
 

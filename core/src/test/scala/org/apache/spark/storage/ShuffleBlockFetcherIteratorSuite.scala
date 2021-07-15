@@ -1059,15 +1059,16 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   test("SPARK-32922: fetch remote push-merged block meta") {
     val blocksByAddress = Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
       (BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "push-merged-host", 1),
-        toBlockList(Seq(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 2)), 2L, SHUFFLE_PUSH_MAP_ID)),
+        toBlockList(Seq(ShufflePushBlockId(0, 0, SHUFFLE_PUSH_MAP_ID, 2)), 2L,
+          SHUFFLE_PUSH_MAP_ID)),
       (BlockManagerId("remote-client-1", "remote-host-1", 1),
         toBlockList(Seq(ShuffleBlockId(0, 0, 2), ShuffleBlockId(0, 3, 2)), 1L, 1))
     )
     val blockChunks = Map[BlockId, ManagedBuffer](
       ShuffleBlockId(0, 0, 2) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 3, 2) -> createMockManagedBuffer(),
-      ShuffleBlockChunkId(0, 2, 0) -> createMockManagedBuffer(),
-      ShuffleBlockChunkId(0, 2, 1) -> createMockManagedBuffer()
+      ShuffleBlockChunkId(0, 0, 2, 0) -> createMockManagedBuffer(),
+      ShuffleBlockChunkId(0, 0, 2, 1) -> createMockManagedBuffer()
     )
     val blocksSem = new Semaphore(0)
     configureMockTransferForPushShuffle(blocksSem, blockChunks)
@@ -1080,15 +1081,16 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     when(pushMergedBlockMeta.readChunkBitmaps()).thenReturn(roaringBitmaps)
     when(transfer.getMergedBlockMeta(any(), any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
-        val metaListener = invocation.getArguments()(4).asInstanceOf[MergedBlocksMetaListener]
+        val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         Future {
           val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-          val reduceId = invocation.getArguments()(3).asInstanceOf[Int]
+          val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+          val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
           logInfo(s"acquiring semaphore for host = ${invocation.getArguments()(0)}, " +
             s"port = ${invocation.getArguments()(1)}, " +
-            s"shuffleId = $shuffleId, reduceId = $reduceId")
+            s"shuffleId = $shuffleId, shuffleSequenceId = $shuffleSequenceId, reduceId = $reduceId")
           metaSem.acquire()
-          metaListener.onSuccess(shuffleId, reduceId, pushMergedBlockMeta)
+          metaListener.onSuccess(shuffleId, shuffleSequenceId, reduceId, pushMergedBlockMeta)
         }
       })
     val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress)
@@ -1101,10 +1103,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     metaSem.release()
     val (id3, _) = iterator.next()
     blocksSem.acquire()
-    assert(id3 === ShuffleBlockChunkId(0, 2, 0))
+    assert(id3 === ShuffleBlockChunkId(0, 0, 2, 0))
     val (id4, _) = iterator.next()
     blocksSem.acquire()
-    assert(id4 === ShuffleBlockChunkId(0, 2, 1))
+    assert(id4 === ShuffleBlockChunkId(0, 0, 2, 1))
     assert(!iterator.hasNext)
   }
 
@@ -1113,7 +1115,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val remoteBmId = BlockManagerId("remote-client", "remote-host-1", 1)
     val blocksByAddress = Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
       (BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "push-merged-host", 1),
-        toBlockList(Seq(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 2)), 2L, SHUFFLE_PUSH_MAP_ID)),
+        toBlockList(Seq(ShufflePushBlockId(0, 0, SHUFFLE_PUSH_MAP_ID, 2)), 2L,
+          SHUFFLE_PUSH_MAP_ID)),
       (remoteBmId, toBlockList(Seq(ShuffleBlockId(0, 0, 2), ShuffleBlockId(0, 3, 2)), 1L, 1)))
 
     val blockChunks = Map[BlockId, ManagedBuffer](
@@ -1129,11 +1132,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     configureMockTransferForPushShuffle(blocksSem, blockChunks)
     when(transfer.getMergedBlockMeta(any(), any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
-        val metaListener = invocation.getArguments()(4).asInstanceOf[MergedBlocksMetaListener]
+        val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-        val reduceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
         Future {
-          metaListener.onFailure(shuffleId, reduceId, new RuntimeException("forced error"))
+          metaListener.onFailure(shuffleId, shuffleSequenceId, reduceId,
+            new RuntimeException("forced error"))
         }
       })
     val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress)
@@ -1154,7 +1159,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val remoteBmId = BlockManagerId("remote-client", "remote-host-1", 1)
     val blocksByAddress = Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
       (BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "push-merged-host", 1),
-        toBlockList(Seq(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 2)), 2L, SHUFFLE_PUSH_MAP_ID)))
+        toBlockList(Seq(ShufflePushBlockId(0, 0, SHUFFLE_PUSH_MAP_ID, 2)), 2L,
+          SHUFFLE_PUSH_MAP_ID)))
 
     val blockChunks = Map[BlockId, ManagedBuffer](
       ShuffleBlockId(0, 0, 2) -> createMockManagedBuffer(),
@@ -1167,11 +1173,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     configureMockTransferForPushShuffle(blocksSem, blockChunks)
     when(transfer.getMergedBlockMeta(any(), any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
-        val metaListener = invocation.getArguments()(4).asInstanceOf[MergedBlocksMetaListener]
+        val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-        val reduceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
         Future {
-          metaListener.onFailure(shuffleId, reduceId, new RuntimeException("forced error"))
+          metaListener.onFailure(shuffleId, shuffleSequenceId, reduceId,
+            new RuntimeException("forced error"))
         }
       })
     val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress)
@@ -1248,7 +1256,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
       (localBmId, toBlockList(Seq(ShuffleBlockId(0, 0, 2), ShuffleBlockId(0, 3, 2)), 1L, 1)),
       (pushMergedBmId, toBlockList(
-        Seq(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 2)), 2L, SHUFFLE_PUSH_MAP_ID)))
+        Seq(ShufflePushBlockId(0, 0, SHUFFLE_PUSH_MAP_ID, 2)), 2L, SHUFFLE_PUSH_MAP_ID)))
   }
 
   private def verifyLocalBlocksFromFallback(iterator: ShuffleBlockFetcherIterator): Unit = {
@@ -1312,8 +1320,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val pushMergedBmId = BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, localHost, 1)
     val blocksByAddress = Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
       (localBmId, toBlockList(Seq(ShuffleBlockId(0, 0, 2), ShuffleBlockId(0, 3, 2)), 1L, 1)),
-      (pushMergedBmId, toBlockList(Seq(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 2),
-        ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 3)), 2L, SHUFFLE_PUSH_MAP_ID)))
+      (pushMergedBmId, toBlockList(Seq(ShufflePushBlockId(0, 0, SHUFFLE_PUSH_MAP_ID, 2),
+        ShufflePushBlockId(0, 0, SHUFFLE_PUSH_MAP_ID, 3)), 2L, SHUFFLE_PUSH_MAP_ID)))
     doThrow(new RuntimeException("Forced error")).when(blockManager)
       .getLocalMergedBlockMeta(ShufflePushBlockId(0, 0, SHUFFLE_PUSH_MAP_ID, 2), localDirs)
     // Create a valid chunk meta for partition 3
@@ -1335,7 +1343,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val (id4, _) = iterator.next()
     assert(id4 === ShuffleBlockId(0, 2, 2))
     val (id5, _) = iterator.next()
-    assert(id5 === ShuffleBlockChunkId(0, 3, 0))
+    assert(id5 === ShuffleBlockChunkId(0, 0, 3, 0))
     assert(!iterator.hasNext)
   }
 
@@ -1366,7 +1374,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     val blocksByAddress = Map[BlockManagerId, Seq[(BlockId, Long, Int)]](
       (BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "test-local-host", 1), toBlockList(
-        Seq(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 2)), 2L, SHUFFLE_PUSH_MAP_ID)))
+        Seq(ShufflePushBlockId(0, 0, SHUFFLE_PUSH_MAP_ID, 2)), 2L, SHUFFLE_PUSH_MAP_ID)))
     val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress,
       blockManager = Some(blockManager))
     // 1st instance of iterator.next() returns the original shuffle block (0, 0, 2)
@@ -1477,7 +1485,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
   test("SPARK-32922: fallback to original blocks when failed to fetch remote shuffle chunk") {
     val blockChunks = Map[BlockId, ManagedBuffer](
-      ShuffleBlockChunkId(0, 2, 0) -> createMockManagedBuffer(),
+      ShuffleBlockChunkId(0, 0, 2, 0) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 3, 2) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 4, 2) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 5, 2) -> createMockManagedBuffer()
@@ -1491,11 +1499,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val pushMergedBlockMeta = createMockPushMergedBlockMeta(2, bitmaps)
     when(transfer.getMergedBlockMeta(any(), any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
-        val metaListener = invocation.getArguments()(4).asInstanceOf[MergedBlocksMetaListener]
+        val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-        val reduceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
         Future {
-          metaListener.onSuccess(shuffleId, reduceId, pushMergedBlockMeta)
+          metaListener.onSuccess(shuffleId, shuffleSequenceId, reduceId, pushMergedBlockMeta)
         }
       })
     val fallbackBlocksByAddr = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
@@ -1506,10 +1515,11 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       .thenReturn(fallbackBlocksByAddr.iterator)
     val iterator = createShuffleBlockIteratorWithDefaults(Map(
       BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "remote-client-1", 1) ->
-        toBlockList(Seq(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 2)), 12L, SHUFFLE_PUSH_MAP_ID)))
+        toBlockList(Seq(ShufflePushBlockId(0, 0, SHUFFLE_PUSH_MAP_ID, 2)),
+          12L, SHUFFLE_PUSH_MAP_ID)))
     val (id1, _) = iterator.next()
     blocksSem.acquire(1)
-    assert(id1 === ShuffleBlockChunkId(0, 2, 0))
+    assert(id1 === ShuffleBlockChunkId(0, 0, 2, 0))
     val (id3, _) = iterator.next()
     blocksSem.acquire(3)
     assert(id3 === ShuffleBlockId(0, 3, 2))
@@ -1533,18 +1543,19 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val pushMergedBlockMeta = createMockPushMergedBlockMeta(2, null)
     when(transfer.getMergedBlockMeta(any(), any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
-        val metaListener = invocation.getArguments()(4).asInstanceOf[MergedBlocksMetaListener]
+        val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-        val reduceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
         Future {
-          metaListener.onSuccess(shuffleId, reduceId, pushMergedBlockMeta)
+          metaListener.onSuccess(shuffleId, shuffleSequenceId, reduceId, pushMergedBlockMeta)
         }
       })
     val remoteMergedBlockMgrId = BlockManagerId(
       SHUFFLE_MERGER_IDENTIFIER, "remote-host-2", 1)
     val iterator = createShuffleBlockIteratorWithDefaults(
       Map(remoteMergedBlockMgrId -> toBlockList(
-        Seq(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 2)), 2L, SHUFFLE_PUSH_MAP_ID)))
+        Seq(ShufflePushBlockId(0, 0, SHUFFLE_PUSH_MAP_ID, 2)), 2L, SHUFFLE_PUSH_MAP_ID)))
     val (id1, _) = iterator.next()
     blocksSem.acquire(2)
     assert(id1 === ShuffleBlockId(0, 0, 2))
@@ -1556,10 +1567,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   test("SPARK-32922: failure to fetch a remote shuffle chunk initiates the fallback of " +
     "pending shuffle chunks immediately") {
     val blockChunks = Map[BlockId, ManagedBuffer](
-      ShuffleBlockChunkId(0, 2, 0) -> createMockManagedBuffer(),
+      ShuffleBlockChunkId(0, 0, 2, 0) -> createMockManagedBuffer(),
       // ShuffleBlockChunk(0, 2, 1) will cause a failure as it is not in block-chunks.
-      ShuffleBlockChunkId(0, 2, 2) -> createMockManagedBuffer(),
-      ShuffleBlockChunkId(0, 2, 3) -> createMockManagedBuffer(),
+      ShuffleBlockChunkId(0, 0, 2, 2) -> createMockManagedBuffer(),
+      ShuffleBlockChunkId(0, 0, 2, 3) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 3, 2) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 4, 2) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 5, 2) -> createMockManagedBuffer(),
@@ -1576,15 +1587,16 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     when(pushMergedBlockMeta.readChunkBitmaps()).thenReturn(roaringBitmaps)
     when(transfer.getMergedBlockMeta(any(), any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
-        val metaListener = invocation.getArguments()(4).asInstanceOf[MergedBlocksMetaListener]
+        val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-        val reduceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
         Future {
           logInfo(s"acquiring semaphore for host = ${invocation.getArguments()(0)}, " +
             s"port = ${invocation.getArguments()(1)}, " +
-            s"shuffleId = $shuffleId, reduceId = $reduceId")
+            s"shuffleId = $shuffleId, shuffleSequenceId = $shuffleSequenceId, reduceId = $reduceId")
           metaSem.release()
-          metaListener.onSuccess(shuffleId, reduceId, pushMergedBlockMeta)
+          metaListener.onSuccess(shuffleId, shuffleSequenceId, reduceId, pushMergedBlockMeta)
         }
       })
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
@@ -1596,12 +1608,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     val iterator = createShuffleBlockIteratorWithDefaults(Map(
       BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "test-client-1", 2) ->
-        toBlockList(Seq(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 2)), 16L, SHUFFLE_PUSH_MAP_ID)),
+        toBlockList(Seq(ShufflePushBlockId(0, 0, SHUFFLE_PUSH_MAP_ID, 2)),
+          16L, SHUFFLE_PUSH_MAP_ID)),
       maxBytesInFlight = 4)
     metaSem.acquire(1)
     val (id1, _) = iterator.next()
     blocksSem.acquire(1)
-    assert(id1 === ShuffleBlockChunkId(0, 2, 0))
+    assert(id1 === ShuffleBlockChunkId(0, 0, 2, 0))
     val regularBlocks = new mutable.HashSet[BlockId]()
     val (id2, _) = iterator.next()
     blocksSem.acquire(1)
@@ -1623,12 +1636,12 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   test("SPARK-32922: failure to fetch a remote shuffle chunk initiates the fallback of " +
     "pending shuffle chunks immediately which got deferred") {
     val blockChunks = Map[BlockId, ManagedBuffer](
-      ShuffleBlockChunkId(0, 2, 0) -> createMockManagedBuffer(),
-      ShuffleBlockChunkId(0, 2, 1) -> createMockManagedBuffer(),
-      ShuffleBlockChunkId(0, 2, 2) -> createMockManagedBuffer(),
+      ShuffleBlockChunkId(0, 0, 2, 0) -> createMockManagedBuffer(),
+      ShuffleBlockChunkId(0, 0, 2, 1) -> createMockManagedBuffer(),
+      ShuffleBlockChunkId(0, 0, 2, 2) -> createMockManagedBuffer(),
       // ShuffleBlockChunkId(0, 2, 3) will cause failure as it is not in bock chunks
-      ShuffleBlockChunkId(0, 2, 4) -> createMockManagedBuffer(),
-      ShuffleBlockChunkId(0, 2, 5) -> createMockManagedBuffer(),
+      ShuffleBlockChunkId(0, 0, 2, 4) -> createMockManagedBuffer(),
+      ShuffleBlockChunkId(0, 0, 2, 5) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 3, 2) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 4, 2) -> createMockManagedBuffer(),
       ShuffleBlockId(0, 5, 2) -> createMockManagedBuffer(),
@@ -1644,15 +1657,16 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     when(pushMergedBlockMeta.readChunkBitmaps()).thenReturn(roaringBitmaps)
     when(transfer.getMergedBlockMeta(any(), any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
-        val metaListener = invocation.getArguments()(4).asInstanceOf[MergedBlocksMetaListener]
+        val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-        val reduceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
         Future {
           logInfo(s"acquiring semaphore for host = ${invocation.getArguments()(0)}, " +
             s"port = ${invocation.getArguments()(1)}, " +
-            s"shuffleId = $shuffleId, reduceId = $reduceId")
+            s"shuffleId = $shuffleId, shuffleSequenceId = $shuffleSequenceId, reduceId = $reduceId")
           metaSem.release()
-          metaListener.onSuccess(shuffleId, reduceId, pushMergedBlockMeta)
+          metaListener.onSuccess(shuffleId, shuffleSequenceId, reduceId, pushMergedBlockMeta)
         }
       })
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
@@ -1664,17 +1678,18 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
 
     val iterator = createShuffleBlockIteratorWithDefaults(Map(
       BlockManagerId(SHUFFLE_MERGER_IDENTIFIER, "test-client-1", 2) ->
-        toBlockList(Seq(ShuffleBlockId(0, SHUFFLE_PUSH_MAP_ID, 2)), 24L, SHUFFLE_PUSH_MAP_ID)),
+        toBlockList(Seq(ShufflePushBlockId(0, 0, SHUFFLE_PUSH_MAP_ID, 2)), 24L,
+          SHUFFLE_PUSH_MAP_ID)),
       maxBytesInFlight = 8, maxBlocksInFlightPerAddress = 1)
     metaSem.acquire(1)
     val (id1, _) = iterator.next()
     blocksSem.acquire(2)
-    assert(id1 === ShuffleBlockChunkId(0, 2, 0))
+    assert(id1 === ShuffleBlockChunkId(0, 0, 2, 0))
     val (id2, _) = iterator.next()
-    assert(id2 === ShuffleBlockChunkId(0, 2, 1))
+    assert(id2 === ShuffleBlockChunkId(0, 0, 2, 1))
     val (id3, _) = iterator.next()
     blocksSem.acquire(1)
-    assert(id3 === ShuffleBlockChunkId(0, 2, 2))
+    assert(id3 === ShuffleBlockChunkId(0, 0, 2, 2))
     val regularBlocks = new mutable.HashSet[BlockId]()
     val (id4, _) = iterator.next()
     blocksSem.acquire(1)

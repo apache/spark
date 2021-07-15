@@ -227,9 +227,9 @@ class BlockIdSuite extends SparkFunSuite {
   }
 
   test("shuffle chunk") {
-    val id = ShuffleBlockChunkId(1, 1, 0)
-    assertSame(id, ShuffleBlockChunkId(1, 1, 0))
-    assertDifferent(id, ShuffleBlockChunkId(1, 1, 1))
+    val id = ShuffleBlockChunkId(1, 0, 1, 0)
+    assertSame(id, ShuffleBlockChunkId(1, 0, 1, 0))
+    assertDifferent(id, ShuffleBlockChunkId(1, 0, 1, 1))
     assert(id.name === "shuffleChunk_1_1_0")
     assert(id.asRDDId === None)
     assert(id.shuffleId === 1)
