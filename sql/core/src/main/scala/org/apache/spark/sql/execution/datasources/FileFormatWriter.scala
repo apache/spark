@@ -303,7 +303,7 @@ object FileFormatWriter extends Logging {
         // Execute the task to write rows out and commit the task.
         val taskAttemptID = taskAttemptContext.getTaskAttemptID
         val (res, timeCost) = Utils.timeTakenMs {
-          logDebug("$taskAttemptID starts to write and commit.")
+          logDebug(s"$taskAttemptID starts to write and commit.")
           dataWriter.writeWithIterator(iterator)
           dataWriter.commit()
         }
