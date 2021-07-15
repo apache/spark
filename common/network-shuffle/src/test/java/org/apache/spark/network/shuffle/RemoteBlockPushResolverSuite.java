@@ -986,7 +986,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = NullPointerException.class)
+  @Test(expected = RuntimeException.class)
   public void testPushBlockStreamCallBackWhileNewAttemptRegistered()
     throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
@@ -1014,7 +1014,7 @@ public class RemoteBlockPushResolverSuite {
       new PushBlockStream(testApp, 1, 0, 0, 0, 0));
     // The onData callback should be called 4 times here before the onComplete callback. But a
     // register executor message arrives in shuffle service after the 2nd onData callback. The 3rd
-    // onData callback should all throw NullPointerException as their channels are set to null.
+    // onData callback should all throw RuntimeException as their channels are set to null.
     stream1.onData(stream1.getID(), blocks[0]);
     stream1.onData(stream1.getID(), blocks[1]);
     Path[] attempt2LocalDirs = createLocalDirs(2);
@@ -1022,8 +1022,15 @@ public class RemoteBlockPushResolverSuite {
       prepareLocalDirs(attempt2LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_2),
       MERGE_DIRECTORY_META_2);
     closed.acquire();
-    // Should throw NullPointerException here.
-    stream1.onData(stream1.getID(), blocks[3]);
+    try {
+      stream1.onData(stream1.getID(), blocks[3]);
+    } catch (RuntimeException re) {
+      assertEquals("The merged shuffle partition info for appId " +
+        "testPushBlockStreamCallBackWhileNewAttemptRegisters " +
+        "shuffleId 0 reduceId 0 has been cleaned up",
+        re.getMessage());
+      throw re;
+    }
   }
 
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {
