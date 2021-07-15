@@ -1563,6 +1563,20 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       ) {
         parquetFilters.createFilter(sources.In("a", Array(2, 3, 7, null, 6)))
       }
+
+      assertResult(
+        Some(FilterApi.not(or(
+          FilterApi.eq(intColumn("a"), 2: Integer),
+          FilterApi.eq(intColumn("a"), 3: Integer))))
+      ) {
+        parquetFilters.createFilter(sources.Not(sources.In("a", Array(2, 3))))
+      }
+
+      assertResult(
+        None
+      ) {
+        parquetFilters.createFilter(sources.Not(sources.In("a", Array(2, 3, 7))))
+      }
     }
   }
 
