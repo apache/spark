@@ -44,8 +44,6 @@ import org.roaringbitmap.RoaringBitmap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.junit.Assert.*;
-
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver.MergeShuffleFile;
@@ -56,6 +54,7 @@ import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
+import static org.junit.Assert.*;
 /**
  * Tests for {@link RemoteBlockPushResolver}.
  */
@@ -306,7 +305,7 @@ public class RemoteBlockPushResolverSuite {
       stream1.onComplete(stream1.getID());
     } catch (RuntimeException re) {
       assertEquals(
-        "Block shufflePush_0_1_0 received after merged shuffle is finalized", re.getMessage());
+        "Block shufflePush_0_0_1_0 received after merged shuffle is finalized", re.getMessage());
       MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
       validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{9}, new int[][]{{0}});
       throw re;
@@ -363,7 +362,7 @@ public class RemoteBlockPushResolverSuite {
       stream2.onComplete(stream2.getID());
     } catch (RuntimeException re) {
       assertEquals(
-        "Couldn't find an opportunity to write block shufflePush_0_1_0 to merged shuffle",
+        "Couldn't find an opportunity to write block shufflePush_0_0_1_0 to merged shuffle",
         re.getMessage());
       throw re;
     }
@@ -391,7 +390,7 @@ public class RemoteBlockPushResolverSuite {
       stream3.onComplete(stream3.getID());
     } catch (RuntimeException re) {
       assertEquals(
-        "Couldn't find an opportunity to write block shufflePush_0_2_0 to merged shuffle",
+        "Couldn't find an opportunity to write block shufflePush_0_0_2_0 to merged shuffle",
         re.getMessage());
       failedEx = re;
     }
@@ -678,7 +677,7 @@ public class RemoteBlockPushResolverSuite {
           new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 5, 0, 0));
       callback2.onData(callback.getID(), ByteBuffer.wrap(new byte[1]));
     } catch (Throwable t) {
-      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_5_0",
+      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_5_0",
         t.getMessage());
       throw t;
     }
@@ -713,7 +712,7 @@ public class RemoteBlockPushResolverSuite {
       callback2.onData(callback2.getID(), ByteBuffer.wrap(new byte[4]));
       callback2.onComplete(callback2.getID());
     } catch (Throwable t) {
-      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_5_0",
+      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_5_0",
         t.getMessage());
       throw t;
     }
@@ -730,7 +729,7 @@ public class RemoteBlockPushResolverSuite {
       pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 10, 0, 0));
     } catch (Throwable t) {
-      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_10_0",
+      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_10_0",
         t.getMessage());
       throw t;
     }
@@ -763,7 +762,7 @@ public class RemoteBlockPushResolverSuite {
     try {
       callback.onData(callback.getID(), ByteBuffer.wrap(new byte[4]));
     } catch (Throwable t) {
-      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0",
+      assertEquals("IOExceptions exceeded the threshold when merging shufflePush_0_0_0_0",
         t.getMessage());
       throw t;
     }
@@ -899,7 +898,7 @@ public class RemoteBlockPushResolverSuite {
       stream3.onComplete(stream3.getID());
     } catch (RuntimeException re) {
       assertEquals(
-        "Couldn't find an opportunity to write block shufflePush_0_2_0 to merged shuffle",
+        "Couldn't find an opportunity to write block shufflePush_0_0_2_0 to merged shuffle",
         re.getMessage());
       failedEx = re;
     }
@@ -1022,42 +1021,169 @@ public class RemoteBlockPushResolverSuite {
 
   @Test(expected = ClosedChannelException.class)
   public void testOngoingMergeOfBlockFromPreviousAttemptIsAborted()
-    throws IOException, InterruptedException {
-    Semaphore closed = new Semaphore(0);
-    pushResolver = new RemoteBlockPushResolver(conf) {
-      @Override
-      void closeAndDeletePartitionFilesIfNeeded(
-        AppShuffleInfo appShuffleInfo,
-        boolean cleanupLocalDirs) {
-        super.closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs);
-        closed.release();
-      }
-    };
-    String testApp = "testOngoingMergeOfBlockFromPreviousAttemptIsAborted";
-    Path[] attempt1LocalDirs = createLocalDirs(1);
-    registerExecutor(testApp,
-      prepareLocalDirs(attempt1LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_1),
-      MERGE_DIRECTORY_META_1);
-    ByteBuffer[] blocks = new ByteBuffer[]{
-      ByteBuffer.wrap(new byte[4]),
-      ByteBuffer.wrap(new byte[5]),
-      ByteBuffer.wrap(new byte[6]),
-      ByteBuffer.wrap(new byte[7])
-    };
-    StreamCallbackWithID stream1 = pushResolver.receiveBlockDataAsStream(
-      new PushBlockStream(testApp, 1, 0, 0, 0, 0, 0));
-    // The onData callback should be called 4 times here before the onComplete callback. But a
-    // register executor message arrives in shuffle service after the 2nd onData callback. The 3rd
-    // onData callback should all throw ClosedChannelException as their channels are closed.
-    stream1.onData(stream1.getID(), blocks[0]);
-    stream1.onData(stream1.getID(), blocks[1]);
-    Path[] attempt2LocalDirs = createLocalDirs(2);
-    registerExecutor(testApp,
-      prepareLocalDirs(attempt2LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_2),
-      MERGE_DIRECTORY_META_2);
-    closed.acquire();
-    // Should throw ClosedChannelException here.
-    stream1.onData(stream1.getID(), blocks[3]);
+      throws IOException, InterruptedException {
+      Semaphore closed = new Semaphore(0);
+      pushResolver = new RemoteBlockPushResolver(conf) {
+        @Override
+        void closeAndDeletePartitionFilesIfNeeded(
+            AppShuffleInfo appShuffleInfo,
+            boolean cleanupLocalDirs) {
+          super.closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs);
+          closed.release();
+        }
+      };
+      String testApp = "testOngoingMergeOfBlockFromPreviousAttemptIsAborted";
+      Path[] attempt1LocalDirs = createLocalDirs(1);
+      registerExecutor(testApp,
+          prepareLocalDirs(attempt1LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_1),
+          MERGE_DIRECTORY_META_1);
+      ByteBuffer[] blocks = new ByteBuffer[]{
+          ByteBuffer.wrap(new byte[4]),
+          ByteBuffer.wrap(new byte[5]),
+          ByteBuffer.wrap(new byte[6]),
+          ByteBuffer.wrap(new byte[7])
+      };
+      StreamCallbackWithID stream1 = pushResolver.receiveBlockDataAsStream(
+          new PushBlockStream(testApp, 1, 0, 0, 0, 0, 0));
+      // The onData callback should be called 4 times here before the onComplete callback. But a
+      // register executor message arrives in shuffle service after the 2nd onData callback. The 3rd
+      // onData callback should all throw ClosedChannelException as their channels are closed.
+      stream1.onData(stream1.getID(), blocks[0]);
+      stream1.onData(stream1.getID(), blocks[1]);
+      Path[] attempt2LocalDirs = createLocalDirs(2);
+      registerExecutor(testApp,
+          prepareLocalDirs(attempt2LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_2),
+          MERGE_DIRECTORY_META_2);
+      closed.acquire();
+      // Should throw ClosedChannelException here.
+      stream1.onData(stream1.getID(), blocks[3]);
+    }
+
+  @Test
+  public void testBlockPushWithOlderShuffleSequenceId() throws IOException {
+    StreamCallbackWithID stream1 =
+        pushResolver.receiveBlockDataAsStream(
+            new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
+    StreamCallbackWithID stream2 =
+        pushResolver.receiveBlockDataAsStream(
+            new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 1, 0, 0, 0));
+    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
+    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
+    try {
+      // stream 1 push should be rejected as it is from an older shuffleSequenceId
+      stream1.onComplete(stream1.getID());
+    } catch(RuntimeException re) {
+      assertEquals("Block shufflePush_0_0_0_0 invalid block push as shuffle blocks of a higher shuffle"
+          + " sequence id for the shuffle is already being pushed", re.getMessage());
+    }
+    // stream 2 now completes
+    stream2.onComplete(stream2.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 1));
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 1, 0);
+    validateChunks(TEST_APP, 0, 1, 0, blockMeta, new int[]{4}, new int[][]{{0}});
+  }
+
+  @Test
+  public void testFinalizeWithOlderShuffleSequenceId() throws IOException {
+    StreamCallbackWithID stream1 =
+        pushResolver.receiveBlockDataAsStream(
+            new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
+    StreamCallbackWithID stream2 =
+        pushResolver.receiveBlockDataAsStream(
+            new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 1, 0, 0, 0));
+    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
+    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
+    try {
+      // stream 1 push should be rejected as it is from an older shuffleSequenceId
+      stream1.onComplete(stream1.getID());
+    } catch(RuntimeException re) {
+      assertEquals("Block shufflePush_0_0_0_0 invalid block push as shuffle blocks of a higher shuffle"
+          + " sequence id for the shuffle is already being pushed", re.getMessage());
+    }
+    // stream 2 now completes
+    stream2.onComplete(stream2.getID());
+    // Invalid finalize request
+    MergeStatuses mergeStatuses =
+        pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
+    validateMergeStatuses(mergeStatuses, new int[0], new long[0]);
+    RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo = pushResolver.validateAndGetAppShuffleInfo(TEST_APP);
+    assertTrue("Older shuffleSequenceId of a shuffle Id should point to INVALID_SHUFFLE_PARTITIONS map",
+        appShuffleInfo.getPartitions().get(0).get(0) == RemoteBlockPushResolver.INVALID_SHUFFLE_PARTITIONS);
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 1));
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 1, 0);
+    validateChunks(TEST_APP, 0, 1, 0, blockMeta, new int[]{4}, new int[][]{{0}});
+  }
+
+  @Test
+  public void testBlockFetchWithOlderShuffleSequenceId() throws IOException {
+    StreamCallbackWithID stream1 =
+        pushResolver.receiveBlockDataAsStream(
+            new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
+    StreamCallbackWithID stream2 =
+        pushResolver.receiveBlockDataAsStream(
+            new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 1, 0, 0, 0));
+    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
+    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
+    try {
+      // stream 1 push should be rejected as it is from an older shuffleSequenceId
+      stream1.onComplete(stream1.getID());
+    } catch(RuntimeException re) {
+      assertEquals("Block shufflePush_0_0_0_0 invalid block push as shuffle blocks of a higher shuffle"
+          + " sequence id for the shuffle is already being pushed", re.getMessage());
+    }
+    // stream 2 now completes
+    stream2.onComplete(stream2.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 1));
+    try {
+      pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
+    } catch(RuntimeException re) {
+      assertEquals("MergedBlock meta fetch for shuffleId 0 shuffleSequenceId 0 reduceId 0 is invalid fetch"
+          + " as the shuffleSequenceId is older than the latest shuffleSequenceId", re.getMessage());
+    }
+
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 1));
+    try {
+      pushResolver.getMergedBlockData(TEST_APP, 0, 0, 0, 0);
+    } catch(RuntimeException re) {
+      assertEquals("MergedBlock data fetch for shuffleId 0 shuffleSequenceId 0 reduceId 0 is invalid fetch"
+          + " as the shuffleSequenceId is older than the latest shuffleSequenceId", re.getMessage());
+    }
+
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 1, 0);
+    validateChunks(TEST_APP, 0, 1, 0, blockMeta, new int[]{4}, new int[][]{{0}});
+  }
+
+  @Test
+  public void testCleanupOlderShuffleSequenceId() throws IOException {
+    StreamCallbackWithID stream1 =
+        pushResolver.receiveBlockDataAsStream(
+            new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
+    StreamCallbackWithID stream2 =
+        pushResolver.receiveBlockDataAsStream(
+            new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 1, 0, 0, 0));
+    RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo = pushResolver.validateAndGetAppShuffleInfo(TEST_APP);
+    assertTrue("Older shuffleSequence partitions should be cleaned up",
+        appShuffleInfo.getPartitions().get(0).get(0) == RemoteBlockPushResolver.INVALID_SHUFFLE_PARTITIONS);
+    assertFalse("Data files on the disk should be cleaned up",
+        appShuffleInfo.getMergedShuffleDataFile(0, 0, 0).exists());
+    assertFalse("Meta files on the disk should be cleaned up",
+        appShuffleInfo.getMergedShuffleMetaFile(0, 0, 0).exists());
+    assertFalse("Index files on the disk should be cleaned up",
+        appShuffleInfo.getMergedShuffleIndexFile(0, 0, 0).exists());
+    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
+    stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
+    // stream 2 now completes
+    stream2.onComplete(stream2.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 1));
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 1, 0);
+    validateChunks(TEST_APP, 0, 1, 0, blockMeta, new int[]{4}, new int[][]{{0}});
   }
 
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {

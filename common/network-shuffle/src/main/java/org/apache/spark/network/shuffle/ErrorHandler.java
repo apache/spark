@@ -81,6 +81,16 @@ public interface ErrorHandler {
     public static final String IOEXCEPTIONS_EXCEEDED_THRESHOLD_PREFIX =
       "IOExceptions exceeded the threshold";
 
+    /**
+     * String constant used for generating exception messages indicating the server rejecting a block
+     * push since shuffle blocks of a higher shuffle sequence id for a shuffle is already being pushed.
+     * This typically happens in the case of indeterminate stage retries where if a stage attempt fails
+     * then the entirety of the shuffle output needs to be rolled back. For more details refer
+     * SPARK-23243 and SPARK-25341.
+     */
+    public static final String INVALID_BLOCK_PUSH =
+        "invalid block push as shuffle blocks of a higher shuffle sequence id for the shuffle is already being pushed";
+
     @Override
     public boolean shouldRetryError(Throwable t) {
       // If it is a connection time-out or a connection closed exception, no need to retry.
@@ -91,15 +101,39 @@ public interface ErrorHandler {
           t.getCause() instanceof FileNotFoundException)) {
         return false;
       }
-      // If the block is too late, there is no need to retry it
-      return !Throwables.getStackTraceAsString(t).contains(TOO_LATE_MESSAGE_SUFFIX);
+      // If the block is too late or an invalid block push, there is no need to retry it
+      return !Throwables.getStackTraceAsString(t).contains(TOO_LATE_MESSAGE_SUFFIX) ||
+          !Throwables.getStackTraceAsString(t).contains(INVALID_BLOCK_PUSH);
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
       String errorStackTrace = Throwables.getStackTraceAsString(t);
       return !errorStackTrace.contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) &&
-        !errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX);
+        !errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX) && !errorStackTrace.contains(INVALID_BLOCK_PUSH);
+    }
+  }
+
+  class BlockFetchErrorHandler implements ErrorHandler {
+    /**
+     * String constant used for generating exception messages indicating the server rejecting a block
+     * fetch since shuffle blocks of a higher shuffle sequence id for a shuffle is already found.
+     * This typically happens in the case of indeterminate stage retries where if a stage attempt fails
+     * then the entirety of the shuffle output needs to be rolled back. For more details refer
+     * SPARK-23243 and SPARK-25341.
+     */
+    public static final String INVALID_BLOCK_FETCH =
+        "invalid fetch as the shuffleSequenceId is older than the latest shuffleSequenceId";
+
+    @Override
+    public boolean shouldRetryError(Throwable t) {
+      return !Throwables.getStackTraceAsString(t).contains(INVALID_BLOCK_FETCH);
+    }
+
+    @Override
+    public boolean shouldLogError(Throwable t) {
+      String errorStackTrace = Throwables.getStackTraceAsString(t);
+      return !errorStackTrace.contains(INVALID_BLOCK_FETCH);
     }
   }
 }

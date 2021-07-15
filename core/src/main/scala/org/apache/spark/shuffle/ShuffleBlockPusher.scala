@@ -69,7 +69,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     new BlockPushErrorHandler() {
       // For a connection exception against a particular host, we will stop pushing any
       // blocks to just that host and continue push blocks to other hosts. So, here push of
-      // all blocks will only stop when it is "Too Late". Also see updateStateAndCheckIfPushMore.
+      // all blocks will only stop when it is "Too Late" or "Invalid Block push.
+      // Also see updateStateAndCheckIfPushMore.
       override def shouldRetryError(t: Throwable): Boolean = {
         // If it is a FileNotFoundException originating from the client while pushing the shuffle
         // blocks to the server, then we stop pushing all the blocks because this indicates the
@@ -77,8 +78,10 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         if (t.getCause != null && t.getCause.isInstanceOf[FileNotFoundException]) {
           return false
         }
-        // If the block is too late, there is no need to retry it
-        !Throwables.getStackTraceAsString(t).contains(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX)
+        // If the block is too late or the invalid block push, there is no need to retry it
+        !Throwables.getStackTraceAsString(t)
+          .contains(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX) ||
+          !Throwables.getStackTraceAsString(t).contains(BlockPushErrorHandler.INVALID_BLOCK_PUSH)
       }
     }
   }
