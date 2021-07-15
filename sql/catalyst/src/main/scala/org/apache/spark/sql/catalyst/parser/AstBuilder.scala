@@ -2444,7 +2444,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else if (ctx.errorCapturingMultiUnitsInterval != null && !conf.legacyIntervalEnabled) {
       val units =
         ctx.errorCapturingMultiUnitsInterval.body.unit.asScala.map(
-          _.getText.toLowerCase(Locale.ROOT).stripSuffix("s"))
+          _.getText.toLowerCase(Locale.ROOT).stripSuffix("s")).toSeq
       constructMultiUnitsIntervalLiteral(ctx, calendarInterval, units)
     } else {
       Literal(calendarInterval, CalendarIntervalType)
