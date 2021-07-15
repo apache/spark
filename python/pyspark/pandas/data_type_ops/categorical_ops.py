@@ -20,6 +20,7 @@ from typing import cast, Any, Callable, Union
 
 import numpy as np
 import pandas as pd
+import numpy as np
 from pandas.api.types import CategoricalDtype
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
@@ -118,8 +119,8 @@ def _compare(
         if hash(left.dtype) != hash(right.dtype):
             raise TypeError("Categoricals can only be compared if 'categories' are the same.")
         return column_op(f)(left, right)
-    elif not hasattr(right, "__len__"):
-        categories = left.dtype.categories
+    elif np.isscalar(right):
+        categories = cast(CategoricalDtype, left.dtype).categories
         if right not in categories:
             raise TypeError("Cannot compare a Categorical with a scalar, which is not a category.")
         right_code = categories.get_loc(right)
