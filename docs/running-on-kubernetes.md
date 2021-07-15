@@ -1288,6 +1288,24 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
   <td>3.0.0</td>
 </tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pod.decommmissionLabel<code></td>
+  <td>(none)</td>
+  <td>
+    Label to be applied to pods which are exiting or being decommissioned. Intended for use
+    with pod disruption budgets, deletion costs, and similar.
+  </td>
+  <td>3.3.0</td>
+</tr>
+<tr>
+  <td><code>spark.kubernetes.executor.pod.decommmissionLabelValue<code></td>
+  <td>""</td>
+  <td>
+    Value to be applied with the label when
+	<code>spark.kubernetes.executor.pod.decommmissionLabel</code> is enabled.
+  </td>
+  <td>3.3.0</td>
+</tr>
 </table>
 
 #### Pod template properties
