@@ -1316,17 +1316,6 @@ object QueryExecutionErrors {
       """Partition filter cannot have both `"` and `'` characters""")
   }
 
-  def getPartitionMetadataByFilterError(e: InvocationTargetException): Throwable = {
-    new RuntimeException(
-      s"""
-         |Caught Hive MetaException attempting to get partition metadata by filter
-         |from Hive. You can set the Spark configuration setting
-         |${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key} to false to work around
-         |this problem, however this will result in degraded performance. Please
-         |report a bug: https://issues.apache.org/jira/browse/SPARK
-       """.stripMargin.replaceAll("\n", " "), e)
-  }
-
   def unsupportedHiveMetastoreVersionError(version: String, key: String): Throwable = {
     new UnsupportedOperationException(s"Unsupported Hive Metastore version ($version). " +
       s"Please set $key with a valid version.")
