@@ -783,8 +783,7 @@ class Column(object):
 
     def between(self, lowerBound, upperBound):
         """
-        A boolean expression that is evaluated to true if the value of this
-        expression is between the given columns.
+        True if the current column is between the lower bound and upper bound, inclusive.
 
         .. versionadded:: 1.3.0
 
