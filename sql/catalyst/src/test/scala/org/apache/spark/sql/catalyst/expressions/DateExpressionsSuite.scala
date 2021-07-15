@@ -97,7 +97,8 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("datetime function localtimestamp") {
-    outstandingTimezonesIds.foreach { zid =>
+    // Verify with multiple outstanding time zones which has no daylight saving time.
+    Seq("UTC", "Africa/Dakar", "Asia/Hong_Kong").foreach { zid =>
       val zoneId = DateTimeUtils.getZoneId(zid)
       val ct = LocalTimestamp(Some(zid)).eval(EmptyRow).asInstanceOf[Long]
       val t1 = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))
