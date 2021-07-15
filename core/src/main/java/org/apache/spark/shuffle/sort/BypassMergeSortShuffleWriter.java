@@ -125,7 +125,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleExecutorComponents = shuffleExecutorComponents;
-    this.partitionChecksums = ShuffleChecksumHelper.createPartitionChecksumsIfEnabled(numPartitions, conf);
+    this.partitionChecksums =
+      ShuffleChecksumHelper.createPartitionChecksumsIfEnabled(numPartitions, conf);
   }
 
   @Override
