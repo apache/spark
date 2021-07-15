@@ -210,6 +210,10 @@ object QueryParsingErrors {
     new ParseException(s"Intervals FROM $from TO $to are not supported.", ctx)
   }
 
+  def mixedIntervalUnitsError(literal: String, ctx: IntervalContext): Throwable = {
+    new ParseException(s"Cannot mix year-month and day-time fields: $literal", ctx)
+  }
+
   def dataTypeUnsupportedError(dataType: String, ctx: PrimitiveDataTypeContext): Throwable = {
     new ParseException(s"DataType $dataType is not supported.", ctx)
   }

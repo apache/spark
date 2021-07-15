@@ -17,7 +17,7 @@
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
-import java.time.LocalDateTime
+import java.time.{Duration, LocalDateTime, Period}
 import java.util.concurrent.TimeUnit
 
 import scala.language.implicitConversions
@@ -27,9 +27,11 @@ import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, _}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{First, Last}
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{DayTimeIntervalType => DT, YearMonthIntervalType => YM}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 /**
@@ -678,7 +680,36 @@ class ExpressionParserSuite extends AnalysisTest {
     }
   }
 
-  def intervalLiteral(u: UTF8String, s: String): Literal = {
+  val ymIntervalUnits = Seq("year", "month")
+  val dtIntervalUnits = Seq("week", "day", "hour", "minute", "second", "millisecond", "microsecond")
+
+  def ymIntervalLiteral(u: String, s: String): Literal = {
+    val period = u match {
+      case "year" => Period.ofYears(Integer.parseInt(s))
+      case "month" => Period.ofMonths(Integer.parseInt(s))
+    }
+    Literal.create(period, YearMonthIntervalType(YM.stringToField(u)))
+  }
+
+  def dtIntervalLiteral(u: String, s: String): Literal = {
+    val value = if (u == "second") {
+      (BigDecimal(s) * NANOS_PER_SECOND).toLong
+    } else {
+      java.lang.Long.parseLong(s)
+    }
+    val (duration, field) = u match {
+      case "week" => (Duration.ofDays(value * 7), DT.DAY)
+      case "day" => (Duration.ofDays(value), DT.DAY)
+      case "hour" => (Duration.ofHours(value), DT.HOUR)
+      case "minute" => (Duration.ofMinutes(value), DT.MINUTE)
+      case "second" => (Duration.ofNanos(value), DT.SECOND)
+      case "millisecond" => (Duration.ofMillis(value), DT.SECOND)
+      case "microsecond" => (Duration.ofNanos(value * NANOS_PER_MICROS), DT.SECOND)
+    }
+    Literal.create(duration, DayTimeIntervalType(field))
+  }
+
+  def legacyIntervalLiteral(u: String, s: String): Literal = {
     Literal(IntervalUtils.stringToInterval(s + " " + u.toString))
   }
 
@@ -698,33 +729,55 @@ class ExpressionParserSuite extends AnalysisTest {
     // Single Intervals.
     val forms = Seq("", "s")
     val values = Seq("0", "10", "-7", "21")
-    Seq("year", "month", "week", "day", "hour", "minute", "second", "millisecond", "microsecond")
-      .foreach { unit =>
+
+    ymIntervalUnits.foreach { unit =>
+      forms.foreach { form =>
+        values.foreach { value =>
+          val expected = ymIntervalLiteral(unit, value)
+          checkIntervals(s"$value $unit$form", expected)
+          checkIntervals(s"'$value' $unit$form", expected)
+        }
+      }
+    }
+
+    dtIntervalUnits.foreach { unit =>
+      forms.foreach { form =>
+        values.foreach { value =>
+          val expected = dtIntervalLiteral(unit, value)
+          checkIntervals(s"$value $unit$form", expected)
+          checkIntervals(s"'$value' $unit$form", expected)
+        }
+      }
+    }
+
+    // Hive nanosecond notation.
+    checkIntervals("13.123456789 seconds", dtIntervalLiteral("second", "13.123456789"))
+
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      (ymIntervalUnits ++ dtIntervalUnits).foreach { unit =>
         forms.foreach { form =>
           values.foreach { value =>
-            val expected = intervalLiteral(unit, value)
+            val expected = legacyIntervalLiteral(unit, value)
             checkIntervals(s"$value $unit$form", expected)
             checkIntervals(s"'$value' $unit$form", expected)
           }
         }
       }
-
-    // Hive nanosecond notation.
-    checkIntervals("13.123456789 seconds", intervalLiteral("second", "13.123456789"))
-    checkIntervals(
-      "-13.123456789 second",
-      Literal(new CalendarInterval(
-        0,
-        0,
-        DateTimeTestUtils.secFrac(-13, -123, -456))))
-    checkIntervals(
-      "13.123456 second",
-      Literal(new CalendarInterval(
-        0,
-        0,
-        DateTimeTestUtils.secFrac(13, 123, 456))))
-    checkIntervals("1.001 second",
-      Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
+      checkIntervals(
+        "-13.123456789 second",
+        Literal(new CalendarInterval(
+          0,
+          0,
+          DateTimeTestUtils.secFrac(-13, -123, -456))))
+      checkIntervals(
+        "13.123456 second",
+        Literal(new CalendarInterval(
+          0,
+          0,
+          DateTimeTestUtils.secFrac(13, 123, 456))))
+      checkIntervals("1.001 second",
+        Literal(IntervalUtils.stringToInterval("1 second 1 millisecond")))
+    }
 
     // Non Existing unit
     intercept("interval 10 nanoseconds", "invalid unit 'nanoseconds'")
@@ -771,8 +824,22 @@ class ExpressionParserSuite extends AnalysisTest {
 
     // Composed intervals.
     checkIntervals(
-      "3 months 4 days 22 seconds 1 millisecond",
-      Literal(new CalendarInterval(3, 4, 22001000L)))
+      "10 years 3 months", Literal.create(Period.of(10, 3, 0), YearMonthIntervalType()))
+    checkIntervals(
+      "8 days 2 hours 3 minutes 21 seconds",
+      Literal.create(Duration.ofDays(8).plusHours(2).plusMinutes(3).plusSeconds(21)))
+
+    Seq(true, false).foreach { legacyEnabled =>
+      withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> legacyEnabled.toString) {
+        val intervalStr = "3 monThs 4 dayS 22 sEcond 1 millisecond"
+        if (legacyEnabled) {
+          checkIntervals(intervalStr, Literal(new CalendarInterval(3, 4, 22001000L)))
+        } else {
+          intercept(s"interval $intervalStr",
+            s"Cannot mix year-month and day-time fields: interval $intervalStr")
+        }
+      }
+    }
   }
 
   test("composed expressions") {

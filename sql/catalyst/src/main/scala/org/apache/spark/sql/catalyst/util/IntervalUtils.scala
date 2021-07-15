@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, DayTimeIntervalType => DT, Decimal, YearMonthIntervalType => YM}
+import org.apache.spark.sql.types.{DayTimeIntervalType => DT, Decimal, YearMonthIntervalType => YM}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 // The style of textual representation of intervals
@@ -123,25 +123,6 @@ object IntervalUtils {
         s"when cast to $typeName: ${input.toString}" +
         s"${fallBackNotice.map(s => s", $s").getOrElse("")}")
   }
-
-  private def checkIntervalStringDataType(
-      input: UTF8String,
-      targetStartField: Byte,
-      targetEndField: Byte,
-      inputIntervalType: DataType,
-      fallBackNotice: Option[String] = None): Unit = {
-    val (intervalStr, typeName, inputStartField, inputEndField) = inputIntervalType match {
-      case DT(startField, endField) =>
-        ("day-time", DT(targetStartField, targetEndField).typeName, startField, endField)
-      case YM(startField, endField) =>
-        ("year-month", YM(targetStartField, targetEndField).typeName, startField, endField)
-    }
-    if (targetStartField != inputStartField || targetEndField != inputEndField) {
-      throwIllegalIntervalFormatException(
-        input, targetStartField, targetEndField, intervalStr, typeName, fallBackNotice)
-    }
-  }
-
 
   val supportedFormat = Map(
     (YM.YEAR, YM.MONTH) -> Seq("[+|-]y-m", "INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH"),

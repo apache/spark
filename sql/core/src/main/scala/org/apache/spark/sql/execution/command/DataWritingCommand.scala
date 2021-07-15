@@ -22,9 +22,10 @@ import java.net.URI
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode, SparkSession}
+import org.apache.spark.sql.{Row, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryCommand}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -114,10 +115,8 @@ object DataWritingCommand {
       if (fs.exists(filePath) &&
           fs.getFileStatus(filePath).isDirectory &&
           fs.listStatus(filePath).length != 0) {
-        throw new AnalysisException(
-          s"CREATE-TABLE-AS-SELECT cannot create table with location to a non-empty directory " +
-            s"${tablePath} . To allow overwriting the existing non-empty directory, " +
-            s"set '${SQLConf.ALLOW_NON_EMPTY_LOCATION_IN_CTAS.key}' to true.")
+        throw QueryCompilationErrors.createTableAsSelectWithNonEmptyDirectoryError(
+          tablePath.toString)
       }
     }
   }

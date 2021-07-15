@@ -236,7 +236,7 @@ trait WatermarkSupport extends SparkPlan {
   protected def removeKeysOlderThanWatermark(store: StateStore): Unit = {
     if (watermarkPredicateForKeys.nonEmpty) {
       val numRemovedStateRows = longMetric("numRemovedStateRows")
-      store.getRange(None, None).foreach { rowPair =>
+      store.iterator().foreach { rowPair =>
         if (watermarkPredicateForKeys.get.eval(rowPair.key)) {
           store.remove(rowPair.key)
           numRemovedStateRows += 1
@@ -306,7 +306,7 @@ case class StateStoreRestoreExec(
       getStateInfo,
       keyExpressions.toStructType,
       stateManager.getStateValueSchema,
-      indexOrdinal = None,
+      numColsPrefixKey = 0,
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
         val hasInput = iter.hasNext
@@ -368,7 +368,7 @@ case class StateStoreSaveExec(
       getStateInfo,
       keyExpressions.toStructType,
       stateManager.getStateValueSchema,
-      indexOrdinal = None,
+      numColsPrefixKey = 0,
       session.sessionState,
       Some(session.streams.stateStoreCoordinator)) { (store, iter) =>
         val numOutputRows = longMetric("numOutputRows")
@@ -530,7 +530,7 @@ case class StreamingDeduplicateExec(
       getStateInfo,
       keyExpressions.toStructType,
       child.output.toStructType,
-      indexOrdinal = None,
+      numColsPrefixKey = 0,
       session.sessionState,
       Some(session.streams.stateStoreCoordinator),
       // We won't check value row in state store since the value StreamingDeduplicateExec.EMPTY_ROW

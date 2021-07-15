@@ -1344,7 +1344,7 @@ class Analyzer(override val catalogManager: CatalogManager)
               case Some(attr) =>
                 attr.name -> staticName
               case _ =>
-                throw QueryCompilationErrors.addStaticValToUnknownColError(staticName)
+                throw QueryCompilationErrors.missingStaticPartitionColumn(staticName)
             }).toMap
 
           val queryColumns = query.output.iterator
@@ -1392,7 +1392,7 @@ class Analyzer(override val catalogManager: CatalogManager)
                 UnresolvedAttribute.quoted(attr.name),
                 Cast(Literal(value), attr.dataType))
             case None =>
-              throw QueryCompilationErrors.unknownStaticPartitionColError(name)
+              throw QueryCompilationErrors.missingStaticPartitionColumn(name)
           }
         }.reduce(And)
       }
@@ -3613,7 +3613,9 @@ class Analyzer(override val catalogManager: CatalogManager)
         table: ResolvedTable,
         fieldName: Seq[String],
         context: Expression): ResolvedFieldName = {
-      table.schema.findNestedField(fieldName, includeCollections = true, conf.resolver).map {
+      table.schema.findNestedField(
+        fieldName, includeCollections = true, conf.resolver, context.origin
+      ).map {
         case (path, field) => ResolvedFieldName(path, field)
       }.getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context))
     }

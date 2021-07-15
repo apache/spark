@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.ParseException
-import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId}
+import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId, ZoneOffset}
 import java.time.format.DateTimeParseException
 import java.util.Locale
 
@@ -201,6 +201,44 @@ case class Now() extends CurrentTimestampLike {
 }
 
 /**
+ * Returns the current timestamp without time zone at the start of query evaluation.
+ * There is no code generation since this expression should get constant folded by the optimizer.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns the current timestamp without time zone at the start of query evaluation. All calls of localtimestamp within the same query return the same value.
+
+    _FUNC_ - Returns the current local date-time at the session time zone at the start of query evaluation.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25 15:49:11.914
+  """,
+  group = "datetime_funcs",
+  since = "3.2.0")
+case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
+  with TimeZoneAwareExpression with CodegenFallback {
+
+  def this() = this(None)
+
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+
+  override def dataType: DataType = TimestampNTZType
+
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def eval(input: InternalRow): Any = localDateTimeToMicros(LocalDateTime.now(zoneId))
+
+  override def prettyName: String = "localtimestamp"
+}
+
+/**
  * Expression representing the current batch time, which is used by StreamExecution to
  * 1. prevent optimizer from pushing this expression below a stateful operator
  * 2. allow IncrementalExecution to substitute this expression with a Literal(timestamp)
@@ -236,6 +274,8 @@ case class CurrentBatchTimestamp(
     val timestampUs = millisToMicros(timestampMs)
     dataType match {
       case _: TimestampType => Literal(timestampUs, TimestampType)
+      case _: TimestampNTZType =>
+        Literal(convertTz(timestampUs, ZoneOffset.UTC, zoneId), TimestampNTZType)
       case _: DateType => Literal(microsToDays(timestampUs, zoneId), DateType)
     }
   }
@@ -1076,6 +1116,53 @@ case class ParseToTimestampNTZ(
   override def dataType: DataType = TimestampNTZType
 
   override protected def withNewChildInternal(newChild: Expression): ParseToTimestampNTZ =
+    copy(child = newChild)
+}
+
+/**
+ * Parses a column to a timestamp with local time zone based on the supplied format.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
+      to a timestamp with local time zone. Returns null with invalid input. By default, it follows casting rules to
+      a timestamp if the `fmt` is omitted.
+  """,
+  arguments = """
+    Arguments:
+      * timestamp_str - A string to be parsed to timestamp with local time zone.
+      * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
+              date and time format patterns.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2016-12-31 00:12:00');
+       2016-12-31 00:12:00
+      > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
+       2016-12-31 00:00:00
+  """,
+  group = "datetime_funcs",
+  since = "3.2.0")
+// scalastyle:on line.size.limit
+case class ParseToTimestampLTZ(
+    left: Expression,
+    format: Option[Expression],
+    child: Expression) extends RuntimeReplaceable {
+
+  def this(left: Expression, format: Expression) = {
+    this(left, Option(format), GetTimestamp(left, format, TimestampType))
+  }
+
+  def this(left: Expression) = this(left, None, Cast(left, TimestampType))
+
+  override def flatArguments: Iterator[Any] = Iterator(left, format)
+  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
+
+  override def prettyName: String = "to_timestamp_ltz"
+  override def dataType: DataType = TimestampType
+
+  override protected def withNewChildInternal(newChild: Expression): ParseToTimestampLTZ =
     copy(child = newChild)
 }
 
@@ -2272,6 +2359,128 @@ case class MakeDate(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
+  usage = "_FUNC_(year, month, day, hour, min, sec) - Create local date-time from year, month, day, hour, min, sec fields. ",
+  arguments = """
+    Arguments:
+      * year - the year to represent, from 1 to 9999
+      * month - the month-of-year to represent, from 1 (January) to 12 (December)
+      * day - the day-of-month to represent, from 1 to 31
+      * hour - the hour-of-day to represent, from 0 to 23
+      * min - the minute-of-hour to represent, from 0 to 59
+      * sec - the second-of-minute and its micro-fraction to represent, from
+              0 to 60. If the sec argument equals to 60, the seconds field is set
+              to 0 and 1 minute is added to the final timestamp.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
+       2014-12-28 06:30:45.887
+      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
+       2019-07-01 00:00:00
+      > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
+       NULL
+  """,
+  group = "datetime_funcs",
+  since = "3.2.0")
+// scalastyle:on line.size.limit
+case class MakeTimestampNTZ(
+    year: Expression,
+    month: Expression,
+    day: Expression,
+    hour: Expression,
+    min: Expression,
+    sec: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled,
+    child: Expression) extends RuntimeReplaceable {
+  def this(
+      year: Expression,
+      month: Expression,
+      day: Expression,
+      hour: Expression,
+      min: Expression,
+      sec: Expression) = {
+    this(year, month, day, hour, min, sec, failOnError = SQLConf.get.ansiEnabled,
+      MakeTimestamp(year, month, day, hour, min, sec, dataType = TimestampNTZType))
+  }
+
+  override def exprsReplaced: Seq[Expression] = Seq(year, month, day, hour, min, sec)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create the current timestamp with local time zone from year, month, day, hour, min, sec and timezone fields. ",
+  arguments = """
+    Arguments:
+      * year - the year to represent, from 1 to 9999
+      * month - the month-of-year to represent, from 1 (January) to 12 (December)
+      * day - the day-of-month to represent, from 1 to 31
+      * hour - the hour-of-day to represent, from 0 to 23
+      * min - the minute-of-hour to represent, from 0 to 59
+      * sec - the second-of-minute and its micro-fraction to represent, from
+              0 to 60. If the sec argument equals to 60, the seconds field is set
+              to 0 and 1 minute is added to the final timestamp.
+      * timezone - the time zone identifier. For example, CET, UTC and etc.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
+       2014-12-28 06:30:45.887
+      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887, 'CET');
+       2014-12-27 21:30:45.887
+      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
+       2019-07-01 00:00:00
+      > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 'PST');
+       NULL
+      > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
+       NULL
+  """,
+  group = "datetime_funcs",
+  since = "3.2.0")
+// scalastyle:on line.size.limit
+case class MakeTimestampLTZ(
+    year: Expression,
+    month: Expression,
+    day: Expression,
+    hour: Expression,
+    min: Expression,
+    sec: Expression,
+    timezone: Option[Expression],
+    failOnError: Boolean = SQLConf.get.ansiEnabled,
+    child: Expression) extends RuntimeReplaceable {
+  def this(
+     year: Expression,
+     month: Expression,
+     day: Expression,
+     hour: Expression,
+     min: Expression,
+     sec: Expression) = {
+    this(year, month, day, hour, min, sec, None, failOnError = SQLConf.get.ansiEnabled,
+      MakeTimestamp(year, month, day, hour, min, sec, dataType = TimestampType))
+  }
+
+  def this(
+      year: Expression,
+      month: Expression,
+      day: Expression,
+      hour: Expression,
+      min: Expression,
+      sec: Expression,
+      timezone: Expression) = {
+    this(year, month, day, hour, min, sec, Some(timezone), failOnError = SQLConf.get.ansiEnabled,
+      MakeTimestamp(year, month, day, hour, min, sec, Some(timezone), dataType = TimestampType))
+  }
+
+  override def exprsReplaced: Seq[Expression] = Seq(year, month, day, hour, min, sec)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
   usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields. " +
     "The result data type is consistent with the value of configuration `spark.sql.timestampType`",
   arguments = """
@@ -2526,7 +2735,7 @@ object DatePart {
        224
       > SELECT _FUNC_('SECONDS', timestamp'2019-10-01 00:00:01.000001');
        1.000001
-      > SELECT _FUNC_('days', interval 1 year 10 months 5 days);
+      > SELECT _FUNC_('days', interval 5 days 3 hours 7 minutes);
        5
       > SELECT _FUNC_('seconds', interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001
@@ -2595,7 +2804,7 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
        224
       > SELECT _FUNC_(SECONDS FROM timestamp'2019-10-01 00:00:01.000001');
        1.000001
-      > SELECT _FUNC_(days FROM interval 1 year 10 months 5 days);
+      > SELECT _FUNC_(days FROM interval 5 days 3 hours 7 minutes);
        5
       > SELECT _FUNC_(seconds FROM interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001

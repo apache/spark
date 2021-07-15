@@ -221,7 +221,6 @@ case class FlatMapGroupsWithStateExec(
         // The state store aware zip partitions will provide us with two iterators,
         // child data iterator and the initial state iterator per partition.
         case (partitionId, childDataIterator, initStateIterator) =>
-
           val stateStoreId = StateStoreId(
             stateInfo.get.checkpointLocation, stateInfo.get.operatorId, partitionId)
           val storeProviderId = StateStoreProviderId(stateStoreId, stateInfo.get.queryRunId)
@@ -229,7 +228,7 @@ case class FlatMapGroupsWithStateExec(
             storeProviderId,
             groupingAttributes.toStructType,
             stateManager.stateSchema,
-            indexOrdinal = None,
+            numColsPrefixKey = 0,
             stateInfo.get.storeVersion, storeConf, hadoopConfBroadcast.value.value)
           val processor = new InputProcessor(store)
           processDataWithPartition(childDataIterator, store, processor, Some(initStateIterator))
@@ -239,7 +238,7 @@ case class FlatMapGroupsWithStateExec(
         getStateInfo,
         groupingAttributes.toStructType,
         stateManager.stateSchema,
-        indexOrdinal = None,
+        numColsPrefixKey = 0,
         session.sqlContext.sessionState,
         Some(session.sqlContext.streams.stateStoreCoordinator)
       ) { case (store: StateStore, singleIterator: Iterator[InternalRow]) =>
