@@ -480,7 +480,7 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
         # to test because of Jenkins environment issue. Once Jenkins has Python 3.9 to test,
         # we should remove this change back and add python3.9 into python/run-tests.py script.
         command.append("--python-executable=%s" % ','.join(
-            x for x in ["python3.6", "python3.9", "pypy3"] if which(x)))
+            x for x in ["python3.9", "pypy3"] if which(x)))
     run_cmd(command)
 
     if with_coverage:
