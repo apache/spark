@@ -913,31 +913,14 @@ case class ColumnStatsMap(originalMap: AttributeMap[ColumnStat]) {
   def update(a: Attribute, stats: ColumnStat): Unit = updatedMap.update(a.exprId, a -> stats)
 
   /**
-   * Collects updated column stats, and scales down ndv for other column stats if the number of rows
-   * decreases after this Filter operator.
+   * Collects updated column stats; scales down column count stats if the
+   * number of rows decreases after this Filter operator.
    */
   def outputColumnStats(rowsBeforeFilter: BigInt, rowsAfterFilter: BigInt)
     : AttributeMap[ColumnStat] = {
     val newColumnStats = originalMap.map { case (attr, oriColStat) =>
-      val colStat = updatedMap.get(attr.exprId).map(_._2).getOrElse(oriColStat)
-      val newNdv = if (colStat.distinctCount.isEmpty) {
-        // No NDV in the original stats.
-        None
-      } else if (colStat.distinctCount.get > 1) {
-        // Update ndv based on the overall filter selectivity: scale down ndv if the number of rows
-        // decreases; otherwise keep it unchanged.
-        Some(EstimationUtils.updateNdv(oldNumRows = rowsBeforeFilter,
-          newNumRows = rowsAfterFilter, oldNdv = oriColStat.distinctCount.get))
-      } else {
-        // no need to scale down since it is already down to 1 (for skewed distribution case)
-        colStat.distinctCount
-      }
-      val newNullCount = if (colStat.nullCount.isEmpty) {
-        None
-      } else {
-        Some(colStat.nullCount.get.min(rowsAfterFilter))
-      }
-      attr -> colStat.copy(distinctCount = newNdv, nullCount = newNullCount)
+      attr -> oriColStat.updateCountStats(
+        rowsBeforeFilter, rowsAfterFilter, updatedMap.get(attr.exprId).map(_._2))
     }
     AttributeMap(newColumnStats.toSeq)
   }

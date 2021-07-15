@@ -52,14 +52,18 @@ object EstimationUtils {
   }
 
   /**
-   * Updates (scales down) the number of distinct values if the number of rows decreases after
-   * some operation (such as filter, join). Otherwise keep it unchanged.
+   * Updates (scales down) a statistic (eg. number of distinct values) if the number of rows
+   * decreases after some operation (such as filter, join). Otherwise keep it unchanged.
    */
-  def updateNdv(oldNumRows: BigInt, newNumRows: BigInt, oldNdv: BigInt): BigInt = {
-    if (newNumRows < oldNumRows) {
-      ceil(BigDecimal(oldNdv) * BigDecimal(newNumRows) / BigDecimal(oldNumRows))
+  def updateStat(
+      oldNumRows: BigInt,
+      newNumRows: BigInt,
+      oldStat: BigInt,
+      updatedStatOpt: Option[BigInt]): BigInt = {
+    if (updatedStatOpt.forall(_ > 1) && newNumRows < oldNumRows) {
+      ceil(BigDecimal(oldStat) * BigDecimal(newNumRows) / BigDecimal(oldNumRows))
     } else {
-      oldNdv
+      updatedStatOpt.getOrElse(oldStat)
     }
   }
 
