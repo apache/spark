@@ -1780,6 +1780,7 @@ def month(col):
 def dayofweek(col):
     """
     Extract the day of the week of a given date as integer.
+    Ranges from 1 for a Sunday through to 7 for a Saturday
 
     .. versionadded:: 2.3.0
 
@@ -1876,6 +1877,8 @@ def second(col):
 def weekofyear(col):
     """
     Extract the week number of a given date as integer.
+    A week is considered to start on a Monday and week 1 is the first week with more than 3 days,
+    as defined by ISO 8601
 
     .. versionadded:: 1.5.0
 

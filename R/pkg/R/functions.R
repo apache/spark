@@ -1011,6 +1011,7 @@ setMethod("dayofmonth",
 #' @details
 #' \code{dayofweek}: Extracts the day of the week as an integer from a
 #' given date/timestamp/string.
+#' Ranges from 1 for a Sunday through to 7 for a Saturday
 #'
 #' @rdname column_datetime_functions
 #' @aliases dayofweek dayofweek,Column-method
@@ -2333,6 +2334,8 @@ setMethod("var_samp",
 
 #' @details
 #' \code{weekofyear}: Extracts the week number as an integer from a given date/timestamp/string.
+#' A week is considered to start on a Monday and week 1 is the first week with more than 3 days,
+#' as defined by ISO 8601
 #'
 #' @rdname column_datetime_functions
 #' @aliases weekofyear weekofyear,Column-method
