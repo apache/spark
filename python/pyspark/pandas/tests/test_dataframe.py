@@ -3053,6 +3053,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf.unstack().sort_index(), pdf.unstack().sort_index(), almost=True)
+        self.assert_eq(
+            psdf.unstack().unstack().sort_index(), pdf.unstack().unstack().sort_index(), almost=True
+        )
 
     def test_pivot_errors(self):
         psdf = ps.range(10)
@@ -5018,7 +5021,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             expected_result2 = pdf
 
         self.assert_eq(psdf.explode("A"), expected_result1, almost=True)
-        self.assert_eq(repr(psdf.explode("B")), repr(expected_result2))
+        self.assert_eq(psdf.explode("B"), expected_result2)
         self.assert_eq(psdf.explode("A").index.name, expected_result1.index.name)
         self.assert_eq(psdf.explode("A").columns.name, expected_result1.columns.name)
 
@@ -5043,7 +5046,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             expected_result2 = pdf
 
         self.assert_eq(psdf.explode("A"), expected_result1, almost=True)
-        self.assert_eq(repr(psdf.explode("B")), repr(expected_result2))
+        self.assert_eq(psdf.explode("B"), expected_result2)
         self.assert_eq(psdf.explode("A").index.names, expected_result1.index.names)
         self.assert_eq(psdf.explode("A").columns.name, expected_result1.columns.name)
 
@@ -5066,7 +5069,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             expected_result3.columns.name = "column2"
 
         self.assert_eq(psdf.explode(("A", "Z")), expected_result1, almost=True)
-        self.assert_eq(repr(psdf.explode(("B", "X"))), repr(expected_result2))
+        self.assert_eq(psdf.explode(("B", "X")), expected_result2)
         self.assert_eq(psdf.explode(("A", "Z")).index.names, expected_result1.index.names)
         self.assert_eq(psdf.explode(("A", "Z")).columns.names, expected_result1.columns.names)
 

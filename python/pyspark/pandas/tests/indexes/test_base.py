@@ -994,7 +994,7 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
 
         # Index from DataFrame
         pdf1 = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]}, index=["a", "b", "c"])
-        pdf2 = pd.DataFrame({"a": [7, 8, 9], "d": [10, 11, 12]}, index=["x", "y", "z"])
+        pdf2 = pd.DataFrame({"a": [7, 8, 9], "d": [10, 11, None]}, index=["x", "y", "z"])
         psdf1 = ps.from_pandas(pdf1)
         psdf2 = ps.from_pandas(pdf2)
 
@@ -1048,12 +1048,20 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(pmidx1.append(pmidx2).names, psmidx1.append(psmidx2).names)
 
-        # Index & MultiIndex currently is not supported
-        expected_error_message = r"append\(\) between Index & MultiIndex currently is not supported"
+        # Index & MultiIndex is currently not supported
+        expected_error_message = r"append\(\) between Index & MultiIndex is currently not supported"
         with self.assertRaisesRegex(NotImplementedError, expected_error_message):
             psidx.append(psmidx)
         with self.assertRaisesRegex(NotImplementedError, expected_error_message):
             psmidx.append(psidx)
+
+        # MultiIndexs with different levels is currently not supported
+        psmidx3 = ps.MultiIndex.from_tuples([("a", "x"), ("b", "y"), ("c", "z")])
+        expected_error_message = (
+            r"append\(\) between MultiIndexs with different levels is currently not supported"
+        )
+        with self.assertRaisesRegex(NotImplementedError, expected_error_message):
+            psmidx.append(psmidx3)
 
     def test_argmin(self):
         pidx = pd.Index([100, 50, 10, 20, 30, 60, 0, 50, 0, 100, 100, 100, 20, 0, 0])
@@ -1452,11 +1460,15 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         # Index
         pidx1 = pd.Index([1, 2, 3, 4])
         pidx2 = pd.Index([3, 4, 5, 6])
+        pidx3 = pd.Index([7.0, 8.0, 9.0, 10.0])
         psidx1 = ps.from_pandas(pidx1)
         psidx2 = ps.from_pandas(pidx2)
+        psidx3 = ps.from_pandas(pidx3)
 
         self.assert_eq(psidx1.union(psidx2), pidx1.union(pidx2))
         self.assert_eq(psidx2.union(psidx1), pidx2.union(pidx1))
+        self.assert_eq(psidx1.union(psidx3), pidx1.union(pidx3))
+
         self.assert_eq(psidx1.union([3, 4, 5, 6]), pidx1.union([3, 4, 5, 6]), almost=True)
         self.assert_eq(psidx2.union([1, 2, 3, 4]), pidx2.union([1, 2, 3, 4]), almost=True)
         self.assert_eq(

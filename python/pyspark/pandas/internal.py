@@ -202,6 +202,13 @@ class InternalField:
             ),
         )
 
+    def __eq__(self, other: Any) -> bool:
+        return (
+            isinstance(other, InternalField)
+            and self.dtype == other.dtype
+            and self.struct_field == other.struct_field
+        )
+
     def __repr__(self) -> str:
         return "InternalField(dtype={dtype},struct_field={struct_field})".format(
             dtype=self.dtype, struct_field=self.struct_field
