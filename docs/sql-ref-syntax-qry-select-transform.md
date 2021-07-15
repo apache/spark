@@ -24,6 +24,14 @@ license: |
 The `TRANSFORM` clause is used to specify a Hive-style transform query specification 
 to transform the inputs by running a user-specified command or script.
 
+Currently, Spark's script transform support two modes:
+
+    1. Without Hive: Spark scripts transform can run without `-Phive` or `SparkSession.builder.enableHiveSupport()`.
+                     In this case, now spark only use script transform with `ROW FORMAT DELIMITED` and treat all value passed
+                     to script as a string. 
+    2. With Hive: When built Spark with `-Phive` and started Spark SQL with `enableHiveSupport()`, spark can use script 
+                  transform with Hive SerDe and both `ROW FORMAT DELIMITED`.
+
 ### Syntax
 
 ```sql
@@ -57,9 +65,30 @@ SELECT TRANSFORM ( expression [ , ... ] )
 
     Specifies a command or a path to script to process data.
 
-### SerDe behavior
+### ROW FORMAT DELIMITED BEHAVIOR
 
-Spark uses the Hive SerDe `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, so columns will be casted
+When spark use `ROW FORMAT DELIMITED` format, Spark will use `\u0001` as default filed delimit,
+use `\n` as default line delimit and use `"\N"` as `NULL` value in order to differentiate `NULL` values 
+from empty strings. These delimit can be overridden by `FIELDS TERMINATED BY`, `LINES TERMINATED BY` and
+`NULL TERMINATED AS`. Since we use `to_json` and `from_json` to handle complex data type, so 
+`COLLECTION ITEMS TERMINATED BY` and `MAP KEYS TERMINATED BY` won't work in current code. 
+Spark will cast all columns to `STRING` and combined by tabs before feeding to the user script.
+For complex type such as `ARRAY\MAP\STRUCT`, spark use `to_json` cast it to input json string
+and use `from_json` to convert result output to `ARRAY/MAP/STRUCT` data. The standard output of
+the user script will be treated as tab-separated `STRING` columns, any cell containing only `"\N"` 
+will be re-interpreted as a `NULL` value, and then the resulting STRING column will be cast to the 
+data type specified in `col_type`. If the actual number of output columns is less than the number 
+of specified output columns, insufficient output columns will be supplemented with `NULL`. 
+If the actual number of output columns is more than the number of specified output columns,
+the output columns will only select the corresponding columns and the remaining part will be discarded.
+
+If there is no `AS` clause after `USING my_script`, an output schema will be `key: STRING, value: STRING`.
+The `key` column contains all the characters before the first tab and the `value` column contains the remaining characters after the first tab.
+If there is no enough tab, Spark will return `NULL` value. These defaults can be overridden with `ROW FORMAT SERDE` or `ROW FORMAT DELIMITED`. 
+
+### Hive SerDe behavior
+
+When enable Hive and use Hive Serde mode, spark uses the Hive SerDe `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, so columns will be casted
 to `STRING` and combined by tabs before feeding to the user script. All `NULL` values will be converted
 to the literal string `"\N"` in order to differentiate `NULL` values from empty strings. The standard output of the
 user script will be treated as tab-separated `STRING` columns, any cell containing only `"\N"` will be re-interpreted
@@ -67,6 +96,7 @@ as a `NULL` value, and then the resulting STRING column will be cast to the data
 number of output columns is less than the number of specified output columns, insufficient output columns will be
 supplemented with `NULL`. If the actual number of output columns is more than the number of specified output columns,
 the output columns will only select the corresponding columns and the remaining part will be discarded.
+
 If there is no `AS` clause after `USING my_script`, an output schema will be `key: STRING, value: STRING`.
 The `key` column contains all the characters before the first tab and the `value` column contains the remaining characters after the first tab.
 If there is no enough tab, Spark will return `NULL` value. These defaults can be overridden with `ROW FORMAT SERDE` or `ROW FORMAT DELIMITED`. 
