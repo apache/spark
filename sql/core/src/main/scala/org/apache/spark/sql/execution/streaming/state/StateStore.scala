@@ -44,6 +44,11 @@ import org.apache.spark.util.{ThreadUtils, Utils}
  *
  * `abort` method will be called when the task is completed - please clean up the resources in
  * the method.
+ *
+ * IMPLEMENTATION NOTES:
+ * * The implementation can throw exception on calling prefixScan method if the functionality is
+ *   not supported yet from the implementation. Note that some stateful operations would not work
+ *   on disabling prefixScan functionality.
  */
 trait ReadStateStore {
 
@@ -60,21 +65,17 @@ trait ReadStateStore {
   def get(key: UnsafeRow): UnsafeRow
 
   /**
-   * Get key value pairs with optional approximate `start` and `end` extents.
-   * If the State Store implementation maintains indices for the data based on the optional
-   * `keyIndexOrdinal` over fields `keySchema` (see `StateStoreProvider.init()`), then it can use
-   * `start` and `end` to make a best-effort scan over the data. Default implementation returns
-   * the full data scan iterator, which is correct but inefficient. Custom implementations must
-   * ensure that updates (puts, removes) can be made while iterating over this iterator.
+   * Return an iterator containing all the key-value pairs which are matched with
+   * the given prefix key.
    *
-   * @param start UnsafeRow having the `keyIndexOrdinal` column set with appropriate starting value.
-   * @param end UnsafeRow having the `keyIndexOrdinal` column set with appropriate ending value.
-   * @return An iterator of key-value pairs that is guaranteed not miss any key between start and
-   *         end, both inclusive.
+   * The operator will provide numColsPrefixKey greater than 0 in StateStoreProvider.init method
+   * if the operator needs to leverage the "prefix scan" feature. The schema of the prefix key
+   * should be same with the leftmost `numColsPrefixKey` columns of the key schema.
+   *
+   * It is expected to throw exception if Spark calls this method without setting numColsPrefixKey
+   * to the greater than 0.
    */
-  def getRange(start: Option[UnsafeRow], end: Option[UnsafeRow]): Iterator[UnsafeRowPair] = {
-    iterator()
-  }
+  def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair]
 
   /** Return an iterator containing all the key-value pairs in the StateStore. */
   def iterator(): Iterator[UnsafeRowPair]
@@ -149,6 +150,9 @@ class WrappedReadStateStore(store: StateStore) extends ReadStateStore {
   override def iterator(): Iterator[UnsafeRowPair] = store.iterator()
 
   override def abort(): Unit = store.abort()
+
+  override def prefixScan(prefixKey: UnsafeRow): Iterator[UnsafeRowPair] =
+    store.prefixScan(prefixKey)
 }
 
 /**
@@ -251,8 +255,9 @@ trait StateStoreProvider {
    * @param stateStoreId Id of the versioned StateStores that this provider will generate
    * @param keySchema Schema of keys to be stored
    * @param valueSchema Schema of value to be stored
-   * @param keyIndexOrdinal Optional column (represent as the ordinal of the field in keySchema) by
-   *                        which the StateStore implementation could index the data.
+   * @param numColsPrefixKey The number of leftmost columns to be used as prefix key.
+   *                         A value not greater than 0 means the operator doesn't activate prefix
+   *                         key, and the operator should not call prefixScan method in StateStore.
    * @param storeConfs Configurations used by the StateStores
    * @param hadoopConf Hadoop configuration that could be used by StateStore to save state data
    */
@@ -260,7 +265,7 @@ trait StateStoreProvider {
       stateStoreId: StateStoreId,
       keySchema: StructType,
       valueSchema: StructType,
-      keyIndexOrdinal: Option[Int], // for sorting the data by their keys
+      numColsPrefixKey: Int,
       storeConfs: StateStoreConf,
       hadoopConf: Configuration): Unit
 
@@ -313,11 +318,12 @@ object StateStoreProvider {
       providerId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      indexOrdinal: Option[Int], // for sorting the data
+      numColsPrefixKey: Int,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
     val provider = create(storeConf.providerClass)
-    provider.init(providerId.storeId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
+    provider.init(providerId.storeId, keySchema, valueSchema, numColsPrefixKey,
+      storeConf, hadoopConf)
     provider
   }
 
@@ -465,13 +471,13 @@ object StateStore extends Logging {
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      indexOrdinal: Option[Int],
+      numColsPrefixKey: Int,
       version: Long,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): ReadStateStore = {
     require(version >= 0)
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      indexOrdinal, storeConf, hadoopConf)
+      numColsPrefixKey, storeConf, hadoopConf)
     storeProvider.getReadStore(version)
   }
 
@@ -480,13 +486,13 @@ object StateStore extends Logging {
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      indexOrdinal: Option[Int],
+      numColsPrefixKey: Int,
       version: Long,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStore = {
     require(version >= 0)
     val storeProvider = getStateStoreProvider(storeProviderId, keySchema, valueSchema,
-      indexOrdinal, storeConf, hadoopConf)
+      numColsPrefixKey, storeConf, hadoopConf)
     storeProvider.getStore(version)
   }
 
@@ -494,7 +500,7 @@ object StateStore extends Logging {
       storeProviderId: StateStoreProviderId,
       keySchema: StructType,
       valueSchema: StructType,
-      indexOrdinal: Option[Int],
+      numColsPrefixKey: Int,
       storeConf: StateStoreConf,
       hadoopConf: Configuration): StateStoreProvider = {
     loadedProviders.synchronized {
@@ -521,7 +527,7 @@ object StateStore extends Logging {
       val provider = loadedProviders.getOrElseUpdate(
         storeProviderId,
         StateStoreProvider.createAndInit(
-          storeProviderId, keySchema, valueSchema, indexOrdinal, storeConf, hadoopConf)
+          storeProviderId, keySchema, valueSchema, numColsPrefixKey, storeConf, hadoopConf)
       )
       val otherProviderIds = loadedProviders.keys.filter(_ != storeProviderId).toSeq
       val providerIdsToUnload = reportActiveStoreInstance(storeProviderId, otherProviderIds)

@@ -24,6 +24,7 @@ select DATE_FROM_UNIX_DATE(0), DATE_FROM_UNIX_DATE(1000), DATE_FROM_UNIX_DATE(nu
 select UNIX_DATE(DATE('1970-01-01')), UNIX_DATE(DATE('2020-12-04')), UNIX_DATE(null);
 -- [SPARK-16836] current_date and current_timestamp literals
 select current_date = current_date(), current_timestamp = current_timestamp();
+select localtimestamp() = localtimestamp();
 
 select to_date(null), to_date('2016-12-31'), to_date('2016-12-31', 'yyyy-MM-dd');
 
@@ -32,6 +33,10 @@ select to_timestamp(null), to_timestamp('2016-12-31 00:12:00'), to_timestamp('20
 select to_timestamp_ntz(null), to_timestamp_ntz('2016-12-31 00:12:00'), to_timestamp_ntz('2016-12-31', 'yyyy-MM-dd');
 select to_timestamp_ntz(to_date(null)), to_timestamp_ntz(to_date('2016-12-31')), to_timestamp_ntz(to_date('2016-12-31', 'yyyy-MM-dd'));
 select to_timestamp_ntz(to_timestamp(null)), to_timestamp_ntz(to_timestamp('2016-12-31 00:12:00')), to_timestamp_ntz(to_timestamp('2016-12-31', 'yyyy-MM-dd'));
+
+select to_timestamp_ltz(null), to_timestamp_ltz('2016-12-31 00:12:00'), to_timestamp_ltz('2016-12-31', 'yyyy-MM-dd');
+select to_timestamp_ltz(to_date(null)), to_timestamp_ltz(to_date('2016-12-31')), to_timestamp_ltz(to_date('2016-12-31', 'yyyy-MM-dd'));
+select to_timestamp_ltz(to_timestamp(null)), to_timestamp_ltz(to_timestamp('2016-12-31 00:12:00')), to_timestamp_ltz(to_timestamp('2016-12-31', 'yyyy-MM-dd'));
 
 select dayofweek('2007-02-03'), dayofweek('2009-07-30'), dayofweek('2017-05-27'), dayofweek(null), dayofweek('1582-10-15 13:10:15');
 
@@ -257,3 +262,34 @@ select to_timestamp_ntz('2021-06-25 10:11:12') - interval '10-9' year to month;
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval '20 15' day to hour;
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval '20 15:40' day to minute;
 select to_timestamp_ntz('2021-06-25 10:11:12') - interval '20 15:40:32.99899999' day to second;
+
+-- timestamp numeric fields constructor
+SELECT make_timestamp(2021, 07, 11, 6, 30, 45.678);
+SELECT make_timestamp(2021, 07, 11, 6, 30, 45.678, 'CET');
+SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007);
+
+-- TimestampNTZ numeric fields constructor
+SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678);
+-- make_timestamp_ntz should not accept time zone input
+SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678, 'CET');
+SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 60.007);
+
+-- TimestampLTZ numeric fields constructor
+SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678);
+SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678, 'CET');
+SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 60.007);
+
+-- datetime with year outside [0000-9999]
+select date'999999-03-18';
+select date'-0001-1-28';
+select date'0015';
+select cast('015' as date);
+select cast('2021-4294967297-11' as date);
+
+select timestamp'-1969-12-31 16:00:00';
+select timestamp'0015-03-18 16:00:00';
+select timestamp'-000001';
+select timestamp'99999-03-18T12:03:17';
+select cast('4294967297' as timestamp);
+select cast('2021-01-01T12:30:4294967297.123456' as timestamp);
+

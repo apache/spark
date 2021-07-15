@@ -147,6 +147,24 @@ private[sql] class JacksonGenerator(
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeString(row.getInterval(ordinal).toString)
 
+    case YearMonthIntervalType(start, end) =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        val ymString = IntervalUtils.toYearMonthIntervalString(
+          row.getInt(ordinal),
+          IntervalStringStyles.ANSI_STYLE,
+          start,
+          end)
+        gen.writeString(ymString)
+
+    case DayTimeIntervalType(start, end) =>
+      (row: SpecializedGetters, ordinal: Int) =>
+        val dtString = IntervalUtils.toDayTimeIntervalString(
+          row.getLong(ordinal),
+          IntervalStringStyles.ANSI_STYLE,
+          start,
+          end)
+        gen.writeString(dtString)
+
     case BinaryType =>
       (row: SpecializedGetters, ordinal: Int) =>
         gen.writeBinary(row.getBinary(ordinal))

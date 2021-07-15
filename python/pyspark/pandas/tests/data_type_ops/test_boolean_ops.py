@@ -26,7 +26,10 @@ from pandas.api.types import CategoricalDtype
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
-from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+from pyspark.pandas.typedef.typehints import (
+    extension_float_dtypes_available,
+    extension_object_dtypes_available,
+)
 from pyspark.sql.types import BooleanType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
@@ -48,6 +51,14 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def float_psser(self):
         return ps.from_pandas(self.float_pser)
 
+    @property
+    def other_pser(self):
+        return pd.Series([False, False, True])
+
+    @property
+    def other_psser(self):
+        return ps.from_pandas(self.other_pser)
+
     def test_add(self):
         pser = self.pser
         psser = self.psser
@@ -64,7 +75,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
             for pser, psser in self.non_numeric_pser_psser_pairs:
                 if isinstance(psser.spark.data_type, BooleanType):
-                    self.assert_eq(self.pser + pser, self.psser + psser)
+                    self.assert_eq(self.pser + pser, (self.psser + psser).sort_index())
                 else:
                     self.assertRaises(TypeError, lambda: self.psser + psser)
 
@@ -100,7 +111,7 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
             for pser, psser in self.non_numeric_pser_psser_pairs:
                 if isinstance(psser.spark.data_type, BooleanType):
-                    self.assert_eq(self.pser * pser, self.psser * psser)
+                    self.assert_eq(self.pser * pser, (self.psser * psser).sort_index())
                 else:
                     self.assertRaises(TypeError, lambda: self.psser * psser)
 
@@ -252,11 +263,12 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         other_pser = pd.Series([False, None, True], dtype="bool")
         other_psser = ps.from_pandas(other_pser)
         with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(pser & other_pser, psser & other_psser)
+            self.assert_eq(pser & other_pser, (psser & other_psser).sort_index())
             self.check_extension(
-                pser & other_pser.astype("boolean"), psser & other_psser.astype("boolean")
+                pser & other_pser.astype("boolean"),
+                (psser & other_psser.astype("boolean")).sort_index(),
             )
-            self.assert_eq(other_pser & pser, other_psser & psser)
+            self.assert_eq(other_pser & pser, (other_psser & psser).sort_index())
 
     def test_rand(self):
         pser = pd.Series([True, False, None], dtype="bool")
@@ -276,11 +288,12 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         other_pser = pd.Series([False, None, True], dtype="bool")
         other_psser = ps.from_pandas(other_pser)
         with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(pser | other_pser, psser | other_psser)
+            self.assert_eq(pser | other_pser, (psser | other_psser).sort_index())
             self.check_extension(
-                pser | other_pser.astype("boolean"), psser | other_psser.astype("boolean")
+                pser | other_pser.astype("boolean"),
+                (psser | other_psser.astype("boolean")).sort_index(),
             )
-            self.assert_eq(other_pser | pser, other_psser | psser)
+            self.assert_eq(other_pser | pser, (other_psser | psser).sort_index())
 
     def test_ror(self):
         pser = pd.Series([True, False, None], dtype="bool")
@@ -305,6 +318,57 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser.astype("category"), psser.astype("category"))
         cat_type = CategoricalDtype(categories=[False, True])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+
+    def test_neg(self):
+        self.assert_eq(-self.pser, -self.psser)
+
+    def test_abs(self):
+        self.assert_eq(abs(self.pser), abs(self.psser))
+
+    def test_invert(self):
+        self.assert_eq(~self.pser, ~self.psser)
+
+    def test_eq(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser == self.other_pser, (self.psser == self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser == self.pser, (self.psser == self.psser).sort_index())
+
+    def test_ne(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser != self.other_pser, (self.psser != self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser != self.pser, (self.psser != self.psser).sort_index())
+
+    def test_lt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser < self.other_pser, (self.psser < self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser < self.pser, (self.psser < self.psser).sort_index())
+
+    def test_le(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser <= self.other_pser, (self.psser <= self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser <= self.pser, (self.psser <= self.psser).sort_index())
+
+    def test_gt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser > self.other_pser, (self.psser > self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser > self.pser, (self.psser > self.psser).sort_index())
+
+    def test_ge(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(
+                self.pser >= self.other_pser, (self.psser >= self.other_psser).sort_index()
+            )
+            self.assert_eq(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
 
 
 @unittest.skipIf(
@@ -338,8 +402,11 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_add(self):
         pser = self.pser
         psser = self.psser
-        self.assert_eq((pser + 1).astype(float), psser + 1)
-        self.assert_eq((pser + 0.1).astype(float), psser + 0.1)
+        self.check_extension(pser + 1, psser + 1)
+        if extension_float_dtypes_available:
+            self.check_extension(pser + 0.1, psser + 0.1)
+        else:
+            self.assert_eq(pser + 0.1, psser + 0.1)
 
         # In pandas, NA | True is NA, whereas NA | True is True in pandas-on-Spark
         self.check_extension(ps.Series([True, True, True], dtype="boolean"), psser + True)
@@ -354,13 +421,16 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                     self.assertRaises(TypeError, lambda: self.psser + psser)
             bool_pser = pd.Series([False, False, False])
             bool_psser = ps.from_pandas(bool_pser)
-            self.check_extension(self.pser + bool_pser, self.psser + bool_psser)
+            self.check_extension(self.pser + bool_pser, (self.psser + bool_psser).sort_index())
 
     def test_sub(self):
         pser = self.pser
         psser = self.psser
-        self.assert_eq((pser - 1).astype(float), psser - 1)
-        self.assert_eq((pser - 0.1).astype(float), psser - 0.1)
+        self.check_extension(pser - 1, psser - 1)
+        if extension_float_dtypes_available:
+            self.check_extension(pser - 0.1, psser - 0.1)
+        else:
+            self.assert_eq(pser - 0.1, psser - 0.1)
         self.assertRaises(TypeError, lambda: psser - psser)
         self.assertRaises(TypeError, lambda: psser - True)
 
@@ -373,8 +443,11 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_mul(self):
         pser = self.pser
         psser = self.psser
-        self.assert_eq((pser * 1).astype(float), psser * 1)
-        self.assert_eq((pser * 0.1).astype(float), psser * 0.1)
+        self.check_extension(pser * 1, psser * 1)
+        if extension_float_dtypes_available:
+            self.check_extension(pser * 0.1, psser * 0.1)
+        else:
+            self.assert_eq(pser * 0.1, psser * 0.1)
 
         # In pandas, NA & False is NA, whereas NA & False is False in pandas-on-Spark
         self.check_extension(pser * True, psser * True)
@@ -389,13 +462,17 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                     self.assertRaises(TypeError, lambda: self.psser * psser)
             bool_pser = pd.Series([True, True, True])
             bool_psser = ps.from_pandas(bool_pser)
-            self.check_extension(self.pser * bool_pser, self.psser * bool_psser)
+            self.check_extension(self.pser * bool_pser, (self.psser * bool_psser).sort_index())
 
     def test_truediv(self):
         pser = self.pser
         psser = self.psser
-        self.assert_eq((pser / 1).astype(float), psser / 1)
-        self.assert_eq((pser / 0.1).astype(float), psser / 0.1)
+        if extension_float_dtypes_available:
+            self.check_extension(pser / 1, psser / 1)
+            self.check_extension(pser / 0.1, psser / 0.1)
+        else:
+            self.assert_eq(pser / 1, psser / 1)
+            self.assert_eq(pser / 0.1, psser / 0.1)
         self.assertRaises(TypeError, lambda: psser / psser)
         self.assertRaises(TypeError, lambda: psser / True)
 
@@ -413,7 +490,10 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         psser = self.psser
 
         # float is always returned in pandas-on-Spark
-        self.assert_eq((pser // 1).astype("float"), psser // 1)
+        if extension_float_dtypes_available:
+            self.check_extension((pser // 1).astype("Float64"), psser // 1)
+        else:
+            self.assert_eq((pser // 1).astype("float"), psser // 1)
 
         # in pandas, 1 // 0.1 = 9.0; in pandas-on-Spark, 1 // 0.1 = 10.0
         # self.assert_eq(pser // 0.1, psser // 0.1)
@@ -433,8 +513,11 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_mod(self):
         pser = self.pser
         psser = self.psser
-        self.assert_eq((pser % 1).astype(float), psser % 1)
-        self.assert_eq((pser % 0.1).astype(float), psser % 0.1)
+        self.check_extension(pser % 1, psser % 1)
+        if extension_float_dtypes_available:
+            self.check_extension(pser % 0.1, psser % 0.1)
+        else:
+            self.assert_eq(pser % 0.1, psser % 0.1)
         self.assertRaises(TypeError, lambda: psser % psser)
         self.assertRaises(TypeError, lambda: psser % True)
 
@@ -448,9 +531,18 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         pser = self.pser
         psser = self.psser
         # float is always returned in pandas-on-Spark
-        self.assert_eq((pser ** 1).astype("float"), psser ** 1)
-        self.assert_eq((pser ** 0.1).astype("float"), self.psser ** 0.1)
-        self.assert_eq((pser ** pser.astype(float)).astype("float"), psser ** psser.astype(float))
+        if extension_float_dtypes_available:
+            self.check_extension((pser ** 1).astype("Float64"), psser ** 1)
+            self.check_extension((pser ** 0.1).astype("Float64"), self.psser ** 0.1)
+            self.check_extension(
+                (pser ** pser.astype(float)).astype("Float64"), psser ** psser.astype(float)
+            )
+        else:
+            self.assert_eq((pser ** 1).astype("float"), psser ** 1)
+            self.assert_eq((pser ** 0.1).astype("float"), self.psser ** 0.1)
+            self.assert_eq(
+                (pser ** pser.astype(float)).astype("float"), psser ** psser.astype(float)
+            )
         self.assertRaises(TypeError, lambda: psser ** psser)
         self.assertRaises(TypeError, lambda: psser ** True)
 
@@ -465,8 +557,11 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: self.psser ** psser)
 
     def test_radd(self):
-        self.assert_eq((1 + self.pser).astype(float), 1 + self.psser)
-        self.assert_eq((0.1 + self.pser).astype(float), 0.1 + self.psser)
+        self.check_extension(1 + self.pser, 1 + self.psser)
+        if extension_float_dtypes_available:
+            self.check_extension(0.1 + self.pser, 0.1 + self.psser)
+        else:
+            self.assert_eq(0.1 + self.pser, 0.1 + self.psser)
         self.assertRaises(TypeError, lambda: "x" + self.psser)
 
         # In pandas, NA | True is NA, whereas NA | True is True in pandas-on-Spark
@@ -477,16 +572,22 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + self.psser)
 
     def test_rsub(self):
-        self.assert_eq((1 - self.pser).astype(float), 1 - self.psser)
-        self.assert_eq((0.1 - self.pser).astype(float), 0.1 - self.psser)
+        self.check_extension(1 - self.pser, 1 - self.psser)
+        if extension_float_dtypes_available:
+            self.check_extension(0.1 - self.pser, 0.1 - self.psser)
+        else:
+            self.assert_eq(0.1 - self.pser, 0.1 - self.psser)
         self.assertRaises(TypeError, lambda: "x" - self.psser)
         self.assertRaises(TypeError, lambda: True - self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - self.psser)
 
     def test_rmul(self):
-        self.assert_eq((1 * self.pser).astype(float), 1 * self.psser)
-        self.assert_eq((0.1 * self.pser).astype(float), 0.1 * self.psser)
+        self.check_extension(1 * self.pser, 1 * self.psser)
+        if extension_float_dtypes_available:
+            self.check_extension(0.1 * self.pser, 0.1 * self.psser)
+        else:
+            self.assert_eq(0.1 * self.pser, 0.1 * self.psser)
         self.assertRaises(TypeError, lambda: "x" * self.psser)
 
         # In pandas, NA & False is NA, whereas NA & False is False in pandas-on-Spark
@@ -497,35 +598,49 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * self.psser)
 
     def test_rtruediv(self):
-        self.assert_eq((1 / self.pser).astype(float), 1 / self.psser)
-        self.assert_eq((0.1 / self.pser).astype(float), 0.1 / self.psser)
+        if extension_float_dtypes_available:
+            self.check_extension(1 / self.pser, 1 / self.psser)
+            self.check_extension(0.1 / self.pser, 0.1 / self.psser)
+        else:
+            self.assert_eq(1 / self.pser, 1 / self.psser)
+            self.assert_eq(0.1 / self.pser, 0.1 / self.psser)
         self.assertRaises(TypeError, lambda: "x" / self.psser)
         self.assertRaises(TypeError, lambda: True / self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) / self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) / self.psser)
 
     def test_rfloordiv(self):
-        self.assert_eq((1 // self.psser).astype(float), ps.Series([1.0, np.inf, np.nan]))
-        self.assert_eq((0.1 // self.psser).astype(float), ps.Series([0.0, np.inf, np.nan]))
+        self.assert_eq(pd.Series([1.0, np.inf, np.nan]), (1 // self.psser).astype(float))
+        self.assert_eq(pd.Series([0.0, np.inf, np.nan]), (0.1 // self.psser).astype(float))
         self.assertRaises(TypeError, lambda: "x" // self.psser)
         self.assertRaises(TypeError, lambda: True // self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // self.psser)
 
     def test_rpow(self):
-        self.assert_eq(1 ** self.psser, ps.Series([1, 1, 1], dtype=float))
-        self.assert_eq((0.1 ** self.pser).astype(float), 0.1 ** self.psser)
+        if extension_float_dtypes_available:
+            self.check_extension(pd.Series([1, 1, 1], dtype="Float64"), 1 ** self.psser)
+            self.check_extension((0.1 ** self.pser).astype("Float64"), 0.1 ** self.psser)
+        else:
+            self.assert_eq(pd.Series([1, 1, 1], dtype="float"), 1 ** self.psser)
+            self.assert_eq((0.1 ** self.pser).astype("float"), 0.1 ** self.psser)
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
         self.assertRaises(TypeError, lambda: True ** self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) ** self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** self.psser)
 
     def test_rmod(self):
-        self.assert_eq(ps.Series([0, np.nan, np.nan], dtype=float), 1 % self.psser)
-        self.assert_eq(
-            ps.Series([0.10000000000000009, np.nan, np.nan], dtype=float),
-            0.1 % self.psser,
-        )
+        self.check_extension(ps.Series([0, np.nan, np.nan], dtype="Int64"), 1 % self.psser)
+        if extension_float_dtypes_available:
+            self.check_extension(
+                pd.Series([0.10000000000000009, np.nan, np.nan], dtype="Float64"),
+                0.1 % self.psser,
+            )
+        else:
+            self.assert_eq(
+                pd.Series([0.10000000000000009, np.nan, np.nan], dtype="float"),
+                0.1 % self.psser,
+            )
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % self.psser)
         self.assertRaises(TypeError, lambda: True % self.psser)
 
@@ -537,8 +652,8 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.check_extension(pser & pser, psser & psser)
 
         with option_context("compute.ops_on_diff_frames", True):
-            self.check_extension(pser & self.other_pser, psser & self.other_psser)
-            self.check_extension(self.other_pser & pser, self.other_psser & psser)
+            self.check_extension(pser & self.other_pser, (psser & self.other_psser).sort_index())
+            self.check_extension(self.other_pser & pser, (self.other_psser & psser).sort_index())
 
     def test_rand(self):
         self.check_extension(True & self.pser, True & self.psser)
@@ -552,8 +667,8 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.check_extension(pser | pser, psser | psser)
 
         with option_context("compute.ops_on_diff_frames", True):
-            self.check_extension(pser | self.other_pser, psser | self.other_psser)
-            self.check_extension(self.other_pser | pser, self.other_psser | psser)
+            self.check_extension(pser | self.other_pser, (psser | self.other_psser).sort_index())
+            self.check_extension(self.other_pser | pser, (self.other_psser | psser).sort_index())
 
     def test_ror(self):
         self.check_extension(True | self.pser, True | self.psser)
@@ -572,10 +687,74 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_astype(self):
         pser = self.pser
         psser = self.psser
+
+        # TODO(SPARK-35976): [True, False, <NA>] is returned in pandas
         self.assert_eq(["True", "False", "None"], self.psser.astype(str).tolist())
+
         self.assert_eq(pser.astype("category"), psser.astype("category"))
         cat_type = CategoricalDtype(categories=[False, True])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+        for dtype in self.extension_dtypes:
+            if dtype in self.fractional_extension_dtypes:
+                # A pandas boolean extension series cannot be casted to fractional extension dtypes
+                self.assert_eq([1.0, 0.0, np.nan], self.psser.astype(dtype).tolist())
+            elif dtype in self.string_extension_dtype:
+                if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
+                    # Limit pandas version due to https://github.com/pandas-dev/pandas/issues/31204
+                    self.check_extension(pser.astype(dtype), psser.astype(dtype))
+            else:
+                self.check_extension(pser.astype(dtype), psser.astype(dtype))
+
+    def test_neg(self):
+        self.assertRaises(TypeError, lambda: -self.psser)
+
+    def test_abs(self):
+        self.assertRaises(TypeError, lambda: abs(self.psser))
+
+    def test_invert(self):
+        self.assertRaises(TypeError, lambda: ~self.psser)
+
+    def test_eq(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.check_extension(
+                self.pser == self.other_pser, (self.psser == self.other_psser).sort_index()
+            )
+            self.check_extension(self.pser == self.pser, (self.psser == self.psser).sort_index())
+
+    def test_ne(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.check_extension(
+                self.pser != self.other_pser, (self.psser != self.other_psser).sort_index()
+            )
+            self.check_extension(self.pser != self.pser, (self.psser != self.psser).sort_index())
+
+    def test_lt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.check_extension(
+                self.pser < self.other_pser, (self.psser < self.other_psser).sort_index()
+            )
+            self.check_extension(self.pser < self.pser, (self.psser < self.psser).sort_index())
+
+    def test_le(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.check_extension(
+                self.pser <= self.other_pser, (self.psser <= self.other_psser).sort_index()
+            )
+            self.check_extension(self.pser <= self.pser, (self.psser <= self.psser).sort_index())
+
+    def test_gt(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.check_extension(
+                self.pser > self.other_pser, (self.psser > self.other_psser).sort_index()
+            )
+            self.check_extension(self.pser > self.pser, (self.psser > self.psser).sort_index())
+
+    def test_ge(self):
+        with option_context("compute.ops_on_diff_frames", True):
+            self.check_extension(
+                self.pser >= self.other_pser, (self.psser >= self.other_psser).sort_index()
+            )
+            self.check_extension(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
 
 
 if __name__ == "__main__":

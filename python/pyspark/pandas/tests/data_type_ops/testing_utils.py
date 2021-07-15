@@ -25,6 +25,21 @@ import pandas as pd
 import pyspark.pandas as ps
 from pyspark.pandas.typedef import extension_dtypes
 
+from pyspark.pandas.typedef.typehints import (
+    extension_dtypes_available,
+    extension_float_dtypes_available,
+    extension_object_dtypes_available,
+)
+
+if extension_dtypes_available:
+    from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
+
+if extension_float_dtypes_available:
+    from pandas import Float32Dtype, Float64Dtype
+
+if extension_object_dtypes_available:
+    from pandas import BooleanDtype, StringDtype
+
 
 class TestCasesUtils(object):
     """A utility holding common test cases for arithmetic operations of different data types."""
@@ -41,8 +56,31 @@ class TestCasesUtils(object):
         return [ps.from_pandas(pser) for pser in self.numeric_psers]
 
     @property
+    def decimal_withnan_pser(self):
+        return pd.Series([decimal.Decimal(1.0), decimal.Decimal(2.0), decimal.Decimal(np.nan)])
+
+    @property
+    def decimal_withnan_psser(self):
+        return ps.from_pandas(self.decimal_withnan_pser)
+
+    @property
+    def float_withnan_pser(self):
+        return pd.Series([1, 2, np.nan], dtype=float)
+
+    @property
+    def float_withnan_psser(self):
+        return ps.from_pandas(self.float_withnan_pser)
+
+    @property
     def numeric_pser_psser_pairs(self):
         return zip(self.numeric_psers, self.numeric_pssers)
+
+    @property
+    def numeric_withnan_pser_psser_pairs(self):
+        return zip(
+            self.numeric_psers + [self.decimal_withnan_pser, self.float_withnan_pser],
+            self.numeric_pssers + [self.decimal_withnan_psser, self.float_withnan_psser],
+        )
 
     @property
     def non_numeric_psers(self):
@@ -81,7 +119,52 @@ class TestCasesUtils(object):
     def pser_psser_pairs(self):
         return zip(self.psers, self.pssers)
 
-    def check_extension(self, psser, pser):
+    @property
+    def string_extension_dtype(self):
+        return ["string", StringDtype()] if extension_object_dtypes_available else []
+
+    @property
+    def object_extension_dtypes(self):
+        return (
+            ["boolean", "string", BooleanDtype(), StringDtype()]
+            if extension_object_dtypes_available
+            else []
+        )
+
+    @property
+    def fractional_extension_dtypes(self):
+        return (
+            ["Float32", "Float64", Float32Dtype(), Float64Dtype()]
+            if extension_float_dtypes_available
+            else []
+        )
+
+    @property
+    def integral_extension_dtypes(self):
+        return (
+            [
+                "Int8",
+                "Int16",
+                "Int32",
+                "Int64",
+                Int8Dtype(),
+                Int16Dtype(),
+                Int32Dtype(),
+                Int64Dtype(),
+            ]
+            if extension_dtypes_available
+            else []
+        )
+
+    @property
+    def extension_dtypes(self):
+        return (
+            self.object_extension_dtypes
+            + self.fractional_extension_dtypes
+            + self.integral_extension_dtypes
+        )
+
+    def check_extension(self, left, right):
         """
         Compare `psser` and `pser` of numeric ExtensionDtypes.
 
@@ -89,7 +172,8 @@ class TestCasesUtils(object):
         pandas versions. Please refer to https://github.com/pandas-dev/pandas/issues/39410.
         """
         if LooseVersion("1.1") <= LooseVersion(pd.__version__) < LooseVersion("1.2.2"):
-            self.assert_eq(psser, pser, check_exact=False)
-            self.assertTrue(isinstance(psser.dtype, extension_dtypes))
+            self.assert_eq(left, right, check_exact=False)
+            self.assertTrue(isinstance(left.dtype, extension_dtypes))
+            self.assertTrue(isinstance(right.dtype, extension_dtypes))
         else:
-            self.assert_eq(psser, pser)
+            self.assert_eq(left, right)

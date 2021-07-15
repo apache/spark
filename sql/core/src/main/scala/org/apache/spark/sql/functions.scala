@@ -2975,6 +2975,16 @@ object functions {
   def current_timestamp(): Column = withExpr { CurrentTimestamp() }
 
   /**
+   * Returns the current timestamp without time zone at the start of query evaluation
+   * as a timestamp without time zone column.
+   * All calls of localtimestamp within the same query return the same value.
+   *
+   * @group datetime_funcs
+   * @since 3.2.0
+   */
+  def localtimestamp(): Column = withExpr { LocalTimestamp() }
+
+  /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *

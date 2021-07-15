@@ -201,8 +201,8 @@ class JacksonParser(
             case "NaN" => Float.NaN
             case "Infinity" => Float.PositiveInfinity
             case "-Infinity" => Float.NegativeInfinity
-            case other => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
-              other, FloatType)
+            case _ => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
+              parser, VALUE_STRING, FloatType)
           }
       }
 
@@ -217,8 +217,8 @@ class JacksonParser(
             case "NaN" => Double.NaN
             case "Infinity" => Double.PositiveInfinity
             case "-Infinity" => Double.NegativeInfinity
-            case other =>
-              throw QueryExecutionErrors.cannotParseStringAsDataTypeError(other, DoubleType)
+            case _ => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
+              parser, VALUE_STRING, DoubleType)
           }
       }
 
@@ -295,6 +295,20 @@ class JacksonParser(
           IntervalUtils.safeStringToInterval(UTF8String.fromString(parser.getText))
       }
 
+    case ym: YearMonthIntervalType => (parser: JsonParser) =>
+      parseJsonToken[Integer](parser, dataType) {
+        case VALUE_STRING =>
+          val expr = Cast(Literal(parser.getText), ym)
+          Integer.valueOf(expr.eval(EmptyRow).asInstanceOf[Int])
+      }
+
+    case dt: DayTimeIntervalType => (parser: JsonParser) =>
+      parseJsonToken[java.lang.Long](parser, dataType) {
+        case VALUE_STRING =>
+          val expr = Cast(Literal(parser.getText), dt)
+          java.lang.Long.valueOf(expr.eval(EmptyRow).asInstanceOf[Long])
+      }
+
     case st: StructType =>
       val fieldConverters = st.map(_.dataType).map(makeConverter).toArray
       (parser: JsonParser) => parseJsonToken[InternalRow](parser, dataType) {
@@ -369,7 +383,7 @@ class JacksonParser(
     case token =>
       // We cannot parse this token based on the given data type. So, we throw a
       // RuntimeException and this exception will be caught by `parse` method.
-      throw QueryExecutionErrors.failToParseValueForDataTypeError(dataType, token)
+      throw QueryExecutionErrors.failToParseValueForDataTypeError(parser, token, dataType)
   }
 
   /**

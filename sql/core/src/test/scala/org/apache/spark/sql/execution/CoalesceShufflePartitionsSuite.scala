@@ -315,7 +315,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
   test("SPARK-24705 adaptive query execution works correctly when exchange reuse enabled") {
     val test: SparkSession => Unit = { spark: SparkSession =>
       spark.sql("SET spark.sql.exchange.reuse=true")
-      val df = spark.range(1).selectExpr("id AS key", "id AS value")
+      val df = spark.range(0, 6, 1).selectExpr("id AS key", "id AS value")
 
       // test case 1: a query stage has 3 child stages but they are the same stage.
       // Final Stage 1
@@ -323,7 +323,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
       //   ReusedQueryStage 0
       //   ReusedQueryStage 0
       val resultDf = df.join(df, "key").join(df, "key")
-      QueryTest.checkAnswer(resultDf, Row(0, 0, 0, 0) :: Nil)
+      QueryTest.checkAnswer(resultDf, (0 to 5).map(i => Row(i, i, i, i)))
       val finalPlan = resultDf.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       assert(finalPlan.collect {
@@ -344,7 +344,9 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
       val grouped = df.groupBy("key").agg(max("value").as("value"))
       val resultDf2 = grouped.groupBy(col("key") + 1).max("value")
         .union(grouped.groupBy(col("key") + 2).max("value"))
-      QueryTest.checkAnswer(resultDf2, Row(1, 0) :: Row(2, 0) :: Nil)
+      QueryTest.checkAnswer(resultDf2, Row(1, 0) :: Row(2, 0) :: Row(2, 1) :: Row(3, 1) ::
+        Row(3, 2) :: Row(4, 2) :: Row(4, 3) :: Row(5, 3) :: Row(5, 4) :: Row(6, 4) :: Row(6, 5) ::
+        Row(7, 5) :: Nil)
 
       val finalPlan2 = resultDf2.queryExecution.executedPlan
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
@@ -352,6 +354,17 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
       // The result stage has 2 children
       val level1Stages = finalPlan2.collect { case q: QueryStageExec => q }
       assert(level1Stages.length == 2)
+
+      assert(
+        finalPlan2.collect {
+          case r @ CoalescedShuffleReader() => r
+        }.length == 2, "finalPlan2")
+
+      level1Stages.foreach(qs =>
+        assert(qs.plan.collect {
+          case r @ CoalescedShuffleReader() => r
+        }.length == 1,
+          "Wrong CoalescedShuffleReader below " + qs.simpleString(3)))
 
       val leafStages = level1Stages.flatMap { stage =>
         // All of the child stages of result stage have only one child stage.
@@ -368,7 +381,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
       }
       assert(reusedStages.length == 1)
     }
-    withSparkSession(test, 4, None)
+    withSparkSession(test, 400, None)
   }
 
   test("Do not reduce the number of shuffle partition for repartition") {
