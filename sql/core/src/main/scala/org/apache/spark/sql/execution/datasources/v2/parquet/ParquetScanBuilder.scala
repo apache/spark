@@ -21,9 +21,10 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitioningAwareFileIndex}
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, ParquetOptions, SparkToParquetSchemaConverter}
+import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -35,8 +36,8 @@ case class ParquetScanBuilder(
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
   extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
-  val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
   lazy val hadoopConf = {
+    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
     sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
   }
@@ -49,11 +50,6 @@ case class ParquetScanBuilder(
     val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
     val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
-    val parquetOptions = new ParquetOptions(caseSensitiveMap, sparkSession.sessionState.conf)
-    val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
-      // Metadata of parquet files (spark version, for instance) is not available at the moment
-      _ => null,
-      parquetOptions.datetimeRebaseModeInRead)
     val parquetSchema =
       new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
     val parquetFilters = new ParquetFilters(
@@ -64,7 +60,9 @@ case class ParquetScanBuilder(
       pushDownStringStartWith,
       pushDownInFilterThreshold,
       isCaseSensitive,
-      datetimeRebaseMode)
+      // The rebase mode doesn't matter here because the filters are used to determine
+      // whether they is convertible.
+      LegacyBehaviorPolicy.CORRECTED)
     parquetFilters.convertibleFilters(this.filters).toArray
   }
 
