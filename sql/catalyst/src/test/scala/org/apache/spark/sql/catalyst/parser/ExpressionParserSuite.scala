@@ -491,18 +491,36 @@ class ExpressionParserSuite extends AnalysisTest {
       checkTimestampNTZAndLTZ()
     }
     // Interval.
-    val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
-    assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
-    assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
-    intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
-    assertEqual(
-      "-interval '3 month 1 hour'",
-      UnaryMinus(Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))))
-    val intervalStrWithAllUnits = "1 year 3 months 2 weeks 2 days 1 hour 3 minutes 2 seconds " +
-      "100 millisecond 200 microseconds"
-    assertEqual(
-      s"interval '$intervalStrWithAllUnits'",
-      Literal(IntervalUtils.stringToInterval(intervalStrWithAllUnits)))
+    val ymIntervalLiteral = Literal.create(Period.of(1, 2, 0), YearMonthIntervalType())
+    assertEqual("InterVal 'interval 1 year 2 month'", ymIntervalLiteral)
+    assertEqual("INTERVAL '1 year 2 month'", ymIntervalLiteral)
+    intercept("Interval 'interval 1 yearsss 2 monthsss'",
+      "Cannot parse the INTERVAL value: interval 1 yearsss 2 monthsss")
+    assertEqual("-interval '1 year 2 month'", UnaryMinus(ymIntervalLiteral))
+    val dtIntervalLiteral = Literal.create(
+      Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4).plusMillis(5).plusNanos(6000))
+    assertEqual("InterVal 'interval 1 day 2 hour 3 minute 4.005006 second'", dtIntervalLiteral)
+    assertEqual("INTERVAL '1 day 2 hour 3 minute 4.005006 second'", dtIntervalLiteral)
+    intercept("Interval 'interval 1 daysss 2 hoursss'",
+      "Cannot parse the INTERVAL value: interval 1 daysss 2 hoursss")
+    assertEqual("-interval '1 day 2 hour 3 minute 4.005006 second'", UnaryMinus(dtIntervalLiteral))
+    intercept("INTERVAL '1 year 2 second'",
+      "Cannot mix year-month and day-time fields: INTERVAL '1 year 2 second'")
+
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      val intervalLiteral = Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))
+      assertEqual("InterVal 'interval 3 month 1 hour'", intervalLiteral)
+      assertEqual("INTERVAL '3 month 1 hour'", intervalLiteral)
+      intercept("Interval 'interval 3 monthsss 1 hoursss'", "Cannot parse the INTERVAL value")
+      assertEqual(
+        "-interval '3 month 1 hour'",
+        UnaryMinus(Literal(IntervalUtils.stringToInterval("interval 3 month 1 hour"))))
+      val intervalStrWithAllUnits = "1 year 3 months 2 weeks 2 days 1 hour 3 minutes 2 seconds " +
+        "100 millisecond 200 microseconds"
+      assertEqual(
+        s"interval '$intervalStrWithAllUnits'",
+        Literal(IntervalUtils.stringToInterval(intervalStrWithAllUnits)))
+    }
 
     // Binary.
     assertEqual("X'A'", Literal(Array(0x0a).map(_.toByte)))
