@@ -793,7 +793,7 @@ case class SessionWindowStateStoreSaveExec(
   private def putToStore(
       baseIter: Iterator[InternalRow],
       store: StateStore,
-      needFilter: Boolean) {
+      needFilter: Boolean): Unit = {
     val iterPutToStore = iteratorPutToStore(baseIter, store, needFilter, false)
     while (iterPutToStore.hasNext) {
       iterPutToStore.next()
