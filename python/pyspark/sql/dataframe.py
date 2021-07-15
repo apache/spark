@@ -1982,7 +1982,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         if subset is None:
             jdf = self._jdf.dropDuplicates()
-        elif not isinstance(subset, list):
+        elif isinstance(subset, str):
+            subset = [subset]
+        elif not isinstance(subset, (list, tuple)):
             raise TypeError("Parameter 'subset' must be a list of columns")
         else:
             jdf = self._jdf.dropDuplicates(self._jseq(subset))

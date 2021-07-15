@@ -67,6 +67,33 @@ class DataFrameTests(ReusedSQLTestCase):
         pydoc.render_doc(df.foo)
         pydoc.render_doc(df.take(1))
 
+    
+    def test_dropDuplicates(self):
+        schema = StructType([
+            StructField("name", StringType(), True),
+            StructField("age", IntegerType(), True)])
+
+        # shouldn't drop a non-null row
+        self.assertEqual(self.spark.createDataFrame(
+            [(u'Alice', 50), (u'Alice', 60)], schema).dropDuplicates().count(),
+            2)
+        
+        self.assertEqual(self.spark.createDataFrame(
+            [(u'Alice', 50), (u'Alice', 60)], schema).dropDuplicates("name").count(),
+            1)
+        
+        self.assertEqual(self.spark.createDataFrame(
+            [(u'Alice', 50), (u'Alice', 60)], schema).dropDuplicates(["name"]).count(),
+            1)
+
+        self.assertEqual(self.spark.createDataFrame(
+            [(u'Alice', 50), (u'Alice', 60)], schema).dropDuplicates(["name", "age"]).count(),
+            2)
+
+        with self.assertRaises(TypeError):
+            self.spark.createDataFrame([(u'Alice', 50), (u'Alice', 60)], schema).dropDuplicates("name", "age").count()
+
+
     def test_dropna(self):
         schema = StructType([
             StructField("name", StringType(), True),
