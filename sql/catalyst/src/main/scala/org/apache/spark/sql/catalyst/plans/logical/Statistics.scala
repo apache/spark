@@ -127,10 +127,10 @@ case class ColumnStat(
       updatedColumnStatOpt: Option[ColumnStat] = None): ColumnStat = {
     val updatedColumnStat = updatedColumnStatOpt.getOrElse(this)
     val newDistinctCount = EstimationUtils.updateStat(oldNumRows, newNumRows,
-      distinctCount.get, updatedColumnStat.distinctCount)
+      distinctCount.get, updatedColumnStat.distinctCount.get)
     val newNullCount = EstimationUtils.updateStat(oldNumRows, newNumRows,
-      nullCount.get, updatedColumnStat.nullCount)
-    updatedColumnStat.copy(distinctCount = newDistinctCount, nullCount = newNullCount)
+      nullCount.get, updatedColumnStat.nullCount.get)
+    updatedColumnStat.copy(distinctCount = Some(newDistinctCount), nullCount = Some(newNullCount))
   }
 }
 
