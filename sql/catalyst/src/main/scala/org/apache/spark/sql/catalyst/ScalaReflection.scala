@@ -156,65 +156,6 @@ object ScalaReflection extends ScalaReflection {
   }
 
   /**
-   * [SPARK-20384] Determine params for a give constructor type, handling unwrapping param
-   * types for value class.
-   *
-   * From doc on value class: https://docs.scala-lang.org/overviews/core/value-classes.html
-   * Given: `class Wrapper(val underlying: Int) extends AnyVal`,
-   *
-   * 1) "The type at compile time is `Wrapper`, but at runtime, the representation is an `Int`"
-   * This implies that when our struct has a field of value class, the generated code
-   * should support the underlying type during runtime execution.
-   *
-   * 2) `Wrapper` "must be instantiated... when a value class is used as a type argument".
-   * This implies that scala.Tuple[Wrapper, ...], Seq[Wrapper], Map[String, Wrapper],
-   * Option[Wrapper] will still contain Wrapper` as-is in during runtime instead of `Int`.
-   *
-   * From 2), out of those generic types, only Tuple is considered a type with constructor, so
-   * no unwrapping is done.
-   *
-   * @param tpe          field type of this constructor
-   * @param isTupleType  whether the constructor is tuple
-   */
-  private def getConstructorUnwrappedParameters(tpe: Type, isTupleType: Boolean):
-  Seq[(String, Type)] = {
-    val params = getConstructorParameters(tpe)
-    if (isTupleType) {
-      params
-    } else {
-      params.map(unwrapValueClassParam)
-    }
-  }
-
-  /**
-   * [SPARK-20384] Determine params for a give constructor type, handling unwrapping param
-   * types for value class.
-   *
-   * @param tpe          field type of this constructor
-   * @param originalType  original type to check for tuple
-   * @return
-   */
-  private def getConstructorUnwrappedParameters(tpe: Type, originalType: Type):
-  Seq[(String, Type)] = {
-    getConstructorUnwrappedParameters(tpe, isTupleType(originalType))
-  }
-
-  private def isTupleType(tpe: Type) = {
-    val cls = ScalaReflection.getClassFromType(tpe)
-    cls.getName startsWith "scala.Tuple"
-  }
-
-  private def unwrapValueClassParam(param: (String, `Type`)): (String, `Type`) = {
-    val (name, tpe) = param
-    val unwrappedTpe = if (tpe.typeSymbol.asClass.isDerivedValueClass) {
-      getConstructorParameters(tpe.dealias).head._2
-    } else {
-      tpe
-    }
-    (name, unwrappedTpe)
-  }
-
-  /**
    * Returns an expression that can be used to deserialize a Spark SQL representation to an object
    * of type `T` with a compatible schema. The Spark SQL representation is located at ordinal 0 of
    * a row, i.e., `GetColumnByOrdinal(0, _)`. Nested classes will have their fields accessed using
@@ -417,17 +358,17 @@ object ScalaReflection extends ScalaReflection {
         Invoke(obj, "deserialize", ObjectType(udt.userClass), path :: Nil)
 
       case t if definedByConstructorParams(t) =>
-        val cls = ScalaReflection.getClassFromType(tpe)
-        val isTypeTuple = isTupleType(tpe)
-        val unwrappedParams = getConstructorUnwrappedParameters(t, isTypeTuple)
+        val params = getConstructorParameters(t)
 
-        val arguments = unwrappedParams.zipWithIndex.map { case ((fieldName, fieldType), i) =>
+        val cls = getClassFromType(tpe)
+
+        val arguments = params.zipWithIndex.map { case ((fieldName, fieldType), i) =>
           val Schema(dataType, nullable) = schemaFor(fieldType)
           val clsName = getClassNameFromType(fieldType)
           val newTypePath = walkedTypePath.recordField(clsName, fieldName)
 
           // For tuples, we based grab the inner fields by ordinal instead of name.
-          val newPath = if (isTypeTuple) {
+          val newPath = if (cls.getName startsWith "scala.Tuple") {
             deserializerFor(
               fieldType,
               addToPathOrdinal(path, i, dataType, newTypePath),
@@ -643,8 +584,8 @@ object ScalaReflection extends ScalaReflection {
           throw QueryExecutionErrors.cannotHaveCircularReferencesInClassError(t.toString)
         }
 
-        val unwrappedParams = getConstructorUnwrappedParameters(t, tpe)
-        val fields = unwrappedParams.map { case (fieldName, fieldType) =>
+        val params = getConstructorParameters(t)
+        val fields = params.map { case (fieldName, fieldType) =>
           if (SourceVersion.isKeyword(fieldName) ||
               !SourceVersion.isIdentifier(encodeFieldNameToIdentifier(fieldName))) {
             throw QueryExecutionErrors.cannotUseInvalidJavaIdentifierAsFieldNameError(
@@ -847,9 +788,9 @@ object ScalaReflection extends ScalaReflection {
       case t if isSubtype(t, definitions.ByteTpe) => Schema(ByteType, nullable = false)
       case t if isSubtype(t, definitions.BooleanTpe) => Schema(BooleanType, nullable = false)
       case t if definedByConstructorParams(t) =>
-        val unwrappedParams = getConstructorUnwrappedParameters(t, tpe)
+        val params = getConstructorParameters(t)
         Schema(StructType(
-          unwrappedParams.map { case (fieldName, fieldType) =>
+          params.map { case (fieldName, fieldType) =>
             val Schema(dataType, nullable) = schemaFor(fieldType)
             StructField(fieldName, dataType, nullable)
           }), nullable = true)
@@ -1015,6 +956,19 @@ trait ScalaReflection extends Logging {
     tag.in(mirror).tpe.dealias
   }
 
+  private def isValueClass(tpe: Type): Boolean = {
+    tpe.typeSymbol.asClass.isDerivedValueClass
+  }
+
+  private def isTypeParameter(tpe: Type): Boolean = {
+    tpe.typeSymbol.isParameter
+  }
+
+  /** Returns the name and type of the underlying parameter of value class `tpe`. */
+  private def getUnderlyingTypeOfValueClass(tpe: `Type`): Type = {
+    getConstructorParameters(tpe).head._2
+  }
+
   /**
    * Returns the parameter names and types for the primary constructor of this type.
    *
@@ -1026,15 +980,17 @@ trait ScalaReflection extends Logging {
     val formalTypeArgs = dealiasedTpe.typeSymbol.asClass.typeParams
     val TypeRef(_, _, actualTypeArgs) = dealiasedTpe
     val params = constructParams(dealiasedTpe)
-    // if there are type variables to fill in, do the substitution (SomeClass[T] -> SomeClass[Int])
-    if (actualTypeArgs.nonEmpty) {
-      params.map { p =>
-        p.name.decodedName.toString ->
-          p.typeSignature.substituteTypes(formalTypeArgs, actualTypeArgs)
-      }
-    } else {
-      params.map { p =>
-        p.name.decodedName.toString -> p.typeSignature
+    params.map { p =>
+      val paramTpe = p.typeSignature
+      if (isTypeParameter(paramTpe)) {
+        // if there are type variables to fill in, do the substitution
+        // (SomeClass[T] -> SomeClass[Int])
+        p.name.decodedName.toString -> paramTpe.substituteTypes(formalTypeArgs, actualTypeArgs)
+      } else if (isValueClass(paramTpe)) {
+        // Replace value class with underlying type
+        p.name.decodedName.toString -> getUnderlyingTypeOfValueClass(paramTpe)
+      } else {
+        p.name.decodedName.toString -> paramTpe
       }
     }
   }
