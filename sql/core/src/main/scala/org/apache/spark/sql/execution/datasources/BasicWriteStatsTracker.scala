@@ -44,6 +44,7 @@ case class BasicWriteTaskStats(
     numRows: Long)
   extends WriteTaskStats
 
+
 /**
  * Simple [[WriteTaskStatsTracker]] implementation that produces [[BasicWriteTaskStats]].
  */
