@@ -24,6 +24,7 @@ import java.util.*;
 
 import org.apache.spark.*;
 import org.apache.spark.shuffle.ShuffleChecksumTestHelper;
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper;
 import org.mockito.stubbing.Answer;
 import scala.*;
 import scala.collection.Iterator;
@@ -298,10 +299,13 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   @Test
   public void writeChecksumFileWithoutSpill() throws Exception {
     IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
-    File checksumFile = new File(tempDir, "checksum");
+    ShuffleChecksumBlockId checksumBlockId =
+      new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
+    File checksumFile = new File(tempDir,
+      ShuffleChecksumHelper.getChecksumFileName(checksumBlockId, conf));
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
-    when(diskBlockManager.getFile(new ShuffleChecksumBlockId(shuffleDep.shuffleId(), 0, 0)))
+    when(diskBlockManager.getFile(checksumFile.getName()))
       .thenReturn(checksumFile);
     when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
       .thenReturn(dataFile);
@@ -324,10 +328,12 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   @Test
   public void writeChecksumFileWithSpill() throws Exception {
     IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
-    File checksumFile = new File(tempDir, "checksum");
+    ShuffleChecksumBlockId checksumBlockId =
+      new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
+    File checksumFile = new File(tempDir, ShuffleChecksumHelper.getChecksumFileName(checksumBlockId, conf));
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
-    when(diskBlockManager.getFile((BlockId) any())).thenReturn(checksumFile);
+    when(diskBlockManager.getFile(eq(checksumFile.getName()))).thenReturn(checksumFile);
     when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
       .thenReturn(dataFile);
     when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0)))

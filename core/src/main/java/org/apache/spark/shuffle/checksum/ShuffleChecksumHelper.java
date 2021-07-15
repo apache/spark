@@ -90,7 +90,7 @@ public class ShuffleChecksumHelper {
   public static Checksum getChecksumByFileExtension(String fileName) throws SparkException {
     int index = fileName.lastIndexOf(".");
     String algorithm = fileName.substring(index + 1);
-    return getChecksumByAlgorithm(1, algorithm)[1];
+    return getChecksumByAlgorithm(1, algorithm)[0];
   }
 
   public static String getChecksumFileName(ShuffleChecksumBlockId blockId, SparkConf conf) {
