@@ -197,9 +197,12 @@ private class PushBasedFetchHelper(
           localShuffleMergerBlockMgrId)
       }
     } else {
-      logDebug(s"Asynchronous fetch the push-merged-local blocks without cached merged dirs")
+      // Push-based shuffle is only enabled when the ESS is enabled. If ESS is not enabled, then
+      // there will not be any push-merged blocks for the iterator to fetch.
+      logDebug(s"Asynchronous fetch the push-merged-local blocks without cached merged " +
+        s"dirs to ESS")
       hostLocalDirManager.getHostLocalDirs(localShuffleMergerBlockMgrId.host,
-        localShuffleMergerBlockMgrId.port, Array(SHUFFLE_MERGER_IDENTIFIER)) {
+        blockManager.externalShuffleServicePort, Array(SHUFFLE_MERGER_IDENTIFIER)) {
         case Success(dirs) =>
           logDebug(s"Fetched merged dirs in " +
             s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")

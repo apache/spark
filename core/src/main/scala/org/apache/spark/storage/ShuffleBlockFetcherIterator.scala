@@ -386,7 +386,7 @@ final class ShuffleBlockFetcherIterator(
         if (address.host == blockManager.blockManagerId.host) {
           numBlocksToFetch += blockInfos.size
           pushMergedLocalBlocks ++= blockInfos.map(_._1)
-          pushMergedLocalBlockBytes += blockInfos.map(_._3).sum
+          pushMergedLocalBlockBytes += blockInfos.map(_._2).sum
         } else {
           collectFetchRequests(address, blockInfos, collectedRemoteRequests)
         }
