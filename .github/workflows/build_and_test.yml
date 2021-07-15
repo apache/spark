@@ -301,6 +301,7 @@ jobs:
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
+      PYSPARK_DRIVER_PYTHON: python3.9
     container:
       image: dongjoon/apache-spark-github-action-image:20210602
     steps:
