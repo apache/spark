@@ -11,12 +11,46 @@
     "message" : [ "Found duplicate keys '%s'" ],
     "sqlState" : "23000"
   },
+  "GROUPING_COLUMN_MISMATCH" : {
+    "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
+    "sqlState" : "42000"
+  },
+  "GROUPING_ID_COLUMN_MISMATCH" : {
+    "message" : [ "Columns of grouping_id (%s) does not match grouping columns (%s)" ],
+    "sqlState" : "42000"
+  },
+  "GROUPING_SIZE_LIMIT_EXCEEDED" : {
+    "message" : [ "Grouping sets size cannot be greater than %s" ]
+  },
+  "IF_PARTITION_NOT_EXISTS_UNSUPPORTED" : {
+    "message" : [ "Cannot write, IF NOT EXISTS is not supported for table: %s" ]
+  },
+  "INCOMPARABLE_PIVOT_COLUMN" : {
+    "message" : [ "Invalid pivot column '%s'. Pivot columns must be comparable." ],
+    "sqlState" : "42000"
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
     "sqlState" : "42000"
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
+    "sqlState" : "42000"
+  },
+  "MISSING_STATIC_PARTITION_COLUMN" : {
+    "message" : [ "Unknown static partition column: %s" ],
+    "sqlState" : "42000"
+  },
+  "NON_LITERAL_PIVOT_VALUES" : {
+    "message" : [ "Literal expressions required for pivot values, found '%s'" ],
+    "sqlState" : "42000"
+  },
+  "NON_PARTITION_COLUMN" : {
+    "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
+    "sqlState" : "42000"
+  },
+  "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
+    "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
     "sqlState" : "42000"
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
