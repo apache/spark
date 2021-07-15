@@ -2042,7 +2042,7 @@ def trunc(date, format):
     ----------
     date : :class:`~pyspark.sql.Column` or str
     format : str
-        'year', 'yyyy', 'yy' or 'month', 'mon', 'mm'
+        'year', 'yyyy', 'yy' or 'month', 'mon', 'mm', or 'week' or 'quarter'
 
     Examples
     --------
