@@ -16,7 +16,7 @@
 #
 
 from itertools import chain
-from typing import Any, Union
+from typing import Any, Union, cast
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -41,8 +41,12 @@ class CategoricalOps(DataTypeOps):
 
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""
-        return pd.Categorical.from_codes(
-            col, categories=self.dtype.categories, ordered=self.dtype.ordered
+        return pd.Series(
+            pd.Categorical.from_codes(
+                col,
+                categories=cast(CategoricalDtype, self.dtype).categories,
+                ordered=cast(CategoricalDtype, self.dtype).ordered,
+            )
         )
 
     def prepare(self, col: pd.Series) -> pd.Series:
@@ -52,10 +56,10 @@ class CategoricalOps(DataTypeOps):
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, _ = pandas_on_spark_type(dtype)
 
-        if isinstance(dtype, CategoricalDtype) and dtype.categories is None:
+        if isinstance(dtype, CategoricalDtype) and cast(CategoricalDtype, dtype).categories is None:
             return index_ops.copy()
 
-        categories = index_ops.dtype.categories
+        categories = cast(CategoricalDtype, index_ops.dtype).categories
         if len(categories) == 0:
             scol = SF.lit(None)
         else:
@@ -84,7 +88,7 @@ class CategoricalOps(DataTypeOps):
 
 
 def _non_equality_comparison_input_check(left: IndexOpsLike, right: Any) -> None:
-    if not left.dtype.ordered:
+    if not cast(CategoricalDtype, left.dtype).ordered:
         raise TypeError("Unordered Categoricals can only compare equality or not.")
     if isinstance(right, IndexOpsMixin) and isinstance(right.dtype, CategoricalDtype):
         if hash(left.dtype) != hash(right.dtype):

@@ -2020,11 +2020,11 @@ def get_dummies(
         if drop_first:
             values = values[1:]
 
-        def column_name(value: str) -> str:
+        def column_name(v: Any) -> Name:
             if prefix is None or cast(List[str], prefix)[i] == "":
-                return value
+                return v
             else:
-                return "{}{}{}".format(cast(List[str], prefix)[i], prefix_sep, value)
+                return "{}{}{}".format(cast(List[str], prefix)[i], prefix_sep, v)
 
         for value in values:
             remaining_columns.append(
