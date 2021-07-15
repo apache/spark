@@ -59,11 +59,11 @@ object EstimationUtils {
       oldNumRows: BigInt,
       newNumRows: BigInt,
       oldStat: BigInt,
-      updatedStatOpt: Option[BigInt]): BigInt = {
+      updatedStatOpt: Option[BigInt]): Option[BigInt] = {
     if (updatedStatOpt.forall(_ > 1) && newNumRows < oldNumRows) {
-      ceil(BigDecimal(oldStat) * BigDecimal(newNumRows) / BigDecimal(oldNumRows))
+      Some(ceil(BigDecimal(oldStat) * BigDecimal(newNumRows) / BigDecimal(oldNumRows)))
     } else {
-      updatedStatOpt.getOrElse(oldStat)
+      updatedStatOpt
     }
   }
 

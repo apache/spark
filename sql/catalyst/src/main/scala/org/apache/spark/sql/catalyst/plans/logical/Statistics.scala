@@ -130,8 +130,7 @@ case class ColumnStat(
       distinctCount.get, updatedColumnStat.distinctCount)
     val newNullCount = EstimationUtils.updateStat(oldNumRows, newNumRows,
       nullCount.get, updatedColumnStat.nullCount)
-    updatedColumnStat.copy(
-      distinctCount = Some(newDistinctCount), nullCount = Some(newNullCount))
+    updatedColumnStat.copy(distinctCount = newDistinctCount, nullCount = newNullCount)
   }
 }
 
