@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.streaming.StreamingSymmetricHashJoinHelper._
 import org.apache.spark.sql.execution.streaming.state._
@@ -411,12 +411,12 @@ object FlatMapGroupsWithStateExec {
   }
 
   /**
-   * Special handling for when the child relation is a batch relation.
+   * Plan logical flatmapGroupsWIthState for batch queries
    * If the initial state is provided, we create an instance of the CoGroupExec, if the initial
    * state is not provided we create an instance of the MapGroupsExec
    */
   // scalastyle:off argcount
-  def forBatch(
+  def generateSparkPlanForBatchQueries(
       userFunc: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
       keyDeserializer: Expression,
       valueDeserializer: Expression,
@@ -438,12 +438,12 @@ object FlatMapGroupsWithStateExec {
       val func = (keyRow: Any, values: Iterator[Any], states: Iterator[Any]) => {
         // Check if there is only one state for every key.
         var foundInitialStateForKey = false
-        val optionalState = states.map { initialState =>
+        val optionalState = states.map { stateValue =>
           if (foundInitialStateForKey) {
             foundDuplicateInitialKeyException()
           }
           foundInitialStateForKey = true
-          initialState
+          stateValue
         }.toSeq
 
         // Create group state object
@@ -458,12 +458,10 @@ object FlatMapGroupsWithStateExec {
         // Call user function with the state and values for this key
         userFunc(keyRow, values, groupState)
       }
-      new CoGroupExec(
-          func, keyDeserializer, valueDeserializer, initialStateDeserializer, groupingAttributes,
-          initialStateGroupAttrs, dataAttributes, initialStateDataAttrs, outputObjAttr,
-          child, initialState) {
-        override def outputPartitioning: Partitioning = child.outputPartitioning
-      }
+      CoGroupExec(
+        func, keyDeserializer, valueDeserializer, initialStateDeserializer, groupingAttributes,
+        initialStateGroupAttrs, dataAttributes, initialStateDataAttrs, outputObjAttr,
+        child, initialState)
     } else {
       MapGroupsExec(
         userFunc, keyDeserializer, valueDeserializer, groupingAttributes,

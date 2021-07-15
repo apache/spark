@@ -674,7 +674,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           f, keyDeserializer, valueDeserializer, grouping, data, output, stateEncoder, outputMode,
           isFlatMapGroupsWithState, timeout, hasInitialState, initialStateGroupAttrs,
           initialStateDataAttrs, initialStateDeserializer, initialState, child) =>
-        FlatMapGroupsWithStateExec.forBatch(
+        FlatMapGroupsWithStateExec.generateSparkPlanForBatchQueries(
           f, keyDeserializer, valueDeserializer, initialStateDeserializer, grouping,
           initialStateGroupAttrs, data, initialStateDataAttrs, output, timeout,
           hasInitialState, planLater(initialState), planLater(child)
