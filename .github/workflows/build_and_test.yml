@@ -207,6 +207,18 @@ jobs:
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           pyspark-coursier-
+    - name: Install Python 3.6
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.6
+        architecture: x64
+    # This step takes much less time (~30s) than other Python versions so it is not included
+    # in the Docker image being used. There is also a technical issue to install Python 3.6 on
+    # Ubuntu 20.04. See also SPARK-33162.
+    - name: Install Python packages (Python 3.6)
+      run: |
+        python3.6 -m pip install numpy 'pyarrow<4.0.0' pandas scipy xmlrunner 'plotly>=4.8'
+        python3.6 -m pip list
     - name: List Python packages (Python 3.9)
       run: |
         python3.9 -m pip list
@@ -399,7 +411,6 @@ jobs:
       run: |
         cd docs
         bundle exec jekyll build
-
   java-11-17:
     name: Java ${{ matrix.java }} build with Maven
     strategy:
@@ -453,7 +464,6 @@ jobs:
         # It uses Maven's 'install' intentionally, see https://github.com/apache/spark/pull/26414.
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Djava.version=${JAVA_VERSION/-ea} install
         rm -rf ~/.m2/repository/org/apache/spark
-
   scala-213:
     name: Scala 2.13 build with SBT
     runs-on: ubuntu-20.04
@@ -497,7 +507,6 @@ jobs:
       run: |
         ./dev/change-scala-version.sh 2.13
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile test:compile
-
   hadoop-2:
     name: Hadoop 2 build with SBT
     runs-on: ubuntu-20.04
@@ -540,7 +549,6 @@ jobs:
     - name: Build with SBT
       run: |
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Phadoop-2.7 compile test:compile
-
   tpcds-1g:
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-20.04
