@@ -330,7 +330,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
-    File checksumFile = new File(tempDir, ShuffleChecksumHelper.getChecksumFileName(checksumBlockId, conf));
+    File checksumFile =
+      new File(tempDir, ShuffleChecksumHelper.getChecksumFileName(checksumBlockId, conf));
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
     when(diskBlockManager.getFile(eq(checksumFile.getName()))).thenReturn(checksumFile);
