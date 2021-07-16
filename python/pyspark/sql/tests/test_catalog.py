@@ -206,7 +206,7 @@ class CatalogTests(ReusedSQLTestCase):
             spark.sql("CREATE DATABASE some_db")
             with self.table("tab1", "some_db.tab2"):
                 self.assertFalse(spark.catalog.tableExists("tab1"))
-                self.assertFalse(spark.catalog.tableExists("tab2", "some_db"), [])
+                self.assertFalse(spark.catalog.tableExists("tab2", "some_db"))
                 spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
                 self.assertTrue(spark.catalog.tableExists("tab1"))
                 spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
