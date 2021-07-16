@@ -48,7 +48,9 @@ case class BasicWriteTaskStats(
 /**
  * Simple [[WriteTaskStatsTracker]] implementation that produces [[BasicWriteTaskStats]].
  */
-class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
+class BasicWriteTaskStatsTracker(
+    hadoopConf: Configuration,
+    taskCommitTimeMetrics: Option[SQLMetric] = None)
   extends WriteTaskStatsTracker with Logging {
 
   private[this] val partitions: mutable.ArrayBuffer[InternalRow] = mutable.ArrayBuffer.empty
@@ -155,7 +157,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
     numRows += 1
   }
 
-  override def getFinalStats(): WriteTaskStats = {
+  override def getFinalStats(taskCommitTime: Long): WriteTaskStats = {
     submittedFiles.foreach(updateFileStats)
     submittedFiles.clear()
 
@@ -170,6 +172,7 @@ class BasicWriteTaskStatsTracker(hadoopConf: Configuration)
         "This could be due to the output format not writing empty files, " +
         "or files being not immediately visible in the filesystem.")
     }
+    taskCommitTimeMetrics.foreach(_ += taskCommitTime)
     BasicWriteTaskStats(partitions.toSeq, numFiles, numBytes, numRows)
   }
 }
@@ -187,7 +190,9 @@ class BasicWriteJobStatsTracker(
   extends WriteJobStatsTracker {
 
   override def newTaskInstance(): WriteTaskStatsTracker = {
-    new BasicWriteTaskStatsTracker(serializableHadoopConf.value)
+    new BasicWriteTaskStatsTracker(
+      serializableHadoopConf.value,
+      Some(metrics(BasicWriteJobStatsTracker.DURATION_OF_TASK_COMMIT)))
   }
 
   override def processStats(stats: Seq[WriteTaskStats], jobCommitDuration: Long): Unit = {
@@ -214,12 +219,7 @@ class BasicWriteJobStatsTracker(
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
-      metrics.filter(_._1 != BasicWriteJobStatsTracker.DURATION_OF_TASK_WRITE_AND_COMMIT)
-        .values.toList)
-  }
-
-  override def updateTaskWriteAndCommitDuration(duration: Long): Unit = {
-    metrics(BasicWriteJobStatsTracker.DURATION_OF_TASK_WRITE_AND_COMMIT) += duration
+      metrics.filter(_._1 != BasicWriteJobStatsTracker.DURATION_OF_TASK_COMMIT).values.toList)
   }
 }
 
@@ -228,7 +228,7 @@ object BasicWriteJobStatsTracker {
   private val NUM_OUTPUT_BYTES_KEY = "numOutputBytes"
   private val NUM_OUTPUT_ROWS_KEY = "numOutputRows"
   private val NUM_PARTS_KEY = "numParts"
-  private val DURATION_OF_TASK_WRITE_AND_COMMIT = "taskWriteAndCommitDuration"
+  private val DURATION_OF_TASK_COMMIT = "taskCommitDuration"
   private val DURATION_JOB_COMMIT = "jobCommitDuration"
   /** XAttr key of the data length header added in HADOOP-17414. */
   val FILE_LENGTH_XATTR = "header.x-hadoop-s3a-magic-data-length"
@@ -240,8 +240,8 @@ object BasicWriteJobStatsTracker {
       NUM_OUTPUT_BYTES_KEY -> SQLMetrics.createSizeMetric(sparkContext, "written output"),
       NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
-      DURATION_OF_TASK_WRITE_AND_COMMIT ->
-        SQLMetrics.createTimingMetric(sparkContext, "duration of task write and commit"),
+      DURATION_OF_TASK_COMMIT ->
+        SQLMetrics.createTimingMetric(sparkContext, "duration of task commit"),
       DURATION_JOB_COMMIT->
         SQLMetrics.createTimingMetric(sparkContext, "duration of committing the job")
     )

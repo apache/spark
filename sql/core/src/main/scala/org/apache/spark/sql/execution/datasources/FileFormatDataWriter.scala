@@ -32,7 +32,7 @@ import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
  * Abstract class for writing out data in a single Spark task.
@@ -91,11 +91,14 @@ abstract class FileFormatDataWriter(
    * driver too and used to e.g. update the metrics in UI.
    */
   override def commit(): WriteTaskResult = {
-    releaseResources()
+    val (taskCommitMessage, taskCommitTime) = Utils.timeTakenMs {
+      releaseResources()
+      committer.commitTask(taskAttemptContext)
+    }
     val summary = ExecutedWriteSummary(
       updatedPartitions = updatedPartitions.toSet,
-      stats = statsTrackers.map(_.getFinalStats()))
-    WriteTaskResult(committer.commitTask(taskAttemptContext), summary)
+      stats = statsTrackers.map(_.getFinalStats(taskCommitTime)))
+    WriteTaskResult(taskCommitMessage, summary)
   }
 
   def abort(): Unit = {
