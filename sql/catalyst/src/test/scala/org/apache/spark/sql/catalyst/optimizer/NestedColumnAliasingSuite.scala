@@ -700,13 +700,15 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
         $"struct_data.search_params.col1".as("col1"),
         $"struct_data.search_params.col2".as("col2")).analyze
     val query = Optimize.execute(plan)
+    val alias = collectGeneratedAliases(query)
+
     val optimized = relation
-      .select(GetStructField('struct_data, 1, None).as("_extract_search_params"))
+      .select(GetStructField('struct_data, 1, None).as(alias(0)))
       .repartition(100)
       .select(
-        $"_extract_search_params".as("value"),
-        $"_extract_search_params.col1".as("col1"),
-        $"_extract_search_params.col2".as("col2")).analyze
+        $"${alias(0)}".as("value"),
+        $"${alias(0)}.col1".as("col1"),
+        $"${alias(0)}.col2".as("col2")).analyze
     comparePlans(optimized, query)
   }
 }
