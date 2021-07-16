@@ -171,17 +171,4 @@ class DisallowedConnectionProviderSuite
     assert(!providers.exists(_.isInstanceOf[DB2ConnectionProvider]))
     assert(providers.size === 5)
   }
-
-  test("Throw an error if the selected provider is disabled") {
-    val providers = ConnectionProvider.loadProviders()
-    // scalastyle:off
-    // debugging, will remove later
-    println("providers: " + providers + ", " + providers.map(_.name))
-    val err = intercept[IllegalArgumentException] {
-      ConnectionProvider.create(mock[Driver],
-        options("jdbc:db2://localhost/db2").parameters, Some("db2"))
-    }
-    assert(err.getMessage.contains("Empty list of JDBC connection providers"))
-    // scalastyle:on
-  }
 }
