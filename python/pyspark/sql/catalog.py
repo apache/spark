@@ -141,9 +141,9 @@ class Catalog(object):
 
         Parameters
         ----------
-        tableName : string
+        tableName : str
                     name of the table to check existence
-        dbName : string, optional
+        dbName : str, optional
                  name of the database to check table existence in.
                  If no database is specified, the current database is used
 
