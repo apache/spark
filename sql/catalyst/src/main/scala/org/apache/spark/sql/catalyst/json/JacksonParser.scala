@@ -406,7 +406,9 @@ class JacksonParser(
         case Some(index) =>
           try {
             val fieldValue = fieldConverters(index).apply(parser)
-            if (!schema(index).nullable && fieldValue == null) {
+            val isIllegal =
+              options.parseMode != PermissiveMode && !schema(index).nullable && fieldValue == null
+            if (isIllegal) {
               throw new IllegalSchemaArgumentException(
                 s"field ${schema(index).name} is not nullable but the parsed value is null.")
             }
@@ -425,20 +427,7 @@ class JacksonParser(
     }
 
     // When the input schema is setting to `nullable = false`, make sure the field is not null.
-    // As PERMISSIVE mode only works with nullable fields, we can skip this not nullable check when
-    // the mode is PERMISSIVE. (see FailureSafeParser.checkNullabilityForPermissiveMode)
-    val checkNotNullable =
-      badRecordException.isEmpty && !skipRow && options.parseMode != PermissiveMode
-    if (checkNotNullable) {
-      var index = 0
-      while (index < schema.length) {
-        if (!schema(index).nullable && row.isNullAt(index)) {
-          throw new IllegalSchemaArgumentException(
-            s"field ${schema(index).name} is not nullable but it's missing in one record.")
-        }
-        index += 1
-      }
-    }
+    checkNotNullableInRow(row, schema, skipRow, badRecordException)
 
     if (skipRow) {
       None
@@ -446,6 +435,28 @@ class JacksonParser(
       Some(row)
     } else {
       throw PartialResultException(row, badRecordException.get)
+    }
+  }
+
+  private lazy val checkNotNullableInRow = {
+    // As PERMISSIVE mode only works with nullable fields, we can skip this not nullable check when
+    // the mode is PERMISSIVE. (see FailureSafeParser.checkNullabilityForPermissiveMode)
+    if (options.parseMode != PermissiveMode) {
+      (row: GenericInternalRow, schema: StructType, skipRow: Boolean,
+          runtimeExceptionOption: Option[Throwable]) => {
+        if (runtimeExceptionOption.isEmpty && !skipRow) {
+          var index = 0
+          while (index < schema.length) {
+            if (!schema(index).nullable && row.isNullAt(index)) {
+              throw new IllegalSchemaArgumentException(
+                s"field ${schema(index).name} is not nullable but it's missing in one record.")
+            }
+            index += 1
+          }
+        }
+      }
+    } else {
+      (_: GenericInternalRow, _: StructType, _: Boolean, _: Option[Throwable]) => {}
     }
   }
 
