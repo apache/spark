@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, DynamicPruningExpression, Literal}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
@@ -71,7 +71,12 @@ case class PlanAdaptiveDynamicPruningFilters(
           val aggregate = Aggregate(Seq(alias), Seq(alias), buildPlan)
 
           val session = adaptivePlan.context.session
-          val sparkPlan = session.sessionState.planner.plan(ReturnAnswer(aggregate)).next()
+          val planner = session.sessionState.planner
+          // Here we can't call the QueryExecution.prepareExecutedPlan() method to
+          // get the sparkPlan as Non-AQE use case, which will cause the physical
+          // plan optimization rules be inserted twice, once in AQE framework and
+          // another in prepareExecutedPlan() method.
+          val sparkPlan = QueryExecution.createSparkPlan(session, planner, aggregate)
           val newAdaptivePlan = adaptivePlan.copy(inputPlan = sparkPlan)
           val values = SubqueryExec(name, newAdaptivePlan)
           DynamicPruningExpression(InSubqueryExec(value, values, exprId))
