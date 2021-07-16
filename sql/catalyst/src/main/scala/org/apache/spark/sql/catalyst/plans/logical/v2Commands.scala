@@ -1086,7 +1086,6 @@ case class AlterTableAddColumns(
 
   override def changes: Seq[TableChange] = {
     columnsToAdd.map { col =>
-      require(col.fieldName.resolved)
       require(col.position.isEmpty || col.position.get.resolved)
       TableChange.addColumn(
         col.name.toArray,
@@ -1120,7 +1119,6 @@ case class AlterTableReplaceColumns(
       TableChange.deleteColumn(Array(name))
     }
     val addChanges = columnsToAdd.map { col =>
-      require(col.fieldName.resolved)
       assert(col.position.isEmpty)
       TableChange.addColumn(
         col.name.toArray,
