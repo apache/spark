@@ -108,7 +108,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     case (_, b) => b
                   }
                   val output = groupAttrs ++ newOutput.drop(groupAttrs.length)
-                  
+
                   logInfo(
                     s"""
                        |Pushing operators to ${sHolder.relation.name}
