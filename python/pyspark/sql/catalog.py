@@ -133,12 +133,30 @@ class Catalog(object):
                 isBucket=jcolumn.isBucket()))
         return columns
 
-    @since(3.2)
     def tableExists(self, tableName, dbName=None):
         """Check if the table or view with the specified name exists.
         This can either be a temporary view or a table/view.
 
-        If no database is specified, the current database is used.
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        tableName : string
+                    name of the table to check existence
+        dbName : string, optional
+                 name of the database to check table existence in.
+                 If no database is specified, the current database is used
+
+        Returns
+        -------
+        Boolean indicating whether the table/view exist
+
+        Examples
+        --------
+        >>> spark.catalog.tableExists("unexisting_table")
+        False
+        >>> spark.catalog.tableExists("existing_table", "another_db")
+        True
         """
         if dbName is None:
             dbName = self.currentDatabase()
