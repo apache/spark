@@ -1066,7 +1066,7 @@ case class UnsetTableProperties(
     copy(table = newChild)
 }
 
-trait AlterTableCommand extends UnaryCommand {
+trait AlterTableColumnCommand extends UnaryCommand {
   def table: LogicalPlan
   def changes: Seq[TableChange]
   override def child: LogicalPlan = table
@@ -1077,7 +1077,7 @@ trait AlterTableCommand extends UnaryCommand {
  */
 case class AlterTableAddColumns(
     table: LogicalPlan,
-    columnsToAdd: Seq[QualifiedColType]) extends AlterTableCommand {
+    columnsToAdd: Seq[QualifiedColType]) extends AlterTableColumnCommand {
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   columnsToAdd.foreach { c =>
     failNullType(c.dataType)
@@ -1106,7 +1106,7 @@ case class AlterTableAddColumns(
  */
 case class AlterTableReplaceColumns(
     table: LogicalPlan,
-    columnsToAdd: Seq[QualifiedColType]) extends AlterTableCommand {
+    columnsToAdd: Seq[QualifiedColType]) extends AlterTableColumnCommand {
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   columnsToAdd.foreach { c =>
     failNullType(c.dataType)
@@ -1140,7 +1140,7 @@ case class AlterTableReplaceColumns(
  */
 case class AlterTableDropColumns(
     table: LogicalPlan,
-    columnsToDrop: Seq[FieldName]) extends AlterTableCommand {
+    columnsToDrop: Seq[FieldName]) extends AlterTableColumnCommand {
   override def changes: Seq[TableChange] = {
     columnsToDrop.map { col =>
       require(col.resolved, "FieldName should be resolved before it's converted to TableChange.")
@@ -1158,7 +1158,7 @@ case class AlterTableDropColumns(
 case class AlterTableRenameColumn(
     table: LogicalPlan,
     column: FieldName,
-    newName: String) extends AlterTableCommand {
+    newName: String) extends AlterTableColumnCommand {
   override def changes: Seq[TableChange] = {
     require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
     Seq(TableChange.renameColumn(column.name.toArray, newName))
@@ -1177,7 +1177,7 @@ case class AlterTableAlterColumn(
     dataType: Option[DataType],
     nullable: Option[Boolean],
     comment: Option[String],
-    position: Option[FieldPosition]) extends AlterTableCommand {
+    position: Option[FieldPosition]) extends AlterTableColumnCommand {
   import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   dataType.foreach(failNullType)
 

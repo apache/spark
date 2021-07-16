@@ -441,8 +441,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
-          case alter: AlterTableCommand if alter.table.resolved =>
-            checkAlterTableCommand(alter)
+          case alter: AlterTableColumnCommand if alter.table.resolved =>
+            checkAlterTableColumnCommand(alter)
 
           case _ => // Falls back to the following checks
         }
@@ -938,7 +938,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   /**
    * Validates the options used for alter table commands after table and columns are resolved.
    */
-  private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
+  private def checkAlterTableColumnCommand(alter: AlterTableColumnCommand): Unit = {
     def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
       if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
         alter.failAnalysis(s"Cannot $op column, because ${fieldNames.quoted} " +

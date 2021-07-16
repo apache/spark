@@ -269,7 +269,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRelations ::
       ResolveTables ::
       ResolvePartitionSpec ::
-      ResolveAlterTableCommands ::
+      ResolveAlterTableColumnCommands ::
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveReferences ::
@@ -3567,11 +3567,11 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   /**
    * Rule to mostly resolve, normalize and rewrite column names based on case sensitivity
-   * for alter table commands.
+   * for alter table column commands.
    */
-  object ResolveAlterTableCommands extends Rule[LogicalPlan] {
+  object ResolveAlterTableColumnCommands extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case a: AlterTableCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
+      case a: AlterTableColumnCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
         val table = a.table.asInstanceOf[ResolvedTable]
         a.transformExpressions {
           case u: UnresolvedFieldName => resolveFieldNames(table, u.name, Some(u))
@@ -3661,7 +3661,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       }.getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context))
     }
 
-    private def hasUnresolvedFieldName(a: AlterTableCommand): Boolean = {
+    private def hasUnresolvedFieldName(a: AlterTableColumnCommand): Boolean = {
       a.expressions.exists(_.find(_.isInstanceOf[UnresolvedFieldName]).isDefined)
     }
 
