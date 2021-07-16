@@ -886,8 +886,8 @@ final class ShuffleBlockFetcherIterator(
           //    blockId is a ShuffleBlockChunkId.
           // 2. Failure to read the push-merged-local meta. In this case, the blockId is
           //    ShuffleBlockId.
-          // 3. Failure to get the push-merged-local directories from the ESS. In this case, the
-          //    blockId is ShuffleBlockId.
+          // 3. Failure to get the push-merged-local directories from the external shuffle service.
+          //    In this case, the blockId is ShuffleBlockId.
           if (pushBasedFetchHelper.isRemotePushMergedBlockAddress(address)) {
             numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
             bytesInFlight -= size
