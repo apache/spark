@@ -93,6 +93,28 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(kcser.astype(str), pcser.astype(str))
 
+    def test_as_ordered_unordered(self):
+        pdf, psdf = self.df_pair
+
+        pser = pdf.a
+        psser = psdf.a
+
+        # as_ordered
+        self.assert_eq(pser.cat.as_ordered(), psser.cat.as_ordered())
+
+        pser.cat.as_ordered(inplace=True)
+        psser.cat.as_ordered(inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        # as_unordered
+        self.assert_eq(pser.cat.as_unordered(), psser.cat.as_unordered())
+
+        pser.cat.as_unordered(inplace=True)
+        psser.cat.as_unordered(inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
     def test_factorize(self):
         pser = pd.Series(["a", "b", "c", None], dtype=CategoricalDtype(["c", "a", "d", "b"]))
         psser = ps.from_pandas(pser)
