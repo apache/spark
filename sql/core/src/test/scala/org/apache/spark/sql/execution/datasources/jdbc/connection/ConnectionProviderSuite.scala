@@ -174,10 +174,14 @@ class DisallowedConnectionProviderSuite
 
   test("Throw an error if the selected provider is disabled") {
     val providers = ConnectionProvider.loadProviders()
+    // scalastyle:off
+    // debugging, will remove later
+    println("providers: " + providers + ", " + providers.map(_.name))
     val err = intercept[IllegalArgumentException] {
       ConnectionProvider.create(mock[Driver],
         options("jdbc:db2://localhost/db2").parameters, Some("db2"))
     }
     assert(err.getMessage.contains("Empty list of JDBC connection providers"))
+    // scalastyle:on
   }
 }

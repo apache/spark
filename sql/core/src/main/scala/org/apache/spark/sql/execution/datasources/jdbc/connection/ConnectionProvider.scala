@@ -61,6 +61,10 @@ protected abstract class ConnectionProviderBase extends Logging {
       options: Map[String, String],
       connectionProviderName: Option[String]): Connection = {
     val filteredProviders = providers.filter(_.canHandle(driver, options))
+    // scalastyle:off
+    println("Filtered providers: " + filteredProviders + ", " + filteredProviders.map(_.name) +
+      ", selected: " + connectionProviderName)
+    // scalastyle:on
 
     if (filteredProviders.isEmpty) {
       throw new IllegalArgumentException(
