@@ -684,6 +684,33 @@ class NestedColumnAliasingSuite extends SchemaPruningTest {
     ).analyze
     comparePlans(optimized2, expected2)
   }
+
+  test("SPARK-35972: NestedColumnAliasing should consider semantic equality") {
+    val dataType = new StructType()
+      .add(StructField("itemid", StringType))
+      .add(StructField("search_params", StructType(Seq(
+        StructField("col1", StringType),
+        StructField("col2", StringType)
+      ))))
+    val relation = LocalRelation('struct_data.struct(dataType))
+    val plan = relation
+      .repartition(100)
+      .select(
+        GetStructField('struct_data, 1, None).as("value"),
+        $"struct_data.search_params.col1".as("col1"),
+        $"struct_data.search_params.col2".as("col2")).analyze
+    val query = Optimize.execute(plan)
+    val alias = collectGeneratedAliases(query)
+
+    val optimized = relation
+      .select(GetStructField('struct_data, 1, None).as(alias(0)))
+      .repartition(100)
+      .select(
+        $"${alias(0)}".as("value"),
+        $"${alias(0)}.col1".as("col1"),
+        $"${alias(0)}.col2".as("col2")).analyze
+    comparePlans(optimized, query)
+  }
 }
 
 object NestedColumnAliasingSuite {
