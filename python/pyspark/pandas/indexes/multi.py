@@ -20,8 +20,7 @@ from functools import partial
 from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
 
 import pandas as pd
-from pandas.api.types import is_list_like
-from pandas.api.types import is_hashable
+from pandas.api.types import is_hashable, is_list_like
 
 from pyspark.sql import functions as F, Column, Window
 from pyspark.sql.types import DataType
@@ -790,12 +789,13 @@ class MultiIndex(Index):
         if sort:
             sdf_symdiff = sdf_symdiff.sort(*self._internal.index_spark_columns)
 
-        internal = InternalFrame(  # TODO: dtypes?
+        internal = InternalFrame(
             spark_frame=sdf_symdiff,
             index_spark_columns=[
                 scol_for(sdf_symdiff, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
+            index_fields=self._internal.index_fields,
         )
         result = cast(MultiIndex, DataFrame(internal).index)
 
@@ -1048,12 +1048,13 @@ class MultiIndex(Index):
         sdf_after = self.to_frame(name=index_name)[loc:].to_spark()
         sdf = sdf_before.union(sdf_middle).union(sdf_after)
 
-        internal = InternalFrame(  # TODO: dtypes?
+        internal = InternalFrame(
             spark_frame=sdf,
             index_spark_columns=[
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
+            index_fields=[field.copy(nullable=True) for field in self._internal.index_fields],
         )
         return DataFrame(internal).index
 
@@ -1114,8 +1115,11 @@ class MultiIndex(Index):
         elif not all(isinstance(item, tuple) for item in other):
             raise TypeError("other must be a MultiIndex or a list of tuples")
         else:
-            spark_frame_other = MultiIndex.from_tuples(list(other)).to_frame().to_spark()
+            other = MultiIndex.from_tuples(list(other))
+            spark_frame_other = cast(MultiIndex, other).to_frame().to_spark()
             keep_name = True
+
+        index_fields = self._index_fields_for_union_like(other, func_name="intersection")
 
         default_name = [SPARK_INDEX_NAME_FORMAT(i) for i in range(self.nlevels)]  # type: List
         spark_frame_self = self.to_frame(name=default_name).to_spark()
@@ -1124,10 +1128,12 @@ class MultiIndex(Index):
             index_names = self._internal.index_names
         else:
             index_names = None
-        internal = InternalFrame(  # TODO: dtypes?
+
+        internal = InternalFrame(
             spark_frame=spark_frame_intersected,
             index_spark_columns=[scol_for(spark_frame_intersected, col) for col in default_name],
             index_names=index_names,
+            index_fields=index_fields,
         )
         return cast(MultiIndex, DataFrame(internal).index)
 

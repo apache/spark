@@ -1960,8 +1960,8 @@ def months_between(date1, date2, roundOff=True):
     """
     Returns number of months between dates date1 and date2.
     If date1 is later than date2, then the result is positive.
-    If date1 and date2 are on the same day of month, or both are the last day of month,
-    returns an integer (time of day will be ignored).
+    A whole number is returned if both inputs have the same day of month or both are the last day
+    of their respective months. Otherwise, the difference is calculated assuming 31 days per month.
     The result is rounded off to 8 digits unless `roundOff` is set to `False`.
 
     .. versionadded:: 1.5.0
@@ -2045,7 +2045,9 @@ def trunc(date, format):
     ----------
     date : :class:`~pyspark.sql.Column` or str
     format : str
-        'year', 'yyyy', 'yy' or 'month', 'mon', 'mm'
+        'year', 'yyyy', 'yy' to truncate by year,
+        or 'month', 'mon', 'mm' to truncate by month
+        Other options are: 'week', 'quarter'
 
     Examples
     --------
@@ -2068,8 +2070,11 @@ def date_trunc(format, timestamp):
     Parameters
     ----------
     format : str
-        'year', 'yyyy', 'yy', 'month', 'mon', 'mm',
-        'day', 'dd', 'hour', 'minute', 'second', 'week', 'quarter'
+        'year', 'yyyy', 'yy' to truncate by year,
+        'month', 'mon', 'mm' to truncate by month,
+        'day', 'dd' to truncate by day,
+        Other options are:
+        'microsecond', 'millisecond', 'second', 'minute', 'hour', 'week', 'quarter'
     timestamp : :class:`~pyspark.sql.Column` or str
 
     Examples

@@ -772,11 +772,11 @@ class Index(IndexOpsMixin):
 
         Examples
         --------
-        >>> ki = ps.DataFrame({'a': ['a', 'b', 'c']}, index=[1, 2, None]).index
-        >>> ki
+        >>> idx = ps.Index([1, 2, None])
+        >>> idx
         Float64Index([1.0, 2.0, nan], dtype='float64')
 
-        >>> ki.fillna(0)
+        >>> idx.fillna(0)
         Float64Index([1.0, 2.0, 0.0], dtype='float64')
         """
         if not isinstance(value, (float, int, str, bool)):
@@ -1774,10 +1774,16 @@ class Index(IndexOpsMixin):
         """
         from pyspark.pandas.indexes.multi import MultiIndex
 
-        if type(self) is not type(other):
+        if isinstance(self, MultiIndex) != isinstance(other, MultiIndex):
             raise NotImplementedError(
-                "append() between Index & MultiIndex currently is not supported"
+                "append() between Index & MultiIndex is currently not supported"
             )
+        if self._internal.index_level != other._internal.index_level:
+            raise NotImplementedError(
+                "append() between MultiIndexs with different levels is currently not supported"
+            )
+
+        index_fields = self._index_fields_for_union_like(other, func_name="append")
 
         sdf_self = self._internal.spark_frame.select(self._internal.index_spark_columns)
         sdf_other = other._internal.spark_frame.select(other._internal.index_spark_columns)
@@ -1789,12 +1795,13 @@ class Index(IndexOpsMixin):
         else:
             index_names = None
 
-        internal = InternalFrame(  # TODO: dtypes?
+        internal = InternalFrame(
             spark_frame=sdf_appended,
             index_spark_columns=[
                 scol_for(sdf_appended, col) for col in self._internal.index_spark_column_names
             ],
             index_names=index_names,
+            index_fields=index_fields,
         )
 
         return DataFrame(internal).index
@@ -2200,6 +2207,34 @@ class Index(IndexOpsMixin):
         result = cast(pd.DataFrame, sdf.toPandas()).iloc[0, 0]
         return result if result is not None else np.nan
 
+    def _index_fields_for_union_like(
+        self: "Index", other: "Index", func_name: str
+    ) -> Optional[List[InternalField]]:
+        if self._internal.index_fields == other._internal.index_fields:
+            return self._internal.index_fields
+        elif all(
+            left.dtype == right.dtype
+            and (isinstance(left.dtype, CategoricalDtype) or left.spark_type == right.spark_type)
+            for left, right in zip(self._internal.index_fields, other._internal.index_fields)
+        ):
+            return [
+                left.copy(nullable=left.nullable or right.nullable)
+                if left.spark_type == right.spark_type
+                else InternalField(dtype=left.dtype)
+                for left, right in zip(self._internal.index_fields, other._internal.index_fields)
+            ]
+        elif any(
+            isinstance(field.dtype, CategoricalDtype)
+            for field in self._internal.index_fields + other._internal.index_fields
+        ):
+            # TODO: non-categorical or categorical with different categories
+            raise NotImplementedError(
+                "{}() between CategoricalIndex and non-categorical or "
+                "categorical with different categories is currently not supported".format(func_name)
+            )
+        else:
+            return None
+
     def union(
         self, other: Union[DataFrame, Series, "Index", List], sort: Optional[bool] = None
     ) -> "Index":
@@ -2243,28 +2278,24 @@ class Index(IndexOpsMixin):
 
         sort = True if sort is None else sort
         sort = validate_bool_kwarg(sort, "sort")
-        if type(self) is not type(other):
-            if isinstance(self, MultiIndex):
-                if not isinstance(other, list) or not all(
-                    [isinstance(item, tuple) for item in other]
-                ):
-                    raise TypeError("other must be a MultiIndex or a list of tuples")
-                other_idx = MultiIndex.from_tuples(other)  # type: Index
+        if isinstance(self, MultiIndex):
+            if isinstance(other, MultiIndex):
+                other_idx = other  # type: Index
+            elif isinstance(other, list) and all(isinstance(item, tuple) for item in other):
+                other_idx = MultiIndex.from_tuples(other)
             else:
-                if isinstance(other, MultiIndex):
-                    # TODO: We can't support different type of values in a single column for now.
-                    raise NotImplementedError(
-                        "Union between Index and MultiIndex is not yet supported"
-                    )
-                elif isinstance(other, Series):
-                    other_frame = other.to_frame()
-                    other_idx = other_frame.set_index(other_frame.columns[0]).index
-                elif isinstance(other, DataFrame):
-                    raise ValueError("Index data must be 1-dimensional")
-                else:
-                    other_idx = Index(other)
+                raise TypeError("other must be a MultiIndex or a list of tuples")
         else:
-            other_idx = cast(Index, other)
+            if isinstance(other, MultiIndex):
+                # TODO: We can't support different type of values in a single column for now.
+                raise NotImplementedError("Union between Index and MultiIndex is not yet supported")
+            elif isinstance(other, DataFrame):
+                raise ValueError("Index data must be 1-dimensional")
+            else:
+                other_idx = Index(other)
+
+        index_fields = self._index_fields_for_union_like(other_idx, func_name="union")
+
         sdf_self = self._internal.spark_frame.select(self._internal.index_spark_columns)
         sdf_other = other_idx._internal.spark_frame.select(other_idx._internal.index_spark_columns)
         sdf = sdf_self.union(sdf_other.subtract(sdf_self))
@@ -2272,12 +2303,14 @@ class Index(IndexOpsMixin):
             sdf = sdf.drop_duplicates()
         if sort:
             sdf = sdf.sort(*self._internal.index_spark_column_names)
-        internal = InternalFrame(  # TODO: dtypes?
+
+        internal = InternalFrame(
             spark_frame=sdf,
             index_spark_columns=[
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
+            index_fields=index_fields,
         )
 
         return DataFrame(internal).index
@@ -2358,16 +2391,20 @@ class Index(IndexOpsMixin):
         else:
             raise TypeError("Input must be Index or array-like")
 
+        index_fields = self._index_fields_for_union_like(other, func_name="intersection")
+
         spark_frame_self = self.to_frame(name=SPARK_DEFAULT_INDEX_NAME).to_spark()
         spark_frame_intersected = spark_frame_self.intersect(spark_frame_other)
         if keep_name:
             index_names = self._internal.index_names
         else:
             index_names = None
-        internal = InternalFrame(  # TODO: dtypes?
+
+        internal = InternalFrame(
             spark_frame=spark_frame_intersected,
             index_spark_columns=[scol_for(spark_frame_intersected, SPARK_DEFAULT_INDEX_NAME)],
             index_names=index_names,
+            index_fields=index_fields,
         )
 
         return DataFrame(internal).index
@@ -2428,16 +2465,17 @@ class Index(IndexOpsMixin):
 
         index_name = self._internal.index_spark_column_names[0]
         sdf_before = self.to_frame(name=index_name)[:loc].to_spark()
-        sdf_middle = Index([item]).to_frame(name=index_name).to_spark()
+        sdf_middle = Index([item], dtype=self.dtype).to_frame(name=index_name).to_spark()
         sdf_after = self.to_frame(name=index_name)[loc:].to_spark()
         sdf = sdf_before.union(sdf_middle).union(sdf_after)
 
-        internal = InternalFrame(  # TODO: dtype?
+        internal = InternalFrame(
             spark_frame=sdf,
             index_spark_columns=[
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
+            index_fields=[field.copy(nullable=True) for field in self._internal.index_fields],
         )
         return DataFrame(internal).index
 

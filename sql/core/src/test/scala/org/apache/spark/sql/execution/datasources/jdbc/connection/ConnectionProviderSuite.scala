@@ -20,10 +20,8 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 import java.sql.{Connection, Driver}
 import javax.security.auth.login.Configuration
 
-import org.mockito.Mockito._
-import org.scalatestplus.mockito.MockitoSugar
-
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.jdbc.JdbcConnectionProvider
 import org.apache.spark.sql.test.SharedSparkSession
 
@@ -162,5 +160,18 @@ class ConnectionProviderSuite
     assert(db2Config.getAppConfigurationEntry(db2AppEntry) != null)
 
     Configuration.setConfiguration(null)
+  }
+}
+
+class DisallowedConnectionProviderSuite extends SharedSparkSession {
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(
+      StaticSQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST.key, "db2")
+
+  test("Disabled provider must not be loaded") {
+    val providers = ConnectionProvider.loadProviders()
+    assert(!providers.exists(_.isInstanceOf[DB2ConnectionProvider]))
+    assert(providers.size === 5)
   }
 }
