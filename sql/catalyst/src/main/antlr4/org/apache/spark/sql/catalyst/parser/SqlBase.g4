@@ -195,7 +195,7 @@ statement
         multipartIdentifier AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
     | DROP TEMPORARY? FUNCTION (IF EXISTS)? multipartIdentifier        #dropFunction
-    | EXPLAIN (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
+    | EXPLAIN FINAL? (LOGICAL | FORMATTED | EXTENDED | CODEGEN | COST)?
         statement                                                      #explain
     | SHOW TABLES ((FROM | IN) multipartIdentifier)?
         (LIKE? pattern=STRING)?                                        #showTables
@@ -1103,6 +1103,7 @@ ansiNonReserved
     | EXTRACT
     | FIELDS
     | FILEFORMAT
+    | FINAL
     | FIRST
     | FOLLOWING
     | FORMAT
@@ -1347,6 +1348,7 @@ nonReserved
     | FILTER
     | FIELDS
     | FILEFORMAT
+    | FINAL
     | FIRST
     | FOLLOWING
     | FOR
@@ -1602,6 +1604,7 @@ FETCH: 'FETCH';
 FIELDS: 'FIELDS';
 FILTER: 'FILTER';
 FILEFORMAT: 'FILEFORMAT';
+FINAL: 'FINAL';
 FIRST: 'FIRST';
 FOLLOWING: 'FOLLOWING';
 FOR: 'FOR';

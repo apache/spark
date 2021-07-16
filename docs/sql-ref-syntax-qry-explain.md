@@ -27,10 +27,13 @@ By default, this clause provides information about a physical plan only.
 ### Syntax
 
 ```sql
-EXPLAIN [ EXTENDED | CODEGEN | COST | FORMATTED ] statement
+EXPLAIN [ FINAL ] [ EXTENDED | CODEGEN | COST | FORMATTED ] statement
 ```
 
 ### Parameters
+
+* **FINAL**
+    If `spark.sql.adaptive.enabled` is enabled, execute the statement first then generates the explanation follow the mode.
 
 * **EXTENDED**
 

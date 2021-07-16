@@ -147,15 +147,17 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
  * (but do NOT actually execute it).
  *
  * {{{
- *   EXPLAIN (EXTENDED | CODEGEN | COST | FORMATTED) SELECT * FROM ...
+ *   EXPLAIN [ FINAL ] (EXTENDED | CODEGEN | COST | FORMATTED) SELECT * FROM ...
  * }}}
  *
  * @param logicalPlan plan to explain
  * @param mode explain mode
+ * @param isFinal when true return the final plan, it's only helpful in AQE
  */
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
-    mode: ExplainMode)
+    mode: ExplainMode,
+    isFinal: Boolean = false)
   extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] =
@@ -163,8 +165,11 @@ case class ExplainCommand(
 
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
-    val outputString = sparkSession.sessionState.executePlan(logicalPlan, CommandExecutionMode.SKIP)
-      .explainString(mode)
+    val qe = sparkSession.sessionState.executePlan(logicalPlan, CommandExecutionMode.SKIP)
+    if (conf.adaptiveExecutionEnabled && isFinal) {
+      qe.executedPlan.execute().count()
+    }
+    val outputString = qe.explainString(mode)
     Seq(Row(outputString))
   } catch { case NonFatal(cause) =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))
