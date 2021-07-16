@@ -882,6 +882,11 @@ def approx_count_distinct(col, rsd=None):
 def broadcast(df):
     """Marks a DataFrame as small enough for use in broadcast joins."""
 
+    warnings.warn(
+        "`broadcast` has been deprecated and will be removed in a future version. "
+        "use `DataFrame.hint` with 'broadcast'.",
+        FutureWarning,
+    )
     sc = SparkContext._active_spark_context
     return DataFrame(sc._jvm.functions.broadcast(df._jdf), df.sql_ctx)
 
