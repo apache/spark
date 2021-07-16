@@ -832,18 +832,18 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     private final int shuffleId;
     private final int reduceId;
     // The merged shuffle data file channel
-    public FileChannel dataChannel;
+    public final FileChannel dataChannel;
+    // The index file for a particular merged shuffle contains the chunk offsets.
+    private final MergeShuffleFile indexFile;
+    // The meta file for a particular merged shuffle contains all the map indices that belong to
+    // every chunk. The entry per chunk is a serialized bitmap.
+    private final MergeShuffleFile metaFile;
     // Location offset of the last successfully merged block for this shuffle partition
     private long dataFilePos;
     // Track the map index whose block is being merged for this shuffle partition
     private int currentMapIndex;
     // Bitmap tracking which mapper's blocks have been merged for this shuffle partition
     private RoaringBitmap mapTracker;
-    // The index file for a particular merged shuffle contains the chunk offsets.
-    private MergeShuffleFile indexFile;
-    // The meta file for a particular merged shuffle contains all the map indices that belong to
-    // every chunk. The entry per chunk is a serialized bitmap.
-    private MergeShuffleFile metaFile;
     // The offset for the last chunk tracked in the index file for this shuffle partition
     private long lastChunkOffset;
     private int lastMergedMapIndex = -1;
@@ -982,7 +982,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     void closeAllFiles() {
       try {
-        dataChannel.close();
+        if (dataChannel.isOpen()) {
+          dataChannel.close();
+        }
       } catch (IOException ioe) {
         logger.warn("Error closing data channel for {} shuffleId {} reduceId {}",
           appId, shuffleId, reduceId);
@@ -1147,7 +1149,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     void close() throws IOException {
-      dos.close();
+      if (channel.isOpen()) {
+        dos.close();
+      }
     }
 
     @VisibleForTesting
