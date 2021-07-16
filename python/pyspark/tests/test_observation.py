@@ -41,7 +41,7 @@ class ObservationTests(ReusedPySparkTestCase):
 
         # we do not bother obtaining the metric, this just
         # tests that Observation.on works transparently
-        observed = Observation("metrics").on(df, func.count(func.lit(1)), func.sum(func.col("val")))
+        observed = df.observe(Observation("metrics"), func.count(func.lit(1)), func.sum(func.col("val")))
         actual = observed.orderBy('id').collect()
         self.assert_collected(actual)
 
@@ -54,16 +54,10 @@ class ObservationTests(ReusedPySparkTestCase):
             func.sum(func.col("id")).alias('sum'),
             func.mean(func.col("val")).alias('mean')
         )
-        self.assertFalse(observation.wait_completed(1000))
 
         actual = observed.collect()
         self.assert_collected(actual)
 
-        self.assertTrue(observation.wait_completed(1000))
-        self.assertEqual(observation.get, Row(cnt=3, sum=6, mean=2.0))
-
-        observed.collect()
-        self.assertTrue(observation.wait_completed(1000))
         self.assertEqual(observation.get, Row(cnt=3, sum=6, mean=2.0))
 
 

@@ -65,7 +65,7 @@ class Observation:
         self._jvm = None
         self._jo = None
 
-    def on(self, df: DataFrame, *exprs: Column) -> DataFrame:
+    def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
         """
         Attaches this observation to the given :class:`Dataset` to observe aggregation expressions.
 
@@ -83,20 +83,6 @@ class Observation:
                                   exprs[0]._jc,
                                   column._to_seq(df._sc, [c._jc for c in exprs[1:]]))
         return DataFrame(observed_df, df.sql_ctx)
-
-    def wait_completed(self, millis: Optional[int] = None) -> bool:
-        """
-        Waits for the first action on the observed dataset to complete and returns true.
-        The result is then available through the `get` method.
-        This method times out after the given number of milliseconds returning false.
-        If no `millis` is None, this method waits without timing out.
-
-        :param millis: timeout in milliseconds or None to disable timeout
-        :return: True if result available or False on timeout
-        """
-        assert self._jo is not None, 'call DataFrame.observe / Observation.on first'
-        unit = self._jvm.java.util.concurrent.TimeUnit.MILLISECONDS
-        return self._jo.waitCompleted(millis, unit)
 
     @property
     def get(self) -> Row:

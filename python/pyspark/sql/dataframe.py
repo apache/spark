@@ -1852,7 +1852,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         from pyspark.sql.observation import Observation
         assert isinstance(observation, Observation), "observation should be Observation"
-        return observation.on(self, *exprs)
+        return observation._on(self, *exprs)
 
     @since(2.0)
     def union(self, other):
