@@ -2823,11 +2823,8 @@ def broadcast(obj: DataFrame) -> DataFrame:
     """
     Marks a DataFrame as small enough for use in broadcast joins.
 
-    Notes
-    -----
-    `broadcast` has been deprecated and will be removed in a future version.
-    Use `DataFrame.spark.hint` with 'broadcast' for `name` parameter instead.
-
+    .. deprecated:: 3.2.0
+        Use :func:`DataFrame.spark.hint` instead.
     Parameters
     ----------
     obj : DataFrame
