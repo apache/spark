@@ -15,18 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions
+package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.annotation.Evolving;
 
-case class Min(column: FieldReference, dataType: DataType) extends AggregateFunc
+import java.io.Serializable;
 
-case class Max(column: FieldReference, dataType: DataType) extends AggregateFunc
+/**
+ * Aggregation in SQL statement.
+ *
+ * @since 3.2.0
+ */
+@Evolving
+public class Aggregation implements Serializable {
+  private AggregateFunc[] aggregateExpressions;
+  private FieldReference[] groupByColumns;
 
-case class Sum(column: FieldReference, dataType: DataType, isDistinct: Boolean)
-  extends AggregateFunc
+  public Aggregation (AggregateFunc[] aggregateExpressions, FieldReference[] groupByColumns) {
+    this.aggregateExpressions = aggregateExpressions;
+    this.groupByColumns = groupByColumns;
+  }
 
-case class Count(column: FieldReference, isDistinct: Boolean)
-  extends AggregateFunc
+  public AggregateFunc[] getAggregateExpressions() {
+    return aggregateExpressions;
+  }
 
-case class CountOne() extends AggregateFunc
+  public FieldReference[] getGroupByColumns() {
+    return groupByColumns;
+  }
+}

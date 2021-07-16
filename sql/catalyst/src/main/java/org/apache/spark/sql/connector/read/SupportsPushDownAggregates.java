@@ -21,17 +21,21 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Aggregation;
 
 /**
- * A mix-in interface for {@link ScanBuilder}. Data source can implement this interface to
- * push down aggregates. Depends on the data source implementation, the aggregates may not
- * be able to push down, or partially push down and have a final aggregate at Spark.
- * For example, "SELECT min(_1) FROM t GROUP BY _2" can be pushed down to data source,
- * the partially aggregated result min(_1) grouped by _2 will be returned to Spark, and
- * then have a final aggregation.
+ * A mix-in interface for {@link ScanBuilder}. Data sources can implement this interface to
+ * push down aggregates. Spark assumes that the data source can't fully complete the
+ * grouping work, and will group the data source output again. For queries like
+ * "SELECT min(value) AS m FROM t GROUP BY key", after pushing down the aggregate
+ * to the data source, the data source can still output data with duplicated keys, which is OK
+ * as Spark will do GROUP BY key again. The final query plan can be something like this:
  * {{{
- *   Aggregate [_2#10], [min(_2#10) AS min(_1)#16]
- *     +- RelationV2[_2#10, min(_1)#18]
+ *   Aggregate [key#1], [min(min(value)#2) AS AS m#3]
+ *     +- RelationV2[key#1, min(value)#2]
  * }}}
  *
+ * <p>
+ * Similarly, if there is no grouping expression, the data source can still output more than one rows.
+ *
+ * <p>
  * When pushing down operators, Spark pushes down filters to the data source first, then push down
  * aggregates or apply column pruning. Depends on data source implementation, aggregates may or
  * may not be able to be pushed down with filters. If pushed filters still need to be evaluated

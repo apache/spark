@@ -98,7 +98,7 @@ object PushDownUtils extends PredicateHelper {
           return None
         }
 
-        val agg = Aggregation(translatedAggregates, translatedGroupBys)
+        val agg = new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray)
         if (r.pushAggregation(agg)) {
           Some(agg)
         } else {

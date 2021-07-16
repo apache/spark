@@ -88,9 +88,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 } else {
                   // No need to do column pruning because only the aggregate columns are used as
                   // DataSourceV2ScanRelation output columns. All the other columns are not
-                  // included in the output. Since PushDownUtils.pruneColumns is not called,
-                  // ScanBuilder.requiredSchema is not pruned, but ScanBuilder.requiredSchema is
-                  // not used anyways. The schema for aggregate columns will be built in Scan.
+                  // included in the output.
                   val scan = sHolder.builder.build()
 
                   // scalastyle:off
@@ -104,25 +102,24 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   // +- RelationV2[c2#10, min(c1)#21, max(c1)#22]
                   // scalastyle:on
                   val newOutput = scan.readSchema().toAttributes
+                  assert(newOutput.length == groupingExpressions.length + aggregates.length)
                   val groupAttrs = groupingExpressions.zip(newOutput).map {
                     case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
                     case (_, b) => b
                   }
                   val output = groupAttrs ++ newOutput.drop(groupAttrs.length)
-
+                  
                   logInfo(
                     s"""
                        |Pushing operators to ${sHolder.relation.name}
                        |Pushed Aggregate Functions:
-                       | ${pushedAggregates.get.aggregateExpressions.mkString(", ")}
+                       | ${pushedAggregates.get.getAggregateExpressions.mkString(", ")}
                        |Pushed Group by:
-                       | ${pushedAggregates.get.groupByColumns.mkString(", ")}
+                       | ${pushedAggregates.get.getGroupByColumns.mkString(", ")}
                        |Output: ${output.mkString(", ")}
                       """.stripMargin)
 
                   val scanRelation = DataSourceV2ScanRelation(sHolder.relation, scan, output)
-                  assert(scanRelation.output.length ==
-                    groupingExpressions.length + aggregates.length)
 
                   val plan = Aggregate(
                     output.take(groupingExpressions.length), resultExpressions, scanRelation)
@@ -149,15 +146,15 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                   val aggOutput = output.drop(groupAttrs.length)
                   plan.transformExpressions {
                     case agg: AggregateExpression =>
-                      i += 1
                       val aggFunction: aggregate.AggregateFunction =
                         agg.aggregateFunction match {
-                          case _: aggregate.Max => aggregate.Max(aggOutput(i - 1))
-                          case _: aggregate.Min => aggregate.Min(aggOutput(i - 1))
-                          case _: aggregate.Sum => aggregate.Sum(aggOutput(i - 1))
-                          case _: aggregate.Count => aggregate.Sum(aggOutput(i - 1))
+                          case _: aggregate.Max => aggregate.Max(aggOutput(i))
+                          case _: aggregate.Min => aggregate.Min(aggOutput(i))
+                          case _: aggregate.Sum => aggregate.Sum(aggOutput(i))
+                          case _: aggregate.Count => aggregate.Sum(aggOutput(i))
                           case _ => agg.aggregateFunction
                         }
+                      i += 1
                       agg.copy(aggregateFunction = aggFunction)
                   }
                 }

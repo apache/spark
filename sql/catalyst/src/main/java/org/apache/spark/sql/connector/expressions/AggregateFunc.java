@@ -15,18 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions
+package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.annotation.Evolving;
 
-case class Min(column: FieldReference, dataType: DataType) extends AggregateFunc
-
-case class Max(column: FieldReference, dataType: DataType) extends AggregateFunc
-
-case class Sum(column: FieldReference, dataType: DataType, isDistinct: Boolean)
-  extends AggregateFunc
-
-case class Count(column: FieldReference, isDistinct: Boolean)
-  extends AggregateFunc
-
-case class CountOne() extends AggregateFunc
+/**
+ * Base class of the Aggregate Functions.
+ *
+ * @since 3.2.0
+ */
+@Evolving
+public interface AggregateFunc {
+}
