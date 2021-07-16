@@ -61,8 +61,8 @@ object MimaExcludes {
     // in the REST API call for a specified stage
     ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.status.api.v1.StageData.this"),
 
-    // [SPARK-xxxxx][CORE] Support getting CPU number in TaskContext
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.cpus")
+    // [SPARK-36173][CORE] Support getting CPU number in TaskContext
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.cpus"),
 
     // [SPARK-35896] Include more granular metrics for stateful operators in StreamingQueryProgress
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.sql.streaming.StateOperatorProgress.this"),
