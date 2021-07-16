@@ -916,7 +916,7 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test(expected = IllegalArgumentException.class)
-  public void testBlockReceivedAfterNewAttemptRegistered()
+  public void testPushBlockFromPreviousAttemptIsRejected()
       throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf) {
@@ -928,7 +928,7 @@ public class RemoteBlockPushResolverSuite {
         closed.release();
       }
     };
-    String testApp = "updateLocalDirsTwiceWithTwoAttempts";
+    String testApp = "testPushBlockFromPreviousAttemptIsRejected";
     Path[] attempt1LocalDirs = createLocalDirs(1);
     registerExecutor(testApp,
       prepareLocalDirs(attempt1LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_1),
@@ -982,13 +982,46 @@ public class RemoteBlockPushResolverSuite {
       assertEquals(
         "The attempt id 1 in this PushBlockStream message does not match " +
           "with the current attempt id 2 stored in shuffle service for application " +
-          "updateLocalDirsTwiceWithTwoAttempts", re.getMessage());
+          testApp, re.getMessage());
       throw re;
     }
   }
 
+  @Test(expected = IllegalArgumentException.class)
+  public void testFinalizeShuffleMergeFromPreviousAttemptIsAborted()
+    throws IOException, InterruptedException {
+    String testApp = "testFinalizeShuffleMergeFromPreviousAttemptIsAborted";
+    Path[] attempt1LocalDirs = createLocalDirs(1);
+    registerExecutor(testApp,
+      prepareLocalDirs(attempt1LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_1),
+      MERGE_DIRECTORY_META_1);
+    ByteBuffer[] blocks = new ByteBuffer[]{
+      ByteBuffer.wrap(new byte[4]),
+      ByteBuffer.wrap(new byte[5])
+    };
+    StreamCallbackWithID stream1 = pushResolver.receiveBlockDataAsStream(
+      new PushBlockStream(testApp, 1, 0, 0, 0, 0));
+    for (ByteBuffer block : blocks) {
+      stream1.onData(stream1.getID(), block);
+    }
+    stream1.onComplete(stream1.getID());
+    Path[] attempt2LocalDirs = createLocalDirs(2);
+    registerExecutor(testApp,
+      prepareLocalDirs(attempt2LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_2),
+      MERGE_DIRECTORY_META_2);
+    try {
+      pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, ATTEMPT_ID_1, 0));
+    } catch (IllegalArgumentException e) {
+      assertEquals(e.getMessage(),
+        String.format("The attempt id %s in this FinalizeShuffleMerge message does not " +
+          "match with the current attempt id %s stored in shuffle service for application %s",
+          ATTEMPT_ID_1, ATTEMPT_ID_2, testApp));
+      throw e;
+    }
+  }
+
   @Test(expected = ClosedChannelException.class)
-  public void testPushBlockStreamCallBackWhileNewAttemptRegistered()
+  public void testOngoingMergeOfBlockFromPreviousAttemptIsAborted()
     throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf) {
@@ -1000,7 +1033,7 @@ public class RemoteBlockPushResolverSuite {
         closed.release();
       }
     };
-    String testApp = "testPushBlockStreamCallBackWhileNewAttemptRegisters";
+    String testApp = "testOngoingMergeOfBlockFromPreviousAttemptIsAborted";
     Path[] attempt1LocalDirs = createLocalDirs(1);
     registerExecutor(testApp,
       prepareLocalDirs(attempt1LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_1),

@@ -247,11 +247,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public String[] getMergedBlockDirs(String appId) {
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(appId);
-    String[] activeLocalDirs =
-      Preconditions.checkNotNull(appShuffleInfo.appPathsInfo.activeLocalDirs,
-        "application " + appId + " active local dirs list has not been updated " +
-        "by any executor registration");
-    return activeLocalDirs;
+    return appShuffleInfo.appPathsInfo.activeLocalDirs;
   }
 
   @Override

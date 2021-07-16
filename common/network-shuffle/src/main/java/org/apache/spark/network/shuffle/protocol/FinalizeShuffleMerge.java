@@ -76,7 +76,7 @@ public class FinalizeShuffleMerge extends BlockTransferMessage {
 
   @Override
   public int encodedLength() {
-    return Encoders.Strings.encodedLength(appId) + 8;
+    return Encoders.Strings.encodedLength(appId) + 4 + 4;
   }
 
   @Override
