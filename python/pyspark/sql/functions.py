@@ -884,7 +884,8 @@ def broadcast(df):
 
     warnings.warn(
         "`broadcast` has been deprecated and will be removed in a future version. "
-        "use `DataFrame.hint` with 'broadcast'.",
+        "use `DataFrame.hint` with 'broadcast'.\n"
+        "If you're using pandas API on Spark, use `DataFrame.spark.hint` instead.",
         FutureWarning,
     )
     sc = SparkContext._active_spark_context
