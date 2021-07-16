@@ -19,17 +19,21 @@ package org.apache.spark.sql
 
 import java.time.LocalDateTime
 
-import org.apache.spark.sql.catalyst.plans.logical.Expand
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types._
 
 class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
 
   import testImplicits._
 
   test("simple tumbling window with record at window start") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id")
+    val df2 = Seq((LocalDateTime.parse("2016-03-27T19:39:30"), 1, "a")).toDF("time", "value", "id")
+
+    Seq(df1, df2).foreach { df =>
       checkAnswer(
         df.groupBy(window($"time", "10 seconds"))
           .agg(count("*").as("counts"))
@@ -40,12 +44,16 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         )
       )
     }
-    doTest(Seq(("2016-03-27 19:39:30", 1, "a")).toDF("time", "value", "id"))
-    doTest(Seq((LocalDateTime.parse("2016-03-27T19:39:30"), 1, "a")).toDF("time", "value", "id"))
   }
 
   test("SPARK-21590: tumbling window using negative start time") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(
+      ("2016-03-27 19:39:30", 1, "a"),
+      ("2016-03-27 19:39:25", 2, "a")).toDF("time", "value", "id")
+    val df2 = Seq((LocalDateTime.parse("2016-03-27T19:39:30"), 1, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:25"), 2, "a")).toDF("time", "value", "id")
+
+    Seq(df1, df2).foreach { df =>
       checkAnswer(
         df.groupBy(window($"time", "10 seconds", "10 seconds", "-5 seconds"))
           .agg(count("*").as("counts"))
@@ -56,14 +64,19 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         )
       )
     }
-    doTest(Seq(("2016-03-27 19:39:30", 1, "a"),
-      ("2016-03-27 19:39:25", 2, "a")).toDF("time", "value", "id"))
-    doTest(Seq((LocalDateTime.parse("2016-03-27T19:39:30"), 1, "a"),
-      (LocalDateTime.parse("2016-03-27T19:39:25"), 2, "a")).toDF("time", "value", "id"))
   }
 
   test("tumbling window groupBy statement") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:56", 2, "a"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+    val df2 = Seq(
+      (LocalDateTime.parse("2016-03-27T19:39:34"), 1, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:27"), 4, "b")).toDF("time", "value", "id")
+
+    Seq(df1, df2).foreach { df =>
       checkAnswer(
         df.groupBy(window($"time", "10 seconds"))
           .agg(count("*").as("counts"))
@@ -72,17 +85,19 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         Seq(Row(1), Row(1), Row(1))
       )
     }
-
-    doTest(Seq(("2016-03-27 19:39:34", 1, "a"),
-      ("2016-03-27 19:39:56", 2, "a"),
-      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id"))
-    doTest(Seq((LocalDateTime.parse("2016-03-27T19:39:34"), 1, "a"),
-      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, "a"),
-      (LocalDateTime.parse("2016-03-27T19:39:27"), 4, "b")).toDF("time", "value", "id"))
   }
 
   test("tumbling window groupBy statement with startTime") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:56", 2, "a"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+    val df2 = Seq(
+      (LocalDateTime.parse("2016-03-27T19:39:34"), 1, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:27"), 4, "b")).toDF("time", "value", "id")
+
+    Seq(df1, df2).foreach { df =>
       checkAnswer(
         df.groupBy(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"id")
           .agg(count("*").as("counts"))
@@ -91,17 +106,19 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         Seq(Row(1), Row(1), Row(1))
       )
     }
-    doTest(Seq(
-      ("2016-03-27 19:39:34", 1, "a"),
-      ("2016-03-27 19:39:56", 2, "a"),
-      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id"))
-    doTest(Seq((LocalDateTime.parse("2016-03-27T19:39:34"), 1, "a"),
-      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, "a"),
-      (LocalDateTime.parse("2016-03-27T19:39:27"), 4, "b")).toDF("time", "value", "id"))
   }
 
   test("SPARK-21590: tumbling window groupBy statement with negative startTime") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:56", 2, "a"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+    val df2 = Seq(
+      (LocalDateTime.parse("2016-03-27T19:39:34"), 1, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:27"), 4, "b")).toDF("time", "value", "id")
+
+    Seq(df1, df2).foreach { df =>
       checkAnswer(
         df.groupBy(window($"time", "10 seconds", "10 seconds", "-5 seconds"), $"id")
           .agg(count("*").as("counts"))
@@ -110,16 +127,25 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         Seq(Row(1), Row(1), Row(1))
       )
     }
-    doTest(Seq(("2016-03-27 19:39:34", 1, "a"),
-      ("2016-03-27 19:39:56", 2, "a"),
-      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id"))
-    doTest(Seq((LocalDateTime.parse("2016-03-27T19:39:34"), 1, "a"),
-      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, "a"),
-      (LocalDateTime.parse("2016-03-27T19:39:27"), 4, "b")).toDF("time", "value", "id"))
   }
 
   test("tumbling window with multi-column projection") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:56", 2, "a"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "10 seconds"), $"value")
+      .orderBy($"window.start".asc)
+      .select($"window.start".cast("string"), $"window.end".cast("string"), $"value")
+    val df2 = Seq(
+      (LocalDateTime.parse("2016-03-27T19:39:34"), 1, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:27"), 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "10 seconds"), $"value")
+      .orderBy($"window.start".asc)
+      .select($"window.start".cast("string"), $"window.end".cast("string"), $"value")
+
+    Seq(df1, df2).foreach { df =>
       val expands = df.queryExecution.optimizedPlan.find(_.isInstanceOf[Expand])
       assert(expands.isEmpty, "Tumbling windows shouldn't require expand")
 
@@ -132,24 +158,19 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         )
       )
     }
-    doTest(Seq(
-        ("2016-03-27 19:39:34", 1, "a"),
-        ("2016-03-27 19:39:56", 2, "a"),
-        ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
-      .select(window($"time", "10 seconds"), $"value")
-      .orderBy($"window.start".asc)
-      .select($"window.start".cast("string"), $"window.end".cast("string"), $"value"))
-    doTest(Seq(
-      (LocalDateTime.parse("2016-03-27T19:39:34"), 1, "a"),
-      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, "a"),
-      (LocalDateTime.parse("2016-03-27T19:39:27"), 4, "b")).toDF("time", "value", "id")
-      .select(window($"time", "10 seconds"), $"value")
-      .orderBy($"window.start".asc)
-      .select($"window.start".cast("string"), $"window.end".cast("string"), $"value"))
   }
 
   test("sliding window grouping") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:56", 2, "a"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+    val df2 = Seq(
+      (LocalDateTime.parse("2016-03-27T19:39:34"), 1, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:27"), 4, "b")).toDF("time", "value", "id")
+
+    Seq(df1, df2).foreach { df =>
       checkAnswer(
         df.groupBy(window($"time", "10 seconds", "3 seconds", "0 second"))
           .agg(count("*").as("counts"))
@@ -170,18 +191,23 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
           Row("2016-03-27 19:39:54", "2016-03-27 19:40:04", 1))
       )
     }
-    doTest(Seq(
-      ("2016-03-27 19:39:34", 1, "a"),
-      ("2016-03-27 19:39:56", 2, "a"),
-      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id"))
-    doTest(Seq(
-      (LocalDateTime.parse("2016-03-27T19:39:34"), 1, "a"),
-      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, "a"),
-      (LocalDateTime.parse("2016-03-27T19:39:27"), 4, "b")).toDF("time", "value", "id"))
   }
 
   test("sliding window projection") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(
+      ("2016-03-27 19:39:34", 1, "a"),
+      ("2016-03-27 19:39:56", 2, "a"),
+      ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "10 seconds", "3 seconds", "0 second"), $"value")
+      .orderBy($"window.start".asc, $"value".desc).select("value")
+    val df2 = Seq(
+      (LocalDateTime.parse("2016-03-27T19:39:34"), 1, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:27"), 4, "b")).toDF("time", "value", "id")
+      .select(window($"time", "10 seconds", "3 seconds", "0 second"), $"value")
+      .orderBy($"window.start".asc, $"value".desc).select("value")
+
+    Seq(df1, df2).foreach { df =>
       val expands = df.queryExecution.optimizedPlan.find(_.isInstanceOf[Expand])
       assert(expands.nonEmpty, "Sliding windows require expand")
 
@@ -193,22 +219,18 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         Seq(Row(4), Row(4), Row(4), Row(4), Row(1), Row(1), Row(1), Row(2), Row(2), Row(2))
       )
     }
-    doTest(Seq(
-        ("2016-03-27 19:39:34", 1, "a"),
-        ("2016-03-27 19:39:56", 2, "a"),
-        ("2016-03-27 19:39:27", 4, "b")).toDF("time", "value", "id")
-      .select(window($"time", "10 seconds", "3 seconds", "0 second"), $"value")
-      .orderBy($"window.start".asc, $"value".desc).select("value"))
-    doTest(Seq(
-      (LocalDateTime.parse("2016-03-27T19:39:34"), 1, "a"),
-      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, "a"),
-      (LocalDateTime.parse("2016-03-27T19:39:27"), 4, "b")).toDF("time", "value", "id")
-      .select(window($"time", "10 seconds", "3 seconds", "0 second"), $"value")
-      .orderBy($"window.start".asc, $"value".desc).select("value"))
   }
 
   test("windowing combined with explode expression") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(
+      ("2016-03-27 19:39:34", 1, Seq("a", "b")),
+      ("2016-03-27 19:39:56", 2, Seq("a", "c", "d"))).toDF("time", "value", "ids")
+    val df2 = Seq(
+      (LocalDateTime.parse("2016-03-27T19:39:34"), 1, Seq("a", "b")),
+      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, Seq("a", "c", "d"))).toDF(
+"time", "value", "ids")
+
+    Seq(df1, df2).foreach { df =>
       checkAnswer(
         df.select(window($"time", "10 seconds"), $"value", explode($"ids"))
           .orderBy($"window.start".asc).select("value"),
@@ -216,17 +238,21 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         Seq(Row(1), Row(1), Row(2), Row(2), Row(2))
       )
     }
-    doTest(Seq(
-      ("2016-03-27 19:39:34", 1, Seq("a", "b")),
-      ("2016-03-27 19:39:56", 2, Seq("a", "c", "d"))).toDF("time", "value", "ids"))
-    doTest(Seq(
-      (LocalDateTime.parse("2016-03-27T19:39:34"), 1, Seq("a", "b")),
-      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, Seq("a", "c", "d"))).toDF(
-      "time", "value", "ids"))
   }
 
   test("null timestamps") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(
+      ("2016-03-27 09:00:05", 1),
+      ("2016-03-27 09:00:32", 2),
+      (null, 3),
+      (null, 4)).toDF("time", "value")
+    val df2 = Seq(
+      (LocalDateTime.parse("2016-03-27T09:00:05"), 1),
+      (LocalDateTime.parse("2016-03-27T09:00:32"), 2),
+      (null, 3),
+      (null, 4)).toDF("time", "value")
+
+    Seq(df1, df2).foreach { df =>
       checkDataset(
         df.select(window($"time", "10 seconds"), $"value")
           .orderBy($"window.start".asc)
@@ -234,29 +260,9 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
           .as[Int],
         1, 2) // null columns are dropped
     }
-    doTest(Seq(
-      ("2016-03-27 09:00:05", 1),
-      ("2016-03-27 09:00:32", 2),
-      (null, 3),
-      (null, 4)).toDF("time", "value"))
-    doTest(Seq(
-      (LocalDateTime.parse("2016-03-27T09:00:05"), 1),
-      (LocalDateTime.parse("2016-03-27T09:00:32"), 2),
-      (null, 3),
-      (null, 4)).toDF("time", "value"))
   }
 
   test("time window joins") {
-    def doTest(df: DataFrame, df2: DataFrame): Unit = {
-      checkAnswer(
-        df.select(window($"time", "10 seconds"), $"value").join(
-          df2.select(window($"time", "10 seconds"), $"othervalue"), Seq("window"))
-          .groupBy("window")
-          .agg((sum("value") + sum("othervalue")).as("total"))
-          .orderBy($"window.start".asc).select("total"),
-        Seq(Row(4), Row(8))
-      )
-    }
     val df = Seq(
       ("2016-03-27 09:00:05", 1),
       ("2016-03-27 09:00:32", 2),
@@ -277,12 +283,27 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
       (LocalDateTime.parse("2016-03-27T09:00:02"), 3),
       (LocalDateTime.parse("2016-03-27T09:00:35"), 6)).toDF("time", "othervalue")
 
-    doTest(df, df2)
-    doTest(df3, df4)
+    Seq((df, df2), (df3, df4)).foreach { tuple =>
+      checkAnswer(
+        tuple._1.select(window($"time", "10 seconds"), $"value").join(
+          tuple._2.select(window($"time", "10 seconds"), $"othervalue"), Seq("window"))
+          .groupBy("window")
+          .agg((sum("value") + sum("othervalue")).as("total"))
+          .orderBy($"window.start".asc).select("total"),
+        Seq(Row(4), Row(8))
+      )
+    }
   }
 
   test("negative timestamps") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(
+      ("1970-01-01 00:00:02", 1),
+      ("1970-01-01 00:00:12", 2)).toDF("time", "value")
+    val df2 = Seq(
+      (LocalDateTime.parse("1970-01-01T00:00:02"), 1),
+      (LocalDateTime.parse("1970-01-01T00:00:12"), 2)).toDF("time", "value")
+
+    Seq(df1, df2).foreach { df =>
       checkAnswer(
         df.select(window($"time", "10 seconds", "10 seconds", "5 seconds"), $"value")
           .orderBy($"window.start".asc)
@@ -292,32 +313,35 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
           Row("1970-01-01 00:00:05", "1970-01-01 00:00:15", 2))
       )
     }
-    doTest(Seq(
-      ("1970-01-01 00:00:02", 1),
-      ("1970-01-01 00:00:12", 2)).toDF("time", "value"))
-    doTest(Seq(
-      (LocalDateTime.parse("1970-01-01T00:00:02"), 1),
-      (LocalDateTime.parse("1970-01-01T00:00:12"), 2)).toDF("time", "value"))
   }
 
   test("multiple time windows in a single operator throws nice exception") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(
+      ("2016-03-27 09:00:02", 3),
+      ("2016-03-27 09:00:35", 6)).toDF("time", "value")
+    val df2 = Seq(
+      (LocalDateTime.parse("2016-03-27T09:00:02"), 3),
+      (LocalDateTime.parse("2016-03-27T09:00:35"), 6)).toDF("time", "value")
+
+    Seq(df1, df2).foreach { df =>
       val e = intercept[AnalysisException] {
         df.select(window($"time", "10 second"), window($"time", "15 second")).collect()
       }
       assert(e.getMessage.contains(
         "Multiple time window expressions would result in a cartesian product"))
     }
-    doTest(Seq(
-      ("2016-03-27 09:00:02", 3),
-      ("2016-03-27 09:00:35", 6)).toDF("time", "value"))
-    doTest(Seq(
-      (LocalDateTime.parse("2016-03-27T09:00:02"), 3),
-      (LocalDateTime.parse("2016-03-27T09:00:35"), 6)).toDF("time", "value"))
   }
 
   test("aliased windows") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(
+      ("2016-03-27 19:39:34", 1, Seq("a", "b")),
+      ("2016-03-27 19:39:56", 2, Seq("a", "c", "d"))).toDF("time", "value", "ids")
+    val df2 = Seq(
+      (LocalDateTime.parse("2016-03-27T19:39:34"), 1, Seq("a", "b")),
+      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, Seq("a", "c", "d"))).toDF(
+      "time", "value", "ids")
+
+    Seq(df1, df2).foreach { df =>
       checkAnswer(
         df.select(window($"time", "10 seconds").as("time_window"), $"value")
           .orderBy($"time_window.start".asc)
@@ -325,17 +349,19 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         Seq(Row(1), Row(2))
       )
     }
-    doTest(Seq(
-      ("2016-03-27 19:39:34", 1, Seq("a", "b")),
-      ("2016-03-27 19:39:56", 2, Seq("a", "c", "d"))).toDF("time", "value", "ids"))
-    doTest(Seq(
-      (LocalDateTime.parse("2016-03-27T19:39:34"), 1, Seq("a", "b")),
-      (LocalDateTime.parse("2016-03-27T19:39:56"), 2, Seq("a", "c", "d"))).toDF(
-      "time", "value", "ids"))
   }
 
   test("millisecond precision sliding windows") {
-    def doTest(df: DataFrame): Unit = {
+    val df1 = Seq(
+      ("2016-03-27 09:00:00.41", 3),
+      ("2016-03-27 09:00:00.62", 6),
+      ("2016-03-27 09:00:00.715", 8)).toDF("time", "value")
+    val df2 = Seq(
+      (LocalDateTime.parse("2016-03-27T09:00:00.41"), 3),
+      (LocalDateTime.parse("2016-03-27T09:00:00.62"), 6),
+      (LocalDateTime.parse("2016-03-27T09:00:00.715"), 8)).toDF("time", "value")
+
+    Seq(df1, df2).foreach { df =>
       checkAnswer(
         df.groupBy(window($"time", "200 milliseconds", "40 milliseconds", "0 milliseconds"))
           .agg(count("*").as("counts"))
@@ -356,18 +382,20 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
           Row("2016-03-27 09:00:00.68", "2016-03-27 09:00:00.88", 1))
       )
     }
-    doTest(Seq(
-      ("2016-03-27 09:00:00.41", 3),
-      ("2016-03-27 09:00:00.62", 6),
-      ("2016-03-27 09:00:00.715", 8)).toDF("time", "value"))
-    doTest(Seq(
-      (LocalDateTime.parse("2016-03-27T09:00:00.41"), 3),
-      (LocalDateTime.parse("2016-03-27T09:00:00.62"), 6),
-      (LocalDateTime.parse("2016-03-27T09:00:00.715"), 8)).toDF("time", "value"))
   }
 
   private def withTempTable(f: String => Unit): Unit = {
-    def doTest(df: DataFrame, tableName: String): Unit = {
+    val tableName = "temp"
+    val df1 = Seq(
+      ("2016-03-27 19:39:34", 1),
+      ("2016-03-27 19:39:56", 2),
+      ("2016-03-27 19:39:27", 4)).toDF("time", "value")
+    val df2 = Seq(
+      (LocalDateTime.parse("2016-03-27T19:39:34"), 1),
+      (LocalDateTime.parse("2016-03-27T19:39:56"), 2),
+      (LocalDateTime.parse("2016-03-27T19:39:27"), 4)).toDF("time", "value")
+
+    Seq(df1, df2).foreach { df =>
       df.createOrReplaceTempView(tableName)
       try {
         f(tableName)
@@ -375,15 +403,6 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
         spark.catalog.dropTempView(tableName)
       }
     }
-    val tableName = "temp"
-    doTest(Seq(
-      ("2016-03-27 19:39:34", 1),
-      ("2016-03-27 19:39:56", 2),
-      ("2016-03-27 19:39:27", 4)).toDF("time", "value"), tableName)
-    doTest(Seq(
-      (LocalDateTime.parse("2016-03-27T19:39:34"), 1),
-      (LocalDateTime.parse("2016-03-27T19:39:56"), 2),
-      (LocalDateTime.parse("2016-03-27T19:39:27"), 4)).toDF("time", "value"), tableName)
   }
 
   test("time window in SQL with single string expression") {
@@ -442,6 +461,33 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
           Row("2016-03-27 19:39:55", "2016-03-27 19:40:05", 2)
         )
       )
+    }
+  }
+
+  test("SPARK-36091: Support TimestampNTZ type in expression TimeWindow") {
+    val df1 = Seq(
+      ("2016-03-27 19:39:30", 1, "a"),
+      ("2016-03-27 19:39:25", 2, "a")).toDF("time", "value", "id")
+    val df2 = Seq((LocalDateTime.parse("2016-03-27T19:39:30"), 1, "a"),
+      (LocalDateTime.parse("2016-03-27T19:39:25"), 2, "a")).toDF("time", "value", "id")
+    val type1 = StructType(
+      Seq(StructField("start", TimestampType), StructField("end", TimestampType)))
+    val type2 = StructType(
+      Seq(StructField("start", TimestampNTZType), StructField("end", TimestampNTZType)))
+
+      Seq((df1, type1), (df2, type2)).foreach { tuple =>
+      val logicalPlan =
+        tuple._1.groupBy(window($"time", "10 seconds", "10 seconds", "-5 seconds"))
+          .agg(count("*").as("counts"))
+          .orderBy($"window.start".asc)
+          .select($"window.start".cast("string"), $"window.end".cast("string"), $"counts")
+      val aggregate = logicalPlan.queryExecution.analyzed.children(0).children(0)
+      assert(aggregate.isInstanceOf[Aggregate])
+      val timeWindow = aggregate.asInstanceOf[Aggregate].groupingExpressions(0)
+      assert(timeWindow.isInstanceOf[AttributeReference])
+      val attributeReference = timeWindow.asInstanceOf[AttributeReference]
+      assert(attributeReference.name == "window")
+      assert(attributeReference.dataType == tuple._2)
     }
   }
 }
