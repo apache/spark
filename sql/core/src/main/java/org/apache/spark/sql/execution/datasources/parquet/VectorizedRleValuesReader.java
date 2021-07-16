@@ -167,7 +167,29 @@ public final class VectorizedRleValuesReader extends ValuesReader
       ParquetReadState state,
       WritableColumnVector values,
       VectorizedValuesReader valueReader,
-      ParquetVectorUpdater updater) throws IOException {
+      ParquetVectorUpdater updater) {
+    readBatchInternal(state, values, values, valueReader, updater);
+  }
+
+  /**
+   * Decoding for dictionary ids. The IDs are populated into `values` and the nullability is
+   * populated into `nulls`.
+   */
+  public void readIntegers(
+      ParquetReadState state,
+      WritableColumnVector values,
+      WritableColumnVector nulls,
+      VectorizedValuesReader data) {
+    readBatchInternal(state, values, nulls, data, new ParquetVectorUpdaterFactory.IntegerUpdater());
+  }
+
+  private void readBatchInternal(
+      ParquetReadState state,
+      WritableColumnVector values,
+      WritableColumnVector nulls,
+      VectorizedValuesReader valueReader,
+      ParquetVectorUpdater updater) {
+
     int offset = state.offset;
     long rowId = state.rowId;
     int leftInBatch = state.valuesToReadInBatch;
@@ -181,8 +203,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       long rangeEnd = state.currentRangeEnd();
 
       if (rowId + n < rangeStart) {
-        updater.skipValues(n, valueReader);
-        advance(n);
+        skipValues(n, state, valueReader, updater);
         rowId += n;
         leftInPage -= n;
       } else if (rowId > rangeEnd) {
@@ -195,8 +216,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
         // skip the part [rowId, start)
         int toSkip = (int) (start - rowId);
         if (toSkip > 0) {
-          updater.skipValues(toSkip, valueReader);
-          advance(toSkip);
+          skipValues(toSkip, state, valueReader, updater);
           rowId += toSkip;
           leftInPage -= toSkip;
         }
@@ -209,7 +229,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
             if (currentValue == state.maxDefinitionLevel) {
               updater.readValues(n, offset, values, valueReader);
             } else {
-              values.putNulls(offset, n);
+              nulls.putNulls(offset, n);
             }
             break;
           case PACKED:
@@ -217,7 +237,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
               if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
                 updater.readValue(offset + i, values, valueReader);
               } else {
-                values.putNull(offset + i);
+                nulls.putNull(offset + i);
               }
             }
             break;
@@ -234,79 +254,38 @@ public final class VectorizedRleValuesReader extends ValuesReader
   }
 
   /**
-   * Decoding for dictionary ids. The IDs are populated into `values` and the nullability is
-   * populated into `nulls`.
+   * Skip the next `n` values (either null or non-null) from this definition level reader and
+   * `valueReader`.
    */
-  public void readIntegers(
+  private void skipValues(
+      int n,
       ParquetReadState state,
-      WritableColumnVector values,
-      WritableColumnVector nulls,
-      VectorizedValuesReader data) throws IOException {
-    int offset = state.offset;
-    long rowId = state.rowId;
-    int leftInBatch = state.valuesToReadInBatch;
-    int leftInPage = state.valuesToReadInPage;
-
-    while (leftInBatch > 0 && leftInPage > 0) {
+      VectorizedValuesReader valuesReader,
+      ParquetVectorUpdater updater) {
+    while (n > 0) {
       if (this.currentCount == 0) this.readNextGroup();
-      int n = Math.min(leftInBatch, Math.min(leftInPage, this.currentCount));
-
-      long rangeStart = state.currentRangeStart();
-      long rangeEnd = state.currentRangeEnd();
-
-      if (rowId + n < rangeStart) {
-        data.skipIntegers(n);
-        advance(n);
-        rowId += n;
-        leftInPage -= n;
-      } else if (rowId > rangeEnd) {
-        state.nextRange();
-      } else {
-        // the range [rowId, rowId + n) overlaps with the current row range in state
-        long start = Math.max(rangeStart, rowId);
-        long end = Math.min(rangeEnd, rowId + n - 1);
-
-        // skip the part [rowId, start)
-        int toSkip = (int) (start - rowId);
-        if (toSkip > 0) {
-          data.skipIntegers(toSkip);
-          advance(toSkip);
-          rowId += toSkip;
-          leftInPage -= toSkip;
-        }
-
-        // read the part [start, end]
-        n = (int) (end - start + 1);
-
-        switch (mode) {
-          case RLE:
-            if (currentValue == state.maxDefinitionLevel) {
-              data.readIntegers(n, values, offset);
-            } else {
-              nulls.putNulls(offset, n);
+      int num = Math.min(n, this.currentCount);
+      switch (mode) {
+        case RLE:
+          // we only need to skip non-null values from `valuesReader` since nulls are represented
+          // via definition levels which are skipped here via decrementing `currentCount`.
+          if (currentValue == state.maxDefinitionLevel) {
+            updater.skipValues(num, valuesReader);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < num; ++i) {
+            // same as above, only skip non-null values from `valuesReader`
+            if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
+              updater.skipValues(1, valuesReader);
             }
-            break;
-          case PACKED:
-            for (int i = 0; i < n; ++i) {
-              if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
-                values.putInt(offset + i, data.readInteger());
-              } else {
-                nulls.putNull(offset + i);
-              }
-            }
-            break;
-        }
-        rowId += n;
-        leftInPage -= n;
-        offset += n;
-        leftInBatch -= n;
-        currentCount -= n;
+          }
+          break;
       }
+      currentCount -= num;
+      n -= num;
     }
-
-    state.advanceOffsetAndRowId(offset, rowId);
   }
-
 
   // The RLE reader implements the vectorized decoding interface when used to decode dictionary
   // IDs. This is different than the above APIs that decodes definitions levels along with values.
@@ -410,7 +389,14 @@ public final class VectorizedRleValuesReader extends ValuesReader
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
       int n = Math.min(left, this.currentCount);
-      advance(n);
+      switch (mode) {
+        case RLE:
+          break;
+        case PACKED:
+          currentBufferIdx += n;
+          break;
+      }
+      currentCount -= n;
       left -= n;
     }
   }
@@ -453,20 +439,6 @@ public final class VectorizedRleValuesReader extends ValuesReader
   @Override
   public void skipFixedLenByteArray(int total, int len) {
     throw new UnsupportedOperationException("only skipIntegers is valid");
-  }
-
-  /**
-   * Advance and skip the next `n` values in the current block. `n` MUST be <= `currentCount`.
-   */
-  private void advance(int n) {
-    switch (mode) {
-      case RLE:
-        break;
-      case PACKED:
-        currentBufferIdx += n;
-        break;
-    }
-    currentCount -= n;
   }
 
   /**

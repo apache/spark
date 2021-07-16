@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.execution
 import org.apache.spark.sql.StatisticsCollectionTestBase
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryOperator, Expression, IsNotNull, Literal}
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
 
@@ -94,9 +95,10 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase with
     val plan = qe.sparkPlan
     assert(getScanExecPartitionSize(plan) == expectedPartitionCount)
 
-    val pushedDownPartitionFilters = qe.executedPlan.collectFirst {
+    val pushedDownPartitionFilters = plan.collectFirst {
       case scan: FileSourceScanExec => scan.partitionFilters
       case scan: HiveTableScanExec => scan.partitionPruningPred
+      case BatchScanExec(_, scan: FileScan, _) => scan.partitionFilters
     }.map(exps => exps.filterNot(e => e.isInstanceOf[IsNotNull]))
     val pushedFilters = pushedDownPartitionFilters.map(filters => {
       filters.foldLeft("")((currentStr, exp) => {

@@ -818,7 +818,7 @@ private[columnar] object ColumnType {
       case ByteType => BYTE
       case ShortType => SHORT
       case IntegerType | DateType | _: YearMonthIntervalType => INT
-      case LongType | TimestampType | _: DayTimeIntervalType => LONG
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType => LONG
       case FloatType => FLOAT
       case DoubleType => DOUBLE
       case StringType => STRING

@@ -96,6 +96,16 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(math.abs(t1 - ct.getTime) < 5000)
   }
 
+  test("datetime function localtimestamp") {
+    // Verify with multiple outstanding time zones which has no daylight saving time.
+    Seq("UTC", "Africa/Dakar", "Asia/Hong_Kong").foreach { zid =>
+      val zoneId = DateTimeUtils.getZoneId(zid)
+      val ct = LocalTimestamp(Some(zid)).eval(EmptyRow).asInstanceOf[Long]
+      val t1 = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))
+      assert(math.abs(t1 - ct) < 1000000)
+    }
+  }
+
   test("DayOfYear") {
     val sdfDay = new SimpleDateFormat("D", Locale.US)
 
@@ -916,6 +926,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
                 Literal(new Timestamp(1000000)), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
               1000L)
             checkEvaluation(
+              UnixTimestamp(
+                Literal(DateTimeUtils.microsToLocalDateTime(DateTimeUtils.millisToMicros(1000000))),
+                Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
+              1000L)
+            checkEvaluation(
               UnixTimestamp(Literal(date1), Literal("yyyy-MM-dd HH:mm:ss"), timeZoneId),
               MICROSECONDS.toSeconds(
                 DateTimeUtils.daysToMicros(DateTimeUtils.fromJavaDate(date1), tz.toZoneId)))
@@ -980,6 +995,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               1000L)
             checkEvaluation(ToUnixTimestamp(
               Literal(new Timestamp(1000000)), Literal(fmt1)),
+              1000L)
+            checkEvaluation(ToUnixTimestamp(
+              Literal(DateTimeUtils.microsToLocalDateTime(DateTimeUtils.millisToMicros(1000000))),
+              Literal(fmt1)),
               1000L)
             checkEvaluation(
               ToUnixTimestamp(Literal(date1), Literal(fmt1), timeZoneId),
@@ -1418,12 +1437,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           val input = s.replace("T", " ")
           val expectedTs = LocalDateTime.parse(s)
           checkEvaluation(
-            GetTimestampNTZ(Literal(input), Literal("yyyy-MM-dd HH:mm:ss")), expectedTs)
+            GetTimestamp(Literal(input), Literal("yyyy-MM-dd HH:mm:ss"), TimestampNTZType),
+            expectedTs)
           Seq(".123456", ".123456PST", ".123456CST", ".123456UTC").foreach { segment =>
             val input2 = input + segment
             val expectedTs2 = LocalDateTime.parse(s + ".123456")
             checkEvaluation(
-              GetTimestampNTZ(Literal(input2), Literal("yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]")),
+              GetTimestamp(Literal(input2), Literal("yyyy-MM-dd HH:mm:ss.SSSSSS[zzz]"),
+                TimestampNTZType),
               expectedTs2)
           }
         }
@@ -1437,19 +1458,22 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkEvaluation(
         GetTimestamp(
           Literal("2020-01-27T20:06:11.847-0800"),
-          Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz")), 1580184371847000L)
+          Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz"), TimestampType),
+        1580184371847000L)
     }
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "corrected") {
       checkEvaluation(
         GetTimestamp(
           Literal("2020-01-27T20:06:11.847-0800"),
-          Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz")), null)
+          Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz"),
+          TimestampType), null)
     }
     withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "exception") {
       checkExceptionInExpression[SparkUpgradeException](
         GetTimestamp(
           Literal("2020-01-27T20:06:11.847-0800"),
-          Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz")), "Fail to parse")
+          Literal("yyyy-MM-dd'T'HH:mm:ss.SSSz"),
+          TimestampType), "Fail to parse")
     }
   }
 
@@ -1675,8 +1699,10 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
 
           val exprSeq = Seq[Expression](
-            GetTimestamp(Literal("2020-01-27T20:06:11.847"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
-            GetTimestamp(Literal("Unparseable"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
+            GetTimestamp(Literal("2020-01-27T20:06:11.847"), Literal("yyyy-MM-dd HH:mm:ss.SSS"),
+              TimestampType),
+            GetTimestamp(Literal("Unparseable"), Literal("yyyy-MM-dd HH:mm:ss.SSS"),
+              TimestampType),
             UnixTimestamp(Literal("2020-01-27T20:06:11.847"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
             UnixTimestamp(Literal("Unparseable"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
             ToUnixTimestamp(Literal("2020-01-27T20:06:11.847"), Literal("yyyy-MM-dd HH:mm:ss.SSS")),
@@ -1695,7 +1721,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           // LEGACY works, CORRECTED failed, EXCEPTION with SparkUpgradeException
           val exprSeq2 = Seq[(Expression, Long)](
             (GetTimestamp(Literal("2020-01-27T20:06:11.847!!!"),
-              Literal("yyyy-MM-dd'T'HH:mm:ss.SSS")), 1580184371847000L),
+              Literal("yyyy-MM-dd'T'HH:mm:ss.SSS"), TimestampType), 1580184371847000L),
             (UnixTimestamp(Literal("2020-01-27T20:06:11.847!!!"),
               Literal("yyyy-MM-dd'T'HH:mm:ss.SSS")), 1580184371L),
             (ToUnixTimestamp(Literal("2020-01-27T20:06:11.847!!!"),

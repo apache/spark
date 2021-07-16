@@ -3272,15 +3272,6 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val DISABLED_JDBC_CONN_PROVIDER_LIST =
-    buildConf("spark.sql.sources.disabledJdbcConnProviderList")
-    .internal()
-    .doc("Configures a list of JDBC connection providers, which are disabled. " +
-      "The list contains the name of the JDBC connection providers separated by comma.")
-    .version("3.1.0")
-    .stringConf
-    .createWithDefault("")
-
   val LEGACY_CREATE_HIVE_TABLE_BY_DEFAULT =
     buildConf("spark.sql.legacy.createHiveTableByDefault")
       .internal()
@@ -4043,7 +4034,8 @@ class SQLConf extends Serializable with Logging {
 
   def legacyPathOptionBehavior: Boolean = getConf(SQLConf.LEGACY_PATH_OPTION_BEHAVIOR)
 
-  def disabledJdbcConnectionProviders: String = getConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
+  def disabledJdbcConnectionProviders: String = getConf(
+    StaticSQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST)
 
   def charVarcharAsString: Boolean = getConf(SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING)
 

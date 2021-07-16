@@ -190,7 +190,7 @@ class DateOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         pser = self.pser
         psser = self.psser
         self.assert_eq(pser.astype(str), psser.astype(str))
-        self.assert_eq(pd.Series([None, None, None]), psser.astype(bool))
+        self.assert_eq(pser.astype(bool), psser.astype(bool))
         cat_type = CategoricalDtype(categories=["a", "b", "c"])
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 

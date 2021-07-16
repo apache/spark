@@ -26,7 +26,10 @@ from pandas.api.types import CategoricalDtype
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
-from pyspark.pandas.typedef.typehints import extension_object_dtypes_available
+from pyspark.pandas.typedef.typehints import (
+    extension_float_dtypes_available,
+    extension_object_dtypes_available,
+)
 from pyspark.sql.types import BooleanType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
@@ -399,8 +402,11 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_add(self):
         pser = self.pser
         psser = self.psser
-        self.assert_eq((pser + 1).astype(float), psser + 1)
-        self.assert_eq((pser + 0.1).astype(float), psser + 0.1)
+        self.check_extension(pser + 1, psser + 1)
+        if extension_float_dtypes_available:
+            self.check_extension(pser + 0.1, psser + 0.1)
+        else:
+            self.assert_eq(pser + 0.1, psser + 0.1)
 
         # In pandas, NA | True is NA, whereas NA | True is True in pandas-on-Spark
         self.check_extension(ps.Series([True, True, True], dtype="boolean"), psser + True)
@@ -420,8 +426,11 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_sub(self):
         pser = self.pser
         psser = self.psser
-        self.assert_eq((pser - 1).astype(float), psser - 1)
-        self.assert_eq((pser - 0.1).astype(float), psser - 0.1)
+        self.check_extension(pser - 1, psser - 1)
+        if extension_float_dtypes_available:
+            self.check_extension(pser - 0.1, psser - 0.1)
+        else:
+            self.assert_eq(pser - 0.1, psser - 0.1)
         self.assertRaises(TypeError, lambda: psser - psser)
         self.assertRaises(TypeError, lambda: psser - True)
 
@@ -434,8 +443,11 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_mul(self):
         pser = self.pser
         psser = self.psser
-        self.assert_eq((pser * 1).astype(float), psser * 1)
-        self.assert_eq((pser * 0.1).astype(float), psser * 0.1)
+        self.check_extension(pser * 1, psser * 1)
+        if extension_float_dtypes_available:
+            self.check_extension(pser * 0.1, psser * 0.1)
+        else:
+            self.assert_eq(pser * 0.1, psser * 0.1)
 
         # In pandas, NA & False is NA, whereas NA & False is False in pandas-on-Spark
         self.check_extension(pser * True, psser * True)
@@ -455,8 +467,12 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_truediv(self):
         pser = self.pser
         psser = self.psser
-        self.assert_eq((pser / 1).astype(float), psser / 1)
-        self.assert_eq((pser / 0.1).astype(float), psser / 0.1)
+        if extension_float_dtypes_available:
+            self.check_extension(pser / 1, psser / 1)
+            self.check_extension(pser / 0.1, psser / 0.1)
+        else:
+            self.assert_eq(pser / 1, psser / 1)
+            self.assert_eq(pser / 0.1, psser / 0.1)
         self.assertRaises(TypeError, lambda: psser / psser)
         self.assertRaises(TypeError, lambda: psser / True)
 
@@ -474,7 +490,10 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         psser = self.psser
 
         # float is always returned in pandas-on-Spark
-        self.assert_eq((pser // 1).astype("float"), psser // 1)
+        if extension_float_dtypes_available:
+            self.check_extension((pser // 1).astype("Float64"), psser // 1)
+        else:
+            self.assert_eq((pser // 1).astype("float"), psser // 1)
 
         # in pandas, 1 // 0.1 = 9.0; in pandas-on-Spark, 1 // 0.1 = 10.0
         # self.assert_eq(pser // 0.1, psser // 0.1)
@@ -494,8 +513,11 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_mod(self):
         pser = self.pser
         psser = self.psser
-        self.assert_eq((pser % 1).astype(float), psser % 1)
-        self.assert_eq((pser % 0.1).astype(float), psser % 0.1)
+        self.check_extension(pser % 1, psser % 1)
+        if extension_float_dtypes_available:
+            self.check_extension(pser % 0.1, psser % 0.1)
+        else:
+            self.assert_eq(pser % 0.1, psser % 0.1)
         self.assertRaises(TypeError, lambda: psser % psser)
         self.assertRaises(TypeError, lambda: psser % True)
 
@@ -509,9 +531,18 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         pser = self.pser
         psser = self.psser
         # float is always returned in pandas-on-Spark
-        self.assert_eq((pser ** 1).astype("float"), psser ** 1)
-        self.assert_eq((pser ** 0.1).astype("float"), self.psser ** 0.1)
-        self.assert_eq((pser ** pser.astype(float)).astype("float"), psser ** psser.astype(float))
+        if extension_float_dtypes_available:
+            self.check_extension((pser ** 1).astype("Float64"), psser ** 1)
+            self.check_extension((pser ** 0.1).astype("Float64"), self.psser ** 0.1)
+            self.check_extension(
+                (pser ** pser.astype(float)).astype("Float64"), psser ** psser.astype(float)
+            )
+        else:
+            self.assert_eq((pser ** 1).astype("float"), psser ** 1)
+            self.assert_eq((pser ** 0.1).astype("float"), self.psser ** 0.1)
+            self.assert_eq(
+                (pser ** pser.astype(float)).astype("float"), psser ** psser.astype(float)
+            )
         self.assertRaises(TypeError, lambda: psser ** psser)
         self.assertRaises(TypeError, lambda: psser ** True)
 
@@ -526,8 +557,11 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.assertRaises(TypeError, lambda: self.psser ** psser)
 
     def test_radd(self):
-        self.assert_eq((1 + self.pser).astype(float), 1 + self.psser)
-        self.assert_eq((0.1 + self.pser).astype(float), 0.1 + self.psser)
+        self.check_extension(1 + self.pser, 1 + self.psser)
+        if extension_float_dtypes_available:
+            self.check_extension(0.1 + self.pser, 0.1 + self.psser)
+        else:
+            self.assert_eq(0.1 + self.pser, 0.1 + self.psser)
         self.assertRaises(TypeError, lambda: "x" + self.psser)
 
         # In pandas, NA | True is NA, whereas NA | True is True in pandas-on-Spark
@@ -538,16 +572,22 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + self.psser)
 
     def test_rsub(self):
-        self.assert_eq((1 - self.pser).astype(float), 1 - self.psser)
-        self.assert_eq((0.1 - self.pser).astype(float), 0.1 - self.psser)
+        self.check_extension(1 - self.pser, 1 - self.psser)
+        if extension_float_dtypes_available:
+            self.check_extension(0.1 - self.pser, 0.1 - self.psser)
+        else:
+            self.assert_eq(0.1 - self.pser, 0.1 - self.psser)
         self.assertRaises(TypeError, lambda: "x" - self.psser)
         self.assertRaises(TypeError, lambda: True - self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - self.psser)
 
     def test_rmul(self):
-        self.assert_eq((1 * self.pser).astype(float), 1 * self.psser)
-        self.assert_eq((0.1 * self.pser).astype(float), 0.1 * self.psser)
+        self.check_extension(1 * self.pser, 1 * self.psser)
+        if extension_float_dtypes_available:
+            self.check_extension(0.1 * self.pser, 0.1 * self.psser)
+        else:
+            self.assert_eq(0.1 * self.pser, 0.1 * self.psser)
         self.assertRaises(TypeError, lambda: "x" * self.psser)
 
         # In pandas, NA & False is NA, whereas NA & False is False in pandas-on-Spark
@@ -558,35 +598,49 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * self.psser)
 
     def test_rtruediv(self):
-        self.assert_eq((1 / self.pser).astype(float), 1 / self.psser)
-        self.assert_eq((0.1 / self.pser).astype(float), 0.1 / self.psser)
+        if extension_float_dtypes_available:
+            self.check_extension(1 / self.pser, 1 / self.psser)
+            self.check_extension(0.1 / self.pser, 0.1 / self.psser)
+        else:
+            self.assert_eq(1 / self.pser, 1 / self.psser)
+            self.assert_eq(0.1 / self.pser, 0.1 / self.psser)
         self.assertRaises(TypeError, lambda: "x" / self.psser)
         self.assertRaises(TypeError, lambda: True / self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) / self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) / self.psser)
 
     def test_rfloordiv(self):
-        self.assert_eq((1 // self.psser).astype(float), ps.Series([1.0, np.inf, np.nan]))
-        self.assert_eq((0.1 // self.psser).astype(float), ps.Series([0.0, np.inf, np.nan]))
+        self.assert_eq(pd.Series([1.0, np.inf, np.nan]), (1 // self.psser).astype(float))
+        self.assert_eq(pd.Series([0.0, np.inf, np.nan]), (0.1 // self.psser).astype(float))
         self.assertRaises(TypeError, lambda: "x" // self.psser)
         self.assertRaises(TypeError, lambda: True // self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // self.psser)
 
     def test_rpow(self):
-        self.assert_eq(1 ** self.psser, ps.Series([1, 1, 1], dtype=float))
-        self.assert_eq((0.1 ** self.pser).astype(float), 0.1 ** self.psser)
+        if extension_float_dtypes_available:
+            self.check_extension(pd.Series([1, 1, 1], dtype="Float64"), 1 ** self.psser)
+            self.check_extension((0.1 ** self.pser).astype("Float64"), 0.1 ** self.psser)
+        else:
+            self.assert_eq(pd.Series([1, 1, 1], dtype="float"), 1 ** self.psser)
+            self.assert_eq((0.1 ** self.pser).astype("float"), 0.1 ** self.psser)
         self.assertRaises(TypeError, lambda: "x" ** self.psser)
         self.assertRaises(TypeError, lambda: True ** self.psser)
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) ** self.psser)
         self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** self.psser)
 
     def test_rmod(self):
-        self.assert_eq(ps.Series([0, np.nan, np.nan], dtype=float), 1 % self.psser)
-        self.assert_eq(
-            ps.Series([0.10000000000000009, np.nan, np.nan], dtype=float),
-            0.1 % self.psser,
-        )
+        self.check_extension(ps.Series([0, np.nan, np.nan], dtype="Int64"), 1 % self.psser)
+        if extension_float_dtypes_available:
+            self.check_extension(
+                pd.Series([0.10000000000000009, np.nan, np.nan], dtype="Float64"),
+                0.1 % self.psser,
+            )
+        else:
+            self.assert_eq(
+                pd.Series([0.10000000000000009, np.nan, np.nan], dtype="float"),
+                0.1 % self.psser,
+            )
         self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % self.psser)
         self.assertRaises(TypeError, lambda: True % self.psser)
 
