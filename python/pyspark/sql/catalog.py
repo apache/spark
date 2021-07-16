@@ -149,7 +149,8 @@ class Catalog(object):
 
         Returns
         -------
-        Boolean indicating whether the table/view exist
+        bool
+            Indicating whether the table/view exists
 
         Examples
         --------
