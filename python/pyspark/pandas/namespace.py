@@ -2855,7 +2855,7 @@ def broadcast(obj: DataFrame) -> DataFrame:
     """
     warnings.warn(
         "`broadcast` has been deprecated and will be removed in a future version. "
-        "use `DataFrame.spark.hint` with 'broadcast'.",
+        "use `DataFrame.spark.hint` with 'broadcast' for `name` parameter.",
         FutureWarning,
     )
     if not isinstance(obj, DataFrame):
