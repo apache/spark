@@ -29,7 +29,7 @@ class Observation:
     Class to observe (named) metrics on a :class:`DataFrame`. Metrics are aggregation expressions,
     which are applied to the DataFrame while is is being processed by an action.
 
-    .. versionadded:: 3.2.0
+    .. versionadded:: 3.3.0
 
     The metrics have the following guarantees:
 
@@ -52,10 +52,6 @@ class Observation:
     An Observation instance collects the metrics while the first action is executed. Subsequent
     actions do not modify the metrics returned by `Observation.get`. Retrieval of the metric via
     `Observation.get` blocks until the first action has finished and metrics become available.
-    You can add a timeout to that blocking via `Observation.waitCompleted`:
-
-        if observation.waitCompleted(millis=100):
-          return observation.get
 
     This class does not support streaming datasets.
     """
@@ -88,8 +84,8 @@ class Observation:
     def get(self) -> Row:
         """
         Get the observed metrics. This waits until the observed dataset finishes its first action.
-        If you want to wait for the result and provide a timeout, use `waitCompleted`. Only the
-        result of the first action is available. Subsequent actions do not modify the result.
+        Only the result of the first action is available. Subsequent actions do not modify the
+        result.
 
         :return: the metrics :class:`Row`
         """

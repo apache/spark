@@ -1830,13 +1830,13 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self.groupBy().agg(*exprs)
 
-    @since(3.2)
+    @since(3.3)
     def observe(self, observation, *exprs):
         """
         Observe (named) metrics through an :class:`Observation` instance.
         This method does not support streaming datasets.
 
-        .. versionadded:: 3.2.0
+        .. versionadded:: 3.3.0
 
         A user can retrieve the metrics by accessing `Observation.get`.
 
