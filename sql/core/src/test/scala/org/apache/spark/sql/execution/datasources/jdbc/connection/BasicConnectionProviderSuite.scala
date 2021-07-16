@@ -21,7 +21,7 @@ import java.sql.{Connection, Driver}
 import java.util.Properties
 
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito._
+import org.mockito.Mockito.when
 import org.mockito.invocation.InvocationOnMock
 import org.scalatestplus.mockito.MockitoSugar
 
@@ -51,6 +51,7 @@ class BasicConnectionProviderSuite extends ConnectionProviderSuiteBase with Mock
       JDBCOptions.JDBC_CONNECTION_PROVIDER -> "basic")
     val conn = provider.getConnection(driver, opts)
     assert(!conn.getClientInfo().containsKey(JDBCOptions.JDBC_URL))
+    assert(!conn.getClientInfo().containsKey(JDBCOptions.JDBC_TABLE_NAME))
     assert(!conn.getClientInfo().containsKey(JDBCOptions.JDBC_CONNECTION_PROVIDER))
   }
 }

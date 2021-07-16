@@ -49,7 +49,7 @@ which must be unique. One can set the following configuration entry in `SparkCon
 ## How to enforce a specific JDBC connection provider?
 
 When more than one JDBC connection provider can handle a specific driver and options, it is possible to
-disambiguate and enforce a particular CP for the JDBC data source. One can set the DataFrameReader
+disambiguate and enforce a particular CP for the JDBC data source. One can set the DataFrame
 option `connectionProvider` to specify the name of the CP they want to use.
 
 ## How a JDBC connection provider found when new connection initiated?

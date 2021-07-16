@@ -20,6 +20,8 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 import java.sql.{Connection, Driver}
 import javax.security.auth.login.Configuration
 
+import org.scalatestplus.mockito.MockitoSugar
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.jdbc.JdbcConnectionProvider
@@ -42,14 +44,6 @@ class ConnectionProviderSuite
     assert(IntentionallyFaultyConnectionProvider.constructed)
     assert(!providers.exists(_.isInstanceOf[IntentionallyFaultyConnectionProvider]))
     assert(providers.size === 6)
-  }
-
-  test("Disabled provider must not be loaded") {
-    withSQLConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST.key -> "db2") {
-      val providers = ConnectionProvider.loadProviders()
-      assert(!providers.exists(_.isInstanceOf[DB2ConnectionProvider]))
-      assert(providers.size === 5)
-    }
   }
 
   test("Throw an error selecting from an empty list of providers on create") {
@@ -163,7 +157,10 @@ class ConnectionProviderSuite
   }
 }
 
-class DisallowedConnectionProviderSuite extends SharedSparkSession {
+class DisallowedConnectionProviderSuite
+  extends ConnectionProviderSuiteBase
+  with SharedSparkSession
+  with MockitoSugar {
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(
@@ -173,5 +170,14 @@ class DisallowedConnectionProviderSuite extends SharedSparkSession {
     val providers = ConnectionProvider.loadProviders()
     assert(!providers.exists(_.isInstanceOf[DB2ConnectionProvider]))
     assert(providers.size === 5)
+  }
+
+  test("Throw an error if the selected provider is disabled") {
+    val providers = ConnectionProvider.loadProviders()
+    val err = intercept[IllegalArgumentException] {
+      ConnectionProvider.create(mock[Driver],
+        options("jdbc:db2://localhost/db2").parameters, Some("db2"))
+    }
+    assert(err.getMessage.contains("Empty list of JDBC connection providers"))
   }
 }

@@ -277,14 +277,14 @@ logging into the data sources.
   </tr>  
 
   <tr>
-   <td><code>connectionProvider</code></td>
-   <td>(none)</td>
-   <td>
-     The short name of the JDBC connection provider to use to connect to this URL, e.g. <code>db2</code>, <code>mssql</code>.
-     Must be one of the providers loaded with the JDBC data source. Used to disambiguate when more than one provider can handle
-     the specified driver and options.
-   </td>
-   <td>read/write</td>
+    <td><code>connectionProvider</code></td>
+    <td>(none)</td>
+    <td>
+      The name of the JDBC connection provider to use to connect to this URL, e.g. <code>db2</code>, <code>mssql</code>.
+      Must be one of the providers loaded with the JDBC data source. Used to disambiguate when more than one provider can handle
+      the specified driver and options. The selected provider must not be disabled by <code>spark.sql.sources.disabledJdbcConnProviderList</code>. 
+    </td>
+    <td>read/write</td>
  </tr>  
 </table>
 
