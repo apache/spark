@@ -1980,14 +1980,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |Alice|  5|    80|
         +-----+---+------+
         """
-        if subset is None:
-            jdf = self._jdf.dropDuplicates()
-        elif isinstance(subset, str):
+        if isinstance(subset, str):
             subset = [subset]
         elif not isinstance(subset, (list, tuple)):
             raise TypeError("Parameter 'subset' must be a list of columns")
 
-        jdf = self._jdf.dropDuplicates(self._jseq(subset))
+        if subset is None:
+            jdf = self._jdf.dropDuplicates()
+        else:
+            jdf = self._jdf.dropDuplicates(self._jseq(subset))
 
         return DataFrame(jdf, self.sql_ctx)
 
