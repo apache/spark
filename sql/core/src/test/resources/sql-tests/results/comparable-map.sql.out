@@ -737,9 +737,9 @@ struct<v1:map<int,struct<col1:string>>>
 struct<v1:map<int,string>>
 -- !query output
 {1:"a",2:"b"}
+{1:"a",3:"c"}
 {1:"a",2:null}
 {1:"a"}
-{1:"a",3:"c"}
 {3:"c"}
 
 
