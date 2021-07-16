@@ -34,6 +34,8 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros}
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -47,7 +49,8 @@ class ParquetFilters(
     pushDownDecimal: Boolean,
     pushDownStartWith: Boolean,
     pushDownInFilterThreshold: Int,
-    caseSensitive: Boolean) {
+    caseSensitive: Boolean,
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value) {
   // A map which contains parquet field name and data type, if predicate push down applies.
   //
   // Each key in `nameToParquetField` represents a column; `dots` are used as separators for
@@ -123,14 +126,26 @@ class ParquetFilters(
   private val ParquetTimestampMicrosType = ParquetSchemaType(TIMESTAMP_MICROS, INT64, 0, null)
   private val ParquetTimestampMillisType = ParquetSchemaType(TIMESTAMP_MILLIS, INT64, 0, null)
 
-  private def dateToDays(date: Any): Int = date match {
-    case d: Date => DateTimeUtils.fromJavaDate(d)
-    case ld: LocalDate => DateTimeUtils.localDateToDays(ld)
+  private def dateToDays(date: Any): Int = {
+    val gregorianDays = date match {
+      case d: Date => DateTimeUtils.fromJavaDate(d)
+      case ld: LocalDate => DateTimeUtils.localDateToDays(ld)
+    }
+    datetimeRebaseMode match {
+      case LegacyBehaviorPolicy.LEGACY => rebaseGregorianToJulianDays(gregorianDays)
+      case _ => gregorianDays
+    }
   }
 
-  private def timestampToMicros(v: Any): JLong = v match {
-    case i: Instant => DateTimeUtils.instantToMicros(i)
-    case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
+  private def timestampToMicros(v: Any): JLong = {
+    val gregorianMicros = v match {
+      case i: Instant => DateTimeUtils.instantToMicros(i)
+      case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
+    }
+    datetimeRebaseMode match {
+      case LegacyBehaviorPolicy.LEGACY => rebaseGregorianToJulianMicros(gregorianMicros)
+      case _ => gregorianMicros
+    }
   }
 
   private def decimalToInt32(decimal: JBigDecimal): Integer = decimal.unscaledValue().intValue()
