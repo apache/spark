@@ -156,8 +156,10 @@ class Catalog(object):
         --------
         >>> spark.catalog.tableExists("unexisting_table")
         False
-        >>> spark.catalog.tableExists("existing_table", "another_db")
+        >>> df = spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+        >>> spark.catalog.tableExists("tab1")
         True
+        >>> df = spark.sql("DROP TABLE tab1")
         """
         if dbName is None:
             dbName = self.currentDatabase()
