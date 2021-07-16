@@ -29,13 +29,13 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
-import org.apache.spark.sql.catalyst.plans.logical.{CommandResult, LocalLimit, Project, RepartitionByExpression, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.UnionExec
+import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.command.FunctionsCommand
+import org.apache.spark.sql.execution.command.{DataWritingCommandExec, FunctionsCommand}
 import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
@@ -4073,27 +4073,20 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         sql("CREATE VIEW t1_v AS SELECT * FROM t1")
         sql(
           """
-            |CREATE TABLE t2
+            |CREATE TABLE t2(FLAG INT, CAL_DT DATE)
             |USING PARQUET
-            |PARTITIONED BY (CAL_DT)
-            |AS
-            |SELECT 1 AS FLAG,CAL_DT FROM t1_v
-            |WHERE CAL_DT BETWEEN '2021-06-27' AND '2021-06-28'""".stripMargin)
-        checkAnswer(sql("SELECT FLAG, CAST(CAL_DT as STRING) FROM t2 "),
-          Row(1, "2021-06-27") :: Row(1, "2021-06-28") :: Nil)
+            |PARTITIONED BY (CAL_DT)""".stripMargin)
         val insert = sql(
           """
             |INSERT INTO t2 SELECT 2 AS FLAG,CAL_DT FROM t1_v
             |WHERE CAL_DT BETWEEN '2021-06-29' AND '2021-06-30'""".stripMargin)
-
-        insert.queryExecution.optimizedPlan.collectFirst {
-          case CommandResult(_, i: InsertIntoHadoopFsRelationCommand, _, _) => i
+        insert.queryExecution.executedPlan.collectFirst {
+          case CommandResultExec(_, DataWritingCommandExec(
+          i: InsertIntoHadoopFsRelationCommand, _), _) => i
         }.get.partitionColumns.map(_.name).foreach(name => assert(name == "CAL_DT"))
         checkAnswer(sql("SELECT FLAG, CAST(CAL_DT as STRING) FROM t2 "),
-          Row(1, "2021-06-27") :: Row(1, "2021-06-28") ::
             Row(2, "2021-06-29") :: Row(2, "2021-06-30") :: Nil)
         checkAnswer(sql("SHOW PARTITIONS t2"),
-          Row("CAL_DT=2021-06-27") :: Row("CAL_DT=2021-06-28") ::
             Row("CAL_DT=2021-06-29") :: Row("CAL_DT=2021-06-30") :: Nil)
       }
     }
