@@ -2333,6 +2333,41 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
     return Column(res)
 
 
+def session_window(timeColumn, gapDuration):
+    """
+    Generates session window given a timestamp specifying column.
+    Session window is one of dynamic windows, which means the length of window is varying
+    according to the given inputs. The length of session window is defined as "the timestamp
+    of latest input of the session + gap duration", so when the new inputs are bound to the
+    current session window, the end time of session window can be expanded according to the new
+    inputs.
+    Windows can support microsecond precision. Windows in the order of months are not supported.
+    For a streaming query, you may use the function `current_timestamp` to generate windows on
+    processing time.
+    gapDuration is provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
+    interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
+    The output column will be a struct called 'session_window' by default with the nested columns
+    'start' and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
+    .. versionadded:: 3.2.0
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
+    >>> w = df.groupBy(session_window("date", "5 seconds")).agg(sum("val").alias("sum"))
+    >>> w.select(w.session_window.start.cast("string").alias("start"),
+    ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
+    [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
+    """
+    def check_string_field(field, fieldName):
+        if not field or type(field) is not str:
+            raise TypeError("%s should be provided as a string" % fieldName)
+
+    sc = SparkContext._active_spark_context
+    time_col = _to_java_column(timeColumn)
+    check_string_field(gapDuration, "gapDuration")
+    res = sc._jvm.functions.session_window(time_col, gapDuration)
+    return Column(res)
+
+
 # ---------------------------- misc functions ----------------------------------
 
 def crc32(col):
