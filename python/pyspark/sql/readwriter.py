@@ -624,7 +624,8 @@ class DataFrameWriter(OptionUtils):
 
     def bucketBy(self, numBuckets, col, *cols):
         """Buckets the output by the given columns.If specified,
-        the output is laid out on the file system similar to Hive's bucketing scheme.
+        the output is laid out on the file system similar to Hive's bucketing scheme,
+        but with a different bucket hash function and is not compatible with Hive's bucketing.
 
         .. versionadded:: 2.3.0
 
@@ -742,10 +743,16 @@ class DataFrameWriter(OptionUtils):
     def insertInto(self, tableName, overwrite=None):
         """Inserts the content of the :class:`DataFrame` to the specified table.
 
+        Optionally overwriting any existing data.
+
         It requires that the schema of the :class:`DataFrame` is the same as the
         schema of the table.
 
-        Optionally overwriting any existing data.
+        Notes
+        -----
+        Unlike `saveAsTable`, `insertInto` ignores the column names and just uses
+        position-based resolution.
+
         """
         if overwrite is not None:
             self.mode("overwrite" if overwrite else "append")
@@ -765,6 +772,13 @@ class DataFrameWriter(OptionUtils):
         * `ignore`: Silently ignore this operation if data already exists.
 
         .. versionadded:: 1.4.0
+
+        Notes
+        -----
+        When `mode` is `Append`, if there is an existing table, we will use the format and
+        options of the existing table. The column order in the schema of the `DataFrame` doesn't
+        need to be same as that of the existing table. Unlike `insertInto`, `saveAsTable` will use
+        the column names to find the correct column positions.
 
         Parameters
         ----------
