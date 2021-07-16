@@ -157,10 +157,7 @@ class ConnectionProviderSuite
   }
 }
 
-class DisallowedConnectionProviderSuite
-  extends ConnectionProviderSuiteBase
-  with SharedSparkSession
-  with MockitoSugar {
+class DisallowedConnectionProviderSuite extends SharedSparkSession {
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(
