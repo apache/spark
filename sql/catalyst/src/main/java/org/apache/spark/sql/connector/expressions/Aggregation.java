@@ -31,7 +31,7 @@ public class Aggregation implements Serializable {
   private AggregateFunc[] aggregateExpressions;
   private FieldReference[] groupByColumns;
 
-  public Aggregation (AggregateFunc[] aggregateExpressions, FieldReference[] groupByColumns) {
+  public Aggregation(AggregateFunc[] aggregateExpressions, FieldReference[] groupByColumns) {
     this.aggregateExpressions = aggregateExpressions;
     this.groupByColumns = groupByColumns;
   }

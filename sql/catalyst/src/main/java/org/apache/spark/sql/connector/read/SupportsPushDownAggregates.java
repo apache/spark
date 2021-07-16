@@ -33,7 +33,8 @@ import org.apache.spark.sql.connector.expressions.Aggregation;
  * }}}
  *
  * <p>
- * Similarly, if there is no grouping expression, the data source can still output more than one rows.
+ * Similarly, if there is no grouping expression, the data source can still output more than one
+ * rows.
  *
  * <p>
  * When pushing down operators, Spark pushes down filters to the data source first, then push down
