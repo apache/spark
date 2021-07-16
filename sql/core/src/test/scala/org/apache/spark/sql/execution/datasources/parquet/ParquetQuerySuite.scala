@@ -158,6 +158,23 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("writing and reading TimestampNTZType column") {
+    withTable("ts") {
+      sql("create table ts (c1 timestamp_ntz) using parquet")
+      sql("insert into ts values (timestamp_ntz'2016-01-01 10:11:12.123456')")
+      sql("insert into ts values (null)")
+      sql("insert into ts values (timestamp_ntz'1965-01-01 10:11:12.123456')")
+      val expectedSchema = new StructType().add(StructField("c1", TimestampNTZType))
+      assert(spark.table("ts").schema == expectedSchema)
+      val expected = Seq(
+        ("2016-01-01 10:11:12.123456"),
+        (null),
+        ("1965-01-01 10:11:12.123456"))
+        .toDS().select($"value".cast("timestamp_ntz"))
+      checkAnswer(sql("select * from ts"), expected)
+    }
+  }
+
   test("SPARK-10365 timestamp written and read as INT64 - TIMESTAMP_MICROS") {
     val data = (1 to 10).map { i =>
       val ts = new java.sql.Timestamp(i)

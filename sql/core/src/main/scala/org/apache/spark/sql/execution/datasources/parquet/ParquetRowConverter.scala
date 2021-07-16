@@ -370,6 +370,23 @@ private[parquet] class ParquetRowConverter(
           }
         }
 
+      case TimestampNTZType
+        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+          parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MICROS =>
+        new ParquetPrimitiveConverter(updater)
+
+      case TimestampNTZType
+        if parquetType.getLogicalTypeAnnotation.isInstanceOf[TimestampLogicalTypeAnnotation] &&
+          parquetType.getLogicalTypeAnnotation
+            .asInstanceOf[TimestampLogicalTypeAnnotation].getUnit == TimeUnit.MILLIS =>
+        new ParquetPrimitiveConverter(updater) {
+          override def addLong(value: Long): Unit = {
+            val micros = DateTimeUtils.millisToMicros(value)
+            updater.setLong(micros)
+          }
+        }
+
       case DateType =>
         new ParquetPrimitiveConverter(updater) {
           override def addInt(value: Int): Unit = {

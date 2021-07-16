@@ -241,10 +241,13 @@ class ParquetToSparkSchemaConverter(
               case 64 => DecimalType(20, 0)
               case _ => illegalType()
             }
-          case timestamp: TimestampLogicalTypeAnnotation if timestamp.getUnit == TimeUnit.MICROS =>
-            TimestampType
-          case timestamp: TimestampLogicalTypeAnnotation if timestamp.getUnit == TimeUnit.MILLIS =>
-            TimestampType
+          case timestamp: TimestampLogicalTypeAnnotation
+            if timestamp.getUnit == TimeUnit.MICROS || timestamp.getUnit == TimeUnit.MILLIS =>
+            if (timestamp.isAdjustedToUTC) {
+              TimestampType
+            } else {
+              TimestampNTZType
+            }
           case _ => illegalType()
         }
 
@@ -528,6 +531,9 @@ class SparkToParquetSchemaConverter(
               .as(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS)).named(field.name)
         }
 
+      case TimestampNTZType =>
+        Types.primitive(INT64, repetition)
+          .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named(field.name)
       case BinaryType =>
         Types.primitive(BINARY, repetition).named(field.name)
 
