@@ -2854,7 +2854,7 @@ def broadcast(obj: DataFrame) -> DataFrame:
     ...
     """
     warnings.warn(
-        "`ps.broadcast` has been deprecated and will be removed in a future version. "
+        "`broadcast` has been deprecated and will be removed in a future version. "
         "use `DataFrame.spark.hint` with 'broadcast'.",
         FutureWarning,
     )
