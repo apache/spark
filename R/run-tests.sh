@@ -32,7 +32,8 @@ NUM_TEST_WARNING="$(grep -c -e 'Warnings ----------------' $LOGFILE)"
 CRAN_CHECK_LOG_FILE=$FWDIR/cran-check.out
 rm -f $CRAN_CHECK_LOG_FILE
 
-NO_TESTS=1 NO_MANUAL=1 $FWDIR/check-cran.sh 2>&1 | tee -a $CRAN_CHECK_LOG_FILE
+# Skip CRAN check for old version in CI. See also SPARK-36177.
+(([ ! -z "$AMPLAB_JENKINS" ] || [ ! -z "$GITHUB_ACTIONS" ]) && touch $CRAN_CHECK_LOG_FILE) || NO_TESTS=1 NO_MANUAL=1 $FWDIR/check-cran.sh 2>&1 | tee -a $CRAN_CHECK_LOG_FILE
 FAILED=$((PIPESTATUS[0]||$FAILED))
 
 NUM_CRAN_WARNING="$(grep -c WARNING$ $CRAN_CHECK_LOG_FILE)"
