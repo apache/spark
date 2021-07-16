@@ -3548,7 +3548,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   override def visitQualifiedColTypeWithPosition(
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
     QualifiedColType(
-      fieldName = UnresolvedFieldName(typedVisit[Seq[String]](ctx.name)),
+      name = typedVisit[Seq[String]](ctx.name),
       dataType = typedVisit[DataType](ctx.dataType),
       nullable = ctx.NULL == null,
       comment = Option(ctx.commentSpec()).map(visitCommentSpec),

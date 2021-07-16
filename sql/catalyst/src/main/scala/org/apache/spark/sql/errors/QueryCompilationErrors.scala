@@ -1985,12 +1985,12 @@ private[spark] object QueryCompilationErrors {
   }
 
   def missingFieldError(
-      fieldName: Seq[String], table: ResolvedTable, context: Expression): Throwable = {
+      fieldName: Seq[String], table: ResolvedTable, context: Option[Expression]): Throwable = {
     throw new AnalysisException(
       s"Missing field ${fieldName.quoted} in table ${table.name} with schema:\n" +
         table.schema.treeString,
-      context.origin.line,
-      context.origin.startPosition)
+      context.map(_.origin.line).asInstanceOf[Option[Int]],
+      context.map(_.origin.startPosition).asInstanceOf[Option[Int]])
   }
 
   def invalidFieldName(fieldName: Seq[String], path: Seq[String]): Throwable = {

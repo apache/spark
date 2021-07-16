@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ViewType}
+import org.apache.spark.sql.catalyst.analysis.{FieldPosition, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
@@ -228,13 +228,11 @@ case class ReplaceTableAsSelectStatement(
  * Column data as parsed by ALTER TABLE ... ADD COLUMNS.
  */
 case class QualifiedColType(
-    fieldName: FieldName,
+    name: Seq[String],
     dataType: DataType,
     nullable: Boolean,
     comment: Option[String],
-    position: Option[FieldPosition]) {
-  def name: Seq[String] = fieldName.name
-}
+    position: Option[FieldPosition])
 
 /**
  * An INSERT INTO statement, as parsed from SQL.
