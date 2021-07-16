@@ -41,7 +41,7 @@ import org.apache.spark.sql.util.QueryExecutionListener
  * This class does not support streaming datasets.
  *
  * @param name name of the metric
- * @since 3.2.0
+ * @since 3.3.0
  */
 class Observation(name: String) {
 

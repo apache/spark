@@ -1966,7 +1966,7 @@ class Dataset[T] private[sql](
    * @throws IllegalArgumentException If this is a streaming Dataset (this.isStreaming == true)
    *
    * @group typedrel
-   * @since 3.2.0
+   * @since 3.3.0
    */
   def observe(observation: Observation, expr: Column, exprs: Column*): Dataset[T] = {
     observation.on(this, expr, exprs: _*)
