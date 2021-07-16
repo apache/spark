@@ -87,7 +87,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    */
   private final ConcurrentMap<String, AppShuffleInfo> appsShuffleInfo;
 
-  private final Executor mergedShuffleCleanerExecutor;
+  private final Executor mergedShuffleCleaner;
   private final TransportConf conf;
   private final int minChunkSize;
   private final int ioExceptionsThresholdDuringMerge;
@@ -100,7 +100,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   public RemoteBlockPushResolver(TransportConf conf) {
     this.conf = conf;
     this.appsShuffleInfo = new ConcurrentHashMap<>();
-    this.mergedShuffleCleanerExecutor = Executors.newSingleThreadExecutor(
+    this.mergedShuffleCleaner = Executors.newSingleThreadExecutor(
       // Add `spark` prefix because it will run in NM in Yarn mode.
       NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
     this.minChunkSize = conf.minChunkSizeInMergedShuffleFile();
@@ -121,9 +121,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   protected AppShuffleInfo validateAndGetAppShuffleInfo(String appId) {
     // TODO: [SPARK-33236] Change the message when this service is able to handle NM restart
-    AppShuffleInfo appShuffleInfo =
-      Preconditions.checkNotNull(appsShuffleInfo.get(appId),
-        "application " + appId + " is not registered or NM was restarted.");
+    AppShuffleInfo appShuffleInfo = appsShuffleInfo.get(appId);
+    Preconditions.checkArgument(appShuffleInfo != null,
+      "application " + appId + " is not registered or NM was restarted.");
     return appShuffleInfo;
   }
 
@@ -255,7 +255,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     logger.info("Application {} removed, cleanupLocalDirs = {}", appId, cleanupLocalDirs);
     AppShuffleInfo appShuffleInfo = appsShuffleInfo.remove(appId);
     if (null != appShuffleInfo) {
-      mergedShuffleCleanerExecutor.execute(
+      mergedShuffleCleaner.execute(
         () -> closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs));
     }
   }
@@ -501,7 +501,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             AppShuffleInfo appShuffleInfo = originalAppShuffleInfo.get();
             logger.warn("Cleanup shuffle info and merged shuffle files for {}_{} as new " +
                 "application attempt registered", appId, appShuffleInfo.attemptId);
-            mergedShuffleCleanerExecutor.execute(
+            mergedShuffleCleaner.execute(
               () -> closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, true));
           }
         }
@@ -538,10 +538,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         String streamId,
         AppShufflePartitionInfo partitionInfo,
         int mapIndex) {
-      this.mergeManager = Preconditions.checkNotNull(mergeManager);
-      this.appShuffleInfo = Preconditions.checkNotNull(appShuffleInfo);
+      Preconditions.checkArgument(mergeManager != null);
+      this.mergeManager = mergeManager;
+      Preconditions.checkArgument(appShuffleInfo != null);
+      this.appShuffleInfo = appShuffleInfo;
       this.streamId = streamId;
-      this.partitionInfo = Preconditions.checkNotNull(partitionInfo);
+      Preconditions.checkArgument(partitionInfo != null);
+      this.partitionInfo = partitionInfo;
       this.mapIndex = mapIndex;
       abortIfNecessary();
     }
@@ -855,7 +858,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         File dataFile,
         MergeShuffleFile indexFile,
         MergeShuffleFile metaFile) throws IOException {
-      this.appId = Preconditions.checkNotNull(appId, "app id is null");
+      Preconditions.checkArgument(appId != null, "app id is null");
+      this.appId = appId;
       this.shuffleId = shuffleId;
       this.reduceId = reduceId;
       this.dataChannel = new FileOutputStream(dataFile).getChannel();

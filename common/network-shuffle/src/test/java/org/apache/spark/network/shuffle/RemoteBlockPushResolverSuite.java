@@ -407,7 +407,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = NullPointerException.class)
+  @Test(expected = IllegalArgumentException.class)
   public void testUpdateLocalDirsOnlyOnce() throws IOException {
     String testApp = "updateLocalDirsOnlyOnceTest";
     Path[] activeLocalDirs = createLocalDirs(1);
@@ -427,10 +427,10 @@ public class RemoteBlockPushResolverSuite {
     removeApplication(testApp);
     try {
       pushResolver.getMergedBlockDirs(testApp);
-    } catch (Throwable e) {
-      assertTrue(e.getMessage()
-        .startsWith("application " + testApp + " is not registered or NM was restarted."));
-      Throwables.propagate(e);
+    } catch (IllegalArgumentException e) {
+      assertEquals(e.getMessage(),
+        "application " + testApp + " is not registered or NM was restarted.");
+      throw e;
     }
   }
 
@@ -450,7 +450,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = NullPointerException.class)
+  @Test(expected = IllegalArgumentException.class)
   public void testExecutorRegistrationFromTwoAppAttempts() throws IOException {
     String testApp = "testExecutorRegistrationFromTwoAppAttempts";
     Path[] attempt1LocalDirs = createLocalDirs(1);
@@ -480,10 +480,10 @@ public class RemoteBlockPushResolverSuite {
     removeApplication(testApp);
     try {
       pushResolver.getMergedBlockDirs(testApp);
-    } catch (Throwable e) {
-      assertTrue(e.getMessage()
-        .startsWith("application " + testApp + " is not registered or NM was restarted."));
-      Throwables.propagate(e);
+    } catch (IllegalArgumentException e) {
+      assertEquals(e.getMessage(),
+        "application " + testApp + " is not registered or NM was restarted.");
+      throw e;
     }
   }
 
