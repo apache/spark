@@ -67,7 +67,7 @@ class DataFrameTests(ReusedSQLTestCase):
         pydoc.render_doc(df.foo)
         pydoc.render_doc(df.take(1))
 
-    def test_dropDuplicates(self):
+    def test_drop_duplicates(self):
         schema = StructType([
             StructField("name", StringType(), True),
             StructField("age", IntegerType(), True)]
