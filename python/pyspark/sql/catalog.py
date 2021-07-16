@@ -133,6 +133,17 @@ class Catalog(object):
                 isBucket=jcolumn.isBucket()))
         return columns
 
+    @since(3.2)
+    def tableExists(self, tableName, dbName=None):
+        """Check if the table or view with the specified name exists.
+        This can either be a temporary view or a table/view.
+
+        If no database is specified, the current database is used.
+        """
+        if dbName is None:
+            dbName = self.currentDatabase()
+        return self._jcatalog.tableExists(dbName, tableName)
+
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
         """Creates a table based on the dataset in a data source.
 
