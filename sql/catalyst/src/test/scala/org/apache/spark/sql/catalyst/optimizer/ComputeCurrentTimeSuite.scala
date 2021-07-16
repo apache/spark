@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.time.ZoneId
+import java.time.{LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentDate, CurrentTimestamp, CurrentTimeZone, Literal, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
@@ -80,5 +80,26 @@ class ComputeCurrentTimeSuite extends PlanTest {
     }
     assert(lits.size == 1)
     assert(lits.head == SQLConf.get.sessionLocalTimeZone)
+  }
+
+  test("analyzer should replace localtimestamp with literals") {
+    val in = Project(Seq(Alias(LocalTimestamp(), "a")(), Alias(LocalTimestamp(), "b")()),
+      LocalRelation())
+
+    val zoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+
+    val min = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))
+    val plan = Optimize.execute(in.analyze).asInstanceOf[Project]
+    val max = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))
+
+    val lits = new scala.collection.mutable.ArrayBuffer[Long]
+    plan.transformAllExpressions { case e: Literal =>
+      lits += e.value.asInstanceOf[Long]
+      e
+    }
+    assert(lits.size == 2)
+    assert(lits(0) >= min && lits(0) <= max)
+    assert(lits(1) >= min && lits(1) <= max)
+    assert(lits(0) == lits(1))
   }
 }

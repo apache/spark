@@ -26,7 +26,7 @@ import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{CurrentDate, CurrentTimestampLike, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
@@ -172,9 +172,9 @@ class ContinuousExecution(
     }
 
     withNewSources.transformAllExpressionsWithPruning(_.containsPattern(CURRENT_LIKE)) {
-      case (_: CurrentTimestamp | _: CurrentDate) =>
-        throw new IllegalStateException(
-          "CurrentTimestamp and CurrentDate not yet supported for continuous processing")
+      case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp) =>
+        throw new IllegalStateException("CurrentTimestamp, Now, CurrentDate and LocalTimestamp" +
+          " not yet supported for continuous processing")
     }
 
     reportTimeTaken("queryPlanning") {

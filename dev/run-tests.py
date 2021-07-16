@@ -294,6 +294,24 @@ def exec_sbt(sbt_args=()):
         exit_from_command_with_retcode(sbt_cmd, retcode)
 
 
+def get_scala_profiles(scala_version):
+    """
+    For the given Scala version tag, return a list of Maven/SBT profile flags for
+    building and testing against that Scala version.
+    """
+    sbt_maven_scala_profiles = {
+        "scala2.12": ["-Pscala-2.12"],
+        "scala2.13": ["-Pscala-2.13"],
+    }
+
+    if scala_version in sbt_maven_scala_profiles:
+        return sbt_maven_scala_profiles[scala_version]
+    else:
+        print("[error] Could not find", scala_version, "in the list. Valid options",
+              " are", sbt_maven_scala_profiles.keys())
+        sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
+
+
 def get_hadoop_profiles(hadoop_version):
     """
     For the given Hadoop version tag, return a list of Maven/SBT profile flags for
@@ -480,7 +498,7 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
         # to test because of Jenkins environment issue. Once Jenkins has Python 3.9 to test,
         # we should remove this change back and add python3.9 into python/run-tests.py script.
         command.append("--python-executable=%s" % ','.join(
-            x for x in ["python3.6", "python3.9", "pypy3"] if which(x)))
+            x for x in ["python3.9", "pypy3"] if which(x)))
     run_cmd(command)
 
     if with_coverage:
@@ -629,6 +647,7 @@ def main():
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
+        scala_version = os.environ.get("AMPLAB_JENKINS_BUILD_SCALA_PROFILE", "scala2.12")
         hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3.2")
         hive_version = os.environ.get("AMPLAB_JENKINS_BUILD_HIVE_PROFILE", "hive2.3")
         test_env = "amplab_jenkins"
@@ -639,6 +658,7 @@ def main():
     else:
         # else we're running locally or GitHub Actions.
         build_tool = "sbt"
+        scala_version = os.environ.get("SCALA_PROFILE", "scala2.12")
         hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3.2")
         hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
         if "GITHUB_ACTIONS" in os.environ:
@@ -648,7 +668,8 @@ def main():
 
     print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
           "and Hive profile", hive_version, "under environment", test_env)
-    extra_profiles = get_hadoop_profiles(hadoop_version) + get_hive_profiles(hive_version)
+    extra_profiles = get_hadoop_profiles(hadoop_version) + get_hive_profiles(hive_version) + \
+        get_scala_profiles(scala_version)
 
     changed_modules = []
     changed_files = []
@@ -658,7 +679,7 @@ def main():
         # If we're running the tests in GitHub Actions, attempt to detect and test
         # only the affected modules.
         if test_env == "github_actions":
-            if os.environ["APACHE_SPARK_REF"] != "":
+            if "APACHE_SPARK_REF" in os.environ and os.environ["APACHE_SPARK_REF"] != "":
                 # Fork repository
                 changed_files = identify_changed_files_from_git_commits(
                     "HEAD", target_ref=os.environ["APACHE_SPARK_REF"])

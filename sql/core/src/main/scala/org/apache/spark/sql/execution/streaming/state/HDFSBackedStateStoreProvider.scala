@@ -70,7 +70,7 @@ import org.apache.spark.util.{SizeEstimator, Utils}
  * to ensure re-executed RDD operations re-apply updates on the correct past version of the
  * store.
  */
-private[state] class HDFSBackedStateStoreProvider extends StateStoreProvider with Logging {
+private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with Logging {
 
   class HDFSBackedReadStateStore(val version: Long, map: HDFSBackedStateStoreMap)
     extends ReadStateStore {
