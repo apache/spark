@@ -2347,7 +2347,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf["c"] + psdf["d"], pdf["c"] + pdf["d"])
 
         # Negative
-        ks_err_msg = "string addition can only be applied to string series or literals"
+        ks_err_msg = "Addition can not be applied to given types"
 
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] + psdf["c"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["c"] + psdf["a"])
@@ -2365,12 +2365,13 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})
-        ks_err_msg = "subtraction can not be applied to string series or literals"
-
-        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] - psdf["b"])
+        ks_err_msg = "Subtraction can not be applied to given types"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] - psdf["a"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] - "literal")
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: "literal" - psdf["b"])
+
+        ks_err_msg = "Subtraction can not be applied to strings"
+        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] - psdf["b"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 1 - psdf["a"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] - 1)
 
@@ -2386,23 +2387,27 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})
-        ks_err_msg = "division can not be applied on string series or literals"
 
-        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] / psdf["b"])
+        ks_err_msg = "True division can not be applied to given types"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] / psdf["a"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] / "literal")
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: "literal" / psdf["b"])
+
+        ks_err_msg = "True division can not be applied to strings"
+        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] / psdf["b"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 1 / psdf["a"])
 
     def test_binary_operator_floordiv(self):
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})
-        ks_err_msg = "division can not be applied on string series or literals"
 
+        ks_err_msg = "Floor division can not be applied to strings"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] // psdf["b"])
+        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 1 // psdf["a"])
+
+        ks_err_msg = "Floor division can not be applied to given types"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] // psdf["a"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] // "literal")
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: "literal" // psdf["b"])
-        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 1 // psdf["a"])
 
     def test_binary_operator_mod(self):
         # Positive
@@ -2413,11 +2418,12 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [1]})
-        ks_err_msg = "modulo can not be applied on string series or literals"
-
-        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] % psdf["b"])
+        ks_err_msg = "Modulo can not be applied to given types"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] % psdf["a"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] % "literal")
+
+        ks_err_msg = "Modulo can not be applied to strings"
+        self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] % psdf["b"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 1 % psdf["a"])
 
     def test_binary_operator_multiply(self):
@@ -2436,12 +2442,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
         # Negative
         psdf = ps.DataFrame({"a": ["x"], "b": [2]})
-        ks_err_msg = "multiplication can not be applied to a string literal"
+        ks_err_msg = "Multiplication can not be applied to given types"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["b"] * "literal")
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: "literal" * psdf["b"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] * "literal")
 
-        ks_err_msg = "a string series can only be multiplied to an int series or literal"
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] * psdf["a"])
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: psdf["a"] * 0.1)
         self.assertRaisesRegex(TypeError, ks_err_msg, lambda: 0.1 * psdf["a"])
@@ -3048,6 +3053,9 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf = ps.from_pandas(pdf)
 
         self.assert_eq(psdf.unstack().sort_index(), pdf.unstack().sort_index(), almost=True)
+        self.assert_eq(
+            psdf.unstack().unstack().sort_index(), pdf.unstack().unstack().sort_index(), almost=True
+        )
 
     def test_pivot_errors(self):
         psdf = ps.range(10)
@@ -5013,7 +5021,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             expected_result2 = pdf
 
         self.assert_eq(psdf.explode("A"), expected_result1, almost=True)
-        self.assert_eq(repr(psdf.explode("B")), repr(expected_result2))
+        self.assert_eq(psdf.explode("B"), expected_result2)
         self.assert_eq(psdf.explode("A").index.name, expected_result1.index.name)
         self.assert_eq(psdf.explode("A").columns.name, expected_result1.columns.name)
 
@@ -5038,7 +5046,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             expected_result2 = pdf
 
         self.assert_eq(psdf.explode("A"), expected_result1, almost=True)
-        self.assert_eq(repr(psdf.explode("B")), repr(expected_result2))
+        self.assert_eq(psdf.explode("B"), expected_result2)
         self.assert_eq(psdf.explode("A").index.names, expected_result1.index.names)
         self.assert_eq(psdf.explode("A").columns.name, expected_result1.columns.name)
 
@@ -5061,7 +5069,7 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             expected_result3.columns.name = "column2"
 
         self.assert_eq(psdf.explode(("A", "Z")), expected_result1, almost=True)
-        self.assert_eq(repr(psdf.explode(("B", "X"))), repr(expected_result2))
+        self.assert_eq(psdf.explode(("B", "X")), expected_result2)
         self.assert_eq(psdf.explode(("A", "Z")).index.names, expected_result1.index.names)
         self.assert_eq(psdf.explode(("A", "Z")).columns.names, expected_result1.columns.names)
 

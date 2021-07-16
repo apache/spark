@@ -953,7 +953,7 @@ class AdaptiveQueryExecSuite
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.SHUFFLE_PARTITIONS.key -> "100",
         SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
-        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1000") {
         withTempView("skewData1", "skewData2") {
           spark
             .range(0, 1000, 1, 10)
@@ -982,9 +982,9 @@ class AdaptiveQueryExecSuite
             assert(reader.metrics.contains("numSkewedPartitions"))
           }
           assert(readers(0).metrics("numSkewedPartitions").value == 2)
-          assert(readers(0).metrics("numSkewedSplits").value == 15)
+          assert(readers(0).metrics("numSkewedSplits").value == 11)
           assert(readers(1).metrics("numSkewedPartitions").value == 1)
-          assert(readers(1).metrics("numSkewedSplits").value == 12)
+          assert(readers(1).metrics("numSkewedSplits").value == 9)
         }
       }
     }
@@ -1582,7 +1582,7 @@ class AdaptiveQueryExecSuite
         // Skew join can apply as the repartition is not optimized out.
         assert(smjWithNum.head.isSkewJoin)
         val customReadersWithNum = collect(smjWithNum.head) {
-          case c: CustomShuffleReaderExec if c.hasCoalescedPartition => c
+          case c: CustomShuffleReaderExec => c
         }
         assert(customReadersWithNum.nonEmpty)
 
@@ -1692,7 +1692,9 @@ class AdaptiveQueryExecSuite
         val (_, adaptive) = runAdaptiveAndVerifyResult("SELECT c1, count(*) FROM t GROUP BY c1")
         assert(
           collect(adaptive) {
-            case c @ CustomShuffleReaderExec(_, partitionSpecs) if partitionSpecs.length == 1 => c
+            case c @ CustomShuffleReaderExec(_, partitionSpecs) if partitionSpecs.length == 1 =>
+              assert(c.hasCoalescedPartition)
+              c
           }.length == 1
         )
       }
@@ -1949,6 +1951,46 @@ class AdaptiveQueryExecSuite
         val (origin, adaptive) = runAdaptiveAndVerifyResult(query)
         assert(findTopLevelSortMergeJoin(origin).size == 1)
         assert(findTopLevelBroadcastHashJoin(adaptive).size == 1)
+      }
+    }
+  }
+
+  test("SPARK-35874: AQE Shuffle should wait for its subqueries to finish before materializing") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val query = "SELECT b FROM testData2 DISTRIBUTE BY (b, (SELECT max(key) FROM testData))"
+      runAdaptiveAndVerifyResult(query)
+    }
+  }
+
+  test("SPARK-36032: Use inputPlan instead of currentPhysicalPlan to initialize logical link") {
+    withTempView("v") {
+      spark.sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString)), 2)
+        .toDF("c1", "c2").createOrReplaceTempView("v")
+
+      Seq("-1", "10000").foreach { aqeBhj =>
+        withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> aqeBhj,
+          SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+          val (origin, adaptive) = runAdaptiveAndVerifyResult(
+            """
+              |SELECT * FROM v t1 JOIN (
+              | SELECT c1 + 1 as c3 FROM v
+              |)t2 ON t1.c1 = t2.c3
+              |SORT BY c1
+          """.stripMargin)
+          if (aqeBhj.toInt < 0) {
+            // 1 sort since spark plan has no shuffle for SMJ
+            assert(findTopLevelSort(origin).size == 1)
+            // 2 sorts in SMJ
+            assert(findTopLevelSort(adaptive).size == 2)
+          } else {
+            assert(findTopLevelSort(origin).size == 1)
+            // 1 sort at top node and BHJ has no sort
+            assert(findTopLevelSort(adaptive).size == 1)
+          }
+        }
       }
     }
   }

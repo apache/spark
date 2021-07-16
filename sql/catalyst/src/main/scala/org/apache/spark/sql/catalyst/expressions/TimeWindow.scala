@@ -109,7 +109,7 @@ object TimeWindow {
    * @return The interval duration in microseconds. SparkSQL casts TimestampType has microsecond
    *         precision.
    */
-  private def getIntervalInMicroSeconds(interval: String): Long = {
+  def getIntervalInMicroSeconds(interval: String): Long = {
     val cal = IntervalUtils.stringToInterval(UTF8String.fromString(interval))
     if (cal.months != 0) {
       throw new IllegalArgumentException(
@@ -122,7 +122,7 @@ object TimeWindow {
    * Parses the duration expression to generate the long value for the original constructor so
    * that we can use `window` in SQL.
    */
-  private def parseExpression(expr: Expression): Long = expr match {
+  def parseExpression(expr: Expression): Long = expr match {
     case NonNullLiteral(s, StringType) => getIntervalInMicroSeconds(s.toString)
     case IntegerLiteral(i) => i.toLong
     case NonNullLiteral(l, LongType) => l.toString.toLong

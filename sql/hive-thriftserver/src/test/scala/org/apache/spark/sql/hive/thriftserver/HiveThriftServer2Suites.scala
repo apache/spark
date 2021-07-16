@@ -663,11 +663,34 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
 
   test("Support interval type") {
     withJdbcStatement() { statement =>
-      val rs = statement.executeQuery("SELECT interval 3 months 1 hours")
+      val rs = statement.executeQuery("SELECT interval 5 years 7 months")
       assert(rs.next())
-      assert(rs.getString(1) === "3 months 1 hours")
+      assert(rs.getString(1) === "5-7")
     }
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval 8 days 10 hours 5 minutes 10 seconds")
+      assert(rs.next())
+      assert(rs.getString(1) === "8 10:05:10.000000000")
+    }
+    withJdbcStatement() { statement =>
+      val rs = statement.executeQuery("SELECT interval 3 days 1 hours")
+      assert(rs.next())
+      assert(rs.getString(1) === "3 01:00:00.000000000")
+    }
+
     // Invalid interval value
+    withJdbcStatement() { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery("SELECT interval 5 yea 7 months")
+      }
+      assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
+    }
+    withJdbcStatement() { statement =>
+      val e = intercept[SQLException] {
+        statement.executeQuery("SELECT interval 8 days 10 hours 5 minutes 10 secon")
+      }
+      assert(e.getMessage.contains("org.apache.spark.sql.catalyst.parser.ParseException"))
+    }
     withJdbcStatement() { statement =>
       val e = intercept[SQLException] {
         statement.executeQuery("SELECT interval 3 months 1 hou")
@@ -715,8 +738,8 @@ class HiveThriftBinaryServerSuite extends HiveThriftServer2Test {
            |  AND v1.c = v2.c
            |""".stripMargin)
       while (rs.next()) {
-        assert(rs.getString("a1") === "1 days")
-        assert(rs.getString("a2") === "1 days")
+        assert(rs.getString("a1") === "1 00:00:00.000000000")
+        assert(rs.getString("a2") === "1 00:00:00.000000000")
         assert(rs.getString("b1") === "2-1")
         assert(rs.getString("b2") === "2-1")
         assert(rs.getString("c1") === "3 01:01:01.000000000")

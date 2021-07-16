@@ -283,7 +283,7 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
 
   /** Assert that a condition on the active query is true */
   class AssertOnQuery(val condition: StreamExecution => Boolean, val message: String)
-    extends StreamAction {
+    extends StreamAction with StreamMustBeRunning {
     override def toString: String = s"AssertOnQuery(<condition>, $message)"
   }
 
@@ -871,6 +871,10 @@ trait StreamTest extends QueryTest with SharedSparkSession with TimeLimits with 
 
           case r if r < 0.7 => // AddData
             addRandomData()
+            // In some suites, e.g. `KafkaSourceStressSuite`, we delete Kafka topic in the
+            // `addData` closure. In the case, the topic with added data might be deleted
+            // before next check. So we must check data after adding data here.
+            addCheck()
 
           case _ => // StopStream
             addCheck()
