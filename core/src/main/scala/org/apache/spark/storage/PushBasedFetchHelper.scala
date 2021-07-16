@@ -201,7 +201,7 @@ private class PushBasedFetchHelper(
       // there will not be any push-merged blocks for the iterator to fetch.
       logDebug(s"Asynchronous fetch the push-merged-local blocks without cached merged " +
         s"dirs to ESS")
-      hostLocalDirManager.getHostLocalDirs(localShuffleMergerBlockMgrId.host,
+      hostLocalDirManager.getHostLocalDirs(blockManager.blockManagerId.host,
         blockManager.externalShuffleServicePort, Array(SHUFFLE_MERGER_IDENTIFIER)) {
         case Success(dirs) =>
           logDebug(s"Fetched merged dirs in " +
