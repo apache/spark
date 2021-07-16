@@ -4079,6 +4079,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |AS
             |SELECT 1 AS FLAG,CAL_DT FROM t1_v
             |WHERE CAL_DT BETWEEN '2021-06-27' AND '2021-06-28'""".stripMargin)
+        checkAnswer(sql("SELECT FLAG, CAST(CAL_DT as STRING) FROM t2 "),
+          Row(1, "2021-06-27") :: Row(1, "2021-06-28") :: Nil)
         val insert = sql(
           """
             |INSERT INTO t2 SELECT 2 AS FLAG,CAL_DT FROM t1_v
