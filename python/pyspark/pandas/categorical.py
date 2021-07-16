@@ -163,20 +163,22 @@ class CategoricalAccessor(object):
             if inplace:
                 return None
             else:
-                return self._data
-        internal = self._data._psdf._internal.with_new_spark_column(
-            self._data._column_label,
-            self._data.spark.column,
-            field=self._data._internal.data_fields[0].copy(
-                dtype=CategoricalDtype(categories=self.categories, ordered=ordered)
-            ),
-        )
-        if inplace:
-            self._data._psdf._update_internal_frame(internal)
-            return None
+                psser = self._data
         else:
-            psser = DataFrame(internal)._psser_for(self._data._column_label)
-            return psser._with_new_scol(psser.spark.column, field=psser._internal.data_fields[0])
+            internal = self._data._psdf._internal.with_new_spark_column(
+                self._data._column_label,
+                self._data.spark.column,
+                field=self._data._internal.data_fields[0].copy(
+                    dtype=CategoricalDtype(categories=self.categories, ordered=ordered)
+                ),
+            )
+            if inplace:
+                self._data._psdf._update_internal_frame(internal)
+                return None
+            else:
+                psser = DataFrame(internal)._psser_for(self._data._column_label)
+
+        return psser._with_new_scol(psser.spark.column, field=psser._internal.data_fields[0])
 
     def as_ordered(self, inplace: bool = False) -> Optional["ps.Series"]:
         """

@@ -198,21 +198,10 @@ class CategoricalIndex(Index):
         if inplace:
             raise ValueError("cannot use inplace with CategoricalIndex")
 
-        if self.ordered == ordered:
-            return self
-        else:
-            return cast(
-                CategoricalIndex,
-                self._with_new_scol(
-                    self.spark.column,
-                    field=self._internal.index_fields[0].copy(
-                        dtype=CategoricalDtype(
-                            categories=self.categories,
-                            ordered=ordered,
-                        )
-                    ),
-                ),
-            )
+        field = self._internal.index_fields[0]
+        if self.ordered != ordered:
+            field = field.copy(dtype=CategoricalDtype(categories=self.categories, ordered=ordered))
+        return cast(CategoricalIndex, self._with_new_scol(self.spark.column, field=field))
 
     def as_ordered(self, inplace: bool = False) -> Optional["CategoricalIndex"]:
         """
