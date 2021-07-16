@@ -201,6 +201,7 @@ class CatalogTests(ReusedSQLTestCase):
                     lambda: spark.catalog.listColumns("does_not_exist"))
 
     def test_table_exists(self):
+        # SPARK-36176: testing that table_exists returns correct boolean
         spark = self.spark
         with self.database("some_db"):
             spark.sql("CREATE DATABASE some_db")
