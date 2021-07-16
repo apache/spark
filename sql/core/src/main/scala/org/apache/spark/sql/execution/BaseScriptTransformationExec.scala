@@ -239,14 +239,14 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
   private val wrapperConvertException: (String => Any, Any => Any) => String => Any =
     (f: String => Any, converter: Any => Any) =>
       (data: String) => converter {
-        try {
-          if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
-            null
-          } else {
+        if (data == ioschema.outputRowFormatMap("TOK_TABLEROWFORMATNULL")) {
+          null
+        } else {
+          try {
             f(data)
+          } catch {
+            case NonFatal(_) => null
           }
-        } catch {
-          case NonFatal(_) => null
         }
       }
 }
@@ -278,21 +278,18 @@ abstract class BaseScriptTransformationWriterThread extends Thread with Logging 
         ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")
       } else {
         val sb = new StringBuilder
-        val first = row.get(0, inputSchema(0))
-        if (first == null) {
-          sb.append(ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATNULL"))
-        } else {
-          sb.append(first)
+        def appendToBuffer(s: AnyRef): Unit = {
+          if (s == null) {
+            sb.append(ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATNULL"))
+          } else {
+            sb.append(s)
+          }
         }
+        appendToBuffer(row.get(0, inputSchema(0)))
         var i = 1
         while (i < len) {
           sb.append(ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
-          val value = row.get(i, inputSchema(i))
-          if (value == null) {
-            sb.append(ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATNULL"))
-          } else {
-            sb.append(value)
-          }
+          appendToBuffer(row.get(i, inputSchema(i)))
           i += 1
         }
         sb.append(ioSchema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))
