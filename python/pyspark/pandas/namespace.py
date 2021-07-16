@@ -2853,6 +2853,11 @@ def broadcast(obj: DataFrame) -> DataFrame:
     ...BroadcastHashJoin...
     ...
     """
+    warnings.warn(
+        "`ps.broadcast` has been deprecated and will be removed in a future version. "
+        "use `DataFrame.spark.hint` with 'broadcast'.",
+        FutureWarning,
+    )
     if not isinstance(obj, DataFrame):
         raise TypeError("Invalid type : expected DataFrame got {}".format(type(obj).__name__))
     return DataFrame(
