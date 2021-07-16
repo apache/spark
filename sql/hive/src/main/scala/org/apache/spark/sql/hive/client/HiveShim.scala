@@ -879,7 +879,10 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
         try {
           // Hive may throw an exception when calling this method in some circumstances, such as
           // when filtering on a non-string partition column when the hive config key
-          // hive.metastore.try.direct.sql is false
+          // hive.metastore.try.direct.sql is false. In some cases the remote metastore will throw
+          // exceptions even if the config is true, due to various reasons including the
+          // underlying RDBMS, Hive bugs when generating the filter, etc. For this reason we
+          // always fallback to use `Hive.getAllPartitionsOf` here when the exception happens.
           getPartitionsByFilterMethod.invoke(hive, table, filter)
             .asInstanceOf[JArrayList[Partition]]
         } catch {
