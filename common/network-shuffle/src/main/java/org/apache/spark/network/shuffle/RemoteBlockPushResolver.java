@@ -981,35 +981,23 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     void closeAllFiles() {
-      if (dataChannel != null) {
-        try {
-          dataChannel.close();
-        } catch (IOException ioe) {
-          logger.warn("Error closing data channel for {} shuffleId {} reduceId {}",
-            appId, shuffleId, reduceId);
-        } finally {
-          dataChannel = null;
-        }
+      try {
+        dataChannel.close();
+      } catch (IOException ioe) {
+        logger.warn("Error closing data channel for {} shuffleId {} reduceId {}",
+          appId, shuffleId, reduceId);
       }
-      if (metaFile != null) {
-        try {
-          metaFile.close();
-        } catch (IOException ioe) {
-          logger.warn("Error closing meta file for {} shuffleId {} reduceId {}",
-            appId, shuffleId, reduceId);
-        } finally {
-          metaFile = null;
-        }
+      try {
+        metaFile.close();
+      } catch (IOException ioe) {
+        logger.warn("Error closing meta file for {} shuffleId {} reduceId {}",
+          appId, shuffleId, reduceId);
       }
-      if (indexFile != null) {
-        try {
-          indexFile.close();
-        } catch (IOException ioe) {
-          logger.warn("Error closing index file for {} shuffleId {} reduceId {}",
-            appId, shuffleId, reduceId);
-        } finally {
-          indexFile = null;
-        }
+      try {
+        indexFile.close();
+      } catch (IOException ioe) {
+        logger.warn("Error closing index file for {} shuffleId {} reduceId {}",
+          appId, shuffleId, reduceId);
       }
     }
 
@@ -1137,8 +1125,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
   @VisibleForTesting
   static class MergeShuffleFile {
-    private FileChannel channel;
-    private DataOutputStream dos;
+    private final FileChannel channel;
+    private final DataOutputStream dos;
     private long pos;
 
     @VisibleForTesting
@@ -1159,12 +1147,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     void close() throws IOException {
-      try {
-        dos.close();
-      } finally {
-        dos = null;
-        channel = null;
-      }
+      dos.close();
     }
 
     @VisibleForTesting

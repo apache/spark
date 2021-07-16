@@ -22,6 +22,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.channels.ClosedChannelException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -969,9 +970,9 @@ public class RemoteBlockPushResolverSuite {
     for (Map<Integer, RemoteBlockPushResolver.AppShufflePartitionInfo> partitionMap :
         partitions.values()) {
       for (RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo : partitionMap.values()) {
-        assertNull(partitionInfo.getDataChannel());
-        assertNull(partitionInfo.getMetaFile());
-        assertNull(partitionInfo.getIndexFile());
+        assertFalse(partitionInfo.getDataChannel().isOpen());
+        assertFalse(partitionInfo.getMetaFile().getChannel().isOpen());
+        assertFalse(partitionInfo.getIndexFile().getChannel().isOpen());
       }
     }
     try {
@@ -986,7 +987,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = NullPointerException.class)
+  @Test(expected = ClosedChannelException.class)
   public void testPushBlockStreamCallBackWhileNewAttemptRegistered()
     throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
@@ -1014,7 +1015,7 @@ public class RemoteBlockPushResolverSuite {
       new PushBlockStream(testApp, 1, 0, 0, 0, 0));
     // The onData callback should be called 4 times here before the onComplete callback. But a
     // register executor message arrives in shuffle service after the 2nd onData callback. The 3rd
-    // onData callback should all throw NullPointerException as their channels are set to null.
+    // onData callback should all throw ClosedChannelException as their channels are closed.
     stream1.onData(stream1.getID(), blocks[0]);
     stream1.onData(stream1.getID(), blocks[1]);
     Path[] attempt2LocalDirs = createLocalDirs(2);
@@ -1022,7 +1023,7 @@ public class RemoteBlockPushResolverSuite {
       prepareLocalDirs(attempt2LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_2),
       MERGE_DIRECTORY_META_2);
     closed.acquire();
-    // Should throw NullPointerException here.
+    // Should throw ClosedChannelException here.
     stream1.onData(stream1.getID(), blocks[3]);
   }
 
