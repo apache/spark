@@ -2823,6 +2823,11 @@ def broadcast(obj: DataFrame) -> DataFrame:
     """
     Marks a DataFrame as small enough for use in broadcast joins.
 
+    Notes
+    -----
+    `broadcast` has been deprecated and will be removed in a future version.
+    Use `DataFrame.spark.hint` with 'broadcast' for `name` parameter instead.
+
     Parameters
     ----------
     obj : DataFrame
@@ -2855,7 +2860,7 @@ def broadcast(obj: DataFrame) -> DataFrame:
     """
     warnings.warn(
         "`broadcast` has been deprecated and will be removed in a future version. "
-        "use `DataFrame.spark.hint` with 'broadcast' for `name` parameter.",
+        "use `DataFrame.spark.hint` with 'broadcast' for `name` parameter instead.",
         FutureWarning,
     )
     if not isinstance(obj, DataFrame):
