@@ -438,26 +438,26 @@ class JacksonParser(
     }
   }
 
-  private lazy val checkNotNullableInRow = {
-    // As PERMISSIVE mode only works with nullable fields, we can skip this not nullable check when
-    // the mode is PERMISSIVE. (see FailureSafeParser.checkNullabilityForPermissiveMode)
-    if (options.parseMode != PermissiveMode) {
-      (row: GenericInternalRow, schema: StructType, skipRow: Boolean,
-          runtimeExceptionOption: Option[Throwable]) => {
-        if (runtimeExceptionOption.isEmpty && !skipRow) {
-          var index = 0
-          while (index < schema.length) {
-            if (!schema(index).nullable && row.isNullAt(index)) {
-              throw new IllegalSchemaArgumentException(
-                s"field ${schema(index).name} is not nullable but it's missing in one record.")
-            }
-            index += 1
+  // As PERMISSIVE mode only works with nullable fields, we can skip this not nullable check when
+  // the mode is PERMISSIVE. (see FailureSafeParser.checkNullabilityForPermissiveMode)
+  private lazy val checkNotNullableInRow = if (options.parseMode != PermissiveMode) {
+    (row: GenericInternalRow,
+        schema: StructType,
+        skipRow: Boolean,
+        runtimeExceptionOption: Option[Throwable]) => {
+      if (runtimeExceptionOption.isEmpty && !skipRow) {
+        var index = 0
+        while (index < schema.length) {
+          if (!schema(index).nullable && row.isNullAt(index)) {
+            throw new IllegalSchemaArgumentException(
+              s"field ${schema(index).name} is not nullable but it's missing in one record.")
           }
+          index += 1
         }
       }
-    } else {
-      (_: GenericInternalRow, _: StructType, _: Boolean, _: Option[Throwable]) => {}
     }
+  } else {
+    (_: GenericInternalRow, _: StructType, _: Boolean, _: Option[Throwable]) => {}
   }
 
   /**
