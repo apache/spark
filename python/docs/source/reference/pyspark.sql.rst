@@ -29,6 +29,7 @@ Core Classes
     :toctree: api/
 
     SparkSession
+    Catalog
     DataFrame
     Column
     Row
