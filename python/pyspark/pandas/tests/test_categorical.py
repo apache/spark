@@ -471,6 +471,17 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             to_category(pdf.a).sort_index(),
         )
 
+    def test_unstack(self):
+        pdf = self.pdf
+        index = pd.MultiIndex.from_tuples(
+            [("x", "a"), ("x", "b"), ("x", "c"), ("y", "a"), ("y", "b"), ("y", "d")]
+        )
+        pdf.index = index
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(psdf.a.unstack().sort_index(), pdf.a.unstack().sort_index())
+        self.assert_eq(psdf.b.unstack().sort_index(), pdf.b.unstack().sort_index())
+
 
 if __name__ == "__main__":
     import unittest
