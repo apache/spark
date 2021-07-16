@@ -61,6 +61,7 @@ object EstimationUtils {
       oldStat: BigInt,
       updatedStat: BigInt): BigInt = {
     if (updatedStat > 1 && newNumRows < oldNumRows) {
+      // no need to scale down since it is already down to 1
       ceil(BigDecimal(oldStat) * BigDecimal(newNumRows) / BigDecimal(oldNumRows))
     } else {
       updatedStat
