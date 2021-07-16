@@ -67,6 +67,7 @@ class DataFrameTests(ReusedSQLTestCase):
         pydoc.render_doc(df.foo)
         pydoc.render_doc(df.take(1))
 
+    # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
     def test_drop_duplicates(self):
         schema = StructType([
             StructField("name", StringType(), True),
