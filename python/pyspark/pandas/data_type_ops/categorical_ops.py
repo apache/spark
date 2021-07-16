@@ -119,7 +119,7 @@ def _compare(
         if hash(left.dtype) != hash(right.dtype):
             raise TypeError("Categoricals can only be compared if 'categories' are the same.")
         return column_op(f)(left, right)
-    elif np.isscalar(right):
+    elif isinstance(right, str) or not hasattr(right, "__len__"):
         categories = cast(CategoricalDtype, left.dtype).categories
         if right not in categories:
             raise TypeError("Cannot compare a Categorical with a scalar, which is not a category.")
