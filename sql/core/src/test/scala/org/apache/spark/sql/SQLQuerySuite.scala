@@ -4082,7 +4082,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
             |WHERE CAL_DT BETWEEN '2021-06-29' AND '2021-06-30'""".stripMargin)
         insert.queryExecution.executedPlan.collectFirst {
           case CommandResultExec(_, DataWritingCommandExec(
-          i: InsertIntoHadoopFsRelationCommand, _), _) => i
+            i: InsertIntoHadoopFsRelationCommand, _), _) => i
         }.get.partitionColumns.map(_.name).foreach(name => assert(name == "CAL_DT"))
         checkAnswer(sql("SELECT FLAG, CAST(CAL_DT as STRING) FROM t2 "),
             Row(2, "2021-06-29") :: Row(2, "2021-06-30") :: Nil)
