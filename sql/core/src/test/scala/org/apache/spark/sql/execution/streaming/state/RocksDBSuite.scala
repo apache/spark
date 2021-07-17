@@ -337,69 +337,6 @@ class RocksDBSuite extends SparkFunSuite {
     }
   }
 
-  ignore("ensure that concurrent update and cleanup consistent versions") {
-    quietly {
-      val numThreads = 20
-      val numUpdatesInEachThread = 20
-      val remoteDir = Utils.createTempDir().toString
-      @volatile var exception: Exception = null
-      val updatingThreads = Array.fill(numThreads) {
-        new Thread() {
-          override def run(): Unit = {
-            try {
-              for (version <- 0 to numUpdatesInEachThread) {
-                withDB(
-                  remoteDir,
-                  version = version) { db =>
-                  val prevValue = Option(toStr(db.get("a"))).getOrElse("0").toInt
-                  db.put("a", (prevValue + 1).toString)
-                  db.commit()
-                }
-              }
-            } catch {
-              case e: Exception =>
-                val newException = new Exception(s"ThreadId ${this.getId} failed", e)
-                if (exception != null) {
-                  exception = newException
-                }
-                throw e
-            }
-          }
-        }
-      }
-      val cleaningThread = new Thread() {
-        override def run(): Unit = {
-          try {
-            withDB(remoteDir, conf = RocksDBConf().copy(compactOnCommit = true)) { db =>
-              while (!this.isInterrupted) {
-                db.cleanup()
-                Thread.sleep(1)
-              }
-            }
-          } catch {
-            case e: Exception =>
-              val newException = new Exception(s"ThreadId ${this.getId} failed", e)
-              if (exception != null) {
-                exception = newException
-              }
-              throw e
-          }
-        }
-      }
-      updatingThreads.foreach(_.start())
-      cleaningThread.start()
-      updatingThreads.foreach(_.join())
-      cleaningThread.interrupt()
-      cleaningThread.join()
-      if (exception != null) {
-        fail(exception)
-      }
-      withDB(remoteDir, numUpdatesInEachThread) { db =>
-        assert(toStr(db.get("a")) === numUpdatesInEachThread.toString)
-      }
-    }
-  }
-
   test("checkpoint metadata serde roundtrip") {
     def checkJsonRoundtrip(metadata: RocksDBCheckpointMetadata, json: String): Unit = {
       assert(metadata.json == json)
