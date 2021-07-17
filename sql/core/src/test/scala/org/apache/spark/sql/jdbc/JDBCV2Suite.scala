@@ -19,6 +19,7 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
