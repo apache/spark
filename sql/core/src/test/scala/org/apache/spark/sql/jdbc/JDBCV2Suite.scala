@@ -19,9 +19,8 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, DriverManager}
 import java.util.Properties
-
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.CannotReplaceMissingTableException
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -30,7 +29,7 @@ import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.util.Utils
 
-class JDBCV2Suite extends QueryTest with SharedSparkSession {
+class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHelper {
   import testImplicits._
 
   val tempDir = Utils.createTempDir()
@@ -84,6 +83,14 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession {
       case f: Filter => f
     }
     assert(filters.isEmpty)
+
+    df.queryExecution.optimizedPlan.collect {
+      case _: DataSourceV2ScanRelation =>
+        val expected_plan_fragment =
+          "PushedFilters: [IsNotNull(ID), GreaterThan(ID,1)]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
+    }
+
     checkAnswer(df, Row("mary", 2))
   }
 

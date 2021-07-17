@@ -129,12 +129,18 @@ case class RowDataSourceScanExec(
   override def inputRDD: RDD[InternalRow] = rdd
 
   override val metadata: Map[String, String] = {
-    val markedFilters = for (filter <- filters) yield {
-      if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
+    if (filters.nonEmpty) {
+      val markedFilters = for (filter <- filters) yield {
+        if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
+      }
+      Map(
+        "ReadSchema" -> requiredSchema.catalogString,
+        "PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
+    } else {
+      Map(
+        "ReadSchema" -> requiredSchema.catalogString,
+        "PushedFilters" -> handledFilters.mkString("[", ", ", "]"))
     }
-    Map(
-      "ReadSchema" -> requiredSchema.catalogString,
-      "PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
