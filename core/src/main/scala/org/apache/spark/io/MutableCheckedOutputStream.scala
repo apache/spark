@@ -15,25 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.shuffle.api;
+package org.apache.spark.io
 
-import java.io.File;
-import java.io.IOException;
-
-import org.apache.spark.annotation.Private;
+import java.io.OutputStream
+import java.util.zip.Checksum
 
 /**
- * Optional extension for partition writing that is optimized for transferring a single
- * file to the backing store.
+ * A variant of [[java.util.zip.CheckedOutputStream]] which can
+ * change the checksum calculator at runtime.
  */
-@Private
-public interface SingleSpillShuffleMapOutputWriter {
+class MutableCheckedOutputStream(out: OutputStream) extends OutputStream {
+  private var checksum: Checksum = _
 
-  /**
-   * Transfer a file that contains the bytes of all the partitions written by this map task.
-   */
-  void transferMapSpillFile(
-      File mapOutputFile,
-      long[] partitionLengths,
-      long[] checksums) throws IOException;
+  def setChecksum(c: Checksum): Unit = {
+    this.checksum = c
+  }
+
+  override def write(b: Int): Unit = {
+    assert(checksum != null, "Checksum is not set.")
+    checksum.update(b)
+    out.write(b)
+  }
+
+  override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+    assert(checksum != null, "Checksum is not set.")
+    checksum.update(b, off, len)
+    out.write(b, off, len)
+  }
+
+  override def flush(): Unit = out.flush()
+
+  override def close(): Unit = out.close()
 }
