@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 class CustomWriteTaskStatsTrackerSuite extends SparkFunSuite {
 
   def checkFinalStats(tracker: CustomWriteTaskStatsTracker, result: Map[String, Int]): Unit = {
-    assert(tracker.getFinalStats(0).asInstanceOf[CustomWriteTaskStats].numRowsPerFile == result)
+    assert(tracker.getFinalStats(0L).asInstanceOf[CustomWriteTaskStats].numRowsPerFile == result)
   }
 
   test("sequential file writing") {

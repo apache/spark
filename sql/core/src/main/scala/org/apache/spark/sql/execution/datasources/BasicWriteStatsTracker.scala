@@ -192,7 +192,7 @@ class BasicWriteJobStatsTracker(
   override def newTaskInstance(): WriteTaskStatsTracker = {
     new BasicWriteTaskStatsTracker(
       serializableHadoopConf.value,
-      Some(metrics(BasicWriteJobStatsTracker.DURATION_OF_TASK_COMMIT)))
+      Some(metrics(BasicWriteJobStatsTracker.TASK_COMMIT_DURATION)))
   }
 
   override def processStats(stats: Seq[WriteTaskStats], jobCommitDuration: Long): Unit = {
@@ -211,7 +211,7 @@ class BasicWriteJobStatsTracker(
       totalNumOutput += summary.numRows
     }
 
-    metrics(BasicWriteJobStatsTracker.DURATION_JOB_COMMIT).add(jobCommitDuration)
+    metrics(BasicWriteJobStatsTracker.JOB_COMMIT_DURATION).add(jobCommitDuration)
     metrics(BasicWriteJobStatsTracker.NUM_FILES_KEY).add(numFiles)
     metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_BYTES_KEY).add(totalNumBytes)
     metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_ROWS_KEY).add(totalNumOutput)
@@ -219,7 +219,7 @@ class BasicWriteJobStatsTracker(
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
     SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
-      metrics.filter(_._1 != BasicWriteJobStatsTracker.DURATION_OF_TASK_COMMIT).values.toList)
+      metrics.filter(_._1 != BasicWriteJobStatsTracker.TASK_COMMIT_DURATION).values.toList)
   }
 }
 
@@ -228,8 +228,8 @@ object BasicWriteJobStatsTracker {
   private val NUM_OUTPUT_BYTES_KEY = "numOutputBytes"
   private val NUM_OUTPUT_ROWS_KEY = "numOutputRows"
   private val NUM_PARTS_KEY = "numParts"
-  private val DURATION_OF_TASK_COMMIT = "taskCommitDuration"
-  private val DURATION_JOB_COMMIT = "jobCommitDuration"
+  private val TASK_COMMIT_DURATION = "taskCommitDuration"
+  private val JOB_COMMIT_DURATION = "jobCommitDuration"
   /** XAttr key of the data length header added in HADOOP-17414. */
   val FILE_LENGTH_XATTR = "header.x-hadoop-s3a-magic-data-length"
 
@@ -240,10 +240,10 @@ object BasicWriteJobStatsTracker {
       NUM_OUTPUT_BYTES_KEY -> SQLMetrics.createSizeMetric(sparkContext, "written output"),
       NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
-      DURATION_OF_TASK_COMMIT ->
+      TASK_COMMIT_DURATION ->
         SQLMetrics.createTimingMetric(sparkContext, "duration of task commit"),
-      DURATION_JOB_COMMIT->
-        SQLMetrics.createTimingMetric(sparkContext, "duration of committing the job")
+      JOB_COMMIT_DURATION->
+        SQLMetrics.createTimingMetric(sparkContext, "duration of job commit")
     )
   }
 }
