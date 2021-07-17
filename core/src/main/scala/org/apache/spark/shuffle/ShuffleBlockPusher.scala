@@ -79,9 +79,9 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
           return false
         }
         // If the block is too late or the invalid block push, there is no need to retry it
-        !Throwables.getStackTraceAsString(t)
+        !(Throwables.getStackTraceAsString(t)
           .contains(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX) ||
-          !Throwables.getStackTraceAsString(t).contains(BlockPushErrorHandler.INVALID_BLOCK_PUSH)
+          Throwables.getStackTraceAsString(t).contains(BlockPushErrorHandler.INVALID_BLOCK_PUSH));
       }
     }
   }

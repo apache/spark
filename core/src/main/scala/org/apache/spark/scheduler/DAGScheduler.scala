@@ -1323,10 +1323,9 @@ private[spark] class DAGScheduler(
     // `findMissingPartitions()` returns all partitions every time.
     stage match {
       case sms: ShuffleMapStage if stage.isIndeterminate && !sms.isAvailable =>
-        // TODO: SPARK-32923: Clean all push-based shuffle metadata like merge enabled and
-        // TODO: finalized as we are clearing all the merge results.
         mapOutputTracker.unregisterAllMapAndMergeOutput(sms.shuffleDep.shuffleId)
         sms.shuffleDep.resetShuffleMergeState()
+        sms.shuffleDep.newShuffleSequenceId()
       case _ =>
     }
 

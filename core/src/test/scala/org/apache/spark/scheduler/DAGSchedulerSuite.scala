@@ -315,7 +315,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         shuffleMapStage: ShuffleMapStage): Unit = {
       if (shuffleMergeRegister) {
         for (part <- 0 until shuffleMapStage.shuffleDep.partitioner.numPartitions) {
-          val mergeStatuses = Seq((part, makeMergeStatus("")))
+          val mergeStatuses = Seq((part, makeMergeStatus("",
+            shuffleMapStage.shuffleDep.shuffleSequenceId)))
           handleRegisterMergeStatuses(shuffleMapStage, mergeStatuses)
         }
         if (shuffleMergeFinalize) {
@@ -3726,9 +3727,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         (Success, makeMapStatus("hostA", parts))
     }.toSeq)
     val shuffleMapStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
-    scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((0, makeMergeStatus("hostA"))))
+    scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((0, makeMergeStatus("hostA",
+      shuffleDep.shuffleSequenceId))))
     scheduler.handleShuffleMergeFinalized(shuffleMapStage)
-    scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((1, makeMergeStatus("hostA"))))
+    scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((1, makeMergeStatus("hostA",
+      shuffleDep.shuffleSequenceId))))
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 1)
   }
 
@@ -3843,7 +3846,7 @@ object DAGSchedulerSuite {
     BlockManagerId(host + "-exec", host, 12345)
   }
 
-  def makeMergeStatus(host: String, shuffleSequenceId: Int = 0, size: Long = 1000): MergeStatus =
+  def makeMergeStatus(host: String, shuffleSequenceId: Int, size: Long = 1000): MergeStatus =
     MergeStatus(makeBlockManagerId(host), shuffleSequenceId, mock(classOf[RoaringBitmap]), size)
 
   def addMergerLocs(locs: Seq[String]): Unit = {

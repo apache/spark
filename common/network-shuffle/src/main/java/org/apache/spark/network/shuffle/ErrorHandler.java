@@ -102,8 +102,8 @@ public interface ErrorHandler {
         return false;
       }
       // If the block is too late or an invalid block push, there is no need to retry it
-      return !Throwables.getStackTraceAsString(t).contains(TOO_LATE_MESSAGE_SUFFIX) ||
-          !Throwables.getStackTraceAsString(t).contains(INVALID_BLOCK_PUSH);
+      return !(Throwables.getStackTraceAsString(t).contains(TOO_LATE_MESSAGE_SUFFIX) ||
+          Throwables.getStackTraceAsString(t).contains(INVALID_BLOCK_PUSH));
     }
 
     @Override

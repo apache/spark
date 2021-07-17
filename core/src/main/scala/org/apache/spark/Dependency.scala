@@ -125,7 +125,11 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
    * shuffleSequenceId is used to give temporal ordering to the executions of a ShuffleDependency.
    * This is required in order to handle indeterministic stage retries for push-based shuffle.
    */
-  private[this] var nextShuffleSequenceId: Int = 0
+  private[this] var nextShuffleSequenceId: Int = -1
+
+  def newShuffleSequenceId(): Unit = {
+    nextShuffleSequenceId = nextShuffleSequenceId + 1
+  }
 
   def shuffleSequenceId: Int = nextShuffleSequenceId
 

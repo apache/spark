@@ -135,7 +135,7 @@ public class OneForOneBlockPusher {
       assert buffers.containsKey(blockIds[i]) : "Could not find the block buffer for block "
         + blockIds[i];
       String[] blockIdParts = blockIds[i].split("_");
-      if (blockIdParts.length != 6 || !blockIdParts[0].equals(SHUFFLE_PUSH_BLOCK_PREFIX)) {
+      if (blockIdParts.length != 5 || !blockIdParts[0].equals(SHUFFLE_PUSH_BLOCK_PREFIX)) {
         throw new IllegalArgumentException(
           "Unexpected shuffle push block id format: " + blockIds[i]);
       }
