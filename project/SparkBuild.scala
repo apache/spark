@@ -1122,7 +1122,7 @@ object TestSettings {
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
     (Test / javaOptions) ++= "-Xmx4g -Xss4m -XX:MaxMetaspaceSize=1g -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
       .split(" ").toSeq,
-    javaOptions += "-Xmx3g -XX:MaxMetaspaceSize=1g",
+    javaOptions ++= "-Xmx3g -XX:MaxMetaspaceSize=1g".split(" ").toSeq,
     (Test / javaOptions) ++= {
       val jdwpEnabled = sys.props.getOrElse("test.jdwp.enabled", "false").toBoolean
 
