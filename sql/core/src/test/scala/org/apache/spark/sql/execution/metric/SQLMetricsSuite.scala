@@ -801,8 +801,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       }
       assert(insert.size == 1)
       assert(insert.head.metrics.contains("jobCommitDuration"))
-      assert(insert.head.metrics("jobCommitDuration").value > 1)
-      assert(insert.head.metrics("taskCommitDuration").value > 1)
+      assert(insert.head.metrics("jobCommitDuration").value > 0)
+      assert(insert.head.metrics("taskCommitDuration").value > 0)
     }
   }
 
