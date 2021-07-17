@@ -115,6 +115,7 @@ def _compare(
         if not is_equality_comparison:
             if not cast(CategoricalDtype, left.dtype).ordered:
                 raise TypeError("Unordered Categoricals can only compare equality or not.")
+        # Check if categoricals have the same dtype, same categories, and same ordered
         if hash(left.dtype) != hash(right.dtype):
             raise TypeError("Categoricals can only be compared if 'categories' are the same.")
         return column_op(f)(left, right)
