@@ -52,7 +52,7 @@ class Observation(name: String) {
   @volatile private var row: Option[Row] = None
 
   /**
-   * Attaches this observation to the given [[Dataset]] to observe aggregation expressions.
+   * Attach this observation to the given [[Dataset]] to observe aggregation expressions.
    *
    * @param ds dataset
    * @param expr first aggregation expression
