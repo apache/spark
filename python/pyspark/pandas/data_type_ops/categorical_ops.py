@@ -18,10 +18,9 @@
 from itertools import chain
 from typing import cast, Any, Callable, Union
 
-import numpy as np
 import pandas as pd
 import numpy as np
-from pandas.api.types import CategoricalDtype
+from pandas.api.types import is_list_like, CategoricalDtype
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
@@ -119,7 +118,7 @@ def _compare(
         if hash(left.dtype) != hash(right.dtype):
             raise TypeError("Categoricals can only be compared if 'categories' are the same.")
         return column_op(f)(left, right)
-    elif isinstance(right, str) or not hasattr(right, "__len__"):
+    elif not is_list_like(right):
         categories = cast(CategoricalDtype, left.dtype).categories
         if right not in categories:
             raise TypeError("Cannot compare a Categorical with a scalar, which is not a category.")
