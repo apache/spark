@@ -861,7 +861,7 @@ class Frame(object, metaclass=ABCMeta):
 
         if num_files is not None:
             warnings.warn(
-                "`num_files` has been deprecated and will be removed in a future version. "
+                "`num_files` has been deprecated and might be removed in a future version. "
                 "Use `DataFrame.spark.repartition` instead.",
                 FutureWarning,
             )
