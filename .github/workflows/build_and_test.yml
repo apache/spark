@@ -171,6 +171,7 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
+      SKIP_UNIDOC: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
