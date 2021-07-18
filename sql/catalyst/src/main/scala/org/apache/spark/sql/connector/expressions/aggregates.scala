@@ -19,9 +19,9 @@ package org.apache.spark.sql.connector.expressions
 
 import org.apache.spark.sql.types.DataType
 
-case class Min(column: FieldReference, dataType: DataType) extends AggregateFunc
+case class Min(column: FieldReference) extends AggregateFunc
 
-case class Max(column: FieldReference, dataType: DataType) extends AggregateFunc
+case class Max(column: FieldReference) extends AggregateFunc
 
 case class Sum(column: FieldReference, dataType: DataType, isDistinct: Boolean)
   extends AggregateFunc

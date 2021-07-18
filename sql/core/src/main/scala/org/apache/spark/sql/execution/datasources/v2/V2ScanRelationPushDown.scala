@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LeafNode, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.connector.expressions.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, V1Scan}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
@@ -119,7 +120,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                        |Output: ${output.mkString(", ")}
                       """.stripMargin)
 
-                  val scanRelation = DataSourceV2ScanRelation(sHolder.relation, scan, output)
+                  val wrappedScan = getWrappedScan(scan, sHolder, pushedAggregates)
+
+                  val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
 
                   val plan = Aggregate(
                     output.take(groupingExpressions.length), resultExpressions, scanRelation)
@@ -181,16 +184,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
            |Output: ${output.mkString(", ")}
          """.stripMargin)
 
-      val wrappedScan = scan match {
-        case v1: V1Scan =>
-          val pushedFilters = sHolder.builder match {
-            case f: SupportsPushDownFilters =>
-              f.pushedFilters()
-            case _ => Array.empty[sources.Filter]
-          }
-          V1ScanWrapper(v1, Array.empty[sources.Filter], pushedFilters)
-        case _ => scan
-      }
+      val wrappedScan = getWrappedScan(scan, sHolder, Option.empty[Aggregation])
 
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
 
@@ -213,6 +207,22 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
       withProjection
   }
+
+  private def getWrappedScan(
+      scan: Scan,
+      sHolder: ScanBuilderHolder,
+      aggregation: Option[Aggregation]): Scan = {
+    scan match {
+      case v1: V1Scan =>
+        val pushedFilters = sHolder.builder match {
+          case f: SupportsPushDownFilters =>
+            f.pushedFilters()
+          case _ => Array.empty[sources.Filter]
+        }
+        V1ScanWrapper(v1, Array.empty[sources.Filter], pushedFilters, aggregation)
+      case _ => scan
+    }
+  }
 }
 
 case class ScanBuilderHolder(
@@ -225,6 +235,7 @@ case class ScanBuilderHolder(
 case class V1ScanWrapper(
     v1Scan: V1Scan,
     translatedFilters: Seq[sources.Filter],
-    handledFilters: Seq[sources.Filter]) extends Scan {
+    handledFilters: Seq[sources.Filter],
+    pushedAggregate: Option[Aggregation]) extends Scan {
   override def readSchema(): StructType = v1Scan.readSchema()
 }

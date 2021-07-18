@@ -19,12 +19,14 @@ package org.apache.spark.sql.execution.datasources.jdbc
 
 import java.sql.{Connection, PreparedStatement, ResultSet}
 
+import scala.collection.mutable.ArrayBuilder
 import scala.util.control.NonFatal
 
 import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.expressions.{AggregateFunc, Aggregation, Count, CountOne, Max, Min, Sum}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -77,12 +79,21 @@ object JDBCRDD extends Logging {
    *
    * @param schema - The Catalyst schema of the master table
    * @param columns - The list of desired columns
+   * @param requiredSchema - The pruned schema
    *
    * @return A Catalyst schema corresponding to columns in the given order.
    */
-  private def pruneSchema(schema: StructType, columns: Array[String]): StructType = {
-    val fieldMap = Map(schema.fields.map(x => x.name -> x): _*)
-    new StructType(columns.map(name => fieldMap(name)))
+  private def pruneSchema(
+      schema: StructType,
+      columns: Array[String],
+      requiredSchema: Option[StructType]): StructType = {
+
+    if (requiredSchema.isEmpty) {
+      val fieldMap = Map(schema.fields.map(x => x.name -> x): _*)
+      new StructType(columns.map(name => fieldMap(name)))
+    } else {
+      requiredSchema.get
+    }
   }
 
   /**
@@ -133,6 +144,32 @@ object JDBCRDD extends Logging {
     })
   }
 
+  def compileAggregates(
+      aggregates: Seq[AggregateFunc],
+      dialect: JdbcDialect): (Array[String]) = {
+    def quote(colName: String): String = dialect.quoteIdentifier(colName)
+
+    val aggBuilder = ArrayBuilder.make[String]
+    aggregates.map {
+      case Min(col) =>
+        aggBuilder += s"MIN(${quote(col.fieldNames.head)})"
+      case Max(col) =>
+        aggBuilder += s"MAX(${quote(col.fieldNames.head)})"
+      case Count(col, isDistinct) =>
+        val distinct = if (isDistinct) "DISTINCT" else ""
+        val column = quote(col.fieldNames.head)
+        aggBuilder += s"COUNT($distinct $column)"
+      case Sum(col, _, isDistinct) =>
+        val distinct = if (isDistinct) "DISTINCT" else ""
+        val column = quote(col.fieldNames.head)
+        aggBuilder += s"SUM($distinct $column)"
+      case CountOne() =>
+        aggBuilder += s"COUNT(1)"
+      case _ =>
+    }
+    aggBuilder.result
+  }
+
   /**
    * Build and return JDBCRDD from the given information.
    *
@@ -143,6 +180,8 @@ object JDBCRDD extends Logging {
    * @param parts - An array of JDBCPartitions specifying partition ids and
    *    per-partition WHERE clauses.
    * @param options - JDBC options that contains url, table and other information.
+   * @param requiredSchema - The schema of the columns to SELECT.
+   * @param aggregation - The pushed down aggregation
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */
@@ -152,19 +191,27 @@ object JDBCRDD extends Logging {
       requiredColumns: Array[String],
       filters: Array[Filter],
       parts: Array[Partition],
-      options: JDBCOptions): RDD[InternalRow] = {
+      options: JDBCOptions,
+      requiredSchema: Option[StructType] = None,
+      aggregation: Option[Aggregation] = None): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
-    val quotedColumns = requiredColumns.map(colName => dialect.quoteIdentifier(colName))
+    val quotedColumns = if (aggregation.isEmpty) {
+      requiredColumns.map(colName => dialect.quoteIdentifier(colName))
+    } else {
+      // these are already quoted in JDBCScanBuilder
+      requiredColumns
+    }
     new JDBCRDD(
       sc,
       JdbcUtils.createConnectionFactory(options),
-      pruneSchema(schema, requiredColumns),
+      pruneSchema(schema, requiredColumns, requiredSchema),
       quotedColumns,
       filters,
       parts,
       url,
-      options)
+      options,
+      aggregation)
   }
 }
 
@@ -181,7 +228,8 @@ private[jdbc] class JDBCRDD(
     filters: Array[Filter],
     partitions: Array[Partition],
     url: String,
-    options: JDBCOptions)
+    options: JDBCOptions,
+    aggregation: Option[Aggregation])
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -216,6 +264,19 @@ private[jdbc] class JDBCRDD(
       "WHERE " + part.whereClause
     } else if (filterWhereClause.length > 0) {
       "WHERE " + filterWhereClause
+    } else {
+      ""
+    }
+  }
+
+  /**
+   * A GROUP BY clause representing pushed-down grouping columns.
+   */
+  private def getGroupByClause: String = {
+    if (aggregation.nonEmpty && aggregation.get.getGroupByColumns.length > 0) {
+      val quotedColumns = aggregation.get.getGroupByColumns
+        .map(c => JdbcDialects.get(url).quoteIdentifier(c.fieldNames.head))
+      s"GROUP BY ${quotedColumns.mkString(", ")}"
     } else {
       ""
     }
@@ -296,7 +357,8 @@ private[jdbc] class JDBCRDD(
 
     val myWhereClause = getWhereClause(part)
 
-    val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause"
+    val sqlText = s"SELECT $columnList FROM ${options.tableOrQuery} $myWhereClause" +
+      s" $getGroupByClause"
     stmt = conn.prepareStatement(sqlText,
         ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
     stmt.setFetchSize(options.fetchSize)

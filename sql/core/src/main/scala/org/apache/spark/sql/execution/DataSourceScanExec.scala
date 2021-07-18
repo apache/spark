@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.connector.expressions.Aggregation
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -102,6 +103,7 @@ case class RowDataSourceScanExec(
     requiredSchema: StructType,
     filters: Set[Filter],
     handledFilters: Set[Filter],
+    aggregation: Option[Aggregation],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     tableIdentifier: Option[TableIdentifier])
@@ -129,17 +131,31 @@ case class RowDataSourceScanExec(
   override def inputRDD: RDD[InternalRow] = rdd
 
   override val metadata: Map[String, String] = {
+
+    def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
+
+    val (aggString, groupByString) = if (aggregation.nonEmpty) {
+      (seqToString(aggregation.get.getAggregateExpressions),
+        seqToString(aggregation.get.getGroupByColumns))
+    } else {
+      ("[]", "[]")
+    }
+
     if (filters.nonEmpty) {
       val markedFilters = for (filter <- filters) yield {
         if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
       }
       Map(
         "ReadSchema" -> requiredSchema.catalogString,
-        "PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
+        "PushedFilters" -> seqToString(markedFilters.toSeq),
+        "PushedAggregates" -> aggString,
+        "PushedGroupby" -> groupByString)
     } else {
       Map(
         "ReadSchema" -> requiredSchema.catalogString,
-        "PushedFilters" -> handledFilters.mkString("[", ", ", "]"))
+        "PushedFilters" -> seqToString(handledFilters.toSeq),
+        "PushedAggregates" -> aggString,
+        "PushedGroupby" -> groupByString)
     }
   }
 
