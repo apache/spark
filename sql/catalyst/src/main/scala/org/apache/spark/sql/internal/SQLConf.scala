@@ -3437,7 +3437,7 @@ object SQLConf {
         "It was removed to prevent errors like SPARK-23173 for non-default value."),
       RemovedConfig(
         "spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation", "3.0.0", "false",
-        "It was removed to prevent loosing of users data for non-default value."),
+        "It was removed to prevent loss of user data for non-default value."),
       RemovedConfig("spark.sql.legacy.compareDateTimestampInTimestamp", "3.0.0", "true",
         "It was removed to prevent errors like SPARK-23549 for non-default value."),
       RemovedConfig("spark.sql.parquet.int64AsTimestampMillis", "3.0.0", "false",
