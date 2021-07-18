@@ -16,7 +16,7 @@
  */
 package org.apache.spark.deploy.k8s
 
-import java.util.Locale
+import java.util.{Locale, UUID}
 
 import io.fabric8.kubernetes.api.model.{LocalObjectReference, LocalObjectReferenceBuilder, Pod}
 
@@ -224,6 +224,9 @@ private[spark] object KubernetesConf {
       resourceProfileId: Int = DEFAULT_RESOURCE_PROFILE_ID): KubernetesExecutorConf = {
     new KubernetesExecutorConf(sparkConf.clone(), appId, executorId, driverPod, resourceProfileId)
   }
+
+  def getKubernetesAppId(): String =
+    s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
 
   def getResourceNamePrefix(appName: String): String = {
     val id = KubernetesUtils.uniqueID()
