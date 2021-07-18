@@ -117,7 +117,7 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * Elimination of outer joins, if the predicates can restrict the result sets so that
+ * 1. Elimination of outer joins, if the predicates can restrict the result sets so that
  * all null-supplying rows are eliminated
  *
  * - full outer -> inner if both sides have such predicates
@@ -125,6 +125,18 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  * - right outer -> inner if the left side has such predicates
  * - full outer -> left outer if only the left side has such predicates
  * - full outer -> right outer if only the right side has such predicates
+ *
+ * 2. Removes outer join if it only references the streamed side and the uniqueness can be
+ *    guaranteed on the buffered side
+ * {{{
+ *   SELECT f1 FROM t1 LEFT JOIN (SELECT DISTINCT id FROM t2) t21 ON t1.id = t21.id  ==>
+ *   SELECT f1 FROM t1
+ * }}}
+ *
+ * 3. Removes outer join if it only has distinct on streamed side
+ * {{{
+ *   SELECT DISTINCT f1 FROM t1 LEFT JOIN t2 ON t1.id = t2.id  ==>  SELECT DISTINCT f1 FROM t1
+ * }}}
  *
  * This rule should be executed before pushing down the Filter
  */
@@ -161,60 +173,37 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsPattern(OUTER_JOIN), ruleId) {
-    case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
-      val newJoinType = buildNewJoinType(f, j)
-      if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
-  }
-}
-
-/**
- * 1. Elimination of left semi -> inner if uniqueness can be guaranteed on the right side.
- * 2. Removes outer join if it only references the streamed side and the uniqueness can be
- *    guaranteed on the buffered side
- * {{{
- *   SELECT f1 FROM t1 LEFT JOIN (SELECT DISTINCT id FROM t2) t21 ON t1.id = t21.id  ==>
- *   SELECT f1 FROM t1
- * }}}
- * 3. Removes outer join if it only has distinct on streamed side
- * {{{
- *   SELECT DISTINCT f1 FROM t1 LEFT JOIN t2 ON t1.id = t2.id  ==>
- *   SELECT DISTINCT f1 FROM t1
- * }}}
- */
-object EliminateJoinBaseUniqueness extends Rule[LogicalPlan] {
   private def guaranteeUnique(joinKeys: Seq[Expression], aggregate: Aggregate) = {
     aggregate.groupOnly && aggregate.output.size == joinKeys.size &&
       aggregate.output.zip(joinKeys).forall(r => r._1.semanticEquals(r._2))
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan =
-    plan.transformWithPruning(_.containsAnyPattern(OUTER_JOIN, LEFT_SEMI_OR_ANTI_JOIN)) {
-      case j @ ExtractEquiJoinKeys(LeftSemi, _, rightKeys, None, _, right: Aggregate, _)
-          if guaranteeUnique(rightKeys, right) =>
-        j.copy(joinType = Inner)
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsPattern(OUTER_JOIN), ruleId) {
+    case f @ Filter(condition, j @ Join(_, _, RightOuter | LeftOuter | FullOuter, _, _)) =>
+      val newJoinType = buildNewJoinType(f, j)
+      if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
 
-      case p @ Project(_, ExtractEquiJoinKeys(LeftOuter, _, rKeys, None, l, r: Aggregate, _))
-          if p.references.subsetOf(AttributeSet(l.output)) && guaranteeUnique(rKeys, r) =>
-        p.copy(child = p.copy(child = l))
-      case p @ Project(_, ExtractEquiJoinKeys(RightOuter, lKeys, _, None, l: Aggregate, r, _))
-          if p.references.subsetOf(AttributeSet(r.output)) && guaranteeUnique(lKeys, l) =>
-        p.copy(child = p.copy(child = r))
+    case p @ Project(_, ExtractEquiJoinKeys(LeftOuter, _, rKeys, None, l, r: Aggregate, _))
+        if p.references.subsetOf(AttributeSet(l.output)) && guaranteeUnique(rKeys, r) =>
+      p.copy(child = p.copy(child = l))
+    case p @ Project(_, ExtractEquiJoinKeys(RightOuter, lKeys, _, None, l: Aggregate, r, _))
+        if p.references.subsetOf(AttributeSet(r.output)) && guaranteeUnique(lKeys, l) =>
+      p.copy(child = p.copy(child = r))
 
-      case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
-          if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
-        a.copy(child = left)
-      case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
-          if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
-        a.copy(child = right)
-      case a @ Aggregate(_, _, p @ Project(_, Join(left, _, LeftOuter, _, _)))
-          if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
-        a.copy(child = p.copy(child = left))
-      case a @ Aggregate(_, _, p @ Project(_, Join(_, right, RightOuter, _, _)))
-          if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
-        a.copy(child = p.copy(child = right))
-    }
+    case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
+      a.copy(child = left)
+    case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
+      a.copy(child = right)
+    case a @ Aggregate(_, _, p @ Project(_, Join(left, _, LeftOuter, _, _)))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
+      a.copy(child = p.copy(child = left))
+    case a @ Aggregate(_, _, p @ Project(_, Join(_, right, RightOuter, _, _)))
+        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
+      a.copy(child = p.copy(child = right))
+  }
 }
 
 /**

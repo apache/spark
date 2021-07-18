@@ -21,7 +21,8 @@ import org.apache.spark.sql.catalyst.analysis.AnalysisTest
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf.{CASE_SENSITIVE, GROUP_BY_ORDINAL}
 
@@ -31,11 +32,16 @@ class AggregateOptimizeSuite extends AnalysisTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches = Batch("Aggregate", FixedPoint(100),
       FoldablePropagation,
+      CollapseProject,
       RemoveLiteralFromGroupExpressions,
-      RemoveRepetitionFromGroupExpressions) :: Nil
+      EliminateOuterJoin,
+      RemoveRepetitionFromGroupExpressions,
+      ReplaceDistinctWithAggregate) :: Nil
   }
 
-  val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  private val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
+  private val x = testRelation.subquery('x)
+  private val y = testRelation.subquery('y)
 
   test("remove literals in grouping expression") {
     val query = testRelation.groupBy('a, Literal("1"), Literal(1) + Literal(2))(sum('b))
@@ -70,5 +76,82 @@ class AggregateOptimizeSuite extends AnalysisTest {
     val correctAnswer = testRelation.groupBy('a + 1, 'b + 2)(sum('c)).analyze
 
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-34808: Remove left join if it only has distinct on left side") {
+    val query = Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr)).select("x.b".attr))
+    val correctAnswer = x.select("x.b".attr).groupBy("x.b".attr)("x.b".attr)
+
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-34808: Remove right join if it only has distinct on right side") {
+    val query = Distinct(x.join(y, RightOuter, Some("x.a".attr === "y.a".attr)).select("y.b".attr))
+    val correctAnswer = y.select("y.b".attr).groupBy("y.b".attr)("y.b".attr)
+
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-34808: Should not remove left join if select 2 join sides") {
+    val query = Distinct(x.join(y, RightOuter, Some("x.a".attr === "y.a".attr))
+      .select("x.b".attr, "y.c".attr))
+    val correctAnswer = Aggregate(query.child.output, query.child.output, query.child)
+
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-34808: aggregateExpressions only contains groupingExpressions") {
+    comparePlans(
+      Optimize.execute(
+        Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+          .select("x.b".attr, "x.b".attr)).analyze),
+      x.select("x.b".attr, "x.b".attr).groupBy("x.b".attr)("x.b".attr, "x.b".attr).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+          .groupBy("x.a".attr, "x.b".attr)("x.b".attr, "x.a".attr).analyze),
+      x.groupBy("x.a".attr, "x.b".attr)("x.b".attr, "x.a".attr).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+          .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze),
+      x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+        .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze)
+  }
+
+  test("SPARK-36155: Remove left join if uniqueness can be guaranteed on the buffered side") {
+    val query = x.join(y.groupBy("y.a".attr)("y.a".attr),
+      LeftOuter,
+      Some("x.a".attr === "y.a".attr)).select("x.b".attr)
+    val correctAnswer = x.select("x.b".attr)
+
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-36155: Should not remove left join") {
+    val query = x.join(y.groupBy("y.a".attr, "y.b".attr)("y.a".attr, "y.b".attr),
+      LeftOuter,
+      Some("x.a".attr === "y.a".attr)).select("x.b".attr)
+
+    comparePlans(Optimize.execute(query.analyze), query.analyze)
+  }
+
+  test("SPARK-36155: Remove right join if uniqueness can be guaranteed on the buffered side") {
+    val query = x.groupBy("x.a".attr, "x.a".attr)("x.a".attr).join(y,
+      RightOuter,
+      Some("x.a".attr === "y.a".attr)).select("y.b".attr)
+    val correctAnswer = y.select("y.b".attr)
+
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-36155: Should not remove right join") {
+    val query = x.groupBy("x.a".attr, "x.b".attr)("x.a".attr, "x.b".attr).join(y,
+      RightOuter,
+      Some("x.a".attr === "y.a".attr)).select("y.b".attr)
+
+    comparePlans(Optimize.execute(query.analyze), query.analyze)
   }
 }
