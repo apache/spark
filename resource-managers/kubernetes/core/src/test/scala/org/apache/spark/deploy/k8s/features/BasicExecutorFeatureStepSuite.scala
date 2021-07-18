@@ -419,6 +419,23 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
 
   }
 
+  test("SPARK-36075: Check executor pod respects nodeSelector/executorNodeSelector") {
+    val initPod = SparkPod.initialPod()
+    val sparkConf = new SparkConf()
+      .set(CONTAINER_IMAGE, "spark-driver:latest")
+      .set(s"${KUBERNETES_NODE_SELECTOR_PREFIX}nodeLabelKey", "nodeLabelValue")
+      .set(s"${KUBERNETES_EXECUTOR_NODE_SELECTOR_PREFIX}execNodeLabelKey", "execNodeLabelValue")
+      .set(s"${KUBERNETES_DRIVER_NODE_SELECTOR_PREFIX}driverNodeLabelKey", "driverNodeLabelValue")
+
+    val executorConf = KubernetesTestConf.createExecutorConf(sparkConf)
+    val executor = new BasicExecutorFeatureStep(executorConf, new SecurityManager(baseConf),
+      defaultProfile).configurePod(initPod)
+    assert(executor.pod.getSpec.getNodeSelector.asScala === Map(
+      "nodeLabelKey" -> "nodeLabelValue",
+      "execNodeLabelKey" -> "execNodeLabelValue"
+    ))
+  }
+
   // There is always exactly one controller reference, and it points to the driver pod.
   private def checkOwnerReferences(executor: Pod, driverPodUid: String): Unit = {
     assert(executor.getMetadata.getOwnerReferences.size() === 1)
