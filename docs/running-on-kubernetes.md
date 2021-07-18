@@ -51,6 +51,7 @@ you may set up a test cluster on your local machine using
   * Be aware that the default minikube configuration is not enough for running Spark applications.
   We recommend 3 CPUs and 4g of memory to be able to start a simple Spark application with a single
   executor.
+  * Check [kubernetes-client library](https://github.com/fabric8io/kubernetes-client)'s version of your Spark environment, and its compatibility with your Kubernetes cluster's version.
 * You must have appropriate permissions to list, create, edit and delete
 [pods](https://kubernetes.io/docs/user-guide/pods/) in your cluster. You can verify that you can list these resources
 by running `kubectl auth can-i <list|create|edit|delete> pods`.
