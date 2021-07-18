@@ -96,7 +96,7 @@ public class PushBlockStream extends BlockTransferMessage {
 
   @Override
   public int encodedLength() {
-    return Encoders.Strings.encodedLength(appId) + 20;
+    return Encoders.Strings.encodedLength(appId) + 4 + 4 + 4 + 4 + 4;
   }
 
   @Override
