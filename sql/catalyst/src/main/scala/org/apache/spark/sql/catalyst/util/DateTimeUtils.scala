@@ -759,11 +759,10 @@ object DateTimeUtils {
       microseconds: Long,
       zoneId: ZoneId): Long = {
     val localDateTime = microsToLocalDateTime(start)
-      .atZone(zoneId)
       .plusMonths(months)
       .plusDays(days)
       .plus(microseconds, ChronoUnit.MICROS)
-    localDateTimeToMicros(localDateTime.toLocalDateTime)
+    localDateTimeToMicros(localDateTime)
   }
 
   /**
