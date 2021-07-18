@@ -1061,9 +1061,9 @@ object TestSettings {
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
-    javaOptions in Test ++= "-Xmx4g -Xss4m -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
+    javaOptions in Test ++= "-Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
       .split(" ").toSeq,
-    javaOptions += "-Xmx3g",
+    javaOptions ++= "-Xmx4g -XX:MaxMetaspaceSize=2g".split(" ").toSeq,
     // Exclude tags defined in a system property
     testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
       sys.props.get("test.exclude.tags").map { tags =>
