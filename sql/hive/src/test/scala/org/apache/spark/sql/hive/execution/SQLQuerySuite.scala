@@ -2615,7 +2615,7 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
     }
   }
 
-  test("abc e") {
+  test("SPARK-36197: Use PartitionDesc instead of TableDesc for reading hive partitioned tables") {
     withTempDir { dir =>
       val t1Loc = s"file:///$dir/t1"
       val t2Loc = s"file:///$dir/t2"
@@ -2625,10 +2625,10 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         hiveClient.runSqlHive("insert into t1 partition(pid=1) select 2")
         hiveClient.runSqlHive(
           s"create table t2(id int) partitioned by(pid int) stored as textfile location '$t2Loc'")
-        hiveClient.runSqlHive("insert into t2 partition(pid=2) select 1")
+        hiveClient.runSqlHive("insert into t2 partition(pid=2) select 2")
         hiveClient.runSqlHive(s"alter table t1 add partition (pid=2) location '$t2Loc/pid=2'")
         hiveClient.runSqlHive("alter table t1 partition(pid=2) SET FILEFORMAT textfile")
-        checkAnswer(sql("select * from t1"), Seq(Row(1, 2), Row(2, 1)))
+        checkAnswer(sql("select pid, id from t1 order by pid"), Seq(Row(1, 2), Row(2, 2)))
       }
     }
   }
