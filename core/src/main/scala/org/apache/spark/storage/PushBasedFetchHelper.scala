@@ -36,8 +36,8 @@ import org.apache.spark.storage.ShuffleBlockFetcherIterator._
  * Helper class for [[ShuffleBlockFetcherIterator]] that encapsulates all the push-based
  * functionality to fetch push-merged block meta and shuffle chunks.
  * A push-merged block contains multiple shuffle chunks where each shuffle chunk contains multiple
- * shuffle blocks that belong to the common reduce partition and were merged by the ESS to that
- * chunk.
+ * shuffle blocks that belong to the common reduce partition and were merged by the
+ * external shuffle service to that chunk.
  */
 private class PushBasedFetchHelper(
    private val iterator: ShuffleBlockFetcherIterator,
@@ -197,9 +197,13 @@ private class PushBasedFetchHelper(
           localShuffleMergerBlockMgrId)
       }
     } else {
-      logDebug(s"Asynchronous fetch the push-merged-local blocks without cached merged dirs")
-      hostLocalDirManager.getHostLocalDirs(localShuffleMergerBlockMgrId.host,
-        localShuffleMergerBlockMgrId.port, Array(SHUFFLE_MERGER_IDENTIFIER)) {
+      // Push-based shuffle is only enabled when the external shuffle service is enabled. If the
+      // external shuffle service is not enabled, then there will not be any push-merged blocks
+      // for the iterator to fetch.
+      logDebug(s"Asynchronous fetch the push-merged-local blocks without cached merged " +
+        s"dirs from the external shuffle service")
+      hostLocalDirManager.getHostLocalDirs(blockManager.blockManagerId.host,
+        blockManager.externalShuffleServicePort, Array(SHUFFLE_MERGER_IDENTIFIER)) {
         case Success(dirs) =>
           logDebug(s"Fetched merged dirs in " +
             s"${TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)} ms")

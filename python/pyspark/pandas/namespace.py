@@ -39,6 +39,7 @@ from distutils.version import LooseVersion
 from functools import reduce
 from io import BytesIO
 import json
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -2822,6 +2823,8 @@ def broadcast(obj: DataFrame) -> DataFrame:
     """
     Marks a DataFrame as small enough for use in broadcast joins.
 
+    .. deprecated:: 3.2.0
+        Use :func:`DataFrame.spark.hint` instead.
     Parameters
     ----------
     obj : DataFrame
@@ -2852,6 +2855,11 @@ def broadcast(obj: DataFrame) -> DataFrame:
     ...BroadcastHashJoin...
     ...
     """
+    warnings.warn(
+        "`broadcast` has been deprecated and might be removed in a future version. "
+        "Use `DataFrame.spark.hint` with 'broadcast' for `name` parameter instead.",
+        FutureWarning,
+    )
     if not isinstance(obj, DataFrame):
         raise TypeError("Invalid type : expected DataFrame got {}".format(type(obj).__name__))
     return DataFrame(

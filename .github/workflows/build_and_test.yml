@@ -83,13 +83,11 @@ jobs:
         ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
-      id: sync-branch
       run: |
-        apache_spark_ref=`git rev-parse HEAD`
+        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
-        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -130,7 +128,6 @@ jobs:
     # Run the tests.
     - name: Run tests
       run: |
-        export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
         # Hive and SQL tests become flaky when running in parallel as it's too intensive.
         if [[ "$MODULES_TO_TEST" == "hive" ]] || [[ "$MODULES_TO_TEST" == "sql" ]]; then export SERIAL_SBT_TESTS=1; fi
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
@@ -170,6 +167,7 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
+      SKIP_UNIDOC: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -180,13 +178,11 @@ jobs:
         ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
-      id: sync-branch
       run: |
-        apache_spark_ref=`git rev-parse HEAD`
+        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
-        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -228,7 +224,6 @@ jobs:
     # Run the tests.
     - name: Run tests
       run: |
-        export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
         export PATH=$PATH:$HOME/miniconda/bin
         ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST"
     - name: Upload test results to report
@@ -264,13 +259,11 @@ jobs:
         ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
-      id: sync-branch
       run: |
-        apache_spark_ref=`git rev-parse HEAD`
+        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
-        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     # Cache local repositories. Note that GitHub Actions cache has a 2G limit.
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
@@ -296,7 +289,6 @@ jobs:
         # R issues at docker environment
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
-        export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
         ./dev/run-tests --parallelism 2 --modules sparkr
     - name: Upload test results to report
       if: always()
@@ -324,7 +316,6 @@ jobs:
         ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
-      id: sync-branch
       run: |
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
@@ -425,7 +416,6 @@ jobs:
         ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
-      id: sync-branch
       run: |
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
@@ -473,7 +463,6 @@ jobs:
         ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
-      id: sync-branch
       run: |
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
@@ -517,7 +506,6 @@ jobs:
         ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
-      id: sync-branch
       run: |
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
@@ -562,7 +550,6 @@ jobs:
         ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
-      id: sync-branch
       run: |
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
@@ -642,13 +629,11 @@ jobs:
         ref: branch-3.2
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
-      id: sync-branch
       run: |
-        apache_spark_ref=`git rev-parse HEAD`
+        echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV
         git fetch https://github.com/$GITHUB_REPOSITORY.git ${GITHUB_REF#refs/heads/}
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' merge --no-commit --progress --squash FETCH_HEAD
         git -c user.name='Apache Spark Test Account' -c user.email='sparktestacc@gmail.com' commit -m "Merged commit"
-        echo "::set-output name=APACHE_SPARK_REF::$apache_spark_ref"
     - name: Cache Scala, SBT and Maven
       uses: actions/cache@v2
       with:
@@ -691,7 +676,6 @@ jobs:
         ./buildContainerImage.sh -v 18.4.0 -x
     - name: Run tests
       run: |
-        export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
         ./dev/run-tests --parallelism 2 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report
       if: always()

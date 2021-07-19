@@ -3874,9 +3874,9 @@ object TimeWindowing extends Rule[LogicalPlan] {
           case _ => Metadata.empty
         }
 
-        def getWindow(i: Int, overlappingWindows: Int): Expression = {
+        def getWindow(i: Int, overlappingWindows: Int, dataType: DataType): Expression = {
           val division = (PreciseTimestampConversion(
-            window.timeColumn, TimestampType, LongType) - window.startTime) / window.slideDuration
+            window.timeColumn, dataType, LongType) - window.startTime) / window.slideDuration
           val ceil = Ceil(division)
           // if the division is equal to the ceiling, our record is the start of a window
           val windowId = CaseWhen(Seq((ceil === division, ceil + 1)), Some(ceil))
@@ -3886,9 +3886,9 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
           CreateNamedStruct(
             Literal(WINDOW_START) ::
-              PreciseTimestampConversion(windowStart, LongType, TimestampType) ::
+              PreciseTimestampConversion(windowStart, LongType, dataType) ::
               Literal(WINDOW_END) ::
-              PreciseTimestampConversion(windowEnd, LongType, TimestampType) ::
+              PreciseTimestampConversion(windowEnd, LongType, dataType) ::
               Nil)
         }
 
@@ -3896,7 +3896,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
           WINDOW_COL_NAME, window.dataType, metadata = metadata)()
 
         if (window.windowDuration == window.slideDuration) {
-          val windowStruct = Alias(getWindow(0, 1), WINDOW_COL_NAME)(
+          val windowStruct = Alias(getWindow(0, 1, window.timeColumn.dataType), WINDOW_COL_NAME)(
             exprId = windowAttr.exprId, explicitMetadata = Some(metadata))
 
           val replacedPlan = p transformExpressions {
@@ -3913,7 +3913,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
           val overlappingWindows =
             math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
           val windows =
-            Seq.tabulate(overlappingWindows)(i => getWindow(i, overlappingWindows))
+            Seq.tabulate(overlappingWindows)(i =>
+              getWindow(i, overlappingWindows, window.timeColumn.dataType))
 
           val projections = windows.map(_ +: child.output)
 

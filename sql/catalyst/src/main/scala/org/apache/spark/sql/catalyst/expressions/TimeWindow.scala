@@ -60,10 +60,10 @@ case class TimeWindow(
   }
 
   override def child: Expression = timeColumn
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType)
   override def dataType: DataType = new StructType()
-    .add(StructField("start", TimestampType))
-    .add(StructField("end", TimestampType))
+    .add(StructField("start", child.dataType))
+    .add(StructField("end", child.dataType))
   override def prettyName: String = "window"
   final override val nodePatterns: Seq[TreePattern] = Seq(TIME_WINDOW)
 

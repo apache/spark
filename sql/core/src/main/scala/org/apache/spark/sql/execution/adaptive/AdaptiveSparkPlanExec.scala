@@ -130,6 +130,27 @@ case class AdaptiveSparkPlanExec(
     }
   }
 
+  private def optimizeQueryStage(plan: SparkPlan, rules: Seq[Rule[SparkPlan]]): SparkPlan = {
+    val optimized = rules.foldLeft(plan) { case (latestPlan, rule) =>
+      val applied = rule.apply(latestPlan)
+      val result = rule match {
+        case c: CustomShuffleReaderRule if c.mayAddExtraShuffles =>
+          if (ValidateRequirements.validate(applied)) {
+            applied
+          } else {
+            logDebug(s"Rule ${rule.ruleName} is not applied due to additional shuffles " +
+              "will be introduced.")
+            latestPlan
+          }
+        case _ => applied
+      }
+      planChangeLogger.logRule(rule.ruleName, latestPlan, result)
+      result
+    }
+    planChangeLogger.logBatch("AQE Query Stage Optimization", plan, optimized)
+    optimized
+  }
+
   @transient private val costEvaluator =
     conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
       case Some(className) => CostEvaluator.instantiate(className, session.sparkContext.getConf)
@@ -274,10 +295,7 @@ case class AdaptiveSparkPlanExec(
       }
 
       // Run the final plan when there's no more unfinished stages.
-      currentPhysicalPlan = applyPhysicalRules(
-        result.newPlan,
-        finalStageOptimizerRules,
-        Some((planChangeLogger, "AQE Final Query Stage Optimization")))
+      currentPhysicalPlan = optimizeQueryStage(result.newPlan, finalStageOptimizerRules)
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
       currentPhysicalPlan
@@ -480,8 +498,7 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def newQueryStage(e: Exchange): QueryStageExec = {
-    val optimizedPlan = applyPhysicalRules(
-      e.child, queryStageOptimizerRules, Some((planChangeLogger, "AQE Query Stage Optimization")))
+    val optimizedPlan = optimizeQueryStage(e.child, queryStageOptimizerRules)
     val queryStage = e match {
       case s: ShuffleExchangeLike =>
         val newShuffle = applyPhysicalRules(
