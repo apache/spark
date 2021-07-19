@@ -2356,14 +2356,12 @@ private[spark] object QueryCompilationErrors {
   }
 
   def missingFieldError(
-      fieldName: Seq[String], table: ResolvedTable, context: Option[Expression]): Throwable = {
-    val msg = s"Missing field ${fieldName.quoted} in table ${table.name} with schema:\n" +
-      table.schema.treeString
-    context.map { c =>
-      throw new AnalysisException(msg, c.origin.line, c.origin.startPosition)
-    }.getOrElse {
-      throw new AnalysisException(msg)
-    }
+      fieldName: Seq[String], table: ResolvedTable, context: Origin): Throwable = {
+    throw new AnalysisException(
+      s"Missing field ${fieldName.quoted} in table ${table.name} with schema:\n" +
+        table.schema.treeString,
+      context.line,
+      context.startPosition)
   }
 
   def invalidFieldName(fieldName: Seq[String], path: Seq[String], context: Origin): Throwable = {
@@ -2371,10 +2369,5 @@ private[spark] object QueryCompilationErrors {
       errorClass = "INVALID_FIELD_NAME",
       messageParameters = Array(fieldName.quoted, path.quoted),
       origin = context)
-  }
-
-  def parentTypeNotStructError(fieldName: Seq[String], parentDataType: DataType): Throwable = {
-    new AnalysisException(s"Cannot add ${fieldName.quoted}, because " +
-      s"its parent is not a StructType. Found $parentDataType")
   }
 }

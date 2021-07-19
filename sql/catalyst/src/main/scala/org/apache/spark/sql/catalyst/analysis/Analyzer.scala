@@ -3575,7 +3575,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case a: AlterTableColumnCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
         val table = a.table.asInstanceOf[ResolvedTable]
         a.transformExpressions {
-          case u: UnresolvedFieldName => resolveFieldNames(table, u.name, Some(u))
+          case u: UnresolvedFieldName => resolveFieldNames(table, u.name, u.origin)
         }
 
       case a @ AlterTableAddColumns(r: ResolvedTable, cols) if hasUnresolvedColumns(cols) =>
@@ -3614,10 +3614,10 @@ class Analyzer(override val catalogManager: CatalogManager)
           val parent = col.name.init
           if (parent.nonEmpty) {
             // Adding a nested field, need to normalize the parent column and position.
-            val resolvedParent = resolveFieldNames(r, parent)
+            val resolvedParent = resolveFieldNames(r, parent, a.origin)
             val parentDataType = resolvedParent.field.dataType match {
               case s: StructType => s
-              case o => throw QueryCompilationErrors.parentTypeNotStructError(col.name, o)
+              case _ => throw QueryCompilationErrors.invalidFieldName(col.name, parent, a.origin)
             }
             addColumn(col, parentDataType, parent.quoted, resolvedParent.name)
           } else {
@@ -3639,7 +3639,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             // TODO: since the field name is already resolved, it's more efficient if
             //       `ResolvedFieldName` carries the parent struct and we resolve column position
             //       based on the par ent struct, instead of re-resolving the entire column path.
-            val resolved = resolveFieldNames(table, path :+ after.column(), Some(u))
+            val resolved = resolveFieldNames(table, path :+ after.column(), u.origin)
             ResolvedFieldPosition(ColumnPosition.after(resolved.field.name))
           case u: UnresolvedFieldPosition => ResolvedFieldPosition(u.position)
           case other => other
@@ -3656,12 +3656,9 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def resolveFieldNames(
         table: ResolvedTable,
         fieldName: Seq[String],
-        context: Option[Expression] = None): ResolvedFieldName = {
+        context: Origin): ResolvedFieldName = {
       table.schema.findNestedField(
-        fieldName,
-        includeCollections = true,
-        conf.resolver,
-        context.map(_.origin).getOrElse(Origin())
+        fieldName, includeCollections = true, conf.resolver, context
       ).map {
         case (path, field) => ResolvedFieldName(path, field)
       }.getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context))
