@@ -30,4 +30,6 @@ trait CustomShuffleReaderRule extends Rule[SparkPlan] {
    * Returns the list of [[ShuffleOrigin]]s supported by this rule.
    */
   def supportedShuffleOrigins: Seq[ShuffleOrigin]
+
+  def mayAddExtraShuffles: Boolean = false
 }

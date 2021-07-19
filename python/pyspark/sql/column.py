@@ -329,7 +329,7 @@ class Column(object):
 
     def getField(self, name):
         """
-        An expression that gets a field by name in a StructField.
+        An expression that gets a field by name in a :class:`StructType`.
 
         .. versionadded:: 1.3.0
 
@@ -394,6 +394,7 @@ class Column(object):
     def dropFields(self, *fieldNames):
         """
         An expression that drops fields in :class:`StructType` by name.
+        This is a no-op if schema doesn't contain field name(s).
 
         .. versionadded:: 3.1.0
 
@@ -757,7 +758,8 @@ class Column(object):
     name = copy_func(alias, sinceversion=2.0, doc=":func:`name` is an alias for :func:`alias`.")
 
     def cast(self, dataType):
-        """ Convert the column into type ``dataType``.
+        """
+        Casts the column into type ``dataType``.
 
         .. versionadded:: 1.3.0
 
@@ -783,8 +785,7 @@ class Column(object):
 
     def between(self, lowerBound, upperBound):
         """
-        A boolean expression that is evaluated to true if the value of this
-        expression is between the given columns.
+        True if the current column is between the lower bound and upper bound, inclusive.
 
         .. versionadded:: 1.3.0
 

@@ -15,15 +15,17 @@
 # limitations under the License.
 #
 from functools import partial
-from typing import Any, no_type_check
+from typing import Any, no_type_check, cast
 
 import pandas as pd
-from pandas.api.types import is_hashable
+from pandas.api.types import is_hashable, CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.indexes.base import Index
+from pyspark.pandas.internal import InternalField
 from pyspark.pandas.missing.indexes import MissingPandasLikeCategoricalIndex
 from pyspark.pandas.series import Series
+from pyspark.sql.types import StructField
 
 
 class CategoricalIndex(Index):
@@ -139,7 +141,16 @@ class CategoricalIndex(Index):
         >>> idx.codes
         Int64Index([0, 1, 1, 2, 2, 2], dtype='int64')
         """
-        return self._with_new_scol(self.spark.column).rename(None)
+        return self._with_new_scol(
+            self.spark.column,
+            field=InternalField.from_struct_field(
+                StructField(
+                    name=self._internal.index_spark_column_names[0],
+                    dataType=self.spark.data_type,
+                    nullable=self.spark.nullable,
+                )
+            ),
+        ).rename(None)
 
     @property
     def categories(self) -> pd.Index:
@@ -156,7 +167,7 @@ class CategoricalIndex(Index):
         >>> idx.categories
         Index(['a', 'b', 'c'], dtype='object')
         """
-        return self.dtype.categories
+        return cast(CategoricalDtype, self.dtype).categories
 
     @categories.setter
     def categories(self, categories: pd.Index) -> None:
@@ -177,7 +188,7 @@ class CategoricalIndex(Index):
         >>> idx.ordered
         False
         """
-        return self.dtype.ordered
+        return cast(CategoricalDtype, self.dtype).ordered
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeCategoricalIndex, item):

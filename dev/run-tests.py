@@ -294,6 +294,40 @@ def exec_sbt(sbt_args=()):
         exit_from_command_with_retcode(sbt_cmd, retcode)
 
 
+def get_scala_profiles(scala_version):
+    """
+    For the given Scala version tag, return a list of Maven/SBT profile flags for
+    building and testing against that Scala version.
+    """
+    if scala_version is None:
+        return []  # assume it's default.
+
+    sbt_maven_scala_profiles = {
+        "scala2.12": ["-Pscala-2.12"],
+        "scala2.13": ["-Pscala-2.13"],
+    }
+
+    if scala_version in sbt_maven_scala_profiles:
+        return sbt_maven_scala_profiles[scala_version]
+    else:
+        print("[error] Could not find", scala_version, "in the list. Valid options",
+              " are", sbt_maven_scala_profiles.keys())
+        sys.exit(int(os.environ.get("CURRENT_BLOCK", 255)))
+
+
+def switch_scala_version(scala_version):
+    """
+    Switch the code base to use the given Scala version.
+    """
+    set_title_and_block(
+        "Switch the Scala version to %s" % scala_version, "BLOCK_SCALA_VERSION")
+
+    assert scala_version is not None
+    ver_num = scala_version[-4:]  # Simply extract. e.g.) 2.13 from scala2.13
+    command = [os.path.join(SPARK_HOME, "dev", "change-scala-version.sh"), ver_num]
+    run_cmd(command)
+
+
 def get_hadoop_profiles(hadoop_version):
     """
     For the given Hadoop version tag, return a list of Maven/SBT profile flags for
@@ -379,7 +413,7 @@ def build_spark_assembly_sbt(extra_profiles, checkstyle=False):
     if checkstyle:
         run_java_style_checks(build_profiles)
 
-    if not os.environ.get("AMPLAB_JENKINS"):
+    if not os.environ.get("AMPLAB_JENKINS") and not os.environ.get("SKIP_UNIDOC"):
         build_spark_unidoc_sbt(extra_profiles)
 
 
@@ -629,6 +663,7 @@ def main():
         # if we're on the Amplab Jenkins build servers setup variables
         # to reflect the environment settings
         build_tool = os.environ.get("AMPLAB_JENKINS_BUILD_TOOL", "sbt")
+        scala_version = os.environ.get("AMPLAB_JENKINS_BUILD_SCALA_PROFILE")
         hadoop_version = os.environ.get("AMPLAB_JENKINS_BUILD_PROFILE", "hadoop3.2")
         hive_version = os.environ.get("AMPLAB_JENKINS_BUILD_HIVE_PROFILE", "hive2.3")
         test_env = "amplab_jenkins"
@@ -639,6 +674,7 @@ def main():
     else:
         # else we're running locally or GitHub Actions.
         build_tool = "sbt"
+        scala_version = os.environ.get("SCALA_PROFILE")
         hadoop_version = os.environ.get("HADOOP_PROFILE", "hadoop3.2")
         hive_version = os.environ.get("HIVE_PROFILE", "hive2.3")
         if "GITHUB_ACTIONS" in os.environ:
@@ -646,9 +682,11 @@ def main():
         else:
             test_env = "local"
 
-    print("[info] Using build tool", build_tool, "with Hadoop profile", hadoop_version,
-          "and Hive profile", hive_version, "under environment", test_env)
-    extra_profiles = get_hadoop_profiles(hadoop_version) + get_hive_profiles(hive_version)
+    extra_profiles = get_hadoop_profiles(hadoop_version) + get_hive_profiles(hive_version) + \
+        get_scala_profiles(scala_version)
+
+    print("[info] Using build tool", build_tool, "with profiles",
+          *(extra_profiles + ["under environment", test_env]))
 
     changed_modules = []
     changed_files = []
@@ -658,7 +696,7 @@ def main():
         # If we're running the tests in GitHub Actions, attempt to detect and test
         # only the affected modules.
         if test_env == "github_actions":
-            if os.environ["APACHE_SPARK_REF"] != "":
+            if "APACHE_SPARK_REF" in os.environ and os.environ["APACHE_SPARK_REF"] != "":
                 # Fork repository
                 changed_files = identify_changed_files_from_git_commits(
                     "HEAD", target_ref=os.environ["APACHE_SPARK_REF"])
@@ -711,6 +749,10 @@ def main():
     for m in changed_modules:
         test_environ.update(m.environ)
     setup_test_environ(test_environ)
+
+    if scala_version is not None:
+        # If not set, assume this is default and doesn't need to change.
+        switch_scala_version(scala_version)
 
     should_run_java_style_checks = False
     if not should_only_test_modules:

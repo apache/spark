@@ -552,6 +552,7 @@ object FunctionRegistry {
     expression[WeekOfYear]("weekofyear"),
     expression[Year]("year"),
     expression[TimeWindow]("window"),
+    expression[SessionWindow]("session_window"),
     expression[MakeDate]("make_date"),
     expression[MakeTimestamp]("make_timestamp"),
     expression[MakeTimestampNTZ]("make_timestamp_ntz", true),
