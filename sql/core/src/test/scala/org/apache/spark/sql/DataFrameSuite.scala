@@ -42,7 +42,6 @@ import org.apache.spark.sql.execution.{FilterExec, QueryExecution, WholeStageCod
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.expressions.{Aggregator, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -2381,50 +2380,6 @@ class DataFrameSuite extends QueryTest
       val aggPlusFilter2 = df.groupBy(col("name")).agg(count(col("name"))).filter(col("name") === 0)
       checkAnswer(aggPlusFilter1, aggPlusFilter2.collect())
     }
-  }
-
-  test("SPARK-34806: observation on datasets") {
-    val namedObservation = Observation("named")
-    val unnamedObservation = Observation()
-
-    val df = spark
-      .range(100)
-      .observe(
-        namedObservation,
-        min($"id").as("min_val"),
-        max($"id").as("max_val"),
-        sum($"id").as("sum_val"),
-        count(when($"id" % 2 === 0, 1)).as("num_even")
-      )
-      .observe(
-        unnamedObservation,
-        avg($"id").cast("int").as("avg_val")
-      )
-
-    def checkMetrics(namedMetric: Row, unnamedMetric: Row): Unit = {
-      assert(namedMetric === Row(0L, 99L, 4950L, 50L))
-      assert(unnamedMetric === Row(49))
-    }
-
-    // First run
-    df.collect()
-    checkMetrics(namedObservation.get, unnamedObservation.get)
-    // we can get the result multiple times
-    checkMetrics(namedObservation.get, unnamedObservation.get)
-
-    // an observation can be used only once
-    val err = intercept[IllegalArgumentException] {
-      spark.range(100).observe(namedObservation, sum($"id").as("sum_val"))
-    }
-    assert(err.getMessage.contains("An Observation can be used with a Dataset only once"))
-
-    // streaming datasets are not supported
-    val streamDf = new MemoryStream[Int](0, sqlContext).toDF()
-    val streamObservation = Observation("stream")
-    val streamErr = intercept[IllegalArgumentException] {
-      streamDf.observe(streamObservation, avg($"value").cast("int").as("avg_val"))
-    }
-    assert(streamErr.getMessage.contains("Observation does not support streaming Datasets"))
   }
 
   test("SPARK-25159: json schema inference should only trigger one job") {
