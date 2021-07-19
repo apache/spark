@@ -186,13 +186,14 @@ class BasicWriteTaskStatsTracker(
  */
 class BasicWriteJobStatsTracker(
     serializableHadoopConf: SerializableConfiguration,
-    val metrics: Map[String, SQLMetric])
+    @transient val driverSideMetrics: Map[String, SQLMetric],
+    taskCommitTimeMetrics: SQLMetric)
   extends WriteJobStatsTracker {
 
   override def newTaskInstance(): WriteTaskStatsTracker = {
     new BasicWriteTaskStatsTracker(
       serializableHadoopConf.value,
-      Some(metrics(BasicWriteJobStatsTracker.TASK_COMMIT_DURATION)))
+      Some(taskCommitTimeMetrics))
   }
 
   override def processStats(stats: Seq[WriteTaskStats], jobCommitDuration: Long): Unit = {
@@ -211,15 +212,14 @@ class BasicWriteJobStatsTracker(
       totalNumOutput += summary.numRows
     }
 
-    metrics(BasicWriteJobStatsTracker.JOB_COMMIT_DURATION).add(jobCommitDuration)
-    metrics(BasicWriteJobStatsTracker.NUM_FILES_KEY).add(numFiles)
-    metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_BYTES_KEY).add(totalNumBytes)
-    metrics(BasicWriteJobStatsTracker.NUM_OUTPUT_ROWS_KEY).add(totalNumOutput)
-    metrics(BasicWriteJobStatsTracker.NUM_PARTS_KEY).add(partitionsSet.size)
+    driverSideMetrics(BasicWriteJobStatsTracker.JOB_COMMIT_DURATION).add(jobCommitDuration)
+    driverSideMetrics(BasicWriteJobStatsTracker.NUM_FILES_KEY).add(numFiles)
+    driverSideMetrics(BasicWriteJobStatsTracker.NUM_OUTPUT_BYTES_KEY).add(totalNumBytes)
+    driverSideMetrics(BasicWriteJobStatsTracker.NUM_OUTPUT_ROWS_KEY).add(totalNumOutput)
+    driverSideMetrics(BasicWriteJobStatsTracker.NUM_PARTS_KEY).add(partitionsSet.size)
 
     val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId,
-      metrics.filter(_._1 != BasicWriteJobStatsTracker.TASK_COMMIT_DURATION).values.toList)
+    SQLMetrics.postDriverMetricUpdates(sparkContext, executionId, driverSideMetrics.values.toList)
   }
 }
 
@@ -228,22 +228,26 @@ object BasicWriteJobStatsTracker {
   private val NUM_OUTPUT_BYTES_KEY = "numOutputBytes"
   private val NUM_OUTPUT_ROWS_KEY = "numOutputRows"
   private val NUM_PARTS_KEY = "numParts"
-  private val TASK_COMMIT_DURATION = "taskCommitDuration"
+  val TASK_COMMIT_DURATION = "taskCommitDuration"
   private val JOB_COMMIT_DURATION = "jobCommitDuration"
   /** XAttr key of the data length header added in HADOOP-17414. */
   val FILE_LENGTH_XATTR = "header.x-hadoop-s3a-magic-data-length"
 
-  def metrics: Map[String, SQLMetric] = {
+  def driverSideMetrics: Map[String, SQLMetric] = {
     val sparkContext = SparkContext.getActive.get
     Map(
       NUM_FILES_KEY -> SQLMetrics.createMetric(sparkContext, "number of written files"),
       NUM_OUTPUT_BYTES_KEY -> SQLMetrics.createSizeMetric(sparkContext, "written output"),
       NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
-      TASK_COMMIT_DURATION ->
-        SQLMetrics.createTimingMetric(sparkContext, "duration of task commit"),
-      JOB_COMMIT_DURATION->
+      JOB_COMMIT_DURATION ->
         SQLMetrics.createTimingMetric(sparkContext, "duration of job commit")
     )
+  }
+
+  def taskCommitTimeMetric: Map[String, SQLMetric] = {
+    val sparkContext = SparkContext.getActive.get
+    Map(TASK_COMMIT_DURATION ->
+      SQLMetrics.createTimingMetric(sparkContext, "duration of task commit"))
   }
 }

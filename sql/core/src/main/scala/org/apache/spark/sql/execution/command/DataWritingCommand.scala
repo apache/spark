@@ -51,11 +51,14 @@ trait DataWritingCommand extends UnaryCommand {
   def outputColumns: Seq[Attribute] =
     DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
 
-  lazy val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
+  lazy val driverSideMetrics = BasicWriteJobStatsTracker.driverSideMetrics
+  lazy val taskCommitTimeMetric = BasicWriteJobStatsTracker.taskCommitTimeMetric
+  lazy val metrics: Map[String, SQLMetric] = driverSideMetrics ++ taskCommitTimeMetric
 
   def basicWriteJobStatsTracker(hadoopConf: Configuration): BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
-    new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
+    new BasicWriteJobStatsTracker(serializableHadoopConf, driverSideMetrics,
+      taskCommitTimeMetric(BasicWriteJobStatsTracker.TASK_COMMIT_DURATION))
   }
 
   def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row]
