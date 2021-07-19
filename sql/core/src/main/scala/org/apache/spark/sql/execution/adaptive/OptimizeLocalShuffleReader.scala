@@ -87,8 +87,7 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
       Seq.empty
     } else if (expectedParallelism >= numMappers) {
       equallyDivide(numReducers, expectedParallelism / numMappers)
-    }
-    else {
+    } else {
       equallyDivide(numMappers, expectedParallelism)
     }
     if (expectedParallelism >= numMappers) {

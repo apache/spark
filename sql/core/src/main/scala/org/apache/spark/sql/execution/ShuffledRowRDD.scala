@@ -58,6 +58,7 @@ case class PartialMapperPartitionSpec(
     startReducerIndex: Int,
     endReducerIndex: Int) extends ShufflePartitionSpec
 
+// Follow-up: consider using map location for coalescing mappers
 case class CoalescedMapperPartitionSpec(
     startMapIndex: Int,
     endMapIndex: Int,
