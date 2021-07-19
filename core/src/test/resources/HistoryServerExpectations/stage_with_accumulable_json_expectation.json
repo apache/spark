@@ -529,14 +529,6 @@
       "isExcludedForStage" : false
     }
   },
-  "speculationSummary" : {
-    "numTasks": 0,
-    "numActiveTasks": 0,
-    "numCompletedTasks": 0,
-    "numFailedTasks": 0,
-    "numKilledTasks": 0,
-    "killedTasksSummary": { }
-  },
   "killedTasksSummary" : { },
   "resourceProfileId" : 0,
   "peakExecutorMetrics" : {
