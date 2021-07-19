@@ -24,11 +24,11 @@ import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 
-class RemoveAggsThroughLeftSemiAntiJoinSuite extends PlanTest {
+class RemoveRedundantAggregatesInLeftSemiAntiJoinSuite extends PlanTest {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
-    val batches = Batch("RemoveAggsThroughLeftSemiAntiJoin", FixedPoint(10),
-      RemoveAggsThroughLeftSemiAntiJoin) :: Nil
+    val batches = Batch("RemoveRedundantAggregatesInLeftSemiAntiJoin", FixedPoint(10),
+      RemoveRedundantAggregatesInLeftSemiAntiJoin) :: Nil
   }
 
   private val testRelation = LocalRelation('a.int, 'b.int)
@@ -61,11 +61,38 @@ class RemoveAggsThroughLeftSemiAntiJoinSuite extends PlanTest {
     }
   }
 
+  test("Transform down to remove more aggregates") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.groupBy('a, 'b)('a, 'b)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .groupBy("x.a".attr, "x.b".attr)("x.a".attr, "x.b".attr)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .groupBy("x.a".attr, "x.b".attr)("x.a".attr)
+      val correctAnswer = x.groupBy('a, 'b)('a, 'b)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, correctAnswer.analyze)
+    }
+  }
+
   test("Negative case: The grouping expressions not same") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
       val originalQuery = x.groupBy('a, 'b)('a, 'b)
         .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
         .groupBy("x.a".attr)("x.a".attr)
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, originalQuery.analyze)
+    }
+  }
+
+  test("Negative case: The aggregate expressions not the sub aggregateExprs") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.groupBy('a, 'b)('a, 'b)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .groupBy("x.a".attr, "x.b".attr)(TrueLiteral)
 
       val optimized = Optimize.execute(originalQuery.analyze)
       comparePlans(optimized, originalQuery.analyze)
