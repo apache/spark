@@ -133,6 +133,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
     val ignoreSet = Set(
       // Explicitly inherits NonSQLExpression, and has no ExpressionDescription
       "org.apache.spark.sql.catalyst.expressions.TimeWindow",
+      "org.apache.spark.sql.catalyst.expressions.SessionWindow",
       // Cast aliases do not need examples
       "org.apache.spark.sql.catalyst.expressions.Cast")
 
@@ -175,6 +176,7 @@ class ExpressionInfoSuite extends SparkFunSuite with SharedSparkSession {
       "org.apache.spark.sql.catalyst.expressions.CurrentTimestamp",
       "org.apache.spark.sql.catalyst.expressions.CurrentTimeZone",
       "org.apache.spark.sql.catalyst.expressions.Now",
+      "org.apache.spark.sql.catalyst.expressions.LocalTimestamp",
       // Random output without a seed
       "org.apache.spark.sql.catalyst.expressions.Rand",
       "org.apache.spark.sql.catalyst.expressions.Randn",

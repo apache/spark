@@ -860,6 +860,11 @@ class Frame(object, metaclass=ABCMeta):
             )
 
         if num_files is not None:
+            warnings.warn(
+                "`num_files` has been deprecated and might be removed in a future version. "
+                "Use `DataFrame.spark.repartition` instead.",
+                FutureWarning,
+            )
             sdf = sdf.repartition(num_files)
 
         builder = sdf.write.mode(mode)
@@ -998,6 +1003,11 @@ class Frame(object, metaclass=ABCMeta):
         sdf = psdf.to_spark(index_col=index_col)  # type: ignore
 
         if num_files is not None:
+            warnings.warn(
+                "`num_files` has been deprecated and might be removed in a future version. "
+                "Use `DataFrame.spark.repartition` instead.",
+                FutureWarning,
+            )
             sdf = sdf.repartition(num_files)
 
         builder = sdf.write.mode(mode)

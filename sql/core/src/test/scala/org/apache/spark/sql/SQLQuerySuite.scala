@@ -136,7 +136,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-14415: All functions should have own descriptions") {
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
-      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f.unquotedString)) {
+      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window",
+          "session_window").contains(f.unquotedString)) {
         checkKeywordsNotExist(sql(s"describe function $f"), "N/A.")
       }
     }
@@ -3377,7 +3378,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         s"VALUES(${(0 until 65).map { _ => 1 }.mkString(", ")}, 3) AS " +
         s"t(${(0 until 65).map { i => s"k$i" }.mkString(", ")}, v)")
 
-      def testGropingIDs(numGroupingSet: Int, expectedIds: Seq[Any] = Nil): Unit = {
+      def testGroupingIDs(numGroupingSet: Int, expectedIds: Seq[Any] = Nil): Unit = {
         val groupingCols = (0 until numGroupingSet).map { i => s"k$i" }
         val df = sql("SELECT GROUPING_ID(), SUM(v) FROM t GROUP BY " +
           s"GROUPING SETS ((${groupingCols.mkString(",")}), (${groupingCols.init.mkString(",")}))")
@@ -3385,19 +3386,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "true") {
-        testGropingIDs(32, Seq(0, 1))
-        val errMsg = intercept[AnalysisException] {
-          testGropingIDs(33)
-        }.getMessage
-        assert(errMsg.contains("Grouping sets size cannot be greater than 32"))
+        testGroupingIDs(32, Seq(0, 1))
+        val ex = intercept[AnalysisException] {
+          testGroupingIDs(33)
+        }
+        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 32"))
+        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "false") {
-        testGropingIDs(64, Seq(0L, 1L))
-        val errMsg = intercept[AnalysisException] {
-          testGropingIDs(65)
-        }.getMessage
-        assert(errMsg.contains("Grouping sets size cannot be greater than 64"))
+        testGroupingIDs(64, Seq(0L, 1L))
+        val ex = intercept[AnalysisException] {
+          testGroupingIDs(65)
+        }
+        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 64"))
+        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
     }
   }

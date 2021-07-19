@@ -20,4 +20,4 @@ from typing import List, Tuple, Union
 from pyspark.mllib.linalg import Vector
 from numpy import ndarray  # noqa: F401
 
-VectorLike = Union[Vector, List[float], Tuple[float, ...]]
+VectorLike = Union[ndarray, Vector, List[float], Tuple[float, ...]]

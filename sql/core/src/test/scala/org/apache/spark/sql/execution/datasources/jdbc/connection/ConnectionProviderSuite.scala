@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.datasources.jdbc.connection
 
 import javax.security.auth.login.Configuration
 
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ConnectionProviderSuite extends ConnectionProviderSuiteBase with SharedSparkSession {
@@ -35,14 +36,6 @@ class ConnectionProviderSuite extends ConnectionProviderSuiteBase with SharedSpa
     assert(IntentionallyFaultyConnectionProvider.constructed)
     assert(!providers.exists(_.isInstanceOf[IntentionallyFaultyConnectionProvider]))
     assert(providers.size === 6)
-  }
-
-  test("Disabled provider must not be loaded") {
-    withSQLConf(SQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST.key -> "db2") {
-      val providers = ConnectionProvider.loadProviders()
-      assert(!providers.exists(_.isInstanceOf[DB2ConnectionProvider]))
-      assert(providers.size === 5)
-    }
   }
 
   test("Multiple security configs must be reachable") {
@@ -75,5 +68,18 @@ class ConnectionProviderSuite extends ConnectionProviderSuiteBase with SharedSpa
     assert(db2Config.getAppConfigurationEntry(db2AppEntry) != null)
 
     Configuration.setConfiguration(null)
+  }
+}
+
+class DisallowedConnectionProviderSuite extends SharedSparkSession {
+
+  override protected def sparkConf: SparkConf =
+    super.sparkConf.set(
+      StaticSQLConf.DISABLED_JDBC_CONN_PROVIDER_LIST.key, "db2")
+
+  test("Disabled provider must not be loaded") {
+    val providers = ConnectionProvider.loadProviders()
+    assert(!providers.exists(_.isInstanceOf[DB2ConnectionProvider]))
+    assert(providers.size === 5)
   }
 }

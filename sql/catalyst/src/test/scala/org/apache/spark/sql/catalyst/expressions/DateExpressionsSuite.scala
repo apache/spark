@@ -96,6 +96,16 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(math.abs(t1 - ct.getTime) < 5000)
   }
 
+  test("datetime function localtimestamp") {
+    // Verify with multiple outstanding time zones which has no daylight saving time.
+    Seq("UTC", "Africa/Dakar", "Asia/Hong_Kong").foreach { zid =>
+      val zoneId = DateTimeUtils.getZoneId(zid)
+      val ct = LocalTimestamp(Some(zid)).eval(EmptyRow).asInstanceOf[Long]
+      val t1 = DateTimeUtils.localDateTimeToMicros(LocalDateTime.now(zoneId))
+      assert(math.abs(t1 - ct) < 1000000)
+    }
+  }
+
   test("DayOfYear") {
     val sdfDay = new SimpleDateFormat("D", Locale.US)
 

@@ -1780,6 +1780,7 @@ def month(col):
 def dayofweek(col):
     """
     Extract the day of the week of a given date as integer.
+    Ranges from 1 for a Sunday through to 7 for a Saturday
 
     .. versionadded:: 2.3.0
 
@@ -1876,6 +1877,8 @@ def second(col):
 def weekofyear(col):
     """
     Extract the week number of a given date as integer.
+    A week is considered to start on a Monday and week 1 is the first week with more than 3 days,
+    as defined by ISO 8601
 
     .. versionadded:: 1.5.0
 
@@ -1957,8 +1960,8 @@ def months_between(date1, date2, roundOff=True):
     """
     Returns number of months between dates date1 and date2.
     If date1 is later than date2, then the result is positive.
-    If date1 and date2 are on the same day of month, or both are the last day of month,
-    returns an integer (time of day will be ignored).
+    A whole number is returned if both inputs have the same day of month or both are the last day
+    of their respective months. Otherwise, the difference is calculated assuming 31 days per month.
     The result is rounded off to 8 digits unless `roundOff` is set to `False`.
 
     .. versionadded:: 1.5.0
@@ -2042,7 +2045,9 @@ def trunc(date, format):
     ----------
     date : :class:`~pyspark.sql.Column` or str
     format : str
-        'year', 'yyyy', 'yy' or 'month', 'mon', 'mm'
+        'year', 'yyyy', 'yy' to truncate by year,
+        or 'month', 'mon', 'mm' to truncate by month
+        Other options are: 'week', 'quarter'
 
     Examples
     --------
@@ -2065,8 +2070,11 @@ def date_trunc(format, timestamp):
     Parameters
     ----------
     format : str
-        'year', 'yyyy', 'yy', 'month', 'mon', 'mm',
-        'day', 'dd', 'hour', 'minute', 'second', 'week', 'quarter'
+        'year', 'yyyy', 'yy' to truncate by year,
+        'month', 'mon', 'mm' to truncate by month,
+        'day', 'dd' to truncate by day,
+        Other options are:
+        'microsecond', 'millisecond', 'second', 'minute', 'hour', 'week', 'quarter'
     timestamp : :class:`~pyspark.sql.Column` or str
 
     Examples
@@ -2322,6 +2330,41 @@ def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
         res = sc._jvm.functions.window(time_col, windowDuration, windowDuration, startTime)
     else:
         res = sc._jvm.functions.window(time_col, windowDuration)
+    return Column(res)
+
+
+def session_window(timeColumn, gapDuration):
+    """
+    Generates session window given a timestamp specifying column.
+    Session window is one of dynamic windows, which means the length of window is varying
+    according to the given inputs. The length of session window is defined as "the timestamp
+    of latest input of the session + gap duration", so when the new inputs are bound to the
+    current session window, the end time of session window can be expanded according to the new
+    inputs.
+    Windows can support microsecond precision. Windows in the order of months are not supported.
+    For a streaming query, you may use the function `current_timestamp` to generate windows on
+    processing time.
+    gapDuration is provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
+    interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
+    The output column will be a struct called 'session_window' by default with the nested columns
+    'start' and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
+    .. versionadded:: 3.2.0
+    Examples
+    --------
+    >>> df = spark.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
+    >>> w = df.groupBy(session_window("date", "5 seconds")).agg(sum("val").alias("sum"))
+    >>> w.select(w.session_window.start.cast("string").alias("start"),
+    ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
+    [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
+    """
+    def check_string_field(field, fieldName):
+        if not field or type(field) is not str:
+            raise TypeError("%s should be provided as a string" % fieldName)
+
+    sc = SparkContext._active_spark_context
+    time_col = _to_java_column(timeColumn)
+    check_string_field(gapDuration, "gapDuration")
+    res = sc._jvm.functions.session_window(time_col, gapDuration)
     return Column(res)
 
 

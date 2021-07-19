@@ -203,8 +203,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
       long rangeEnd = state.currentRangeEnd();
 
       if (rowId + n < rangeStart) {
-        updater.skipValues(n, valueReader);
-        advance(n);
+        skipValues(n, state, valueReader, updater);
         rowId += n;
         leftInPage -= n;
       } else if (rowId > rangeEnd) {
@@ -217,8 +216,7 @@ public final class VectorizedRleValuesReader extends ValuesReader
         // skip the part [rowId, start)
         int toSkip = (int) (start - rowId);
         if (toSkip > 0) {
-          updater.skipValues(toSkip, valueReader);
-          advance(toSkip);
+          skipValues(toSkip, state, valueReader, updater);
           rowId += toSkip;
           leftInPage -= toSkip;
         }
@@ -255,6 +253,39 @@ public final class VectorizedRleValuesReader extends ValuesReader
     state.advanceOffsetAndRowId(offset, rowId);
   }
 
+  /**
+   * Skip the next `n` values (either null or non-null) from this definition level reader and
+   * `valueReader`.
+   */
+  private void skipValues(
+      int n,
+      ParquetReadState state,
+      VectorizedValuesReader valuesReader,
+      ParquetVectorUpdater updater) {
+    while (n > 0) {
+      if (this.currentCount == 0) this.readNextGroup();
+      int num = Math.min(n, this.currentCount);
+      switch (mode) {
+        case RLE:
+          // we only need to skip non-null values from `valuesReader` since nulls are represented
+          // via definition levels which are skipped here via decrementing `currentCount`.
+          if (currentValue == state.maxDefinitionLevel) {
+            updater.skipValues(num, valuesReader);
+          }
+          break;
+        case PACKED:
+          for (int i = 0; i < num; ++i) {
+            // same as above, only skip non-null values from `valuesReader`
+            if (currentBuffer[currentBufferIdx++] == state.maxDefinitionLevel) {
+              updater.skipValues(1, valuesReader);
+            }
+          }
+          break;
+      }
+      currentCount -= num;
+      n -= num;
+    }
+  }
 
   // The RLE reader implements the vectorized decoding interface when used to decode dictionary
   // IDs. This is different than the above APIs that decodes definitions levels along with values.
@@ -358,7 +389,14 @@ public final class VectorizedRleValuesReader extends ValuesReader
     while (left > 0) {
       if (this.currentCount == 0) this.readNextGroup();
       int n = Math.min(left, this.currentCount);
-      advance(n);
+      switch (mode) {
+        case RLE:
+          break;
+        case PACKED:
+          currentBufferIdx += n;
+          break;
+      }
+      currentCount -= n;
       left -= n;
     }
   }
@@ -401,20 +439,6 @@ public final class VectorizedRleValuesReader extends ValuesReader
   @Override
   public void skipFixedLenByteArray(int total, int len) {
     throw new UnsupportedOperationException("only skipIntegers is valid");
-  }
-
-  /**
-   * Advance and skip the next `n` values in the current block. `n` MUST be <= `currentCount`.
-   */
-  private void advance(int n) {
-    switch (mode) {
-      case RLE:
-        break;
-      case PACKED:
-        currentBufferIdx += n;
-        break;
-    }
-    currentCount -= n;
   }
 
   /**
