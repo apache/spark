@@ -347,7 +347,9 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
                 if isinstance(psser.spark.data_type, DecimalType):
-                    self.assertRaises(TypeError, lambda: psser < psser)
+                    self.assertRaisesRegex(
+                        TypeError, "< can not be applied to", lambda: psser < psser
+                    )
                 else:
                     self.assert_eq(pser < pser, (psser < psser).sort_index())
 
@@ -355,7 +357,9 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
                 if isinstance(psser.spark.data_type, DecimalType):
-                    self.assertRaises(TypeError, lambda: psser <= psser)
+                    self.assertRaisesRegex(
+                        TypeError, "<= can not be applied to", lambda: psser <= psser
+                    )
                 else:
                     self.assert_eq(pser <= pser, (psser <= psser).sort_index())
 
@@ -363,7 +367,9 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
                 if isinstance(psser.spark.data_type, DecimalType):
-                    self.assertRaises(TypeError, lambda: psser > psser)
+                    self.assertRaisesRegex(
+                        TypeError, "> can not be applied to", lambda: psser > psser
+                    )
                 else:
                     self.assert_eq(pser > pser, (psser > psser).sort_index())
 
@@ -371,7 +377,9 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
                 if isinstance(psser.spark.data_type, DecimalType):
-                    self.assertRaises(TypeError, lambda: psser >= psser)
+                    self.assertRaisesRegex(
+                        TypeError, ">= can not be applied to", lambda: psser >= psser
+                    )
                 else:
                     self.assert_eq(pser >= pser, (psser >= psser).sort_index())
 
