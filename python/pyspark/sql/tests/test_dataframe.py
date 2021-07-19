@@ -80,10 +80,6 @@ class DataFrameTests(ReusedSQLTestCase):
             2)
 
         self.assertEqual(self.spark.createDataFrame(
-            [(u'Alice', 50), (u'Alice', 60)], schema).dropDuplicates("name").count(),
-            1)
-
-        self.assertEqual(self.spark.createDataFrame(
             [(u'Alice', 50), (u'Alice', 60)], schema).dropDuplicates(["name"]).count(),
             1)
 
