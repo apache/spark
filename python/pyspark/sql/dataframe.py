@@ -1989,7 +1989,6 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             jdf = self._jdf.dropDuplicates()
         else:
             jdf = self._jdf.dropDuplicates(self._jseq(subset))
-
         return DataFrame(jdf, self.sql_ctx)
 
     def dropna(self, how='any', thresh=None, subset=None):
