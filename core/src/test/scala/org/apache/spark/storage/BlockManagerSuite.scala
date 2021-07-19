@@ -2093,6 +2093,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       Seq("hostC", "hostB", "hostD").sorted)
     assert(master.getShufflePushMergerLocations(4, Set.empty).map(_.host).sorted ===
       Seq("hostB", "hostA", "hostC", "hostD").sorted)
+    master.removeShufflePushMergerLocation("hostA")
+    assert(master.getShufflePushMergerLocations(4, Set.empty).map(_.host).sorted ===
+      Seq("hostB", "hostC", "hostD").sorted)
   }
 
   test("SPARK-33387 Support ordered shuffle block migration") {
