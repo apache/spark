@@ -28,7 +28,7 @@ Spark's script transform supports two modes:
 
     1. Without Hive: Spark scripts transform can run without `-Phive` or `SparkSession.builder.enableHiveSupport()`.
                      In this case, now spark only use script transform with `ROW FORMAT DELIMITED` and treat all values passed
-                     to script as a string. 
+                     to the script as strings. 
     2. With Hive: When built Spark with `-Phive` and started Spark SQL with `enableHiveSupport()`, spark can use script 
                   transform with Hive SerDe and both `ROW FORMAT DELIMITED`.
 
