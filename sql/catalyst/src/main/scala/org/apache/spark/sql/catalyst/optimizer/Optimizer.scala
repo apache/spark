@@ -649,9 +649,9 @@ object LimitPushDown extends Rule[LogicalPlan] {
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
     // Push down limit 1 through Aggregate if it is group only.
     case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
-      Limit(le, a.copy(child = LocalLimit(le, a.child)))
+      Limit(le, Project(a.output, LocalLimit(le, a.child)))
     case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
-      Limit(le, p.copy(child = a.copy(child = LocalLimit(le, a.child))))
+      Limit(le, p.copy(child = Project(a.output, LocalLimit(le, a.child))))
   }
 }
 
