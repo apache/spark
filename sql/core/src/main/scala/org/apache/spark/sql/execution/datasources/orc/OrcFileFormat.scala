@@ -45,7 +45,6 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 private[sql] object OrcFileFormat {
   private def checkFieldName(name: String): Unit = {
     try {
-      println(name)
       TypeDescription.fromString(s"struct<`$name`:int>")
     } catch {
       case _: IllegalArgumentException =>
