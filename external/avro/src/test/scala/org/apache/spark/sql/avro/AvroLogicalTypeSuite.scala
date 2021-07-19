@@ -82,6 +82,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  // scalastyle:off line.size.limit
   val timestampSchema = s"""
       {
         "namespace": "logical",
@@ -96,6 +97,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
         ]
       }
     """
+  // scalastyle:on line.size.limit
 
   val timestampInputData =
     Seq((1000L, 2000L, 1000L, 2000L, 3000L), (666000L, 999000L, 666000L, 999000L, 777000L))
