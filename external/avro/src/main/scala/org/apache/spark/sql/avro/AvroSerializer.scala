@@ -32,7 +32,7 @@ import org.apache.avro.generic.GenericData.Record
 import org.apache.avro.util.Utf8
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.avro.AvroUtils.toFieldStr
+import org.apache.spark.sql.avro.AvroUtils.{toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -243,11 +243,11 @@ private[sql] class AvroSerializer(
     val avroSchemaHelper = new AvroUtils.AvroSchemaHelper(
       avroStruct, catalystStruct, avroPath, catalystPath, positionalFieldMatch)
 
-    avroSchemaHelper.assertNoExtraSqlFields(includeNullable = true)
-    avroSchemaHelper.assertNoExtraAvroFields()
+    avroSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = false)
+    avroSchemaHelper.validateNoExtraAvroFields()
 
     val (avroIndices, fieldConverters) = avroSchemaHelper.getMatchedFields.map {
-      case (catalystField, _, avroField) =>
+      case AvroMatchedField(catalystField, _, avroField) =>
         val converter = newConverter(catalystField.dataType,
           resolveNullableType(avroField.schema(), catalystField.nullable),
           catalystPath :+ catalystField.name, avroPath :+ avroField.name)

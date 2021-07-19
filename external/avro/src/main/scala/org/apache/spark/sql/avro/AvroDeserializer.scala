@@ -29,7 +29,7 @@ import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
 
-import org.apache.spark.sql.avro.AvroUtils.toFieldStr
+import org.apache.spark.sql.avro.AvroUtils.{toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
@@ -340,11 +340,11 @@ private[sql] class AvroDeserializer(
     val avroSchemaHelper = new AvroUtils.AvroSchemaHelper(
       avroType, catalystType, avroPath, catalystPath, positionalFieldMatch)
 
-    avroSchemaHelper.assertNoExtraSqlFields(includeNullable = false)
+    avroSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = true)
     // no need to assertNoExtraAvroFields since extra Avro fields are ignored
 
     val (validFieldIndexes, fieldWriters) = avroSchemaHelper.getMatchedFields.map {
-      case (catalystField, ordinal, avroField) =>
+      case AvroMatchedField(catalystField, ordinal, avroField) =>
         val baseWriter = newWriter(avroField.schema(), catalystField.dataType,
           avroPath :+ avroField.name, catalystPath :+ catalystField.name)
         val fieldWriter = (fieldUpdater: CatalystDataUpdater, value: Any) => {

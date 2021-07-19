@@ -18,6 +18,7 @@ package org.apache.spark.sql.avro
 
 import org.apache.avro.SchemaBuilder
 
+import org.apache.spark.sql.avro.AvroUtils.AvroMatchedField
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, SQLTestUtils}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -99,15 +100,15 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
 
     val helper = new AvroUtils.AvroSchemaHelper(avroSchema, catalystSchema, Seq(""), Seq(""), false)
     assert(helper.getMatchedFields === Seq(
-      (catalystSchema("shared1"), 2, avroSchema.getField("shared1")),
-      (catalystSchema("shared2"), 3, avroSchema.getField("shared2"))
+      AvroMatchedField(catalystSchema("shared1"), 2, avroSchema.getField("shared1")),
+      AvroMatchedField(catalystSchema("shared2"), 3, avroSchema.getField("shared2"))
     ))
     assertThrows[IncompatibleSchemaException] {
-      helper.assertNoExtraAvroFields()
+      helper.validateNoExtraAvroFields()
     }
-    helper.assertNoExtraSqlFields(includeNullable = false)
+    helper.validateNoExtraCatalystFields(ignoreNullable = true)
     assertThrows[IncompatibleSchemaException] {
-      helper.assertNoExtraSqlFields(includeNullable = true)
+      helper.validateNoExtraCatalystFields(ignoreNullable = false)
     }
   }
 
@@ -118,18 +119,18 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
     val helperNonnull =
       new AvroUtils.AvroSchemaHelper(avroSchema, catalystNonnull, Seq(""), Seq(""), false)
     assertThrows[IncompatibleSchemaException] {
-      helperNonnull.assertNoExtraSqlFields(includeNullable = false)
+      helperNonnull.validateNoExtraCatalystFields(ignoreNullable = true)
     }
     assertThrows[IncompatibleSchemaException] {
-      helperNonnull.assertNoExtraSqlFields(includeNullable = true)
+      helperNonnull.validateNoExtraCatalystFields(ignoreNullable = false)
     }
 
     val catalystNullable = new StructType().add("foo", IntegerType)
     val helperNullable =
       new AvroUtils.AvroSchemaHelper(avroSchema, catalystNullable, Seq(""), Seq(""), false)
-    helperNullable.assertNoExtraSqlFields(includeNullable = false)
+    helperNullable.validateNoExtraCatalystFields(ignoreNullable = true)
     assertThrows[IncompatibleSchemaException] {
-      helperNullable.assertNoExtraSqlFields(includeNullable = true)
+      helperNullable.validateNoExtraCatalystFields(ignoreNullable = false)
     }
   }
 }

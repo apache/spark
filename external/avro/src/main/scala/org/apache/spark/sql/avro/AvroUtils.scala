@@ -205,6 +205,12 @@ private[sql] object AvroUtils extends Logging {
     }
   }
 
+  /** Wrapper for a pair of matched fields, one Catalyst and one corresponding Avro field. */
+  case class AvroMatchedField(
+      catalystField: StructField,
+      catalystPosition: Int,
+      avroField: Schema.Field)
+
   /**
    * Helper class to perform field lookup/matching on Avro schemas.
    *
@@ -236,37 +242,43 @@ private[sql] object AvroUtils extends Logging {
       .groupBy(_.name.toLowerCase(Locale.ROOT))
       .mapValues(_.toSeq) // toSeq needed for scala 2.13
 
-    private[this] val fieldPairs = catalystSchema
-      .zipWithIndex
-      .map(fieldWithPos => (fieldWithPos, getAvroField(fieldWithPos._1.name, fieldWithPos._2)))
-
-    /**
-     * Get the fields which have matching equivalents in both Avro and Catalyst schemas.
-     *
-     * @return A sequence of `(catalystField, catalystPosition, avroField)` tuples.
-     */
-    def getMatchedFields: Seq[(StructField, Int, Schema.Field)] = fieldPairs.flatMap {
-      case ((sqlField, sqlPos), Some(avroField)) => Some((sqlField, sqlPos, avroField))
-      case (_, None) => None
+    /** Get the fields which have matching equivalents in both Avro and Catalyst schemas. */
+    def getMatchedFields: Seq[AvroMatchedField] = catalystSchema.zipWithIndex.flatMap {
+      case (sqlField, sqlPos) =>
+        getAvroField(sqlField.name, sqlPos).map(AvroMatchedField(sqlField, sqlPos, _))
     }
 
-    def assertNoExtraSqlFields(includeNullable: Boolean): Unit =
-      fieldPairs.filter(_._2.isEmpty).map(_._1).filter(includeNullable || !_._1.nullable) match {
-        case Seq() => // do nothing
-        case fields => throw new IncompatibleSchemaException(
+    /**
+     * Validate that there are no Catalyst fields which don't have a matching Avro field, throwing
+     * [[IncompatibleSchemaException]] if such extra fields are found. If `ignoreNullable` is false,
+     * consider nullable Catalyst fields to be eligible to be an extra field; otherwise,
+     * ignore nullable Catalyst fields when checking for extras.
+     */
+    def validateNoExtraCatalystFields(ignoreNullable: Boolean): Unit = {
+      val extraFieldDescriptions = catalystSchema.zipWithIndex
+        .filter { case (sqlField, sqlPos) => getAvroField(sqlField.name, sqlPos).isEmpty }
+        .filter { case (sqlField, _) => !ignoreNullable || !sqlField.nullable }
+        .map { case (field, pos) => toFieldDescription(catalystPath :+ field.name, pos) }
+      if (extraFieldDescriptions.nonEmpty) {
+        throw new IncompatibleSchemaException(
           s"Cannot find SQL field(s) in Avro ${toFieldStr(avroPath)}: " +
-            fields.map(f => toFieldDescription(catalystPath :+ f._1.name, f._2))
-              .mkString("[", ", ", "]"))
+            extraFieldDescriptions.mkString("[", ", ", "]"))
       }
+    }
 
-    def assertNoExtraAvroFields(): Unit =
-      (avroFieldArray.toSet -- getMatchedFields.map(_._3)).toSeq match {
-        case Seq() => // do nothing
-        case fields => throw new IncompatibleSchemaException(
-          s"Avro field(s) missing from SQL ${toFieldStr(catalystPath)}: " +
-            fields.map(f => toFieldDescription(avroPath :+ f.name(), f.pos()))
-              .mkString("[", ", ", "]"))
+    /**
+     * Validate that there are no Avro fields which don't have a matching Catalyst field, throwing
+     * [[IncompatibleSchemaException]] if such extra fields are found.
+     */
+    def validateNoExtraAvroFields(): Unit = {
+      val extraFields = avroFieldArray.toSet -- getMatchedFields.map(_.avroField)
+      if (extraFields.nonEmpty) {
+        throw new IncompatibleSchemaException(
+          s"Avro field(s) missing from SQL ${toFieldStr(catalystPath)}: " + extraFields
+            .map(f => toFieldDescription(avroPath :+ f.name(), f.pos()))
+            .mkString("[", ", ", "]"))
       }
+    }
 
     /**
      * Extract a single field from the contained avro schema which has the desired field name,
