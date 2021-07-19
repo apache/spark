@@ -84,8 +84,8 @@ When Spark uses `ROW FORMAT DELIMITED` format:
  - If the actual number of output columns is less than the number of specified output columns,
   additional output columns will be filled with `NULL`. For example:
      ```
-     output tabs: `1, 2`
-     output columns: `A: INT, B INT, C: INT`
+     output tabs: 1, 2
+     output columns: A: INT, B INT, C: INT
      result: 
        +---+---+------+
        |  a|  b|     c|
@@ -97,8 +97,8 @@ When Spark uses `ROW FORMAT DELIMITED` format:
  the output columns only select the corresponding columns, and the remaining part will be discarded.
  For example, if the output has three tabs and there are only two output columns:
      ```
-     output tabs: `1, 2, 3`
-     output columns: `A: INT, B INT`
+     output tabs: 1, 2, 3
+     output columns: A: INT, B INT
      result: 
        +---+---+
        |  a|  b|
@@ -110,7 +110,7 @@ When Spark uses `ROW FORMAT DELIMITED` format:
  The `key` column contains all the characters before the first tab and the `value` column contains the remaining characters after the first tab.
  If there are no tabs, Spark returns the `NULL` value. For example:
       ```
-      output tabs: `1, 2, 3`
+      output tabs: 1, 2, 3
       output columns: 
       result: 
         +-----+-------+
@@ -119,7 +119,7 @@ When Spark uses `ROW FORMAT DELIMITED` format:
         |    1|      2|
         +-----+-------+
    
-      output tabs: `1, 2`
+      output tabs: 1, 2
       output columns: 
       result: 
         +-----+-------+
