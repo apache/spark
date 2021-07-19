@@ -191,9 +191,7 @@ class BasicWriteJobStatsTracker(
   extends WriteJobStatsTracker {
 
   override def newTaskInstance(): WriteTaskStatsTracker = {
-    new BasicWriteTaskStatsTracker(
-      serializableHadoopConf.value,
-      Some(taskCommitTimeMetrics))
+    new BasicWriteTaskStatsTracker(serializableHadoopConf.value, Some(taskCommitTimeMetrics))
   }
 
   override def processStats(stats: Seq[WriteTaskStats], jobCommitDuration: Long): Unit = {
