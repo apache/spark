@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.StatisticsCollectionTestBase
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryOperator, Expression, IsNotNull, Literal}
-import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
 
@@ -94,7 +94,7 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase {
     val plan = qe.sparkPlan
     assert(getScanExecPartitionSize(plan) == expectedPartitionCount)
 
-    val collectFn = collectPartitionFiltersFn orElse {
+    val collectFn: PartialFunction[SparkPlan, Seq[Expression]] = collectPartitionFiltersFn orElse {
       case BatchScanExec(_, scan: FileScan, _) => scan.partitionFilters
     }
     val pushedDownPartitionFilters = plan.collectFirst(collectFn)
