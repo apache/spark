@@ -573,7 +573,7 @@ object QueryCompilationErrors {
 
   def invalidNameForCatalogError(name: String): Throwable = {
     new AnalysisException(s"`$name` is not a valid name for catalog. " +
-      "Valid names only contain alphabet characters, numbers and _.")
+      "Valid names can not be empty string or only contain whitespaces.")
   }
 
   def cannotCreateDatabaseWithSameNameAsPreservedDatabaseError(database: String): Throwable = {
