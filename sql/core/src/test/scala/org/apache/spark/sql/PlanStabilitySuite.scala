@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
-import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec}
+import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, ValidateRequirements}
 import org.apache.spark.sql.internal.SQLConf
 
 // scalastyle:off line.size.limit
@@ -251,6 +251,8 @@ trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
     val qe = sql(queryString).queryExecution
     val plan = qe.executedPlan
     val explain = normalizeLocation(normalizeIds(qe.explainString(FormattedMode)))
+
+    assert(ValidateRequirements.validate(plan))
 
     if (regenerateGoldenFiles) {
       generateGoldenFile(plan, query + suffix, explain)

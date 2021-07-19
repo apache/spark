@@ -501,7 +501,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         // Transform the expressions.
         newNode.mapExpressions { expr =>
           clean(expr.transform {
-            case a: Attribute => mapping.getOrElse(a, a)
+            case a: Attribute => mapping.get(a).map(_.withName(a.name)).getOrElse(a)
           })
         }
     }

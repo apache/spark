@@ -451,9 +451,9 @@ cannot resolve '(+ TIMESTAMP '1999-01-01 00:00:00')' due to data type mismatch: 
 -- !query
 select +interval '1 day'
 -- !query schema
-struct<(+ INTERVAL '1 days'):interval>
+struct<(+ INTERVAL '1' DAY):interval day>
 -- !query output
-1 days
+1 00:00:00.000000000
 
 
 -- !query
