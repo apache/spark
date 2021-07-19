@@ -37,9 +37,9 @@ float	double	decimal(2,1)
 -- !query
 select typeof(date '1986-05-23'),  typeof(timestamp '1986-05-23'), typeof(interval '23 days')
 -- !query schema
-struct<typeof(DATE '1986-05-23'):string,typeof(TIMESTAMP '1986-05-23 00:00:00'):string,typeof(INTERVAL '23 days'):string>
+struct<typeof(DATE '1986-05-23'):string,typeof(TIMESTAMP '1986-05-23 00:00:00'):string,typeof(INTERVAL '23' DAY):string>
 -- !query output
-date	timestamp	interval
+date	timestamp	interval day
 
 
 -- !query

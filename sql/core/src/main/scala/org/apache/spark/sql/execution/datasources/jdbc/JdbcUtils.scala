@@ -61,7 +61,8 @@ object JdbcUtils extends Logging {
     () => {
       DriverRegistry.register(driverClass)
       val driver: Driver = DriverRegistry.get(driverClass)
-      val connection = ConnectionProvider.create(driver, options.parameters)
+      val connection =
+        ConnectionProvider.create(driver, options.parameters, options.connectionProviderName)
       require(connection != null,
         s"The driver could not open a JDBC connection. Check the URL: ${options.url}")
       connection

@@ -2568,7 +2568,7 @@ case class Sequence(
     val typesCorrect =
       startType.sameType(stop.dataType) &&
         (startType match {
-          case TimestampType =>
+          case TimestampType | TimestampNTZType =>
             stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
               YearMonthIntervalType.acceptsType(stepType) ||
               DayTimeIntervalType.acceptsType(stepType)
@@ -2614,20 +2614,20 @@ case class Sequence(
       val ct = ClassTag[T](iType.tag.mirror.runtimeClass(iType.tag.tpe))
       new IntegralSequenceImpl(iType)(ct, iType.integral)
 
-    case TimestampType =>
+    case TimestampType | TimestampNTZType =>
       if (stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepOpt.get.dataType)) {
-        new TemporalSequenceImpl[Long](LongType, 1, identity, zoneId)
+        new TemporalSequenceImpl[Long](LongType, start.dataType, 1, identity, zoneId)
       } else if (YearMonthIntervalType.acceptsType(stepOpt.get.dataType)) {
-        new PeriodSequenceImpl[Long](LongType, 1, identity, zoneId)
+        new PeriodSequenceImpl[Long](LongType, start.dataType, 1, identity, zoneId)
       } else {
-        new DurationSequenceImpl[Long](LongType, 1, identity, zoneId)
+        new DurationSequenceImpl[Long](LongType, start.dataType, 1, identity, zoneId)
       }
 
     case DateType =>
       if (stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepOpt.get.dataType)) {
-        new TemporalSequenceImpl[Int](IntegerType, MICROS_PER_DAY, _.toInt, zoneId)
+        new TemporalSequenceImpl[Int](IntegerType, start.dataType, MICROS_PER_DAY, _.toInt, zoneId)
       } else {
-        new PeriodSequenceImpl[Int](IntegerType, MICROS_PER_DAY, _.toInt, zoneId)
+        new PeriodSequenceImpl[Int](IntegerType, start.dataType, MICROS_PER_DAY, _.toInt, zoneId)
       }
   }
 
@@ -2769,8 +2769,9 @@ object Sequence {
   }
 
   private class PeriodSequenceImpl[T: ClassTag]
-      (dt: IntegralType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
-      (implicit num: Integral[T]) extends InternalSequenceBase(dt, scale, fromLong, zoneId) {
+      (dt: IntegralType, outerDataType: DataType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
+      (implicit num: Integral[T])
+    extends InternalSequenceBase(dt, outerDataType, scale, fromLong, zoneId) {
 
     override val defaultStep: DefaultStep = new DefaultStep(
       (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
@@ -2794,8 +2795,9 @@ object Sequence {
   }
 
   private class DurationSequenceImpl[T: ClassTag]
-      (dt: IntegralType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
-      (implicit num: Integral[T]) extends InternalSequenceBase(dt, scale, fromLong, zoneId) {
+      (dt: IntegralType, outerDataType: DataType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
+      (implicit num: Integral[T])
+    extends InternalSequenceBase(dt, outerDataType, scale, fromLong, zoneId) {
 
     override val defaultStep: DefaultStep = new DefaultStep(
       (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
@@ -2819,8 +2821,9 @@ object Sequence {
   }
 
   private class TemporalSequenceImpl[T: ClassTag]
-      (dt: IntegralType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
-      (implicit num: Integral[T]) extends InternalSequenceBase(dt, scale, fromLong, zoneId) {
+      (dt: IntegralType, outerDataType: DataType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
+      (implicit num: Integral[T])
+    extends InternalSequenceBase(dt, outerDataType, scale, fromLong, zoneId) {
 
     override val defaultStep: DefaultStep = new DefaultStep(
       (dt.ordering.lteq _).asInstanceOf[LessThanOrEqualFn],
@@ -2845,7 +2848,7 @@ object Sequence {
   }
 
   private abstract class InternalSequenceBase[T: ClassTag]
-      (dt: IntegralType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
+      (dt: IntegralType, outerDataType: DataType, scale: Long, fromLong: Long => T, zoneId: ZoneId)
       (implicit num: Integral[T]) extends InternalSequence {
 
     val defaultStep: DefaultStep
@@ -2858,6 +2861,11 @@ object Sequence {
     protected val intervalType: DataType
 
     protected def splitStep(input: Any): (Int, Int, Long)
+
+    private val addInterval: (Long, Int, Int, Long, ZoneId) => Long = outerDataType match {
+      case TimestampType | DateType => timestampAddInterval
+      case TimestampNTZType => timestampNTZAddInterval
+    }
 
     override def eval(input1: Any, input2: Any, input3: Any): Array[T] = {
       val start = input1.asInstanceOf[T]
@@ -2897,8 +2905,7 @@ object Sequence {
         while (t < exclusiveItem ^ stepSign < 0) {
           arr(i) = fromLong(t / scale)
           i += 1
-          t = timestampAddInterval(
-            startMicros, i * stepMonths, i * stepDays, i * stepMicros, zoneId)
+          t = addInterval(startMicros, i * stepMonths, i * stepDays, i * stepMicros, zoneId)
         }
 
         // truncate array to the correct length
@@ -2908,6 +2915,13 @@ object Sequence {
 
     protected def stepSplitCode(
          stepMonths: String, stepDays: String, stepMicros: String, step: String): String
+
+    private val addIntervalCode = outerDataType match {
+      case TimestampType | DateType =>
+        "org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval"
+      case TimestampNTZType =>
+        "org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampNTZAddInterval"
+    }
 
     override def genCode(
         ctx: CodegenContext,
@@ -2978,7 +2992,7 @@ object Sequence {
          |  while ($t < $exclusiveItem ^ $stepSign < 0) {
          |    $arr[$i] = ($elemType) ($t / ${scale}L);
          |    $i += 1;
-         |    $t = org.apache.spark.sql.catalyst.util.DateTimeUtils.timestampAddInterval(
+         |    $t = $addIntervalCode(
          |       $startMicros, $i * $stepMonths, $i * $stepDays, $i * $stepMicros, $zid);
          |  }
          |

@@ -15,21 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.adaptive
+package org.apache.spark.io
 
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.ShuffleOrigin
+import java.io.OutputStream
+import java.util.zip.Checksum
 
 /**
- * Adaptive Query Execution rule that may create [[CustomShuffleReaderExec]] on top of query stages.
+ * A variant of [[java.util.zip.CheckedOutputStream]] which can
+ * change the checksum calculator at runtime.
  */
-trait CustomShuffleReaderRule extends Rule[SparkPlan] {
+class MutableCheckedOutputStream(out: OutputStream) extends OutputStream {
+  private var checksum: Checksum = _
 
-  /**
-   * Returns the list of [[ShuffleOrigin]]s supported by this rule.
-   */
-  def supportedShuffleOrigins: Seq[ShuffleOrigin]
+  def setChecksum(c: Checksum): Unit = {
+    this.checksum = c
+  }
 
-  def mayAddExtraShuffles: Boolean = false
+  override def write(b: Int): Unit = {
+    assert(checksum != null, "Checksum is not set.")
+    checksum.update(b)
+    out.write(b)
+  }
+
+  override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+    assert(checksum != null, "Checksum is not set.")
+    checksum.update(b, off, len)
+    out.write(b, off, len)
+  }
+
+  override def flush(): Unit = out.flush()
+
+  override def close(): Unit = out.close()
 }
