@@ -5,11 +5,46 @@ on:
     branches:
     - '**'
     - '!branch-*.*'
+  schedule:
+    # master
+    - cron: '0 0 * * *'
+    # branch-3.2
+    - cron: '0 1 * * *'
 
 jobs:
+  configure-jobs:
+    name: Configure jobs
+    runs-on: ubuntu-20.04
+    outputs:
+      should_run: ${{ steps.set-outputs.outputs.should_run }}
+      branch: ${{ steps.set-outputs.outputs.branch }}
+      envs: ${{ steps.set-outputs.outputs.envs }}
+    env:
+      SCHEDULE: ${{ github.event.schedule }}
+    steps:
+    - name: Configure branch and additional environment variables
+      id: set-outputs
+      run: |
+        if [ "$SCHEDULE" = "0 0 * * *" ]; then
+          echo '::set-output name=branch::master'
+          echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
+          echo '::set-output name=should_run::${{ github.repository == 'apache/spark' }}'
+        elif [ "$SCHEDULE" = "0 1 * * *" ]; then
+          echo '::set-output name=branch::branch-3.2"
+          echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
+          echo '::set-output name=should_run::${{ github.repository == 'apache/spark' }}'
+        else
+          echo '::set-output name=branch::master' # Default branch to run on. CHANGE here when a branch is cut out.
+          echo '::set-output name=envs::{}'
+          echo '::set-output name=should_run::true'
+        fi
+
   # Build: build Spark and run the tests for specified modules.
   build:
     name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
+    needs: configure-jobs
+    caption: ${{ needs.configure-jobs.outputs.branch }}
+    if: needs.configure-jobs.outputs.should_run == 'true'
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
     strategy:
@@ -81,7 +116,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       id: sync-branch
@@ -130,6 +165,7 @@ jobs:
         python3.8 -m pip list
     # Run the tests.
     - name: Run tests
+      env: ${{fromJSON(needs.configure-jobs.outputs.envs)}}
       run: |
         export APACHE_SPARK_REF=${{ steps.sync-branch.outputs.APACHE_SPARK_REF }}
         # Hive and SQL tests become flaky when running in parallel as it's too intensive.
