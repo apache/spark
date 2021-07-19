@@ -24,7 +24,7 @@ license: |
 The `TRANSFORM` clause is used to specify a Hive-style transform query specification 
 to transform the inputs by running a user-specified command or script.
 
-Currently, Spark's script transform support two modes:
+Spark's script transform supports two modes:
 
     1. Without Hive: Spark scripts transform can run without `-Phive` or `SparkSession.builder.enableHiveSupport()`.
                      In this case, now spark only use script transform with `ROW FORMAT DELIMITED` and treat all value passed
