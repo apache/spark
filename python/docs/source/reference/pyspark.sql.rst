@@ -630,4 +630,5 @@ Catalog APIs
     Catalog.refreshTable
     Catalog.registerFunction
     Catalog.setCurrentDatabase
+    Catalog.tableExists
     Catalog.uncacheTable
