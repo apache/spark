@@ -593,8 +593,14 @@ private[sql] object ParquetSchemaConverter {
        """.stripMargin.split("\n").mkString(" ").trim)
   }
 
-  def checkFieldNames(names: Seq[String]): Unit = {
-    names.foreach(checkFieldName)
+  def checkFieldNames(schema: StructType): Unit = {
+    schema.map(field => field.name -> field.dataType)
+      .foreach {
+        case (name, struct: StructType) =>
+          checkFieldName(name)
+          checkFieldNames(struct)
+        case (name, _) => checkFieldName(name)
+      }
   }
 
   def checkConversionRequirement(f: => Boolean, message: String): Unit = {

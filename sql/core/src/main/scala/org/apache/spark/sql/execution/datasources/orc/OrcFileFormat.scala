@@ -45,6 +45,7 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 private[sql] object OrcFileFormat {
   private def checkFieldName(name: String): Unit = {
     try {
+      println(name)
       TypeDescription.fromString(s"struct<`$name`:int>")
     } catch {
       case _: IllegalArgumentException =>
@@ -52,8 +53,14 @@ private[sql] object OrcFileFormat {
     }
   }
 
-  def checkFieldNames(names: Seq[String]): Unit = {
-    names.foreach(checkFieldName)
+  def checkFieldNames(schema: StructType): Unit = {
+    schema.map(field => field.name -> field.dataType)
+      .foreach {
+        case (name, struct: StructType) =>
+          checkFieldName(name)
+          checkFieldNames(struct)
+        case (name, _) => checkFieldName(name)
+      }
   }
 
   def getQuotedSchemaString(dataType: DataType): String = dataType match {
