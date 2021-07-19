@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.analysis.CleanupAliases
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.ScalarSubquery
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LocalRelation, LogicalPlan, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LocalRelation, LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
 
@@ -46,7 +47,9 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
     val batches =
       Batch("Subquery", Once,
         OptimizeOneRowRelationSubquery,
-        PullupCorrelatedPredicates) :: Nil
+        PullupCorrelatedPredicates) ::
+      Batch("Cleanup", FixedPoint(10),
+        CleanupAliases) :: Nil
   }
 
   private def assertHasDomainJoin(plan: LogicalPlan): Unit = {
@@ -91,8 +94,8 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
     val inner = t0.select('a.as("a1"), 'b.as("b1")).select(('a1 + 'b1).as("c"))
     val query = t1.select(ScalarSubquery(inner).as("sub"))
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = Project(Alias(Alias(a + b, "c")(), "sub")() :: Nil, t1)
-    comparePlans(optimized, correctAnswer)
+    val correctAnswer = t1.select(('a + 'b).as("c").as("sub"))
+    comparePlans(optimized, correctAnswer.analyze)
   }
 
   test("Optimize lateral subquery with multiple projects") {
@@ -111,8 +114,8 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
     val inner = t0.select('a.as("b")).select(ScalarSubquery(t0.select('b)).as("s"))
     val query = t1.select(ScalarSubquery(inner).as("sub"))
     val optimized = Optimize.execute(query.analyze)
-    val correctAnswer = Project(Alias(Alias(a, "s")(), "sub")() :: Nil, t1)
-    comparePlans(optimized, correctAnswer)
+    val correctAnswer = t1.select('a.as("s").as("sub"))
+    comparePlans(optimized, correctAnswer.analyze)
   }
 
   test("Batch should be idempotent") {
@@ -149,8 +152,9 @@ class OptimizeOneRowRelationSubquerySuite extends PlanTest {
     }
   }
 
-  test("Should not optimize subquery with nested subqueries") {
+  test("Should not optimize subquery with nested subqueries that can't be optimized") {
     // SELECT (SELECT (SELECT a WHERE a = 1) FROM (SELECT a AS a)) FROM t1
+    // Filter (a = 1) cannot be optimized.
     val inner = t0.select('a).where('a === 1)
     val subquery = t0.select('a.as("a"))
       .select(ScalarSubquery(inner).as("s")).select('s + 1)
