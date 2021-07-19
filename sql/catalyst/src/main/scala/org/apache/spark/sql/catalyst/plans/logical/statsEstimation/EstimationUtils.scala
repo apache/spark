@@ -58,13 +58,14 @@ object EstimationUtils {
   def updateStat(
       oldNumRows: BigInt,
       newNumRows: BigInt,
-      oldStat: BigInt,
-      updatedStat: BigInt): BigInt = {
-    if (updatedStat > 1 && newNumRows < oldNumRows) {
-      // no need to scale down since it is already down to 1
-      ceil(BigDecimal(oldStat) * BigDecimal(newNumRows) / BigDecimal(oldNumRows))
+      oldStatOpt: Option[BigInt],
+      updatedStatOpt: Option[BigInt]): Option[BigInt] = {
+    if (oldStatOpt.isDefined && updatedStatOpt.isDefined && updatedStatOpt.get > 1 &&
+      newNumRows < oldNumRows) {
+        // no need to scale down since it is already down to 1
+        Some(ceil(BigDecimal(oldStatOpt.get) * BigDecimal(newNumRows) / BigDecimal(oldNumRows)))
     } else {
-      updatedStat
+      updatedStatOpt
     }
   }
 
