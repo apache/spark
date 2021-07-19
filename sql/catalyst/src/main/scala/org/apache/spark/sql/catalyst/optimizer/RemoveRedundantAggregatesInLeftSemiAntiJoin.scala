@@ -30,11 +30,11 @@ object RemoveRedundantAggregatesInLeftSemiAntiJoin extends Rule[LogicalPlan] {
   // Transform down to remove more Aggregates.
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
     _.containsAllPatterns(AGGREGATE, LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
-    case agg @ Aggregate(grouping, aggExps, j @ Join(left: Aggregate, _, LeftSemi | LeftAnti, _, _))
-      if agg.groupOnly && left.groupOnly &&
+    case agg @ Aggregate(groupingExps, aggExps,
+      j @ Join(left: Aggregate, _, LeftSemi | LeftAnti, _, _)) if agg.groupOnly && left.groupOnly &&
         aggExps.forall(e => left.aggregateExpressions.exists(_.semanticEquals(e))) &&
-        grouping.length == left.groupingExpressions.length &&
-        grouping.zip(left.groupingExpressions).forall(e => e._1.semanticEquals(e._2)) =>
+        groupingExps.length == left.groupingExpressions.length &&
+        groupingExps.zip(left.groupingExpressions).forall(e => e._1.semanticEquals(e._2)) =>
       j
   }
 }
