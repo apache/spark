@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
@@ -868,14 +869,14 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
         .option("path", dir.getCanonicalPath).mode("append").save()
 
       // Wait until the new execution is started and being tracked.
-      while (statusStore.executionsCount() < oldCount) {
-        Thread.sleep(100)
+      eventually(timeout(10.seconds), interval(10.milliseconds)) {
+        assert(statusStore.executionsCount() >= oldCount)
       }
 
       // Wait for listener to finish computing the metrics for the execution.
-      while (statusStore.executionsList().isEmpty ||
-        statusStore.executionsList().last.metricValues == null) {
-        Thread.sleep(100)
+      eventually(timeout(10.seconds), interval(10.milliseconds)) {
+        assert(statusStore.executionsList().nonEmpty &&
+          statusStore.executionsList().last.metricValues != null)
       }
 
       val execId = statusStore.executionsList().last.executionId
