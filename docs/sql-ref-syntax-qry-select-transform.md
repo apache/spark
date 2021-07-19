@@ -26,11 +26,12 @@ to transform the inputs by running a user-specified command or script.
 
 Spark's script transform supports two modes:
 
-    1. Without Hive: Spark script transform can run without `-Phive` or `SparkSession.builder.enableHiveSupport()`.
-                     In this case, now spark only use script transform with `ROW FORMAT DELIMITED` and treat all values passed
-                     to the script as strings. 
-    2. With Hive: When built Spark with `-Phive` and started Spark SQL with `enableHiveSupport()`, spark can use script 
-                  transform with Hive SerDe and both `ROW FORMAT DELIMITED`.
+  1. Hive supported disabled: Spark script transform can run without `spark.sql.catalogImplementation=true` 
+  or `SparkSession.builder.enableHiveSupport()`. In this case, now spark only use script transform with 
+  `ROW FORMAT DELIMITED` and treat all values passed to the script as strings. 
+  2. Hive support enabled: When run Spark with `spark.sql.catalogImplementation=true` or started Spark SQL 
+  with `SparkSession.builder.enableHiveSupport()`, spark can use script transform with Hive SerDe and both 
+  `ROW FORMAT DELIMITED`.
 
 ### Syntax
 
