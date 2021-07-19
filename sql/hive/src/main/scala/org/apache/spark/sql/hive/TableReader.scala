@@ -315,12 +315,6 @@ class HadoopTableReader(
     }
   }
 
-  /**
-   * The entry of creating a RDD.
-   * Using which HadoopRDD will be decided by the input format of partitions.
-   * The input format of NewHadoopRDD is from `org.apache.hadoop.mapreduce` package while
-   * the input format of HadoopRDD is from `org.apache.hadoop.mapred` package.
-   */
   private def createHadoopRDD(partitionDesc: PartitionDesc, inputPathStr: String): RDD[Writable] = {
     val inputFormatClazz = partitionDesc.getInputFileFormatClass
     if (classOf[newInputClass[_, _]].isAssignableFrom(inputFormatClazz)) {
@@ -330,21 +324,6 @@ class HadoopTableReader(
     }
   }
 
-  private def createOldHadoopRDD(
-      inputFormatClass: Class[oldInputClass[Writable, Writable]],
-      initializeJobConfFunc: JobConf => Unit): RDD[Writable] = {
-    val rdd = new HadoopRDD(
-      sparkSession.sparkContext,
-      _broadcastedHadoopConf.asInstanceOf[Broadcast[SerializableConfiguration]],
-      Some(initializeJobConfFunc),
-      inputFormatClass,
-      classOf[Writable],
-      classOf[Writable],
-      _minSplitsPerRDD)
-
-    // Only take the value (skip the key) because Hive works only with values.
-    rdd.map(_._2)
-  }
   /**
    * Creates a HadoopRDD based on the broadcasted HiveConf and other job properties that will be
    * applied locally on each executor.
@@ -368,16 +347,18 @@ class HadoopTableReader(
     createOldHadoopRDD(inputFormatClass, initializeJobConfFunc)
   }
 
-  private def createNewHadoopRDD(
-      inputFormatClass: Class[newInputClass[Writable, Writable]],
-      newJobConf: JobConf): RDD[Writable] = {
-    val rdd = new NewHadoopRDD(
+  private def createOldHadoopRDD(
+      inputFormatClass: Class[oldInputClass[Writable, Writable]],
+      initializeJobConfFunc: JobConf => Unit): RDD[Writable] = {
+    val rdd = new HadoopRDD(
       sparkSession.sparkContext,
+      _broadcastedHadoopConf.asInstanceOf[Broadcast[SerializableConfiguration]],
+      Some(initializeJobConfFunc),
       inputFormatClass,
       classOf[Writable],
       classOf[Writable],
-      newJobConf
-    )
+      _minSplitsPerRDD)
+
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
   }
@@ -401,6 +382,22 @@ class HadoopTableReader(
       .asInstanceOf[Class[newInputClass[Writable, Writable]]]
     createNewHadoopRDD(inputFormatClass, newJobConf)
   }
+
+  private def createNewHadoopRDD(
+      inputFormatClass: Class[newInputClass[Writable, Writable]],
+      jobConf: JobConf): RDD[Writable] = {
+    val rdd = new NewHadoopRDD(
+      sparkSession.sparkContext,
+      inputFormatClass,
+      classOf[Writable],
+      classOf[Writable],
+      jobConf
+    )
+
+    // Only take the value (skip the key) because Hive works only with values.
+    rdd.map(_._2)
+  }
+
 }
 
 private[hive] object HiveTableUtil {
