@@ -23,10 +23,10 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE, LEFT_SEMI_OR_ANTI_JOIN}
 
 /**
- * Remove the aggregation from left semi/anti join if the same aggregation has already been done
- * on left side.
+ * Remove the redundant aggregation from left semi/anti join if the same aggregation has already
+ * been done on left side.
  */
-object RemoveAggsThroughLeftSemiAntiJoin extends Rule[LogicalPlan] {
+object RemoveRedundantAggregatesInLeftSemiAntiJoin extends Rule[LogicalPlan] {
   // Transform down to remove more Aggregates.
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
     _.containsAllPatterns(AGGREGATE, LEFT_SEMI_OR_ANTI_JOIN), ruleId) {
