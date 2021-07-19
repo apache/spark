@@ -475,7 +475,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSparkSession {
     val type2 = StructType(
       Seq(StructField("start", TimestampNTZType), StructField("end", TimestampNTZType)))
 
-      Seq((df1, type1), (df2, type2)).foreach { tuple =>
+    Seq((df1, type1), (df2, type2)).foreach { tuple =>
       val logicalPlan =
         tuple._1.groupBy(window($"time", "10 seconds", "10 seconds", "-5 seconds"))
           .agg(count("*").as("counts"))
