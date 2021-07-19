@@ -262,4 +262,12 @@ object StaticSQLConf {
       .stringConf
       .toSequence
       .createWithDefault(Nil)
+
+  val DISABLED_JDBC_CONN_PROVIDER_LIST =
+    buildStaticConf("spark.sql.sources.disabledJdbcConnProviderList")
+      .doc("Configures a list of JDBC connection providers, which are disabled. " +
+        "The list contains the name of the JDBC connection providers separated by comma.")
+      .version("3.1.0")
+      .stringConf
+      .createWithDefault("")
 }

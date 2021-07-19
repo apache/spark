@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
@@ -38,31 +38,18 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_NONE)
 
-  private val ensureRequirements = EnsureRequirements
+  override def mayAddExtraShuffles: Boolean = true
 
   // The build side is a broadcast query stage which should have been optimized using local reader
   // already. So we only need to deal with probe side here.
   private def createProbeSideLocalReader(plan: SparkPlan): SparkPlan = {
-    val optimizedPlan = plan.transformDown {
+    plan.transformDown {
       case join @ BroadcastJoinWithShuffleLeft(shuffleStage, BuildRight) =>
         val localReader = createLocalReader(shuffleStage)
         join.asInstanceOf[BroadcastHashJoinExec].copy(left = localReader)
       case join @ BroadcastJoinWithShuffleRight(shuffleStage, BuildLeft) =>
         val localReader = createLocalReader(shuffleStage)
         join.asInstanceOf[BroadcastHashJoinExec].copy(right = localReader)
-    }
-
-    val numShuffles = ensureRequirements.apply(optimizedPlan).collect {
-      case e: ShuffleExchangeExec => e
-    }.length
-
-    // Check whether additional shuffle introduced. If introduced, revert the local reader.
-    if (numShuffles > 0) {
-      logDebug("OptimizeLocalShuffleReader rule is not applied due" +
-        " to additional shuffles will be introduced.")
-      plan
-    } else {
-      optimizedPlan
     }
   }
 

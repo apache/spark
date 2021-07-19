@@ -14,10 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
+
+from pyspark.pandas.internal import InternalField
+from pyspark.sql.types import StructField
 
 if TYPE_CHECKING:
     import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
@@ -79,7 +82,7 @@ class CategoricalAccessor(object):
         >>> s.cat.categories
         Index(['a', 'b', 'c'], dtype='object')
         """
-        return self._data.dtype.categories
+        return cast(CategoricalDtype, self._data.dtype).categories
 
     @categories.setter
     def categories(self, categories: pd.Index) -> None:
@@ -106,7 +109,7 @@ class CategoricalAccessor(object):
         >>> s.cat.ordered
         False
         """
-        return self._data.dtype.ordered
+        return cast(CategoricalDtype, self._data.dtype).ordered
 
     @property
     def codes(self) -> "ps.Series":
@@ -135,7 +138,16 @@ class CategoricalAccessor(object):
         5    2
         dtype: int8
         """
-        return self._data._with_new_scol(self._data.spark.column).rename()
+        return self._data._with_new_scol(
+            self._data.spark.column,
+            field=InternalField.from_struct_field(
+                StructField(
+                    name=self._data._internal.data_spark_column_names[0],
+                    dataType=self._data.spark.data_type,
+                    nullable=self._data.spark.nullable,
+                )
+            ),
+        ).rename()
 
     def add_categories(self, new_categories: pd.Index, inplace: bool = False) -> "ps.Series":
         raise NotImplementedError()
