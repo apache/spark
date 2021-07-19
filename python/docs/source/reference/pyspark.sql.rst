@@ -608,7 +608,7 @@ Grouping
 Catalog APIs
 ------------
 
-.. currentmodule:: pyspark.sql.catalog
+.. currentmodule:: pyspark.sql
 
 .. autosummary::
     :toctree: api/
