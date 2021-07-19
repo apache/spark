@@ -24,7 +24,7 @@ import org.apache.spark.sql.util.QueryExecutionListener
 
 
 /**
- * Helper class to simplify usage of [[Dataset.observe(String, Column, Column*) observe]]:
+ * Helper class to simplify usage of `Dataset.observe(String, Column, Column*)`:
  *
  * {{{
  *   // Observe row count (rows) and highest id (maxid) in the Dataset while writing it
@@ -74,8 +74,9 @@ class Observation(name: String) {
    * Only the result of the first action is available. Subsequent actions do not modify the result.
    *
    * @return the observed metrics as a [[Row]]
-   * @throws java.lang.InterruptedException interrupted while waiting
+   * @throws InterruptedException interrupted while waiting
    */
+  @throws[InterruptedException]
   def get: Row = {
     synchronized {
       // we need to loop as wait might return without us calling notify
@@ -131,6 +132,9 @@ private[sql] case class ObservationListener(observation: Observation)
 
 }
 
+/**
+ * (Scala-specific) Create a named or anonymous instance of Observation.
+ */
 object Observation {
 
   /**
