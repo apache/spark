@@ -194,15 +194,6 @@ class CategoricalIndex(Index):
         """
         return self.dtype.ordered
 
-    def _set_ordered(self, *, ordered: bool, inplace: bool) -> Optional["CategoricalIndex"]:
-        if inplace:
-            raise ValueError("cannot use inplace with CategoricalIndex")
-
-        field = self._internal.index_fields[0]
-        if self.ordered != ordered:
-            field = field.copy(dtype=CategoricalDtype(categories=self.categories, ordered=ordered))
-        return cast(CategoricalIndex, self._with_new_scol(self.spark.column, field=field))
-
     def as_ordered(self, inplace: bool = False) -> Optional["CategoricalIndex"]:
         """
         Set the Categorical to be ordered.
@@ -229,7 +220,10 @@ class CategoricalIndex(Index):
         CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
                          categories=['a', 'b', 'c'], ordered=True, dtype='category')
         """
-        return self._set_ordered(ordered=True, inplace=inplace)
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(self.to_series().cat.as_ordered()).rename(self.name)
 
     def as_unordered(self, inplace: bool = False) -> Optional["CategoricalIndex"]:
         """
@@ -257,7 +251,10 @@ class CategoricalIndex(Index):
         CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
                          categories=['a', 'b', 'c'], ordered=False, dtype='category')
         """
-        return self._set_ordered(ordered=False, inplace=inplace)
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(self.to_series().cat.as_unordered()).rename(self.name)
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeCategoricalIndex, item):
