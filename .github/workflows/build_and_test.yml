@@ -5,11 +5,44 @@ on:
     branches:
     - '**'
     - '!branch-*.*'
+  schedule:
+    # master
+    - cron: '0 4 * * *'
+    # branch-3.2
+    - cron: '0 7 * * *'
 
 jobs:
+  configure-jobs:
+    name: Configure jobs
+    runs-on: ubuntu-20.04
+    outputs:
+      branch: ${{ steps.set-outputs.outputs.branch }}
+      type: ${{ steps.set-outputs.outputs.type }}
+      envs: ${{ steps.set-outputs.outputs.envs }}
+    steps:
+    - name: Configure branch and additional environment variables
+      id: set-outputs
+      run: |
+        if [ "${{ github.event.schedule }}" = "0 4 * * *" ]; then
+          echo '::set-output name=branch::master'
+          echo '::set-output name=type::scheduled'
+          echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
+        elif [ "${{ github.event.schedule }}" = "0 7 * * *" ]; then
+          echo '::set-output name=branch::branch-3.2'
+          echo '::set-output name=type::scheduled'
+          echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
+        else
+          echo '::set-output name=branch::master' # Default branch to run on. CHANGE here when a branch is cut out.
+          echo '::set-output name=type::regular'
+          echo '::set-output name=envs::{}'
+        fi
+
   # Build: build Spark and run the tests for specified modules.
   build:
-    name: "Build modules: ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
+    name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
+    needs: configure-jobs
+    # Do not run as scheduled jobs in forked repos
+    if: github.repository == 'apache/spark' || needs.configure-jobs.outputs.type == 'regular'
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
     strategy:
@@ -81,7 +114,7 @@ jobs:
       with:
         fetch-depth: 0
         repository: apache/spark
-        ref: master
+        ref: ${{ needs.configure-jobs.outputs.branch }}
     - name: Sync the current branch with the latest in Apache Spark
       if: github.repository != 'apache/spark'
       run: |
@@ -128,6 +161,7 @@ jobs:
         python3.8 -m pip list
     # Run the tests.
     - name: Run tests
+      env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
       run: |
         # Hive and SQL tests become flaky when running in parallel as it's too intensive.
         if [[ "$MODULES_TO_TEST" == "hive" ]] || [[ "$MODULES_TO_TEST" == "sql" ]]; then export SERIAL_SBT_TESTS=1; fi
@@ -146,6 +180,8 @@ jobs:
         path: "**/target/unit-tests.log"
 
   pyspark:
+    needs: configure-jobs
+    if: needs.configure-jobs.outputs.type == 'regular'
     name: "Build modules: ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
@@ -229,6 +265,8 @@ jobs:
         path: "**/target/unit-tests.log"
 
   sparkr:
+    needs: configure-jobs
+    if: needs.configure-jobs.outputs.type == 'regular'
     name: "Build modules: sparkr"
     runs-on: ubuntu-20.04
     container:
@@ -288,6 +326,8 @@ jobs:
 
   # Static analysis, and documentation build
   lint:
+    needs: configure-jobs
+    if: needs.configure-jobs.outputs.type == 'regular'
     name: Linters, licenses, dependencies and documentation generation
     runs-on: ubuntu-20.04
     env:
@@ -388,6 +428,8 @@ jobs:
         bundle exec jekyll build
 
   java-11-17:
+    needs: configure-jobs
+    if: needs.configure-jobs.outputs.type == 'regular'
     name: Java ${{ matrix.java }} build with Maven
     strategy:
       fail-fast: false
@@ -441,6 +483,8 @@ jobs:
         rm -rf ~/.m2/repository/org/apache/spark
 
   scala-213:
+    needs: configure-jobs
+    if: needs.configure-jobs.outputs.type == 'regular'
     name: Scala 2.13 build with SBT
     runs-on: ubuntu-20.04
     steps:
@@ -484,6 +528,8 @@ jobs:
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pdocker-integration-tests -Pkubernetes-integration-tests -Pspark-ganglia-lgpl -Pscala-2.13 compile test:compile
 
   hadoop-2:
+    needs: configure-jobs
+    if: needs.configure-jobs.outputs.type == 'regular'
     name: Hadoop 2 build with SBT
     runs-on: ubuntu-20.04
     steps:
@@ -526,6 +572,8 @@ jobs:
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Phadoop-2.7 compile test:compile
 
   tpcds-1g:
+    needs: configure-jobs
+    if: needs.configure-jobs.outputs.type == 'regular'
     name: Run TPC-DS queries with SF=1
     runs-on: ubuntu-20.04
     env:
@@ -601,6 +649,8 @@ jobs:
         path: "**/target/unit-tests.log"
 
   docker-integration-tests:
+    needs: configure-jobs
+    if: needs.configure-jobs.outputs.type == 'regular'
     name: Run docker integration tests
     runs-on: ubuntu-20.04
     env:

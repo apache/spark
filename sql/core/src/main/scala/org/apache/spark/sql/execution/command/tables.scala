@@ -236,7 +236,7 @@ case class AlterTableAddColumnsCommand(
       (colsToAdd ++ catalogTable.schema).map(_.name),
       "in the table definition of " + table.identifier,
       conf.caseSensitiveAnalysis)
-    DDLUtils.checkDataColNames(catalogTable, colsToAdd.map(_.name))
+    DDLUtils.checkDataColNames(catalogTable, StructType(colsToAdd))
 
     val existingSchema = CharVarcharUtils.getRawSchema(catalogTable.dataSchema)
     catalog.alterTableDataSchema(table, StructType(existingSchema ++ colsToAdd))

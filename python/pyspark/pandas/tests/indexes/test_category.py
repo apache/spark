@@ -159,13 +159,25 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         psidx2 = ps.from_pandas(pidx2)
         psidx3 = ps.from_pandas(pidx3)
 
-        self.assert_eq(
-            psidx1.intersection(psidx2).sort_values(), pidx1.intersection(pidx2).sort_values()
-        )
-        self.assert_eq(
-            psidx1.intersection(psidx3.astype("category")).sort_values(),
-            pidx1.intersection(pidx3.astype("category")).sort_values(),
-        )
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            self.assert_eq(
+                psidx1.intersection(psidx2).sort_values(), pidx1.intersection(pidx2).sort_values()
+            )
+            self.assert_eq(
+                psidx1.intersection(psidx3.astype("category")).sort_values(),
+                pidx1.intersection(pidx3.astype("category")).sort_values(),
+            )
+        else:
+            self.assert_eq(
+                psidx1.intersection(psidx2).sort_values(),
+                pidx1.intersection(pidx2).set_categories(pidx1.categories).sort_values(),
+            )
+            self.assert_eq(
+                psidx1.intersection(psidx3.astype("category")).sort_values(),
+                pidx1.intersection(pidx3.astype("category"))
+                .set_categories(pidx1.categories)
+                .sort_values(),
+            )
 
         # TODO: intersection non-categorical or categorical with a different category
         self.assertRaises(NotImplementedError, lambda: psidx1.intersection(psidx3))

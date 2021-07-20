@@ -68,6 +68,8 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
       shuffleStage: ShuffleQueryStageExec,
       advisoryParallelism: Option[Int]): Seq[ShufflePartitionSpec] = {
     val numMappers = shuffleStage.shuffle.numMappers
+    // ShuffleQueryStageExec.mapStats.isDefined promise numMappers > 0
+    assert(numMappers > 0)
     val numReducers = shuffleStage.shuffle.numPartitions
     val expectedParallelism = advisoryParallelism.getOrElse(numReducers)
     val splitPoints = if (numMappers == 0) {
@@ -138,8 +140,8 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
   def canUseLocalShuffleReader(plan: SparkPlan): Boolean = plan match {
     case s: ShuffleQueryStageExec =>
       s.mapStats.isDefined && supportLocalReader(s.shuffle)
-    case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs) =>
-      s.mapStats.isDefined && partitionSpecs.nonEmpty && supportLocalReader(s.shuffle) &&
+    case CustomShuffleReaderExec(s: ShuffleQueryStageExec, _) =>
+      s.mapStats.isDefined && supportLocalReader(s.shuffle) &&
         s.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS
     case _ => false
   }
