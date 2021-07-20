@@ -243,7 +243,7 @@ public class ExternalBlockHandlerSuite {
   public void testFinalizeShuffleMerge() throws IOException {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
-    FinalizeShuffleMerge req = new FinalizeShuffleMerge("app0", 0);
+    FinalizeShuffleMerge req = new FinalizeShuffleMerge("app0", 1, 0);
     RoaringBitmap bitmap = RoaringBitmap.bitmapOf(0, 1, 2);
     MergeStatuses statuses = new MergeStatuses(0, new RoaringBitmap[]{bitmap},
       new int[]{3}, new long[]{30});

@@ -21,11 +21,18 @@ import java.io.{File, IOException}
 import java.nio.file.Files
 import java.util.UUID
 
+import scala.collection.mutable.HashMap
+
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.scala.DefaultScalaModule
+
 import org.apache.spark.SparkConf
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.shuffle.ExecutorDiskUtils
-import org.apache.spark.storage.DiskBlockManager.MERGE_MANAGER_DIR
+import org.apache.spark.storage.DiskBlockManager.ATTEMPT_ID_KEY
+import org.apache.spark.storage.DiskBlockManager.MERGE_DIR_KEY
+import org.apache.spark.storage.DiskBlockManager.MERGE_DIRECTORY
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
@@ -56,6 +63,10 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
   // The content of subDirs is immutable but the content of subDirs(i) is mutable. And the content
   // of subDirs(i) is protected by the lock of subDirs(i)
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
+
+  // Get merge directory name, append attemptId if there is any
+  private val mergeDirName =
+    s"$MERGE_DIRECTORY${conf.get(config.APP_ATTEMPT_ID).map(id => s"_$id").getOrElse("")}"
 
   // Create merge directories
   createLocalDirsForMergedShuffleBlocks()
@@ -200,12 +211,12 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
       // Will create the merge_manager directory only if it doesn't exist under the local dir.
       Utils.getConfiguredLocalDirs(conf).foreach { rootDir =>
         try {
-          val mergeDir = new File(rootDir, MERGE_MANAGER_DIR)
+          val mergeDir = new File(rootDir, mergeDirName)
           if (!mergeDir.exists()) {
             // This executor does not find merge_manager directory, it will try to create
             // the merge_manager directory and the sub directories.
             logDebug(s"Try to create $mergeDir and its sub dirs since the " +
-              s"$MERGE_MANAGER_DIR dir does not exist")
+              s"$mergeDirName dir does not exist")
             for (dirNum <- 0 until subDirsPerLocalDir) {
               val subDir = new File(mergeDir, "%02x".format(dirNum))
               if (!subDir.exists()) {
@@ -219,7 +230,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
         } catch {
           case e: IOException =>
             logError(
-              s"Failed to create $MERGE_MANAGER_DIR dir in $rootDir. Ignoring this directory.", e)
+              s"Failed to create $mergeDirName dir in $rootDir. Ignoring this directory.", e)
         }
       }
     }
@@ -264,6 +275,17 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
     }
   }
 
+  def getMergeDirectoryAndAttemptIDJsonString(): String = {
+    val mergedMetaMap: HashMap[String, String] = new HashMap[String, String]()
+    mergedMetaMap.put(MERGE_DIR_KEY, mergeDirName)
+    conf.get(config.APP_ATTEMPT_ID).foreach(
+      attemptId => mergedMetaMap.put(ATTEMPT_ID_KEY, attemptId))
+    val mapper = new ObjectMapper()
+    mapper.registerModule(DefaultScalaModule)
+    val jsonString = mapper.writeValueAsString(mergedMetaMap)
+    jsonString
+  }
+
   private def addShutdownHook(): AnyRef = {
     logDebug("Adding shutdown hook") // force eager creation of logger
     ShutdownHookManager.addShutdownHook(ShutdownHookManager.TEMP_DIR_SHUTDOWN_PRIORITY + 1) { () =>
@@ -303,5 +325,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
 }
 
 private[spark] object DiskBlockManager {
-  private[spark] val MERGE_MANAGER_DIR = "merge_manager"
+  val MERGE_DIRECTORY = "merge_manager"
+  val MERGE_DIR_KEY = "mergeDir"
+  val ATTEMPT_ID_KEY = "attemptId"
 }
