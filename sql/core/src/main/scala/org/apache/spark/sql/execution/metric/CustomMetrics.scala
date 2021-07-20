@@ -51,7 +51,7 @@ object CustomMetrics {
       currentMetricsValues: Seq[CustomTaskMetric],
       customMetrics: Map[String, SQLMetric]): Unit = {
     currentMetricsValues.foreach { metric =>
-      customMetrics(metric.name()).set(metric.value())
+      customMetrics.get(metric.name()).map(_.set(metric.value()))
     }
   }
 }
