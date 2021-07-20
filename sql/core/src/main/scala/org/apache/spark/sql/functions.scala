@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
  * Spark also includes more built-in functions that are less common and are not defined here.
  * You can still access them (and all the functions defined here) using the `functions.expr()` API
  * and calling them through a SQL expression string. You can find the entire list of functions
- * at SQL API documentation.
+ * at SQL API documentation (https://spark.apache.org/docs/latest/api/sql/index.html).
  *
  * As an example, `isnan` is a function that is defined here. You can use `isnan(col("myCol"))`
  * to invoke the `isnan` function. This way the programming language's compiler ensures `isnan`
