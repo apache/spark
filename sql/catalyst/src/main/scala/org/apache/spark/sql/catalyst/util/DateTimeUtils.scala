@@ -728,7 +728,7 @@ object DateTimeUtils {
   }
 
   /**
-   * Adds a full interval (months, days, microseconds) a timestamp represented as the number of
+   * Adds a full interval (months, days, microseconds) to a timestamp represented as the number of
    * microseconds since 1970-01-01 00:00:00Z.
    * @return A timestamp value, expressed in microseconds since 1970-01-01 00:00:00Z.
    */
@@ -744,6 +744,25 @@ object DateTimeUtils {
       .plusDays(days)
       .plus(microseconds, ChronoUnit.MICROS)
     instantToMicros(resultTimestamp.toInstant)
+  }
+
+  /**
+   * Adds a full interval (months, days, microseconds) to a timestamp without time zone
+   * represented as a local time in microsecond precision, which is independent of time zone.
+   * @return A timestamp without time zone value, expressed in range
+   *         [0001-01-01T00:00:00.000000, 9999-12-31T23:59:59.999999].
+   */
+  def timestampNTZAddInterval(
+      start: Long,
+      months: Int,
+      days: Int,
+      microseconds: Long,
+      zoneId: ZoneId): Long = {
+    val localDateTime = microsToLocalDateTime(start)
+      .plusMonths(months)
+      .plusDays(days)
+      .plus(microseconds, ChronoUnit.MICROS)
+    localDateTimeToMicros(localDateTime)
   }
 
   /**
