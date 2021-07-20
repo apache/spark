@@ -45,6 +45,11 @@ import org.apache.spark.sql.util.QueryExecutionListener
  */
 class Observation(name: String) {
 
+  /**
+   * Create an Observation instance without providing a name. This generates a random name.
+   */
+  def this() = this(UUID.randomUUID().toString)
+
   private val listener: ObservationListener = ObservationListener(this)
 
   @volatile private var sparkSession: Option[SparkSession] = None
@@ -133,14 +138,15 @@ private[sql] case class ObservationListener(observation: Observation)
 }
 
 /**
- * (Scala-specific) Create a named or anonymous instance of Observation.
+ * (Scala-specific) Create instances of Observation via Scala `apply`.
+ * @since 3.3.0
  */
 object Observation {
 
   /**
    * Observation constructor for creating an anonymous observation.
    */
-  def apply(): Observation = new Observation(UUID.randomUUID().toString)
+  def apply(): Observation = new Observation()
 
   /**
    * Observation constructor for creating a named observation.
