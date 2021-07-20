@@ -395,7 +395,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
           createAttributeMapping(left, newLeft) ++
           createAttributeMapping(right, newRight))
         val newCondition = condition.map(_.transform {
-          case a: Attribute => mapping.getOrElse(a, a)
+          case a: Attribute => mapping.get(a).map(_.withName(a.name)).getOrElse(a)
         })
         Join(newLeft, newRight, joinType, newCondition, hint)
 
@@ -425,7 +425,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         // Transform the expressions.
         newNode.mapExpressions { expr =>
           clean(expr.transform {
-            case a: Attribute => mapping.getOrElse(a, a)
+            case a: Attribute => mapping.get(a).map(_.withName(a.name)).getOrElse(a)
           })
         }
     }
