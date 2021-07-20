@@ -482,7 +482,7 @@ class DynamicPartitionDataConcurrentWriter(
       val sorter = concurrentOutputWriterSpec.createSorter()
       val sortIterator = sorter.sort(iterator.asInstanceOf[Iterator[UnsafeRow]])
       while (sortIterator.hasNext) {
-        writeWithMetrics(iterator.next(), count)
+        writeWithMetrics(sortIterator.next(), count)
         count += 1
       }
       CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
