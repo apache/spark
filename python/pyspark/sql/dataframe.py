@@ -1981,7 +1981,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |Alice|  5|    80|
         +-----+---+------+
         """
-        if not isinstance(subset, Iterable):
+        if subset is not None and not isinstance(subset, Iterable):
             raise TypeError("Parameter 'subset' must be a list of columns or a single column")
 
         if subset is None:
