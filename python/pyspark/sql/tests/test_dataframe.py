@@ -87,7 +87,7 @@ class DataFrameTests(ReusedSQLTestCase):
             [(u'Alice', 50), (u'Alice', 60)], schema).dropDuplicates(["name", "age"]).count(),
             2)
 
-        with self.assertRaises(TypeError):
+        with self.assertRaisesRegex(TypeError, "Parameter 'subset' must be a list of columns or a single column"):
             self.spark.createDataFrame(
                 [(u'Alice', 50), (u'Alice', 60)], schema
             ).dropDuplicates("name", "age").count()
