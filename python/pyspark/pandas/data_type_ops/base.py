@@ -331,10 +331,10 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("<= can not be applied to %s." % self.pretty_name)
 
-    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("> can not be applied to %s." % self.pretty_name)
 
-    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
