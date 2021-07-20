@@ -19,14 +19,14 @@ package org.apache.spark.sql.connector.expressions
 
 import org.apache.spark.sql.types.DataType
 
-case class Min(column: FieldReference) extends AggregateFunc
+private[sql] final case class Min(column: FieldReference) extends AggregateFunc
 
-case class Max(column: FieldReference) extends AggregateFunc
+private[sql] final case class Max(column: FieldReference) extends AggregateFunc
 
-case class Sum(column: FieldReference, dataType: DataType, isDistinct: Boolean)
+private[sql] final case class Sum(column: FieldReference, dataType: DataType, isDistinct: Boolean)
   extends AggregateFunc
 
-case class Count(column: FieldReference, isDistinct: Boolean)
+private[sql] final case class Count(column: FieldReference, isDistinct: Boolean)
   extends AggregateFunc
 
-case class CountOne() extends AggregateFunc
+private[sql] final case class CountOne() extends AggregateFunc
