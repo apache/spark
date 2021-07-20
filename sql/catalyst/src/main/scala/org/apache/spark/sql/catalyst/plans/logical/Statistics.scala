@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogColumnStat
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils
 import org.apache.spark.sql.catalyst.util.{ArrayData, DateTimeUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -124,6 +125,18 @@ case class ColumnStat(
       maxLen = maxLen,
       histogram = histogram,
       version = version)
+
+  def updateCountStats(
+      oldNumRows: BigInt,
+      newNumRows: BigInt,
+      updatedColumnStatOpt: Option[ColumnStat] = None): ColumnStat = {
+    val updatedColumnStat = updatedColumnStatOpt.getOrElse(this)
+    val newDistinctCount = EstimationUtils.updateStat(oldNumRows, newNumRows,
+      distinctCount, updatedColumnStat.distinctCount)
+    val newNullCount = EstimationUtils.updateStat(oldNumRows, newNumRows,
+      nullCount, updatedColumnStat.nullCount)
+    updatedColumnStat.copy(distinctCount = newDistinctCount, nullCount = newNullCount)
+  }
 }
 
 /**
