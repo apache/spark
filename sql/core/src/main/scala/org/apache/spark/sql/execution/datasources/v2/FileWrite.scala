@@ -119,11 +119,9 @@ trait FileWrite extends Write {
     val outputWriterFactory =
       prepareWrite(sparkSession.sessionState.conf, job, caseInsensitiveOptions, schema)
     val allColumns = schema.toAttributes
-    val driverSideMetrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.driverSideMetrics
-    val taskCommitTimeMetric: (String, SQLMetric) = BasicWriteJobStatsTracker.taskCommitTimeMetric
+    val metrics: Map[String, SQLMetric] = BasicWriteJobStatsTracker.metrics
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
-    val statsTracker = new BasicWriteJobStatsTracker(serializableHadoopConf, driverSideMetrics,
-      taskCommitTimeMetric._2)
+    val statsTracker = new BasicWriteJobStatsTracker(serializableHadoopConf, metrics)
     // TODO: after partitioning is supported in V2:
     //       1. filter out partition columns in `dataColumns`.
     //       2. Don't use Seq.empty for `partitionColumns`.
