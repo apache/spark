@@ -48,7 +48,7 @@ import org.apache.spark.sql.internal.SQLConf
  * (L3, R3-1), (L3, R3-2),
  * (L4-1, R4-1), (L4-2, R4-1), (L4-1, R4-2), (L4-2, R4-2)
  */
-object OptimizeSkewedJoin extends CustomShuffleReaderRule {
+object OptimizeSkewedJoin extends AQEShuffleReadRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
 
@@ -110,9 +110,9 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
    * 2. Assuming partition0 is skewed in left side, and it has 5 mappers (Map0, Map1...Map4).
    *    And we may split the 5 Mappers into 3 mapper ranges [(Map0, Map1), (Map2, Map3), (Map4)]
    *    based on the map size and the max split number.
-   * 3. Wrap the join left child with a special shuffle reader that reads each mapper range with one
+   * 3. Wrap the join left child with a special shuffle read that loads each mapper range with one
    *    task, so total 3 tasks.
-   * 4. Wrap the join right child with a special shuffle reader that reads partition0 3 times by
+   * 4. Wrap the join right child with a special shuffle read that loads partition0 3 times by
    *    3 tasks separately.
    */
   private def tryOptimizeJoinChildren(
@@ -196,8 +196,8 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
     }
     logDebug(s"number of skewed partitions: left $numSkewedLeft, right $numSkewedRight")
     if (numSkewedLeft > 0 || numSkewedRight > 0) {
-      Some((CustomShuffleReaderExec(left, leftSidePartitions.toSeq),
-        CustomShuffleReaderExec(right, rightSidePartitions.toSeq)))
+      Some((AQEShuffleReadExec(left, leftSidePartitions.toSeq),
+        AQEShuffleReadExec(right, rightSidePartitions.toSeq)))
     } else {
       None
     }
