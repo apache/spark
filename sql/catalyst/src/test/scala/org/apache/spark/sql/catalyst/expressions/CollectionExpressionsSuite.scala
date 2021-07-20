@@ -919,6 +919,16 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Date.valueOf("2020-11-01"),
           Date.valueOf("2022-04-01")))
 
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2021-07-01")),
+        Literal(Date.valueOf("2021-07-10")),
+        Literal(fromDayTimeString("3 0:0:0"))),
+        Seq(
+          Date.valueOf("2021-07-01"),
+          Date.valueOf("2021-07-04"),
+          Date.valueOf("2021-07-07"),
+          Date.valueOf("2021-07-10")))
+
       checkExceptionInExpression[IllegalArgumentException](
         new Sequence(
           Literal(Date.valueOf("1970-01-02")),
@@ -1092,6 +1102,52 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Date.valueOf("2020-11-01"),
           Date.valueOf("2022-04-01")))
 
+      checkEvaluation(new Sequence(
+        Literal(Date.valueOf("2021-07-01")),
+        Literal(Date.valueOf("2021-07-10")),
+        Literal(Duration.ofDays(3))),
+        Seq(
+          Date.valueOf("2021-07-01"),
+          Date.valueOf("2021-07-04"),
+          Date.valueOf("2021-07-07"),
+          Date.valueOf("2021-07-10")))
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("2021-07-01")),
+          Literal(Date.valueOf("2021-07-10")),
+          Literal(Duration.ofHours(3))),
+        EmptyRow,
+        "sequence step must be an interval day to second of day granularity" +
+          " if start and end values are dates")
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("2021-07-01")),
+          Literal(Date.valueOf("2021-07-10")),
+          Literal(Duration.ofMinutes(3))),
+        EmptyRow,
+        "sequence step must be an interval day to second of day granularity" +
+          " if start and end values are dates")
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("2021-07-01")),
+          Literal(Date.valueOf("2021-07-10")),
+          Literal(Duration.ofSeconds(3))),
+        EmptyRow,
+        "sequence step must be an interval day to second of day granularity" +
+          " if start and end values are dates")
+
+      checkExceptionInExpression[IllegalArgumentException](
+        new Sequence(
+          Literal(Date.valueOf("2021-07-01")),
+          Literal(Date.valueOf("2021-07-10")),
+          Literal(Duration.ofMillis(3))),
+        EmptyRow,
+        "sequence step must be an interval day to second of day granularity" +
+          " if start and end values are dates")
+
       checkExceptionInExpression[IllegalArgumentException](
         new Sequence(
           Literal(Date.valueOf("2018-01-01")),
@@ -1108,11 +1164,6 @@ class CollectionExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper
           Literal(Period.ofMonths(-1))),
         EmptyRow,
         s"sequence boundaries: 0 to 2678400000000 by -1")
-
-      assert(Sequence(
-        Cast(Literal("2011-03-01"), DateType),
-        Cast(Literal("2011-04-01"), DateType),
-        Option(Literal(Duration.ofHours(1)))).checkInputDataTypes().isFailure)
     }
   }
 
