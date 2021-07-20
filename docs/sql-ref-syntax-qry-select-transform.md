@@ -69,17 +69,17 @@ SELECT TRANSFORM ( expression [ , ... ] )
 ### ROW FORMAT DELIMITED BEHAVIOR
 
 When Spark uses `ROW FORMAT DELIMITED` format:
- - Spark uses `\u0001` as the default field delimiter and this delimiter can be overridden by `FIELDS TERMINATED BY`.
- - Spark uses `\n` as the default line delimit and this delimiter can be overridden by `LINES TERMINATED BY`.
- - Spark uses literal string `\N` as the default `NULL` value in order to differentiate `NULL` values 
- from literal string `NULL`. This delimiter can be overridden by `NULL DEFINED AS`.
+ - Spark uses the character `\u0001` as the default field delimiter and this delimiter can be overridden by `FIELDS TERMINATED BY`.
+ - Spark uses the character `\n` as the default line delimiter and this delimiter can be overridden by `LINES TERMINATED BY`.
+ - Spark uses a string `\N` as the default `NULL` value in order to differentiate `NULL` values 
+ from the literal string `NULL`. This delimiter can be overridden by `NULL DEFINED AS`.
  - Spark casts all columns to `STRING` and combines columns by tabs before feeding to the user script.
- For complex types such as `ARRAY`/`MAP`/`STRUCT`. Spark uses `to_json` cast it to an input `JSON` string and use 
+ For complex types such as `ARRAY`/`MAP`/`STRUCT`, Spark uses `to_json` casts it to an input `JSON` string and uses 
  `from_json` to convert the result output `JSON` string to `ARRAY`/`MAP`/`STRUCT` data.
  - `COLLECTION ITEMS TERMINATED BY` and `MAP KEYS TERMINATED BY` are delimiters to split complex data such as 
- `ARRAY`/`MAP`/`STRUCT`, Spark uses `to_json` and `from_json` to handle complex data types with `JSON` format, so 
+ `ARRAY`/`MAP`/`STRUCT`, Spark uses `to_json` and `from_json` to handle complex data types with `JSON` format. So 
  `COLLECTION ITEMS TERMINATED BY` and `MAP KEYS TERMINATED BY` won't work in default row format.
- - The standard output of the user script is treated as tab-separated `STRING` columns, any cell containing only literal string `\N`
+ - The standard output of the user script is treated as tab-separated `STRING` columns. Any cell containing only a string `\N`
  is re-interpreted as a literal `NULL` value, and then the resulting `STRING` column will be cast to the data types specified in `col_type`.
  - If the actual number of output columns is less than the number of specified output columns,
   additional output columns will be filled with `NULL`. For example:
@@ -131,11 +131,11 @@ When Spark uses `ROW FORMAT DELIMITED` format:
 
 ### Hive SerDe behavior
 
-When Hive support is enabled and use Hive SerDe mode:
+When Hive support is enabled and Hive SerDe mode is used:
  - Spark uses the Hive SerDe `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, so columns are cast
  to `STRING` and combined by tabs before feeding to the user script.
- - All literal `NULL` values are converted to the literal string `\N` in order to differentiate literal `NULL` values from literal string `NULL`.
- - The standard output of the user script is treated as tab-separated `STRING` columns, any cell containing only literal string `\N` is re-interpreted
+ - All literal `NULL` values are converted to a string `\N` in order to differentiate literal `NULL` values from the literal string `NULL`.
+ - The standard output of the user script is treated as tab-separated `STRING` columns, any cell containing only a string `\N` is re-interpreted
  as a `NULL` value, and then the resulting STRING column will be cast to the data type specified in `col_type`.
  - If the actual number of output columns is less than the number of specified output columns,
   additional output columns will be filled with `NULL`.
