@@ -275,7 +275,10 @@ abstract class BaseDynamicPartitionDataWriter(
 
     // The prefix and suffix must be in a form that matches our bucketing format.
     // See BucketingUtils.
-    val prefix = bucketId.map(description.bucketSpec.get.bucketFileNamePrefix).getOrElse("")
+    val prefix = bucketId match {
+      case Some(id) => description.bucketSpec.get.bucketFileNamePrefix(id)
+      case _ => ""
+    }
     val suffix = f"$bucketIdStr.c$fileCounter%03d" +
       description.outputWriterFactory.getFileExtension(taskAttemptContext)
     val fileNameSpec = FileNameSpec(prefix, suffix)
