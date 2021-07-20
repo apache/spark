@@ -523,4 +523,55 @@ public class JavaDataFrameSuite {
       .map(row -> row.get(0).toString() + row.getString(1)).toArray(String[]::new);
     Assert.assertArrayEquals(expected, result);
   }
+
+  /**
+   * Tests the Java API of Observation and Dataset.observe(Observation, Column, Column*).
+   */
+  @Test
+  public void testObservation() {
+    Observation namedObservation = new Observation("named");
+    Observation unnamedObservation = new Observation();
+
+    Dataset<Long> df = spark
+            .range(100)
+            .observe(
+                    namedObservation,
+                    min(col("id")).as("min_val"),
+                    scala.collection.JavaConverters.asScalaBuffer(Arrays.asList(
+                            max(col("id")).as("max_val"),
+                            sum(col("id")).as("sum_val"),
+                            count(when(pmod(col("id"), lit(2)).$eq$eq$eq(0), 1)).as("num_even")
+                    ))
+            )
+            .observe(
+                    unnamedObservation,
+                    avg(col("id")).cast("int").as("avg_val"),
+                    scala.collection.JavaConverters.asScalaBuffer(Arrays.asList())
+            );
+
+    df.collect();
+    Row namedMetrics = null;
+    Row unnamedMetrics = null;
+
+    try {
+      // we can get the result multiple times
+      namedMetrics = namedObservation.get();
+      unnamedMetrics = unnamedObservation.get();
+    } catch (InterruptedException e) {
+      Assert.fail();
+    }
+    Assert.assertEquals(Arrays.asList(0L, 99L, 4950L, 50L), scala.collection.JavaConverters.seqAsJavaList(namedMetrics.toSeq()));
+    Assert.assertEquals(Arrays.asList(49), scala.collection.JavaConverters.seqAsJavaList(unnamedMetrics.toSeq()));
+
+    // we can get the result multiple times
+    try {
+      // we can get the result multiple times
+      namedMetrics = namedObservation.get();
+      unnamedMetrics = unnamedObservation.get();
+    } catch (InterruptedException e) {
+      Assert.fail();
+    }
+    Assert.assertEquals(Arrays.asList(0L, 99L, 4950L, 50L), scala.collection.JavaConverters.seqAsJavaList(namedMetrics.toSeq()));
+    Assert.assertEquals(Arrays.asList(49), scala.collection.JavaConverters.seqAsJavaList(unnamedMetrics.toSeq()));
+  }
 }
