@@ -2403,6 +2403,8 @@ case class MakeTimestampNTZ(
       MakeTimestamp(year, month, day, hour, min, sec, dataType = TimestampNTZType))
   }
 
+  override def prettyName: String = "make_timestamp_ntz"
+
   override def exprsReplaced: Seq[Expression] = Seq(year, month, day, hour, min, sec)
 
   override protected def withNewChildInternal(newChild: Expression): Expression =
@@ -2472,6 +2474,8 @@ case class MakeTimestampLTZ(
     this(year, month, day, hour, min, sec, Some(timezone), failOnError = SQLConf.get.ansiEnabled,
       MakeTimestamp(year, month, day, hour, min, sec, Some(timezone), dataType = TimestampType))
   }
+
+  override def prettyName: String = "make_timestamp_ltz"
 
   override def exprsReplaced: Seq[Expression] = Seq(year, month, day, hour, min, sec)
 
