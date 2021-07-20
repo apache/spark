@@ -2406,10 +2406,9 @@ class DataFrameSuite extends QueryTest
       assert(unnamedMetric === Row(49))
     }
 
-    // First run
     df.collect()
-    checkMetrics(namedObservation.get, unnamedObservation.get)
     // we can get the result multiple times
+    checkMetrics(namedObservation.get, unnamedObservation.get)
     checkMetrics(namedObservation.get, unnamedObservation.get)
 
     // an observation can be used only once
