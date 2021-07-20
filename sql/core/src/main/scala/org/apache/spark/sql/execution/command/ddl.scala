@@ -924,23 +924,23 @@ object DDLUtils {
   }
 
   private[sql] def checkDataColNames(table: CatalogTable): Unit = {
-    checkDataColNames(table, table.dataSchema.fieldNames)
+    checkDataColNames(table, table.dataSchema)
   }
 
-  private[sql] def checkDataColNames(table: CatalogTable, colNames: Seq[String]): Unit = {
+  private[sql] def checkDataColNames(table: CatalogTable, schema: StructType): Unit = {
     table.provider.foreach {
       _.toLowerCase(Locale.ROOT) match {
         case HIVE_PROVIDER =>
           val serde = table.storage.serde
           if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
-            OrcFileFormat.checkFieldNames(colNames)
+            OrcFileFormat.checkFieldNames(schema)
           } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
             serde == Some("parquet.hive.serde.ParquetHiveSerDe") ||
             serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")) {
-            ParquetSchemaConverter.checkFieldNames(colNames)
+            ParquetSchemaConverter.checkFieldNames(schema)
           }
-        case "parquet" => ParquetSchemaConverter.checkFieldNames(colNames)
-        case "orc" => OrcFileFormat.checkFieldNames(colNames)
+        case "parquet" => ParquetSchemaConverter.checkFieldNames(schema)
+        case "orc" => OrcFileFormat.checkFieldNames(schema)
         case _ =>
       }
     }
