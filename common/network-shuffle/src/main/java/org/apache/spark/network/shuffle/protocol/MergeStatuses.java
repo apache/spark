@@ -108,7 +108,7 @@ public class MergeStatuses extends BlockTransferMessage {
 
   @Override
   public int encodedLength() {
-    return 8 // int
+    return 4 + 4 // shuffleId and shuffleSequenceId
       + Encoders.BitmapArrays.encodedLength(bitmaps)
       + Encoders.IntArrays.encodedLength(reduceIds)
       + Encoders.LongArrays.encodedLength(sizes);

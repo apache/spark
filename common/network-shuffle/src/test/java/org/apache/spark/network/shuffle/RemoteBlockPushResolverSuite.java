@@ -1022,42 +1022,42 @@ public class RemoteBlockPushResolverSuite {
   @Test(expected = ClosedChannelException.class)
   public void testOngoingMergeOfBlockFromPreviousAttemptIsAborted()
       throws IOException, InterruptedException {
-      Semaphore closed = new Semaphore(0);
-      pushResolver = new RemoteBlockPushResolver(conf) {
-        @Override
-        void closeAndDeletePartitionFilesIfNeeded(
-            AppShuffleInfo appShuffleInfo,
-            boolean cleanupLocalDirs) {
-          super.closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs);
-          closed.release();
-        }
-      };
-      String testApp = "testOngoingMergeOfBlockFromPreviousAttemptIsAborted";
-      Path[] attempt1LocalDirs = createLocalDirs(1);
-      registerExecutor(testApp,
-          prepareLocalDirs(attempt1LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_1),
-          MERGE_DIRECTORY_META_1);
-      ByteBuffer[] blocks = new ByteBuffer[]{
-          ByteBuffer.wrap(new byte[4]),
-          ByteBuffer.wrap(new byte[5]),
-          ByteBuffer.wrap(new byte[6]),
-          ByteBuffer.wrap(new byte[7])
-      };
-      StreamCallbackWithID stream1 = pushResolver.receiveBlockDataAsStream(
-          new PushBlockStream(testApp, 1, 0, 0, 0, 0, 0));
-      // The onData callback should be called 4 times here before the onComplete callback. But a
-      // register executor message arrives in shuffle service after the 2nd onData callback. The 3rd
-      // onData callback should all throw ClosedChannelException as their channels are closed.
-      stream1.onData(stream1.getID(), blocks[0]);
-      stream1.onData(stream1.getID(), blocks[1]);
-      Path[] attempt2LocalDirs = createLocalDirs(2);
-      registerExecutor(testApp,
-          prepareLocalDirs(attempt2LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_2),
-          MERGE_DIRECTORY_META_2);
-      closed.acquire();
-      // Should throw ClosedChannelException here.
-      stream1.onData(stream1.getID(), blocks[3]);
-    }
+    Semaphore closed = new Semaphore(0);
+    pushResolver = new RemoteBlockPushResolver(conf) {
+      @Override
+      void closeAndDeletePartitionFilesIfNeeded(
+          AppShuffleInfo appShuffleInfo,
+          boolean cleanupLocalDirs) {
+        super.closeAndDeletePartitionFilesIfNeeded(appShuffleInfo, cleanupLocalDirs);
+        closed.release();
+      }
+    };
+    String testApp = "testOngoingMergeOfBlockFromPreviousAttemptIsAborted";
+    Path[] attempt1LocalDirs = createLocalDirs(1);
+    registerExecutor(testApp,
+        prepareLocalDirs(attempt1LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_1),
+        MERGE_DIRECTORY_META_1);
+    ByteBuffer[] blocks = new ByteBuffer[]{
+        ByteBuffer.wrap(new byte[4]),
+        ByteBuffer.wrap(new byte[5]),
+        ByteBuffer.wrap(new byte[6]),
+        ByteBuffer.wrap(new byte[7])
+    };
+    StreamCallbackWithID stream1 = pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, 1, 0, 0, 0, 0, 0));
+    // The onData callback should be called 4 times here before the onComplete callback. But a
+    // register executor message arrives in shuffle service after the 2nd onData callback. The 3rd
+    // onData callback should all throw ClosedChannelException as their channels are closed.
+    stream1.onData(stream1.getID(), blocks[0]);
+    stream1.onData(stream1.getID(), blocks[1]);
+    Path[] attempt2LocalDirs = createLocalDirs(2);
+    registerExecutor(testApp,
+        prepareLocalDirs(attempt2LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_2),
+        MERGE_DIRECTORY_META_2);
+    closed.acquire();
+    // Should throw ClosedChannelException here.
+    stream1.onData(stream1.getID(), blocks[3]);
+  }
 
   @Test
   public void testBlockPushWithOlderShuffleSequenceId() throws IOException {

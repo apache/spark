@@ -87,13 +87,14 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
 
   @Override
   public int encodedLength() {
-    int encodedLengthOfChunkIds = 4; // encoded length of shuffleSequenceId
+    int encodedLengthOfChunkIds = 0;
     for (int[] ids: chunkIds) {
       encodedLengthOfChunkIds += Encoders.IntArrays.encodedLength(ids);
     }
     return super.encodedLength()
       + Encoders.IntArrays.encodedLength(reduceIds)
       + 4 /* encoded length of chunkIds.size() */
+      + 4  // encoded length of shuffleSequenceId
       + encodedLengthOfChunkIds;
   }
 
