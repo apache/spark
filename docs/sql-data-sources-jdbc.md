@@ -9,9 +9,9 @@ license: |
   The ASF licenses this file to You under the Apache License, Version 2.0
   (the "License"); you may not use this file except in compliance with
   the License.  You may obtain a copy of the License at
- 
+
      http://www.apache.org/licenses/LICENSE-2.0
- 
+
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -191,7 +191,7 @@ logging into the data sources.
     <td>write</td>
    </td>
   </tr>
-  
+
   <tr>
     <td><code>cascadeTruncate</code></td>
     <td>the default cascading truncate behaviour of the JDBC database in question, specified in the <code>isCascadeTruncate</code> in each JDBCDialect</td>
@@ -275,11 +275,22 @@ logging into the data sources.
     </td>
     <td>read/write</td>
   </tr>  
+
+  <tr>
+    <td><code>connectionProvider</code></td>
+    <td>(none)</td>
+    <td>
+      The name of the JDBC connection provider to use to connect to this URL, e.g. <code>db2</code>, <code>mssql</code>.
+      Must be one of the providers loaded with the JDBC data source. Used to disambiguate when more than one provider can handle
+      the specified driver and options. The selected provider must not be disabled by <code>spark.sql.sources.disabledJdbcConnProviderList</code>. 
+    </td>
+    <td>read/write</td>
+ </tr>  
 </table>
 
 Note that kerberos authentication with keytab is not always supported by the JDBC driver.<br>
 Before using <code>keytab</code> and <code>principal</code> configuration options, please make sure the following requirements are met:
-* The included JDBC driver version supports kerberos authentication with keytab. 
+* The included JDBC driver version supports kerberos authentication with keytab.
 * There is a built-in connection provider which supports the used database.
 
 There is a built-in connection providers for the following databases:

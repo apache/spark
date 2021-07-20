@@ -24,6 +24,7 @@ import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -51,8 +52,17 @@ case class ParquetScanBuilder(
     val isCaseSensitive = sqlConf.caseSensitiveAnalysis
     val parquetSchema =
       new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
-    val parquetFilters = new ParquetFilters(parquetSchema, pushDownDate, pushDownTimestamp,
-      pushDownDecimal, pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
+    val parquetFilters = new ParquetFilters(
+      parquetSchema,
+      pushDownDate,
+      pushDownTimestamp,
+      pushDownDecimal,
+      pushDownStringStartWith,
+      pushDownInFilterThreshold,
+      isCaseSensitive,
+      // The rebase mode doesn't matter here because the filters are used to determine
+      // whether they is convertible.
+      LegacyBehaviorPolicy.CORRECTED)
     parquetFilters.convertibleFilters(this.filters).toArray
   }
 

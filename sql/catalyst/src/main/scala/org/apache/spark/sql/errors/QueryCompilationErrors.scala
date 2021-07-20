@@ -50,56 +50,57 @@ private[spark] object QueryCompilationErrors {
 
   def groupingIDMismatchError(groupingID: GroupingID, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
-      s"Columns of grouping_id (${groupingID.groupByExprs.mkString(",")}) " +
-        s"does not match grouping columns (${groupByExprs.mkString(",")})")
+      errorClass = "GROUPING_ID_COLUMN_MISMATCH",
+      messageParameters = Array(groupingID.groupByExprs.mkString(","), groupByExprs.mkString(",")))
   }
 
   def groupingColInvalidError(groupingCol: Expression, groupByExprs: Seq[Expression]): Throwable = {
     new AnalysisException(
-      s"Column of grouping ($groupingCol) can't be found " +
-        s"in grouping columns ${groupByExprs.mkString(",")}")
+      errorClass = "GROUPING_COLUMN_MISMATCH",
+      messageParameters = Array(groupingCol.toString, groupByExprs.mkString(",")))
   }
 
   def groupingSizeTooLargeError(sizeLimit: Int): Throwable = {
     new AnalysisException(
-      s"Grouping sets size cannot be greater than $sizeLimit")
+      errorClass = "GROUPING_SIZE_LIMIT_EXCEEDED",
+      messageParameters = Array(sizeLimit.toString))
   }
 
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
-      s"Invalid pivot column '$pivotCol'. Pivot columns must be comparable."
-    )
+      errorClass = "INCOMPARABLE_PIVOT_COLUMN",
+      messageParameters = Array(pivotCol.toString))
   }
 
   def nonLiteralPivotValError(pivotVal: Expression): Throwable = {
     new AnalysisException(
-      s"Literal expressions required for pivot values, found '$pivotVal'")
+      errorClass = "NON_LITERAL_PIVOT_VALUES",
+      messageParameters = Array(pivotVal.toString))
   }
 
   def pivotValDataTypeMismatchError(pivotVal: Expression, pivotCol: Expression): Throwable = {
     new AnalysisException(
-      s"Invalid pivot value '$pivotVal': " +
-        s"value data type ${pivotVal.dataType.simpleString} does not match " +
-        s"pivot column data type ${pivotCol.dataType.catalogString}")
+      errorClass = "PIVOT_VALUE_DATA_TYPE_MISMATCH",
+      messageParameters = Array(
+        pivotVal.toString, pivotVal.dataType.simpleString, pivotCol.dataType.catalogString))
   }
 
   def unsupportedIfNotExistsError(tableName: String): Throwable = {
     new AnalysisException(
-      s"Cannot write, IF NOT EXISTS is not supported for table: $tableName")
+      errorClass = "IF_PARTITION_NOT_EXISTS_UNSUPPORTED",
+      messageParameters = Array(tableName))
   }
 
   def nonPartitionColError(partitionName: String): Throwable = {
     new AnalysisException(
-      s"PARTITION clause cannot contain a non-partition column name: $partitionName")
+      errorClass = "NON_PARTITION_COLUMN",
+      messageParameters = Array(partitionName))
   }
 
-  def addStaticValToUnknownColError(staticName: String): Throwable = {
+  def missingStaticPartitionColumn(staticName: String): Throwable = {
     new AnalysisException(
-      s"Cannot add static value for unknown column: $staticName")
-  }
-
-  def unknownStaticPartitionColError(name: String): Throwable = {
-    new AnalysisException(s"Unknown static partition column: $name")
+      errorClass = "MISSING_STATIC_PARTITION_COLUMN",
+      messageParameters = Array(staticName))
   }
 
   def nestedGeneratorError(trimmedNestedGenerator: Expression): Throwable = {
@@ -365,8 +366,9 @@ private[spark] object QueryCompilationErrors {
   }
 
   def multiTimeWindowExpressionsNotSupportedError(t: TreeNode[_]): Throwable = {
-    new AnalysisException("Multiple time window expressions would result in a cartesian product " +
-      "of rows, therefore they are currently not supported.", t.origin.line, t.origin.startPosition)
+    new AnalysisException("Multiple time/session window expressions would result in a cartesian " +
+      "product of rows, therefore they are currently not supported.", t.origin.line,
+      t.origin.startPosition)
   }
 
   def viewOutputNumberMismatchQueryColumnNamesError(

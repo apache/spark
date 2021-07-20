@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -2515,12 +2516,20 @@ class DDLParserSuite extends AnalysisTest {
     val dateTypeSql = "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES('a')"
     val interval = new CalendarInterval(7, 1, 1000).toString
     val intervalTypeSql = s"INSERT INTO t PARTITION(part = interval'$interval') VALUES('a')"
+    val ymIntervalTypeSql = "INSERT INTO t PARTITION(part = interval'1 year 2 month') VALUES('a')"
+    val dtIntervalTypeSql = "INSERT INTO t PARTITION(part = interval'1 day 2 hour " +
+      "3 minute 4.123456 second 5 millisecond 6 microsecond') VALUES('a')"
     val timestamp = "2019-01-02 11:11:11"
     val timestampTypeSql = s"INSERT INTO t PARTITION(part = timestamp'$timestamp') VALUES('a')"
     val binaryTypeSql = s"INSERT INTO t PARTITION(part = X'$binaryHexStr') VALUES('a')"
 
     comparePlans(parsePlan(dateTypeSql), insertPartitionPlan("2019-01-02"))
-    comparePlans(parsePlan(intervalTypeSql), insertPartitionPlan(interval))
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      comparePlans(parsePlan(intervalTypeSql), insertPartitionPlan(interval))
+    }
+    comparePlans(parsePlan(ymIntervalTypeSql), insertPartitionPlan("INTERVAL '1-2' YEAR TO MONTH"))
+    comparePlans(parsePlan(dtIntervalTypeSql),
+      insertPartitionPlan("INTERVAL '1 02:03:04.128462' DAY TO SECOND"))
     comparePlans(parsePlan(timestampTypeSql), insertPartitionPlan(timestamp))
     comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan(binaryStr))
   }

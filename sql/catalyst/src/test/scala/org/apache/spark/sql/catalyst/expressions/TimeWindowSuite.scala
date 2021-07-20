@@ -21,7 +21,7 @@ import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{LongType, StructField, StructType, TimestampNTZType, TimestampType}
 
 class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with PrivateMethodTester {
 
@@ -132,5 +132,19 @@ class TimeWindowSuite extends SparkFunSuite with ExpressionEvalHelper with Priva
         Literal("0 seconds"))
       assert(applyValue == constructed)
     }
+  }
+
+  test("SPARK-36091: Support TimestampNTZ type in expression TimeWindow") {
+    val timestampWindow =
+      TimeWindow(Literal(10L, TimestampType), "10 seconds", "10 seconds", "0 seconds")
+    assert(timestampWindow.child.dataType == TimestampType)
+    assert(timestampWindow.dataType == StructType(
+      Seq(StructField("start", TimestampType), StructField("end", TimestampType))))
+
+    val timestampNTZWindow =
+      TimeWindow(Literal(10L, TimestampNTZType), "10 seconds", "10 seconds", "0 seconds")
+    assert(timestampNTZWindow.child.dataType == TimestampNTZType)
+    assert(timestampNTZWindow.dataType == StructType(
+      Seq(StructField("start", TimestampNTZType), StructField("end", TimestampNTZType))))
   }
 }

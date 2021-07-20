@@ -3631,6 +3631,36 @@ object functions {
   }
 
   /**
+   * Generates session window given a timestamp specifying column.
+   *
+   * Session window is one of dynamic windows, which means the length of window is varying
+   * according to the given inputs. The length of session window is defined as "the timestamp
+   * of latest input of the session + gap duration", so when the new inputs are bound to the
+   * current session window, the end time of session window can be expanded according to the new
+   * inputs.
+   *
+   * Windows can support microsecond precision. gapDuration in the order of months are not
+   * supported.
+   *
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
+   * processing time.
+   *
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time column must be of TimestampType.
+   * @param gapDuration A string specifying the timeout of the session, e.g. `10 minutes`,
+   *                    `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
+   *                    valid duration identifiers.
+   *
+   * @group datetime_funcs
+   * @since 3.2.0
+   */
+  def session_window(timeColumn: Column, gapDuration: String): Column = {
+    withExpr {
+      SessionWindow(timeColumn.expr, gapDuration)
+    }.as("session_window")
+  }
+
+  /**
    * Creates timestamp from the number of seconds since UTC epoch.
    * @group datetime_funcs
    * @since 3.1.0

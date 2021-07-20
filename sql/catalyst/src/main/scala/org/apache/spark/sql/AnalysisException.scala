@@ -46,6 +46,9 @@ class AnalysisException protected[sql] (
       messageParameters = messageParameters,
       cause = cause)
 
+  def this(errorClass: String, messageParameters: Array[String]) =
+    this(errorClass = errorClass, messageParameters = messageParameters, cause = None)
+
   def this(
       errorClass: String,
       messageParameters: Array[String],

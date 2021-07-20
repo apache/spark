@@ -71,7 +71,7 @@ case class ShowCreateTableExec(
       builder: StringBuilder,
       tableOptions: Map[String, String]): Unit = {
     if (tableOptions.nonEmpty) {
-      val props = tableOptions.map { case (key, value) =>
+      val props = tableOptions.toSeq.sortBy(_._1).map { case (key, value) =>
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
       builder ++= "OPTIONS"
@@ -104,7 +104,7 @@ case class ShowCreateTableExec(
         && !key.startsWith(TableCatalog.OPTION_PREFIX)
         && !tableOptions.contains(key))
     if (showProps.nonEmpty) {
-      val props = showProps.map {
+      val props = showProps.toSeq.sortBy(_._1).map {
         case (key, value) =>
           s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
