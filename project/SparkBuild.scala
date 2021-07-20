@@ -1197,7 +1197,7 @@ object TestSettings {
     (Global / concurrentRestrictions) := {
       // The number of concurrent test groups is empirically chosen based on experience
       // with Jenkins flakiness.
-      if (sys.env.contains("SERIAL_SBT_TESTS")) (Global / concurrentRestrictions).value
+      if (sys.env.contains("SERIAL_SBT_TESTS")) Seq(Tags.limit(Tags.Test, 1))
       else Seq(Tags.limit(Tags.ForkedTestGroup, 4))
     }
   )
