@@ -438,17 +438,17 @@ object FlatMapGroupsWithStateExec {
       val func = (keyRow: Any, values: Iterator[Any], states: Iterator[Any]) => {
         // Check if there is only one state for every key.
         var foundInitialStateForKey = false
-        val optionalState = states.map { stateValue =>
+        val optionalStates = states.map { stateValue =>
           if (foundInitialStateForKey) {
             foundDuplicateInitialKeyException()
           }
           foundInitialStateForKey = true
           stateValue
-        }.toSeq
+        }.toArray
 
         // Create group state object
         val groupState = GroupStateImpl.createForStreaming(
-          optionalState.headOption,
+          optionalStates.headOption,
           System.currentTimeMillis,
           GroupStateImpl.NO_TIMESTAMP,
           timeoutConf,

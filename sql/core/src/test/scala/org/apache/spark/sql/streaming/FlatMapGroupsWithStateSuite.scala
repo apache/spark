@@ -1435,8 +1435,8 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
         ("keyOnlyInData"), ("keyInStateAndData-2")
       )
       val result = inputData.toDS().groupByKey(x => x)
-          .flatMapGroupsWithState(
-            Update, timeout, initialState)(flatMapGroupsWithStateFunc)
+        .flatMapGroupsWithState(
+          Update, timeout, initialState)(flatMapGroupsWithStateFunc)
 
       val expected = Seq(
         ("keyOnlyInState-1", Seq[String](), "1"),
@@ -1447,6 +1447,22 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       ).toDF()
       checkAnswer(result.toDF(), expected)
     }
+  }
+
+  testQuietly("flatMapGroupsWithState - initial state - batch mode - duplicate state") {
+    val initialState = Seq(
+      ("a", new RunningCount(1)),
+      ("a", new RunningCount(2))
+    ).toDS().groupByKey(x => x._1).mapValues(_._2)
+
+    val e = intercept[SparkException] {
+      Seq("a", "b").toDS().groupByKey(x => x)
+        .flatMapGroupsWithState(Update, NoTimeout(), initialState)(flatMapGroupsWithStateFunc)
+        .show()
+    }
+    assert(e.getMessage.contains(
+      "The initial state provided contained multiple rows(state) with the same key." +
+        " Make sure to de-duplicate the initial state before passing it."))
   }
 
   testQuietly("flatMapGroupsWithState - initial state - streaming initial state") {
