@@ -47,6 +47,7 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
+import org.apache.spark.network.corruption.Cause
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
@@ -54,7 +55,8 @@ import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.{MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper._
 import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
@@ -281,6 +283,55 @@ private[spark] class BlockManager(
   }
 
   override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString
+
+  /**
+   * Diagnose the possible cause of the shuffle data corruption by verify the shuffle checksums.
+   *
+   * There're 3 different kinds of checksums for the same shuffle partition:
+   *   - checksum (c1) that calculated by the shuffle data reader
+   *   - checksum (c2) that calculated by the shuffle data writer and stored in the checksum file
+   *   - checksum (c3) that recalculated during diagnosis
+   *
+   * And the diagnosis mechanism works like this:
+   * If c2 != c3, we suspect the corruption is caused by the DISK_ISSUE. Otherwise, if c1 != c3,
+   * we suspect the corruption is caused by the NETWORK_ISSUE. Otherwise, the cause remains
+   * CHECKSUM_VERIFY_PASS. In case of the any other failures, the cause remains UNKNOWN_ISSUE.
+   *
+   * @param blockId The shuffle block Id
+   * @param checksumByReader The checksum value that calculated by the shuffle data reader
+   * @return The cause of data corruption
+   */
+  override def diagnoseShuffleBlockCorruption(blockId: BlockId, checksumByReader: Long): Cause = {
+    assert(blockId.isInstanceOf[ShuffleBlockId],
+      s"Corruption diagnosis only supports shuffle block yet, but got $blockId")
+    val shuffleBlock = blockId.asInstanceOf[ShuffleBlockId]
+    val resolver = shuffleManager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
+    val checksumFile = resolver.getChecksumFile(shuffleBlock.shuffleId, shuffleBlock.mapId)
+    val reduceId = shuffleBlock.reduceId
+    if (checksumFile.exists()) {
+      try {
+        val checksumByWriter = readChecksumByReduceId(checksumFile, reduceId)
+        val (checksumByReCalculation, t) =
+          Utils.timeTakenMs(calculateChecksumForPartition(shuffleBlock, resolver))
+        logInfo(s"Checksum recalculation for shuffle block $shuffleBlock took $t ms")
+        if (checksumByWriter != checksumByReCalculation) {
+          Cause.DISK_ISSUE
+        } else if (checksumByWriter != checksumByReader) {
+          Cause.NETWORK_ISSUE
+        } else {
+          Cause.CHECKSUM_VERIFY_PASS
+        }
+      } catch {
+        case NonFatal(e) =>
+          logWarning("Exception throws while diagnosing shuffle block corruption.", e)
+          Cause.UNKNOWN_ISSUE
+      }
+    } else {
+      // Even if checksum is enabled, a checksum file may not exist if error throws during writing.
+      logWarning(s"Checksum file ${checksumFile.getName} doesn't exit")
+      Cause.UNKNOWN_ISSUE
+    }
+  }
 
   /**
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.

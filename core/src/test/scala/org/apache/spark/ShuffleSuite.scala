@@ -17,7 +17,8 @@
 
 package org.apache.spark
 
-import java.io.File
+import java.io.{File, FileOutputStream}
+import java.nio.ByteBuffer
 import java.util.{Locale, Properties}
 import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService }
 
@@ -446,6 +447,42 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
         assert (!file.exists(), s"Shuffle file $file was not cleaned up")
       }
     }
+  }
+
+  test("SPARK-18188: shuffle checksum detect disk corruption") {
+    conf
+      .set(config.SHUFFLE_CHECKSUM_ENABLED, true)
+      .set(TEST_NO_STAGE_RETRY, false)
+      .set("spark.stage.maxConsecutiveAttempts", "1")
+        .set(config.SHUFFLE_SERVICE_ENABLED, true)
+    sc = new SparkContext("local-cluster[2, 1, 2048]", "test", conf)
+    val rdd = sc.parallelize(1 to 10, 2).map((_, 1)).reduceByKey(_ + _)
+    // materialize the shuffle map outputs
+    rdd.count()
+
+    sc.parallelize(1 to 10, 2).barrier().mapPartitions { iter =>
+      var dataFile = SparkEnv.get.blockManager
+        .diskBlockManager.getFile(ShuffleDataBlockId(0, 0, 0))
+      if (!dataFile.exists()) {
+        dataFile = SparkEnv.get.blockManager
+          .diskBlockManager.getFile(ShuffleDataBlockId(0, 1, 0))
+      }
+
+      if (dataFile.exists()) {
+        val f = new FileOutputStream(dataFile, true)
+        val ch = f.getChannel
+        // corrupt the shuffle data files by writing some arbitrary bytes
+        ch.write(ByteBuffer.wrap(Array[Byte](12)), 0)
+        ch.close()
+      }
+      BarrierTaskContext.get().barrier()
+      iter
+    }.collect()
+
+    val e = intercept[SparkException] {
+      rdd.count()
+    }
+    assert(e.getMessage.contains("corrupted due to DISK_ISSUE"))
   }
 }
 

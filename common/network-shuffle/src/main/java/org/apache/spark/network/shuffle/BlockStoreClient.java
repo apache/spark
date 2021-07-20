@@ -33,6 +33,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
+import org.apache.spark.network.corruption.Cause;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.GetLocalDirsForExecutors;
 import org.apache.spark.network.shuffle.protocol.LocalDirsForExecutors;
@@ -46,6 +47,26 @@ public abstract class BlockStoreClient implements Closeable {
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
+
+  /**
+   * Send the diagnosis request for the corrupted shuffle block to the server.
+   *
+   * @param host the host of the remote node.
+   * @param port the port of the remote node.
+   * @param execId the executor id.
+   * @param blockId the blockId of the corrupted shuffle block
+   * @param checksum the shuffle checksum which calculated at client side for the corrupted
+   *                 shuffle block
+   * @return The cause of the shuffle block corruption
+   */
+  public Cause diagnoseCorruption(
+     String host,
+     int port,
+     String execId,
+     String blockId,
+     long checksum) {
+    return Cause.UNKNOWN_ISSUE;
+  }
 
   /**
    * Fetch a sequence of blocks from a remote node asynchronously,

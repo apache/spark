@@ -133,6 +133,11 @@ class NettyBlockRpcServer(
               Map(actualExecId -> blockManager.getLocalDiskDirs).asJava).toByteBuffer)
           }
         }
+
+      case diagnose: DiagnoseCorruption =>
+        val cause = blockManager
+          .diagnoseShuffleBlockCorruption(BlockId.apply(diagnose.blockId), diagnose.checksum)
+        responseContext.onSuccess(new CorruptionCause(cause).toByteBuffer)
     }
   }
 
