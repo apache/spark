@@ -58,7 +58,7 @@ case class PartialMapperPartitionSpec(
     startReducerIndex: Int,
     endReducerIndex: Int) extends ShufflePartitionSpec
 
-// Follow-up: consider using map location for coalescing mappers
+// TODO(SPARK-36234): Consider mapper location and shuffle block size when coalescing mappers
 case class CoalescedMapperPartitionSpec(
     startMapIndex: Int,
     endMapIndex: Int,

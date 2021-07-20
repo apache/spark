@@ -85,8 +85,7 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
           case Seq(start, end) => PartialMapperPartitionSpec(mapIndex, start, end)
         }
       }
-    }
-    else {
+    } else {
       (0 until 1).flatMap { _ =>
         (splitPoints :+ numMappers).sliding(2).map {
           case Seq(start, end) => CoalescedMapperPartitionSpec(start, end, numReducers)
