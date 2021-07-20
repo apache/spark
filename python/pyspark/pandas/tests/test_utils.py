@@ -21,6 +21,7 @@ from pyspark.pandas.utils import (
     lazy_property,
     validate_arguments_and_invoke_function,
     validate_bool_kwarg,
+    validate_mode,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.sqlutils import SQLTestUtils
@@ -81,6 +82,15 @@ class UtilsTest(PandasOnSparkTestCase, SQLTestUtils):
             TypeError, 'For argument "pandas_on_spark" expected type bool, received type str.'
         ):
             validate_bool_kwarg(pandas_on_spark, "pandas_on_spark")
+
+    def test_validate_mode(self):
+        self.assert_eq(validate_mode("a"), "append")
+        self.assert_eq(validate_mode("w"), "overwrite")
+        self.assert_eq(validate_mode("a+"), "append")
+        self.assert_eq(validate_mode("w+"), "overwrite")
+
+        with self.assertRaises(ValueError):
+            validate_mode("r")
 
 
 class TestClassForLazyProp:

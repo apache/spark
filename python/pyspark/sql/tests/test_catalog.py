@@ -200,6 +200,19 @@ class CatalogTests(ReusedSQLTestCase):
                     "does_not_exist",
                     lambda: spark.catalog.listColumns("does_not_exist"))
 
+    def test_table_exists(self):
+        # SPARK-36176: testing that table_exists returns correct boolean
+        spark = self.spark
+        with self.database("some_db"):
+            spark.sql("CREATE DATABASE some_db")
+            with self.table("tab1", "some_db.tab2"):
+                self.assertFalse(spark.catalog.tableExists("tab1"))
+                self.assertFalse(spark.catalog.tableExists("tab2", "some_db"))
+                spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+                self.assertTrue(spark.catalog.tableExists("tab1"))
+                spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
+                self.assertTrue(spark.catalog.tableExists("tab2", "some_db"))
+
 
 if __name__ == "__main__":
     import unittest

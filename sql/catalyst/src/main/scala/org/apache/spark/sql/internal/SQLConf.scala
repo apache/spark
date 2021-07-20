@@ -979,9 +979,7 @@ object SQLConf {
   val HIVE_METASTORE_PARTITION_PRUNING =
     buildConf("spark.sql.hive.metastorePartitionPruning")
       .doc("When true, some predicates will be pushed down into the Hive metastore so that " +
-           "unmatching partitions can be eliminated earlier. This only affects Hive tables " +
-           "not converted to filesource relations (see HiveUtils.CONVERT_METASTORE_PARQUET and " +
-           "HiveUtils.CONVERT_METASTORE_ORC for more information).")
+           "unmatching partitions can be eliminated earlier.")
       .version("1.5.0")
       .booleanConf
       .createWithDefault(true)
@@ -1005,7 +1003,8 @@ object SQLConf {
       .doc("When true, enable metastore partition management for file source tables as well. " +
            "This includes both datasource and converted Hive tables. When partition management " +
            "is enabled, datasource tables store partition in the Hive metastore, and use the " +
-           "metastore to prune partitions during query planning.")
+           s"metastore to prune partitions during query planning when " +
+           s"$HIVE_METASTORE_PARTITION_PRUNING is set to true.")
       .version("2.1.1")
       .booleanConf
       .createWithDefault(true)
@@ -1609,6 +1608,27 @@ object SQLConf {
       .intConf
       .checkValue(v => Set(1, 2).contains(v), "Valid versions are 1 and 2")
       .createWithDefault(2)
+
+  val STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION =
+    buildConf("spark.sql.streaming.sessionWindow.merge.sessions.in.local.partition")
+      .internal()
+      .doc("When true, streaming session window sorts and merge sessions in local partition " +
+        "prior to shuffle. This is to reduce the rows to shuffle, but only beneficial when " +
+        "there're lots of rows in a batch being assigned to same sessions.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val STREAMING_SESSION_WINDOW_STATE_FORMAT_VERSION =
+    buildConf("spark.sql.streaming.sessionWindow.stateFormatVersion")
+      .internal()
+      .doc("State format version used by streaming session window in a streaming query. " +
+        "State between versions are tend to be incompatible, so state format version shouldn't " +
+        "be modified after running.")
+      .version("3.2.0")
+      .intConf
+      .checkValue(v => Set(1).contains(v), "Valid version is 1")
+      .createWithDefault(1)
 
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     buildConf("spark.sql.streaming.unsupportedOperationCheck")
@@ -3417,7 +3437,7 @@ object SQLConf {
         "It was removed to prevent errors like SPARK-23173 for non-default value."),
       RemovedConfig(
         "spark.sql.legacy.allowCreatingManagedTableUsingNonemptyLocation", "3.0.0", "false",
-        "It was removed to prevent loosing of users data for non-default value."),
+        "It was removed to prevent loss of user data for non-default value."),
       RemovedConfig("spark.sql.legacy.compareDateTimestampInTimestamp", "3.0.0", "true",
         "It was removed to prevent errors like SPARK-23549 for non-default value."),
       RemovedConfig("spark.sql.parquet.int64AsTimestampMillis", "3.0.0", "false",
@@ -3675,6 +3695,9 @@ class SQLConf extends Serializable with Logging {
   def topKSortFallbackThreshold: Int = getConf(TOP_K_SORT_FALLBACK_THRESHOLD)
 
   def fastHashAggregateRowMaxCapacityBit: Int = getConf(FAST_HASH_AGGREGATE_MAX_ROWS_CAPACITY_BIT)
+
+  def streamingSessionWindowMergeSessionInLocalPartition: Boolean =
+    getConf(STREAMING_SESSION_WINDOW_MERGE_SESSIONS_IN_LOCAL_PARTITION)
 
   def datetimeJava8ApiEnabled: Boolean = getConf(DATETIME_JAVA8API_ENABLED)
 
