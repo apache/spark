@@ -73,7 +73,7 @@ class Catalog(object):
         Parameters
         ----------
         dbName : str
-                 name of the database to check existence
+             name of the database to check existence
 
         Returns
         -------
