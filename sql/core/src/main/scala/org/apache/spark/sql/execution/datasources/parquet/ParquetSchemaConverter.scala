@@ -594,11 +594,12 @@ private[sql] object ParquetSchemaConverter {
   }
 
   def checkFieldNames(schema: StructType): Unit = {
-    schema.foreach {
-      case field if field.dataType.isInstanceOf[StructType] =>
-        checkFieldName(field.name)
-        checkFieldNames(field.dataType.asInstanceOf[StructType])
-      case field => checkFieldName(field.name)
+    schema.foreach { field =>
+      checkFieldName(field.name)
+      field.dataType match {
+        case s: StructType => checkFieldNames(s)
+        case _ =>
+      }
     }
   }
 
