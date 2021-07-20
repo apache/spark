@@ -36,6 +36,7 @@ import org.apache.spark.internal.config
  * @param rollingPolicy           Policy based on which files will be rolled over.
  * @param conf                    SparkConf that is used to pass on extra configurations
  * @param bufferSize              Optional buffer size. Used mainly for testing.
+ * @param closeStreams            Option flag: whether to close the inputStream at the end.
  */
 private[spark] class RollingFileAppender(
     inputStream: InputStream,

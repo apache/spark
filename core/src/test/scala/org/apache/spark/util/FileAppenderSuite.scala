@@ -61,7 +61,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     assert(Files.toString(testFile, StandardCharsets.UTF_8) === header + testString)
   }
 
-  test("basic file appender - close stream") {
+  test("SPARK-35027: basic file appender - close stream") {
     val inputStream = mock(classOf[InputStream])
     val appender = new FileAppender(inputStream, testFile, closeStreams = true)
     Thread.sleep(10)
@@ -105,7 +105,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
       appender, testOutputStream, textToAppend, rolloverIntervalMillis, isCompressed = true)
   }
 
-  test("rolling file appender - time-based rolling close stream") {
+  test("SPARK-35027: rolling file appender - time-based rolling close stream") {
     val inputStream = mock(classOf[InputStream])
     val sparkConf = new SparkConf()
     sparkConf.set(config.EXECUTOR_LOGS_ROLLING_STRATEGY.key, "time")
@@ -118,7 +118,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
     verify(inputStream).close()
   }
 
-  test("rolling file appender - size-based rolling close stream") {
+  test("SPARK-35027: rolling file appender - size-based rolling close stream") {
     val inputStream = mock(classOf[InputStream])
     val sparkConf = new SparkConf()
     sparkConf.set(config.EXECUTOR_LOGS_ROLLING_STRATEGY.key, "size")
