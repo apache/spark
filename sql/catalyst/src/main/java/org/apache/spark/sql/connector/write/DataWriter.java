@@ -111,7 +111,6 @@ public interface DataWriter<T> extends Closeable {
    * not recommended to put heavy logic in this method as it may affect writing performance.
    */
   default CustomTaskMetric[] currentMetricsValues() {
-    CustomTaskMetric[] NO_METRICS = {};
-    return NO_METRICS;
+    return new CustomTaskMetric[]{};
   }
 }

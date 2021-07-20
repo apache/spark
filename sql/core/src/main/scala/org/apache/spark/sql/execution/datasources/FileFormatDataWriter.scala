@@ -78,16 +78,19 @@ abstract class FileFormatDataWriter(
   /** Writes a record. */
   def write(record: InternalRow): Unit
 
+  def writeWithMetrics(record: InternalRow, count: Long): Unit = {
+    if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+      CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
+    }
+    write(record)
+  }
 
   /** Write an iterator of records. */
   def writeWithIterator(iterator: Iterator[InternalRow]): Unit = {
     var count = 0L
     while (iterator.hasNext) {
-      if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
-        CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
-      }
+      writeWithMetrics(iterator.next(), count)
       count += 1
-      write(iterator.next())
     }
     CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
   }
@@ -468,11 +471,8 @@ class DynamicPartitionDataConcurrentWriter(
   override def writeWithIterator(iterator: Iterator[InternalRow]): Unit = {
     var count = 0L
     while (iterator.hasNext && !sorted) {
-      if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
-        CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
-      }
+      writeWithMetrics(iterator.next(), count)
       count += 1
-      write(iterator.next())
     }
     CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
 
@@ -482,11 +482,8 @@ class DynamicPartitionDataConcurrentWriter(
       val sorter = concurrentOutputWriterSpec.createSorter()
       val sortIterator = sorter.sort(iterator.asInstanceOf[Iterator[UnsafeRow]])
       while (sortIterator.hasNext) {
-        if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
-          CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
-        }
+        writeWithMetrics(iterator.next(), count)
         count += 1
-        write(sortIterator.next())
       }
       CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
     }

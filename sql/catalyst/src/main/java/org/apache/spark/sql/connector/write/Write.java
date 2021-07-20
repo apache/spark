@@ -21,6 +21,7 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.Table;
 import org.apache.spark.sql.connector.catalog.TableCapability;
 import org.apache.spark.sql.connector.metric.CustomMetric;
+import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite;
 
 /**
@@ -69,7 +70,6 @@ public interface Write {
    * By default it returns empty array.
    */
   default CustomMetric[] supportedCustomMetrics() {
-    CustomMetric[] NO_METRICS = {};
-    return NO_METRICS;
+    return new CustomMetric[]{};
   }
 }
