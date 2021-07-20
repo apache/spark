@@ -34,6 +34,7 @@ import org.junit.*;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Observation;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.expressions.UserDefinedFunction;
@@ -533,21 +534,21 @@ public class JavaDataFrameSuite {
     Observation unnamedObservation = new Observation();
 
     Dataset<Long> df = spark
-            .range(100)
-            .observe(
-                    namedObservation,
-                    min(col("id")).as("min_val"),
-                    scala.collection.JavaConverters.asScalaBuffer(Arrays.asList(
-                            max(col("id")).as("max_val"),
-                            sum(col("id")).as("sum_val"),
-                            count(when(pmod(col("id"), lit(2)).$eq$eq$eq(0), 1)).as("num_even")
-                    ))
-            )
-            .observe(
-                    unnamedObservation,
-                    avg(col("id")).cast("int").as("avg_val"),
-                    scala.collection.JavaConverters.asScalaBuffer(Arrays.asList())
-            );
+      .range(100)
+      .observe(
+        namedObservation,
+        min(col("id")).as("min_val"),
+        scala.collection.JavaConverters.asScalaBuffer(Arrays.asList(
+          max(col("id")).as("max_val"),
+          sum(col("id")).as("sum_val"),
+          count(when(pmod(col("id"), lit(2)).$eq$eq$eq(0), 1)).as("num_even")
+        ))
+      )
+      .observe(
+        unnamedObservation,
+        avg(col("id")).cast("int").as("avg_val"),
+        scala.collection.JavaConverters.asScalaBuffer(Arrays.asList())
+      );
 
     df.collect();
     Row namedMetrics = null;
