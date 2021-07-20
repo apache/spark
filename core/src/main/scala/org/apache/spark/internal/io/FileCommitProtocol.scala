@@ -198,6 +198,15 @@ object FileCommitProtocol extends Logging {
   object EmptyTaskCommitMessage extends TaskCommitMessage(null)
 
   /**
+   * The specification for Spark output file name.
+   * This is used by [[FileCommitProtocol]] to create full path of file.
+   *
+   * @param prefix Prefix of file.
+   * @param suffix Suffix of file.
+   */
+  final case class FileNameSpec(prefix: String, suffix: String)
+
+  /**
    * Instantiates a FileCommitProtocol using the given className.
    */
   def instantiate(
@@ -231,12 +240,3 @@ object FileCommitProtocol extends Logging {
     new Path(path, ".spark-staging-" + jobId)
   }
 }
-
-/**
- * The specification for Spark output file name.
- * This is used by [[FileCommitProtocol]] to create full path of file.
- *
- * @param prefix Prefix of file.
- * @param suffix Suffix of file.
- */
-final case class FileNameSpec(prefix: String, suffix: String)
