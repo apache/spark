@@ -18,6 +18,7 @@
 from itertools import chain
 from typing import cast, Any, Callable, Union
 
+import numpy as np
 import pandas as pd
 import numpy as np
 from pandas.api.types import is_list_like, CategoricalDtype
@@ -44,7 +45,7 @@ class CategoricalOps(DataTypeOps):
         """Restore column when to_pandas."""
         return pd.Series(
             pd.Categorical.from_codes(
-                col,
+                col.replace(np.nan, -1).astype(int),
                 categories=cast(CategoricalDtype, self.dtype).categories,
                 ordered=cast(CategoricalDtype, self.dtype).ordered,
             )
