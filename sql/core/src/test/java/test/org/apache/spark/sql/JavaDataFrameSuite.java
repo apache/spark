@@ -33,7 +33,6 @@ import org.junit.*;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.Column;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Observation;
 import org.apache.spark.sql.Row;
@@ -539,16 +538,13 @@ public class JavaDataFrameSuite {
       .observe(
         namedObservation,
         min(col("id")).as("min_val"),
-        scala.collection.JavaConverters.asScalaBuffer(Arrays.asList(
-          max(col("id")).as("max_val"),
-          sum(col("id")).as("sum_val"),
-          count(when(pmod(col("id"), lit(2)).$eq$eq$eq(0), 1)).as("num_even")
-        )).toSeq()
+        max(col("id")).as("max_val"),
+        sum(col("id")).as("sum_val"),
+        count(when(pmod(col("id"), lit(2)).$eq$eq$eq(0), 1)).as("num_even")
       )
       .observe(
         unnamedObservation,
-        avg(col("id")).cast("int").as("avg_val"),
-        scala.collection.JavaConverters.asScalaBuffer(Collections.<Column>emptyList()).toSeq()
+        avg(col("id")).cast("int").as("avg_val")
       );
 
     df.collect();

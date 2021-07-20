@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
 
+import scala.annotation.varargs
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.reflect.runtime.universe.TypeTag
@@ -1968,6 +1969,7 @@ class Dataset[T] private[sql](
    * @group typedrel
    * @since 3.3.0
    */
+  @varargs
   def observe(observation: Observation, expr: Column, exprs: Column*): Dataset[T] = {
     observation.on(this, expr, exprs: _*)
   }
