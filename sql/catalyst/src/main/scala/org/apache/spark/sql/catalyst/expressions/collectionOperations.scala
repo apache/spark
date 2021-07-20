@@ -2574,7 +2574,8 @@ case class Sequence(
               DayTimeIntervalType.acceptsType(stepType)
           case DateType =>
             stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepType) ||
-              YearMonthIntervalType.acceptsType(stepType)
+              YearMonthIntervalType.acceptsType(stepType) ||
+              DayTimeIntervalType.acceptsType(stepType)
           case _: IntegralType =>
             stepOpt.isEmpty || stepType.sameType(startType)
           case _ => false
@@ -2626,8 +2627,10 @@ case class Sequence(
     case DateType =>
       if (stepOpt.isEmpty || CalendarIntervalType.acceptsType(stepOpt.get.dataType)) {
         new TemporalSequenceImpl[Int](IntegerType, start.dataType, MICROS_PER_DAY, _.toInt, zoneId)
-      } else {
+      } else if (YearMonthIntervalType.acceptsType(stepOpt.get.dataType)) {
         new PeriodSequenceImpl[Int](IntegerType, start.dataType, MICROS_PER_DAY, _.toInt, zoneId)
+      } else {
+        new DurationSequenceImpl[Int](IntegerType, start.dataType, MICROS_PER_DAY, _.toInt, zoneId)
       }
   }
 
@@ -2807,15 +2810,19 @@ object Sequence {
     val intervalType: DataType = DayTimeIntervalType()
 
     def splitStep(input: Any): (Int, Int, Long) = {
-      (0, 0, input.asInstanceOf[Long])
+      val duration = input.asInstanceOf[Long]
+      val days = IntervalUtils.getDays(duration)
+      val micros = duration - days * MICROS_PER_DAY
+      (0, days, micros)
     }
 
     def stepSplitCode(
         stepMonths: String, stepDays: String, stepMicros: String, step: String): String = {
       s"""
          |final int $stepMonths = 0;
-         |final int $stepDays = 0;
-         |final long $stepMicros = $step;
+         |final int $stepDays =
+         |  (int) org.apache.spark.sql.catalyst.util.IntervalUtils.getDays($step);
+         |final long $stepMicros = $step - $stepDays * ${MICROS_PER_DAY}L;
        """.stripMargin
     }
   }
