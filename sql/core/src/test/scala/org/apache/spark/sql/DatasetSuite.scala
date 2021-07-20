@@ -2040,6 +2040,23 @@ class DatasetSuite extends QueryTest
       joined,
       (1, 1), (2, 2), (3, 3))
   }
+
+  test("SPARK-36210: withColumns preserve insertion ordering") {
+    val df = Seq(1, 2, 3).toDS()
+
+    val colNames = (1 to 10).map(i => s"value${i}")
+    val cols = (1 to 10).map(i => col("value") + i)
+
+    val inserted = df.withColumns(colNames, cols)
+
+    assert(inserted.columns === "value" +: colNames)
+
+    checkDataset(
+      inserted.as[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)],
+      (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
+      (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+      (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13))
+  }
 }
 
 case class Bar(a: Int)
