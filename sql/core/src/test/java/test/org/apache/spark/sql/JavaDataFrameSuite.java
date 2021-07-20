@@ -551,28 +551,26 @@ public class JavaDataFrameSuite {
       );
 
     df.collect();
-    Row namedMetrics = null;
-    Row unnamedMetrics = null;
+    List<?> namedMetrics = null;
+    List<?> unnamedMetrics = null;
 
     try {
-      // we can get the result multiple times
-      namedMetrics = namedObservation.get();
-      unnamedMetrics = unnamedObservation.get();
+      namedMetrics = JavaConverters.seqAsJavaList(namedObservation.get().toSeq());
+      unnamedMetrics = JavaConverters.seqAsJavaList(unnamedObservation.get().toSeq());
     } catch (InterruptedException e) {
       Assert.fail();
     }
-    Assert.assertEquals(Arrays.asList(0L, 99L, 4950L, 50L), scala.collection.JavaConverters.seqAsJavaList(namedMetrics.toSeq()));
-    Assert.assertEquals(Arrays.asList(49), scala.collection.JavaConverters.seqAsJavaList(unnamedMetrics.toSeq()));
+    Assert.assertEquals(Arrays.asList(0L, 99L, 4950L, 50L), namedMetrics);
+    Assert.assertEquals(Arrays.asList(49), unnamedMetrics);
 
     // we can get the result multiple times
     try {
-      // we can get the result multiple times
-      namedMetrics = namedObservation.get();
-      unnamedMetrics = unnamedObservation.get();
+      namedMetrics = JavaConverters.seqAsJavaList(namedObservation.get().toSeq());
+      unnamedMetrics = JavaConverters.seqAsJavaList(unnamedObservation.get().toSeq());
     } catch (InterruptedException e) {
       Assert.fail();
     }
-    Assert.assertEquals(Arrays.asList(0L, 99L, 4950L, 50L), scala.collection.JavaConverters.seqAsJavaList(namedMetrics.toSeq()));
-    Assert.assertEquals(Arrays.asList(49), scala.collection.JavaConverters.seqAsJavaList(unnamedMetrics.toSeq()));
+    Assert.assertEquals(Arrays.asList(0L, 99L, 4950L, 50L), namedMetrics);
+    Assert.assertEquals(Arrays.asList(49), unnamedMetrics);
   }
 }
