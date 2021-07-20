@@ -204,7 +204,6 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
       TimeUnit.MILLISECONDS)
     verify(labeledPods, never()).delete()
 
-
     schedulerBackendUnderTest.doKillExecutors(Seq("1", "2"))
     verify(driverEndpointRef).send(RemoveExecutor("1", ExecutorKilled))
     verify(driverEndpointRef).send(RemoveExecutor("2", ExecutorKilled))
