@@ -386,6 +386,10 @@ class ParquetFileFormat
 
     case _ => false
   }
+
+  override def checkFieldName(name: String): Unit = {
+    ParquetSchemaConverter.checkFieldName(name)
+  }
 }
 
 object ParquetFileFormat extends Logging {

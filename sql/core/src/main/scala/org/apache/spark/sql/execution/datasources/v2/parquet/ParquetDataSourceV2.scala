@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2.parquet
 
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -42,6 +42,10 @@ class ParquetDataSourceV2 extends FileDataSourceV2 {
     val optionsWithoutPaths = getOptionsWithoutPaths(options)
     ParquetTable(
       tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
+  }
+
+  override def checkFieldName(name: String): Unit = {
+    ParquetSchemaConverter.checkFieldName(name)
   }
 }
 

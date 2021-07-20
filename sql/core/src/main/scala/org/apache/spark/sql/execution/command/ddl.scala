@@ -25,12 +25,14 @@ import scala.collection.parallel.ForkJoinTaskSupport
 import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
 
+import org.apache.avro.SchemaParseException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
@@ -40,9 +42,8 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
-import org.apache.spark.sql.execution.datasources.parquet.ParquetSchemaConverter
+import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.PartitioningUtils
@@ -860,7 +861,7 @@ case class AlterTableSetLocationCommand(
 }
 
 
-object DDLUtils {
+object DDLUtils extends Logging {
   val HIVE_PROVIDER = "hive"
 
   def isHiveTable(table: CatalogTable): Boolean = {
@@ -933,16 +934,31 @@ object DDLUtils {
         case HIVE_PROVIDER =>
           val serde = table.storage.serde
           if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
-            OrcFileFormat.checkFieldNames(schema)
+            checkDataColNames("orc", schema)
           } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
             serde == Some("parquet.hive.serde.ParquetHiveSerDe") ||
             serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")) {
-            ParquetSchemaConverter.checkFieldNames(schema)
+            checkDataColNames("parquet", schema)
           }
-        case "parquet" => ParquetSchemaConverter.checkFieldNames(schema)
-        case "orc" => OrcFileFormat.checkFieldNames(schema)
+        case "parquet" => checkDataColNames("parquet", schema)
+        case "orc" => checkDataColNames("orc", schema)
         case _ =>
       }
+    }
+  }
+
+  private[sql] def checkDataColNames(provider: String, schema: StructType): Unit = {
+    try {
+      DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance() match {
+        case f: FileFormat => f.checkFieldNames(schema)
+        case f: FileDataSourceV2 => f.checkFieldNames(schema)
+        case _ =>
+      }
+    } catch {
+      case e: AnalysisException if e.getMessage.contains("contains invalid character") => throw e
+      case e: SchemaParseException => throw e
+      case e: Throwable =>
+        logError(s"Failed to find data source: $provider when check data column names.", e)
     }
   }
 
