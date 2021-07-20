@@ -79,7 +79,7 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(requestId, appId, shuffleId, reduceId);
+    return Objects.hashCode(requestId, appId, shuffleId, shuffleSequenceId, reduceId);
   }
 
   @Override
