@@ -246,9 +246,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 bucketSpec = None,
                 // Do not interpret the 'path' option at all when tables are read using the Hive
                 // source, since the URIs will already have been read from the table's LOCATION.
-                // The `Map() ++` is necessary to force materialization since the return of
-                // `filterKeys` is a view which is not serializable
-                options = Map() ++ options.filterKeys(!_.equalsIgnoreCase("path")),
+                options = options.filter { case (k, _) => !k.equalsIgnoreCase("path") },
                 className = fileType).resolveRelation(),
               table = updatedTable)
 
