@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.expressions.Aggregation;
  * to the data source, the data source can still output data with duplicated keys, which is OK
  * as Spark will do GROUP BY key again. The final query plan can be something like this:
  * {{{
- *   Aggregate [key#1], [min(min(value)#2) AS AS m#3]
+ *   Aggregate [key#1], [min(min(value)#2) AS m#3]
  *     +- RelationV2[key#1, min(value)#2]
  * }}}
  *

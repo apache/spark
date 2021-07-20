@@ -141,22 +141,19 @@ case class RowDataSourceScanExec(
       ("[]", "[]")
     }
 
-    if (filters.nonEmpty) {
-      val markedFilters = for (filter <- filters) yield {
+    val markedFilters = if (filters.nonEmpty) {
+      for (filter <- filters) yield {
         if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
       }
-      Map(
-        "ReadSchema" -> requiredSchema.catalogString,
-        "PushedFilters" -> seqToString(markedFilters.toSeq),
-        "PushedAggregates" -> aggString,
-        "PushedGroupby" -> groupByString)
     } else {
-      Map(
-        "ReadSchema" -> requiredSchema.catalogString,
-        "PushedFilters" -> seqToString(handledFilters.toSeq),
-        "PushedAggregates" -> aggString,
-        "PushedGroupby" -> groupByString)
+      handledFilters
     }
+
+    Map(
+      "ReadSchema" -> requiredSchema.catalogString,
+      "PushedFilters" -> seqToString(markedFilters.toSeq),
+      "PushedAggregates" -> aggString,
+      "PushedGroupby" -> groupByString)
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.

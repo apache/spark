@@ -27,7 +27,7 @@ import java.io.Serializable;
  * @since 3.2.0
  */
 @Evolving
-public class Aggregation implements Serializable {
+public final class Aggregation implements Serializable {
   private AggregateFunc[] aggregateExpressions;
   private FieldReference[] groupByColumns;
 

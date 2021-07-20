@@ -63,8 +63,6 @@ case class JDBCScanBuilder(
 
     val dialect = JdbcDialects.get(jdbcOptions.url)
     val compiledAgg = JDBCRDD.compileAggregates(aggregation.getAggregateExpressions, dialect)
-    // if any of the aggregates is not supported by the data source, not push down
-    if (compiledAgg.length != aggregation.getAggregateExpressions.size) return false
 
     var pushedSchema = new StructType()
     aggregation.getGroupByColumns.foreach { col =>
@@ -129,7 +127,12 @@ case class JDBCScanBuilder(
     // "DEPT","NAME",MAX("SALARY"),MIN("BONUS"), instead of getting column names from
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
+    val groupByColumns = if (pushedAggregations.nonEmpty) {
+      Some(pushedAggregations.get.getGroupByColumns)
+    } else {
+      Option.empty[Array[FieldReference]]
+    }
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), prunedSchema, pushedFilter,
-      pushedAggregations, pushedAggregateColumn)
+      pushedAggregateColumn, groupByColumns)
   }
 }
