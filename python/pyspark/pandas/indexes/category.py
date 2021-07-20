@@ -204,6 +204,52 @@ class CategoricalIndex(Index):
         """
         return self.dtype.ordered
 
+    def add_categories(
+        self, new_categories: Union[pd.Index, Any, List], inplace: bool = False
+    ) -> Optional["CategoricalIndex"]:
+        """
+        Add new categories.
+
+        `new_categories` will be included at the last/highest place in the
+        categories and will be unused directly after this call.
+
+        Parameters
+        ----------
+        new_categories : category or list-like of category
+           The new categories to be included.
+        inplace : bool, default False
+           Whether or not to add the categories inplace or return a copy of
+           this categorical with added categories.
+
+        Returns
+        -------
+        CategoricalIndex or None
+            Categorical with new categories added or None if ``inplace=True``.
+
+        Raises
+        ------
+        ValueError
+            If the new categories include old categories or do not validate as
+            categories
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(list("abbccc"))
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+
+        >>> idx.add_categories('x')  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c', 'x'], ordered=False, dtype='category')
+        """
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(
+            self.to_series().cat.add_categories(new_categories=new_categories)
+        ).rename(self.name)
+
     def as_ordered(self, inplace: bool = False) -> Optional["CategoricalIndex"]:
         """
         Set the Categorical to be ordered.

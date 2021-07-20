@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import List, Optional, Union, TYPE_CHECKING, cast
+from typing import Any, List, Optional, Union, TYPE_CHECKING, cast
 
 import pandas as pd
-from pandas.api.types import CategoricalDtype
+from pandas.api.types import CategoricalDtype, is_list_like
 
 from pyspark.pandas.internal import InternalField
 from pyspark.sql.types import StructField
@@ -165,8 +165,84 @@ class CategoricalAccessor(object):
             ),
         ).rename()
 
-    def add_categories(self, new_categories: pd.Index, inplace: bool = False) -> "ps.Series":
-        raise NotImplementedError()
+    def add_categories(
+        self, new_categories: Union[pd.Index, Any, List], inplace: bool = False
+    ) -> Optional["ps.Series"]:
+        """
+        Add new categories.
+
+        `new_categories` will be included at the last/highest place in the
+        categories and will be unused directly after this call.
+
+        Parameters
+        ----------
+        new_categories : category or list-like of category
+           The new categories to be included.
+        inplace : bool, default False
+           Whether or not to add the categories inplace or return a copy of
+           this categorical with added categories.
+
+        Returns
+        -------
+        Series or None
+            Categorical with new categories added or None if ``inplace=True``.
+
+        Raises
+        ------
+        ValueError
+            If the new categories include old categories or do not validate as
+            categories
+
+        Examples
+        --------
+        >>> s = ps.Series(list("abbccc"), dtype="category")
+        >>> s  # doctest: +SKIP
+        0    a
+        1    b
+        2    b
+        3    c
+        4    c
+        5    c
+        dtype: category
+        Categories (3, object): ['a', 'b', 'c']
+
+        >>> s.cat.add_categories('x')  # doctest: +SKIP
+        0    a
+        1    b
+        2    b
+        3    c
+        4    c
+        5    c
+        dtype: category
+        Categories (4, object): ['a', 'b', 'c', 'x']
+        """
+        from pyspark.pandas.frame import DataFrame
+
+        if is_list_like(new_categories):
+            categories = list(new_categories)  # type: List
+        else:
+            categories = [new_categories]
+
+        if any(cat in self.categories for cat in categories):
+            raise ValueError(
+                "new categories must not include old categories: {{{cats}}}".format(
+                    cats=", ".join(set(str(cat) for cat in categories if cat in self.categories))
+                )
+            )
+
+        internal = self._data._psdf._internal.with_new_spark_column(
+            self._data._column_label,
+            self._data.spark.column,
+            field=self._data._internal.data_fields[0].copy(
+                dtype=CategoricalDtype(list(self.categories) + categories, ordered=self.ordered)
+            ),
+        )
+        if inplace:
+            self._data._psdf._update_internal_frame(internal)
+            return None
+        else:
+            psser = DataFrame(internal)._psser_for(self._data._column_label)
+            return psser._with_new_scol(psser.spark.column, field=psser._internal.data_fields[0])
 
     def _set_ordered(self, *, ordered: bool, inplace: bool) -> Optional["ps.Series"]:
         from pyspark.pandas.frame import DataFrame
