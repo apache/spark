@@ -49,9 +49,7 @@ object RemoveRedundantProjects extends Rule[SparkPlan] {
     plan match {
       case p @ ProjectExec(_, child) =>
         if (isRedundant(p, child, requireOrdering) && canRemove(p, child)) {
-          val newPlan = removeProject(child, requireOrdering)
-          newPlan.setLogicalLink(child.logicalLink.get)
-          newPlan
+          removeProject(child, requireOrdering)
         } else {
           p.mapChildren(removeProject(_, false))
         }
