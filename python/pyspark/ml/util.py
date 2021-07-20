@@ -462,7 +462,7 @@ class DefaultParamsReadable(MLReadable):
     then extending this trait will provide a default implementation of reading saved
     instances of the class. This only handles simple :py:class:`Param` types;
     e.g., it will not handle :py:class:`pyspark.sql.DataFrame`. See
-    :py:class:`DefaultParamsWritable`, the counterpart to this trait.
+    :py:class:`DefaultParamsWritable`, the counterpart to this class.
 
     .. versionadded:: 2.3.0
     """
