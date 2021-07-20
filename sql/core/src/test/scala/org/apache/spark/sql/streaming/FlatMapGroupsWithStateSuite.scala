@@ -1419,7 +1419,7 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
     )
   }
 
-  Seq("NoTimeout", "EventTime", "ProcessingTime").foreach { timeout =>
+  Seq(NoTimeout(), EventTimeTimeout(), ProcessingTimeTimeout()).foreach { timeout =>
     test(s"flatMapGroupsWithState - initial state - batch mode - timeout ${timeout}") {
       // We will test them on different shuffle partition configuration to make sure the
       // grouping by key will still work. On higher number of shuffle partitions its possible
@@ -1434,19 +1434,9 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       val inputData = Seq(
         ("keyOnlyInData"), ("keyInStateAndData-2")
       )
-      val timeoutMode = timeout match {
-        case "NoTimeout" =>
-          NoTimeout()
-        case "EventTime" =>
-          EventTimeTimeout()
-        case "ProcessingTime" =>
-          ProcessingTimeTimeout()
-      }
-      val result =
-        inputData.toDS()
-          .groupByKey(x => x)
+      val result = inputData.toDS().groupByKey(x => x)
           .flatMapGroupsWithState(
-            Update, timeoutMode, initialState)(flatMapGroupsWithStateFunc)
+            Update, timeout, initialState)(flatMapGroupsWithStateFunc)
 
       val expected = Seq(
         ("keyOnlyInState-1", Seq[String](), "1"),
