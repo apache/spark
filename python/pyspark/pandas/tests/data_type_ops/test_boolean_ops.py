@@ -526,7 +526,7 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         # float is always returned in pandas-on-Spark
         if extension_float_dtypes_available:
             self.check_extension((pser ** 1).astype("Float64"), psser ** 1)
-            self.check_extension((pser ** 0.1).astype("Float64"), self.psser ** 0.1)
+            self.check_extension((pser ** 0.1).astype("Float64"), psser ** 0.1)
             self.check_extension(
                 (pser ** pser.astype(float)).astype("Float64"), psser ** psser.astype(float)
             )
@@ -627,7 +627,7 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
         if extension_float_dtypes_available:
             self.check_extension(pd.Series([1, 1, 1], dtype="Float64", name=psser.name), 1 ** psser)
-            self.check_extension((0.1 ** pser).astype("Float64", name=psser.name), 0.1 ** psser)
+            self.check_extension((0.1 ** pser).astype("Float64"), 0.1 ** psser)
         else:
             self.assert_eq(pd.Series([1, 1, 1], dtype="float", name=psser.name), 1 ** psser)
             self.assert_eq((0.1 ** pser).astype("float"), 0.1 ** psser)
