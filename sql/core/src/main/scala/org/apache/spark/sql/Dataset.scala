@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.io.{ByteArrayOutputStream, CharArrayWriter, DataOutputStream}
+import java.util.Locale
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, HashSet}
@@ -42,12 +43,12 @@ import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.json.{JacksonGenerator, JSONOptions}
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
-import org.apache.spark.sql.catalyst.parser.{ParseException, ParserUtils}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException, ParserUtils}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeConstants, IntervalUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
@@ -63,7 +64,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.unsafe.array.ByteArrayMethods
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 private[sql] object Dataset {
@@ -739,13 +740,23 @@ class Dataset[T] private[sql](
   // We only accept an existing column name, not a derived column here as a watermark that is
   // defined on a derived column cannot referenced elsewhere in the plan.
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withTypedPlan {
-    val parsedDelay =
-      try {
+    val parsedDelay = try {
+      if (delayThreshold.toLowerCase(Locale.ROOT).startsWith("interval")) {
+        CatalystSqlParser.parseExpression(delayThreshold) match {
+          case Literal(months: Int, _: YearMonthIntervalType) =>
+            new CalendarInterval(months, 0, 0)
+          case Literal(micros: Long, _: DayTimeIntervalType) =>
+            val days = micros / DateTimeConstants.MICROS_PER_DAY
+            val restMicros = micros % DateTimeConstants.MICROS_PER_DAY
+            new CalendarInterval(0, Math.toIntExact(days), restMicros)
+        }
+      } else {
         IntervalUtils.stringToInterval(UTF8String.fromString(delayThreshold))
-      } catch {
-        case e: IllegalArgumentException =>
-          throw QueryCompilationErrors.cannotParseTimeDelayError(delayThreshold, e)
       }
+    } catch {
+      case NonFatal(e) =>
+        throw QueryCompilationErrors.cannotParseTimeDelayError(delayThreshold, e)
+    }
     require(!IntervalUtils.isNegative(parsedDelay),
       s"delay threshold ($delayThreshold) should not be negative.")
     EliminateEventTimeWatermark(
