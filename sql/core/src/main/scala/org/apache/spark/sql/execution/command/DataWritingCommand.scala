@@ -58,7 +58,7 @@ trait DataWritingCommand extends UnaryCommand {
   def basicWriteJobStatsTracker(hadoopConf: Configuration): BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
     new BasicWriteJobStatsTracker(serializableHadoopConf, driverSideMetrics,
-      taskCommitTimeMetric(BasicWriteJobStatsTracker.TASK_COMMIT_DURATION))
+      taskCommitTimeMetric(BasicWriteJobStatsTracker.TASK_COMMIT_TIME))
   }
 
   def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row]

@@ -91,8 +91,8 @@ abstract class FileFormatDataWriter(
    * driver too and used to e.g. update the metrics in UI.
    */
   override def commit(): WriteTaskResult = {
+    releaseResources()
     val (taskCommitMessage, taskCommitTime) = Utils.timeTakenMs {
-      releaseResources()
       committer.commitTask(taskAttemptContext)
     }
     val summary = ExecutedWriteSummary(

@@ -124,7 +124,7 @@ trait FileWrite extends Write {
       BasicWriteJobStatsTracker.taskCommitTimeMetric
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
     val statsTracker = new BasicWriteJobStatsTracker(serializableHadoopConf, driverSideMetrics,
-      taskCommitTimeMetric(BasicWriteJobStatsTracker.TASK_COMMIT_DURATION))
+      taskCommitTimeMetric(BasicWriteJobStatsTracker.TASK_COMMIT_TIME))
     // TODO: after partitioning is supported in V2:
     //       1. filter out partition columns in `dataColumns`.
     //       2. Don't use Seq.empty for `partitionColumns`.

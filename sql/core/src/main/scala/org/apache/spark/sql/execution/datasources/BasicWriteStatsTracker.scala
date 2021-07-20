@@ -194,7 +194,7 @@ class BasicWriteJobStatsTracker(
     new BasicWriteTaskStatsTracker(serializableHadoopConf.value, Some(taskCommitTimeMetrics))
   }
 
-  override def processStats(stats: Seq[WriteTaskStats], jobCommitDuration: Long): Unit = {
+  override def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long): Unit = {
     val sparkContext = SparkContext.getActive.get
     var partitionsSet: mutable.Set[InternalRow] = mutable.HashSet.empty
     var numFiles: Long = 0L
@@ -210,7 +210,7 @@ class BasicWriteJobStatsTracker(
       totalNumOutput += summary.numRows
     }
 
-    driverSideMetrics(BasicWriteJobStatsTracker.JOB_COMMIT_DURATION).add(jobCommitDuration)
+    driverSideMetrics(BasicWriteJobStatsTracker.JOB_COMMIT_TIME).add(jobCommitTime)
     driverSideMetrics(BasicWriteJobStatsTracker.NUM_FILES_KEY).add(numFiles)
     driverSideMetrics(BasicWriteJobStatsTracker.NUM_OUTPUT_BYTES_KEY).add(totalNumBytes)
     driverSideMetrics(BasicWriteJobStatsTracker.NUM_OUTPUT_ROWS_KEY).add(totalNumOutput)
@@ -226,8 +226,8 @@ object BasicWriteJobStatsTracker {
   private val NUM_OUTPUT_BYTES_KEY = "numOutputBytes"
   private val NUM_OUTPUT_ROWS_KEY = "numOutputRows"
   private val NUM_PARTS_KEY = "numParts"
-  val TASK_COMMIT_DURATION = "taskCommitDuration"
-  private val JOB_COMMIT_DURATION = "jobCommitDuration"
+  val TASK_COMMIT_TIME = "taskCommitTime"
+  val JOB_COMMIT_TIME = "jobCommitTime"
   /** XAttr key of the data length header added in HADOOP-17414. */
   val FILE_LENGTH_XATTR = "header.x-hadoop-s3a-magic-data-length"
 
@@ -238,14 +238,12 @@ object BasicWriteJobStatsTracker {
       NUM_OUTPUT_BYTES_KEY -> SQLMetrics.createSizeMetric(sparkContext, "written output"),
       NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
-      JOB_COMMIT_DURATION ->
-        SQLMetrics.createTimingMetric(sparkContext, "duration of job commit")
+      JOB_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "time of committing the job")
     )
   }
 
-  def taskCommitTimeMetric: Map[String, SQLMetric] = {
+  def taskCommitTimeMetric: (String, SQLMetric) = {
     val sparkContext = SparkContext.getActive.get
-    Map(TASK_COMMIT_DURATION ->
-      SQLMetrics.createTimingMetric(sparkContext, "duration of task commit"))
+    TASK_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "time of committing the tasks")
   }
 }

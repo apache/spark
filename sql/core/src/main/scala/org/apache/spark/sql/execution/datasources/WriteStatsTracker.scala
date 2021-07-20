@@ -66,7 +66,7 @@ trait WriteTaskStatsTracker {
 
   /**
    * Returns the final statistics computed so far.
-   * @param taskCommitTime The task commit duration.
+   * @param taskCommitTime Time of committing the task.
    * @note This may only be called once. Further use of the object may lead to undefined behavior.
    * @return An object of subtype of [[WriteTaskStats]], to be sent to the driver.
    */
@@ -94,7 +94,7 @@ trait WriteJobStatsTracker extends Serializable {
    * Process the given collection of stats computed during this job.
    * E.g. aggregate them, write them to memory / disk, issue warnings, whatever.
    * @param stats One [[WriteTaskStats]] object from each successful write task.
-   * @param jobCommitDuration Duration of job commit.
+   * @param jobCommitTime Time of committing the job.
    * @note The type of @param `stats` is too generic. These classes should probably be parametrized:
    *   WriteTaskStatsTracker[S <: WriteTaskStats]
    *   WriteJobStatsTracker[S <: WriteTaskStats, T <: WriteTaskStatsTracker[S]]
@@ -105,5 +105,5 @@ trait WriteJobStatsTracker extends Serializable {
    * to the expected derived type when implementing this method in a derived class.
    * The framework will make sure to call this with the right arguments.
    */
-  def processStats(stats: Seq[WriteTaskStats], jobCommitDuration: Long): Unit
+  def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long): Unit
 }

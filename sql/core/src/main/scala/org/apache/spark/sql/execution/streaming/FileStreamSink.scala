@@ -143,7 +143,7 @@ class FileStreamSink(
     new BasicWriteJobStatsTracker(serializableHadoopConf,
       BasicWriteJobStatsTracker.driverSideMetrics,
       BasicWriteJobStatsTracker.taskCommitTimeMetric(
-        BasicWriteJobStatsTracker.TASK_COMMIT_DURATION))
+        BasicWriteJobStatsTracker.TASK_COMMIT_TIME))
   }
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {

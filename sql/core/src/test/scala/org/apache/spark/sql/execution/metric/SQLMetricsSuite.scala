@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.metric
 
 import java.io.File
 
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.{ClassTag, classTag}
 import scala.util.Random
 
 import org.apache.spark.sql._
@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
+import org.apache.spark.sql.execution.datasources.BasicWriteJobStatsTracker
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
 import org.apache.spark.sql.functions._
@@ -800,9 +801,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         case CommandResultExec(_, dataWriting: DataWritingCommandExec, _) => dataWriting.cmd
       }
       assert(insert.size == 1)
-      assert(insert.head.metrics.contains("jobCommitDuration"))
-      assert(insert.head.metrics("jobCommitDuration").value > 0)
-      assert(insert.head.metrics("taskCommitDuration").value > 0)
+      assert(insert.head.metrics.contains(BasicWriteJobStatsTracker.JOB_COMMIT_TIME))
+      assert(insert.head.metrics.contains(BasicWriteJobStatsTracker.TASK_COMMIT_TIME))
+      assert(insert.head.metrics(BasicWriteJobStatsTracker.JOB_COMMIT_TIME).value > 0)
+      assert(insert.head.metrics(BasicWriteJobStatsTracker.TASK_COMMIT_TIME).value > 0)
     }
   }
 
