@@ -45,7 +45,8 @@ object CustomMetrics {
   }
 
   /**
-   * Updates given custom metrics.
+   * Updates given custom metrics. If `currentMetricsValues` has metric which does not exist
+   * in `customMetrics` map, it is non-op.
    */
   def updateMetrics(
       currentMetricsValues: Seq[CustomTaskMetric],
