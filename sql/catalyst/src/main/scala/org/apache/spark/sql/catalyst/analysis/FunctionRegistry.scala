@@ -324,7 +324,7 @@ object FunctionRegistry {
         expression[ParseToTimestampNTZ]("to_timestamp_ntz"),
         expression[ParseToTimestampLTZ]("to_timestamp_ltz"),
         expression[MakeTimestampNTZ]("make_timestamp_ntz"),
-        expression[MakeTimestampLTZ]("make_timestamp_ltz"),
+        expression[MakeTimestampLTZ]("make_timestamp_ltz")
       )
     } else {
       Map.empty
