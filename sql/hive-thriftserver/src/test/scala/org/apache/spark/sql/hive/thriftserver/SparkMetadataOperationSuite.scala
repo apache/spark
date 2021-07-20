@@ -665,7 +665,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
     val t = "t_ltz_ntz"
     // TODO: (SPARK-36180) add hive table here too
     val ddl = s"CREATE GLOBAL TEMP VIEW $t as SELECT TIMESTAMP_LTZ '2018-11-17 13:33:33.000'" +
-      s" as c0, TIMESTAMP_NTZ '2018-11-17 13:33:33.000' as c1"
+      " as c0, TIMESTAMP_NTZ '2018-11-17 13:33:33.000' as c1"
     withJdbcStatement(t) { statement =>
       statement.execute(ddl)
       val md = statement.getConnection.getMetaData
