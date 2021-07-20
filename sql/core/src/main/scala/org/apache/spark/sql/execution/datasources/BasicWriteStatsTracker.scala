@@ -50,7 +50,7 @@ case class BasicWriteTaskStats(
  */
 class BasicWriteTaskStatsTracker(
     hadoopConf: Configuration,
-    taskCommitTimeMetrics: Option[SQLMetric] = None)
+    taskCommitTimeMetric: Option[SQLMetric] = None)
   extends WriteTaskStatsTracker with Logging {
 
   private[this] val partitions: mutable.ArrayBuffer[InternalRow] = mutable.ArrayBuffer.empty
@@ -172,7 +172,7 @@ class BasicWriteTaskStatsTracker(
         "This could be due to the output format not writing empty files, " +
         "or files being not immediately visible in the filesystem.")
     }
-    taskCommitTimeMetrics.foreach(_ += taskCommitTime)
+    taskCommitTimeMetric.foreach(_ += taskCommitTime)
     BasicWriteTaskStats(partitions.toSeq, numFiles, numBytes, numRows)
   }
 }
@@ -187,11 +187,11 @@ class BasicWriteTaskStatsTracker(
 class BasicWriteJobStatsTracker(
     serializableHadoopConf: SerializableConfiguration,
     @transient val driverSideMetrics: Map[String, SQLMetric],
-    taskCommitTimeMetrics: SQLMetric)
+    taskCommitTimeMetric: SQLMetric)
   extends WriteJobStatsTracker {
 
   override def newTaskInstance(): WriteTaskStatsTracker = {
-    new BasicWriteTaskStatsTracker(serializableHadoopConf.value, Some(taskCommitTimeMetrics))
+    new BasicWriteTaskStatsTracker(serializableHadoopConf.value, Some(taskCommitTimeMetric))
   }
 
   override def processStats(stats: Seq[WriteTaskStats], jobCommitTime: Long): Unit = {

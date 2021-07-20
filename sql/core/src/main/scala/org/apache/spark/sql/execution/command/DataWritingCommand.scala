@@ -53,12 +53,12 @@ trait DataWritingCommand extends UnaryCommand {
 
   lazy val driverSideMetrics = BasicWriteJobStatsTracker.driverSideMetrics
   lazy val taskCommitTimeMetric = BasicWriteJobStatsTracker.taskCommitTimeMetric
-  lazy val metrics: Map[String, SQLMetric] = driverSideMetrics ++ taskCommitTimeMetric
+  lazy val metrics: Map[String, SQLMetric] = driverSideMetrics ++ Seq(taskCommitTimeMetric)
 
   def basicWriteJobStatsTracker(hadoopConf: Configuration): BasicWriteJobStatsTracker = {
     val serializableHadoopConf = new SerializableConfiguration(hadoopConf)
     new BasicWriteJobStatsTracker(serializableHadoopConf, driverSideMetrics,
-      taskCommitTimeMetric(BasicWriteJobStatsTracker.TASK_COMMIT_TIME))
+      taskCommitTimeMetric._2)
   }
 
   def run(sparkSession: SparkSession, child: SparkPlan): Seq[Row]

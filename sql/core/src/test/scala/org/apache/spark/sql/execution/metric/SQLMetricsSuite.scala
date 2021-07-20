@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.metric
 
 import java.io.File
 
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.{classTag, ClassTag}
 import scala.util.Random
 
 import org.apache.spark.sql._
