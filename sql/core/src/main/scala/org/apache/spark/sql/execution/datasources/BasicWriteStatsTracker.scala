@@ -192,8 +192,8 @@ class BasicWriteJobStatsTracker(
   extends WriteJobStatsTracker {
 
   def this(
-    serializableHadoopConf: SerializableConfiguration,
-    metrics: Map[String, SQLMetric]) = {
+      serializableHadoopConf: SerializableConfiguration,
+      metrics: Map[String, SQLMetric]) = {
     this(serializableHadoopConf, metrics - TASK_COMMIT_TIME, metrics(TASK_COMMIT_TIME))
   }
 
