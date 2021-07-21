@@ -19,9 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2.orc
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.FileStatus
+import org.apache.orc.TypeDescription
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, Write, WriteBuilder}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.datasources.orc.OrcUtils
 import org.apache.spark.sql.execution.datasources.v2.FileTable
@@ -61,6 +63,15 @@ case class OrcTable(
     case udt: UserDefinedType[_] => supportsDataType(udt.sqlType)
 
     case _ => false
+  }
+
+  override def supportFieldName(name: String): Unit = {
+    try {
+      TypeDescription.fromString(s"struct<`$name`:int>")
+    } catch {
+      case _: IllegalArgumentException =>
+        throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
+    }
   }
 
   override def formatName: String = "ORC"

@@ -86,6 +86,8 @@ abstract class FileTable(
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
       }
     }
+    supportFieldNames(dataSchema)
+
     val partitionSchema = fileIndex.partitionSchema
     SchemaUtils.checkSchemaColumnNameDuplication(partitionSchema,
       "in the partition schema", caseSensitive)
@@ -119,6 +121,23 @@ abstract class FileTable(
    * By default all data types are supported.
    */
   def supportsDataType(dataType: DataType): Boolean = true
+
+  private def supportFieldNames(schema: StructType): Unit = {
+    schema.foreach { field =>
+      supportFieldName(field.name)
+      field.dataType match {
+        case s: StructType => supportFieldNames(s)
+        case _ =>
+      }
+    }
+  }
+
+  /**
+   * Check whether target schema field name is valid.
+   *
+   * @throws AnalysisException If field name is invalid
+   */
+  def supportFieldName(name: String): Unit = {}
 
   /**
    * The string that represents the format that this data source provider uses. This is

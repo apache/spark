@@ -16,10 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.orc
 
-import org.apache.orc.TypeDescription
-
 import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.v2._
@@ -44,15 +41,6 @@ class OrcDataSourceV2 extends FileDataSourceV2 {
     val tableName = getTableName(options, paths)
     val optionsWithoutPaths = getOptionsWithoutPaths(options)
     OrcTable(tableName, sparkSession, optionsWithoutPaths, paths, Some(schema), fallbackFileFormat)
-  }
-
-  override def checkFieldName(name: String): Unit = {
-    try {
-      TypeDescription.fromString(s"struct<`$name`:int>")
-    } catch {
-      case _: IllegalArgumentException =>
-        throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
-    }
   }
 }
 

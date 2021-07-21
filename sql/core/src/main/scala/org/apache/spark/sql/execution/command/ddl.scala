@@ -21,11 +21,11 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.{GenMap, GenSeq}
+import scala.collection.JavaConverters._
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
 
-import org.apache.avro.SchemaParseException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, TableCatalog}
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces._
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.{DataSource, FileFormat, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSource, DataSourceUtils, FileFormat, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 import org.apache.spark.sql.types._
@@ -950,13 +950,13 @@ object DDLUtils extends Logging {
   private[sql] def checkDataColNames(provider: String, schema: StructType): Unit = {
     try {
       DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance() match {
-        case f: FileFormat => f.checkFieldNames(schema)
-        case f: FileDataSourceV2 => f.checkFieldNames(schema)
+        case f: FileFormat => DataSourceUtils.verifySchema(f, schema)
+        case f: FileDataSourceV2 =>
+          f.getTable(schema, Array.empty, Map.empty[String, String].asJava).schema()
         case _ =>
       }
     } catch {
       case e: AnalysisException if e.getMessage.contains("contains invalid character") => throw e
-      case e: SchemaParseException => throw e
       case e: Throwable =>
         logError(s"Failed to find data source: $provider when check data column names.", e)
     }
