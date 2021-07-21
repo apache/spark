@@ -798,8 +798,6 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       withTable("t", "t2") {
         sql("CREATE TABLE t(id STRING) USING PARQUET")
         sql("INSERT INTO TABLE t SELECT 'abc'")
-        sql("INSERT INTO TABLE t SELECT 'abc'")
-        sql("INSERT INTO TABLE t SELECT 'abc'")
         sql("CREATE TABLE t2(id STRING) USING PARQUET")
         val df = sql("INSERT INTO TABLE t2 SELECT * FROM  t")
         val insert = df.queryExecution.executedPlan.collect {
