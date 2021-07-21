@@ -221,6 +221,7 @@ class CatalogTests(ReusedSQLTestCase):
                 spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
                 self.assertTrue(spark.catalog.tableExists("tab2", "some_db"))
 
+
 if __name__ == "__main__":
     import unittest
     from pyspark.sql.tests.test_catalog import *  # noqa: F401
