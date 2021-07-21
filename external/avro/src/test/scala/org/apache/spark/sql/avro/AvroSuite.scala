@@ -2175,6 +2175,14 @@ abstract class AvroSuite
         }
 
         withTempDir { dir =>
+          val e = intercept[SchemaParseException] {
+            sql("SELECT ID, IF(ID=1,1,0) FROM v").write.format("avro")
+              .mode(SaveMode.Overwrite).save(dir.toString)
+          }.getMessage
+          assert(e.contains("Illegal initial character: (IF((ID = 1), 1, 0))"))
+        }
+
+        withTempDir { dir =>
           spark.sql(
             s"""
                |CREATE TABLE test_ddl USING AVRO
