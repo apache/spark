@@ -633,6 +633,27 @@ abstract class BaseScriptTransformationSuite extends SparkPlanTest with SQLTestU
       }
     }
   }
+
+  test("SPARK-36208: TRANSFORM should support ANSI interval (no serde)") {
+    assume(TestUtils.testCommandAvailable("python"))
+    withTempView("v") {
+      val df = Seq(
+        (Period.of(1, 2, 0), Duration.ofDays(1).plusHours(2).plusMinutes(3).plusSeconds(4))
+      ).toDF("ym", "dt")
+
+      checkAnswer(
+        df,
+        (child: SparkPlan) => createScriptTransformationExec(
+          script = "cat",
+          output = Seq(
+            AttributeReference("ym", YearMonthIntervalType())(),
+            AttributeReference("dt", DayTimeIntervalType())()),
+          child = child,
+          ioschema = defaultIOSchema
+        ),
+        df.select($"ym", $"dt").collect())
+    }
+  }
 }
 
 case class ExceptionInjectingOperator(child: SparkPlan) extends UnaryExecNode {
