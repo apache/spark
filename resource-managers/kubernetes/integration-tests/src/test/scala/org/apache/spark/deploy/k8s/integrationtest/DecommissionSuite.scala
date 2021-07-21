@@ -101,9 +101,9 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       .set(config.DYN_ALLOCATION_MIN_EXECUTORS.key, "1")
       .set(config.DYN_ALLOCATION_INITIAL_EXECUTORS.key, "2")
       .set(config.DYN_ALLOCATION_ENABLED.key, "true")
-      // The default of 30 seconds is fine, but for testing we just want to get this done fast
-      // but give enough time to validate the labels are set.
-      .set("spark.storage.decommission.replicationReattemptInterval", "20")
+      // The default of 30 seconds is fine, but for testing we just want to
+      // give enough time to validate the labels are set.
+      .set("spark.storage.decommission.replicationReattemptInterval", "60")
       // Configure labels for decommissioning pods.
       .set("spark.kubernetes.executor.pod.decommmissionLabel", "solong")
       .set("spark.kubernetes.executor.pod.decommmissionLabelValue", "cruelworld")
@@ -116,8 +116,8 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
         val client = kubernetesTestComponents.kubernetesClient
         // The label will be added eventually, but k8s objects don't refresh.
         Eventually.eventually(
-          PatienceConfiguration.Timeout(Span(120, Seconds)),
-          PatienceConfiguration.Interval(Span(2, Seconds))) {
+          PatienceConfiguration.Timeout(Span(180, Seconds)),
+          PatienceConfiguration.Interval(Span(1, Seconds))) {
 
           val currentPod = client.pods().withName(pod.getMetadata.getName).get
           val labels = currentPod.getMetadata.getLabels.asScala
