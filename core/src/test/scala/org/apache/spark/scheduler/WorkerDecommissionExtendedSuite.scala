@@ -31,8 +31,8 @@ import org.apache.spark.scheduler.cluster.StandaloneSchedulerBackend
 class WorkerDecommissionExtendedSuite extends SparkFunSuite with LocalSparkContext {
   private val conf = new org.apache.spark.SparkConf()
     .setAppName(getClass.getName)
-    .set(SPARK_MASTER, "local-cluster[3,1,512]")
-    .set(EXECUTOR_MEMORY, "512m")
+    .set(SPARK_MASTER, "local-cluster[3,1,384]")
+    .set(EXECUTOR_MEMORY, "384m")
     .set(DYN_ALLOCATION_ENABLED, true)
     .set(DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED, true)
     .set(DYN_ALLOCATION_INITIAL_EXECUTORS, 3)
