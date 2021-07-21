@@ -49,12 +49,14 @@ object NumberConverter {
    */
   private def encode(radix: Int, fromPos: Int, value: Array[Byte]): Long = {
     var v: Long = 0L
-    val bound = java.lang.Long.divideUnsigned(-1 - radix, radix) // Possible overflow once
+    // bound will always positive since radix >= 2
+    val bound = java.lang.Long.divideUnsigned(-1 - radix, radix)
     var i = fromPos
     while (i < value.length && value(i) >= 0) {
-      if (v >= bound) {
+      // check if v greater than bound
+      if (v >= bound || v < 0) {
         // Check for overflow
-        if (java.lang.Long.divideUnsigned(-1 - value(i), radix) < v) {
+        if (java.lang.Long.divideUnsigned(-1 - value(i), radix) < v || v < 0) {
           return -1
         }
       }
@@ -89,6 +91,10 @@ object NumberConverter {
     var i = fromPos
     while (i < value.length) {
       value(i) = Character.digit(value(i), radix).asInstanceOf[Byte]
+      // if invalid characters are found, it no need to convert the suffix starting there
+      if (value(i) < 0) {
+        return
+      }
       i += 1
     }
   }
@@ -112,19 +118,19 @@ object NumberConverter {
     var (negative, first) = if (n(0) == '-') (true, 1) else (false, 0)
 
     // Copy the digits in the right side of the array
-    val temp = new Array[Byte](64)
+    val temp = new Array[Byte](Math.max(n.length, 64))
     var v: Long = -1
-    if ((n.length == 65 && negative) || n.length <= 64) {
-      var i = 1
-      while (i <= n.length - first) {
-        temp(temp.length - i) = n(n.length - i)
-        i += 1
-      }
-      char2byte(fromBase, temp.length - n.length + first, temp)
 
-      // Do the conversion by going through a 64 bit integer
-      v = encode(fromBase, temp.length - n.length + first, temp)
+    var i = 1
+    while (i <= n.length - first) {
+      temp(temp.length - i) = n(n.length - i)
+      i += 1
     }
+    char2byte(fromBase, temp.length - n.length + first, temp)
+
+    // Do the conversion by going through a 64 bit integer
+    v = encode(fromBase, temp.length - n.length + first, temp)
+
     if (negative && toBase > 0) {
       if (v < 0) {
         v = -1
