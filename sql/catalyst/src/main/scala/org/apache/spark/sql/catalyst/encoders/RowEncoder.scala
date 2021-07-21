@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * A factory for constructing encoders that convert external row to/from the Spark SQL
@@ -112,7 +113,8 @@ object RowEncoder {
         createSerializerForSqlTimestamp(inputObject)
       }
 
-    case TimestampNTZType => createSerializerForLocalDateTime(inputObject)
+    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    case TimestampNTZType if Utils.isTesting => createSerializerForLocalDateTime(inputObject)
 
     case DateType =>
       if (lenient) {
@@ -243,7 +245,8 @@ object RowEncoder {
       } else {
         ObjectType(classOf[java.sql.Timestamp])
       }
-    case TimestampNTZType =>
+    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    case TimestampNTZType if Utils.isTesting =>
       ObjectType(classOf[java.time.LocalDateTime])
     case DateType =>
       if (SQLConf.get.datetimeJava8ApiEnabled) {
@@ -301,7 +304,8 @@ object RowEncoder {
         createDeserializerForSqlTimestamp(input)
       }
 
-    case TimestampNTZType =>
+    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    case TimestampNTZType if Utils.isTesting =>
       createDeserializerForLocalDateTime(input)
 
     case DateType =>

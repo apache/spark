@@ -48,6 +48,7 @@ import org.apache.spark.sql.errors.QueryParsingErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.util.Utils.isTesting
 import org.apache.spark.util.random.RandomSampler
 
 /**
@@ -2203,11 +2204,11 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
           val zoneId = getZoneId(conf.sessionLocalTimeZone)
           val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
           specialDate.getOrElse(toLiteral(stringToDate, DateType))
-        case "TIMESTAMP_NTZ" =>
+        case "TIMESTAMP_NTZ" if isTesting =>
           convertSpecialTimestampNTZ(value, getZoneId(conf.sessionLocalTimeZone))
             .map(Literal(_, TimestampNTZType))
             .getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
-        case "TIMESTAMP_LTZ" =>
+        case "TIMESTAMP_LTZ" if isTesting =>
           constructTimestampLTZLiteral(value)
         case "TIMESTAMP" =>
           SQLConf.get.timestampType match {
@@ -2658,8 +2659,9 @@ class AstBuilder extends SqlBaseParserBaseVisitor[AnyRef] with SQLConfHelper wit
       case ("double", Nil) => DoubleType
       case ("date", Nil) => DateType
       case ("timestamp", Nil) => SQLConf.get.timestampType
-      case ("timestamp_ntz", Nil) => TimestampNTZType
-      case ("timestamp_ltz", Nil) => TimestampType
+      // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+      case ("timestamp_ntz", Nil) if isTesting => TimestampNTZType
+      case ("timestamp_ltz", Nil) if isTesting => TimestampType
       case ("string", Nil) => StringType
       case ("character" | "char", length :: Nil) => CharType(length.getText.toInt)
       case ("varchar", length :: Nil) => VarcharType(length.getText.toInt)
