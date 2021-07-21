@@ -254,29 +254,25 @@ private[sql] object AvroUtils extends Logging {
      * consider nullable Catalyst fields to be eligible to be an extra field; otherwise,
      * ignore nullable Catalyst fields when checking for extras.
      */
-    def validateNoExtraCatalystFields(ignoreNullable: Boolean): Unit = {
-      val extraFieldDescriptions = catalystSchema.zipWithIndex
-        .filter { case (sqlField, sqlPos) => getAvroField(sqlField.name, sqlPos).isEmpty }
-        .filter { case (sqlField, _) => !ignoreNullable || !sqlField.nullable }
-        .map { case (field, pos) => toFieldDescription(catalystPath :+ field.name, pos) }
-      if (extraFieldDescriptions.nonEmpty) {
-        throw new IncompatibleSchemaException(
-          s"Cannot find SQL field(s) in Avro ${toFieldStr(avroPath)}: " +
-            extraFieldDescriptions.mkString("[", ", ", "]"))
+    def validateNoExtraCatalystFields(ignoreNullable: Boolean): Unit =
+      catalystSchema.zipWithIndex.foreach { case (sqlField, sqlPos) =>
+        if (getAvroField(sqlField.name, sqlPos).isEmpty &&
+          (!ignoreNullable || !sqlField.nullable)) {
+          val desc = toFieldDescription(catalystPath :+ sqlField.name, sqlPos)
+          throw new IncompatibleSchemaException(
+            s"Cannot find $desc in Avro schema at ${toFieldStr(avroPath)}")
+        }
       }
-    }
 
     /**
      * Validate that there are no Avro fields which don't have a matching Catalyst field, throwing
      * [[IncompatibleSchemaException]] if such extra fields are found.
      */
     def validateNoExtraAvroFields(): Unit = {
-      val extraFields = avroFieldArray.toSet -- getMatchedFields.map(_.avroField)
-      if (extraFields.nonEmpty) {
-        throw new IncompatibleSchemaException(
-          s"Avro field(s) missing from SQL ${toFieldStr(catalystPath)}: " + extraFields
-            .map(f => toFieldDescription(avroPath :+ f.name(), f.pos()))
-            .mkString("[", ", ", "]"))
+      (avroFieldArray.toSet -- getMatchedFields.map(_.avroField)).foreach { extraField =>
+        val desc = toFieldDescription(avroPath :+ extraField.name(), extraField.pos())
+        throw new IncompatibleSchemaException(s"Found $desc in Avro schema but there is no " +
+          s"match in the SQL schema at ${toFieldStr(catalystPath)}")
       }
     }
 
@@ -312,27 +308,33 @@ private[sql] object AvroUtils extends Logging {
       }
     }
 
-    /**
-     * Take a field's hierarchical names (see [[toFieldStr]]) and position, and convert it to a
-     * human-readable description of the field. Depending on the value of `positionalFieldMatch`,
-     * either the position or name will be emphasized (for true and false, respectively); both will
-     * be included in either case.
-     */
     private[this] def toFieldDescription(names: Seq[String], position: Int): String =
-      if (positionalFieldMatch) {
-        s"position $position (${toFieldStr(names)})"
-      } else {
-        s"${toFieldStr(names)} (position $position)"
-      }
+      toFieldStr(names, Some(position), positionalFieldMatch)
   }
 
   /**
-   * Convert a sequence of hierarchical field names (like `Seq(foo, bar)`) into a human-readable
-   * string representing the field, like "field 'foo.bar'". If `names` is empty, the string
-   * "top-level record" is returned.
+   * Take a field's hierarchical names and (optionally) position, and convert it to a
+   * human-readable description of the field. Depending on the value of `positionalFieldMatch`,
+   * either the position or name will be emphasized (for true and false, respectively); both will
+   * be included in either case, unless it represents a top-level record, in which case neither
+   * will be used.
+   *
+   * @param names The hierarchical names of the field (like `Seq(foo, bar)`)
+   * @param position The position of the field.
+   * @param positionalFieldMatch Whether to emphasize the position of the field or the name.
+   *                             Ignored if `position` is `None`.
+   * @return A readable representation of the field, like "field 'foo.bar'" or "top-level record"
    */
-  private[avro] def toFieldStr(names: Seq[String]): String = names match {
-    case Seq() => "top-level record"
-    case n => s"field '${n.mkString(".")}'"
+  private[avro] def toFieldStr(
+      names: Seq[String],
+      position: Option[Int] = None,
+      positionalFieldMatch: Boolean = false): String = {
+    val nameStr = names.mkString(".")
+    (names, position) match {
+      case (Seq(), _) => "top-level record"
+      case (_, None) => s"field '$nameStr'"
+      case (_, Some(pos)) if positionalFieldMatch => s"field at position $pos ('$nameStr')"
+      case (_, Some(pos)) if !positionalFieldMatch => s"field '$nameStr' (at position $pos)"
+    }
   }
 }

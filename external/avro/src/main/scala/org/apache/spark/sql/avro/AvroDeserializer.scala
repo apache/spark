@@ -341,7 +341,7 @@ private[sql] class AvroDeserializer(
       avroType, catalystType, avroPath, catalystPath, positionalFieldMatch)
 
     avroSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = true)
-    // no need to assertNoExtraAvroFields since extra Avro fields are ignored
+    // no need to validateNoExtraAvroFields since extra Avro fields are ignored
 
     val (validFieldIndexes, fieldWriters) = avroSchemaHelper.getMatchedFields.map {
       case AvroMatchedField(catalystField, ordinal, avroField) =>

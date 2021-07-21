@@ -1403,8 +1403,7 @@ abstract class AvroSuite
           df.write.option("avroSchema", avroSchema).format("avro").save(s"$tempDir/save2")
         }
         assertExceptionMsg[IncompatibleSchemaException](e,
-          "Cannot find SQL field(s) in Avro top-level record: " +
-            "[field 'FOO' (position 0), field 'bar' (position 1)]")
+          "Cannot find field 'FOO' (at position 0) in Avro schema at top-level record")
       }
     }
   }

@@ -112,7 +112,7 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
     }
   }
 
-  test("respect nullability settings for assertNoExtraSqlFields") {
+  test("respect nullability settings for validateNoExtraSqlFields") {
     val avroSchema = SchemaBuilder.record("record").fields().requiredInt("bar").endRecord()
 
     val catalystNonnull = new StructType().add("foo", IntegerType, nullable = false)
