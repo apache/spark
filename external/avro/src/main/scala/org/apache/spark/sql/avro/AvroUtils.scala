@@ -334,7 +334,7 @@ private[sql] object AvroUtils extends Logging {
       case (Seq(), _) => "top-level record"
       case (_, None) => s"field '$nameStr'"
       case (_, Some(pos)) if positionalFieldMatch => s"field at position $pos ('$nameStr')"
-      case (_, Some(pos)) if !positionalFieldMatch => s"field '$nameStr' (at position $pos)"
+      case (_, Some(pos)) => s"field '$nameStr' (at position $pos)"
     }
   }
 }
