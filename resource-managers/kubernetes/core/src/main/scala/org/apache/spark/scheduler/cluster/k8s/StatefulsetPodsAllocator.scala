@@ -29,6 +29,7 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.deploy.k8s.KubernetesConf
+import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.Logging
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.{Clock, Utils}
@@ -120,7 +121,8 @@ private[spark] class StatefulsetPodsAllocator(
       val podTemplateSpec = new PodTemplateSpec(meta, podWithAttachedContainer)
       // Resources that need to be created, volumes are per-pod which is all we care about here.
       val resources = resolvedExecutorSpec.executorKubernetesResources
-      // We'll let PVCs be handled by the statefulset, we need
+      // We'll let PVCs be handled by the statefulset. Note user is responsible for
+      // cleaning up PVCs. Future work: integrate with KEP1847 once stabilized.
       val volumes = resources
         .filter(_.getKind == "PersistentVolumeClaim")
         .map { hm =>
@@ -150,6 +152,7 @@ private[spark] class StatefulsetPodsAllocator(
         .endSpec()
         .build()
 
+      addOwnerReference(driverPod, Seq(statefulSet))
       kubernetesClient.apps().statefulSets().create(statefulSet)
       setsCreated += (resourceProfileId)
     }
