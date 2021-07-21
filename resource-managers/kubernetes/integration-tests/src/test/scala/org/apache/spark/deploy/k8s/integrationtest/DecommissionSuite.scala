@@ -116,7 +116,7 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
         val client = kubernetesTestComponents.kubernetesClient
         // The label will be added eventually, but k8s objects don't refresh.
         Eventually.eventually(
-          PatienceConfiguration.Timeout(Span(180, Seconds)),
+          PatienceConfiguration.Timeout(Span(900, Seconds)),
           PatienceConfiguration.Interval(Span(1, Seconds))) {
 
           val currentPod = client.pods().withName(pod.getMetadata.getName).get
