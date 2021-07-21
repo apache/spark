@@ -357,13 +357,12 @@ object PartitioningUtils {
     }.mkString("/")
   }
 
-  def removeLeadingZerosFromNumberTypePartition(value: String, dataType: DataType): String = {
+  def removeLeadingZerosFromNumberTypePartition(value: String, dataType: DataType): String =
     dataType match {
-      case ByteType | ShortType | IntegerType | LongType => value.toLong.toString
-      case FloatType | DoubleType => value.toDouble.toString
+      case ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
+        castPartValueToDesiredType(dataType, value, null).toString
       case _ => value
     }
-  }
 
   def getPathFragment(spec: TablePartitionSpec, partitionColumns: Seq[Attribute]): String = {
     getPathFragment(spec, StructType.fromAttributes(partitionColumns))
@@ -526,9 +525,9 @@ object PartitioningUtils {
     case _ if value == DEFAULT_PARTITION_NAME => null
     case NullType => null
     case StringType => UTF8String.fromString(unescapePathName(value))
-    case IntegerType => Integer.parseInt(value)
+    case ByteType | ShortType | IntegerType => Integer.parseInt(value)
     case LongType => JLong.parseLong(value)
-    case DoubleType => JDouble.parseDouble(value)
+    case FloatType | DoubleType => JDouble.parseDouble(value)
     case _: DecimalType => Literal(new JBigDecimal(value)).value
     case DateType =>
       Cast(Literal(value), DateType, Some(zoneId.getId)).eval()
