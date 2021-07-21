@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
-import org.apache.spark.sql.connector.expressions.{AggregateFunc, Aggregation, Count, CountOne, FieldReference, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.{AggregateFunc, Aggregation, Count, CountStar, FieldReference, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -707,7 +707,7 @@ object DataSourceStrategy
         case count: aggregate.Count if count.children.length == 1 =>
           count.children.head match {
             // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
-            case Literal(_, _) => Some(new CountOne())
+            case Literal(_, _) => Some(new CountStar())
             case PushableColumnAndNestedColumn(name) =>
               Some(new Count(FieldReference(Seq(name)), aggregates.isDistinct))
             case _ => None

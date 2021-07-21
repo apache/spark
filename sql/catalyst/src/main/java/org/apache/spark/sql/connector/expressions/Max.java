@@ -32,13 +32,11 @@ public final class Max implements AggregateFunc {
         this.column = column;
     }
 
-    public FieldReference getCol() {
-        return column;
-    }
+    public FieldReference column() { return column; }
 
     @Override
     public String toString() {
-        return "Max(" + column.fieldNames()[0] + ")";
+        return "Max(" + column.describe() + ")";
     }
 
     @Override

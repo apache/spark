@@ -290,10 +290,10 @@ private[sql] case class JDBCRelation(
   }
 
   def buildScan(
-    requiredColumns: Array[String],
-    requireSchema: Option[StructType],
-    filters: Array[Filter],
-    groupByColumns: Option[Array[FieldReference]]): RDD[Row] = {
+      requiredColumns: Array[String],
+      requireSchema: Option[StructType],
+      filters: Array[Filter],
+      groupByColumns: Option[Array[FieldReference]]): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
       sparkSession.sparkContext,

@@ -34,17 +34,15 @@ public final class Count implements AggregateFunc {
         this.isDistinct = isDistinct;
     }
 
-    public FieldReference getCol() {
+    public FieldReference column() {
         return column;
     }
-    public boolean getIsDinstinct() {
+    public boolean isDinstinct() {
         return isDistinct;
     }
 
     @Override
-    public String toString() {
-        return "Count(" + column.fieldNames()[0] + "," + isDistinct + ")";
-    }
+    public String toString() { return "Count(" + column.describe() + "," + isDistinct + ")"; }
 
     @Override
     public String describe() { return this.toString(); }

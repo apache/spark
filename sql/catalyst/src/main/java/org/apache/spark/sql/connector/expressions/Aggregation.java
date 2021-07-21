@@ -36,11 +36,11 @@ public final class Aggregation implements Serializable {
     this.groupByColumns = groupByColumns;
   }
 
-  public AggregateFunc[] getAggregateExpressions() {
+  public AggregateFunc[] aggregateExpressions() {
     return aggregateExpressions;
   }
 
-  public FieldReference[] getGroupByColumns() {
+  public FieldReference[] groupByColumns() {
     return groupByColumns;
   }
 }

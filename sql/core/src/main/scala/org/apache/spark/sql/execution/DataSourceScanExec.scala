@@ -135,8 +135,8 @@ case class RowDataSourceScanExec(
     def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
 
     val (aggString, groupByString) = if (aggregation.nonEmpty) {
-      (seqToString(aggregation.get.getAggregateExpressions),
-        seqToString(aggregation.get.getGroupByColumns))
+      (seqToString(aggregation.get.aggregateExpressions),
+        seqToString(aggregation.get.groupByColumns))
     } else {
       ("[]", "[]")
     }

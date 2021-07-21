@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.expressions.{Aggregation, Count, CountOne, FieldReference, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.{Aggregation, Count, CountStar, FieldReference, Max, Min, Sum}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
@@ -62,12 +62,12 @@ case class JDBCScanBuilder(
     if (!jdbcOptions.pushDownAggregate) return false
 
     val dialect = JdbcDialects.get(jdbcOptions.url)
-    val compiledAgg = JDBCRDD.compileAggregates(aggregation.getAggregateExpressions, dialect)
+    val compiledAgg = JDBCRDD.compileAggregates(aggregation.aggregateExpressions, dialect)
 
-    var pushedSchema = new StructType()
-    aggregation.getGroupByColumns.foreach { col =>
+    var outputSchema = new StructType()
+    aggregation.groupByColumns.foreach { col =>
       val structField = getStructFieldForCol(col)
-      pushedSchema = pushedSchema.add(StructField(structField.name, structField.dataType))
+      outputSchema = outputSchema.add(StructField(structField.name, structField.dataType))
       pushedAggregateColumn = pushedAggregateColumn :+ dialect.quoteIdentifier(structField.name)
     }
 
@@ -77,29 +77,29 @@ case class JDBCScanBuilder(
     //   GROUP BY "DEPT", "NAME"
     pushedAggregateColumn = pushedAggregateColumn ++ compiledAgg
 
-    aggregation.getAggregateExpressions.foreach {
+    aggregation.aggregateExpressions.foreach {
       case max: Max =>
-        val structField = getStructFieldForCol(max.getCol)
-        pushedSchema = pushedSchema.add(structField.copy("max(" + structField.name + ")"))
+        val structField = getStructFieldForCol(max.column)
+        outputSchema = outputSchema.add(structField.copy("max(" + structField.name + ")"))
       case min: Min =>
-        val structField = getStructFieldForCol(min.getCol)
-        pushedSchema = pushedSchema.add(structField.copy("min(" + structField.name + ")"))
+        val structField = getStructFieldForCol(min.column)
+        outputSchema = outputSchema.add(structField.copy("min(" + structField.name + ")"))
       case count: Count =>
-        val distinct = if (count.getIsDinstinct) "DISTINCT " else ""
-        val structField = getStructFieldForCol(count.getCol)
-        pushedSchema =
-          pushedSchema.add(StructField(s"count($distinct" + structField.name + ")", LongType))
-      case _: CountOne =>
-          pushedSchema = pushedSchema.add(StructField("count(*)", LongType))
+        val distinct = if (count.isDinstinct) "DISTINCT " else ""
+        val structField = getStructFieldForCol(count.column)
+        outputSchema =
+          outputSchema.add(StructField(s"count($distinct" + structField.name + ")", LongType))
+      case _: CountStar =>
+        outputSchema = outputSchema.add(StructField("count(*)", LongType))
       case sum: Sum =>
-        val distinct = if (sum.getIsDinstinct) "DISTINCT " else ""
-        val structField = getStructFieldForCol(sum.getCol)
-        pushedSchema =
-          pushedSchema.add(StructField(s"sum($distinct" + structField.name + ")", sum.getDataType))
+        val distinct = if (sum.isDinstinct) "DISTINCT " else ""
+        val structField = getStructFieldForCol(sum.column)
+        outputSchema =
+          outputSchema.add(StructField(s"sum($distinct" + structField.name + ")", sum.dataType))
       case _ => return false
     }
     this.pushedAggregations = Some(aggregation)
-    prunedSchema = pushedSchema
+    prunedSchema = outputSchema
     true
   }
 
@@ -128,7 +128,7 @@ case class JDBCScanBuilder(
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
     val groupByColumns = if (pushedAggregations.nonEmpty) {
-      Some(pushedAggregations.get.getGroupByColumns)
+      Some(pushedAggregations.get.groupByColumns)
     } else {
       Option.empty[Array[FieldReference]]
     }

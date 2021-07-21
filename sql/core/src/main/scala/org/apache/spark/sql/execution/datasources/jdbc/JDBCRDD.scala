@@ -25,7 +25,7 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskCon
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.expressions.{AggregateFunc, Count, CountOne, FieldReference, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.{AggregateFunc, Count, CountStar, FieldReference, Max, Min, Sum}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -141,18 +141,22 @@ object JDBCRDD extends Logging {
 
     aggregates.map {
       case min: Min =>
-        s"MIN(${quote(min.getCol.fieldNames.head)})"
+        assert(min.column.fieldNames.length == 1)
+        s"MIN(${quote(min.column.fieldNames.head)})"
       case max: Max =>
-        s"MAX(${quote(max.getCol.fieldNames.head)})"
+        assert(max.column.fieldNames.length == 1)
+        s"MAX(${quote(max.column.fieldNames.head)})"
       case count: Count =>
-        val distinct = if (count.getIsDinstinct) "DISTINCT" else ""
-        val column = quote(count.getCol.fieldNames.head)
+        assert(count.column.fieldNames.length == 1)
+        val distinct = if (count.isDinstinct) "DISTINCT" else ""
+        val column = quote(count.column.fieldNames.head)
         s"COUNT($distinct $column)"
       case sum: Sum =>
-        val distinct = if (sum.getIsDinstinct) "DISTINCT" else ""
-        val column = quote(sum.getCol.fieldNames.head)
+        assert(sum.column.fieldNames.length == 1)
+        val distinct = if (sum.isDinstinct) "DISTINCT" else ""
+        val column = quote(sum.column.fieldNames.head)
         s"SUM($distinct $column)"
-      case _: CountOne =>
+      case _: CountStar =>
         s"COUNT(1)"
       case _ => ""
     }
@@ -261,7 +265,8 @@ private[jdbc] class JDBCRDD(
    * A GROUP BY clause representing pushed-down grouping columns.
    */
   private def getGroupByClause: String = {
-    if (groupByColumns.nonEmpty && groupByColumns.get.length > 0) {
+    if (groupByColumns.nonEmpty && groupByColumns.get.nonEmpty) {
+      assert(groupByColumns.get.forall(_.fieldNames.length == 1))
       val dialect = JdbcDialects.get(url)
       val quotedColumns = groupByColumns.get.map(c => dialect.quoteIdentifier(c.fieldNames.head))
       s"GROUP BY ${quotedColumns.mkString(", ")}"

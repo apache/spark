@@ -114,9 +114,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     s"""
                        |Pushing operators to ${sHolder.relation.name}
                        |Pushed Aggregate Functions:
-                       | ${pushedAggregates.get.getAggregateExpressions.mkString(", ")}
+                       | ${pushedAggregates.get.aggregateExpressions.mkString(", ")}
                        |Pushed Group by:
-                       | ${pushedAggregates.get.getGroupByColumns.mkString(", ")}
+                       | ${pushedAggregates.get.groupByColumns.mkString(", ")}
                        |Output: ${output.mkString(", ")}
                       """.stripMargin)
 
@@ -151,11 +151,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     case agg: AggregateExpression =>
                       val aggFunction: aggregate.AggregateFunction =
                         agg.aggregateFunction match {
-                          case _: aggregate.Max => aggregate.Max(aggOutput(i))
-                          case _: aggregate.Min => aggregate.Min(aggOutput(i))
-                          case _: aggregate.Sum => aggregate.Sum(aggOutput(i))
+                          case max: aggregate.Max => max.copy(child = aggOutput(i))
+                          case min: aggregate.Min => min.copy(child = aggOutput(i))
+                          case sum: aggregate.Sum => sum.copy(child = aggOutput(i))
                           case _: aggregate.Count => aggregate.Sum(aggOutput(i))
-                          case _ => agg.aggregateFunction
+                          case other => other
                         }
                       i += 1
                       agg.copy(aggregateFunction = aggFunction)
@@ -219,7 +219,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             f.pushedFilters()
           case _ => Array.empty[sources.Filter]
         }
-        V1ScanWrapper(v1, Array.empty[sources.Filter], pushedFilters, aggregation)
+        V1ScanWrapper(v1, pushedFilters, aggregation)
       case _ => scan
     }
   }
@@ -234,7 +234,6 @@ case class ScanBuilderHolder(
 // the physical v1 scan node.
 case class V1ScanWrapper(
     v1Scan: V1Scan,
-    translatedFilters: Seq[sources.Filter],
     handledFilters: Seq[sources.Filter],
     pushedAggregate: Option[Aggregation]) extends Scan {
   override def readSchema(): StructType = v1Scan.readSchema()

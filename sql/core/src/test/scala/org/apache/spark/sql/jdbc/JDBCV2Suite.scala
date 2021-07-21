@@ -256,7 +256,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     checkAnswer(df1, Seq(Row(10000, 1000), Row(12000, 1200), Row(12000, 1200)))
 
     val df2 = sql("select MAX(ID), MIN(ID) FROM h2.test.people where id > 0")
-    df2.explain(true)
     val filters2 = df2.queryExecution.optimizedPlan.collect {
       case f: Filter => f
     }
@@ -284,7 +283,7 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     df4.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedAggregates: [CountOne()]"
+          "PushedAggregates: [CountStar()]"
         checkKeywordsExistsInExplain(df4, expected_plan_fragment)
     }
     checkAnswer(df4, Seq(Row(5)))
@@ -366,8 +365,6 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
 
     val df12 = sql("select MAX(SALARY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
       " group by DEPT having MIN(BONUS) > 1000")
-    df12.show
-    df12.explain(true)
     val filters12 = df12.queryExecution.optimizedPlan.collect {
       case f: Filter => f  // filter over aggregate not push down
     }
