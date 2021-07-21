@@ -163,8 +163,12 @@ case class ResolvedPartitionSpec(
     ident: InternalRow,
     location: Option[String] = None) extends PartitionSpec
 
-case class ResolvedFieldName(path: Seq[String], field: StructField) extends FieldName {
-  def name: Seq[String] = path :+ field.name
+case class ResolvedFieldName(
+    path: Seq[String],
+    field: StructField,
+    isRoot: Boolean = false) extends FieldName {
+  require(!isRoot || path.isEmpty, "path should be empty if the field is a root.")
+  def name: Seq[String] = if (isRoot) Nil else path :+ field.name
 }
 
 case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition

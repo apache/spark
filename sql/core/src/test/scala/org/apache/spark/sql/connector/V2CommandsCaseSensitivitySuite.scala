@@ -142,7 +142,8 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
       alterTableTest(
         AlterTableAddColumns(
           table,
-          Seq(QualifiedColType(field, LongType, true, None, None))),
+          Seq(QualifiedColType(
+            UnresolvedFieldName(field.init), field.last, LongType, true, None, None))),
         Seq("Missing field " + field.head)
       )
     }
@@ -154,7 +155,8 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
         AlterTableAddColumns(
           table,
           Seq(QualifiedColType(
-            Seq("f"),
+            UnresolvedFieldName(Nil),
+            "f",
             LongType,
             true,
             None,
@@ -169,13 +171,15 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
       AlterTableAddColumns(
         table,
         Seq(QualifiedColType(
-          Seq("x"),
+          UnresolvedFieldName(Nil),
+          "x",
           LongType,
           true,
           None,
           Some(UnresolvedFieldPosition(ColumnPosition.after("id")))),
         QualifiedColType(
-          Seq("x"),
+          UnresolvedFieldName(Nil),
+          "x",
           LongType,
           true,
           None,
@@ -190,7 +194,8 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
         AlterTableAddColumns(
           table,
           Seq(QualifiedColType(
-            Seq("point", "z"),
+            UnresolvedFieldName(Seq("point")),
+            "z",
             LongType,
             true,
             None,
@@ -205,13 +210,15 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
       AlterTableAddColumns(
         table,
         Seq(QualifiedColType(
-          Seq("point", "z"),
+          UnresolvedFieldName(Seq("point")),
+          "z",
           LongType,
           true,
           None,
           None),
         QualifiedColType(
-          Seq("point", "zz"),
+          UnresolvedFieldName(Seq("point")),
+          "zz",
           LongType,
           true,
           None,

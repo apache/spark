@@ -1120,9 +1120,11 @@ case class AlterTableReplaceColumns(
       TableChange.deleteColumn(Array(name))
     }
     val addChanges = columnsToAdd.map { col =>
+      // Cannot add nested columns when replacing columns.
+      assert(col.path.name.isEmpty)
       assert(col.position.isEmpty)
       TableChange.addColumn(
-        col.name.toArray,
+        Array(col.colName),
         col.dataType,
         col.nullable,
         col.comment.orNull,
