@@ -952,11 +952,12 @@ object DDLUtils extends Logging {
     } catch {
       case e: Throwable =>
         logError(s"Failed to find data source: $provider when check data column names.", e)
+        return
     }
     source match {
-      case f: FileFormat => DataSourceUtils.verifySchema(f, schema)
+      case f: FileFormat => DataSourceUtils.checkFieldNames(f, schema)
       case f: FileDataSourceV2 =>
-        DataSourceUtils.verifySchema(f.fallbackFileFormat.newInstance(), schema)
+        DataSourceUtils.checkFieldNames(f.fallbackFileFormat.newInstance(), schema)
       case _ =>
     }
   }

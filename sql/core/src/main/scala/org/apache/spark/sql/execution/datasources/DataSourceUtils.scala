@@ -58,7 +58,7 @@ object DataSourceUtils {
     Serialization.read[Seq[String]](str)
   }
 
-  private def checkFieldNames(format: FileFormat, schema: StructType): Unit = {
+  def checkFieldNames(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
       format.checkFieldName(field.name)
       field.dataType match {
@@ -78,7 +78,6 @@ object DataSourceUtils {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(format.toString, field)
       }
     }
-    checkFieldNames(format, schema)
   }
 
   // SPARK-24626: Metadata files and temporary files should not be

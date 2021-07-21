@@ -2456,33 +2456,30 @@ class HiveDDLSuite
 
     // Make sure spark.catalog.createTable with null type will fail
     val schema1 = new StructType().add("c", NullType)
-    assertHiveTableNullType(schema1, "Parquet data source does not support null data type.")
+    assertHiveTableNullType(schema1)
     assertDSTableNullType(schema1)
 
     val schema2 = new StructType()
       .add("c", StructType(Seq(StructField.apply("c1", NullType))))
-    assertHiveTableNullType(schema2,
-      "Parquet data source does not support struct<c1:null> data type.")
+    assertHiveTableNullType(schema2)
     assertDSTableNullType(schema2)
 
     val schema3 = new StructType().add("c", ArrayType(NullType))
-    assertHiveTableNullType(schema3, "Parquet data source does not support array<null> data type.")
+    assertHiveTableNullType(schema3)
     assertDSTableNullType(schema3)
 
     val schema4 = new StructType()
       .add("c", MapType(StringType, NullType))
-    assertHiveTableNullType(schema4,
-      "Parquet data source does not support map<string,null> data type.")
+    assertHiveTableNullType(schema4)
     assertDSTableNullType(schema4)
 
     val schema5 = new StructType()
       .add("c", MapType(NullType, StringType))
-    assertHiveTableNullType(schema5,
-      "Parquet data source does not support map<null,string> data type.")
+    assertHiveTableNullType(schema5)
     assertDSTableNullType(schema5)
   }
 
-  private def assertHiveTableNullType(schema: StructType, errorMsg: String): Unit = {
+  private def assertHiveTableNullType(schema: StructType): Unit = {
     withTable("t") {
       val e = intercept[AnalysisException] {
         spark.catalog.createTable(
@@ -2491,7 +2488,7 @@ class HiveDDLSuite
           schema = schema,
           options = Map("fileFormat" -> "parquet"))
       }.getMessage
-      assert(e.contains(errorMsg))
+      assert(e.contains("Parquet data source does not support null data type."))
     }
   }
 
