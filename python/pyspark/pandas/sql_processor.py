@@ -16,7 +16,7 @@
 #
 
 import _string  # type: ignore
-from typing import Any, Dict, Optional  # noqa: F401 (SPARK-34943)
+from typing import Any, Dict, Optional, Union, List  # noqa: F401 (SPARK-34943)
 import inspect
 import pandas as pd
 
@@ -36,6 +36,7 @@ from builtins import locals as builtin_locals
 
 def sql(
     query: str,
+    index_col: Optional[Union[str, List[str]]] = None,
     globals: Optional[Dict[str, Any]] = None,
     locals: Optional[Dict[str, Any]] = None,
     **kwargs: Any
@@ -65,6 +66,9 @@ def sql(
     ----------
     query : str
         the SQL query
+    index_col: str or list of str, optional
+        Column names to be used in Spark to represent pandas-on-Spark's index. The index name
+        in pandas-on-Spark is ignored. By default, the index is always lost.
     globals : dict, optional
         the dictionary of global variables, if explicitly set by the user
     locals : dict, optional
@@ -137,6 +141,15 @@ def sql(
                         0
     0     [1.0, 2.0, 3.0]
     1  [15.0, 30.0, 45.0]
+
+    If you want to preserve the index, `index_col` parameter should be specified.
+
+    >>> mydf_with_index = ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}, index=['a', 'b', 'c'])
+    >>> ps.sql("SELECT * from {mydf_with_index} WHERE A > 1", index_col="index")
+           A  B
+    index
+    b      2  5
+    c      3  6
     """
     if globals is None:
         globals = _get_ipython_scope()
@@ -151,7 +164,7 @@ def sql(
     _dict.update(_locals)
     # Highest order of precedence is the locals
     _dict.update(kwargs)
-    return SQLProcessor(_dict, query, default_session()).execute()
+    return SQLProcessor(_dict, query, default_session()).execute(index_col)
 
 
 _CAPTURE_SCOPES = 2
@@ -221,12 +234,12 @@ class SQLProcessor(object):
         # The normalized form is typically a string
         self._cached_vars = {}  # type: Dict[str, Any]
         # The SQL statement after:
-        # - all the dataframes have been have been registered as temporary views
+        # - all the dataframes have been registered as temporary views
         # - all the values have been converted normalized to equivalent SQL representations
         self._normalized_statement = None  # type: Optional[str]
         self._session = session
 
-    def execute(self) -> DataFrame:
+    def execute(self, index_col: Optional[Union[str, List[str]]]) -> DataFrame:
         """
         Returns a DataFrame for which the SQL statement has been executed by
         the underlying SQL engine.
@@ -252,7 +265,7 @@ class SQLProcessor(object):
         res = ""
         try:
             for (pre, inner, _, _) in blocks:
-                var_next = "" if inner is None else self._convert(inner)
+                var_next = "" if inner is None else self._convert(inner, index_col)
                 res = res + pre + var_next
             self._normalized_statement = res
 
@@ -260,9 +273,13 @@ class SQLProcessor(object):
         finally:
             for v in self._temp_views:
                 self._session.catalog.dropTempView(v)
-        return DataFrame(sdf)
 
-    def _convert(self, key: str) -> Any:
+        if index_col is None:
+            return DataFrame(sdf)
+        else:
+            return DataFrame(sdf).set_index(index_col)
+
+    def _convert(self, key: str, index_col: Optional[Union[str, List[str]]] = None) -> Any:
         """
         Given a {} key, returns an equivalent SQL representation.
         This conversion performs all the necessary escaping so that the string
@@ -278,11 +295,11 @@ class SQLProcessor(object):
                 " local or parameters variables".format(key)
             )
         var = self._scope[key]
-        fillin = self._convert_var(var)
+        fillin = self._convert_var(var, index_col)
         self._cached_vars[key] = fillin
         return fillin
 
-    def _convert_var(self, var: Any) -> Any:
+    def _convert_var(self, var: Any, index_col: Optional[Union[str, List[str]]] = None) -> Any:
         """
         Converts a python object into a string that is legal SQL.
         """
@@ -295,7 +312,7 @@ class SQLProcessor(object):
         if isinstance(var, DataFrame):
             df_id = "pandas_on_spark_" + str(id(var))
             if df_id not in self._temp_views:
-                sdf = var.to_spark()
+                sdf = var.to_spark(index_col)
                 sdf.createOrReplaceTempView(df_id)
                 self._temp_views[df_id] = sdf
             return df_id
