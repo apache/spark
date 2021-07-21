@@ -40,4 +40,7 @@ public final class Max implements AggregateFunc {
     public String toString() {
         return "Max(" + column.fieldNames()[0] + ")";
     }
+
+    @Override
+    public String describe() { return this.toString(); }
 }

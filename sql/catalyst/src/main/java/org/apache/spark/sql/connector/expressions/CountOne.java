@@ -34,4 +34,7 @@ public final class CountOne implements AggregateFunc {
     public String toString() {
         return "CountOne()";
     }
+
+    @Override
+    public String describe() { return this.toString(); }
 }

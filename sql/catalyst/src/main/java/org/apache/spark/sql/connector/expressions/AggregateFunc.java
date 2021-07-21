@@ -27,5 +27,5 @@ import java.io.Serializable;
  * @since 3.2.0
  */
 @Evolving
-public interface AggregateFunc extends Serializable {
+public interface AggregateFunc extends Expression, Serializable {
 }

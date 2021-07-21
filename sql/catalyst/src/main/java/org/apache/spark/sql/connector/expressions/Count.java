@@ -45,4 +45,7 @@ public final class Count implements AggregateFunc {
     public String toString() {
         return "Count(" + column.fieldNames()[0] + "," + isDistinct + ")";
     }
+
+    @Override
+    public String describe() { return this.toString(); }
 }

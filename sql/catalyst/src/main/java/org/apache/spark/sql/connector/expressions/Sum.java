@@ -51,4 +51,7 @@ public final class Sum implements AggregateFunc {
     public String toString() {
         return "Sum(" + column.fieldNames()[0] + "," + dataType + "," + isDistinct + ")";
     }
+
+    @Override
+    public String describe() { return this.toString(); }
 }
