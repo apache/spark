@@ -152,7 +152,7 @@ private[spark] class StatefulsetPodsAllocator(
         .endSpec()
         .build()
 
-      addOwnerReference(driverPod, Seq(statefulSet))
+      addOwnerReference(driverPod.get, Seq(statefulSet))
       kubernetesClient.apps().statefulSets().create(statefulSet)
       setsCreated += (resourceProfileId)
     }
