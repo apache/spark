@@ -24,7 +24,7 @@ license: |
 
 ## Upgrading from Spark SQL 3.2 to 3.3
 
-  - Non-nullable schema was not supported properly in previous Spark version so the output schema of `DataFrameReader.json(jsonDataset: Dataset[String])` and `DataFrameReader.csv(csvDataset: Dataset[String])` became nullable which also matches with `DataFrameReader.json(path: String)` and `DataFrameReader.csv(path: String)`.
+  - Since Spark 3.3, Spark turns a non-nullable schema into nullable for API `DataFrameReader.schema(schema: StructType).json(jsonDataset: Dataset[String])` and `DataFrameReader.schema(schema: StructType).csv(csvDataset: Dataset[String])` when the schema is specified by the user and contains non-nullable fields.
 
 ## Upgrading from Spark SQL 3.1 to 3.2
 
