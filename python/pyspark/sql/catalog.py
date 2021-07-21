@@ -185,6 +185,14 @@ class Catalog(object):
         >>> df = spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
         >>> spark.catalog.tableExists("tab1")
         True
+        >>> spark.catalog.tableExists("view1")
+        False
+        >>> df = spark.sql("CREATE VIEW view1 AS SELECT * FROM tab1")
+        >>> spark.catalog.tableExists("view1")
+        True
+        >>> df = spark.sql("DROP VIEW view1")
+        >>> spark.catalog.tableExists("view1")
+        False
         >>> df = spark.sql("DROP TABLE tab1")
         """
         if dbName is None:

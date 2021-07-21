@@ -210,17 +210,34 @@ class CatalogTests(ReusedSQLTestCase):
 
     def test_table_exists(self):
         # SPARK-36176: testing that table_exists returns correct boolean
+        from pyspark.sql.catalog import Table
         spark = self.spark
         with self.database("some_db"):
             spark.sql("CREATE DATABASE some_db")
             with self.table("tab1", "some_db.tab2"):
-                self.assertFalse(spark.catalog.tableExists("tab1"))
-                self.assertFalse(spark.catalog.tableExists("tab2", "some_db"))
-                spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
-                self.assertTrue(spark.catalog.tableExists("tab1"))
-                spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
-                self.assertTrue(spark.catalog.tableExists("tab2", "some_db"))
-
+                with self.tempView("view1"):
+                    self.assertFalse(spark.catalog.tableExists("tab1"))
+                    self.assertFalse(spark.catalog.tableExists("tab2", "some_db"))
+                    spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
+                    self.assertTrue(spark.catalog.tableExists("tab1"))
+                    spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT) USING parquet")
+                    self.assertTrue(spark.catalog.tableExists("tab2", "some_db"))
+                    self.assertEquals(len(spark.catalog.listTables()), 1)
+                    spark.sql("CREATE VIEW view1 AS SELECT * from tab1")
+                    self.assertEquals(len(spark.catalog.listTables()), 2)
+                    self.assertTrue(spark.catalog.tableExists("view1"))
+                    spark.sql("DROP VIEW view1")
+                    self.assertEquals(len(spark.catalog.listTables()), 1)
+                    spark.sql("CREATE TEMPORARY VIEW view1 AS SELECT * from tab1")
+                    tables = sorted(spark.catalog.listTables(), key=lambda t: t.name)
+                    self.assertEqual(len(tables), 2)
+                    self.assertEqual(tables[1], Table(
+                        name="view1",
+                        database=None,
+                        description=None,
+                        tableType="TEMPORARY",
+                        isTemporary=True))
+                    self.assertTrue(spark.catalog.tableExists("view1"))
 
 if __name__ == "__main__":
     import unittest
