@@ -282,7 +282,8 @@ object RocksDBStateStoreProvider {
     "RocksDB: read - total of uncompressed bytes read (from memtables/cache/sst) from DB::Get()")
   val CUSTOM_METRIC_BYTES_WRITTEN = StateStoreCustomSizeMetric(
     "rocksdbTotalBytesWrittenByPut",
-    "RocksDB: write - total of uncompressed bytes written by DB::Put()")
+    "RocksDB: write - total of uncompressed bytes written by " +
+      "DB::{Put(), Delete(), Merge(), Write()}")
   val CUSTOM_METRIC_ITERATOR_BYTES_READ = StateStoreCustomSizeMetric(
     "rocksdbTotalBytesReadThroughIterator",
     "RocksDB: read - total of uncompressed bytes read using an iterator")

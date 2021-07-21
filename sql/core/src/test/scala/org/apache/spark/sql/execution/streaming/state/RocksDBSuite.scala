@@ -366,7 +366,7 @@ class RocksDBSuite extends SparkFunSuite {
     // scalastyle:on line.size.limit
   }
 
-  test("reset RocksDB metrics whenever a new version is loaded") {
+  test("SPARK-36236: reset RocksDB metrics whenever a new version is loaded") {
     def verifyMetrics(putCount: Long, getCount: Long, iterCountPositive: Boolean = false,
                       metrics: RocksDBMetrics): Unit = {
       assert(metrics.nativeOpsHistograms("put").count === putCount, "invalid put count")
@@ -390,7 +390,7 @@ class RocksDBSuite extends SparkFunSuite {
       assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") >=0)
     }
 
-    withTempDirectory { dir =>
+    withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
       withDB(remoteDir) { db =>
         verifyMetrics(putCount = 0, getCount = 0, metrics = db.metrics)
@@ -412,7 +412,7 @@ class RocksDBSuite extends SparkFunSuite {
     }
 
     // disable resetting stats
-    withTempDirectory { dir =>
+    withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
       withDB(remoteDir, conf = RocksDBConf().copy(resetStatsOnLoad = false)) { db =>
         verifyMetrics(putCount = 0, getCount = 0, metrics = db.metrics)
@@ -432,7 +432,7 @@ class RocksDBSuite extends SparkFunSuite {
     }
 
     // force compaction and check the compaction metrics
-    withTempDirectory { dir =>
+    withTempDir { dir =>
       val remoteDir = dir.getCanonicalPath
       withDB(remoteDir, conf = RocksDBConf().copy(compactOnCommit = true)) { db =>
         db.load(0)
@@ -450,13 +450,6 @@ class RocksDBSuite extends SparkFunSuite {
         assert(metrics.nativeOpsMetrics("totalBytesReadByCompaction") > 0)
         assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") > 0)
       }
-    }
-  }
-
-  private def withTempDirectory(f: File => Unit): Unit = {
-    val dir = Utils.createTempDir()
-    try f(dir) finally {
-      Utils.deleteRecursively(dir)
     }
   }
 

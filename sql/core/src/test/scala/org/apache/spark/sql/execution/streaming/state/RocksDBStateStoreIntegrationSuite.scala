@@ -52,7 +52,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
     }
   }
 
-  test("streaming query progress contains only the expected RocksDB state store custom metrics") {
+  test("SPARK-36236: query progress contains only the expected RocksDB store custom metrics") {
     // fails if any new custom metrics are added to remind the author of API changes
     import testImplicits._
 
