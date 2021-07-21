@@ -389,6 +389,7 @@ private[spark] class ExecutorPodsAllocator(
               s"StorageClass ${pvc.getSpec.getStorageClassName}")
             kubernetesClient.persistentVolumeClaims().create(pvc)
           }
+        kubernetesClient.resourceList(resources: _*).createOrReplace()
         newlyCreatedExecutors(newExecutorId) = (resourceProfileId, clock.getTimeMillis())
         logDebug(s"Requested executor with id $newExecutorId from Kubernetes.")
       } catch {
