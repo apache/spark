@@ -131,7 +131,7 @@ class LogicalPlanTagInSparkPlanSuite extends TPCDSQuerySuite with DisableAdaptiv
   }
 
   private def getLogicalPlan(node: SparkPlan): LogicalPlan = {
-    node.logicalLink.getOrElse {
+    node.getTagValue(SparkPlan.LOGICAL_PLAN_TAG).getOrElse {
       fail(node.getClass.getSimpleName + " does not have a logical plan link")
     }
   }
