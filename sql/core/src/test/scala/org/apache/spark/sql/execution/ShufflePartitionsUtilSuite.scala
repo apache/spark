@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.{MapOutputStatistics, SparkFunSuite}
+import org.apache.spark.{LocalSparkContext, MapOutputStatistics, MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv, SparkFunSuite}
+import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.sql.execution.adaptive.ShufflePartitionsUtil
+import org.apache.spark.storage.BlockManagerId
 
-class ShufflePartitionsUtilSuite extends SparkFunSuite {
+class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
 
   private def checkEstimation(
       bytesByPartitionIdArray: Array[Array[Long]],
@@ -764,5 +766,32 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite {
         Some(specs2)),
       targetSize, 1, 0)
     assert(coalesced == Seq(expected1, expected2))
+  }
+
+  test("SPARK-36228: Skip splitting a skewed partition when some map outputs are removed") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local[2]"))
+    val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+    mapOutputTracker.registerShuffle(shuffleId = 10, numMaps = 2, numReduces = 1)
+    mapOutputTracker.registerMapOutput(shuffleId = 10, mapIndex = 0, MapStatus(
+      BlockManagerId("a", "hostA", port = 1000),
+      Array(MapStatus.compressSize(10)),
+      mapTaskId = 5))
+    mapOutputTracker.registerMapOutput(shuffleId = 10, mapIndex = 1, MapStatus(
+      BlockManagerId("b", "hostB", port = 1000),
+      Array(MapStatus.compressSize(20)),
+      mapTaskId = 6))
+
+    val skewPartitionSpecs = ShufflePartitionsUtil.createSkewPartitionSpecs(
+      shuffleId = 10, reducerId = 0, targetSize = 2)
+    assert(skewPartitionSpecs.isDefined)
+    // Returns 2 partition specs because there are 2 mappers.
+    assert(skewPartitionSpecs.get.size == 2)
+
+    // As if one map output is removed
+    mapOutputTracker.unregisterMapOutput(
+      shuffleId = 10, mapIndex = 0, BlockManagerId("a", "hostA", port = 1000))
+    val skewPartitionSpecsAfterRemoval = ShufflePartitionsUtil.createSkewPartitionSpecs(
+      shuffleId = 10, reducerId = 0, targetSize = 2)
+    assert(skewPartitionSpecsAfterRemoval.isEmpty)
   }
 }

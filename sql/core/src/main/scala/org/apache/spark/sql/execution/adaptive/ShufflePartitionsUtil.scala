@@ -362,11 +362,15 @@ object ShufflePartitionsUtil extends Logging {
   }
 
   /**
-   * Get the map size of the specific reduce shuffle Id.
+   * Get the map size of the specific shuffle and reduce ID. Note that, some map outputs can be
+   * missing due to issues like executor lost. The size will be -1 for missing map outputs and the
+   * caller side should take care of it.
    */
   private def getMapSizesForReduceId(shuffleId: Int, partitionId: Int): Array[Long] = {
     val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-    mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses.map{_.getSizeForBlock(partitionId)}
+    mapOutputTracker.shuffleStatuses(shuffleId).withMapStatuses(_.map { stat =>
+      if (stat == null) -1 else stat.getSizeForBlock(partitionId)
+    })
   }
 
   /**
@@ -378,6 +382,7 @@ object ShufflePartitionsUtil extends Logging {
       reducerId: Int,
       targetSize: Long): Option[Seq[PartialReducerPartitionSpec]] = {
     val mapPartitionSizes = getMapSizesForReduceId(shuffleId, reducerId)
+    if (mapPartitionSizes.exists(_ < 0)) return None
     val mapStartIndices = splitSizeListByTargetSize(mapPartitionSizes, targetSize)
     if (mapStartIndices.length > 1) {
       Some(mapStartIndices.indices.map { i =>
