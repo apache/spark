@@ -21,7 +21,6 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit._
 
 import scala.collection.{GenMap, GenSeq}
-import scala.collection.JavaConverters._
 import scala.collection.parallel.ForkJoinTaskSupport
 import scala.collection.parallel.immutable.ParVector
 import scala.util.control.NonFatal
@@ -32,7 +31,7 @@ import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog._
@@ -948,17 +947,17 @@ object DDLUtils extends Logging {
   }
 
   def checkDataColNames(provider: String, schema: StructType): Unit = {
-    try {
-      DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance() match {
-        case f: FileFormat => DataSourceUtils.verifySchema(f, schema)
-        case f: FileDataSourceV2 =>
-          f.getTable(schema, Array.empty, Map.empty[String, String].asJava).schema()
-        case _ =>
-      }
+    val source = try {
+      DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance()
     } catch {
-      case e: AnalysisException if e.getMessage.contains("contains invalid character") => throw e
       case e: Throwable =>
         logError(s"Failed to find data source: $provider when check data column names.", e)
+    }
+    source match {
+      case f: FileFormat => DataSourceUtils.verifySchema(f, schema)
+      case f: FileDataSourceV2 =>
+        DataSourceUtils.verifySchema(f.fallbackFileFormat.newInstance(), schema)
+      case _ =>
     }
   }
 
