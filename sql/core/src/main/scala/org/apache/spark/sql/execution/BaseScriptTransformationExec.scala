@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.io.{BufferedReader, File, InputStream, InputStreamReader, OutputStream}
 import java.nio.charset.StandardCharsets
-import java.time.{Duration, Period}
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
@@ -34,7 +33,7 @@ import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Cast, Expression, GenericInternalRow, JsonToStructs, Literal, StructsToJson, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.catalyst.util.{DateTimeConstants, DateTimeUtils, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -225,12 +224,12 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
         converter)
       case YearMonthIntervalType(start, end) => wrapperConvertException(
-        data => Period.ofMonths(
+        data => IntervalUtils.monthsToPeriod(
           IntervalUtils.castStringToYMInterval(UTF8String.fromString(data), start, end)),
         converter)
       case DayTimeIntervalType(start, end) => wrapperConvertException(
-        data => Duration.ofNanos(IntervalUtils.castStringToDTInterval(
-          UTF8String.fromString(data), start, end) * DateTimeConstants.NANOS_PER_MICROS),
+        data => IntervalUtils.microsToDuration(
+          IntervalUtils.castStringToDTInterval(UTF8String.fromString(data), start, end)),
         converter)
       case _: ArrayType | _: MapType | _: StructType =>
         val complexTypeFactory = JsonToStructs(attr.dataType,
