@@ -325,7 +325,7 @@ private[spark] class ExternalSorter[K, V, C](
         writer.revertPartialWritesAndClose()
         if (file.exists()) {
           if (!file.delete()) {
-            logWarning(s"Error deleting $file")
+            logWarning(s"Error deleting ${file}")
           }
         }
       }
