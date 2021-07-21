@@ -454,7 +454,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
       .set(config.SHUFFLE_CHECKSUM_ENABLED, true)
       .set(TEST_NO_STAGE_RETRY, false)
       .set("spark.stage.maxConsecutiveAttempts", "1")
-        .set(config.SHUFFLE_SERVICE_ENABLED, true)
+      .set(config.SHUFFLE_SERVICE_ENABLED, false)
     sc = new SparkContext("local-cluster[2, 1, 2048]", "test", conf)
     val rdd = sc.parallelize(1 to 10, 2).map((_, 1)).reduceByKey(_ + _)
     // materialize the shuffle map outputs

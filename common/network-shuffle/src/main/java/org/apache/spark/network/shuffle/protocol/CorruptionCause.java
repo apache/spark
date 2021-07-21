@@ -58,7 +58,7 @@ public class CorruptionCause extends BlockTransferMessage {
 
   @Override
   public int encodedLength() {
-    return 4; /* encoded length of cause */
+    return 1; /* encoded length of cause */
   }
 
   @Override

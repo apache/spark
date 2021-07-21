@@ -38,9 +38,10 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.corruption.Cause
 import org.apache.spark.network.shuffle._
+import org.apache.spark.network.shuffle.checksum.ShuffleCorruptionDiagnosisHelper
 import org.apache.spark.network.util.{NettyUtils, TransportConf}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
-import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper.getChecksumByConf
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 
 /**
@@ -796,7 +797,7 @@ final class ShuffleBlockFetcherIterator(
           val in = try {
             var bufIn = buf.createInputStream()
             if (checksumEnabled) {
-              val checksum = ShuffleChecksumHelper.getChecksumByConf(SparkEnv.get.conf)
+              val checksum = getChecksumByConf(SparkEnv.get.conf)
               checkedIn = new CheckedInputStream(bufIn, checksum)
               bufIn = checkedIn
             }
@@ -1030,7 +1031,9 @@ final class ShuffleBlockFetcherIterator(
       blockId: BlockId): Cause = {
     logInfo("Start corruption diagnosis.")
     val startTimeNs = System.nanoTime()
-    val buffer = new Array[Byte](ShuffleChecksumHelper.CHECKSUM_CALCULATION_BUFFER)
+    assert(blockId.isInstanceOf[ShuffleBlockId], s"Expected ShuffleBlockId, but got $blockId")
+    val shuffleBlock = blockId.asInstanceOf[ShuffleBlockId]
+    val buffer = new Array[Byte](ShuffleCorruptionDiagnosisHelper.CHECKSUM_CALCULATION_BUFFER)
     // consume the remaining data to calculate the checksum
     try {
       while (checkedIn.read(buffer, 0, 8192) != -1) {}
@@ -1040,8 +1043,8 @@ final class ShuffleBlockFetcherIterator(
         return Cause.UNKNOWN_ISSUE
     }
     val checksum = checkedIn.getChecksum.getValue
-    val cause = shuffleClient.diagnoseCorruption(
-      address.host, address.port, address.executorId, blockId.toString, checksum)
+    val cause = shuffleClient.diagnoseCorruption(address.host, address.port, address.executorId,
+      shuffleBlock.shuffleId, shuffleBlock.mapId, shuffleBlock.reduceId, checksum)
     val duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
     logInfo(s"Finished corruption diagnosis in ${duration} ms, cause: $cause")
     cause

@@ -50,13 +50,13 @@ import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.corruption.Cause
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle._
+import org.apache.spark.network.shuffle.checksum.ShuffleCorruptionDiagnosisHelper.diagnoseCorruption
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
-import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper._
 import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
@@ -308,29 +308,8 @@ private[spark] class BlockManager(
     val resolver = shuffleManager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
     val checksumFile = resolver.getChecksumFile(shuffleBlock.shuffleId, shuffleBlock.mapId)
     val reduceId = shuffleBlock.reduceId
-    if (checksumFile.exists()) {
-      try {
-        val checksumByWriter = readChecksumByReduceId(checksumFile, reduceId)
-        val (checksumByReCalculation, t) =
-          Utils.timeTakenMs(calculateChecksumForPartition(shuffleBlock, resolver))
-        logInfo(s"Checksum recalculation for shuffle block $shuffleBlock took $t ms")
-        if (checksumByWriter != checksumByReCalculation) {
-          Cause.DISK_ISSUE
-        } else if (checksumByWriter != checksumByReader) {
-          Cause.NETWORK_ISSUE
-        } else {
-          Cause.CHECKSUM_VERIFY_PASS
-        }
-      } catch {
-        case NonFatal(e) =>
-          logWarning("Exception throws while diagnosing shuffle block corruption.", e)
-          Cause.UNKNOWN_ISSUE
-      }
-    } else {
-      // Even if checksum is enabled, a checksum file may not exist if error throws during writing.
-      logWarning(s"Checksum file ${checksumFile.getName} doesn't exit")
-      Cause.UNKNOWN_ISSUE
-    }
+    diagnoseCorruption(
+      checksumFile, reduceId, resolver.getBlockData(shuffleBlock), checksumByReader)
   }
 
   /**

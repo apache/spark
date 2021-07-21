@@ -34,9 +34,8 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.corruption.Cause;
-import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
-import org.apache.spark.network.shuffle.protocol.GetLocalDirsForExecutors;
-import org.apache.spark.network.shuffle.protocol.LocalDirsForExecutors;
+import org.apache.spark.network.shuffle.protocol.*;
+import org.apache.spark.network.util.TransportConf;
 
 /**
  * Provides an interface for reading both shuffle files and RDD blocks, either from an Executor
@@ -47,6 +46,7 @@ public abstract class BlockStoreClient implements Closeable {
 
   protected volatile TransportClientFactory clientFactory;
   protected String appId;
+  protected TransportConf transportConf;
 
   /**
    * Send the diagnosis request for the corrupted shuffle block to the server.
@@ -54,7 +54,9 @@ public abstract class BlockStoreClient implements Closeable {
    * @param host the host of the remote node.
    * @param port the port of the remote node.
    * @param execId the executor id.
-   * @param blockId the blockId of the corrupted shuffle block
+   * @param shuffleId the shuffleId of the corrupted shuffle block
+   * @param mapId the mapId of the corrupted shuffle block
+   * @param reduceId the reduceId of the corrupted shuffle block
    * @param checksum the shuffle checksum which calculated at client side for the corrupted
    *                 shuffle block
    * @return The cause of the shuffle block corruption
@@ -63,9 +65,23 @@ public abstract class BlockStoreClient implements Closeable {
      String host,
      int port,
      String execId,
-     String blockId,
-     long checksum) {
-    return Cause.UNKNOWN_ISSUE;
+     int shuffleId,
+     long mapId,
+     int reduceId,
+     long checksum) throws IOException, InterruptedException {
+    TransportClient client = clientFactory.createClient(host, port);
+    try {
+      ByteBuffer response = client.sendRpcSync(
+        new DiagnoseCorruption(appId, execId, shuffleId, mapId, reduceId, checksum).toByteBuffer(),
+        transportConf.connectionTimeoutMs()
+      );
+      CorruptionCause cause =
+        (CorruptionCause) BlockTransferMessage.Decoder.fromByteBuffer(response);
+      return cause.cause;
+    } catch (Exception e) {
+      logger.warn("Failed to get the corruption cause.");
+      return Cause.UNKNOWN_ISSUE;
+    }
   }
 
   /**

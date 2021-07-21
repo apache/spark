@@ -37,6 +37,7 @@ import com.codahale.metrics.Timer;
 import com.codahale.metrics.Counter;
 import com.google.common.collect.Sets;
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.spark.network.corruption.Cause;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -223,6 +224,14 @@ public class ExternalBlockHandler extends RpcHandler
       } finally {
         responseDelayContext.stop();
       }
+    } else if (msgObj instanceof DiagnoseCorruption) {
+      DiagnoseCorruption msg = (DiagnoseCorruption) msgObj;
+      checkAuth(client, msg.appId);
+      Cause cause = blockManager.diagnoseShuffleBlockCorruption(
+        msg.appId, msg.execId, msg.shuffleId, msg.mapId, msg.reduceId, msg.checksum);
+      // In any cases of the error, diagnoseShuffleBlockCorruption should return UNKNOWN_ISSUE,
+      // so it should always reply as success.
+      callback.onSuccess(new CorruptionCause(cause).toByteBuffer());
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }

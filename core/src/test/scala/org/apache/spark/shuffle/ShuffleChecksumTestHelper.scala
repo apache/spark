@@ -20,8 +20,8 @@ package org.apache.spark.shuffle
 import java.io.{DataInputStream, File, FileInputStream}
 import java.util.zip.CheckedInputStream
 
+import org.apache.spark.network.shuffle.checksum.ShuffleCorruptionDiagnosisHelper
 import org.apache.spark.network.util.LimitedInputStream
-import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper
 
 trait ShuffleChecksumTestHelper {
 
@@ -55,7 +55,8 @@ trait ShuffleChecksumTestHelper {
         val curOffset = indexIn.readLong
         val limit = (curOffset - prevOffset).toInt
         val bytes = new Array[Byte](limit)
-        val checksumCal = ShuffleChecksumHelper.getChecksumByFileExtension(checksum.getName)
+        val checksumCal =
+          ShuffleCorruptionDiagnosisHelper.getChecksumByFileExtension(checksum.getName)
         checkedIn = new CheckedInputStream(
           new LimitedInputStream(dataIn, curOffset - prevOffset), checksumCal)
         checkedIn.read(bytes, 0, limit)

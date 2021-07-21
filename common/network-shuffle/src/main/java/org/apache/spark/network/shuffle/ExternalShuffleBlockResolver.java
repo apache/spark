@@ -45,6 +45,8 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
+import org.apache.spark.network.corruption.Cause;
+import org.apache.spark.network.shuffle.checksum.ShuffleCorruptionDiagnosisHelper;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.LevelDBProvider;
 import org.apache.spark.network.util.LevelDBProvider.StoreVersion;
@@ -372,6 +374,32 @@ public class ExternalShuffleBlockResolver {
         return Pair.of(exec, info.localDirs);
       })
       .collect(Collectors.toMap(Pair::getKey, Pair::getValue));
+  }
+
+  /**
+   * Diagnose the possible cause of the shuffle data corruption by verify the shuffle checksums
+   */
+  public Cause diagnoseShuffleBlockCorruption(
+      String appId,
+      String execId,
+      int shuffleId,
+      long mapId,
+      int reduceId,
+      long checksumByReader) {
+    ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
+    String fileName = "shuffle_" + shuffleId + "_" + mapId + "_0.checksum";
+    File probeFile = ExecutorDiskUtils.getFile(
+      executor.localDirs,
+      executor.subDirsPerLocalDir,
+      fileName);
+    File parentFile = probeFile.getParentFile();
+
+    File[] checksumFiles = parentFile.listFiles(f -> f.getName().startsWith(fileName));
+    assert checksumFiles.length == 1;
+    File checksumFile = checksumFiles[0];
+    ManagedBuffer data = getBlockData(appId, execId, shuffleId, mapId, reduceId);
+    return ShuffleCorruptionDiagnosisHelper
+      .diagnoseCorruption(checksumFile, reduceId, data, checksumByReader);
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */

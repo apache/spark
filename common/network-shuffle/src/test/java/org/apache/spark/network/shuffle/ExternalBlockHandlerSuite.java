@@ -17,7 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.IOException;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.Map;
@@ -25,6 +25,9 @@ import java.util.Map;
 import com.codahale.metrics.Meter;
 import com.codahale.metrics.Metric;
 import com.codahale.metrics.Timer;
+import com.google.common.io.Files;
+import org.apache.spark.network.corruption.Cause;
+import org.apache.spark.network.shuffle.checksum.ShuffleCorruptionDiagnosisHelper;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -43,6 +46,8 @@ import org.apache.spark.network.protocol.MergedBlockMetaRequest;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
+import org.apache.spark.network.shuffle.protocol.CorruptionCause;
+import org.apache.spark.network.shuffle.protocol.DiagnoseCorruption;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlockChunks;
@@ -106,6 +111,72 @@ public class ExternalBlockHandlerSuite {
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
     verifyOpenBlockLatencyMetrics(2, 2);
+  }
+
+  private void checkDiagnosisResult(
+      long checksumByReader,
+      long checksumByWriter,
+      Cause expectedCaused) throws IOException {
+    String appId = "app0";
+    String execId = "execId";
+    int shuffleId = 0;
+    long mapId = 0;
+    int reduceId = 0;
+
+    // prepare the checksum file
+    File tmpDir = Files.createTempDir();
+    tmpDir.deleteOnExit();
+    File checksumFile = new File(tmpDir,
+      "shuffle_" + shuffleId +"_" + mapId + "_" + reduceId + ".checksum.ADLER32");
+    DataOutputStream out = new DataOutputStream(new FileOutputStream(checksumFile));
+    if (checksumByWriter != 0) {
+      out.writeLong(checksumByWriter);
+    }
+    out.close();
+
+    // Checksum for the blockMarkers[0] using adler32 is 196609.
+    when(blockResolver.getBlockData(appId, execId, shuffleId, mapId, reduceId)).thenReturn(blockMarkers[0]);
+    Cause actualCause = ShuffleCorruptionDiagnosisHelper.diagnoseCorruption(checksumFile, reduceId,
+      blockResolver.getBlockData(appId, execId, shuffleId, mapId, reduceId), checksumByReader);
+    when(blockResolver
+      .diagnoseShuffleBlockCorruption(appId, execId, shuffleId, mapId, reduceId, checksumByReader))
+      .thenReturn(actualCause);
+
+    when(client.getClientId()).thenReturn(appId);
+    RpcResponseCallback callback = mock(RpcResponseCallback.class);
+
+    DiagnoseCorruption diagnoseMsg = new DiagnoseCorruption(
+      appId, execId, shuffleId, mapId, reduceId, checksumByReader);
+    handler.receive(client, diagnoseMsg.toByteBuffer(), callback);
+
+    ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
+    verify(callback, times(1)).onSuccess(response.capture());
+    verify(callback, never()).onFailure(any());
+
+    CorruptionCause cause =
+      (CorruptionCause) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
+    assertEquals(expectedCaused, cause.cause);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisDiskIssue() throws IOException {
+    checkDiagnosisResult(1, 1, Cause.DISK_ISSUE);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisNetworkIssue() throws IOException {
+    checkDiagnosisResult(1, 196609, Cause.NETWORK_ISSUE);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisUnknownIssue() throws IOException {
+    // Use checksumByWriter=0 to create the invalid checksum file
+    checkDiagnosisResult(196609, 0, Cause.UNKNOWN_ISSUE);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisChecksumVerifyPass() throws IOException {
+    checkDiagnosisResult(196609, 196609, Cause.CHECKSUM_VERIFY_PASS);
   }
 
   @Test
