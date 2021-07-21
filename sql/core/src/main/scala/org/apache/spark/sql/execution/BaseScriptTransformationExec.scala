@@ -223,6 +223,14 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
       case CalendarIntervalType => wrapperConvertException(
         data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
         converter)
+      case YearMonthIntervalType(start, end) => wrapperConvertException(
+        data => IntervalUtils.monthsToPeriod(
+          IntervalUtils.castStringToYMInterval(UTF8String.fromString(data), start, end)),
+        converter)
+      case DayTimeIntervalType(start, end) => wrapperConvertException(
+        data => IntervalUtils.microsToDuration(
+          IntervalUtils.castStringToDTInterval(UTF8String.fromString(data), start, end)),
+        converter)
       case _: ArrayType | _: MapType | _: StructType =>
         val complexTypeFactory = JsonToStructs(attr.dataType,
           ioschema.outputSerdeProps.toMap, Literal(null), Some(conf.sessionLocalTimeZone))
