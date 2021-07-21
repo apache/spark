@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
@@ -159,22 +160,10 @@ public class OneForOneBlockFetcher {
       }
     }
 
-    int[][] reduceIds = new int[mapIdToBlocksInfo.size()][];
-    int blockIdIndex = 0;
-    int reduceIndex = 0;
-    for (BlocksInfo blocksInfo: mapIdToBlocksInfo.values()) {
-      reduceIds[reduceIndex++] = Ints.toArray(blocksInfo.ids);
-
-      // The `blockIds`'s order must be same with the read order specified in FetchShuffleBlocks
-      for (String blockId : blocksInfo.blockIds) {
-        this.blockIds[blockIdIndex++] = blockId;
-      }
-    }
-
-    assert(blockIdIndex == this.blockIds.length);
+    int[][] reduceIdsArray = getSecondaryIds(mapIdToBlocksInfo);
     long[] mapIds = Longs.toArray(mapIdToBlocksInfo.keySet());
     return new FetchShuffleBlocks(
-        appId, execId, shuffleId, mapIds, reduceIds, batchFetchEnabled);
+        appId, execId, shuffleId, mapIds, reduceIdsArray, batchFetchEnabled);
   }
 
   private AbstractFetchShuffleBlocks createFetchShuffleChunksMsg(String appId, String execId, String[] blockIds) {
@@ -196,11 +185,20 @@ public class OneForOneBlockFetcher {
       blocksInfoByReduceId.ids.add(Integer.parseInt(blockIdParts[4]));
     }
 
-    int[][] chunkIdsArray = new int[reduceIdToBlocksInfo.size()][];
+    int[][] chunkIdsArray = getSecondaryIds(reduceIdToBlocksInfo);
+    int[] reduceIds = Ints.toArray(reduceIdToBlocksInfo.keySet());
+
+    return new FetchShuffleBlockChunks(appId, execId, shuffleId, shuffleSequenceId, reduceIds, chunkIdsArray);
+  }
+
+  private int[][] getSecondaryIds(Map<? extends Number, BlocksInfo> primaryIdsToBlockInfo) {
+    // In case of FetchShuffleBlocks, secondaryIds are reduceIds. For FetchShuffleBlockChunks,
+    // secondaryIds are chunkIds.
+    int[][] secondaryIds = new int[primaryIdsToBlockInfo.size()][];
     int blockIdIndex = 0;
     int chunkIndex = 0;
-    for (BlocksInfo blocksInfo: reduceIdToBlocksInfo.values()) {
-      chunkIdsArray[chunkIndex++] = Ints.toArray(blocksInfo.ids);
+    for (BlocksInfo blocksInfo: primaryIdsToBlockInfo.values()) {
+      secondaryIds[chunkIndex++] = Ints.toArray(blocksInfo.ids);
 
       // The `blockIds`'s order must be same with the read order specified in FetchShuffleBlockChunks
       for (String blockId : blocksInfo.blockIds) {
@@ -208,12 +206,15 @@ public class OneForOneBlockFetcher {
       }
     }
     assert(blockIdIndex == this.blockIds.length);
-    int[] reduceIds = Ints.toArray(reduceIdToBlocksInfo.keySet());
-
-    return new FetchShuffleBlockChunks(appId, execId, shuffleId, shuffleSequenceId, reduceIds, chunkIdsArray);
+    return secondaryIds;
   }
 
-  /** Split the shuffleBlockId and return shuffleId, shuffleSequenceId, mapId and reduceIds. */
+  /**
+   * Split the blockId and return accordingly
+   * shuffleChunk - return shuffleId, shuffleSequenceId, reduceId and chunkIds
+   * shuffle block - return shuffleId, mapId, reduceId
+   * shuffle batch block - return shuffleId, mapId, begin reduceId and end reduceId
+   */
   private String[] splitBlockId(String blockId) {
     String[] blockIdParts = blockId.split("_");
     // For batch block id, the format contains shuffleId, mapId, begin reduceId, end reduceId.
