@@ -50,6 +50,7 @@ class MasterWebUISuite extends SparkFunSuite with BeforeAndAfterAll {
   override def beforeAll(): Unit = {
     super.beforeAll()
     masterWebUI.bind()
+    masterWebUI.attachAllHandler()
   }
 
   override def afterAll(): Unit = {

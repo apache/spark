@@ -93,6 +93,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     server = new HistoryServer(conf, provider, securityManager, 18080)
     server.initialize()
     server.bind()
+    server.attachAllHandler()
     provider.start()
     port = server.boundPort
   }
@@ -412,6 +413,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     server = new HistoryServer(myConf, provider, securityManager, 0)
     server.initialize()
     server.bind()
+    server.attachAllHandler()
     provider.start()
     val port = server.boundPort
     val metrics = server.cacheMetrics
