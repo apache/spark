@@ -355,10 +355,10 @@ class DecimalOps(FractionalOps):
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("<= can not be applied to %s." % self.pretty_name)
 
-    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("> can not be applied to %s." % self.pretty_name)
 
-    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def isnull(self, index_ops: IndexOpsLike) -> IndexOpsLike:
