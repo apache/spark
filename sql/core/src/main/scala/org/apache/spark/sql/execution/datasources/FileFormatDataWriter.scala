@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
+import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StringType
 import org.apache.spark.util.SerializableConfiguration
@@ -41,7 +42,8 @@ import org.apache.spark.util.SerializableConfiguration
 abstract class FileFormatDataWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
-    committer: FileCommitProtocol) extends DataWriter[InternalRow] {
+    committer: FileCommitProtocol,
+    customMetrics: Map[String, SQLMetric]) extends DataWriter[InternalRow] {
   /**
    * Max number of files a single task writes out due to file size. In most cases the number of
    * files written should be very small. This is just a safe guard to protect some really bad
@@ -76,12 +78,21 @@ abstract class FileFormatDataWriter(
   /** Writes a record. */
   def write(record: InternalRow): Unit
 
+  def writeWithMetrics(record: InternalRow, count: Long): Unit = {
+    if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+      CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
+    }
+    write(record)
+  }
 
   /** Write an iterator of records. */
   def writeWithIterator(iterator: Iterator[InternalRow]): Unit = {
+    var count = 0L
     while (iterator.hasNext) {
-      write(iterator.next())
+      writeWithMetrics(iterator.next(), count)
+      count += 1
     }
+    CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
   }
 
   /**
@@ -113,8 +124,9 @@ abstract class FileFormatDataWriter(
 class EmptyDirectoryDataWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
-    committer: FileCommitProtocol
-) extends FileFormatDataWriter(description, taskAttemptContext, committer) {
+    committer: FileCommitProtocol,
+    customMetrics: Map[String, SQLMetric] = Map.empty
+) extends FileFormatDataWriter(description, taskAttemptContext, committer, customMetrics) {
   override def write(record: InternalRow): Unit = {}
 }
 
@@ -122,8 +134,9 @@ class EmptyDirectoryDataWriter(
 class SingleDirectoryDataWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
-    committer: FileCommitProtocol)
-  extends FileFormatDataWriter(description, taskAttemptContext, committer) {
+    committer: FileCommitProtocol,
+    customMetrics: Map[String, SQLMetric] = Map.empty)
+  extends FileFormatDataWriter(description, taskAttemptContext, committer, customMetrics) {
   private var fileCounter: Int = _
   private var recordsInFile: Long = _
   // Initialize currentWriter and statsTrackers
@@ -169,8 +182,9 @@ class SingleDirectoryDataWriter(
 abstract class BaseDynamicPartitionDataWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
-    committer: FileCommitProtocol)
-  extends FileFormatDataWriter(description, taskAttemptContext, committer) {
+    committer: FileCommitProtocol,
+    customMetrics: Map[String, SQLMetric])
+  extends FileFormatDataWriter(description, taskAttemptContext, committer, customMetrics) {
 
   /** Flag saying whether or not the data to be written out is partitioned. */
   protected val isPartitioned = description.partitionColumns.nonEmpty
@@ -314,8 +328,10 @@ abstract class BaseDynamicPartitionDataWriter(
 class DynamicPartitionDataSingleWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
-    committer: FileCommitProtocol)
-  extends BaseDynamicPartitionDataWriter(description, taskAttemptContext, committer) {
+    committer: FileCommitProtocol,
+    customMetrics: Map[String, SQLMetric] = Map.empty)
+  extends BaseDynamicPartitionDataWriter(description, taskAttemptContext, committer,
+    customMetrics) {
 
   private var currentPartitionValues: Option[UnsafeRow] = None
   private var currentBucketId: Option[Int] = None
@@ -361,8 +377,9 @@ class DynamicPartitionDataConcurrentWriter(
     description: WriteJobDescription,
     taskAttemptContext: TaskAttemptContext,
     committer: FileCommitProtocol,
-    concurrentOutputWriterSpec: ConcurrentOutputWriterSpec)
-  extends BaseDynamicPartitionDataWriter(description, taskAttemptContext, committer)
+    concurrentOutputWriterSpec: ConcurrentOutputWriterSpec,
+    customMetrics: Map[String, SQLMetric] = Map.empty)
+  extends BaseDynamicPartitionDataWriter(description, taskAttemptContext, committer, customMetrics)
   with Logging {
 
   /** Wrapper class to index a unique concurrent output writer. */
@@ -452,17 +469,23 @@ class DynamicPartitionDataConcurrentWriter(
    * Write iterator of records with concurrent writers.
    */
   override def writeWithIterator(iterator: Iterator[InternalRow]): Unit = {
+    var count = 0L
     while (iterator.hasNext && !sorted) {
-      write(iterator.next())
+      writeWithMetrics(iterator.next(), count)
+      count += 1
     }
+    CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
 
     if (iterator.hasNext) {
+      count = 0L
       clearCurrentWriterStatus()
       val sorter = concurrentOutputWriterSpec.createSorter()
       val sortIterator = sorter.sort(iterator.asInstanceOf[Iterator[UnsafeRow]])
       while (sortIterator.hasNext) {
-        write(sortIterator.next())
+        writeWithMetrics(sortIterator.next(), count)
+        count += 1
       }
+      CustomMetrics.updateMetrics(currentMetricsValues, customMetrics)
     }
   }
 

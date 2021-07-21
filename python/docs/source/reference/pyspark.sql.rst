@@ -618,6 +618,7 @@ Catalog APIs
     Catalog.createExternalTable
     Catalog.createTable
     Catalog.currentDatabase
+    Catalog.databaseExists
     Catalog.dropGlobalTempView
     Catalog.dropTempView
     Catalog.isCached
