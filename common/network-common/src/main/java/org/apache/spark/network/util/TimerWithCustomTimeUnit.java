@@ -21,6 +21,8 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.util.concurrent.TimeUnit;
 
+import com.codahale.metrics.Clock;
+import com.codahale.metrics.ExponentiallyDecayingReservoir;
 import com.codahale.metrics.Snapshot;
 import com.codahale.metrics.Timer;
 
@@ -31,7 +33,7 @@ import com.codahale.metrics.Timer;
  * do not specify a unit, and always return nanoseconds. It can be useful to specify that a timer
  * should use a different unit for its snapshot. Note that internally, all values are still stored
  * with nanosecond-precision; it is only before being returned to the caller that the nanosecond
- * value is converted to a millisecond value.
+ * value is converted to the custom time unit.
  */
 public class TimerWithCustomTimeUnit extends Timer {
 
@@ -39,6 +41,11 @@ public class TimerWithCustomTimeUnit extends Timer {
   private final double nanosPerUnit;
 
   public TimerWithCustomTimeUnit(TimeUnit timeUnit) {
+    this(timeUnit, Clock.defaultClock());
+  }
+
+  TimerWithCustomTimeUnit(TimeUnit timeUnit, Clock clock) {
+    super(new ExponentiallyDecayingReservoir(), clock);
     this.timeUnit = timeUnit;
     this.nanosPerUnit = timeUnit.toNanos(1);
   }
@@ -73,11 +80,11 @@ public class TimerWithCustomTimeUnit extends Timer {
     @Override
     public long[] getValues() {
       long[] nanoValues = wrappedSnapshot.getValues();
-      long[] milliValues = new long[nanoValues.length];
+      long[] customUnitValues = new long[nanoValues.length];
       for (int i = 0; i < nanoValues.length; i++) {
-        milliValues[i] = toUnit(nanoValues[i]);
+        customUnitValues[i] = toUnit(nanoValues[i]);
       }
-      return milliValues;
+      return customUnitValues;
     }
 
     @Override
