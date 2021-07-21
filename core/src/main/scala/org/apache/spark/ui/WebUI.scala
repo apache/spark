@@ -136,6 +136,15 @@ private[spark] abstract class WebUI(
     attachHandler(JettyUtils.createStaticHandler(resourceBase, path))
   }
 
+  /**
+   * Attach all existed handler to ServerInfo.
+   */
+  def attachAllHandler(): Unit = {
+    serverInfo.foreach { server =>
+      handlers.foreach(server.addHandler(_, securityManager))
+    }
+  }
+
   /** A hook to initialize components of the UI */
   def initialize(): Unit
 
@@ -145,7 +154,6 @@ private[spark] abstract class WebUI(
     try {
       val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
       val server = startJettyServer(host, port, sslOptions, conf, name, poolSize)
-      handlers.foreach(server.addHandler(_, securityManager))
       serverInfo = Some(server)
       logInfo(s"Bound $className to $host, and started at $webUrl")
     } catch {
