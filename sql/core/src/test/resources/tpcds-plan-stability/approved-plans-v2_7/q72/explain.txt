@@ -290,7 +290,7 @@ Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)
 (49) BroadcastHashJoin [codegen id : 10]
 Left keys [1]: [cs_ship_date_sk#1]
 Right keys [1]: [d_date_sk#33]
-Join condition: (d_date#34 > d_date#28 + 5 days)
+Join condition: (d_date#34 > date_add(d_date#28, 5))
 
 (50) Project [codegen id : 10]
 Output [6]: [cs_item_sk#4, cs_promo_sk#5, cs_order_number#6, w_warehouse_name#16, i_item_desc#19, d_week_seq#29]

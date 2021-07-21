@@ -20,6 +20,8 @@ package org.apache.spark.sql
 import java.io.File
 import java.net.{MalformedURLException, URL}
 import java.sql.{Date, Timestamp}
+import java.time.{Duration, Period}
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.commons.io.FileUtils
@@ -31,12 +33,12 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Partial}
 import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, NestedColumnAliasingSuite}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalLimit, Project, RepartitionByExpression, Sort}
 import org.apache.spark.sql.catalyst.util.StringUtils
-import org.apache.spark.sql.execution.UnionExec
+import org.apache.spark.sql.execution.{CommandResultExec, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, ObjectHashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
-import org.apache.spark.sql.execution.command.FunctionsCommand
-import org.apache.spark.sql.execution.datasources.LogicalRelation
+import org.apache.spark.sql.execution.command.{DataWritingCommandExec, FunctionsCommand}
+import org.apache.spark.sql.execution.datasources.{InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.orc.OrcScan
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -134,7 +136,8 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
 
   test("SPARK-14415: All functions should have own descriptions") {
     for (f <- spark.sessionState.functionRegistry.listFunction()) {
-      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f.unquotedString)) {
+      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window",
+          "session_window").contains(f.unquotedString)) {
         checkKeywordsNotExist(sql(s"describe function $f"), "N/A.")
       }
     }
@@ -1441,30 +1444,52 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   test("SPARK-8753: add interval type") {
     import org.apache.spark.unsafe.types.CalendarInterval
 
-    val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
-    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123 )))
+    val ymDF = sql("select interval 3 years -3 month")
+    checkAnswer(ymDF, Row(Period.of(2, 9, 0)))
     withTempPath(f => {
-      // Currently we don't yet support saving out values of interval data type.
       val e = intercept[AnalysisException] {
-        df.write.json(f.getCanonicalPath)
+        ymDF.write.json(f.getCanonicalPath)
       }
       e.message.contains("Cannot save interval data type into external storage")
     })
+
+    val dtDF = sql("select interval 5 days 8 hours 12 minutes 50 seconds")
+    checkAnswer(dtDF, Row(Duration.ofDays(5).plusHours(8).plusMinutes(12).plusSeconds(50)))
+    withTempPath(f => {
+      val e = intercept[AnalysisException] {
+        dtDF.write.json(f.getCanonicalPath)
+      }
+      e.message.contains("Cannot save interval data type into external storage")
+    })
+
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      val df = sql("select interval 3 years -3 month 7 week 123 microseconds")
+      checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
+      withTempPath(f => {
+        // Currently we don't yet support saving out values of interval data type.
+        val e = intercept[AnalysisException] {
+          df.write.json(f.getCanonicalPath)
+        }
+        e.message.contains("Cannot save interval data type into external storage")
+      })
+    }
   }
 
   test("SPARK-8945: add and subtract expressions for interval type") {
-    val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")
-    checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      val df = sql("select interval 3 years -3 month 7 week 123 microseconds as i")
+      checkAnswer(df, Row(new CalendarInterval(12 * 3 - 3, 7 * 7, 123)))
 
-    checkAnswer(df.select(df("i") + new CalendarInterval(2, 1, 123)),
-      Row(new CalendarInterval(12 * 3 - 3 + 2, 7 * 7 + 1, 123 + 123)))
+      checkAnswer(df.select(df("i") + new CalendarInterval(2, 1, 123)),
+        Row(new CalendarInterval(12 * 3 - 3 + 2, 7 * 7 + 1, 123 + 123)))
 
-    checkAnswer(df.select(df("i") - new CalendarInterval(2, 1, 123)),
-      Row(new CalendarInterval(12 * 3 - 3 - 2, 7 * 7 - 1, 123 - 123)))
+      checkAnswer(df.select(df("i") - new CalendarInterval(2, 1, 123)),
+        Row(new CalendarInterval(12 * 3 - 3 - 2, 7 * 7 - 1, 123 - 123)))
 
-    // unary minus
-    checkAnswer(df.select(-df("i")),
-      Row(new CalendarInterval(-(12 * 3 - 3), -7 * 7, -123)))
+      // unary minus
+      checkAnswer(df.select(-df("i")),
+        Row(new CalendarInterval(-(12 * 3 - 3), -7 * 7, -123)))
+    }
   }
 
   test("aggregation with codegen updates peak execution memory") {
@@ -3353,7 +3378,7 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
         s"VALUES(${(0 until 65).map { _ => 1 }.mkString(", ")}, 3) AS " +
         s"t(${(0 until 65).map { i => s"k$i" }.mkString(", ")}, v)")
 
-      def testGropingIDs(numGroupingSet: Int, expectedIds: Seq[Any] = Nil): Unit = {
+      def testGroupingIDs(numGroupingSet: Int, expectedIds: Seq[Any] = Nil): Unit = {
         val groupingCols = (0 until numGroupingSet).map { i => s"k$i" }
         val df = sql("SELECT GROUPING_ID(), SUM(v) FROM t GROUP BY " +
           s"GROUPING SETS ((${groupingCols.mkString(",")}), (${groupingCols.init.mkString(",")}))")
@@ -3361,19 +3386,21 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "true") {
-        testGropingIDs(32, Seq(0, 1))
-        val errMsg = intercept[AnalysisException] {
-          testGropingIDs(33)
-        }.getMessage
-        assert(errMsg.contains("Grouping sets size cannot be greater than 32"))
+        testGroupingIDs(32, Seq(0, 1))
+        val ex = intercept[AnalysisException] {
+          testGroupingIDs(33)
+        }
+        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 32"))
+        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
 
       withSQLConf(SQLConf.LEGACY_INTEGER_GROUPING_ID.key -> "false") {
-        testGropingIDs(64, Seq(0L, 1L))
-        val errMsg = intercept[AnalysisException] {
-          testGropingIDs(65)
-        }.getMessage
-        assert(errMsg.contains("Grouping sets size cannot be greater than 64"))
+        testGroupingIDs(64, Seq(0L, 1L))
+        val ex = intercept[AnalysisException] {
+          testGroupingIDs(65)
+        }
+        assert(ex.getMessage.contains("Grouping sets size cannot be greater than 64"))
+        assert(ex.getErrorClass == "GROUPING_SIZE_LIMIT_EXCEEDED")
       }
     }
   }
@@ -4011,18 +4038,102 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("SPARK-35737: Parse day-time interval literals to tightest types") {
+    import DayTimeIntervalType._
     val dayToSecDF = spark.sql("SELECT INTERVAL '13 02:02:10' DAY TO SECOND")
-    assert(dayToSecDF.schema.head.dataType === DayTimeIntervalType(0, 3))
+    assert(dayToSecDF.schema.head.dataType === DayTimeIntervalType(DAY, SECOND))
     val dayToMinuteDF = spark.sql("SELECT INTERVAL '-2 13:00' DAY TO MINUTE")
-    assert(dayToMinuteDF.schema.head.dataType === DayTimeIntervalType(0, 2))
+    assert(dayToMinuteDF.schema.head.dataType === DayTimeIntervalType(DAY, MINUTE))
     val dayToHourDF = spark.sql("SELECT INTERVAL '0 15' DAY TO HOUR")
-    assert(dayToHourDF.schema.head.dataType === DayTimeIntervalType(0, 1))
+    assert(dayToHourDF.schema.head.dataType === DayTimeIntervalType(DAY, HOUR))
+    val dayDF = spark.sql("SELECT INTERVAL '23' DAY")
+    assert(dayDF.schema.head.dataType === DayTimeIntervalType(DAY))
     val hourToSecDF = spark.sql("SELECT INTERVAL '00:21:02.03' HOUR TO SECOND")
-    assert(hourToSecDF.schema.head.dataType === DayTimeIntervalType(1, 3))
+    assert(hourToSecDF.schema.head.dataType === DayTimeIntervalType(HOUR, SECOND))
     val hourToMinuteDF = spark.sql("SELECT INTERVAL '01:02' HOUR TO MINUTE")
-    assert(hourToMinuteDF.schema.head.dataType === DayTimeIntervalType(1, 2))
+    assert(hourToMinuteDF.schema.head.dataType === DayTimeIntervalType(HOUR, MINUTE))
+    val hourDF1 = spark.sql("SELECT INTERVAL '17' HOUR")
+    assert(hourDF1.schema.head.dataType === DayTimeIntervalType(HOUR))
     val minuteToSecDF = spark.sql("SELECT INTERVAL '10:03.775808000' MINUTE TO SECOND")
-    assert(minuteToSecDF.schema.head.dataType === DayTimeIntervalType(2, 3))
+    assert(minuteToSecDF.schema.head.dataType === DayTimeIntervalType(MINUTE, SECOND))
+    val minuteDF1 = spark.sql("SELECT INTERVAL '03' MINUTE")
+    assert(minuteDF1.schema.head.dataType === DayTimeIntervalType(MINUTE))
+    val secondDF1 = spark.sql("SELECT INTERVAL '11' SECOND")
+    assert(secondDF1.schema.head.dataType === DayTimeIntervalType(SECOND))
+
+    // Seconds greater than 1 minute
+    val secondDF2 = spark.sql("SELECT INTERVAL '75' SECONDS")
+    assert(secondDF2.schema.head.dataType === DayTimeIntervalType(SECOND))
+
+    // Minutes and seconds greater than 1 hour
+    val minuteDF2 = spark.sql("SELECT INTERVAL '68' MINUTES")
+    assert(minuteDF2.schema.head.dataType === DayTimeIntervalType(MINUTE))
+    val secondDF3 = spark.sql("SELECT INTERVAL '11112' SECONDS")
+    assert(secondDF3.schema.head.dataType === DayTimeIntervalType(SECOND))
+
+    // Hours, minutes and seconds greater than 1 day
+    val hourDF2 = spark.sql("SELECT INTERVAL '27' HOURS")
+    assert(hourDF2.schema.head.dataType === DayTimeIntervalType(HOUR))
+    val minuteDF3 = spark.sql("SELECT INTERVAL '2883' MINUTES")
+    assert(minuteDF3.schema.head.dataType === DayTimeIntervalType(MINUTE))
+    val secondDF4 = spark.sql("SELECT INTERVAL '266582' SECONDS")
+    assert(secondDF4.schema.head.dataType === DayTimeIntervalType(SECOND))
+  }
+
+  test("SPARK-35773: Parse year-month interval literals to tightest types") {
+    import YearMonthIntervalType._
+    val yearToMonthDF = spark.sql("SELECT INTERVAL '2021-06' YEAR TO MONTH")
+    assert(yearToMonthDF.schema.head.dataType === YearMonthIntervalType(YEAR, MONTH))
+    val yearDF = spark.sql("SELECT INTERVAL '2022' YEAR")
+    assert(yearDF.schema.head.dataType === YearMonthIntervalType(YEAR))
+    val monthDF1 = spark.sql("SELECT INTERVAL '08' MONTH")
+    assert(monthDF1.schema.head.dataType === YearMonthIntervalType(MONTH))
+    // Months greater than 1 year
+    val monthDF2 = spark.sql("SELECT INTERVAL '25' MONTHS")
+    assert(monthDF2.schema.head.dataType === YearMonthIntervalType(MONTH))
+  }
+
+  test("SPARK-35749: Parse multiple unit fields interval literals as day-time interval types") {
+    def evalAsSecond(query: String): Long = {
+      spark.sql(query).map(_.getAs[Duration](0)).collect.head.getSeconds
+    }
+
+    Seq(
+      ("SELECT INTERVAL '7' DAY", 604800),
+      ("SELECT INTERVAL '5' HOUR", 18000),
+      ("SELECT INTERVAL '2' MINUTE", 120),
+      ("SELECT INTERVAL '30' SECOND", 30),
+      ("SELECT INTERVAL '10' DAY '20' HOUR '30' MINUTE '40' SECOND", 937840),
+      // Units end with 's'
+      ("SELECT INTERVAL '2' DAYS '18' HOURS '34' MINUTES '53' SECONDS", 239693),
+      // A unit occurs more than one time
+      ("SELECT INTERVAL '1' DAY '23' HOURS '3' DAYS '70' MINUTES " +
+        "'5' SECONDS '24' HOURS '10' MINUTES '80' SECONDS", 519685)
+    ).foreach { case (query, expect) =>
+      assert(evalAsSecond(query) === expect)
+      // Units are lower case
+      assert(evalAsSecond(query.toLowerCase(Locale.ROOT)) === expect)
+    }
+  }
+
+  test("SPARK-35749: Parse multiple unit fields interval literals as year-month interval types") {
+    def evalAsYearAndMonth(query: String): (Int, Int) = {
+      val result = spark.sql(query).map(_.getAs[Period](0)).collect.head
+      (result.getYears, result.getMonths)
+    }
+
+    Seq(
+      ("SELECT INTERVAL '10' YEAR", (10, 0)),
+      ("SELECT INTERVAL '7' MONTH", (0, 7)),
+      ("SELECT INTERVAL '8' YEAR '3' MONTH", (8, 3)),
+      // Units end with 's'
+      ("SELECT INTERVAL '5' YEARS '10' MONTHS", (5, 10)),
+      // A unit is appears more than one time
+      ("SELECT INTERVAL '3' YEARS '5' MONTHS '1' YEAR '8' MONTHS", (5, 1))
+    ).foreach { case (query, expect) =>
+      assert(evalAsYearAndMonth(query) === expect)
+      // Units are lower case
+      assert(evalAsYearAndMonth(query.toLowerCase(Locale.ROOT)) === expect)
+    }
   }
 
   test("SPARK-35937: Extract date field from timestamp should work in ANSI mode") {
@@ -4056,6 +4167,39 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
            |select * from start S join end E on S.c1 = E.c1
            |""".stripMargin),
         Row(1, 2, 1, 2) :: Nil)
+    }
+  }
+
+  test("SPARK-36093: RemoveRedundantAliases should not change expression's name") {
+    withTable("t1", "t2") {
+      withView("t1_v") {
+        sql("CREATE TABLE t1(cal_dt DATE) USING PARQUET")
+        sql(
+          """
+            |INSERT INTO t1 VALUES
+            |(date'2021-06-27'),
+            |(date'2021-06-28'),
+            |(date'2021-06-29'),
+            |(date'2021-06-30')""".stripMargin)
+        sql("CREATE VIEW t1_v AS SELECT * FROM t1")
+        sql(
+          """
+            |CREATE TABLE t2(FLAG INT, CAL_DT DATE)
+            |USING PARQUET
+            |PARTITIONED BY (CAL_DT)""".stripMargin)
+        val insert = sql(
+          """
+            |INSERT INTO t2 SELECT 2 AS FLAG,CAL_DT FROM t1_v
+            |WHERE CAL_DT BETWEEN '2021-06-29' AND '2021-06-30'""".stripMargin)
+        insert.queryExecution.executedPlan.collectFirst {
+          case CommandResultExec(_, DataWritingCommandExec(
+            i: InsertIntoHadoopFsRelationCommand, _), _) => i
+        }.get.partitionColumns.map(_.name).foreach(name => assert(name == "CAL_DT"))
+        checkAnswer(sql("SELECT FLAG, CAST(CAL_DT as STRING) FROM t2 "),
+            Row(2, "2021-06-29") :: Row(2, "2021-06-30") :: Nil)
+        checkAnswer(sql("SHOW PARTITIONS t2"),
+            Row("CAL_DT=2021-06-29") :: Row("CAL_DT=2021-06-30") :: Nil)
+      }
     }
   }
 }

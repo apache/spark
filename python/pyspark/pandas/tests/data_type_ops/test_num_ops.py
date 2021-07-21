@@ -30,7 +30,7 @@ from pyspark.pandas.typedef.typehints import (
     extension_dtypes_available,
     extension_float_dtypes_available,
 )
-from pyspark.sql.types import ByteType, DecimalType, IntegerType, LongType
+from pyspark.sql.types import DecimalType, IntegralType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
@@ -328,7 +328,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
     def test_invert(self):
         for pser, psser in self.numeric_pser_psser_pairs:
-            if type(psser.spark.data_type) in [ByteType, IntegerType, LongType]:
+            if isinstance(psser.spark.data_type, IntegralType):
                 self.assert_eq(~pser, ~psser)
             else:
                 self.assertRaises(TypeError, lambda: ~psser)
@@ -347,7 +347,9 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
                 if isinstance(psser.spark.data_type, DecimalType):
-                    self.assertRaises(TypeError, lambda: psser < psser)
+                    self.assertRaisesRegex(
+                        TypeError, "< can not be applied to", lambda: psser < psser
+                    )
                 else:
                     self.assert_eq(pser < pser, (psser < psser).sort_index())
 
@@ -355,7 +357,9 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
                 if isinstance(psser.spark.data_type, DecimalType):
-                    self.assertRaises(TypeError, lambda: psser <= psser)
+                    self.assertRaisesRegex(
+                        TypeError, "<= can not be applied to", lambda: psser <= psser
+                    )
                 else:
                     self.assert_eq(pser <= pser, (psser <= psser).sort_index())
 
@@ -363,7 +367,9 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
                 if isinstance(psser.spark.data_type, DecimalType):
-                    self.assertRaises(TypeError, lambda: psser > psser)
+                    self.assertRaisesRegex(
+                        TypeError, "> can not be applied to", lambda: psser > psser
+                    )
                 else:
                     self.assert_eq(pser > pser, (psser > psser).sort_index())
 
@@ -371,7 +377,9 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         with option_context("compute.ops_on_diff_frames", True):
             for pser, psser in self.numeric_pser_psser_pairs:
                 if isinstance(psser.spark.data_type, DecimalType):
-                    self.assertRaises(TypeError, lambda: psser >= psser)
+                    self.assertRaisesRegex(
+                        TypeError, ">= can not be applied to", lambda: psser >= psser
+                    )
                 else:
                     self.assert_eq(pser >= pser, (psser >= psser).sort_index())
 

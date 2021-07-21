@@ -51,8 +51,7 @@ package object analysis {
       throw new AnalysisException(
         errorClass = errorClass,
         messageParameters = messageParameters,
-        line = t.origin.line,
-        startPosition = t.origin.startPosition)
+        origin = t.origin)
     }
   }
 

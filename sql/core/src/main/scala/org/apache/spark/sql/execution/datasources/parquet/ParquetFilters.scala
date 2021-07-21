@@ -35,6 +35,8 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName._
 
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, DateTimeUtils}
+import org.apache.spark.sql.catalyst.util.RebaseDateTime.{rebaseGregorianToJulianDays, rebaseGregorianToJulianMicros}
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -48,7 +50,8 @@ class ParquetFilters(
     pushDownDecimal: Boolean,
     pushDownStartWith: Boolean,
     pushDownInFilterThreshold: Int,
-    caseSensitive: Boolean) {
+    caseSensitive: Boolean,
+    datetimeRebaseMode: LegacyBehaviorPolicy.Value) {
   // A map which contains parquet field name and data type, if predicate push down applies.
   //
   // Each key in `nameToParquetField` represents a column; `dots` are used as separators for
@@ -129,14 +132,26 @@ class ParquetFilters(
   private val ParquetTimestampMillisType =
     ParquetSchemaType(LogicalTypeAnnotation.timestampType(true, TimeUnit.MILLIS), INT64, 0)
 
-  private def dateToDays(date: Any): Int = date match {
-    case d: Date => DateTimeUtils.fromJavaDate(d)
-    case ld: LocalDate => DateTimeUtils.localDateToDays(ld)
+  private def dateToDays(date: Any): Int = {
+    val gregorianDays = date match {
+      case d: Date => DateTimeUtils.fromJavaDate(d)
+      case ld: LocalDate => DateTimeUtils.localDateToDays(ld)
+    }
+    datetimeRebaseMode match {
+      case LegacyBehaviorPolicy.LEGACY => rebaseGregorianToJulianDays(gregorianDays)
+      case _ => gregorianDays
+    }
   }
 
-  private def timestampToMicros(v: Any): JLong = v match {
-    case i: Instant => DateTimeUtils.instantToMicros(i)
-    case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
+  private def timestampToMicros(v: Any): JLong = {
+    val gregorianMicros = v match {
+      case i: Instant => DateTimeUtils.instantToMicros(i)
+      case t: Timestamp => DateTimeUtils.fromJavaTimestamp(t)
+    }
+    datetimeRebaseMode match {
+      case LegacyBehaviorPolicy.LEGACY => rebaseGregorianToJulianMicros(gregorianMicros)
+      case _ => gregorianMicros
+    }
   }
 
   private def decimalToInt32(decimal: JBigDecimal): Integer = decimal.unscaledValue().intValue()
@@ -710,7 +725,7 @@ class ParquetFilters(
           values.distinct.flatMap { v =>
             makeEq.lift(fieldType).map(_(fieldNames, v))
           }.reduceLeftOption(FilterApi.or)
-        } else {
+        } else if (canPartialPushDownConjuncts) {
           val primitiveType = schema.getColumnDescription(fieldNames).getPrimitiveType
           val statistics: ParquetStatistics[_] = ParquetStatistics.createStats(primitiveType)
           if (values.contains(null)) {
@@ -721,6 +736,8 @@ class ParquetFilters(
           } else {
             makeInPredicate.lift(fieldType).map(_(fieldNames, values, statistics))
           }
+        } else {
+          None
         }
 
       case sources.StringStartsWith(name, prefix)

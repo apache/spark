@@ -1646,14 +1646,14 @@ class iLocIndexer(LocIndexerLike):
     ) -> Tuple[Optional[Column], Optional[int], Optional[int]]:
         sdf = self._internal.spark_frame
 
-        if any(isinstance(key, (int, np.int, np.int64, np.int32)) and key < 0 for key in rows_sel):
+        if any(isinstance(key, (int, np.int64, np.int32)) and key < 0 for key in rows_sel):
             offset = sdf.count()
         else:
             offset = 0
 
         new_rows_sel = []
         for key in list(rows_sel):
-            if not isinstance(key, (int, np.int, np.int64, np.int32)):
+            if not isinstance(key, (int, np.int64, np.int32)):
                 raise TypeError(
                     "cannot do positional indexing with these indexers [{}] of {}".format(
                         key, type(key)

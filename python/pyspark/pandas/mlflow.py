@@ -25,7 +25,7 @@ import pandas as pd
 import numpy as np
 from typing import Any
 
-from pyspark.pandas._typing import Label  # noqa: F401 (SPARK-34943)
+from pyspark.pandas._typing import Label, Dtype  # noqa: F401 (SPARK-34943)
 from pyspark.pandas.utils import lazy_property, default_session
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series, first_series
@@ -42,7 +42,7 @@ class PythonModelWrapper(object):
 
     """
 
-    def __init__(self, model_uri: str, return_type_hint: str):
+    def __init__(self, model_uri: str, return_type_hint: Union[str, type, Dtype]):
         self._model_uri = model_uri
         self._return_type_hint = return_type_hint
 
@@ -109,7 +109,9 @@ class PythonModelWrapper(object):
             raise ValueError("unknown data type: {}".format(type(data).__name__))
 
 
-def load_model(model_uri: str, predict_type: str = "infer") -> PythonModelWrapper:
+def load_model(
+    model_uri: str, predict_type: Union[str, type, Dtype] = "infer"
+) -> PythonModelWrapper:
     """
     Loads an MLflow model into an wrapper that can be used both for pandas and pandas-on-Spark
     DataFrame.

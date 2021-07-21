@@ -15,15 +15,17 @@
 # limitations under the License.
 #
 from functools import partial
-from typing import Any, no_type_check
+from typing import Any, Optional, cast, no_type_check
 
 import pandas as pd
-from pandas.api.types import is_hashable
+from pandas.api.types import is_hashable, CategoricalDtype
 
 from pyspark import pandas as ps
 from pyspark.pandas.indexes.base import Index
+from pyspark.pandas.internal import InternalField
 from pyspark.pandas.missing.indexes import MissingPandasLikeCategoricalIndex
 from pyspark.pandas.series import Series
+from pyspark.sql.types import StructField
 
 
 class CategoricalIndex(Index):
@@ -114,6 +116,10 @@ class CategoricalIndex(Index):
         )
 
     @property
+    def dtype(self) -> CategoricalDtype:
+        return cast(CategoricalDtype, super().dtype)
+
+    @property
     def codes(self) -> Index:
         """
         The category codes of this categorical.
@@ -139,7 +145,16 @@ class CategoricalIndex(Index):
         >>> idx.codes
         Int64Index([0, 1, 1, 2, 2, 2], dtype='int64')
         """
-        return self._with_new_scol(self.spark.column).rename(None)
+        return self._with_new_scol(
+            self.spark.column,
+            field=InternalField.from_struct_field(
+                StructField(
+                    name=self._internal.index_spark_column_names[0],
+                    dataType=self.spark.data_type,
+                    nullable=self.spark.nullable,
+                )
+            ),
+        ).rename(None)
 
     @property
     def categories(self) -> pd.Index:
@@ -178,6 +193,68 @@ class CategoricalIndex(Index):
         False
         """
         return self.dtype.ordered
+
+    def as_ordered(self, inplace: bool = False) -> Optional["CategoricalIndex"]:
+        """
+        Set the Categorical to be ordered.
+
+        Parameters
+        ----------
+        inplace : bool, default False
+           Whether or not to set the ordered attribute in-place or return
+           a copy of this categorical with ordered set to True.
+
+        Returns
+        -------
+        CategoricalIndex or None
+            Ordered Categorical or None if ``inplace=True``.
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(list("abbccc"))
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+
+        >>> idx.as_ordered()  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=True, dtype='category')
+        """
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(self.to_series().cat.as_ordered()).rename(self.name)
+
+    def as_unordered(self, inplace: bool = False) -> Optional["CategoricalIndex"]:
+        """
+        Set the Categorical to be unordered.
+
+        Parameters
+        ----------
+        inplace : bool, default False
+           Whether or not to set the ordered attribute in-place or return
+           a copy of this categorical with ordered set to False.
+
+        Returns
+        -------
+        CategoricalIndex or None
+            Unordered Categorical or None if ``inplace=True``.
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(list("abbccc")).as_ordered()
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=True, dtype='category')
+
+        >>> idx.as_unordered()  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+        """
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(self.to_series().cat.as_unordered()).rename(self.name)
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeCategoricalIndex, item):

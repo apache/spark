@@ -65,6 +65,28 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(psser.cat.codes, pser.cat.codes)
         self.assert_eq(psser.cat.ordered, pser.cat.ordered)
 
+    def test_as_ordered_unordered(self):
+        pdf, psdf = self.df_pair
+
+        pser = pdf.a
+        psser = psdf.a
+
+        # as_ordered
+        self.assert_eq(pser.cat.as_ordered(), psser.cat.as_ordered())
+
+        pser.cat.as_ordered(inplace=True)
+        psser.cat.as_ordered(inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        # as_unordered
+        self.assert_eq(pser.cat.as_unordered(), psser.cat.as_unordered())
+
+        pser.cat.as_unordered(inplace=True)
+        psser.cat.as_unordered(inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
     def test_astype(self):
         pser = pd.Series(["a", "b", "c"])
         psser = ps.from_pandas(pser)
@@ -470,6 +492,17 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             psdf.a.pandas_on_spark.transform_batch(to_category).sort_index(),
             to_category(pdf.a).sort_index(),
         )
+
+    def test_unstack(self):
+        pdf = self.pdf
+        index = pd.MultiIndex.from_tuples(
+            [("x", "a"), ("x", "b"), ("x", "c"), ("y", "a"), ("y", "b"), ("y", "d")]
+        )
+        pdf.index = index
+        psdf = ps.from_pandas(pdf)
+
+        self.assert_eq(psdf.a.unstack().sort_index(), pdf.a.unstack().sort_index())
+        self.assert_eq(psdf.b.unstack().sort_index(), pdf.b.unstack().sort_index())
 
 
 if __name__ == "__main__":
