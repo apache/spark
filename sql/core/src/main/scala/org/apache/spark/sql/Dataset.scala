@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
-import org.apache.spark.sql.catalyst.util.{DateTimeConstants, IntervalUtils}
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
@@ -741,14 +741,12 @@ class Dataset[T] private[sql](
   // defined on a derived column cannot referenced elsewhere in the plan.
   def withWatermark(eventTime: String, delayThreshold: String): Dataset[T] = withTypedPlan {
     val parsedDelay = try {
-      if (delayThreshold.toLowerCase(Locale.ROOT).startsWith("interval")) {
+      if (delayThreshold.toLowerCase(Locale.ROOT).trim.startsWith("interval")) {
         CatalystSqlParser.parseExpression(delayThreshold) match {
           case Literal(months: Int, _: YearMonthIntervalType) =>
             new CalendarInterval(months, 0, 0)
           case Literal(micros: Long, _: DayTimeIntervalType) =>
-            val days = micros / DateTimeConstants.MICROS_PER_DAY
-            val restMicros = micros % DateTimeConstants.MICROS_PER_DAY
-            new CalendarInterval(0, Math.toIntExact(days), restMicros)
+            new CalendarInterval(0, 0, micros)
         }
       } else {
         IntervalUtils.stringToInterval(UTF8String.fromString(delayThreshold))

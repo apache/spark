@@ -31,6 +31,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
+import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.UTC
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemorySink
@@ -768,22 +769,25 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   test("SPARK-35815: Support ANSI intervals for delay threshold") {
     Seq(
       // Conventional form and some variants
-      (Seq("3 days", "Interval 3 day", "inTerval '3' day"), 259200000),
-      (Seq("5 hours", "INTERVAL 5 hour", "interval '5' hour"), 18000000),
-      (Seq("8 minutes", "interval 8 minute", "interval '8' minute"), 480000),
-      (Seq("10 seconds", "interval 10 second", "interval '10' second"), 10000),
-      (Seq("1 years", "interval 1 year", "interval '1' year"), 32140800000L),
-      (Seq("1 months", "interval 1 month", "interval '1' month"), 2678400000L),
+      (Seq("3 days", "Interval 3 day", "inTerval '3' day"), 3 * MILLIS_PER_DAY),
+      (Seq(" 5 hours", "INTERVAL 5 hour", "interval '5' hour"), 5 * MILLIS_PER_HOUR),
+      (Seq("\t8 minutes", "interval 8 minute", "interval '8' minute"), 8 * MILLIS_PER_MINUTE),
+      (Seq("10 seconds", "interval 10 second", "interval '10' second"), 10 * MILLIS_PER_SECOND),
+      (Seq("1 years", "interval 1 year", "interval '1' year"),
+        MONTHS_PER_YEAR * DAYS_PER_MONTH * MILLIS_PER_DAY),
+      (Seq("1 months", "interval 1 month", "interval '1' month"), DAYS_PER_MONTH * MILLIS_PER_DAY),
       (Seq(
         "1 day 2 hours 3 minutes 4 seconds",
-        "interval 1 day 2 hours 3 minutes 4 seconds",
-        "interval '1' day '2' hours '3' minutes '4' seconds",
-        "interval '1 2:3:4' day to second"), 93784000),
+        " interval 1 day 2 hours 3 minutes 4 seconds",
+        "\tinterval '1' day '2' hours '3' minutes '4' seconds",
+        "interval '1 2:3:4' day to second"),
+        MILLIS_PER_DAY + 2 * MILLIS_PER_HOUR + 3 * MILLIS_PER_MINUTE + 4 * MILLIS_PER_SECOND),
       (Seq(
-        "1 year 2 months",
+        " 1 year 2 months",
         "interval 1 year 2 month",
         "interval '1' year '2' month",
-        "interval '1-2' year to month"), 37497600000L)
+        "\tinterval '1-2' year to month"),
+        (MONTHS_PER_YEAR * DAYS_PER_MONTH + 2 * DAYS_PER_MONTH) * MILLIS_PER_DAY)
     ).foreach { case (delayThresholdVariants, expectedMs) =>
       delayThresholdVariants.foreach { case delayThreshold =>
         val df = MemoryStream[Int].toDF
