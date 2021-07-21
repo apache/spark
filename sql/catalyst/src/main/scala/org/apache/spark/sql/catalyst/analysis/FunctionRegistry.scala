@@ -325,7 +325,8 @@ object FunctionRegistry {
         expression[ParseToTimestampNTZ]("to_timestamp_ntz"),
         expression[ParseToTimestampLTZ]("to_timestamp_ltz"),
         expression[MakeTimestampNTZ]("make_timestamp_ntz"),
-        expression[MakeTimestampLTZ]("make_timestamp_ltz")
+        expression[MakeTimestampLTZ]("make_timestamp_ltz"),
+        expression[LocalTimestamp]("localtimestamp")
       )
     } else {
       Map.empty
@@ -533,7 +534,6 @@ object FunctionRegistry {
     expression[CurrentDate]("current_date"),
     expression[CurrentTimestamp]("current_timestamp"),
     expression[CurrentTimeZone]("current_timezone"),
-    expression[LocalTimestamp]("localtimestamp"),
     expression[DateDiff]("datediff"),
     expression[DateAdd]("date_add"),
     expression[DateFormatClass]("date_format"),
