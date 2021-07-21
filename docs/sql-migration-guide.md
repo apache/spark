@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 3.2 to 3.3
+
+  - Non-nullable schema was not supported properly in previous Spark version so the output schema of `DataFrameReader.json(jsonDataset: Dataset[String])` and `DataFrameReader.csv(csvDataset: Dataset[String])` became nullable which also matches with `DataFrameReader.json(path: String)` and `DataFrameReader.csv(path: String)`.
+
 ## Upgrading from Spark SQL 3.1 to 3.2
 
   - Since Spark 3.2, ADD FILE/JAR/ARCHIVE commands require each path to be enclosed by `"` or `'` if the path contains whitespaces.
