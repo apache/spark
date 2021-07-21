@@ -185,11 +185,11 @@ private[deploy] class ExecutorRunner(
 
       // Redirect its stdout and stderr to files
       val stdout = new File(executorDir, "stdout")
-      stdoutAppender = FileAppender(process.getInputStream, stdout, conf)
+      stdoutAppender = FileAppender(process.getInputStream, stdout, conf, true)
 
       val stderr = new File(executorDir, "stderr")
       Files.write(header, stderr, StandardCharsets.UTF_8)
-      stderrAppender = FileAppender(process.getErrorStream, stderr, conf)
+      stderrAppender = FileAppender(process.getErrorStream, stderr, conf, true)
 
       state = ExecutorState.RUNNING
       worker.send(ExecutorStateChanged(appId, execId, state, None, None))
