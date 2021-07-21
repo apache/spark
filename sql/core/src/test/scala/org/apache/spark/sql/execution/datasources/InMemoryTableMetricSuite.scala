@@ -41,7 +41,7 @@ class InMemoryTableMetricSuite
     spark.sessionState.conf.clear()
   }
 
-  private def testMetricOnDSv2(func: String => Unit, checker: Map[Long, String] => Unit) {
+  private def testMetricOnDSv2(func: String => Unit, checker: Map[Long, String] => Unit): Unit = {
     withTable("testcat.table_name") {
       val statusStore = spark.sharedState.statusStore
       val oldCount = statusStore.executionsList().size
