@@ -1063,6 +1063,77 @@ then drops intermediate state of a window < watermark, and appends the final
 counts to the Result Table/sink. For example, the final counts of window `12:00 - 12:10` is 
 appended to the Result Table only after the watermark is updated to `12:11`. 
 
+#### Types of time windows
+
+Spark supports three types of time windows: tumbling (fixed), sliding and session.
+
+![The types of time windows](img/structured-streaming-time-window-types.jpg)
+
+Tumbling windows are a series of fixed-sized, non-overlapping and contiguous time intervals. An input
+can only be bound to a single window.
+
+Sliding windows are similar to the tumbling windows from the point of being "fixed-sized", but windows
+can overlap if the duration of slide is smaller than the duration of window, and in this case an input
+can be bound to the multiple windows.
+
+Tumbling and sliding window use `window` function, which has been described on above examples.
+
+Session windows have different characteristic compared to the previous two types. Session window has a dynamic size
+of the window length, depending on the inputs. A session window starts with an input, and expands itself
+if following input has been received within gap duration. A session window closes when there's no input
+received within gap duration after receiving the latest input.
+
+Session window uses `session_window` function. The usage of the function is similar to the `window` function.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+import spark.implicits._
+
+val events = ... // streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+// Group the data by session window and userId, and compute the count of each group
+val sessionizedCounts = events
+    .withWatermark("timestamp", "10 minutes")
+    .groupBy(
+        session_window($"timestamp", "5 minutes"),
+        $"userId")
+    .count()
+{% endhighlight %}
+
+</div>
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+Dataset<Row> events = ... // streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+// Group the data by session window and userId, and compute the count of each group
+Dataset<Row> sessionizedCounts = events
+    .withWatermark("timestamp", "10 minutes")
+    .groupBy(
+        session_window(col("timestamp"), "5 minutes"),
+        col("userId"))
+    .count();
+{% endhighlight %}
+
+</div>
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+events = ...  # streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+# Group the data by session window and userId, and compute the count of each group
+sessionizedCounts = events \
+    .withWatermark("timestamp", "10 minutes") \
+    .groupBy(
+        session_window(events.timestamp, "5 minutes"),
+        events.userId) \
+    .count()
+{% endhighlight %}
+
+</div>
+</div>
+
 ##### Conditions for watermarking to clean aggregation state
 {:.no_toc}
 
