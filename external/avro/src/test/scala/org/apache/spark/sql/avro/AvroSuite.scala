@@ -25,7 +25,7 @@ import java.util.{Locale, UUID}
 
 import scala.collection.JavaConverters._
 
-import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder}
+import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder, SchemaParseException}
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
@@ -2155,6 +2155,46 @@ abstract class AvroSuite
         }
         val errMsg = e.getCause.asInstanceOf[SparkUpgradeException].getMessage
         assert(errMsg.contains("You may get a different result due to the upgrading"))
+      }
+    }
+  }
+
+  test("SPARK-33865: Hive DDL with avro should check col name") {
+    withTable("test_ddl") {
+      withView("v") {
+        spark.range(1).createTempView("v")
+        withTempDir { dir =>
+          val e1 = intercept[SchemaParseException] {
+            spark.sql(
+              s"""
+                 |CREATE TABLE test_ddl USING AVRO
+                 |LOCATION '${dir}'
+                 |AS SELECT ID, ABS(ID) FROM v""".stripMargin)
+          }.getMessage
+          assert(e1.contains("Illegal character in: abs(ID)"))
+        }
+
+        withTempDir { dir =>
+          val e2 = intercept[SchemaParseException] {
+            spark.sql(
+              s"""
+                 |CREATE TABLE test_ddl USING AVRO
+                 |LOCATION '${dir}'
+                 |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
+          }.getMessage
+          assert(e2.contains("Illegal initial character: (IF((ID = 1), 1, 0))"))
+        }
+        withTempDir { dir =>
+          spark.sql(
+            s"""
+               |CREATE TABLE test_ddl USING AVRO
+               |LOCATION '${dir}'
+               |AS SELECT ID, IF(ID=1,ID,0) AS A, ABS(ID) AS B
+               |FROM v""".stripMargin)
+          val expectedSchema = StructType(Seq(StructField("ID", LongType, true),
+            StructField("A", LongType, true), StructField("B", LongType, true)))
+          assert(spark.table("test_ddl").schema == expectedSchema)
+        }
       }
     }
   }

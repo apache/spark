@@ -60,7 +60,7 @@ object DataSourceUtils {
 
   def checkFieldNames(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
-      format.checkFieldName(field.name)
+      format.supportFieldName(field.name)
       field.dataType match {
         case s: StructType => checkFieldNames(format, s)
         case _ =>

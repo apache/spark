@@ -170,7 +170,7 @@ trait FileFormat {
    *
    * @throws AnalysisException If field name is invalid
    */
-  def checkFieldName(name: String): Unit = {}
+  def supportFieldName(name: String): Unit = {}
 }
 
 /**

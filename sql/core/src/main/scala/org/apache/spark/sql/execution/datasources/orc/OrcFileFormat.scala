@@ -262,7 +262,7 @@ class OrcFileFormat
     case _ => false
   }
 
-  override def checkFieldName(name: String): Unit = {
+  override def supportFieldName(name: String): Unit = {
     try {
       TypeDescription.fromString(s"struct<`$name`:int>")
     } catch {

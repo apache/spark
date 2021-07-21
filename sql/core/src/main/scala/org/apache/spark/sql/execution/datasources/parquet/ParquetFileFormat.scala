@@ -387,7 +387,7 @@ class ParquetFileFormat
     case _ => false
   }
 
-  override def checkFieldName(name: String): Unit = {
+  override def supportFieldName(name: String): Unit = {
     ParquetSchemaConverter.checkFieldName(name)
   }
 }
