@@ -765,6 +765,55 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
   }
 
+  test("SPARK-35815: Support ANSI intervals for delay threshold") {
+    Seq(
+      // Conventional form and some variants
+      (Seq("3 days", "Interval 3 day", "inTerval '3' day"), 259200000),
+      (Seq("5 hours", "INTERVAL 5 hour", "interval '5' hour"), 18000000),
+      (Seq("8 minutes", "interval 8 minute", "interval '8' minute"), 480000),
+      (Seq("10 seconds", "interval 10 second", "interval '10' second"), 10000),
+      (Seq("1 years", "interval 1 year", "interval '1' year"), 32140800000L),
+      (Seq("1 months", "interval 1 month", "interval '1' month"), 2678400000L),
+      (Seq(
+        "1 day 2 hours 3 minutes 4 seconds",
+        "interval 1 day 2 hours 3 minutes 4 seconds",
+        "interval '1' day '2' hours '3' minutes '4' seconds",
+        "interval '1 2:3:4' day to second"), 93784000),
+      (Seq(
+        "1 year 2 months",
+        "interval 1 year 2 month",
+        "interval '1' year '2' month",
+        "interval '1-2' year to month"), 37497600000L)
+    ).foreach { case (delayThresholdVariants, expectedMs) =>
+      delayThresholdVariants.foreach { case delayThreshold =>
+        val df = MemoryStream[Int].toDF
+          .withColumn("eventTime", timestamp_seconds($"value"))
+          .withWatermark("eventTime", delayThreshold)
+        val eventTimeAttr = df.queryExecution.analyzed.output.find(a => a.name == "eventTime")
+        assert(eventTimeAttr.isDefined)
+        val metadata = eventTimeAttr.get.metadata
+        assert(metadata.contains(EventTimeWatermark.delayKey))
+        assert(metadata.getLong(EventTimeWatermark.delayKey) === expectedMs)
+      }
+    }
+
+    // Invalid interval patterns
+    Seq(
+      "1 foo",
+      "interva 2 day",
+      "intrval '3' day",
+      "interval 4 foo",
+      "interval '5' foo",
+      "interval '1 2:3:4' day to hour",
+      "interval '1 2' year to month").foreach { delayThreshold =>
+      intercept[AnalysisException] {
+        val df = MemoryStream[Int].toDF
+          .withColumn("eventTime", timestamp_seconds($"value"))
+          .withWatermark("eventTime", delayThreshold)
+      }
+    }
+  }
+
   private def dfWithMultipleWatermarks(
       input1: MemoryStream[Int],
       input2: MemoryStream[Int]): Dataset[_] = {
