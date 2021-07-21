@@ -309,9 +309,7 @@ case class FlatMapGroupsWithStateExec(
           var foundInitialStateForKey = false
           initialStateRowIter.foreach { initialStateRow =>
             if (foundInitialStateForKey) {
-              throw new IllegalArgumentException("The initial state provided contained " +
-                "multiple rows(state) with the same key. Make sure to de-duplicate the " +
-                "initial state before passing it.")
+              FlatMapGroupsWithStateExec.foundDuplicateInitialKeyException()
             }
             foundInitialStateForKey = true
             val initStateObj = getStateObj.get(initialStateRow)
@@ -403,3 +401,70 @@ case class FlatMapGroupsWithStateExec(
     copy(child = newLeft, initialState = newRight)
 }
 
+object FlatMapGroupsWithStateExec {
+
+  def foundDuplicateInitialKeyException(): Exception = {
+    throw new IllegalArgumentException("The initial state provided contained " +
+      "multiple rows(state) with the same key. Make sure to de-duplicate the " +
+      "initial state before passing it.")
+  }
+
+  /**
+   * Plan logical flatmapGroupsWIthState for batch queries
+   * If the initial state is provided, we create an instance of the CoGroupExec, if the initial
+   * state is not provided we create an instance of the MapGroupsExec
+   */
+  // scalastyle:off argcount
+  def generateSparkPlanForBatchQueries(
+      userFunc: (Any, Iterator[Any], LogicalGroupState[Any]) => Iterator[Any],
+      keyDeserializer: Expression,
+      valueDeserializer: Expression,
+      initialStateDeserializer: Expression,
+      groupingAttributes: Seq[Attribute],
+      initialStateGroupAttrs: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      initialStateDataAttrs: Seq[Attribute],
+      outputObjAttr: Attribute,
+      timeoutConf: GroupStateTimeout,
+      hasInitialState: Boolean,
+      initialState: SparkPlan,
+      child: SparkPlan): SparkPlan = {
+    if (hasInitialState) {
+      val watermarkPresent = child.output.exists {
+        case a: Attribute if a.metadata.contains(EventTimeWatermark.delayKey) => true
+        case _ => false
+      }
+      val func = (keyRow: Any, values: Iterator[Any], states: Iterator[Any]) => {
+        // Check if there is only one state for every key.
+        var foundInitialStateForKey = false
+        val optionalStates = states.map { stateValue =>
+          if (foundInitialStateForKey) {
+            foundDuplicateInitialKeyException()
+          }
+          foundInitialStateForKey = true
+          stateValue
+        }.toArray
+
+        // Create group state object
+        val groupState = GroupStateImpl.createForStreaming(
+          optionalStates.headOption,
+          System.currentTimeMillis,
+          GroupStateImpl.NO_TIMESTAMP,
+          timeoutConf,
+          hasTimedOut = false,
+          watermarkPresent)
+
+        // Call user function with the state and values for this key
+        userFunc(keyRow, values, groupState)
+      }
+      CoGroupExec(
+        func, keyDeserializer, valueDeserializer, initialStateDeserializer, groupingAttributes,
+        initialStateGroupAttrs, dataAttributes, initialStateDataAttrs, outputObjAttr,
+        child, initialState)
+    } else {
+      MapGroupsExec(
+        userFunc, keyDeserializer, valueDeserializer, groupingAttributes,
+        dataAttributes, outputObjAttr, timeoutConf, child)
+    }
+  }
+}
