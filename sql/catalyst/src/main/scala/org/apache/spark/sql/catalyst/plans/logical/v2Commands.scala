@@ -425,6 +425,12 @@ case class UpdateTable(
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): UpdateTable =
     copy(table = newChild)
+
+  def skipSchemaResolution: Boolean = table match {
+    case r: NamedRelation => r.skipSchemaResolution
+    case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
+    case _ => false
+  }
 }
 
 /**
@@ -437,6 +443,13 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction]) extends BinaryCommand with SupportsSubquery {
   def duplicateResolved: Boolean = targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
+
+  def skipSchemaResolution: Boolean = targetTable match {
+    case r: NamedRelation => r.skipSchemaResolution
+    case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
+    case _ => false
+  }
+
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
   override protected def withNewChildrenInternal(
@@ -466,7 +479,7 @@ case class UpdateAction(
       newChildren: IndexedSeq[Expression]): UpdateAction =
     copy(
       condition = if (condition.isDefined) Some(newChildren.head) else None,
-      assignments = newChildren.tail.asInstanceOf[Seq[Assignment]])
+      assignments = newChildren.takeRight(assignments.length).asInstanceOf[Seq[Assignment]])
 }
 
 case class UpdateStarAction(condition: Option[Expression]) extends MergeAction {
@@ -485,7 +498,7 @@ case class InsertAction(
       newChildren: IndexedSeq[Expression]): InsertAction =
     copy(
       condition = if (condition.isDefined) Some(newChildren.head) else None,
-      assignments = newChildren.tail.asInstanceOf[Seq[Assignment]])
+      assignments = newChildren.takeRight(assignments.length).asInstanceOf[Seq[Assignment]])
 }
 
 case class InsertStarAction(condition: Option[Expression]) extends MergeAction {
