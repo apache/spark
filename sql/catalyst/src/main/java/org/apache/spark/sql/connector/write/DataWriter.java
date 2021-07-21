@@ -21,6 +21,7 @@ import java.io.Closeable;
 import java.io.IOException;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 
 /**
  * A data writer returned by {@link DataWriterFactory#createWriter(int, long)} and is
@@ -104,4 +105,12 @@ public interface DataWriter<T> extends Closeable {
    * @throws IOException if failure happens during disk/network IO like writing files.
    */
   void abort() throws IOException;
+
+  /**
+   * Returns an array of custom task metrics. By default it returns empty array. Note that it is
+   * not recommended to put heavy logic in this method as it may affect writing performance.
+   */
+  default CustomTaskMetric[] currentMetricsValues() {
+    return new CustomTaskMetric[]{};
+  }
 }

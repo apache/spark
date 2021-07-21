@@ -141,8 +141,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       RetryingBlockFetcher.BlockFetchStarter blockPushStarter =
           (inputBlockId, inputListener) -> {
             TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockPusher(client, appId, inputBlockId, inputListener, buffersWithId)
-              .start();
+            new OneForOneBlockPusher(client, appId, conf.appAttemptId(), inputBlockId,
+              inputListener, buffersWithId).start();
           };
       int maxRetries = conf.maxIORetries();
       if (maxRetries > 0) {
@@ -168,7 +168,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     checkInit();
     try {
       TransportClient client = clientFactory.createClient(host, port);
-      ByteBuffer finalizeShuffleMerge = new FinalizeShuffleMerge(appId, shuffleId).toByteBuffer();
+      ByteBuffer finalizeShuffleMerge =
+        new FinalizeShuffleMerge(appId, conf.appAttemptId(), shuffleId).toByteBuffer();
       client.sendRpc(finalizeShuffleMerge, new RpcResponseCallback() {
         @Override
         public void onSuccess(ByteBuffer response) {

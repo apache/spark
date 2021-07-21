@@ -43,6 +43,14 @@ class CatalogTests(ReusedSQLTestCase):
             databases = [db.name for db in spark.catalog.listDatabases()]
             self.assertEqual(sorted(databases), ["default", "some_db"])
 
+    def test_database_exists(self):
+        # SPARK-36207: testing that database_exists returns correct boolean
+        spark = self.spark
+        with self.database("some_db"):
+            self.assertFalse(spark.catalog.databaseExists("some_db"))
+            spark.sql("CREATE DATABASE some_db")
+            self.assertTrue(spark.catalog.databaseExists("some_db"))
+
     def test_list_tables(self):
         from pyspark.sql.catalog import Table
         spark = self.spark

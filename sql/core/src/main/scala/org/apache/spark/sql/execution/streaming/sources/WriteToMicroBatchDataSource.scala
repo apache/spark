@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.streaming.sources
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
+import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, WriteToDataSourceV2}
 
@@ -31,13 +32,14 @@ import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, Writ
 case class WriteToMicroBatchDataSource(
     relation: Option[DataSourceV2Relation],
     write: StreamingWrite,
-    query: LogicalPlan)
+    query: LogicalPlan,
+    customMetrics: Seq[CustomMetric])
   extends UnaryNode {
   override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil
 
   def createPlan(batchId: Long): WriteToDataSourceV2 = {
-    WriteToDataSourceV2(relation, new MicroBatchWrite(batchId, write), query)
+    WriteToDataSourceV2(relation, new MicroBatchWrite(batchId, write), query, customMetrics)
   }
 
   override protected def withNewChildInternal(newChild: LogicalPlan): WriteToMicroBatchDataSource =

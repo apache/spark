@@ -65,6 +65,32 @@ class Catalog(object):
                 locationUri=jdb.locationUri()))
         return databases
 
+    def databaseExists(self, dbName):
+        """Check if the database with the specified name exists.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        dbName : str
+             name of the database to check existence
+
+        Returns
+        -------
+        bool
+            Indicating whether the database exists
+
+        Examples
+        --------
+        >>> spark.catalog.databaseExists("test_new_database")
+        False
+        >>> df = spark.sql("CREATE DATABASE test_new_database")
+        >>> spark.catalog.databaseExists("test_new_database")
+        True
+        >>> df = spark.sql("DROP DATABASE test_new_database")
+        """
+        return self._jcatalog.databaseExists(dbName)
+
     @since(2.0)
     def listTables(self, dbName=None):
         """Returns a list of tables/views in the specified database.
