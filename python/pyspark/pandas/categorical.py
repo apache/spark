@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Optional, TYPE_CHECKING, cast
+from typing import List, Optional, Union, TYPE_CHECKING, cast
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -89,8 +89,20 @@ class CategoricalAccessor(object):
         return self._dtype.categories
 
     @categories.setter
-    def categories(self, categories: pd.Index) -> None:
-        raise NotImplementedError()
+    def categories(self, categories: Union[pd.Index, List]) -> None:
+        dtype = CategoricalDtype(categories, ordered=self.ordered)
+
+        if len(self.categories) != len(dtype.categories):
+            raise ValueError(
+                "new categories need to have the same number of items as the old categories!"
+            )
+
+        internal = self._data._psdf._internal.with_new_spark_column(
+            self._data._column_label,
+            self._data.spark.column,
+            field=self._data._internal.data_fields[0].copy(dtype=dtype),
+        )
+        self._data._psdf._update_internal_frame(internal)
 
     @property
     def ordered(self) -> bool:

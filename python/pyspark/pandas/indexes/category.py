@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from functools import partial
-from typing import Any, Optional, cast, no_type_check
+from typing import Any, List, Optional, Union, cast, no_type_check
 
 import pandas as pd
 from pandas.api.types import is_hashable, CategoricalDtype
@@ -174,8 +174,18 @@ class CategoricalIndex(Index):
         return self.dtype.categories
 
     @categories.setter
-    def categories(self, categories: pd.Index) -> None:
-        raise NotImplementedError()
+    def categories(self, categories: Union[pd.Index, List]) -> None:
+        dtype = CategoricalDtype(categories, ordered=self.ordered)
+
+        if len(self.categories) != len(dtype.categories):
+            raise ValueError(
+                "new categories need to have the same number of items as the old categories!"
+            )
+
+        internal = self._psdf._internal.copy(
+            index_fields=[self._internal.index_fields[0].copy(dtype=dtype)]
+        )
+        self._psdf._update_internal_frame(internal)
 
     @property
     def ordered(self) -> bool:

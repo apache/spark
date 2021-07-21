@@ -65,6 +65,20 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(psser.cat.codes, pser.cat.codes)
         self.assert_eq(psser.cat.ordered, pser.cat.ordered)
 
+    def test_categories_setter(self):
+        pdf, psdf = self.df_pair
+
+        pser = pdf.a
+        psser = psdf.a
+
+        pser.cat.categories = ["z", "y", "x"]
+        psser.cat.categories = ["z", "y", "x"]
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        with self.assertRaises(ValueError):
+            psser.cat.categories = [1, 2, 3, 4]
+
     def test_as_ordered_unordered(self):
         pdf, psdf = self.df_pair
 
