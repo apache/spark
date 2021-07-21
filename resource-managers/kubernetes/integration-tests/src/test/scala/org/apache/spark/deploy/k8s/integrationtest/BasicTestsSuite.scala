@@ -30,6 +30,11 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
     runSparkPiAndVerifyCompletion()
   }
 
+  test("Run SparkPi with no resources & statefulset allocation", k8sTestTag) {
+    sparkAppConf.set("spark.kubernetes.allocation.podsallocator", "statefulset")
+    runSparkPiAndVerifyCompletion()
+  }
+
   test("Run SparkPi with a very long application name.", k8sTestTag) {
     sparkAppConf.set("spark.app.name", "long" * 40)
     runSparkPiAndVerifyCompletion()
