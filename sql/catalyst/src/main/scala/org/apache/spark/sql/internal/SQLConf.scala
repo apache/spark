@@ -3976,6 +3976,8 @@ class SQLConf extends Serializable with Logging {
   def ansiEnabled: Boolean = getConf(ANSI_ENABLED)
 
   def timestampType: AtomicType = getConf(TIMESTAMP_TYPE) match {
+    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
+    //              The configuration `TIMESTAMP_TYPE` is only effective for testing in Spark 3.2.
     case "TIMESTAMP_NTZ" if Utils.isTesting =>
       TimestampNTZType
 

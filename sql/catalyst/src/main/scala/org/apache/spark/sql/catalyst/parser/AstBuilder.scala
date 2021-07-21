@@ -2132,6 +2132,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           val zoneId = getZoneId(conf.sessionLocalTimeZone)
           val specialDate = convertSpecialDate(value, zoneId).map(Literal(_, DateType))
           specialDate.getOrElse(toLiteral(stringToDate, DateType))
+        // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
         case "TIMESTAMP_NTZ" if isTesting =>
           val specialTs = convertSpecialTimestampNTZ(value).map(Literal(_, TimestampNTZType))
           specialTs.getOrElse(toLiteral(stringToTimestampWithoutTimeZone, TimestampNTZType))
@@ -2574,6 +2575,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case ("double", Nil) => DoubleType
       case ("date", Nil) => DateType
       case ("timestamp", Nil) => SQLConf.get.timestampType
+      // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
       case ("timestamp_ntz", Nil) if isTesting => TimestampNTZType
       case ("timestamp_ltz", Nil) if isTesting => TimestampType
       case ("string", Nil) => StringType

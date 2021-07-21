@@ -120,6 +120,7 @@ object JavaTypeInference {
       case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
       case c: Class[_] if c == classOf[java.time.Instant] => (TimestampType, true)
       case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
+      // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
       case c: Class[_] if c == classOf[java.time.LocalDateTime] && Utils.isTesting =>
         (TimestampNTZType, true)
       case c: Class[_] if c == classOf[java.time.Duration] => (DayTimeIntervalType(), true)
@@ -253,6 +254,7 @@ object JavaTypeInference {
       case c if c == classOf[java.sql.Timestamp] =>
         createDeserializerForSqlTimestamp(path)
 
+      // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
       case c if c == classOf[java.time.LocalDateTime] && Utils.isTesting =>
         createDeserializerForLocalDateTime(path)
 
@@ -415,6 +417,7 @@ object JavaTypeInference {
 
         case c if c == classOf[java.sql.Timestamp] => createSerializerForSqlTimestamp(inputObject)
 
+        // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
         case c if c == classOf[java.time.LocalDateTime] && Utils.isTesting =>
           createSerializerForLocalDateTime(inputObject)
 

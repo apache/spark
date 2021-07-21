@@ -319,6 +319,7 @@ object FunctionRegistry {
   val FUNC_ALIAS = TreeNodeTag[String]("functionAliasName")
 
   val expressionsForTimestampNTZSupport: Map[String, (ExpressionInfo, FunctionBuilder)] =
+    // SPARK-36227: Remove TimestampNTZ type support in Spark 3.2 with minimal code changes.
     if (Utils.isTesting) {
       Map(
         expression[ParseToTimestampNTZ]("to_timestamp_ntz"),
