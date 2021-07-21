@@ -218,6 +218,14 @@ case class StateStoreCustomTimingMetric(name: String, desc: String) extends Stat
     SQLMetrics.createTimingMetric(sparkContext, desc)
 }
 
+case class StateStoreCustomTimingNsMetric(name: String, desc: String)
+  extends StateStoreCustomMetric {
+  override def withNewDesc(desc: String): StateStoreCustomTimingNsMetric = copy(desc = desc)
+
+  override def createSQLMetric(sparkContext: SparkContext): SQLMetric =
+    SQLMetrics.createNanoTimingMetric(sparkContext, desc)
+}
+
 /**
  * An exception thrown when an invalid UnsafeRow is detected in state store.
  */
