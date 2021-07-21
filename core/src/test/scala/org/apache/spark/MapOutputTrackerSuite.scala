@@ -736,14 +736,14 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
-  test("cache serialized merge statuses for large result") {
+  test("SPARK-33781: cache serialized merge statuses for large result") {
     val newConf = new SparkConf
-    newConf.set("spark.shuffle.push.based.enabled", "true")
-    newConf.set("spark.shuffle.service.enabled", "true")
-    newConf.set("spark.rpc.message.maxSize", "1")
-    newConf.set("spark.rpc.askTimeout", "1") // Fail fast
-    newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", "10240") // 10 KB << 1MB framesize
-    newConf.set("spark.shuffle.push.based.mergeResult.minSizeForReducedCache", "2m")
+    newConf.set(PUSH_BASED_SHUFFLE_ENABLED, true)
+    newConf.set(IS_TESTING, true)
+    newConf.set(RPC_MESSAGE_MAX_SIZE, 1)
+    newConf.set(RPC_ASK_TIMEOUT, "1") // Fail fast
+    newConf.set(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST, 10240L) // 10 KB << 1MB framesize
+    newConf.set(PUSH_BASED_SHUFFLE_MERGE_RESULT_MIN_SIZE_FOR_REDUCED_CACHE, 2097152L) // 2MB
 
     // needs TorrentBroadcast so need a SparkContext
     withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>

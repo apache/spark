@@ -1156,8 +1156,8 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   // Make sure that MergeStatus reduced cache is only enabled for MergeStatus arrays that
   // use broadcast to transmit.
   if (minSizeForBroadcast > minSizeForMergeStatusReducedCache) {
-    val msg = s"spark.shuffle.mapOutput.minSizeForBroadcast ($minSizeForBroadcast bytes) must " +
-      s"be <= spark.shuffle.push.based.mergeResult.minSizeForReducedCache (" +
+    val msg = s"${SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST.key} ($minSizeForBroadcast bytes) " +
+      s"must be <= ${PUSH_BASED_SHUFFLE_MERGE_RESULT_MIN_SIZE_FOR_REDUCED_CACHE.key} (" +
       s"$minSizeForMergeStatusReducedCache bytes) so only broadcast MergeStatus arrays are " +
       s"using reduced cache."
     logError(msg)
