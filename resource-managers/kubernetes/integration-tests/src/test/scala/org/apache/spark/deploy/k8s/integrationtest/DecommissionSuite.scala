@@ -20,6 +20,7 @@ import scala.collection.JavaConverters._
 
 import io.fabric8.kubernetes.api.model.Pod
 import org.scalatest.concurrent.{Eventually, PatienceConfiguration}
+import org.scalatest.matchers.should.Matchers._
 import org.scalatest.time.{Minutes, Seconds, Span}
 
 import org.apache.spark.internal.config
@@ -102,10 +103,10 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       .set(config.DYN_ALLOCATION_ENABLED.key, "true")
       // The default of 30 seconds is fine, but for testing we just want to get this done fast
       // but give enough time to validate the labels are set.
-      .set("spark.storage.decommission.replicationReattemptInterval", "10")
+      .set("spark.storage.decommission.replicationReattemptInterval", "20")
       // Configure labels for decommissioning pods.
-      .set("spark.kubernetes.executor.pod.decommmissionLabel", "soLong")
-      .set("spark.kubernetes.executor.pod.decommmissionLabelValue", "cruelWorld")
+      .set("spark.kubernetes.executor.pod.decommmissionLabel", "solong")
+      .set("spark.kubernetes.executor.pod.decommmissionLabelValue", "cruelworld")
 
     // This is called on all exec pods but we only care about exec 0 since it's the "first."
     // We only do this inside of this test since the other tests trigger k8s side deletes where we
@@ -115,13 +116,14 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
         val client = kubernetesTestComponents.kubernetesClient
         // The label will be added eventually, but k8s objects don't refresh.
         Eventually.eventually(
-          PatienceConfiguration.Timeout(Span(30, Seconds)),
-          PatienceConfiguration.Interval(Span(1, Seconds))) {
+          PatienceConfiguration.Timeout(Span(120, Seconds)),
+          PatienceConfiguration.Interval(Span(2, Seconds))) {
 
           val currentPod = client.pods().withName(pod.getMetadata.getName).get
           val labels = currentPod.getMetadata.getLabels.asScala
-          assert(labels.contains("soLong"))
-          assert(labels.get("soLong") === "cruelWorld")
+
+          labels should not be (null)
+          labels should (contain key ("solong") and contain value ("cruelworld"))
         }
       }
       doBasicExecutorPyPodCheck(pod)
