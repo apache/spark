@@ -66,7 +66,7 @@ def sql(
     ----------
     query : str
         the SQL query
-    index_col: str or list of str, optional
+    index_col : str or list of str, optional
         Column names to be used in Spark to represent pandas-on-Spark's index. The index name
         in pandas-on-Spark is ignored. By default, the index is always lost.
     globals : dict, optional
