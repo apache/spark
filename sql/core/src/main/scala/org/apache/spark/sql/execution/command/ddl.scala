@@ -947,7 +947,7 @@ object DDLUtils extends Logging {
     }
   }
 
-  private[sql] def checkDataColNames(provider: String, schema: StructType): Unit = {
+  def checkDataColNames(provider: String, schema: StructType): Unit = {
     try {
       DataSource.lookupDataSource(provider, SQLConf.get).getConstructor().newInstance() match {
         case f: FileFormat => DataSourceUtils.verifySchema(f, schema)
