@@ -587,8 +587,7 @@ private[sql] object ParquetSchemaConverter {
   def checkFieldName(name: String): Unit = {
     // ,;{}()\n\t= and space are special characters in Parquet schema
     if (name.matches(".*[ ,;{}()\n\t=].*")) {
-      throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(
-        name, Some(" ,;{}()\\n\\t="))
+      throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
     }
   }
 
