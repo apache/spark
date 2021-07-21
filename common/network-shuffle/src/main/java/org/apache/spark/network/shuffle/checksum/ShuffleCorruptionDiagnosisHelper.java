@@ -88,6 +88,25 @@ public class ShuffleCorruptionDiagnosisHelper {
     }
   }
 
+  /**
+   * Diagnose the possible cause of the shuffle data corruption by verify the shuffle checksums.
+   *
+   * There're 3 different kinds of checksums for the same shuffle partition:
+   *   - checksum (c1) that calculated by the shuffle data reader
+   *   - checksum (c2) that calculated by the shuffle data writer and stored in the checksum file
+   *   - checksum (c3) that recalculated during diagnosis
+   *
+   * And the diagnosis mechanism works like this:
+   * If c2 != c3, we suspect the corruption is caused by the DISK_ISSUE. Otherwise, if c1 != c3,
+   * we suspect the corruption is caused by the NETWORK_ISSUE. Otherwise, the cause remains
+   * CHECKSUM_VERIFY_PASS. In case of the any other failures, the cause remains UNKNOWN_ISSUE.
+   *
+   * @param checksumFile The checksum file that written by the shuffle writer
+   * @param reduceId The reduceId of the shuffle block
+   * @param partitionData The partition data of the shuffle block
+   * @param checksumByReader The checksum value that calculated by the shuffle data reader
+   * @return The cause of data corruption
+   */
   public static Cause diagnoseCorruption(
       File checksumFile,
       int reduceId,
