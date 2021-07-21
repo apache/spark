@@ -97,6 +97,30 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         self.assertRaises(ValueError, lambda: psser.cat.add_categories(4))
         self.assertRaises(ValueError, lambda: psser.cat.add_categories([5, 5]))
 
+    def test_remove_categories(self):
+        pdf, psdf = self.df_pair
+
+        pser = pdf.a
+        psser = psdf.a
+
+        self.assert_eq(pser.cat.remove_categories(2), psser.cat.remove_categories(2))
+        self.assert_eq(pser.cat.remove_categories([1, 3]), psser.cat.remove_categories([1, 3]))
+        self.assert_eq(pser.cat.remove_categories([]), psser.cat.remove_categories([]))
+        self.assert_eq(pser.cat.remove_categories([2, 2]), psser.cat.remove_categories([2, 2]))
+        self.assert_eq(
+            pser.cat.remove_categories([1, 2, 3]), psser.cat.remove_categories([1, 2, 3])
+        )
+        self.assert_eq(pser.cat.remove_categories(None), psser.cat.remove_categories(None))
+        self.assert_eq(pser.cat.remove_categories([None]), psser.cat.remove_categories([None]))
+
+        pser.cat.remove_categories(2, inplace=True)
+        psser.cat.remove_categories(2, inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        self.assertRaises(ValueError, lambda: psser.cat.remove_categories(4))
+        self.assertRaises(ValueError, lambda: psser.cat.remove_categories([4, None]))
+
     def test_as_ordered_unordered(self):
         pdf, psdf = self.df_pair
 
