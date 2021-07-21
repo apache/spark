@@ -97,7 +97,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
     shuffleId, this)
 
-  val numPartitions = rdd.partitions.length
+  private[this] val numPartitions = rdd.partitions.length
 
   // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle
   // is enabled
