@@ -300,10 +300,9 @@ private[evaluation] object SquaredEuclideanSilhouette extends Silhouette {
       .map { row => (row.getDouble(0), (row.getAs[Vector](1), row.getDouble(2), row.getDouble(3))) }
       .aggregateByKey[(DenseVector, Double, Double)]((null.asInstanceOf[DenseVector], 0.0, 0.0))(
         seqOp = {
-          case (
-            (featureSum: DenseVector, squaredNormSum: Double, weightSum: Double),
-            (features, squaredNorm, weight)
-            ) =>
+          case t: ((DenseVector, Double, Double), (Vector, Double, Double)) =>
+            val ((featureSum, squaredNormSum, weightSum),
+                 (features: Vector, squaredNorm, weight)) = t
             val theFeatureSum =
               if (featureSum == null) {
                 Vectors.zeros(numFeatures).toDense
@@ -314,10 +313,9 @@ private[evaluation] object SquaredEuclideanSilhouette extends Silhouette {
             (theFeatureSum, squaredNormSum + squaredNorm * weight, weightSum + weight)
         },
         combOp = {
-          case (
-            (featureSum1, squaredNormSum1, weightSum1),
-            (featureSum2, squaredNormSum2, weightSum2)
-            ) =>
+          case t: ((DenseVector, Double, Double), (DenseVector, Double, Double)) =>
+            val ((featureSum1, squaredNormSum1, weightSum1),
+                 (featureSum2, squaredNormSum2, weightSum2)) = t
             val theFeatureSum =
               if (featureSum1 == null) {
                 featureSum2
@@ -518,8 +516,8 @@ private[evaluation] object CosineSilhouette extends Silhouette {
       .map { row => (row.getDouble(0), (row.getAs[Vector](1), row.getDouble(2))) }
       .aggregateByKey[(DenseVector, Double)]((null.asInstanceOf[DenseVector], 0.0))(
       seqOp = {
-        case ((normalizedFeaturesSum: DenseVector, weightSum: Double),
-        (normalizedFeatures, weight)) =>
+        case t: ((DenseVector, Double), (Vector, Double)) =>
+          val ((normalizedFeaturesSum, weightSum), (normalizedFeatures, weight)) = t
           val theNormalizedFeaturesSum =
             if (normalizedFeaturesSum == null) {
               Vectors.zeros(numFeatures).toDense
@@ -530,7 +528,8 @@ private[evaluation] object CosineSilhouette extends Silhouette {
           (theNormalizedFeaturesSum, weightSum + weight)
       },
       combOp = {
-        case ((normalizedFeaturesSum1, weightSum1), (normalizedFeaturesSum2, weightSum2)) =>
+        case t: ((DenseVector, Double), (DenseVector, Double)) =>
+          val ((normalizedFeaturesSum1, weightSum1), (normalizedFeaturesSum2, weightSum2)) = t
           val theNormalizedFeaturesSum =
             if (normalizedFeaturesSum1 == null) {
               normalizedFeaturesSum2
