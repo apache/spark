@@ -2164,26 +2164,16 @@ abstract class AvroSuite
       withView("v") {
         spark.range(1).createTempView("v")
         withTempDir { dir =>
-          val e1 = intercept[SchemaParseException] {
-            spark.sql(
-              s"""
-                 |CREATE TABLE test_ddl USING AVRO
-                 |LOCATION '${dir}'
-                 |AS SELECT ID, ABS(ID) FROM v""".stripMargin)
-          }.getMessage
-          assert(e1.contains("Illegal character in: abs(ID)"))
-        }
-
-        withTempDir { dir =>
-          val e2 = intercept[SchemaParseException] {
-            spark.sql(
+          val e = intercept[SchemaParseException] {
+            sql(
               s"""
                  |CREATE TABLE test_ddl USING AVRO
                  |LOCATION '${dir}'
                  |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
           }.getMessage
-          assert(e2.contains("Illegal initial character: (IF((ID = 1), 1, 0))"))
+          assert(e.contains("Illegal initial character: (IF((ID = 1), 1, 0))"))
         }
+
         withTempDir { dir =>
           spark.sql(
             s"""
