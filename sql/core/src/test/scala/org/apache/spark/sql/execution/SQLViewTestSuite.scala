@@ -381,6 +381,19 @@ class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
   override protected def tableIdentifier(viewName: String): TableIdentifier = {
     TableIdentifier(viewName)
   }
+
+  test("SPARK-36243: tableExists should report correctly on temporary view") {
+    Seq(true, false).foreach { storeAnalyzed =>
+      withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
+        val tblIdent = tableIdentifier("v")
+        assert(!spark.sessionState.catalog.tableExists(tblIdent))
+        val viewName = createView("v", "SELECT 1")
+        withView(viewName) {
+          assert(spark.sessionState.catalog.tableExists(tableIdentifier("v")))
+        }
+      }
+    }
+  }
 }
 
 class GlobalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
@@ -489,6 +502,19 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
             assert(e.contains("Not allowed to create a permanent view `default`.`v1` by " +
               s"referencing a temporary function `$tempFunctionName`"))
           }
+        }
+      }
+    }
+  }
+
+  test("SPARK-36243: tableExists should report correctly on permanent view") {
+    Seq(true, false).foreach { storeAnalyzed =>
+      withSQLConf(STORE_ANALYZED_PLAN_FOR_VIEW.key -> storeAnalyzed.toString) {
+        val tblIdent = tableIdentifier("v")
+        assert(!spark.sessionState.catalog.tableExists(tblIdent))
+        val viewName = createView("v", "SELECT 1")
+        withView(viewName) {
+          assert(spark.sessionState.catalog.tableExists(tableIdentifier("v")))
         }
       }
     }
