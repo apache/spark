@@ -78,24 +78,24 @@ case class JDBCScanBuilder(
     pushedAggregateColumn = pushedAggregateColumn ++ compiledAgg
 
     aggregation.getAggregateExpressions.foreach {
-      case Max(col) =>
-        val structField = getStructFieldForCol(col)
+      case max: Max =>
+        val structField = getStructFieldForCol(max.getCol)
         pushedSchema = pushedSchema.add(structField.copy("max(" + structField.name + ")"))
-      case Min(col) =>
-        val structField = getStructFieldForCol(col)
+      case min: Min =>
+        val structField = getStructFieldForCol(min.getCol)
         pushedSchema = pushedSchema.add(structField.copy("min(" + structField.name + ")"))
-      case Count(col, isDistinct) =>
-        val distinct = if (isDistinct) "DISTINCT " else ""
-        val structField = getStructFieldForCol(col)
+      case count: Count =>
+        val distinct = if (count.getIsDinstinct) "DISTINCT " else ""
+        val structField = getStructFieldForCol(count.getCol)
         pushedSchema =
           pushedSchema.add(StructField(s"count($distinct" + structField.name + ")", LongType))
-      case CountOne() =>
+      case _: CountOne =>
           pushedSchema = pushedSchema.add(StructField("count(*)", LongType))
-      case Sum(col, dataType, isDistinct) =>
-        val distinct = if (isDistinct) "DISTINCT " else ""
-        val structField = getStructFieldForCol(col)
+      case sum: Sum =>
+        val distinct = if (sum.getIsDinstinct) "DISTINCT " else ""
+        val structField = getStructFieldForCol(sum.getCol)
         pushedSchema =
-          pushedSchema.add(StructField(s"sum($distinct" + structField.name + ")", dataType))
+          pushedSchema.add(StructField(s"sum($distinct" + structField.name + ")", sum.getDataType))
       case _ => return false
     }
     this.pushedAggregations = Some(aggregation)

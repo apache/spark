@@ -19,13 +19,30 @@ package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Evolving;
 
-import java.io.Serializable;
-
 /**
- * Base class of the Aggregate Functions.
+ * An aggregate function that returns the number of the specific row in a group.
  *
  * @since 3.2.0
  */
 @Evolving
-public interface AggregateFunc extends Serializable {
+public final class Count implements AggregateFunc {
+    private FieldReference column;
+    private boolean isDistinct;
+
+    public Count(FieldReference column, boolean isDistinct) {
+        this.column = column;
+        this.isDistinct = isDistinct;
+    }
+
+    public FieldReference getCol() {
+        return column;
+    }
+    public boolean getIsDinstinct() {
+        return isDistinct;
+    }
+
+    @Override
+    public String toString() {
+        return "Count(" + column.fieldNames()[0] + "," + isDistinct + ")";
+    }
 }

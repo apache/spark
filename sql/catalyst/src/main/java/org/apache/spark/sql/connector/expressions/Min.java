@@ -19,13 +19,25 @@ package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Evolving;
 
-import java.io.Serializable;
-
 /**
- * Base class of the Aggregate Functions.
+ * An aggregate function that returns the minimum value in a group.
  *
  * @since 3.2.0
  */
 @Evolving
-public interface AggregateFunc extends Serializable {
+public final class Min implements AggregateFunc {
+    private FieldReference column;
+
+    public Min(FieldReference column) {
+        this.column = column;
+    }
+
+    public FieldReference getCol() {
+        return column;
+    }
+
+    @Override
+    public String toString() {
+        return "Min(" + column.fieldNames()[0] + ")";
+    }
 }

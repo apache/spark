@@ -140,19 +140,19 @@ object JDBCRDD extends Logging {
     def quote(colName: String): String = dialect.quoteIdentifier(colName)
 
     aggregates.map {
-      case Min(col) =>
-        s"MIN(${quote(col.fieldNames.head)})"
-      case Max(col) =>
-        s"MAX(${quote(col.fieldNames.head)})"
-      case Count(col, isDistinct) =>
-        val distinct = if (isDistinct) "DISTINCT" else ""
-        val column = quote(col.fieldNames.head)
+      case min: Min =>
+        s"MIN(${quote(min.getCol.fieldNames.head)})"
+      case max: Max =>
+        s"MAX(${quote(max.getCol.fieldNames.head)})"
+      case count: Count =>
+        val distinct = if (count.getIsDinstinct) "DISTINCT" else ""
+        val column = quote(count.getCol.fieldNames.head)
         s"COUNT($distinct $column)"
-      case Sum(col, _, isDistinct) =>
-        val distinct = if (isDistinct) "DISTINCT" else ""
-        val column = quote(col.fieldNames.head)
+      case sum: Sum =>
+        val distinct = if (sum.getIsDinstinct) "DISTINCT" else ""
+        val column = quote(sum.getCol.fieldNames.head)
         s"SUM($distinct $column)"
-      case CountOne() =>
+      case _: CountOne =>
         s"COUNT(1)"
       case _ => ""
     }

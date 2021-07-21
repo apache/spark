@@ -701,19 +701,19 @@ object DataSourceStrategy
     if (aggregates.filter.isEmpty) {
       aggregates.aggregateFunction match {
         case aggregate.Min(PushableColumnAndNestedColumn(name)) =>
-          Some(Min(FieldReference(Seq(name))))
+          Some(new Min(FieldReference(Seq(name))))
         case aggregate.Max(PushableColumnAndNestedColumn(name)) =>
-          Some(Max(FieldReference(Seq(name))))
+          Some(new Max(FieldReference(Seq(name))))
         case count: aggregate.Count if count.children.length == 1 =>
           count.children.head match {
             // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
-            case Literal(_, _) => Some(CountOne())
+            case Literal(_, _) => Some(new CountOne())
             case PushableColumnAndNestedColumn(name) =>
-              Some(Count(FieldReference(Seq(name)), aggregates.isDistinct))
+              Some(new Count(FieldReference(Seq(name)), aggregates.isDistinct))
             case _ => None
           }
         case sum @ aggregate.Sum(PushableColumnAndNestedColumn(name), _) =>
-          Some(Sum(FieldReference(Seq(name)), sum.dataType, aggregates.isDistinct))
+          Some(new Sum(FieldReference(Seq(name)), sum.dataType, aggregates.isDistinct))
         case _ => None
       }
     } else {

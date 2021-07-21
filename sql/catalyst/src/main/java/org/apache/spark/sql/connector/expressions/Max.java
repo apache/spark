@@ -15,18 +15,29 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions
+package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.annotation.Evolving;
 
-private[sql] final case class Min(column: FieldReference) extends AggregateFunc
+/**
+ * An aggregate function that returns the maximum value in a group.
+ *
+ * @since 3.2.0
+ */
+@Evolving
+public final class Max implements AggregateFunc {
+    private FieldReference column;
 
-private[sql] final case class Max(column: FieldReference) extends AggregateFunc
+    public Max(FieldReference column) {
+        this.column = column;
+    }
 
-private[sql] final case class Sum(column: FieldReference, dataType: DataType, isDistinct: Boolean)
-  extends AggregateFunc
+    public FieldReference getCol() {
+        return column;
+    }
 
-private[sql] final case class Count(column: FieldReference, isDistinct: Boolean)
-  extends AggregateFunc
-
-private[sql] final case class CountOne() extends AggregateFunc
+    @Override
+    public String toString() {
+        return "Max(" + column.fieldNames()[0] + ")";
+    }
+}
