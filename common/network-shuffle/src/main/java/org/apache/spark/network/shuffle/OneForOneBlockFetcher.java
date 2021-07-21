@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 
 import com.google.common.primitives.Ints;
@@ -125,103 +126,107 @@ public class OneForOneBlockFetcher {
       String execId,
       String[] blockIds) {
     if (blockIds[0].startsWith(SHUFFLE_CHUNK_PREFIX)) {
-      return createFetchShuffleMsgAndBuildBlockIds(appId, execId, blockIds, true);
+      return createFetchShuffleChunksMsg(appId, execId, blockIds);
     } else {
-      return createFetchShuffleMsgAndBuildBlockIds(appId, execId, blockIds, false);
+      return createFetchShuffleBlocksMsg(appId, execId, blockIds);
     }
   }
 
-  /**
-   * Create FetchShuffleBlocks/FetchShuffleBlockChunks message and rebuild internal blockIds by
-   * analyzing the passed in blockIds.
-   */
-  private AbstractFetchShuffleBlocks createFetchShuffleMsgAndBuildBlockIds(
-      String appId,
-      String execId,
-      String[] blockIds,
-      boolean areMergedChunks) {
+  private AbstractFetchShuffleBlocks createFetchShuffleBlocksMsg(String appId, String execId, String[] blockIds) {
     String[] firstBlock = splitBlockId(blockIds[0]);
     int shuffleId = Integer.parseInt(firstBlock[1]);
-    int shuffleSequenceId = Integer.parseInt(firstBlock[2]);
-    boolean batchFetchEnabled = firstBlock.length == 6;
-
-    // In case of FetchShuffleBlocks, primaryId is mapId. For FetchShuffleBlockChunks, primaryId
-    // is reduceId.
-    LinkedHashMap<Number, BlocksInfo> primaryIdToBlocksInfo = new LinkedHashMap<>();
+    boolean batchFetchEnabled = firstBlock.length == 5;
+    Map<Long, BlocksInfo> mapIdToBlocksInfo = new LinkedHashMap<>();
     for (String blockId : blockIds) {
       String[] blockIdParts = splitBlockId(blockId);
       if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
-        throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
-          ", got:" + blockId);
+        throw new IllegalArgumentException("Expected shuffleId=" + shuffleId + ", got:" + blockId);
       }
-      Number primaryId;
-      if (!areMergedChunks) {
-        primaryId = Long.parseLong(blockIdParts[3]);
-      } else {
-        primaryId = Integer.parseInt(blockIdParts[3]);
-      }
-      BlocksInfo blocksInfoByPrimaryId = primaryIdToBlocksInfo.computeIfAbsent(primaryId,
-        id -> new BlocksInfo());
-      blocksInfoByPrimaryId.blockIds.add(blockId);
-      // If blockId is a regular shuffle block, then blockIdParts[4] = reduceId. If blockId is a
-      // shuffleChunk block, then blockIdParts[4] = chunkId
-      blocksInfoByPrimaryId.ids.add(Integer.parseInt(blockIdParts[4]));
+
+      long mapId = Long.parseLong(blockIdParts[2]);
+      BlocksInfo blocksInfoByMapId = mapIdToBlocksInfo.computeIfAbsent(mapId,
+          id -> new BlocksInfo());
+      blocksInfoByMapId.blockIds.add(blockId);
+      blocksInfoByMapId.ids.add(Integer.parseInt(blockIdParts[3]));
+
       if (batchFetchEnabled) {
-        // It comes here only if the blockId is a regular shuffle block not a shuffleChunk block.
         // When we read continuous shuffle blocks in batch, we will reuse reduceIds in
         // FetchShuffleBlocks to store the start and end reduce id for range
         // [startReduceId, endReduceId).
-        assert(blockIdParts.length == 6);
+        assert(blockIdParts.length == 5);
         // blockIdParts[4] is the end reduce id for the batch range
-        blocksInfoByPrimaryId.ids.add(Integer.parseInt(blockIdParts[5]));
+        blocksInfoByMapId.ids.add(Integer.parseInt(blockIdParts[4]));
       }
     }
-    // In case of FetchShuffleBlocks, secondaryIds are reduceIds. For FetchShuffleBlockChunks,
-    // secondaryIds are chunkIds.
-    int[][] secondaryIdsArray = new int[primaryIdToBlocksInfo.size()][];
-    int blockIdIndex = 0;
-    int secIndex = 0;
-    for (BlocksInfo blocksInfo: primaryIdToBlocksInfo.values()) {
-      secondaryIdsArray[secIndex++] = Ints.toArray(blocksInfo.ids);
 
-      // The `blockIds`'s order must be same with the read order specified in FetchShuffleBlocks/
-      // FetchShuffleBlockChunks because the shuffle data's return order should match the
-      // `blockIds`'s order to ensure blockId and data match.
+    int[][] reduceIds = new int[mapIdToBlocksInfo.size()][];
+    int blockIdIndex = 0;
+    int reduceIndex = 0;
+    for (BlocksInfo blocksInfo: mapIdToBlocksInfo.values()) {
+      reduceIds[reduceIndex++] = Ints.toArray(blocksInfo.ids);
+
+      // The `blockIds`'s order must be same with the read order specified in FetchShuffleBlocks
+      for (String blockId : blocksInfo.blockIds) {
+        this.blockIds[blockIdIndex++] = blockId;
+      }
+    }
+
+    assert(blockIdIndex == this.blockIds.length);
+    long[] mapIds = Longs.toArray(mapIdToBlocksInfo.keySet());
+    return new FetchShuffleBlocks(
+        appId, execId, shuffleId, mapIds, reduceIds, batchFetchEnabled);
+  }
+
+  private AbstractFetchShuffleBlocks createFetchShuffleChunksMsg(String appId, String execId, String[] blockIds) {
+    String[] firstBlock = splitBlockId(blockIds[0]);
+    int shuffleId = Integer.parseInt(firstBlock[1]);
+    int shuffleSequenceId = Integer.parseInt(firstBlock[2]);
+
+    Map<Integer, BlocksInfo> reduceIdToBlocksInfo = new LinkedHashMap<>();
+    for (String blockId : blockIds) {
+      String[] blockIdParts = splitBlockId(blockId);
+      if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
+        throw new IllegalArgumentException("Expected shuffleId=" + shuffleId + ", got:" + blockId);
+      }
+
+      int reduceId = Integer.parseInt(blockIdParts[3]);
+      BlocksInfo blocksInfoByReduceId = reduceIdToBlocksInfo.computeIfAbsent(reduceId,
+          id -> new BlocksInfo());
+      blocksInfoByReduceId.blockIds.add(blockId);
+      blocksInfoByReduceId.ids.add(Integer.parseInt(blockIdParts[4]));
+    }
+
+    int[][] chunkIdsArray = new int[reduceIdToBlocksInfo.size()][];
+    int blockIdIndex = 0;
+    int chunkIndex = 0;
+    for (BlocksInfo blocksInfo: reduceIdToBlocksInfo.values()) {
+      chunkIdsArray[chunkIndex++] = Ints.toArray(blocksInfo.ids);
+
+      // The `blockIds`'s order must be same with the read order specified in FetchShuffleBlockChunks
       for (String blockId : blocksInfo.blockIds) {
         this.blockIds[blockIdIndex++] = blockId;
       }
     }
     assert(blockIdIndex == this.blockIds.length);
-    Set<Number> primaryIds = primaryIdToBlocksInfo.keySet();
-    if (!areMergedChunks) {
-      long[] mapIds = Longs.toArray(primaryIds);
-      return new FetchShuffleBlocks(
-        appId, execId, shuffleId, mapIds, secondaryIdsArray, batchFetchEnabled);
-    } else {
-      int[] reduceIds = Ints.toArray(primaryIds);
-      return new FetchShuffleBlockChunks(appId, execId, shuffleId, shuffleSequenceId, reduceIds, secondaryIdsArray);
-    }
+    int[] reduceIds = Ints.toArray(reduceIdToBlocksInfo.keySet());
+
+    return new FetchShuffleBlockChunks(appId, execId, shuffleId, shuffleSequenceId, reduceIds, chunkIdsArray);
   }
 
   /** Split the shuffleBlockId and return shuffleId, shuffleSequenceId, mapId and reduceIds. */
   private String[] splitBlockId(String blockId) {
     String[] blockIdParts = blockId.split("_");
-    // For batch block id, the format contains shuffleId, shuffleSequenceId, mapId, begin reduceId, end reduceId.
-    // For single block id, the format contains shuffleId, shuffleSequenceId, mapId, reduceId.
+    // For batch block id, the format contains shuffleId, mapId, begin reduceId, end reduceId.
+    // For single block id, the format contains shuffleId, mapId, reduceId.
     // For single block chunk id, the format contains shuffleId, shuffleSequenceId, reduceId, chunkId.
-    if (blockIdParts.length < 5 || blockIdParts.length > 6) {
-      throw new IllegalArgumentException(
-        "Unexpected shuffle block id format: " + blockId);
+    if (blockIdParts.length < 4 || blockIdParts.length > 5) {
+      throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
     }
-    if (blockIdParts.length == 6 && !blockIdParts[0].equals("shuffle")) {
-      throw new IllegalArgumentException(
-        "Unexpected shuffle block id format: " + blockId);
+
+    if(!(blockIdParts[0].equals("shuffle") || blockIdParts[0].equals("shuffleChunk"))) {
+      throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
     }
-    if (blockIdParts.length == 5 &&
-      !(blockIdParts[0].equals("shuffle") || blockIdParts[0].equals("shuffleChunk"))) {
-      throw new IllegalArgumentException(
-        "Unexpected shuffle block id format: " + blockId);
-    }
+
     return blockIdParts;
   }
 
