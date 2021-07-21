@@ -403,6 +403,7 @@ the ``Series.cat`` accessor.
    Series.cat.remove_categories
    Series.cat.as_ordered
    Series.cat.as_unordered
+   Series.cat.rename_categories
 
 .. _api.series.plot:
 
