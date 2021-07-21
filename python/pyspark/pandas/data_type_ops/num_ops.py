@@ -39,11 +39,12 @@ from pyspark.sql import functions as F
 from pyspark.sql.column import Column
 from pyspark.sql.types import (
     BooleanType,
+    DataType,
     StringType,
 )
 
 
-def _non_fractional_astype(index_ops, dtype, spark_type):
+def _non_fractional_astype(index_ops: IndexOpsLike, dtype: Dtype, spark_type: DataType):
     if isinstance(dtype, CategoricalDtype):
         return _as_categorical_type(index_ops, dtype, spark_type)
     elif isinstance(spark_type, BooleanType):
