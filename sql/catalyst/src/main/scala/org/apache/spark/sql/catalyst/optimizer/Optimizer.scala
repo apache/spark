@@ -234,6 +234,10 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ColumnPruning,
       CollapseProject,
       RemoveNoopOperators) :+
+    // This batch must be executed after the `RewriteSubquery` batch, which creates
+    // left semi/anti joins.
+    Batch("Deduplicate Right Side of LeftSemiAnti Join", Once,
+        DeduplicateRightSideOfLeftSemiAntiJoin) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
     Batch("ReplaceUpdateFieldsExpression", Once, ReplaceUpdateFieldsExpression)
