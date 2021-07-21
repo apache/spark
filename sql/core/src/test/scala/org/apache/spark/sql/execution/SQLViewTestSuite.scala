@@ -389,7 +389,9 @@ class LocalTempViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         assert(!spark.sessionState.catalog.tableExists(tblIdent))
         val viewName = createView("v", "SELECT 1")
         withView(viewName) {
-          assert(spark.sessionState.catalog.tableExists(tableIdentifier("v")))
+          assert(spark.sessionState.catalog.isTempView(tableIdentifier("v")))
+          assert(!spark.sessionState.catalog.tableExists(tableIdentifier("v")))
+          assert(spark.catalog.tableExists("v"))
         }
       }
     }
@@ -515,6 +517,7 @@ class PersistedViewTestSuite extends SQLViewTestSuite with SharedSparkSession {
         val viewName = createView("v", "SELECT 1")
         withView(viewName) {
           assert(spark.sessionState.catalog.tableExists(tableIdentifier("v")))
+          assert(spark.catalog.tableExists("v"))
         }
       }
     }
