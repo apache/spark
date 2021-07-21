@@ -135,7 +135,7 @@ private class PushBasedFetchHelper(
   def sendFetchMergedStatusRequest(req: FetchRequest): Unit = {
     val sizeMap = req.blocks.map {
       case FetchBlockInfo(blockId, size, _) =>
-        val shuffleBlockId = blockId.asInstanceOf[ShufflePushBlockId]
+        val shuffleBlockId = blockId.asInstanceOf[ShuffleMergedBlockId]
         ((shuffleBlockId.shuffleId, shuffleBlockId.reduceId), size)
     }.toMap
     val address = req.address
@@ -167,7 +167,7 @@ private class PushBasedFetchHelper(
       }
     }
     req.blocks.foreach { block =>
-      val shuffleBlockId = block.blockId.asInstanceOf[ShufflePushBlockId]
+      val shuffleBlockId = block.blockId.asInstanceOf[ShuffleMergedBlockId]
       shuffleClient.getMergedBlockMeta(address.host, address.port, shuffleBlockId.shuffleId,
         shuffleBlockId.shuffleSequenceId, shuffleBlockId.reduceId, mergedBlocksMetaListener)
     }
@@ -246,7 +246,7 @@ private class PushBasedFetchHelper(
       localDirs: Array[String],
       blockManagerId: BlockManagerId): Unit = {
     try {
-      val shuffleBlockId = blockId.asInstanceOf[ShufflePushBlockId]
+      val shuffleBlockId = blockId.asInstanceOf[ShuffleMergedBlockId]
       val chunksMeta = blockManager.getLocalMergedBlockMeta(shuffleBlockId, localDirs)
       iterator.addToResultsQueue(PushMergedLocalMetaFetchResult(
         shuffleBlockId.shuffleId, shuffleBlockId.shuffleSequenceId,
@@ -288,13 +288,13 @@ private class PushBasedFetchHelper(
   def initiateFallbackFetchForPushMergedBlock(
       blockId: BlockId,
       address: BlockManagerId): Unit = {
-    assert(blockId.isInstanceOf[ShufflePushBlockId] || blockId.isInstanceOf[ShuffleBlockChunkId])
+    assert(blockId.isInstanceOf[ShuffleMergedBlockId] || blockId.isInstanceOf[ShuffleBlockChunkId])
     logWarning(s"Falling back to fetch the original blocks for push-merged block $blockId")
     // Increase the blocks processed since we will process another block in the next iteration of
     // the while loop in ShuffleBlockFetcherIterator.next().
     val fallbackBlocksByAddr: Iterator[(BlockManagerId, Seq[(BlockId, Long, Int)])] =
       blockId match {
-        case shuffleBlockId: ShufflePushBlockId =>
+        case shuffleBlockId: ShuffleMergedBlockId =>
           iterator.decreaseNumBlocksToFetch(1)
           mapOutputTracker.getMapSizesForMergeResult(
             shuffleBlockId.shuffleId, shuffleBlockId.reduceId)

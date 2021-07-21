@@ -31,7 +31,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus, MergeStatus}
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId, ShufflePushBlockId}
+import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 
 class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   private val conf = new SparkConf
@@ -391,7 +391,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq ===
-      Seq((blockMgrId, ArrayBuffer((ShufflePushBlockId(10, -1, -1, 0), 3000, -1),
+      Seq((blockMgrId, ArrayBuffer((ShuffleMergedBlockId(10, -1, 0), 3000, -1),
         (ShuffleBlockId(10, 2, 0), size1000, 2)))))
 
     masterTracker.stop()

@@ -497,7 +497,7 @@ final class ShuffleBlockFetcherIterator(
               collectedRemoteRequests, enableBatchFetch = false)
             curRequestSize = curBlocks.map(_.size).sum
           }
-        case ShufflePushBlockId(_, _, SHUFFLE_PUSH_MAP_ID, _) =>
+        case ShuffleMergedBlockId(_, _, _) =>
           if (curBlocks.size >= maxBlocksInFlightPerAddress) {
             curBlocks = createFetchRequests(curBlocks.toSeq, address, isLast = false,
               collectedRemoteRequests, enableBatchFetch = false, forMergedMetas = true)
@@ -517,7 +517,7 @@ final class ShuffleBlockFetcherIterator(
       val (enableBatchFetch, forMergedMetas) = {
         curBlocks.head.blockId match {
           case ShuffleBlockChunkId(_, _, _, _) => (false, false)
-          case ShufflePushBlockId(_, _, SHUFFLE_PUSH_MAP_ID, _) => (false, true)
+          case ShuffleMergedBlockId(_, _, _) => (false, true)
           case _ => (doBatchFetch, false)
         }
       }
@@ -904,8 +904,7 @@ final class ShuffleBlockFetcherIterator(
           case PushMergedLocalMetaFetchResult(
             shuffleId, shuffleSequenceId, reduceId, bitmaps, localDirs) =>
             // Fetch push-merged-local shuffle block data as multiple shuffle chunks
-            val shuffleBlockId = ShufflePushBlockId(shuffleId, shuffleSequenceId,
-              SHUFFLE_PUSH_MAP_ID, reduceId)
+            val shuffleBlockId = ShuffleMergedBlockId(shuffleId, shuffleSequenceId, reduceId)
             try {
               val bufs: Seq[ManagedBuffer] = blockManager.getLocalMergedBlockData(shuffleBlockId,
                 localDirs)
@@ -958,8 +957,7 @@ final class ShuffleBlockFetcherIterator(
           // If we fail to fetch the meta of a push-merged block, we fall back to fetching the
           // original blocks.
           pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(
-            ShufflePushBlockId(shuffleId, shuffleSequenceId, SHUFFLE_PUSH_MAP_ID,
-              reduceId), address)
+            ShuffleMergedBlockId(shuffleId, shuffleSequenceId, reduceId), address)
           // Set result to null to force another iteration.
           result = null
       }

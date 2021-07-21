@@ -27,7 +27,7 @@ import org.mockito.invocation.InvocationOnMock
 import org.roaringbitmap.RoaringBitmap
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.{MapOutputTracker, SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.config
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.storage._
@@ -187,7 +187,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
     val dirs = Some(Array[String](tempDir.getAbsolutePath))
     val managedBufferList =
-      resolver.getMergedBlockData(ShufflePushBlockId(shuffleId, shuffleSequenceId, -1, reduceId),
+      resolver.getMergedBlockData(ShuffleMergedBlockId(shuffleId, shuffleSequenceId, reduceId),
         dirs)
     assert(managedBufferList.size === 3)
     assert(managedBufferList(0).size === 10)
@@ -225,8 +225,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     val dirs = Some(Array[String](tempDir.getAbsolutePath))
     val mergedBlockMeta =
       resolver.getMergedBlockMeta(
-        ShufflePushBlockId(shuffleId, shuffleSequenceId, MapOutputTracker.SHUFFLE_PUSH_MAP_ID,
-          reduceId),
+        ShuffleMergedBlockId(shuffleId, shuffleSequenceId, reduceId),
         dirs)
     assert(mergedBlockMeta.getNumChunks === 3)
     assert(mergedBlockMeta.readChunkBitmaps().size === 3)
