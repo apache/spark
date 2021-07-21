@@ -131,8 +131,6 @@ class MissingPandasLikeCategoricalIndex(MissingPandasLikeIndex):
         "remove_unused_categories", cls="CategoricalIndex"
     )
     set_categories = _unsupported_function("set_categories", cls="CategoricalIndex")
-    as_ordered = _unsupported_function("as_ordered", cls="CategoricalIndex")
-    as_unordered = _unsupported_function("as_unordered", cls="CategoricalIndex")
     map = _unsupported_function("map", cls="CategoricalIndex")
 
 
