@@ -63,7 +63,7 @@ class DeduplicateRightSideOfLeftSemiAntiJoinSuite extends PlanTest
     rowCount = 100,
     size = Some(100 * (8 + 4))).as("z")
 
-  test("Deduplicate the right side of left semi/anti join") {
+  test("SPARK-36245: Deduplicate the right side of left semi/anti join") {
     Seq(true, false).foreach { cboEnabled =>
       Seq(-1, 10485760).foreach { threshold =>
         Seq(LeftSemi, LeftAnti).foreach { joinType =>
@@ -85,7 +85,7 @@ class DeduplicateRightSideOfLeftSemiAntiJoinSuite extends PlanTest
     }
   }
 
-  test("Should not deduplicate the right side if can not reduce the data") {
+  test("SPARK-36245: Should not deduplicate the right side if can not reduce the data") {
     withSQLConf(
       SQLConf.CBO_ENABLED.key -> "true",
       SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
