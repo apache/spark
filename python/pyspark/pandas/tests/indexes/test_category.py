@@ -130,6 +130,27 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
 
         self.assertRaises(ValueError, lambda: psidx.remove_unused_categories(inplace=True))
 
+    def test_reorder_categories(self):
+        pidx = pd.CategoricalIndex([1, 2, 3])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(pidx.reorder_categories([1, 2, 3]), psidx.reorder_categories([1, 2, 3]))
+        self.assert_eq(
+            pidx.reorder_categories([1, 2, 3], ordered=True),
+            psidx.reorder_categories([1, 2, 3], ordered=True),
+        )
+        self.assert_eq(pidx.reorder_categories([3, 2, 1]), psidx.reorder_categories([3, 2, 1]))
+        self.assert_eq(
+            pidx.reorder_categories([3, 2, 1], ordered=True),
+            psidx.reorder_categories([3, 2, 1], ordered=True),
+        )
+
+        self.assertRaises(ValueError, lambda: pidx.reorder_categories([1, 2, 3], inplace=True))
+        self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2]))
+        self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 4]))
+        self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 2]))
+        self.assertRaises(TypeError, lambda: psidx.reorder_categories(1))
+
     def test_as_ordered_unordered(self):
         pidx = pd.CategoricalIndex(["x", "y", "z"], categories=["z", "y", "x"])
         psidx = ps.from_pandas(pidx)
