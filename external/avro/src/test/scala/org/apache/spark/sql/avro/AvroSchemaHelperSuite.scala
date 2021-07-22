@@ -99,7 +99,7 @@ class AvroSchemaHelperSuite extends SQLTestUtils with SharedSparkSession {
       .endRecord()
 
     val helper = new AvroUtils.AvroSchemaHelper(avroSchema, catalystSchema, Seq(""), Seq(""), false)
-    assert(helper.getMatchedFields === Seq(
+    assert(helper.matchedFields === Seq(
       AvroMatchedField(catalystSchema("shared1"), 2, avroSchema.getField("shared1")),
       AvroMatchedField(catalystSchema("shared2"), 3, avroSchema.getField("shared2"))
     ))

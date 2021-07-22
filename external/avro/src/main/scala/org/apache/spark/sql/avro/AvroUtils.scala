@@ -242,8 +242,8 @@ private[sql] object AvroUtils extends Logging {
       .groupBy(_.name.toLowerCase(Locale.ROOT))
       .mapValues(_.toSeq) // toSeq needed for scala 2.13
 
-    /** Get the fields which have matching equivalents in both Avro and Catalyst schemas. */
-    def getMatchedFields: Seq[AvroMatchedField] = catalystSchema.zipWithIndex.flatMap {
+    /** The fields which have matching equivalents in both Avro and Catalyst schemas. */
+    val matchedFields: Seq[AvroMatchedField] = catalystSchema.zipWithIndex.flatMap {
       case (sqlField, sqlPos) =>
         getAvroField(sqlField.name, sqlPos).map(AvroMatchedField(sqlField, sqlPos, _))
     }
@@ -269,7 +269,7 @@ private[sql] object AvroUtils extends Logging {
      * [[IncompatibleSchemaException]] if such extra fields are found.
      */
     def validateNoExtraAvroFields(): Unit = {
-      (avroFieldArray.toSet -- getMatchedFields.map(_.avroField)).foreach { extraField =>
+      (avroFieldArray.toSet -- matchedFields.map(_.avroField)).foreach { extraField =>
         val desc = toFieldDescription(avroPath :+ extraField.name(), extraField.pos())
         throw new IncompatibleSchemaException(s"Found $desc in Avro schema but there is no " +
           s"match in the SQL schema at ${toFieldStr(catalystPath)}")

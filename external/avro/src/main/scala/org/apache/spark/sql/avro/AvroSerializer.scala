@@ -246,7 +246,7 @@ private[sql] class AvroSerializer(
     avroSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = false)
     avroSchemaHelper.validateNoExtraAvroFields()
 
-    val (avroIndices, fieldConverters) = avroSchemaHelper.getMatchedFields.map {
+    val (avroIndices, fieldConverters) = avroSchemaHelper.matchedFields.map {
       case AvroMatchedField(catalystField, _, avroField) =>
         val converter = newConverter(catalystField.dataType,
           resolveNullableType(avroField.schema(), catalystField.nullable),
