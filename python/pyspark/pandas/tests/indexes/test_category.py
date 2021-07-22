@@ -67,6 +67,33 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(psidx.codes, pd.Index(pidx.codes))
         self.assert_eq(psidx.ordered, pidx.ordered)
 
+    def test_categories_setter(self):
+        pdf = pd.DataFrame(
+            {
+                "a": pd.Categorical([1, 2, 3, 1, 2, 3]),
+                "b": pd.Categorical(["a", "b", "c", "a", "b", "c"], categories=["c", "b", "a"]),
+            },
+            index=pd.Categorical([10, 20, 30, 20, 30, 10], categories=[30, 10, 20], ordered=True),
+        )
+        psdf = ps.from_pandas(pdf)
+
+        pidx = pdf.index
+        psidx = psdf.index
+
+        pidx.categories = ["z", "y", "x"]
+        psidx.categories = ["z", "y", "x"]
+        if LooseVersion(pd.__version__) >= LooseVersion("1.0.5"):
+            self.assert_eq(pidx, psidx)
+            self.assert_eq(pdf, psdf)
+        else:
+            pidx = pidx.set_categories(pidx.categories)
+            pdf.index = pidx
+            self.assert_eq(pidx, psidx)
+            self.assert_eq(pdf, psdf)
+
+        with self.assertRaises(ValueError):
+            psidx.categories = [1, 2, 3, 4]
+
     def test_as_ordered_unordered(self):
         pidx = pd.CategoricalIndex(["x", "y", "z"], categories=["z", "y", "x"])
         psidx = ps.from_pandas(pidx)
