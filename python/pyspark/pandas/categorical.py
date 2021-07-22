@@ -523,12 +523,14 @@ class CategoricalAccessor(object):
             categories = [cast(dict, new_categories).get(item, item) for item in self.categories]
         elif callable(new_categories):
             categories = [new_categories(item) for item in self.categories]
-        else:
+        elif is_list_like(new_categories):
             if len(self.categories) != len(new_categories):
                 raise ValueError(
                     "new categories need to have the same number of items as the old categories!"
                 )
             categories = cast(list, new_categories)
+        else:
+            raise TypeError("new_categories must be list-like, dict-like or callable.")
 
         internal = self._data._psdf._internal.with_new_spark_column(
             self._data._column_label,

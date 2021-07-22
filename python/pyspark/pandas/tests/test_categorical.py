@@ -594,6 +594,18 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             "new categories need to have the same number of items as the old categories",
             lambda: psser.cat.rename_categories([0, 1, 2]),
         )
+        self.assertRaises(
+            TypeError,
+            lambda: psser.cat.rename_categories(None),
+        )
+        self.assertRaises(
+            TypeError,
+            lambda: psser.cat.rename_categories(1),
+        )
+        self.assertRaises(
+            TypeError,
+            lambda: psser.cat.rename_categories("x"),
+        )
 
 
 if __name__ == "__main__":

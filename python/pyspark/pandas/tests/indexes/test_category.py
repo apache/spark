@@ -269,6 +269,18 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
             pidx.rename_categories(lambda x: x.upper()),
             psidx.rename_categories(lambda x: x.upper()),
         )
+        self.assertRaises(
+            TypeError,
+            lambda: psidx.rename_categories(None),
+        )
+        self.assertRaises(
+            TypeError,
+            lambda: psidx.rename_categories(1),
+        )
+        self.assertRaises(
+            TypeError,
+            lambda: psidx.rename_categories("x"),
+        )
 
 
 if __name__ == "__main__":
