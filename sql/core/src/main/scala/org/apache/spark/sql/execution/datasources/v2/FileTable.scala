@@ -86,7 +86,6 @@ abstract class FileTable(
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)
       }
     }
-
     val partitionSchema = fileIndex.partitionSchema
     SchemaUtils.checkSchemaColumnNameDuplication(partitionSchema,
       "in the partition schema", caseSensitive)

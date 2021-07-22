@@ -2488,7 +2488,7 @@ class HiveDDLSuite
           schema = schema,
           options = Map("fileFormat" -> "parquet"))
       }.getMessage
-      assert(e.contains("Cannot create tables with null type."))
+      assert(e.contains("Cannot create tables with null type"))
     }
   }
 
