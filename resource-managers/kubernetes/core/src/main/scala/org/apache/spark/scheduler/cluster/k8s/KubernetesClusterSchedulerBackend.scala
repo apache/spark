@@ -202,7 +202,8 @@ private[spark] class KubernetesClusterSchedulerBackend(
               .inNamespace(pod.getMetadata.getNamespace)
               .withName(pod.getMetadata.getName)
               .edit({p: Pod => new PodBuilder(p).editMetadata()
-                .addToLabels(label, conf.get(KUBERNETES_EXECUTOR_POD_DECOMMISSION_LABEL_VALUE))
+                .addToLabels(label,
+                  conf.get(KUBERNETES_EXECUTOR_POD_DECOMMISSION_LABEL_VALUE).getOrElse(""))
                 .endMetadata()
                 .build()})
           }

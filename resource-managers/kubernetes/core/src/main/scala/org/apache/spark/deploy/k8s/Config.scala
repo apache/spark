@@ -321,7 +321,7 @@ private[spark] object Config extends Logging {
         " such as pod-deletion-cost.")
       .version("3.3.0")
       .stringConf
-      .createWithDefault("")
+      .createOptional
 
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
