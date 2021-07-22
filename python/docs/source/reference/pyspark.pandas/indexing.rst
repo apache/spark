@@ -111,7 +111,6 @@ in Spark. These can be accessed by ``Index.spark.<function/property>``.
 .. autosummary::
    :toctree: api/
 
-   Index.spark.data_type
    Index.spark.column
    Index.spark.transform
 
