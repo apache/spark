@@ -393,7 +393,7 @@ class CategoricalIndex(Index):
 
         Returns
         -------
-        cat : Categorical or None
+        cat : CategoricalIndex or None
             Categorical with removed categories or None if ``inplace=True``.
 
         Raises
