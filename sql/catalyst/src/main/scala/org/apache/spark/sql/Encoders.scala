@@ -140,7 +140,7 @@ object Encoders {
    * Creates an encoder that serializes instances of the `java.time.Duration` class
    * to the internal representation of nullable Catalyst's DayTimeIntervalType.
    *
-   * @since 3.3.0
+   * @since 3.2.0
    */
   def DURATION: Encoder[java.time.Duration] = ExpressionEncoder()
 
