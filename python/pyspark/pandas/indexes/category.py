@@ -312,6 +312,49 @@ class CategoricalIndex(Index):
 
         return CategoricalIndex(self.to_series().cat.as_unordered()).rename(self.name)
 
+    def remove_categories(
+        self, removals: Union[pd.Index, Any, List], inplace: bool = False
+    ) -> Optional["CategoricalIndex"]:
+        """
+        Remove the specified categories.
+
+        `removals` must be included in the old categories. Values which were in
+        the removed categories will be set to NaN
+
+        Parameters
+        ----------
+        removals : category or list of categories
+           The categories which should be removed.
+        inplace : bool, default False
+           Whether or not to remove the categories inplace or return a copy of
+           this categorical with removed categories.
+
+        Returns
+        -------
+        CategoricalIndex or None
+            Categorical with removed categories or None if ``inplace=True``.
+
+        Raises
+        ------
+        ValueError
+            If the removals are not contained in the categories
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(list("abbccc"))
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+
+        >>> idx.remove_categories('b')  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', nan, nan, 'c', 'c', 'c'],
+                         categories=['a', 'c'], ordered=False, dtype='category')
+        """
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(self.to_series().cat.remove_categories(removals)).rename(self.name)
+
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeCategoricalIndex, item):
             property_or_func = getattr(MissingPandasLikeCategoricalIndex, item)
