@@ -491,7 +491,7 @@ class CategoricalAccessor(object):
         Examples
         --------
         >>> s = ps.Series(["a", "a", "b"], dtype="category")
-        >>> s.cat.rename_categories([0, 1])
+        >>> s.cat.rename_categories([0, 1])  # doctest: +SKIP
         0    0
         1    0
         2    1
@@ -501,7 +501,7 @@ class CategoricalAccessor(object):
         For dict-like ``new_categories``, extra keys are ignored and
         categories not in the dictionary are passed through
 
-        >>> s.cat.rename_categories({'a': 'A', 'c': 'C'})
+        >>> s.cat.rename_categories({'a': 'A', 'c': 'C'})  # doctest: +SKIP
         0    A
         1    A
         2    b
@@ -510,7 +510,7 @@ class CategoricalAccessor(object):
 
         You may also provide a callable to create the new categories
 
-        >>> s.cat.rename_categories(lambda x: x.upper())
+        >>> s.cat.rename_categories(lambda x: x.upper())  # doctest: +SKIP
         0    A
         1    A
         2    B
