@@ -47,14 +47,17 @@ private[spark] object SparkCoreErrors {
 
   def pathNotSupportedError(path: String): Throwable = {
     new IOException(s"Path: ${path} is a directory, which is not supported by the " +
-      s"record reader when `mapreduce.input.fileinputformat.input.dir.recursive` is false.")
+      "record reader when `mapreduce.input.fileinputformat.input.dir.recursive` is false.")
   }
 
   def checkpointRDDBlockIdNotFoundError(rddBlockId: RDDBlockId): Throwable = {
-    new SparkException(s"Checkpoint block $rddBlockId not found! Either the executor " +
-      s"that originally checkpointed this partition is no longer alive, or the original RDD is " +
-      s"unpersisted. If this problem persists, you may consider using `rdd.checkpoint()` " +
-      s"instead, which is slower than local checkpointing but more fault-tolerant.")
+    new SparkException(
+      s"""
+         |Checkpoint block $rddBlockId not found! Either the executor
+         |that originally checkpointed this partition is no longer alive, or the original RDD is
+         |unpersisted. If this problem persists, you may consider using `rdd.checkpoint()`
+         |instead, which is slower than local checkpointing but more fault-tolerant.
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def endOfStreamError(): Throwable = {
@@ -123,10 +126,11 @@ private[spark] object SparkCoreErrors {
       newRDDId: Int,
       newRDDLength: Int): Throwable = {
     new SparkException(
-      "Checkpoint RDD has a different number of partitions from original RDD. Original " +
-        s"RDD [ID: $originalRDDId, num of partitions: $originalRDDLength]; " +
-        s"Checkpoint RDD [ID: $newRDDId, num of partitions: " +
-        s"$newRDDLength].")
+      s"""
+         |Checkpoint RDD has a different number of partitions from original RDD. Original
+         |RDD [ID: $originalRDDId, num of partitions: $originalRDDLength];
+         |Checkpoint RDD [ID: $newRDDId, num of partitions: $newRDDLength].
+       """.stripMargin.replaceAll("\n", " "))
   }
 
   def checkpointFailedToSaveError(task: Int, path: Path): Throwable = {
