@@ -80,6 +80,7 @@ def sql(
             >>> psdf = ps.DataFrame({"A": [1, 2, 3], "B":[4, 5, 6]}, index=['a', 'b', 'c'])
             >>> psdf_reset_index = psdf.reset_index()
             >>> ps.sql("SELECT * FROM {psdf_reset_index}", index_col="index")
+            ... # doctest: +NORMALIZE_WHITESPACE
                    A  B
             index
             a      1  4
@@ -89,13 +90,14 @@ def sql(
             For MultiIndex,
 
             >>> psdf = ps.DataFrame(
-            >>>     {"A": [1, 2, 3], "B": [4, 5, 6]},
-            >>>     index=pd.MultiIndex.from_tuples(
-            >>>         [("a", "b"), ("c", "d"), ("e", "f")], names=["index1", "index2"]
-            >>>     ),
-            >>> )
+            ...     {"A": [1, 2, 3], "B": [4, 5, 6]},
+            ...     index=pd.MultiIndex.from_tuples(
+            ...         [("a", "b"), ("c", "d"), ("e", "f")], names=["index1", "index2"]
+            ...     ),
+            ... )
             >>> psdf_reset_index = psdf.reset_index()
             >>> ps.sql("SELECT * FROM {psdf_reset_index}", index_col=["index1", "index2"])
+            ... # doctest: +NORMALIZE_WHITESPACE
                            A  B
             index1 index2
             a      b       1  4
