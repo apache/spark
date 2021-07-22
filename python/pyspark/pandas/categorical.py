@@ -348,8 +348,96 @@ class CategoricalAccessor(object):
         """
         return self._set_ordered(ordered=False, inplace=inplace)
 
-    def remove_categories(self, removals: pd.Index, inplace: bool = False) -> "ps.Series":
-        raise NotImplementedError()
+    def remove_categories(
+        self, removals: Union[pd.Index, Any, List], inplace: bool = False
+    ) -> Optional["ps.Series"]:
+        """
+        Remove the specified categories.
+
+        `removals` must be included in the old categories. Values which were in
+        the removed categories will be set to NaN
+
+        Parameters
+        ----------
+        removals : category or list of categories
+           The categories which should be removed.
+        inplace : bool, default False
+           Whether or not to remove the categories inplace or return a copy of
+           this categorical with removed categories.
+
+        Returns
+        -------
+        Series or None
+            Categorical with removed categories or None if ``inplace=True``.
+
+        Raises
+        ------
+        ValueError
+            If the removals are not contained in the categories
+
+        Examples
+        --------
+        >>> s = ps.Series(list("abbccc"), dtype="category")
+        >>> s  # doctest: +SKIP
+        0    a
+        1    b
+        2    b
+        3    c
+        4    c
+        5    c
+        dtype: category
+        Categories (3, object): ['a', 'b', 'c']
+
+        >>> s.cat.remove_categories('b')  # doctest: +SKIP
+        0      a
+        1    NaN
+        2    NaN
+        3      c
+        4      c
+        5      c
+        dtype: category
+        Categories (2, object): ['a', 'c']
+        """
+        if is_list_like(removals):
+            categories = [cat for cat in removals if cat is not None]  # type: List
+        elif removals is None:
+            categories = []
+        else:
+            categories = [removals]
+
+        if any(cat not in self.categories for cat in categories):
+            raise ValueError(
+                "removals must all be in old categories: {{{cats}}}".format(
+                    cats=", ".join(
+                        set(str(cat) for cat in categories if cat not in self.categories)
+                    )
+                )
+            )
+
+        if len(categories) == 0:
+            if inplace:
+                return None
+            else:
+                psser = self._data
+                return psser._with_new_scol(
+                    psser.spark.column, field=psser._internal.data_fields[0]
+                )
+        else:
+            dtype = CategoricalDtype(
+                [cat for cat in self.categories if cat not in categories], ordered=self.ordered
+            )
+            psser = self._data.astype(dtype)
+
+            if inplace:
+                internal = self._data._psdf._internal.with_new_spark_column(
+                    self._data._column_label,
+                    psser.spark.column,
+                    field=psser._internal.data_fields[0],
+                )
+                self._data._psdf._update_internal_frame(internal)
+                return None
+            else:
+                return psser
 
     def remove_unused_categories(self) -> "ps.Series":
         raise NotImplementedError()

@@ -176,6 +176,7 @@ Categorical components
    CategoricalIndex.categories
    CategoricalIndex.ordered
    CategoricalIndex.add_categories
+   CategoricalIndex.remove_categories
    CategoricalIndex.as_ordered
    CategoricalIndex.as_unordered
 
