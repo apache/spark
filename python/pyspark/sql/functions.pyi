@@ -17,7 +17,7 @@
 # under the License.
 
 from typing import overload
-from typing import Any, Callable, Dict, List, Optional, Protocol, Union
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from pyspark.sql._typing import (
     ColumnOrName,
