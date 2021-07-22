@@ -1841,8 +1841,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         A user can retrieve the metrics by accessing `Observation.get`.
 
         Example:
+            >>> from pyspark.sql.functions import col, lit, count, max
+            >>> from pyspark.sql.observation import Observation
             >>> observation = Observation("my_metrics")
-            >>> observed_df = df.observe(observation, count(lit(1)).as("rows"), max($"id").as("maxid"))
+            >>> observed_df = df.observe(observation, count(lit(1)).as("rows"), max(col("id")).as("maxid"))
             >>> observed_df.write.parquet("ds.parquet")
             >>> metrics = observation.get
 

@@ -23,6 +23,8 @@ import time
 import unittest
 
 from pyspark.sql import SparkSession, Row
+from pyspark.sql.functions import col, lit, count, sum, mean
+from pyspark.sql.observation import Observation
 from pyspark.sql.types import StringType, IntegerType, DoubleType, StructType, StructField, \
     BooleanType, DateType, TimestampType, FloatType
 from pyspark.sql.utils import AnalysisException, IllegalArgumentException
@@ -388,6 +390,32 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(1, logical_plan.toString().count("1.2345"))
         self.assertEqual(1, logical_plan.toString().count("what"))
         self.assertEqual(3, logical_plan.toString().count("itworks"))
+
+    def test_observe(self):
+        df = SparkSession(self.sc).createDataFrame([
+            (1, 1.0, 'one'),
+            (2, 2.0, 'two'),
+            (3, 3.0, 'three'),
+        ], ['id', 'val', 'label'])
+
+        observation = Observation("metric")
+        observed = df.orderBy('id').observe(
+            observation,
+            count(lit(1)).alias('cnt'),
+            sum(col("id")).alias('sum'),
+            mean(col("val")).alias('mean')
+        )
+
+        # test that observe works transparently
+        actual = observed.collect()
+        self.assertEqual([
+            {'id': 1, 'val': 1.0, 'label': 'one'},
+            {'id': 2, 'val': 2.0, 'label': 'two'},
+            {'id': 3, 'val': 3.0, 'label': 'three'},
+        ], [row.asDict() for row in actual])
+
+        # test that we retrieve the metrics
+        self.assertEqual(observation.get, Row(cnt=3, sum=6, mean=2.0))
 
     def test_sample(self):
         self.assertRaisesRegex(
