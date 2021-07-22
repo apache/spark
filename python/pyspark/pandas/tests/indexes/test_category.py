@@ -67,6 +67,71 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(psidx.codes, pd.Index(pidx.codes))
         self.assert_eq(psidx.ordered, pidx.ordered)
 
+    def test_categories_setter(self):
+        pdf = pd.DataFrame(
+            {
+                "a": pd.Categorical([1, 2, 3, 1, 2, 3]),
+                "b": pd.Categorical(["a", "b", "c", "a", "b", "c"], categories=["c", "b", "a"]),
+            },
+            index=pd.Categorical([10, 20, 30, 20, 30, 10], categories=[30, 10, 20], ordered=True),
+        )
+        psdf = ps.from_pandas(pdf)
+
+        pidx = pdf.index
+        psidx = psdf.index
+
+        pidx.categories = ["z", "y", "x"]
+        psidx.categories = ["z", "y", "x"]
+        if LooseVersion(pd.__version__) >= LooseVersion("1.0.5"):
+            self.assert_eq(pidx, psidx)
+            self.assert_eq(pdf, psdf)
+        else:
+            pidx = pidx.set_categories(pidx.categories)
+            pdf.index = pidx
+            self.assert_eq(pidx, psidx)
+            self.assert_eq(pdf, psdf)
+
+        with self.assertRaises(ValueError):
+            psidx.categories = [1, 2, 3, 4]
+
+    def test_add_categories(self):
+        pidx = pd.CategoricalIndex([1, 2, 3], categories=[3, 2, 1])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(pidx.add_categories(4), psidx.add_categories(4))
+        self.assert_eq(pidx.add_categories([4, 5]), psidx.add_categories([4, 5]))
+        self.assert_eq(pidx.add_categories([]), psidx.add_categories([]))
+
+        self.assertRaises(ValueError, lambda: psidx.add_categories(4, inplace=True))
+        self.assertRaises(ValueError, lambda: psidx.add_categories(3))
+        self.assertRaises(ValueError, lambda: psidx.add_categories([4, 4]))
+
+    def test_remove_categories(self):
+        pidx = pd.CategoricalIndex([1, 2, 3], categories=[3, 2, 1])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(pidx.remove_categories(2), psidx.remove_categories(2))
+        self.assert_eq(pidx.remove_categories([1, 3]), psidx.remove_categories([1, 3]))
+        self.assert_eq(pidx.remove_categories([]), psidx.remove_categories([]))
+        self.assert_eq(pidx.remove_categories([2, 2]), psidx.remove_categories([2, 2]))
+        self.assert_eq(pidx.remove_categories([1, 2, 3]), psidx.remove_categories([1, 2, 3]))
+        self.assert_eq(pidx.remove_categories(None), psidx.remove_categories(None))
+        self.assert_eq(pidx.remove_categories([None]), psidx.remove_categories([None]))
+
+        self.assertRaises(ValueError, lambda: pidx.remove_categories(4, inplace=True))
+        self.assertRaises(ValueError, lambda: psidx.remove_categories(4))
+        self.assertRaises(ValueError, lambda: psidx.remove_categories([4, None]))
+
+    def test_as_ordered_unordered(self):
+        pidx = pd.CategoricalIndex(["x", "y", "z"], categories=["z", "y", "x"])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(pidx.as_ordered(), psidx.as_ordered())
+        self.assert_eq(pidx.as_unordered(), psidx.as_unordered())
+
+        self.assertRaises(ValueError, lambda: psidx.as_ordered(inplace=True))
+        self.assertRaises(ValueError, lambda: psidx.as_unordered(inplace=True))
+
     def test_astype(self):
         pidx = pd.Index(["a", "b", "c"])
         psidx = ps.from_pandas(pidx)
@@ -110,6 +175,87 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(kcodes.tolist(), pcodes.tolist())
         self.assert_eq(kuniques, puniques)
+
+    def test_append(self):
+        pidx1 = pd.CategoricalIndex(["x", "y", "z"], categories=["z", "y", "x", "w"])
+        pidx2 = pd.CategoricalIndex(["y", "x", "w"], categories=["z", "y", "x", "w"])
+        pidx3 = pd.Index(["y", "x", "w", "z"])
+        psidx1 = ps.from_pandas(pidx1)
+        psidx2 = ps.from_pandas(pidx2)
+        psidx3 = ps.from_pandas(pidx3)
+
+        self.assert_eq(psidx1.append(psidx2), pidx1.append(pidx2))
+        self.assert_eq(
+            psidx1.append(psidx3.astype("category")), pidx1.append(pidx3.astype("category"))
+        )
+
+        # TODO: append non-categorical or categorical with a different category
+        self.assertRaises(NotImplementedError, lambda: psidx1.append(psidx3))
+
+        pidx4 = pd.CategoricalIndex(["y", "x", "w"], categories=["z", "y", "x"])
+        psidx4 = ps.from_pandas(pidx4)
+        self.assertRaises(NotImplementedError, lambda: psidx1.append(psidx4))
+
+    def test_union(self):
+        pidx1 = pd.CategoricalIndex(["x", "y", "z"], categories=["z", "y", "x", "w"])
+        pidx2 = pd.CategoricalIndex(["y", "x", "w"], categories=["z", "y", "x", "w"])
+        pidx3 = pd.Index(["y", "x", "w", "z"])
+        psidx1 = ps.from_pandas(pidx1)
+        psidx2 = ps.from_pandas(pidx2)
+        psidx3 = ps.from_pandas(pidx3)
+
+        self.assert_eq(psidx1.union(psidx2), pidx1.union(pidx2))
+        self.assert_eq(
+            psidx1.union(psidx3.astype("category")), pidx1.union(pidx3.astype("category"))
+        )
+
+        # TODO: union non-categorical or categorical with a different category
+        self.assertRaises(NotImplementedError, lambda: psidx1.union(psidx3))
+
+        pidx4 = pd.CategoricalIndex(["y", "x", "w"], categories=["z", "y", "x"])
+        psidx4 = ps.from_pandas(pidx4)
+        self.assertRaises(NotImplementedError, lambda: psidx1.union(psidx4))
+
+    def test_intersection(self):
+        pidx1 = pd.CategoricalIndex(["x", "y", "z"], categories=["z", "y", "x", "w"])
+        pidx2 = pd.CategoricalIndex(["y", "x", "w"], categories=["z", "y", "x", "w"])
+        pidx3 = pd.Index(["y", "x", "w", "z"])
+        psidx1 = ps.from_pandas(pidx1)
+        psidx2 = ps.from_pandas(pidx2)
+        psidx3 = ps.from_pandas(pidx3)
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+            self.assert_eq(
+                psidx1.intersection(psidx2).sort_values(), pidx1.intersection(pidx2).sort_values()
+            )
+            self.assert_eq(
+                psidx1.intersection(psidx3.astype("category")).sort_values(),
+                pidx1.intersection(pidx3.astype("category")).sort_values(),
+            )
+        else:
+            self.assert_eq(
+                psidx1.intersection(psidx2).sort_values(),
+                pidx1.intersection(pidx2).set_categories(pidx1.categories).sort_values(),
+            )
+            self.assert_eq(
+                psidx1.intersection(psidx3.astype("category")).sort_values(),
+                pidx1.intersection(pidx3.astype("category"))
+                .set_categories(pidx1.categories)
+                .sort_values(),
+            )
+
+        # TODO: intersection non-categorical or categorical with a different category
+        self.assertRaises(NotImplementedError, lambda: psidx1.intersection(psidx3))
+
+        pidx4 = pd.CategoricalIndex(["y", "x", "w"], categories=["z", "y", "x"])
+        psidx4 = ps.from_pandas(pidx4)
+        self.assertRaises(NotImplementedError, lambda: psidx1.intersection(psidx4))
+
+    def test_insert(self):
+        pidx = pd.CategoricalIndex(["x", "y", "z"], categories=["z", "y", "x", "w"])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(psidx.insert(1, "w"), pidx.insert(1, "w"))
 
 
 if __name__ == "__main__":

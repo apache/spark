@@ -125,14 +125,10 @@ class MissingPandasLikeCategoricalIndex(MissingPandasLikeIndex):
     # Functions
     rename_categories = _unsupported_function("rename_categories", cls="CategoricalIndex")
     reorder_categories = _unsupported_function("reorder_categories", cls="CategoricalIndex")
-    add_categories = _unsupported_function("add_categories", cls="CategoricalIndex")
-    remove_categories = _unsupported_function("remove_categories", cls="CategoricalIndex")
     remove_unused_categories = _unsupported_function(
         "remove_unused_categories", cls="CategoricalIndex"
     )
     set_categories = _unsupported_function("set_categories", cls="CategoricalIndex")
-    as_ordered = _unsupported_function("as_ordered", cls="CategoricalIndex")
-    as_unordered = _unsupported_function("as_unordered", cls="CategoricalIndex")
     map = _unsupported_function("map", cls="CategoricalIndex")
 
 

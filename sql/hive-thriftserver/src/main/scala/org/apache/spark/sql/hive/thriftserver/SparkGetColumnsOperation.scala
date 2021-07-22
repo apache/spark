@@ -130,7 +130,7 @@ private[hive] class SparkGetColumnsOperation(
    * For array, map, string, and binaries, the column size is variable, return null as unknown.
    */
   private def getColumnSize(typ: DataType): Option[Int] = typ match {
-    case dt @ (BooleanType | _: NumericType | DateType | TimestampType |
+    case dt @ (BooleanType | _: NumericType | DateType | TimestampType | TimestampNTZType |
                CalendarIntervalType | NullType |
                _: YearMonthIntervalType | _: DayTimeIntervalType) =>
       Some(dt.defaultSize)
@@ -158,7 +158,7 @@ private[hive] class SparkGetColumnsOperation(
     case FloatType => Some(7)
     case DoubleType => Some(15)
     case d: DecimalType => Some(d.scale)
-    case TimestampType => Some(6)
+    case TimestampType | TimestampNTZType => Some(6)
     case _ => None
   }
 
@@ -182,7 +182,7 @@ private[hive] class SparkGetColumnsOperation(
     case CharType(_) => java.sql.Types.CHAR
     case BinaryType => java.sql.Types.BINARY
     case DateType => java.sql.Types.DATE
-    case TimestampType => java.sql.Types.TIMESTAMP
+    case TimestampType | TimestampNTZType => java.sql.Types.TIMESTAMP
     case _: ArrayType => java.sql.Types.ARRAY
     case _: MapType => java.sql.Types.JAVA_OBJECT
     case _: StructType => java.sql.Types.STRUCT

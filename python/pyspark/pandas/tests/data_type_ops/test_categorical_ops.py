@@ -29,20 +29,39 @@ from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
+    def pdf(self):
+        return pd.DataFrame(
+            {
+                "this_numeric_cat": pd.Series([1, 2, 3], dtype="category"),
+                "that_numeric_cat": pd.Series([3, 2, 1], dtype="category"),
+                "this_ordered_numeric_cat": pd.Categorical(
+                    [1, 2, 3], categories=[3, 2, 1], ordered=True
+                ),
+                "that_ordered_numeric_cat": pd.Categorical(
+                    [2, 3, 1], categories=[3, 2, 1], ordered=True
+                ),
+                "this_string_cat": pd.Series(["x", "y", "z"], dtype="category"),
+                "that_string_cat": pd.Series(["z", "y", "x"], dtype="category"),
+                "this_ordered_string_cat": pd.Categorical(
+                    ["x", "y", "z"], categories=["x", "z", "y"], ordered=True
+                ),
+                "that_ordered_string_cat": pd.Categorical(
+                    ["z", "y", "x"], categories=["x", "z", "y"], ordered=True
+                ),
+            }
+        )
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
+
+    @property
     def pser(self):
-        return pd.Series([1, "x", "y"], dtype="category")
+        return pd.Series([1, 2, 3], dtype="category")
 
     @property
     def psser(self):
         return ps.from_pandas(self.pser)
-
-    @property
-    def other_pser(self):
-        return pd.Series(["y", "x", 1], dtype="category")
-
-    @property
-    def other_psser(self):
-        return ps.from_pandas(self.other_pser)
 
     def test_add(self):
         self.assertRaises(TypeError, lambda: self.psser + "x")
@@ -184,30 +203,302 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: ~self.psser)
 
     def test_eq(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser == self.other_pser, (self.psser == self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser == self.pser, (self.psser == self.psser).sort_index())
+        pdf, psdf = self.pdf, self.psdf
+
+        pser, psser = pdf["this_numeric_cat"], psdf["this_numeric_cat"]
+        ordered_pser, ordered_psser = (
+            pdf["this_ordered_numeric_cat"],
+            psdf["this_ordered_numeric_cat"],
+        )
+        self.assert_eq(ordered_pser == 1, ordered_psser == 1)
+        self.assert_eq(pser == pser, psser == psser)
+        self.assert_eq(ordered_pser == ordered_pser, ordered_psser == ordered_psser)
+
+        pser, psser = pdf["this_string_cat"], psdf["this_string_cat"]
+        ordered_pser, ordered_psser = (
+            pdf["this_ordered_string_cat"],
+            psdf["this_ordered_string_cat"],
+        )
+        self.assert_eq(pser == "x", psser == "x")
+        self.assert_eq(pser == pser, psser == psser)
+        self.assert_eq(ordered_pser == ordered_pser, ordered_psser == ordered_psser)
+
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser == 4,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser == "a",
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser == ps.Series([1, 2, 3]),
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser == [1, 2, 3],
+        )
+
+        self.assert_eq(
+            pdf["this_numeric_cat"] == pdf["that_numeric_cat"],
+            psdf["this_numeric_cat"] == psdf["that_numeric_cat"],
+        )
+        self.assert_eq(
+            pdf["this_string_cat"] == pdf["that_string_cat"],
+            psdf["this_string_cat"] == psdf["that_string_cat"],
+        )
 
     def test_ne(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser != self.other_pser, (self.psser != self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser != self.pser, (self.psser != self.psser).sort_index())
+        pdf, psdf = self.pdf, self.psdf
+
+        pser, psser = pdf["this_numeric_cat"], psdf["this_numeric_cat"]
+        ordered_pser, ordered_psser = (
+            pdf["this_ordered_numeric_cat"],
+            psdf["this_ordered_numeric_cat"],
+        )
+        self.assert_eq(ordered_pser != 1, ordered_psser != 1)
+        self.assert_eq(pser != pser, psser != psser)
+        self.assert_eq(ordered_pser != ordered_pser, ordered_psser != ordered_psser)
+
+        pser, psser = pdf["this_string_cat"], psdf["this_string_cat"]
+        ordered_pser, ordered_psser = (
+            pdf["this_ordered_string_cat"],
+            psdf["this_ordered_string_cat"],
+        )
+        self.assert_eq(pser != "x", psser != "x")
+        self.assert_eq(pser != pser, psser != psser)
+        self.assert_eq(ordered_pser != ordered_pser, ordered_psser != ordered_psser)
+
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser != 4,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser != "a",
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser != ps.Series([1, 2, 3]),
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser != [1, 2, 3],
+        )
+        self.assert_eq(
+            pdf["this_numeric_cat"] != pdf["that_numeric_cat"],
+            psdf["this_numeric_cat"] != psdf["that_numeric_cat"],
+        )
+        self.assert_eq(
+            pdf["this_string_cat"] != pdf["that_string_cat"],
+            psdf["this_string_cat"] != psdf["that_string_cat"],
+        )
 
     def test_lt(self):
-        self.assertRaises(NotImplementedError, lambda: self.psser < self.other_psser)
+        pdf, psdf = self.pdf, self.psdf
+        ordered_pser, ordered_psser = (
+            pdf["this_ordered_numeric_cat"],
+            psdf["this_ordered_numeric_cat"],
+        )
+        self.assert_eq(ordered_pser < 1, ordered_psser < 1)
+        self.assert_eq(ordered_pser < ordered_pser, ordered_psser < ordered_psser)
+
+        ordered_pser, ordered_psser = (
+            pdf["this_ordered_string_cat"],
+            psdf["this_ordered_string_cat"],
+        )
+        self.assert_eq(ordered_pser < "x", ordered_psser < "x")
+        self.assert_eq(ordered_pser < ordered_pser, ordered_psser < ordered_psser)
+
+        self.assertRaisesRegex(
+            TypeError,
+            "Unordered Categoricals can only compare equality or not",
+            lambda: self.psser < ordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser < 4,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser < "a",
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser < ps.Series([1, 2, 3]),
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser < [1, 2, 3],
+        )
+        self.assert_eq(
+            pdf["this_ordered_numeric_cat"] < pdf["that_ordered_numeric_cat"],
+            psdf["this_ordered_numeric_cat"] < psdf["that_ordered_numeric_cat"],
+        )
+        self.assert_eq(
+            pdf["this_ordered_string_cat"] < pdf["that_ordered_string_cat"],
+            psdf["this_ordered_string_cat"] < psdf["that_ordered_string_cat"],
+        )
 
     def test_le(self):
-        self.assertRaises(NotImplementedError, lambda: self.psser <= self.other_psser)
+        pdf, psdf = self.pdf, self.psdf
+        ordered_pser, ordered_psser = (
+            pdf["this_ordered_numeric_cat"],
+            psdf["this_ordered_numeric_cat"],
+        )
+        self.assert_eq(ordered_pser <= 1, ordered_psser <= 1)
+        self.assert_eq(ordered_pser <= ordered_pser, ordered_psser <= ordered_psser)
+
+        ordered_pser, ordered_psser = (
+            pdf["this_ordered_string_cat"],
+            psdf["this_ordered_string_cat"],
+        )
+        self.assert_eq(ordered_pser <= "x", ordered_psser <= "x")
+        self.assert_eq(ordered_pser <= ordered_pser, ordered_psser <= ordered_psser)
+        self.assertRaisesRegex(
+            TypeError,
+            "Unordered Categoricals can only compare equality or not",
+            lambda: self.psser <= ordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser <= 4,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser <= "a",
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser <= ps.Series([1, 2, 3]),
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser <= [1, 2, 3],
+        )
+        self.assert_eq(
+            pdf["this_ordered_numeric_cat"] <= pdf["that_ordered_numeric_cat"],
+            psdf["this_ordered_numeric_cat"] <= psdf["that_ordered_numeric_cat"],
+        )
+        self.assert_eq(
+            pdf["this_ordered_string_cat"] <= pdf["that_ordered_string_cat"],
+            psdf["this_ordered_string_cat"] <= psdf["that_ordered_string_cat"],
+        )
 
     def test_gt(self):
-        self.assertRaises(NotImplementedError, lambda: self.psser > self.other_psser)
+        pdf, psdf = self.pdf, self.psdf
+        ordered_pser, ordered_psser = (
+            pdf["this_ordered_numeric_cat"],
+            psdf["this_ordered_numeric_cat"],
+        )
+        self.assert_eq(ordered_pser > 1, ordered_psser > 1)
+        self.assert_eq(ordered_pser > ordered_pser, ordered_psser > ordered_psser)
+
+        ordered_pser, ordered_psser = (
+            pdf["this_ordered_string_cat"],
+            psdf["this_ordered_string_cat"],
+        )
+        self.assert_eq(ordered_pser > "x", ordered_psser > "x")
+        self.assert_eq(ordered_pser > ordered_pser, ordered_psser > ordered_psser)
+        self.assertRaisesRegex(
+            TypeError,
+            "Unordered Categoricals can only compare equality or not",
+            lambda: self.psser > ordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser > 4,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser > "a",
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser > ps.Series([1, 2, 3]),
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser > [1, 2, 3],
+        )
+        self.assert_eq(
+            pdf["this_ordered_numeric_cat"] > pdf["that_ordered_numeric_cat"],
+            psdf["this_ordered_numeric_cat"] > psdf["that_ordered_numeric_cat"],
+        )
+        self.assert_eq(
+            pdf["this_ordered_string_cat"] > pdf["that_ordered_string_cat"],
+            psdf["this_ordered_string_cat"] > psdf["that_ordered_string_cat"],
+        )
 
     def test_ge(self):
-        self.assertRaises(NotImplementedError, lambda: self.psser >= self.other_psser)
+        pdf, psdf = self.pdf, self.psdf
+        ordered_pser, ordered_psser = (
+            pdf["this_ordered_numeric_cat"],
+            psdf["this_ordered_numeric_cat"],
+        )
+        self.assert_eq(ordered_pser >= 1, ordered_psser >= 1)
+        self.assert_eq(ordered_pser >= ordered_pser, ordered_psser >= ordered_psser)
+
+        ordered_pser, ordered_psser = (
+            pdf["this_ordered_string_cat"],
+            psdf["this_ordered_string_cat"],
+        )
+        self.assert_eq(ordered_pser >= "x", ordered_psser >= "x")
+        self.assert_eq(ordered_pser >= ordered_pser, ordered_psser >= ordered_psser)
+        self.assertRaisesRegex(
+            TypeError,
+            "Unordered Categoricals can only compare equality or not",
+            lambda: self.psser >= ordered_psser,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser >= 4,
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with a scalar, which is not a category",
+            lambda: ordered_psser >= "a",
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser >= ps.Series([1, 2, 3]),
+        )
+        self.assertRaisesRegex(
+            TypeError,
+            "Cannot compare a Categorical with the given type",
+            lambda: ordered_psser >= [1, 2, 3],
+        )
+        self.assert_eq(
+            pdf["this_ordered_numeric_cat"] >= pdf["that_ordered_numeric_cat"],
+            psdf["this_ordered_numeric_cat"] >= psdf["that_ordered_numeric_cat"],
+        )
+        self.assert_eq(
+            pdf["this_ordered_string_cat"] >= pdf["that_ordered_string_cat"],
+            psdf["this_ordered_string_cat"] >= psdf["that_ordered_string_cat"],
+        )
 
 
 if __name__ == "__main__":

@@ -533,6 +533,10 @@ case class RegExpReplace(subject: Expression, regexp: Expression, rep: Expressio
     this(subject, regexp, rep, Literal(1))
 
   override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      return defaultCheck
+    }
     if (!pos.foldable) {
       return TypeCheckFailure(s"Position expression must be foldable, but got $pos")
     }

@@ -140,12 +140,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // Add a Project here to make sure we produce unsafe rows.
       withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
-    case WriteToDataSourceV2(relationOpt, writer, query) =>
+    case WriteToDataSourceV2(relationOpt, writer, query, customMetrics) =>
       val invalidateCacheFunc: () => Unit = () => relationOpt match {
         case Some(r) => session.sharedState.cacheManager.uncacheQuery(session, r, cascade = true)
         case None => ()
       }
-      WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query)) :: Nil
+      WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
     case CreateV2Table(catalog, ident, schema, parts, props, ifNotExists) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
@@ -260,8 +260,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           throw QueryCompilationErrors.deleteOnlySupportedWithV2TablesError()
       }
 
-    case WriteToContinuousDataSource(writer, query) =>
-      WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
+    case WriteToContinuousDataSource(writer, query, customMetrics) =>
+      WriteToContinuousDataSourceExec(writer, planLater(query), customMetrics) :: Nil
 
     case DescribeNamespace(ResolvedNamespace(catalog, ns), extended, output) =>
       DescribeNamespaceExec(output, catalog.asNamespaceCatalog, ns, extended) :: Nil

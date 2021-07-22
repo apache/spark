@@ -38,7 +38,7 @@ class ParquetColumnIndexSuite extends QueryTest with ParquetTest with SharedSpar
    * col_1     500       500       500       500
    *  |---------|---------|---------|---------|
    *  |-------|-----|-----|---|---|---|---|---|
-   * col_2   400   300   200 200 200 200 200 200
+   * col_2   400   300   300 200 200 200 200 200
    */
   def checkUnalignedPages(df: DataFrame)(actions: (DataFrame => DataFrame)*): Unit = {
     Seq(true, false).foreach { enableDictionary =>
@@ -90,6 +90,16 @@ class ParquetColumnIndexSuite extends QueryTest with ParquetTest with SharedSpar
       "cast(cast(1618161925000 + (id % 10) * 1000 * 60 * 60 * 24 as timestamp) as date) as _9",
       "cast(1618161925000 + (id % 10) as timestamp) as _10"
     )
+    checkUnalignedPages(df)(actions: _*)
+  }
+
+  test("SPARK-36123: reading from unaligned pages - test filters with nulls") {
+    // insert 50 null values in [400, 450) to verify that they are skipped during processing row
+    // range [500, 1000) against the second page of col_2 [400, 800)
+    var df = spark.range(0, 2000).map { i =>
+      val strVal = if (i >= 400 && i < 450) null else i + ":" + "o" * (i / 100).toInt
+      (i, strVal)
+    }.toDF()
     checkUnalignedPages(df)(actions: _*)
   }
 }

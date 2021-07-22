@@ -953,7 +953,7 @@ class AdaptiveQueryExecSuite
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.SHUFFLE_PARTITIONS.key -> "100",
         SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
-        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "1000") {
         withTempView("skewData1", "skewData2") {
           spark
             .range(0, 1000, 1, 10)
@@ -982,9 +982,9 @@ class AdaptiveQueryExecSuite
             assert(reader.metrics.contains("numSkewedPartitions"))
           }
           assert(readers(0).metrics("numSkewedPartitions").value == 2)
-          assert(readers(0).metrics("numSkewedSplits").value == 15)
+          assert(readers(0).metrics("numSkewedSplits").value == 11)
           assert(readers(1).metrics("numSkewedPartitions").value == 1)
-          assert(readers(1).metrics("numSkewedSplits").value == 12)
+          assert(readers(1).metrics("numSkewedSplits").value == 9)
         }
       }
     }
@@ -1425,8 +1425,7 @@ class AdaptiveQueryExecSuite
       Seq("=== Result of Batch AQE Preparations ===",
           "=== Result of Batch AQE Post Stage Creation ===",
           "=== Result of Batch AQE Replanning ===",
-          "=== Result of Batch AQE Query Stage Optimization ===",
-          "=== Result of Batch AQE Final Query Stage Optimization ===").foreach { expectedMsg =>
+          "=== Result of Batch AQE Query Stage Optimization ===").foreach { expectedMsg =>
         assert(testAppender.loggingEvents.exists(_.getRenderedMessage.contains(expectedMsg)))
       }
     }
@@ -1582,7 +1581,7 @@ class AdaptiveQueryExecSuite
         // Skew join can apply as the repartition is not optimized out.
         assert(smjWithNum.head.isSkewJoin)
         val customReadersWithNum = collect(smjWithNum.head) {
-          case c: CustomShuffleReaderExec if c.hasCoalescedPartition => c
+          case c: CustomShuffleReaderExec => c
         }
         assert(customReadersWithNum.nonEmpty)
 
@@ -1692,7 +1691,9 @@ class AdaptiveQueryExecSuite
         val (_, adaptive) = runAdaptiveAndVerifyResult("SELECT c1, count(*) FROM t GROUP BY c1")
         assert(
           collect(adaptive) {
-            case c @ CustomShuffleReaderExec(_, partitionSpecs) if partitionSpecs.length == 1 => c
+            case c @ CustomShuffleReaderExec(_, partitionSpecs) if partitionSpecs.length == 1 =>
+              assert(c.hasCoalescedPartition)
+              c
           }.length == 1
         )
       }

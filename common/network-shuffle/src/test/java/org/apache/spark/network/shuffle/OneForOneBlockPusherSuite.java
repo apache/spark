@@ -51,7 +51,7 @@ public class OneForOneBlockPusherSuite {
     BlockPushingListener listener = pushBlocks(
       blocks,
       blockIds,
-      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0)));
+      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0, 0)));
 
     verify(listener).onBlockPushSuccess(eq("shufflePush_0_0_0"), any());
   }
@@ -67,9 +67,9 @@ public class OneForOneBlockPusherSuite {
     BlockPushingListener listener = pushBlocks(
       blocks,
       blockIds,
-      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0),
-        new PushBlockStream("app-id", 0, 1, 0, 1),
-        new PushBlockStream("app-id", 0, 2, 0, 2)));
+      Arrays.asList(new PushBlockStream("app-id",0,  0, 0, 0, 0),
+        new PushBlockStream("app-id", 0, 0, 1, 0, 1),
+        new PushBlockStream("app-id", 0, 0, 2, 0, 2)));
 
     verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_0"), any());
     verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_1_0"), any());
@@ -87,9 +87,9 @@ public class OneForOneBlockPusherSuite {
     BlockPushingListener listener = pushBlocks(
       blocks,
       blockIds,
-      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0),
-        new PushBlockStream("app-id", 0, 1, 0, 1),
-        new PushBlockStream("app-id", 0, 2, 0, 2)));
+      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0, 0),
+        new PushBlockStream("app-id", 0, 0, 1, 0, 1),
+        new PushBlockStream("app-id", 0, 0, 2, 0, 2)));
 
     verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_0"), any());
     verify(listener, times(1)).onBlockPushFailure(eq("shufflePush_0_1_0"), any());
@@ -107,9 +107,9 @@ public class OneForOneBlockPusherSuite {
     BlockPushingListener listener = pushBlocks(
       blocks,
       blockIds,
-      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0),
-        new PushBlockStream("app-id", 0, 1, 0, 1),
-        new PushBlockStream("app-id", 0, 2, 0, 2)));
+      Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0, 0),
+        new PushBlockStream("app-id", 0, 0, 1, 0, 1),
+        new PushBlockStream("app-id", 0, 0, 2, 0, 2)));
 
     verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_0"), any());
     verify(listener, times(0)).onBlockPushSuccess(not(eq("shufflePush_0_0_0")), any());
@@ -130,7 +130,7 @@ public class OneForOneBlockPusherSuite {
     TransportClient client = mock(TransportClient.class);
     BlockPushingListener listener = mock(BlockPushingListener.class);
     OneForOneBlockPusher pusher =
-      new OneForOneBlockPusher(client, "app-id", blockIds, listener, blocks);
+      new OneForOneBlockPusher(client, "app-id", 0, blockIds, listener, blocks);
 
     Iterator<Map.Entry<String, ManagedBuffer>> blockIterator = blocks.entrySet().iterator();
     Iterator<BlockTransferMessage> msgIterator = expectMessages.iterator();
