@@ -300,9 +300,9 @@ struct<a:string,b:string,c:string,d:string>
 	NULL	NULL	NULL
 	NULL	NULL	NULL
 	NULL	NULL	NULL
-1	true	Spark SQL	NULL
-2	false	Spark SQL	NULL
-3	true	Spark SQL	NULL
+1	true	Spark SQL	
+2	false	Spark SQL	
+3	true	Spark SQL
 
 
 -- !query
