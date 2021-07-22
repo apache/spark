@@ -180,15 +180,38 @@ class Catalog(object):
 
         Examples
         --------
+
+        This function can check if a table is defined or not:
+
         >>> spark.catalog.tableExists("unexisting_table")
         False
         >>> df = spark.sql("CREATE TABLE tab1 (name STRING, age INT) USING parquet")
         >>> spark.catalog.tableExists("tab1")
         True
         >>> df = spark.sql("DROP TABLE tab1")
+        >>> spark.catalog.tableExists("unexisting_table")
+        False
+
+        It also works for views:
+
+        >>> spark.catalog.tableExists("view1")
+        False
+        >>> df = spark.sql("CREATE VIEW view1 AS SELECT 1")
+        >>> spark.catalog.tableExists("view1")
+        True
+        >>> df = spark.sql("DROP VIEW view1")
+        >>> spark.catalog.tableExists("view1")
+        False
+
+        And also for temporary views:
+
+        >>> df = spark.sql("CREATE TEMPORARY VIEW view1 AS SELECT 1")
+        >>> spark.catalog.tableExists("view1")
+        True
+        >>> df = spark.sql("DROP VIEW view1")
+        >>> spark.catalog.tableExists("view1")
+        False
         """
-        if dbName is None:
-            dbName = self.currentDatabase()
         return self._jcatalog.tableExists(dbName, tableName)
 
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
