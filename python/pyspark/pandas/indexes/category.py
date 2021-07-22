@@ -355,6 +355,37 @@ class CategoricalIndex(Index):
 
         return CategoricalIndex(self.to_series().cat.remove_categories(removals)).rename(self.name)
 
+    def remove_unused_categories(self, inplace: bool = False) -> Optional["CategoricalIndex"]:
+        """
+        Remove categories which are not used.
+
+        Parameters
+        ----------
+        inplace : bool, default False
+           Whether or not to drop unused categories inplace or return a copy of
+           this categorical with unused categories dropped.
+
+        Returns
+        -------
+        cat : CategoricalIndex or None
+            Categorical with unused categories dropped or None if ``inplace=True``.
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(list("abbccc"), categories=['a', 'b', 'c', 'd'])
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c', 'd'], ordered=False, dtype='category')
+
+        >>> idx.remove_unused_categories()  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+        """
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(self.to_series().cat.remove_unused_categories()).rename(self.name)
+
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeCategoricalIndex, item):
             property_or_func = getattr(MissingPandasLikeCategoricalIndex, item)

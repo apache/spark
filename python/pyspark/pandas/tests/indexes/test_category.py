@@ -122,6 +122,14 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assertRaises(ValueError, lambda: psidx.remove_categories(4))
         self.assertRaises(ValueError, lambda: psidx.remove_categories([4, None]))
 
+    def test_remove_unused_categories(self):
+        pidx = pd.CategoricalIndex([1, 4, 5, 3], categories=[4, 3, 2, 1])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(pidx.remove_unused_categories(), psidx.remove_unused_categories())
+
+        self.assertRaises(ValueError, lambda: psidx.remove_unused_categories(inplace=True))
+
     def test_as_ordered_unordered(self):
         pidx = pd.CategoricalIndex(["x", "y", "z"], categories=["z", "y", "x"])
         psidx = ps.from_pandas(pidx)
