@@ -97,6 +97,7 @@ class ExternalSorterSpillSuite extends SparkFunSuite with BeforeAndAfterEach {
   test("SPARK-36242 Spill File should not exists if writer close fails") {
     val errorMessage = "Spill file close failed"
     val externalSorter = new TestExternalSorter[Int, Int, Int](taskContext)
+    // Make sure to enter the `objectsWritten > 0` branch
     val writeSize = conf.get(config.SHUFFLE_SPILL_BATCH_SIZE) + 1
     val dataBuffer = new PartitionedPairBuffer[Int, Int]
     (0 until writeSize.toInt).foreach(i => dataBuffer.insert(0, 0, i))
