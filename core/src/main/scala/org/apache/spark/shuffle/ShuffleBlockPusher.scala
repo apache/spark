@@ -73,7 +73,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       override def shouldRetryError(t: Throwable): Boolean = {
         // If it is a FileNotFound exception originating from the client while pushing the shuffle
         // blocks to the server, then we stop pushing all the blocks because this indicates the
-        // shuffle files are deleted because subsequent block push will also fail.
+        // shuffle files are deleted and subsequent block push will also fail.
         if (t.getCause != null && t.getCause.isInstanceOf[FileNotFoundException]) {
           return false
         }
@@ -110,7 +110,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         pushUpToMax()
       } catch {
         case e: FileNotFoundException =>
-          logWarning("The shuffle files got deleted when this task was reading from them" +
+          logWarning("The shuffle files got deleted when this task was reading from them " +
             "which could happen when the job finishes and the driver instructs the executor to " +
             "cleanup the shuffle. In this case, push of the blocks belonging to this shuffle" +
             "will stop.", e)
@@ -311,7 +311,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       }
     }
     if (pushResult.failure != null && !errorHandler.shouldRetryError(pushResult.failure)) {
-      logDebug(s"Encountered an exception from $address that indicates that push needs to " +
+      logDebug(s"Encountered an exception from $address which indicates that push needs to " +
         s"stop.")
       return false
     } else {
