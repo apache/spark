@@ -412,19 +412,19 @@ class CategoricalIndex(Index):
 
         Examples
         --------
-        >>> psser = ps.CategoricalIndex(["a", "a", "b"])
-        >>> psser.rename_categories([0, 1])
+        >>> idx = ps.CategoricalIndex(["a", "a", "b"])
+        >>> idx.rename_categories([0, 1])
         CategoricalIndex([0, 0, 1], categories=[0, 1], ordered=False, dtype='category')
 
         For dict-like ``new_categories``, extra keys are ignored and
         categories not in the dictionary are passed through
 
-        >>> psser.rename_categories({'a': 'A', 'c': 'C'})
+        >>> idx.rename_categories({'a': 'A', 'c': 'C'})
         CategoricalIndex(['A', 'A', 'b'], categories=['A', 'b'], ordered=False, dtype='category')
 
         You may also provide a callable to create the new categories
 
-        >>> psser.rename_categories(lambda x: x.upper())
+        >>> idx.rename_categories(lambda x: x.upper())
         CategoricalIndex(['A', 'A', 'B'], categories=['A', 'B'], ordered=False, dtype='category')
         """
         if inplace:

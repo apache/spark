@@ -580,12 +580,15 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         pser.cat.rename_categories({"a": "A", "c": "C"}, inplace=True)
         psser.cat.rename_categories({"a": "A", "c": "C"}, inplace=True)
         self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
         pser.cat.rename_categories(lambda x: x.upper(), inplace=True)
         psser.cat.rename_categories(lambda x: x.upper(), inplace=True)
         self.assert_eq(pser, psser)
-        pser.cat.rename_categories(lambda x: x.upper(), inplace=True)
-        psser.cat.rename_categories(lambda x: x.upper(), inplace=True)
+        self.assert_eq(pdf, psdf)
+        pser.cat.rename_categories([0, 1, 3, 2], inplace=True)
+        psser.cat.rename_categories([0, 1, 3, 2], inplace=True)
         self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
         self.assertRaisesRegex(
             ValueError,
             "new categories need to have the same number of items as the old categories",

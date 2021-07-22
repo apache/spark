@@ -471,7 +471,7 @@ class CategoricalAccessor(object):
 
         Returns
         -------
-        cat : Categorical or None
+        cat : Series or None
             Categorical with removed categories or None if ``inplace=True``.
 
         Raises
