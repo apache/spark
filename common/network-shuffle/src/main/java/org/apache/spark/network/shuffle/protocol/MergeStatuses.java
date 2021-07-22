@@ -43,7 +43,7 @@ public class MergeStatuses extends BlockTransferMessage {
   /**
    * shuffleSequenceId is to track the sequence of shuffle executions
    * This is required to handle indeterminate stage retries
-   **/
+   */
   public final int shuffleSequenceId;
   /**
    * Array of bitmaps tracking the set of mapper partition blocks merged for each

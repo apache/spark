@@ -86,10 +86,21 @@ public interface ErrorHandler {
      * push since shuffle blocks of a higher shuffle sequence id for a shuffle is already being pushed.
      * This typically happens in the case of indeterminate stage retries where if a stage attempt fails
      * then the entirety of the shuffle output needs to be rolled back. For more details refer
-     * SPARK-23243 and SPARK-25341.
+     * SPARK-23243, SPARK-25341 and SPARK-32923.
      */
-    public static final String INVALID_BLOCK_PUSH =
-        "invalid block push as shuffle blocks of a higher shuffle sequence id for the shuffle is already being pushed";
+    public static final String STALE_BLOCK_PUSH =
+        "stale block push as shuffle blocks of a higher shuffle sequence id for the shuffle is already being pushed";
+
+    /**
+     * String constant used for generating exception messages indicating the server rejecting a shuffle
+     * finalize request since shuffle blocks of a higher shuffle sequence id for a shuffle is already
+     * being pushed. This typically happens in the case of indeterminate stage retries where if a
+     * stage attempt fails then the entirety of the shuffle output needs to be rolled back. For more
+     * details refer SPARK-23243, SPARK-25341 and SPARK-32923.
+     */
+    public static final String STALE_SHUFFLE_FINALIZE =
+        "stale shuffle finalize request as shuffle blocks of a higher shuffle sequence id for the shuffle is already"
+            + " being pushed";
 
     @Override
     public boolean shouldRetryError(Throwable t) {
@@ -101,16 +112,19 @@ public interface ErrorHandler {
           t.getCause() instanceof FileNotFoundException)) {
         return false;
       }
-      // If the block is too late or an invalid block push, there is no need to retry it
+      // If the block is too late or an stale block push, there is no need to retry it
       return !(Throwables.getStackTraceAsString(t).contains(TOO_LATE_MESSAGE_SUFFIX) ||
-          Throwables.getStackTraceAsString(t).contains(INVALID_BLOCK_PUSH));
+          Throwables.getStackTraceAsString(t).contains(STALE_BLOCK_PUSH) ||
+          Throwables.getStackTraceAsString(t).contains(STALE_SHUFFLE_FINALIZE));
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
       String errorStackTrace = Throwables.getStackTraceAsString(t);
       return !errorStackTrace.contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) &&
-        !errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX) && !errorStackTrace.contains(INVALID_BLOCK_PUSH);
+        !errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX) &&
+          !errorStackTrace.contains(STALE_BLOCK_PUSH) &&
+            !errorStackTrace.contains(STALE_SHUFFLE_FINALIZE);
     }
   }
 
@@ -122,18 +136,18 @@ public interface ErrorHandler {
      * then the entirety of the shuffle output needs to be rolled back. For more details refer
      * SPARK-23243 and SPARK-25341.
      */
-    public static final String INVALID_BLOCK_FETCH =
-        "invalid fetch as the shuffleSequenceId is older than the latest shuffleSequenceId";
+    public static final String STALE_BLOCK_FETCH =
+        "stale fetch as the shuffleSequenceId is older than the latest shuffleSequenceId";
 
     @Override
     public boolean shouldRetryError(Throwable t) {
-      return !Throwables.getStackTraceAsString(t).contains(INVALID_BLOCK_FETCH);
+      return !Throwables.getStackTraceAsString(t).contains(STALE_BLOCK_FETCH);
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
       String errorStackTrace = Throwables.getStackTraceAsString(t);
-      return !errorStackTrace.contains(INVALID_BLOCK_FETCH);
+      return !errorStackTrace.contains(STALE_BLOCK_FETCH);
     }
   }
 }

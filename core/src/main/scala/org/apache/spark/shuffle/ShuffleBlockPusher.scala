@@ -81,7 +81,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         // If the block is too late or the invalid block push, there is no need to retry it
         !(Throwables.getStackTraceAsString(t)
           .contains(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX) ||
-          Throwables.getStackTraceAsString(t).contains(BlockPushErrorHandler.INVALID_BLOCK_PUSH));
+          Throwables.getStackTraceAsString(t).contains(BlockPushErrorHandler.STALE_BLOCK_PUSH));
       }
     }
   }
@@ -99,12 +99,11 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       dataFile: File,
       partitionLengths: Array[Long],
       dep: ShuffleDependency[_, _, _],
-      mapIndex: Int,
-      shuffleSequenceId: Int): Unit = {
+      mapIndex: Int): Unit = {
     val numPartitions = dep.partitioner.numPartitions
     val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
     val requests = prepareBlockPushRequests(numPartitions, mapIndex, dep.shuffleId, dataFile,
-      partitionLengths, dep.getMergerLocs, transportConf, shuffleSequenceId)
+      partitionLengths, dep.getMergerLocs, transportConf, dep.shuffleSequenceId)
     // Randomize the orders of the PushRequest, so different mappers pushing blocks at the same
     // time won't be pushing the same ranges of shuffle partitions.
     pushRequests ++= Utils.randomize(requests)
@@ -343,6 +342,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
    * @param partitionLengths array of sizes of blocks in the shuffle data file
    * @param mergerLocs target locations to push blocks to
    * @param transportConf transportConf used to create FileSegmentManagedBuffer
+   * @param shuffleSequenceId shuffleSequenceId gives temporal ordering of shuffle executions
    * @return List of the PushRequest, randomly shuffled.
    *
    * VisibleForTesting

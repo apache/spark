@@ -218,7 +218,8 @@ public class ExternalBlockHandler extends RpcHandler
         callback.onSuccess(statuses.toByteBuffer());
       } catch(IOException e) {
         throw new RuntimeException(String.format("Error while finalizing shuffle merge "
-          + "for application %s shuffle %d", msg.appId, msg.shuffleId), e);
+          + "for application %s shuffle %d with shuffleSequenceId %d", msg.appId, msg.shuffleId,
+            msg.shuffleSequenceId), e);
       } finally {
         responseDelayContext.stop();
       }

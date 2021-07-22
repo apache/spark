@@ -29,23 +29,39 @@ import static org.junit.Assert.*;
 public class ErrorHandlerSuite {
 
   @Test
-  public void testPushErrorRetry() {
-    ErrorHandler.BlockPushErrorHandler handler = new ErrorHandler.BlockPushErrorHandler();
-    assertFalse(handler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
+  public void testErrorRetry() {
+    ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
+    assertFalse(pushHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
       ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))));
-    assertFalse(handler.shouldRetryError(new RuntimeException(new ConnectException())));
-    assertTrue(handler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
+    assertFalse(pushHandler.shouldRetryError(new RuntimeException(new ConnectException())));
+    assertTrue(pushHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
       ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))));
-    assertTrue(handler.shouldRetryError(new Throwable()));
+    assertTrue(pushHandler.shouldRetryError(new Throwable()));
+    assertFalse(pushHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
+      ErrorHandler.BlockPushErrorHandler.STALE_BLOCK_PUSH))));
+    assertFalse(pushHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
+        ErrorHandler.BlockPushErrorHandler.STALE_SHUFFLE_FINALIZE))));
+
+    ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();
+    assertFalse(fetchHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
+        ErrorHandler.BlockFetchErrorHandler.STALE_BLOCK_FETCH))));
   }
 
   @Test
-  public void testPushErrorLogging() {
-    ErrorHandler.BlockPushErrorHandler handler = new ErrorHandler.BlockPushErrorHandler();
-    assertFalse(handler.shouldLogError(new RuntimeException(new IllegalArgumentException(
+  public void testErrorLogging() {
+    ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
+    assertFalse(pushHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
       ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))));
-    assertFalse(handler.shouldLogError(new RuntimeException(new IllegalArgumentException(
+    assertFalse(pushHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
       ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))));
-    assertTrue(handler.shouldLogError(new Throwable()));
+    assertFalse(pushHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
+        ErrorHandler.BlockPushErrorHandler.STALE_BLOCK_PUSH))));
+    assertFalse(pushHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
+        ErrorHandler.BlockPushErrorHandler.STALE_SHUFFLE_FINALIZE))));
+    assertTrue(pushHandler.shouldLogError(new Throwable()));
+
+    ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();
+    assertFalse(fetchHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
+        ErrorHandler.BlockFetchErrorHandler.STALE_BLOCK_FETCH))));
   }
 }

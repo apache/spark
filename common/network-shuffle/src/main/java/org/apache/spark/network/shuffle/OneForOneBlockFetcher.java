@@ -196,11 +196,13 @@ public class OneForOneBlockFetcher {
     // secondaryIds are chunkIds.
     int[][] secondaryIds = new int[primaryIdsToBlockInfo.size()][];
     int blockIdIndex = 0;
-    int chunkIndex = 0;
+    int secIndex = 0;
     for (BlocksInfo blocksInfo: primaryIdsToBlockInfo.values()) {
-      secondaryIds[chunkIndex++] = Ints.toArray(blocksInfo.ids);
+      secondaryIds[secIndex++] = Ints.toArray(blocksInfo.ids);
 
-      // The `blockIds`'s order must be same with the read order specified in FetchShuffleBlockChunks
+      // The `blockIds`'s order must be same with the read order specified in FetchShuffleBlocks/
+      // FetchShuffleBlockChunks because the shuffle data's return order should match the
+      // `blockIds`'s order to ensure blockId and data match.
       for (String blockId : blocksInfo.blockIds) {
         this.blockIds[blockIdIndex++] = blockId;
       }
