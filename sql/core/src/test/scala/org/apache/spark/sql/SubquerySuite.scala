@@ -1838,7 +1838,8 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
   }
 
   test("Subquery reuse across the whole plan") {
-    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+      SQLConf.OPTIMIZE_ONE_ROW_RELATION_SUBQUERY.key -> "false") {
       val df = sql(
         """
           |SELECT (SELECT avg(key) FROM testData), (SELECT (SELECT avg(key) FROM testData))

@@ -390,6 +390,13 @@ package object dsl {
         condition: Option[Expression] = None): LogicalPlan =
         Join(logicalPlan, otherPlan, joinType, condition, JoinHint.NONE)
 
+      def lateralJoin(
+          otherPlan: LogicalPlan,
+          joinType: JoinType = Inner,
+          condition: Option[Expression] = None): LogicalPlan = {
+        LateralJoin(logicalPlan, LateralSubquery(otherPlan), joinType, condition)
+      }
+
       def cogroup[Key: Encoder, Left: Encoder, Right: Encoder, Result: Encoder](
           otherPlan: LogicalPlan,
           func: (Key, Iterator[Left], Iterator[Right]) => TraversableOnce[Result],

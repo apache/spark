@@ -121,6 +121,49 @@ USING 'cat' AS (d)
   NULL DEFINED AS 'NULL'
 FROM t;
 
+SELECT TRANSFORM(a, b, c, null)
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '@'
+  LINES TERMINATED BY '\n'
+USING 'cat' AS (a, b, c, d)
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '@'
+  LINES TERMINATED BY '\n'
+  NULL DEFINED AS 'NULL'
+FROM t;
+
+SELECT TRANSFORM(a, b, c, null)
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '@'
+  LINES TERMINATED BY '\n'
+USING 'cat' AS (a, b, c, d)
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '@'
+  LINES TERMINATED BY '\n'
+FROM t;
+
+SELECT TRANSFORM(a, b, c, null)
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '@'
+  LINES TERMINATED BY '\n'
+  NULL DEFINED AS 'XXXX'
+USING 'cat' AS (a, b, c, d)
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '@'
+  LINES TERMINATED BY '\n'
+FROM t;
+
+SELECT TRANSFORM(a, b, c, null)
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '@'
+  LINES TERMINATED BY '\n'
+  NULL DEFINED AS '\n'
+USING 'cat' AS (a, b, c, d)
+  ROW FORMAT DELIMITED
+  FIELDS TERMINATED BY '@'
+  LINES TERMINATED BY '\n'
+FROM t;
+
 -- transform with defined row format delimit handle schema with correct type
 SELECT a, b, decode(c, 'UTF-8'), d, e, f, g, h, i, j, k, l FROM (
   SELECT TRANSFORM(a, b, c, d, e, f, g, h, i, j, k, l)

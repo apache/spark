@@ -2613,6 +2613,14 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val OPTIMIZE_ONE_ROW_RELATION_SUBQUERY =
+    buildConf("spark.sql.optimizer.optimizeOneRowRelationSubquery")
+      .internal()
+      .doc("When true, the optimizer will inline subqueries with OneRowRelation as leaf nodes.")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val TOP_K_SORT_FALLBACK_THRESHOLD =
     buildConf("spark.sql.execution.topKSortFallbackThreshold")
       .internal()

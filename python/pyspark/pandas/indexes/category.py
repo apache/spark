@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from functools import partial
-from typing import Any, Optional, cast, no_type_check
+from typing import Any, List, Optional, Union, cast, no_type_check
 
 import pandas as pd
 from pandas.api.types import is_hashable, CategoricalDtype
@@ -174,8 +174,18 @@ class CategoricalIndex(Index):
         return self.dtype.categories
 
     @categories.setter
-    def categories(self, categories: pd.Index) -> None:
-        raise NotImplementedError()
+    def categories(self, categories: Union[pd.Index, List]) -> None:
+        dtype = CategoricalDtype(categories, ordered=self.ordered)
+
+        if len(self.categories) != len(dtype.categories):
+            raise ValueError(
+                "new categories need to have the same number of items as the old categories!"
+            )
+
+        internal = self._psdf._internal.copy(
+            index_fields=[self._internal.index_fields[0].copy(dtype=dtype)]
+        )
+        self._psdf._update_internal_frame(internal)
 
     @property
     def ordered(self) -> bool:
@@ -193,6 +203,52 @@ class CategoricalIndex(Index):
         False
         """
         return self.dtype.ordered
+
+    def add_categories(
+        self, new_categories: Union[pd.Index, Any, List], inplace: bool = False
+    ) -> Optional["CategoricalIndex"]:
+        """
+        Add new categories.
+
+        `new_categories` will be included at the last/highest place in the
+        categories and will be unused directly after this call.
+
+        Parameters
+        ----------
+        new_categories : category or list-like of category
+           The new categories to be included.
+        inplace : bool, default False
+           Whether or not to add the categories inplace or return a copy of
+           this categorical with added categories.
+
+        Returns
+        -------
+        CategoricalIndex or None
+            Categorical with new categories added or None if ``inplace=True``.
+
+        Raises
+        ------
+        ValueError
+            If the new categories include old categories or do not validate as
+            categories
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(list("abbccc"))
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+
+        >>> idx.add_categories('x')  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c', 'x'], ordered=False, dtype='category')
+        """
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(
+            self.to_series().cat.add_categories(new_categories=new_categories)
+        ).rename(self.name)
 
     def as_ordered(self, inplace: bool = False) -> Optional["CategoricalIndex"]:
         """
@@ -255,6 +311,49 @@ class CategoricalIndex(Index):
             raise ValueError("cannot use inplace with CategoricalIndex")
 
         return CategoricalIndex(self.to_series().cat.as_unordered()).rename(self.name)
+
+    def remove_categories(
+        self, removals: Union[pd.Index, Any, List], inplace: bool = False
+    ) -> Optional["CategoricalIndex"]:
+        """
+        Remove the specified categories.
+
+        `removals` must be included in the old categories. Values which were in
+        the removed categories will be set to NaN
+
+        Parameters
+        ----------
+        removals : category or list of categories
+           The categories which should be removed.
+        inplace : bool, default False
+           Whether or not to remove the categories inplace or return a copy of
+           this categorical with removed categories.
+
+        Returns
+        -------
+        CategoricalIndex or None
+            Categorical with removed categories or None if ``inplace=True``.
+
+        Raises
+        ------
+        ValueError
+            If the removals are not contained in the categories
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(list("abbccc"))
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+
+        >>> idx.remove_categories('b')  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', nan, nan, 'c', 'c', 'c'],
+                         categories=['a', 'c'], ordered=False, dtype='category')
+        """
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(self.to_series().cat.remove_categories(removals)).rename(self.name)
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeCategoricalIndex, item):
