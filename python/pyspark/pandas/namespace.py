@@ -2825,6 +2825,7 @@ def broadcast(obj: DataFrame) -> DataFrame:
 
     .. deprecated:: 3.2.0
         Use :func:`DataFrame.spark.hint` instead.
+
     Parameters
     ----------
     obj : DataFrame
