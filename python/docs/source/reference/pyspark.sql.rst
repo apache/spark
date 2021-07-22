@@ -441,6 +441,7 @@ Functions
     length
     levenshtein
     lit
+    localtimestamp
     locate
     log
     log10

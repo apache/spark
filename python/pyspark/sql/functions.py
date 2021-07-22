@@ -1703,6 +1703,23 @@ def current_timestamp():
     return Column(sc._jvm.functions.current_timestamp())
 
 
+def localtimestamp():
+    """
+    Returns the current timestamp without time zone at the start of query evaluation as a
+    :class:`TimestampNTZType` column. All calls of localtimestamp within the same query return
+    the same value.
+
+    Examples
+    --------
+    >>> import datetime
+    >>> df = spark.createDataFrame([(1,)], ['i']).withColumn('local_t', localtimestamp())
+    >>> type(df.collect()[0]['local_t']) is datetime.datetime
+    True
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.localtimestamp())
+
+
 def date_format(date, format):
     """
     Converts a date/timestamp/string to a value of string in the format specified by the date
