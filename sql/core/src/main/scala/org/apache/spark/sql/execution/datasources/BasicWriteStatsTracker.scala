@@ -245,9 +245,8 @@ object BasicWriteJobStatsTracker {
       NUM_OUTPUT_BYTES_KEY -> SQLMetrics.createSizeMetric(sparkContext, "written output"),
       NUM_OUTPUT_ROWS_KEY -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
       NUM_PARTS_KEY -> SQLMetrics.createMetric(sparkContext, "number of dynamic part"),
-      TASK_COMMIT_TIME ->
-        SQLMetrics.createTimingMetric(sparkContext, "time of committing the tasks"),
-      JOB_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "time of committing the job")
+      TASK_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "task commit time"),
+      JOB_COMMIT_TIME -> SQLMetrics.createTimingMetric(sparkContext, "job commit time")
     )
   }
 }
