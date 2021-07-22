@@ -100,11 +100,17 @@ class KubernetesSuite extends SparkFunSuite
       .withLabel("spark-role", "executor")
       .list()
       .getItems.asScala.foreach { execPod =>
-        logInfo(s"\nBEGIN executor (${execPod.getMetadata.getName}) POD log:\n" +
+        val podLog = try {
           kubernetesTestComponents.kubernetesClient
             .pods()
             .withName(execPod.getMetadata.getName)
-            .getLog)
+            .getLog
+        } catch {
+          case e: io.fabric8.kubernetes.client.KubernetesClientException =>
+            "Error fetching log (pod is likely not ready) ${e}"
+        }
+        logInfo(s"\nBEGIN executor (${execPod.getMetadata.getName}) POD log:\n" +
+        podLog)
         logInfo(s"END executor (${execPod.getMetadata.getName}) POD log")
       }
   }
