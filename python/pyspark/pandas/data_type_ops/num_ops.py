@@ -44,7 +44,9 @@ from pyspark.sql.types import (
 )
 
 
-def _non_fractional_astype(index_ops: IndexOpsLike, dtype: Dtype, spark_type: DataType):
+def _non_fractional_astype(
+    index_ops: IndexOpsLike, dtype: Dtype, spark_type: DataType
+) -> IndexOpsLike:
     if isinstance(dtype, CategoricalDtype):
         return _as_categorical_type(index_ops, dtype, spark_type)
     elif isinstance(spark_type, BooleanType):
