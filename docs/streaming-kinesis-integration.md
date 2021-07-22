@@ -92,7 +92,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
                 streamingContext, [Kinesis app name], [Kinesis stream name], [endpoint URL],
                 [region name], [initial position], [checkpoint interval], StorageLevel.MEMORY_AND_DISK_2)
 
-	See the [API docs](api/python/pyspark.streaming.html#pyspark.streaming.kinesis.KinesisUtils)
+	See the [API docs](api/python/reference/pyspark.streaming.html#kinesis)
 	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/external/kinesis-asl/src/main/python/examples/streaming/kinesis_wordcount_asl.py). Refer to the [Running the Example](#running-the-example) subsection for instructions to run the example.
 
 	</div>
