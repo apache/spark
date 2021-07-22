@@ -32,6 +32,7 @@ class DecorrelateInnerQuerySuite extends PlanTest {
   val x = AttributeReference("x", IntegerType)()
   val y = AttributeReference("y", IntegerType)()
   val z = AttributeReference("z", IntegerType)()
+  val t0 = OneRowRelation()
   val testRelation = LocalRelation(a, b, c)
   val testRelation2 = LocalRelation(x, y, z)
 
@@ -203,23 +204,24 @@ class DecorrelateInnerQuerySuite extends PlanTest {
 
   test("correlated values in project") {
     val outerPlan = testRelation2
-    val innerPlan = Project(Seq(OuterReference(x), OuterReference(y)), OneRowRelation())
-    val correctAnswer = Project(Seq(x, y), DomainJoin(Seq(x, y), OneRowRelation()))
+    val innerPlan = Project(Seq(OuterReference(x).as("x1"), OuterReference(y).as("y1")), t0)
+    val correctAnswer = Project(
+      Seq(x.as("x1"), y.as("y1"), x, y), DomainJoin(Seq(x, y), t0))
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))
   }
 
   test("correlated values in project with alias") {
     val outerPlan = testRelation2
     val innerPlan =
-      Project(Seq(OuterReference(x), 'y1, 'sum),
+      Project(Seq(OuterReference(x).as("x1"), 'y1, 'sum),
         Project(Seq(
           OuterReference(x),
           OuterReference(y).as("y1"),
           Add(OuterReference(x), OuterReference(y)).as("sum")),
             testRelation)).analyze
     val correctAnswer =
-      Project(Seq(x, 'y1, 'sum, y),
-        Project(Seq(x, y.as("y1"), (x + y).as("sum"), y),
+      Project(Seq(x.as("x1"), 'y1, 'sum, x, y),
+        Project(Seq(x.as(x.name), y.as("y1"), (x + y).as("sum"), x, y),
           DomainJoin(Seq(x, y), testRelation))).analyze
     check(innerPlan, outerPlan, correctAnswer, Seq(x <=> x, y <=> y))
   }
@@ -228,13 +230,13 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     val outerPlan = testRelation2
     val innerPlan =
       Project(
-        Seq(OuterReference(x)),
+        Seq(OuterReference(x).as("x1")),
         Filter(
           And(OuterReference(x) === a, And(OuterReference(x) + OuterReference(y) === c, b === 1)),
           testRelation
         )
       )
-    val correctAnswer = Project(Seq(a, c), Filter(b === 1, testRelation))
+    val correctAnswer = Project(Seq(a.as("x1"), a, c), Filter(b === 1, testRelation))
     check(innerPlan, outerPlan, correctAnswer, Seq(x === a, x + y === c))
   }
 
@@ -242,14 +244,14 @@ class DecorrelateInnerQuerySuite extends PlanTest {
     val outerPlan = testRelation2
     val innerPlan =
       Project(
-        Seq(OuterReference(y)),
+        Seq(OuterReference(y).as("y1")),
         Filter(
           And(OuterReference(x) === a, And(OuterReference(x) + OuterReference(y) === c, b === 1)),
           testRelation
         )
       )
     val correctAnswer =
-      Project(Seq(y, a, c),
+      Project(Seq(y.as("y1"), y, a, c),
         Filter(b === 1,
           DomainJoin(Seq(y), testRelation)
         )

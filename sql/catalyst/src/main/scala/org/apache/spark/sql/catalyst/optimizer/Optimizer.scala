@@ -179,6 +179,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // non-nullable when an empty relation child of a Union is removed
       UpdateAttributeNullability) ::
     Batch("Pullup Correlated Expressions", Once,
+      OptimizeOneRowRelationSubquery,
       PullupCorrelatedPredicates) ::
     // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
