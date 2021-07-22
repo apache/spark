@@ -26,16 +26,14 @@ import org.apache.spark.storage.{BlockId, RDDBlockId}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
- * This does not include exceptions thrown during the eager execution of commands, which are
- * grouped into [[CompilationErrors]].
  */
-private[spark] object ExecutionErrors {
-  def blockOfRddNotFoundError(blockId: BlockId, id: Int): Throwable = {
+private[spark] object SparkCoreErrors {
+  def rddBlockNotFoundError(blockId: BlockId, id: Int): Throwable = {
     new Exception(s"Could not compute split, block $blockId of RDD $id not found")
   }
 
-  def blockHaveBeenRemovedError(): Throwable = {
-    new SparkException("Attempted to use %s after its blocks have been removed!".format(toString))
+  def blockHaveBeenRemovedError(string: String): Throwable = {
+    new SparkException(s"Attempted to use $string after its blocks have been removed!")
   }
 
   def histogramOnEmptyRDDOrContainingInfinityOrNaNError(): Throwable = {
@@ -79,7 +77,7 @@ private[spark] object ExecutionErrors {
     new NoSuchElementException()
   }
 
-  def rddLacksASparkContextError(): Throwable = {
+  def rddLacksSparkContextError(): Throwable = {
     new SparkException("This RDD lacks a SparkContext. It could happen in the following cases: " +
       "\n(1) RDD transformations and actions are NOT invoked by the driver, but inside of other " +
       "transformations; for example, rdd1.map(x => rdd2.values.count() * x) is invalid " +
@@ -95,7 +93,7 @@ private[spark] object ExecutionErrors {
       "Cannot change storage level of an RDD after it was already assigned a level")
   }
 
-  def canOnlyZipRDDsWithSamePartitionSize(): Throwable = {
+  def canOnlyZipRDDsWithSamePartitionSizeError(): Throwable = {
     new SparkException("Can only zip RDDs with same number of elements in each partition")
   }
 
@@ -136,7 +134,7 @@ private[spark] object ExecutionErrors {
       s"$task and final output path does not exist: $path")
   }
 
-  def checkpointDirMustSpecifiedError(): Throwable = {
+  def mustSpecifyCheckpointDirError(): Throwable = {
     new SparkException("Checkpoint dir must be specified.")
   }
 }

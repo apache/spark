@@ -36,7 +36,7 @@ import org.apache.spark._
 import org.apache.spark.Partitioner._
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.errors.ExecutionErrors
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.RDD_LIMIT_SCALE_UP_FACTOR
@@ -93,7 +93,7 @@ abstract class RDD[T: ClassTag](
 
   private def sc: SparkContext = {
     if (_sc == null) {
-      throw ExecutionErrors.rddLacksASparkContextError()
+      throw SparkCoreErrors.rddLacksSparkContextError()
     }
     _sc
   }
@@ -165,7 +165,7 @@ abstract class RDD[T: ClassTag](
   private def persist(newLevel: StorageLevel, allowOverride: Boolean): this.type = {
     // TODO: Handle changes of StorageLevel
     if (storageLevel != StorageLevel.NONE && newLevel != storageLevel && !allowOverride) {
-      throw ExecutionErrors.cannotChangeStorageLevelError()
+      throw SparkCoreErrors.cannotChangeStorageLevelError()
     }
     // If this is the first time this RDD is marked for persisting, register it
     // with the SparkContext for cleanups and accounting. Do this only once.
@@ -943,7 +943,7 @@ abstract class RDD[T: ClassTag](
         def hasNext: Boolean = (thisIter.hasNext, otherIter.hasNext) match {
           case (true, true) => true
           case (false, false) => false
-          case _ => throw ExecutionErrors.canOnlyZipRDDsWithSamePartitionSize()
+          case _ => throw SparkCoreErrors.canOnlyZipRDDsWithSamePartitionSizeError()
         }
         def next(): (T, U) = (thisIter.next(), otherIter.next())
       }
@@ -1110,7 +1110,7 @@ abstract class RDD[T: ClassTag](
     }
     sc.runJob(this, reducePartition, mergeResult)
     // Get the final result out of our Option, or throw an exception if the RDD was empty
-    jobResult.getOrElse(throw ExecutionErrors.emptyCollectionError())
+    jobResult.getOrElse(throw SparkCoreErrors.emptyCollectionError())
   }
 
   /**
@@ -1142,7 +1142,7 @@ abstract class RDD[T: ClassTag](
       }
     }
     partiallyReduced.treeAggregate(Option.empty[T])(op, op, depth)
-      .getOrElse(throw ExecutionErrors.emptyCollectionError())
+      .getOrElse(throw SparkCoreErrors.emptyCollectionError())
   }
 
   /**
@@ -1302,7 +1302,7 @@ abstract class RDD[T: ClassTag](
       : PartialResult[Map[T, BoundedDouble]] = withScope {
     require(0.0 <= confidence && confidence <= 1.0, s"confidence ($confidence) must be in [0,1]")
     if (elementClassTag.runtimeClass.isArray) {
-      throw ExecutionErrors.countByValueApproxNotSupportArraysError()
+      throw SparkCoreErrors.countByValueApproxNotSupportArraysError()
     }
     val countPartition: (TaskContext, Iterator[T]) => OpenHashMap[T, Long] = { (_, iter) =>
       val map = new OpenHashMap[T, Long]
@@ -1453,7 +1453,7 @@ abstract class RDD[T: ClassTag](
   def first(): T = withScope {
     take(1) match {
       case Array(t) => t
-      case _ => throw ExecutionErrors.emptyCollectionError()
+      case _ => throw SparkCoreErrors.emptyCollectionError()
     }
   }
 
@@ -1603,7 +1603,7 @@ abstract class RDD[T: ClassTag](
     // children RDD partitions point to the correct parent partitions. In the future
     // we should revisit this consideration.
     if (context.checkpointDir.isEmpty) {
-      throw ExecutionErrors.checkpointDirectoryHasNotBeenSetInSparkContextError()
+      throw SparkCoreErrors.checkpointDirectoryHasNotBeenSetInSparkContextError()
     } else if (checkpointData.isEmpty) {
       checkpointData = Some(new ReliableRDDCheckpointData(this))
     }

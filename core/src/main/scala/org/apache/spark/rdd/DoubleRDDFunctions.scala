@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import org.apache.spark.TaskContext
 import org.apache.spark.annotation.Since
-import org.apache.spark.errors.ExecutionErrors
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.MeanEvaluator
@@ -136,7 +136,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
       (maxmin1._1.max(maxmin2._1), maxmin1._2.min(maxmin2._2))
     }
     if (min.isNaN || max.isNaN || max.isInfinity || min.isInfinity ) {
-      throw ExecutionErrors.histogramOnEmptyRDDOrContainingInfinityOrNaNError()
+      throw SparkCoreErrors.histogramOnEmptyRDDOrContainingInfinityOrNaNError()
     }
     val range = if (min != max) {
       // Range.Double.inclusive(min, max, increment)

@@ -20,7 +20,7 @@ package org.apache.spark.rdd
 import scala.reflect.ClassTag
 
 import org.apache.spark._
-import org.apache.spark.errors.ExecutionErrors
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.storage.{BlockId, BlockManager}
 
 private[spark] class BlockRDDPartition(val blockId: BlockId, idx: Int) extends Partition {
@@ -48,7 +48,7 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
     blockManager.get[T](blockId) match {
       case Some(block) => block.data.asInstanceOf[Iterator[T]]
       case None =>
-        throw ExecutionErrors.blockOfRddNotFoundError(blockId, id)
+        throw SparkCoreErrors.rddBlockNotFoundError(blockId, id)
     }
   }
 
@@ -80,7 +80,7 @@ class BlockRDD[T: ClassTag](sc: SparkContext, @transient val blockIds: Array[Blo
   /** Check if this BlockRDD is valid. If not valid, exception is thrown. */
   private[spark] def assertValid(): Unit = {
     if (!isValid) {
-      throw ExecutionErrors.blockHaveBeenRemovedError()
+      throw SparkCoreErrors.blockHaveBeenRemovedError(toString)
     }
   }
 

@@ -20,7 +20,7 @@ package org.apache.spark.rdd
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, SparkContext, TaskContext}
-import org.apache.spark.errors.ExecutionErrors
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.storage.RDDBlockId
 
 /**
@@ -58,7 +58,7 @@ private[spark] class LocalCheckpointRDD[T: ClassTag](
    * available in the block storage.
    */
   override def compute(partition: Partition, context: TaskContext): Iterator[T] = {
-    throw ExecutionErrors.checkpointRDDBlockIdNotFoundError(RDDBlockId(rddId, partition.index))
+    throw SparkCoreErrors.checkpointRDDBlockIdNotFoundError(RDDBlockId(rddId, partition.index))
   }
 
 }
