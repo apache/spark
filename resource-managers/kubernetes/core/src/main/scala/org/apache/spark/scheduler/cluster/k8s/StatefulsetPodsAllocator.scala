@@ -161,7 +161,9 @@ private[spark] class StatefulsetPodsAllocator(
   override def stop(applicationId: String): Unit = {
     // Cleanup the statefulsets when we stop
     setsCreated.foreach { rpid =>
-      kubernetesClient.apps().statefulSets().withName(setName(applicationId, rpid)).delete()
+      Utils.tryLogNonFatalError {
+        kubernetesClient.apps().statefulSets().withName(setName(applicationId, rpid)).delete()
+      }
     }
   }
 }
