@@ -144,13 +144,9 @@ private[spark] class KubernetesClusterSchedulerBackend(
     }
 
     if (shouldDeleteExecutors) {
-      Utils.tryLogNonFatalError {
-        kubernetesClient
-          .pods()
-          .withLabel(SPARK_APP_ID_LABEL, applicationId())
-          .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
-          .delete()
-      }
+
+      podAllocator.stop(applicationId())
+
       if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
         Utils.tryLogNonFatalError {
           kubernetesClient
