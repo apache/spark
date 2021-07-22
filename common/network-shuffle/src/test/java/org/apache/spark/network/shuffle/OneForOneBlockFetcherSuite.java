@@ -288,6 +288,23 @@ import org.apache.spark.network.util.TransportConf;
         new int[][] {{ 0 }}), conf));
   }
 
+  @Test
+  public void testChunkFetchWithNegativeShuffleSequenceId() {
+    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
+    blocks.put("shuffleChunk_0_-1_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
+    blocks.put("shuffleChunk_0_-1_0_1", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
+    blocks.put("shuffleChunk_0_-1_0_2", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
+    String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
+
+    BlockFetchingListener listener = fetchBlocks(blocks, blockIds,
+        new FetchShuffleBlockChunks("app-id", "exec-id", 0, -1, new int[] { 0 },
+            new int[][] {{ 0, 1, 2 }}), conf);
+    for (int i = 0; i < 3; i ++) {
+      verify(listener, times(1)).onBlockFetchSuccess("shuffleChunk_0_-1_0_" + i,
+          blocks.get("shuffleChunk_0_-1_0_" + i));
+    }
+  }
+
   /**
    * Begins a fetch on the given set of blocks by mocking out the server side of the RPC which
    * simply returns the given (BlockId, Block) pairs.

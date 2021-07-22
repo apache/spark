@@ -1186,6 +1186,21 @@ public class RemoteBlockPushResolverSuite {
     validateChunks(TEST_APP, 0, 1, 0, blockMeta, new int[]{4}, new int[][]{{0}});
   }
 
+  @Test
+  public void testBlockPushAndFetchWithNegativeShuffleSequenceId() throws IOException {
+    StreamCallbackWithID stream1 =
+        pushResolver.receiveBlockDataAsStream(
+            new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, -1, 0, 0, 0));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
+    stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
+    stream1.onComplete(stream1.getID());
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, -1));
+    RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo = pushResolver.validateAndGetAppShuffleInfo(TEST_APP);
+    assertTrue(appShuffleInfo.getMergedShuffleDataFile(0, -1, 0).exists());
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, -1, 0);
+    validateChunks(TEST_APP, 0, -1, 0, blockMeta, new int[]{4}, new int[][]{{0}});
+  }
+
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {
     pushResolver = new RemoteBlockPushResolver(conf) {
       @Override
