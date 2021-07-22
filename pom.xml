@@ -880,7 +880,7 @@
       <dependency>
         <groupId>org.scalanlp</groupId>
         <artifactId>breeze_${scala.binary.version}</artifactId>
-        <version>1.0</version>
+        <version>1.2</version>
         <exclusions>
           <exclusion>
             <groupId>org.apache.commons</groupId>
