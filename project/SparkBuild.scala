@@ -1120,9 +1120,9 @@ object TestSettings {
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     (Test / javaOptions) += "-ea",
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
-    (Test / javaOptions) ++= "-Xms1024m -Xmx3200m -Xss4m -XX:MaxMetaspaceSize=1300m -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m"
+    (Test / javaOptions) ++= "-Xms1024m -Xmx3200m -Xss4m -XX:MaxMetaspaceSize=1400m -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m"
       .split(" ").toSeq,
-    javaOptions ++= "-Xms1024m -Xmx3200m -XX:MaxMetaspaceSize=1300m".split(" ").toSeq,
+    javaOptions ++= "-Xms1024m -Xmx3200m -XX:MaxMetaspaceSize=1400m".split(" ").toSeq,
     (Test / javaOptions) ++= {
       val jdwpEnabled = sys.props.getOrElse("test.jdwp.enabled", "false").toBoolean
 
