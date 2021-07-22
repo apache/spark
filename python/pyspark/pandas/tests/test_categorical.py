@@ -79,6 +79,24 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaises(ValueError):
             psser.cat.categories = [1, 2, 3, 4]
 
+    def test_add_categories(self):
+        pdf, psdf = self.df_pair
+
+        pser = pdf.a
+        psser = psdf.a
+
+        self.assert_eq(pser.cat.add_categories(4), psser.cat.add_categories(4))
+        self.assert_eq(pser.cat.add_categories([4, 5]), psser.cat.add_categories([4, 5]))
+        self.assert_eq(pser.cat.add_categories([]), psser.cat.add_categories([]))
+
+        pser.cat.add_categories(4, inplace=True)
+        psser.cat.add_categories(4, inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        self.assertRaises(ValueError, lambda: psser.cat.add_categories(4))
+        self.assertRaises(ValueError, lambda: psser.cat.add_categories([5, 5]))
+
     def test_as_ordered_unordered(self):
         pdf, psdf = self.df_pair
 
