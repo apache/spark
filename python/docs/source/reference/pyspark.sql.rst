@@ -621,6 +621,7 @@ Catalog APIs
     Catalog.databaseExists
     Catalog.dropGlobalTempView
     Catalog.dropTempView
+    Catalog.functionExists
     Catalog.isCached
     Catalog.listColumns
     Catalog.listDatabases
