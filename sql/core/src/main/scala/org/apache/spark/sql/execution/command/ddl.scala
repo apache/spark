@@ -938,9 +938,12 @@ object DDLUtils extends Logging {
             serde == Some("parquet.hive.serde.ParquetHiveSerDe") ||
             serde == Some("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe")) {
             checkDataColNames("parquet", schema)
+          } else if (serde == HiveSerDe.sourceToSerDe("avro").get.serde) {
+            checkDataColNames("avro", schema)
           }
         case "parquet" => checkDataColNames("parquet", schema)
         case "orc" => checkDataColNames("orc", schema)
+        case "avro" => checkDataColNames("avro", schema)
         case _ =>
       }
     }

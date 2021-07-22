@@ -25,7 +25,7 @@ import java.util.{Locale, UUID}
 
 import scala.collection.JavaConverters._
 
-import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder, SchemaParseException}
+import org.apache.avro.{AvroTypeException, Schema, SchemaBuilder}
 import org.apache.avro.Schema.{Field, Type}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.file.{DataFileReader, DataFileWriter}
@@ -2164,22 +2164,14 @@ abstract class AvroSuite
       withView("v") {
         spark.range(1).createTempView("v")
         withTempDir { dir =>
-          val e = intercept[SchemaParseException] {
+          val e = intercept[AnalysisException] {
             sql(
               s"""
                  |CREATE TABLE test_ddl USING AVRO
                  |LOCATION '${dir}'
                  |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
           }.getMessage
-          assert(e.contains("Illegal initial character: (IF((ID = 1), 1, 0))"))
-        }
-
-        withTempDir { dir =>
-          val e = intercept[SchemaParseException] {
-            sql("SELECT ID, IF(ID=1,1,0) FROM v").write.format("avro")
-              .mode(SaveMode.Overwrite).save(dir.toString)
-          }.getMessage
-          assert(e.contains("Illegal initial character: (IF((ID = 1), 1, 0))"))
+          assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
         }
 
         withTempDir { dir =>

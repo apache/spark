@@ -22,7 +22,6 @@ import java.net.URI
 
 import scala.util.control.NonFatal
 
-import org.apache.avro.SchemaParseException
 import org.apache.avro.file.DataFileReader
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.FsInput
@@ -34,6 +33,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, OrderedFilters}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileFormat, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{DataSourceRegister, Filter}
@@ -158,17 +158,17 @@ private[sql] class AvroFileFormat extends FileFormat
   override def supportFieldName(name: String): Unit = {
     val length = name.length
     if (length == 0) {
-      throw new SchemaParseException("Empty name")
+      throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
     } else {
       val first = name.charAt(0)
       if (!Character.isLetter(first) && first != '_') {
-        throw new SchemaParseException("Illegal initial character: " + name)
+        throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
       } else {
         var i = 1
         while (i < length) {
           val c = name.charAt(i)
           if (!Character.isLetterOrDigit(c) && c != '_') {
-            throw new SchemaParseException("Illegal character in: " + name)
+            throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
           }
           i += 1
         }
