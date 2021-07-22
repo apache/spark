@@ -26,6 +26,8 @@ from pyspark import pandas as ps  # For running doctests and reference resolutio
 from pyspark.pandas.utils import default_session
 from pyspark.pandas.frame import DataFrame
 from pyspark.pandas.series import Series
+from pyspark.pandas.internal import InternalFrame
+from pyspark.pandas.namespace import _get_index_map
 
 
 __all__ = ["sql"]
@@ -69,6 +71,39 @@ def sql(
     index_col : str or list of str, optional
         Column names to be used in Spark to represent pandas-on-Spark's index. The index name
         in pandas-on-Spark is ignored. By default, the index is always lost.
+
+        .. note:: If you want to preserve the index, explicitly use :func:`DataFrame.reset_index`,
+            and pass it to the sql statement with `index_col` parameter.
+
+            For example,
+
+            >>> psdf = ps.DataFrame({"A": [1, 2, 3], "B":[4, 5, 6]}, index=['a', 'b', 'c'])
+            >>> psdf_reset_index = psdf.reset_index()
+            >>> ps.sql("SELECT * FROM {psdf_reset_index}", index_col="index")
+                   A  B
+            index
+            a      1  4
+            b      2  5
+            c      3  6
+
+            For MultiIndex,
+
+            >>> psdf = ps.DataFrame(
+            >>>     {"A": [1, 2, 3], "B": [4, 5, 6]},
+            >>>     index=pd.MultiIndex.from_tuples(
+            >>>         [("a", "b"), ("c", "d"), ("e", "f")], names=["index1", "index2"]
+            >>>     ),
+            >>> )
+            >>> psdf_reset_index = psdf.reset_index()
+            >>> ps.sql("SELECT * FROM {psdf_reset_index}", index_col=["index1", "index2"])
+                           A  B
+            index1 index2
+            a      b       1  4
+            c      d       2  5
+            e      f       3  6
+
+            Also note that the index name(s) should be matched to the existing name.
+
     globals : dict, optional
         the dictionary of global variables, if explicitly set by the user
     locals : dict, optional
@@ -141,15 +176,6 @@ def sql(
                         0
     0     [1.0, 2.0, 3.0]
     1  [15.0, 30.0, 45.0]
-
-    If you want to preserve the index, `index_col` parameter should be specified.
-
-    >>> mydf_with_index = ps.DataFrame({"A": [1, 2, 3], "B": [4, 5, 6]}, index=['a', 'b', 'c'])
-    >>> ps.sql("SELECT * from {mydf_with_index} WHERE A > 1", index_col="index")
-           A  B
-    index
-    b      2  5
-    c      3  6
     """
     if globals is None:
         globals = _get_ipython_scope()
@@ -265,7 +291,7 @@ class SQLProcessor(object):
         res = ""
         try:
             for (pre, inner, _, _) in blocks:
-                var_next = "" if inner is None else self._convert(inner, index_col)
+                var_next = "" if inner is None else self._convert(inner)
                 res = res + pre + var_next
             self._normalized_statement = res
 
@@ -274,12 +300,15 @@ class SQLProcessor(object):
             for v in self._temp_views:
                 self._session.catalog.dropTempView(v)
 
-        if index_col is None:
-            return DataFrame(sdf)
-        else:
-            return DataFrame(sdf).set_index(index_col)
+        index_spark_columns, index_names = _get_index_map(sdf, index_col)
 
-    def _convert(self, key: str, index_col: Optional[Union[str, List[str]]] = None) -> Any:
+        return DataFrame(
+            InternalFrame(
+                spark_frame=sdf, index_spark_columns=index_spark_columns, index_names=index_names
+            )
+        )
+
+    def _convert(self, key: str) -> Any:
         """
         Given a {} key, returns an equivalent SQL representation.
         This conversion performs all the necessary escaping so that the string
@@ -295,11 +324,11 @@ class SQLProcessor(object):
                 " local or parameters variables".format(key)
             )
         var = self._scope[key]
-        fillin = self._convert_var(var, index_col)
+        fillin = self._convert_var(var)
         self._cached_vars[key] = fillin
         return fillin
 
-    def _convert_var(self, var: Any, index_col: Optional[Union[str, List[str]]] = None) -> Any:
+    def _convert_var(self, var: Any) -> Any:
         """
         Converts a python object into a string that is legal SQL.
         """
@@ -312,7 +341,7 @@ class SQLProcessor(object):
         if isinstance(var, DataFrame):
             df_id = "pandas_on_spark_" + str(id(var))
             if df_id not in self._temp_views:
-                sdf = var.to_spark(index_col)
+                sdf = var.to_spark()
                 sdf.createOrReplaceTempView(df_id)
                 self._temp_views[df_id] = sdf
             return df_id
