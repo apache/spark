@@ -84,7 +84,7 @@ public interface ErrorHandler {
     @Override
     public boolean shouldRetryError(Throwable t) {
       // If it is a connection time-out or a connection closed exception, no need to retry.
-      // If it is a FileNotFound exception originating from the client while pushing the shuffle
+      // If it is a FileNotFoundException originating from the client while pushing the shuffle
       // blocks to the server, even then there is no need to retry. We will still log this exception
       // once which helps with debugging.
       if (t.getCause() != null && (t.getCause() instanceof ConnectException ||

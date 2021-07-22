@@ -324,7 +324,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(pusher.unreachableBlockMgrs.size == 2)
   }
 
-  test("FileNotFound exceptions stops the push") {
+  test("SPARK-36255: FileNotFoundException stops the push") {
     when(dependency.getMergerLocs).thenReturn(
       Seq(BlockManagerId("client1", "client1", 1), BlockManagerId("client2", "client2", 2)))
     conf.set("spark.reducer.maxReqsInFlight", "1")

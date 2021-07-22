@@ -106,16 +106,20 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     pushRequests ++= Utils.randomize(requests)
 
     submitTask(() => {
-      try {
-        pushUpToMax()
-      } catch {
-        case e: FileNotFoundException =>
-          logWarning("The shuffle files got deleted when this shuffle-block-push-thread " +
-            "was reading from them which could happen when the job finishes and the driver " +
-            "instructs the executor to cleanup the shuffle. In this case, push of the blocks " +
-            "belonging to this shuffle will stop.", e)
-      }
+      tryPushUpToMax()
     })
+  }
+
+  private[shuffle] def tryPushUpToMax(): Unit = {
+    try {
+      pushUpToMax()
+    } catch {
+      case e: FileNotFoundException =>
+        logWarning("The shuffle files got deleted when this shuffle-block-push-thread " +
+          "was reading from them which could happen when the job finishes and the driver " +
+          "instructs the executor to cleanup the shuffle. In this case, push of the blocks " +
+          "belonging to this shuffle will stop.", e)
+    }
   }
 
   /**
@@ -215,7 +219,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         submitTask(() => {
           if (updateStateAndCheckIfPushMore(
             sizeMap(result.blockId), address, remainingBlocks, result)) {
-            pushUpToMax()
+            tryPushUpToMax()
           }
         })
       }
