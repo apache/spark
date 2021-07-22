@@ -204,6 +204,7 @@ class Catalog(object):
         False
 
         And also for temporary views:
+
         >>> df = spark.sql("CREATE TEMPORARY VIEW view1 AS SELECT 1")
         >>> spark.catalog.tableExists("view1")
         True
