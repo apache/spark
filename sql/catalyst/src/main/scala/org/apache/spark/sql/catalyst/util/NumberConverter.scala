@@ -81,8 +81,8 @@ object NumberConverter {
   }
 
   /**
-   * Convert the chars in value[] to the corresponding integers. Convert invalid
-   * characters to -1.
+   * Convert the chars in value[] to the corresponding integers. If invalid
+   * character is found, convert it to -1 and ignore the suffix starting there.
    *
    * @param radix must be between MIN_RADIX and MAX_RADIX
    * @param fromPos is the first nonzero element
