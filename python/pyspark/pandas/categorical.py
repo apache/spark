@@ -520,7 +520,7 @@ class CategoricalAccessor(object):
         from pyspark.pandas.frame import DataFrame
 
         if is_dict_like(new_categories):
-            categories = [new_categories.get(item, item) for item in self.categories]
+            categories = [cast(dict, new_categories).get(item, item) for item in self.categories]
         elif callable(new_categories):
             categories = [new_categories(item) for item in self.categories]
         else:
@@ -528,7 +528,7 @@ class CategoricalAccessor(object):
                 raise ValueError(
                     "new categories need to have the same number of items as the old categories!"
                 )
-            categories = new_categories
+            categories = cast(list, new_categories)
 
         internal = self._data._psdf._internal.with_new_spark_column(
             self._data._column_label,
