@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.LEFT_SEMI_OR_ANTI_JOIN
  * and there are many duplicate values.
  * {{{
  *   SELECT a1, a2 FROM Tab1 LEFT SEMI JOIN Tab2 ON a1=b1
- *   ==>  SELECT a1, a2 FROM Tab1 LEFT SEMI JOIN (SELECT b1 Tab2 GROUP BY b1) t2 ON a1<=>b1
+ *   ==>  SELECT a1, a2 FROM Tab1 LEFT SEMI JOIN (SELECT b1 Tab2 GROUP BY b1) t2 ON a1=b1
  * }}}
  */
 object DeduplicateRightSideOfLeftSemiAntiJoin extends Rule[LogicalPlan] with JoinSelectionHelper {
