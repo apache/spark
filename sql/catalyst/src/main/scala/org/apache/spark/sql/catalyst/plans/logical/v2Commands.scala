@@ -1086,6 +1086,8 @@ case class AlterTableAddColumns(
 
   override def changes: Seq[TableChange] = {
     columnsToAdd.map { col =>
+      require(col.path.forall(_.resolved),
+        "FieldName should be resolved before it's converted to TableChange.")
       require(col.position.forall(_.resolved),
         "FieldPosition should be resolved before it's converted to TableChange.")
       TableChange.addColumn(
@@ -1121,7 +1123,7 @@ case class AlterTableReplaceColumns(
     }
     val addChanges = columnsToAdd.map { col =>
       // Cannot add nested columns when replacing columns.
-      assert(col.path.name.isEmpty)
+      assert(col.path.isEmpty)
       assert(col.position.isEmpty)
       TableChange.addColumn(
         Array(col.colName),

@@ -3570,7 +3570,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
     val name = typedVisit[Seq[String]](ctx.name)
     QualifiedColType(
-      path = UnresolvedFieldName(name.init),
+      path = if (name.length > 1) Some(UnresolvedFieldName(name.init)) else None,
       colName = name.last,
       dataType = typedVisit[DataType](ctx.dataType),
       nullable = ctx.NULL == null,
@@ -3720,7 +3720,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
             "Column position", "REPLACE COLUMNS", ctx)
         }
-        typedVisit[QualifiedColType](colType)
+        val col = typedVisit[QualifiedColType](colType)
+        if (col.path.isDefined) {
+          throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
+            "Replacing with a nested column", "REPLACE COLUMNS", ctx)
+        }
+        col
       }.toSeq
     )
   }

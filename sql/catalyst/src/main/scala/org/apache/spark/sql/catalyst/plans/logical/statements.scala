@@ -225,16 +225,16 @@ case class ReplaceTableAsSelectStatement(
 
 
 /**
- * Column data as parsed by ALTER TABLE ... ADD COLUMNS.
+ * Column data as parsed by ALTER TABLE ... (ADD|REPLACE) COLUMNS.
  */
 case class QualifiedColType(
-    path: FieldName,
+    path: Option[FieldName],
     colName: String,
     dataType: DataType,
     nullable: Boolean,
     comment: Option[String],
     position: Option[FieldPosition]) {
-  def name: Seq[String] = path.name :+ colName
+  def name: Seq[String] = path.map(_.name).getOrElse(Nil) :+ colName
 }
 
 /**

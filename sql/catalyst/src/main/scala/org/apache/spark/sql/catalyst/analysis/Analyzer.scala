@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
-import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin, Origin}
+import org.apache.spark.sql.catalyst.trees.{AlwaysProcess, CurrentOrigin}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
@@ -3575,7 +3575,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       case a: AlterTableColumnCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
         val table = a.table.asInstanceOf[ResolvedTable]
         a.transformExpressions {
-          case u: UnresolvedFieldName => resolveFieldNames(table, u.name, u.origin)
+          case u: UnresolvedFieldName => resolveFieldNames(table, u.name, u)
         }
 
       case a @ AlterTableAddColumns(r: ResolvedTable, cols) if hasUnresolvedColumns(cols) =>
@@ -3584,15 +3584,11 @@ class Analyzer(override val catalogManager: CatalogManager)
         // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
         // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
         val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
-        def addColumn(
+        def resolvePosition(
             col: QualifiedColType,
-            parent: ResolvedFieldName): QualifiedColType = {
-          val parentSchema = parent.field.dataType match {
-            case s: StructType => s
-            case _ => throw QueryCompilationErrors.invalidFieldName(
-              col.name, col.path.name, col.path.origin)
-          }
-          val fieldsAdded = colsToAdd.getOrElse(parent.name, Nil)
+            parentSchema: StructType,
+            resolvedParentName: Seq[String]): Option[FieldPosition] = {
+          val fieldsAdded = colsToAdd.getOrElse(resolvedParentName, Nil)
           val resolvedPosition = col.position.map {
             case u: UnresolvedFieldPosition => u.position match {
               case after: After =>
@@ -3601,34 +3597,40 @@ class Analyzer(override val catalogManager: CatalogManager)
                   case Some(colName) =>
                     ResolvedFieldPosition(ColumnPosition.after(colName))
                   case None =>
-                    val parentName = if (parent.isRoot) "root" else parent.name.quoted
+                    val name = if (resolvedParentName.isEmpty) "root" else resolvedParentName.quoted
                     throw QueryCompilationErrors.referenceColNotFoundForAlterTableChangesError(
-                      after, parentName)
+                      after, name)
                 }
               case _ => ResolvedFieldPosition(u.position)
             }
             case resolved => resolved
           }
-          colsToAdd(parent.name) = fieldsAdded :+ col.colName
-          col.copy(path = parent, position = resolvedPosition)
+          colsToAdd(resolvedParentName) = fieldsAdded :+ col.colName
+          resolvedPosition
         }
         val schema = r.table.schema
         val resolvedCols = cols.map { col =>
-          val parent = col.path
-          val parentName = parent.name
-          val resolvedParent = if (parentName.nonEmpty) {
-            // Adding a nested field, need to resolve the parent column.
-            resolveFieldNames(r, parentName, parent.origin)
-          } else {
-            // Adding to the root.
-            ResolvedFieldName(Nil, StructField("root", schema), isRoot = true)
+          col.path match {
+            case Some(parent) =>
+              // Adding a nested field, need to resolve the parent column and position.
+              val resolvedParent = resolveFieldNames(r, parent.name, parent)
+              val parentSchema = resolvedParent.field.dataType match {
+                case s: StructType => s
+                case _ => throw QueryCompilationErrors.invalidFieldName(
+                  col.name, parent.name, parent.origin)
+              }
+              val resolvedPosition = resolvePosition(col, parentSchema, resolvedParent.name)
+              col.copy(path = Some(resolvedParent), position = resolvedPosition)
+            case _ =>
+              // Adding to the root. Just need to resolve position.
+              val resolvedPosition = resolvePosition(col, schema, Nil)
+              col.copy(position = resolvedPosition)
           }
-          addColumn(col, resolvedParent)
         }
         a.copy(columnsToAdd = resolvedCols)
 
       case a @ AlterTableAlterColumn(
-          table: ResolvedTable, ResolvedFieldName(path, field, _), dataType, _, _, position) =>
+          table: ResolvedTable, ResolvedFieldName(path, field), dataType, _, _, position) =>
         val newDataType = dataType.flatMap { dt =>
           // Hive style syntax provides the column type, even if it may not have changed.
           val existing = CharVarcharUtils.getRawType(field.metadata).getOrElse(field.dataType)
@@ -3639,7 +3641,7 @@ class Analyzer(override val catalogManager: CatalogManager)
             // TODO: since the field name is already resolved, it's more efficient if
             //       `ResolvedFieldName` carries the parent struct and we resolve column position
             //       based on the parent struct, instead of re-resolving the entire column path.
-            val resolved = resolveFieldNames(table, path :+ after.column(), u.origin)
+            val resolved = resolveFieldNames(table, path :+ after.column(), u)
             ResolvedFieldPosition(ColumnPosition.after(resolved.field.name))
           case u: UnresolvedFieldPosition => ResolvedFieldPosition(u.position)
           case other => other
@@ -3656,12 +3658,12 @@ class Analyzer(override val catalogManager: CatalogManager)
     private def resolveFieldNames(
         table: ResolvedTable,
         fieldName: Seq[String],
-        context: Origin): ResolvedFieldName = {
+        context: Expression): ResolvedFieldName = {
       table.schema.findNestedField(
-        fieldName, includeCollections = true, conf.resolver, context
+        fieldName, includeCollections = true, conf.resolver, context.origin
       ).map {
         case (path, field) => ResolvedFieldName(path, field)
-      }.getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context))
+      }.getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context.origin))
     }
 
     private def hasUnresolvedFieldName(a: AlterTableColumnCommand): Boolean = {
@@ -3669,7 +3671,7 @@ class Analyzer(override val catalogManager: CatalogManager)
     }
 
     private def hasUnresolvedColumns(cols: Seq[QualifiedColType]): Boolean = {
-      cols.exists(col => !col.path.resolved || col.position.exists(!_.resolved))
+      cols.exists(col => col.path.exists(!_.resolved) || col.position.exists(!_.resolved))
     }
   }
 

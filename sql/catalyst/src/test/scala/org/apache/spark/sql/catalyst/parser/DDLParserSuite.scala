@@ -789,7 +789,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMN x int"),
       AlterTableAddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(UnresolvedFieldName(Nil), "x", IntegerType, true, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None)
       )))
   }
 
@@ -798,8 +798,8 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int, y string"),
       AlterTableAddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(UnresolvedFieldName(Nil), "x", IntegerType, true, None, None),
-          QualifiedColType(UnresolvedFieldName(Nil), "y", StringType, true, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None),
+          QualifiedColType(None, "y", StringType, true, None, None)
       )))
   }
 
@@ -808,7 +808,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int"),
       AlterTableAddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(UnresolvedFieldName(Nil), "x", IntegerType, true, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None)
       )))
   }
 
@@ -817,7 +817,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int)"),
       AlterTableAddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(UnresolvedFieldName(Nil), "x", IntegerType, true, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None)
       )))
   }
 
@@ -826,7 +826,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int COMMENT 'doc')"),
       AlterTableAddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
-        Seq(QualifiedColType(UnresolvedFieldName(Nil), "x", IntegerType, true, Some("doc"), None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, Some("doc"), None)
       )))
   }
 
@@ -835,7 +835,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMN x int NOT NULL"),
       AlterTableAddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(UnresolvedFieldName(Nil), "x", IntegerType, false, None, None)
+        Seq(QualifiedColType(None, "x", IntegerType, false, None, None)
       )))
   }
 
@@ -844,7 +844,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("ALTER TABLE table_name ADD COLUMN x int COMMENT 'doc'"),
       AlterTableAddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
-        Seq(QualifiedColType(UnresolvedFieldName(Nil), "x", IntegerType, true, Some("doc"), None)
+        Seq(QualifiedColType(None, "x", IntegerType, true, Some("doc"), None)
       )))
   }
 
@@ -854,7 +854,7 @@ class DDLParserSuite extends AnalysisTest {
       AlterTableAddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
         Seq(QualifiedColType(
-          UnresolvedFieldName(Nil),
+          None,
           "x",
           IntegerType,
           true,
@@ -867,7 +867,7 @@ class DDLParserSuite extends AnalysisTest {
       AlterTableAddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
         Seq(QualifiedColType(
-          UnresolvedFieldName(Nil),
+          None,
           "x",
           IntegerType,
           true,
@@ -882,7 +882,7 @@ class DDLParserSuite extends AnalysisTest {
       AlterTableAddColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
         Seq(QualifiedColType(
-          UnresolvedFieldName(Seq("x", "y")), "z", IntegerType, true, Some("doc"), None)
+          Some(UnresolvedFieldName(Seq("x", "y"))), "z", IntegerType, true, Some("doc"), None)
       )))
   }
 
@@ -893,14 +893,14 @@ class DDLParserSuite extends AnalysisTest {
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
         Seq(
           QualifiedColType(
-            UnresolvedFieldName(Seq("x", "y")),
+            Some(UnresolvedFieldName(Seq("x", "y"))),
             "z",
             IntegerType,
             true,
             Some("doc"),
             None),
           QualifiedColType(
-            UnresolvedFieldName(Seq("a")),
+            Some(UnresolvedFieldName(Seq("a"))),
             "b",
             StringType,
             true,
@@ -1100,21 +1100,21 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan(sql1),
       AlterTableReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
-        Seq(QualifiedColType(UnresolvedFieldName(Nil), "x", StringType, true, None, None))))
+        Seq(QualifiedColType(None, "x", StringType, true, None, None))))
 
     comparePlans(
       parsePlan(sql2),
       AlterTableReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
-        Seq(QualifiedColType(UnresolvedFieldName(Nil), "x", StringType, true, Some("x1"), None))))
+        Seq(QualifiedColType(None, "x", StringType, true, Some("x1"), None))))
 
     comparePlans(
       parsePlan(sql3),
       AlterTableReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(
-          QualifiedColType(UnresolvedFieldName(Nil), "x", StringType, true, Some("x1"), None),
-          QualifiedColType(UnresolvedFieldName(Nil), "y", IntegerType, true, None, None)
+          QualifiedColType(None, "x", StringType, true, Some("x1"), None),
+          QualifiedColType(None, "y", IntegerType, true, None, None)
         )))
 
     comparePlans(
@@ -1122,8 +1122,8 @@ class DDLParserSuite extends AnalysisTest {
       AlterTableReplaceColumns(
         UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(
-          QualifiedColType(UnresolvedFieldName(Nil), "x", StringType, true, Some("x1"), None),
-          QualifiedColType(UnresolvedFieldName(Nil), "y", IntegerType, true, Some("y1"), None)
+          QualifiedColType(None, "x", StringType, true, Some("x1"), None),
+          QualifiedColType(None, "y", IntegerType, true, Some("y1"), None)
         )))
 
     intercept("ALTER TABLE table_name PARTITION (a='1') REPLACE COLUMNS (x string)",
@@ -1134,6 +1134,9 @@ class DDLParserSuite extends AnalysisTest {
 
     intercept("ALTER TABLE table_name REPLACE COLUMNS (x string FIRST)",
       "Column position is not supported in Hive-style REPLACE COLUMNS")
+
+    intercept("ALTER TABLE table_name REPLACE COLUMNS (a.b.c string)",
+      "Replacing with a nested column is not supported in Hive-style REPLACE COLUMNS")
   }
 
   test("alter view: rename view") {
