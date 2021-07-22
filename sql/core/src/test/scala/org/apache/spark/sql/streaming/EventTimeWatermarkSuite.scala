@@ -767,6 +767,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
   }
 
   test("SPARK-35815: Support ANSI intervals for delay threshold") {
+    val DAYS_PER_MONTH = 31
     Seq(
       // Conventional form and some variants
       (Seq("3 days", "Interval 3 day", "inTerval '3' day"), 3 * MILLIS_PER_DAY),

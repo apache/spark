@@ -21,8 +21,6 @@ public class DateTimeConstants {
 
   public static final int MONTHS_PER_YEAR = 12;
 
-  public static final byte DAYS_PER_MONTH = 31;
-
   public static final byte DAYS_PER_WEEK = 7;
 
   public static final long HOURS_PER_DAY = 24L;
