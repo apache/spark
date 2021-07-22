@@ -94,6 +94,18 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         with self.assertRaises(ValueError):
             psidx.categories = [1, 2, 3, 4]
 
+    def test_add_categories(self):
+        pidx = pd.CategoricalIndex([1, 2, 3], categories=[3, 2, 1])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(pidx.add_categories(4), psidx.add_categories(4))
+        self.assert_eq(pidx.add_categories([4, 5]), psidx.add_categories([4, 5]))
+        self.assert_eq(pidx.add_categories([]), psidx.add_categories([]))
+
+        self.assertRaises(ValueError, lambda: psidx.add_categories(4, inplace=True))
+        self.assertRaises(ValueError, lambda: psidx.add_categories(3))
+        self.assertRaises(ValueError, lambda: psidx.add_categories([4, 4]))
+
     def test_as_ordered_unordered(self):
         pidx = pd.CategoricalIndex(["x", "y", "z"], categories=["z", "y", "x"])
         psidx = ps.from_pandas(pidx)
