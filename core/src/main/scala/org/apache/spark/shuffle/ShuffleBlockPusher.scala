@@ -71,7 +71,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       // blocks to just that host and continue push blocks to other hosts. So, here push of
       // all blocks will only stop when it is "Too Late". Also see updateStateAndCheckIfPushMore.
       override def shouldRetryError(t: Throwable): Boolean = {
-        // If it is a FileNotFound exception originating from the client while pushing the shuffle
+        // If it is a FileNotFoundException originating from the client while pushing the shuffle
         // blocks to the server, then we stop pushing all the blocks because this indicates the
         // shuffle files are deleted and subsequent block push will also fail.
         if (t.getCause != null && t.getCause.isInstanceOf[FileNotFoundException]) {
@@ -110,10 +110,10 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         pushUpToMax()
       } catch {
         case e: FileNotFoundException =>
-          logWarning("The shuffle files got deleted when this task was reading from them " +
-            "which could happen when the job finishes and the driver instructs the executor to " +
-            "cleanup the shuffle. In this case, push of the blocks belonging to this shuffle" +
-            "will stop.", e)
+          logWarning("The shuffle files got deleted when this shuffle-block-push-thread " +
+            "was reading from them which could happen when the job finishes and the driver " +
+            "instructs the executor to cleanup the shuffle. In this case, push of the blocks " +
+            "belonging to this shuffle will stop.", e)
       }
     })
   }
