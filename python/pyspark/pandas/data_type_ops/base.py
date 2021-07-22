@@ -128,7 +128,7 @@ def _as_categorical_type(
             )
             map_scol = F.create_map(*kvs)
 
-            scol = F.coalesce(map_scol.getItem(index_ops.spark.column), SF.lit(-1))
+            scol = F.coalesce(map_scol[index_ops.spark.column], SF.lit(-1))
         return index_ops._with_new_scol(
             scol.cast(spark_type),
             field=index_ops._internal.data_fields[0].copy(

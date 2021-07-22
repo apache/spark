@@ -68,7 +68,7 @@ class CategoricalOps(DataTypeOps):
                 *[(SF.lit(code), SF.lit(category)) for code, category in enumerate(categories)]
             )
             map_scol = F.create_map(*kvs)
-            scol = map_scol.getItem(index_ops.spark.column)
+            scol = map_scol[index_ops.spark.column]
         return index_ops._with_new_scol(scol).astype(dtype)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
