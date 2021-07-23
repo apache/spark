@@ -411,7 +411,6 @@ private[spark] class SpeculationStageSummaryWrapper(
   private def stage: Array[Int] = Array(stageId, stageAttemptId)
 
   private[this] val id: Array[Int] = _id
-
 }
 
 private[spark] class StreamBlockData(

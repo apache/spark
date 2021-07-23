@@ -529,7 +529,7 @@ private[spark] class AppStatusStore(
         } else {
           None
         }
-      val speculationStageSummary: Option[v1.SpeculationStageSummary] = if (withSummaries) {
+      val speculationStageSummary: Option[v1.SpeculationStageSummary] = if (withDetail) {
         speculationSummary(stage.stageId, stage.attemptId)
       } else {
         None
