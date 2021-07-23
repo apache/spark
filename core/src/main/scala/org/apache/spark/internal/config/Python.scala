@@ -23,37 +23,44 @@ import org.apache.spark.network.util.ByteUnit
 private[spark] object Python {
   val PYTHON_WORKER_REUSE = ConfigBuilder("spark.python.worker.reuse")
     .version("1.2.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .booleanConf
     .createWithDefault(true)
 
   val PYTHON_TASK_KILL_TIMEOUT = ConfigBuilder("spark.python.task.killTimeout")
     .version("2.2.2")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("2s")
 
   val PYTHON_USE_DAEMON = ConfigBuilder("spark.python.use.daemon")
     .version("2.3.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .booleanConf
     .createWithDefault(true)
 
   val PYTHON_DAEMON_MODULE = ConfigBuilder("spark.python.daemon.module")
     .version("2.4.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .createOptional
 
   val PYTHON_WORKER_MODULE = ConfigBuilder("spark.python.worker.module")
     .version("2.4.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .createOptional
 
   val PYSPARK_EXECUTOR_MEMORY = ConfigBuilder("spark.executor.pyspark.memory")
     .version("2.4.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
   val PYTHON_AUTH_SOCKET_TIMEOUT = ConfigBuilder("spark.python.authenticate.socketTimeout")
     .internal()
     .version("3.1.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("15s")
 

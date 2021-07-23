@@ -22,6 +22,7 @@ import java.util.regex.PatternSyntaxException
 
 import scala.util.matching.Regex
 
+import org.apache.spark.internal.config.EffectTiming.EffectTiming
 import org.apache.spark.network.util.{ByteUnit, JavaUtils}
 import org.apache.spark.util.Utils
 
@@ -189,6 +190,7 @@ private[spark] case class ConfigBuilder(key: String) {
   private[config] var _public = true
   private[config] var _doc = ""
   private[config] var _version = ""
+  private[config] var _scope: EffectTiming = EffectTiming.UNKNOWN
   private[config] var _onCreate: Option[ConfigEntry[_] => Unit] = None
   private[config] var _alternatives = List.empty[String]
 
@@ -204,6 +206,11 @@ private[spark] case class ConfigBuilder(key: String) {
 
   def version(v: String): ConfigBuilder = {
     _version = v
+    this
+  }
+
+  def scope(s: EffectTiming): ConfigBuilder = {
+    _scope = s
     this
   }
 
@@ -278,4 +285,9 @@ private[spark] case class ConfigBuilder(key: String) {
       throw new IllegalArgumentException(s"$key type must be string if prepend used")
     }
   }
+}
+
+object EffectTiming extends Enumeration {
+  type EffectTiming = Value
+  val LAUNCHING_DRIVER, DEPLOYING_APPLICATION, RUNTIME, DEPLOYING_CLUSTER, TESTING, UNKNOWN = Value
 }

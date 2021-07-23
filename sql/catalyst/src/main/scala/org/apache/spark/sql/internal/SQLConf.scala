@@ -104,13 +104,14 @@ object SQLConf {
 
   def isStaticConfigKey(key: String): Boolean = staticConfKeys.contains(key)
 
-  def buildConf(key: String): ConfigBuilder = ConfigBuilder(key).onCreate(register)
+  def buildConf(key: String): ConfigBuilder =
+    ConfigBuilder(key).onCreate(register).scope(EffectTiming.RUNTIME)
 
   def buildStaticConf(key: String): ConfigBuilder = {
     ConfigBuilder(key).onCreate { entry =>
       SQLConf.registerStaticConfigKey(entry.key)
       SQLConf.register(entry)
-    }
+    }.scope(EffectTiming.RUNTIME)
   }
 
   /**

@@ -29,57 +29,68 @@ private[spark] object Worker {
       "The file should be formatted as a JSON array of ResourceAllocation objects. " +
       "Only used internally in standalone mode.")
     .version("3.0.0")
+    .scope(EffectTiming.DEPLOYING_CLUSTER)
     .stringConf
     .createOptional
 
   val WORKER_TIMEOUT = ConfigBuilder("spark.worker.timeout")
     .version("0.6.2")
+    .scope(EffectTiming.DEPLOYING_CLUSTER)
     .longConf
     .createWithDefault(60)
 
   val WORKER_DRIVER_TERMINATE_TIMEOUT = ConfigBuilder("spark.worker.driverTerminateTimeout")
     .version("2.1.2")
+    .scope(EffectTiming.DEPLOYING_CLUSTER)
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("10s")
 
   val WORKER_CLEANUP_ENABLED = ConfigBuilder("spark.worker.cleanup.enabled")
     .version("1.0.0")
+    .scope(EffectTiming.DEPLOYING_CLUSTER)
     .booleanConf
     .createWithDefault(false)
 
   val WORKER_CLEANUP_INTERVAL = ConfigBuilder("spark.worker.cleanup.interval")
     .version("1.0.0")
+    .scope(EffectTiming.DEPLOYING_CLUSTER)
     .longConf
     .createWithDefault(60 * 30)
 
   val APP_DATA_RETENTION = ConfigBuilder("spark.worker.cleanup.appDataTtl")
     .version("1.0.0")
+    .scope(EffectTiming.DEPLOYING_CLUSTER)
     .longConf
     .createWithDefault(7 * 24 * 3600)
 
   val PREFER_CONFIGURED_MASTER_ADDRESS = ConfigBuilder("spark.worker.preferConfiguredMasterAddress")
     .version("2.2.1")
+    .scope(EffectTiming.DEPLOYING_CLUSTER)
     .booleanConf
     .createWithDefault(false)
 
   val WORKER_UI_PORT = ConfigBuilder("spark.worker.ui.port")
     .version("1.1.0")
+    .scope(EffectTiming.DEPLOYING_CLUSTER)
     .intConf
     .createOptional
 
   val WORKER_UI_RETAINED_EXECUTORS = ConfigBuilder("spark.worker.ui.retainedExecutors")
     .version("1.5.0")
+    .scope(EffectTiming.DEPLOYING_CLUSTER)
     .intConf
     .createWithDefault(1000)
 
   val WORKER_UI_RETAINED_DRIVERS = ConfigBuilder("spark.worker.ui.retainedDrivers")
     .version("1.5.0")
+    .scope(EffectTiming.DEPLOYING_CLUSTER)
     .intConf
     .createWithDefault(1000)
 
   val UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE_CONF =
     ConfigBuilder("spark.worker.ui.compressedLogFileLengthCacheSize")
       .version("2.0.2")
+      .scope(EffectTiming.DEPLOYING_CLUSTER)
       .intConf
       .createWithDefault(100)
 
@@ -87,6 +98,7 @@ private[spark] object Worker {
     ConfigBuilder("spark.worker.decommission.signal")
       .doc("The signal that used to trigger the worker to start decommission.")
       .version("3.2.0")
+      .scope(EffectTiming.DEPLOYING_CLUSTER)
       .stringConf
       .createWithDefaultString("PWR")
 }

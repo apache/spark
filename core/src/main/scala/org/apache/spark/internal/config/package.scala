@@ -47,6 +47,7 @@ package object config {
         "returns the resource information for that resource. It tries the discovery " +
         "script last if none of the plugins return information for that resource.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .toSequence
       .createWithDefault(Nil)
@@ -58,12 +59,21 @@ package object config {
         "The file should be formatted as a JSON array of ResourceAllocation objects. " +
         "Only used internally in standalone mode.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createOptional
 
   private[spark] val DRIVER_CLASS_PATH =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_CLASSPATH)
       .version("1.0.0")
+      .scope(EffectTiming.LAUNCHING_DRIVER)
+      .stringConf
+      .createOptional
+
+  private[spark] val DRIVER_DEFAULT_JAVA_OPTIONS =
+    ConfigBuilder(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS)
+      .version("1.0.0")
+      .scope(EffectTiming.LAUNCHING_DRIVER)
       .stringConf
       .createOptional
 
@@ -71,30 +81,35 @@ package object config {
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS)
       .withPrepended(SparkLauncher.DRIVER_DEFAULT_JAVA_OPTIONS)
       .version("1.0.0")
+      .scope(EffectTiming.LAUNCHING_DRIVER)
       .stringConf
       .createOptional
 
   private[spark] val DRIVER_LIBRARY_PATH =
     ConfigBuilder(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH)
       .version("1.0.0")
+      .scope(EffectTiming.LAUNCHING_DRIVER)
       .stringConf
       .createOptional
 
   private[spark] val DRIVER_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.driver.userClassPathFirst")
       .version("1.3.0")
+      .scope(EffectTiming.LAUNCHING_DRIVER)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val DRIVER_CORES = ConfigBuilder("spark.driver.cores")
     .doc("Number of cores to use for the driver process, only in cluster mode.")
     .version("1.3.0")
+    .scope(EffectTiming.LAUNCHING_DRIVER)
     .intConf
     .createWithDefault(1)
 
   private[spark] val DRIVER_MEMORY = ConfigBuilder(SparkLauncher.DRIVER_MEMORY)
     .doc("Amount of memory to use for the driver process, in MiB unless otherwise specified.")
     .version("1.1.1")
+    .scope(EffectTiming.LAUNCHING_DRIVER)
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
@@ -102,55 +117,68 @@ package object config {
     .doc("The amount of non-heap memory to be allocated per driver in cluster mode, " +
       "in MiB unless otherwise specified.")
     .version("2.3.0")
+    .scope(EffectTiming.LAUNCHING_DRIVER)
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
   private[spark] val DRIVER_LOG_DFS_DIR =
-    ConfigBuilder("spark.driver.log.dfsDir").version("3.0.0").stringConf.createOptional
+    ConfigBuilder("spark.driver.log.dfsDir")
+      .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
+      .stringConf
+      .createOptional
 
   private[spark] val DRIVER_LOG_LAYOUT =
     ConfigBuilder("spark.driver.log.layout")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createOptional
 
   private[spark] val DRIVER_LOG_PERSISTTODFS =
     ConfigBuilder("spark.driver.log.persistToDfs.enabled")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val DRIVER_LOG_ALLOW_EC =
     ConfigBuilder("spark.driver.log.allowErasureCoding")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_ENABLED = ConfigBuilder("spark.eventLog.enabled")
     .version("1.0.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .booleanConf
     .createWithDefault(false)
 
   private[spark] val EVENT_LOG_DIR = ConfigBuilder("spark.eventLog.dir")
     .version("1.0.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .createWithDefault(EventLoggingListener.DEFAULT_LOG_DIR)
 
   private[spark] val EVENT_LOG_COMPRESS =
     ConfigBuilder("spark.eventLog.compress")
       .version("1.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_BLOCK_UPDATES =
     ConfigBuilder("spark.eventLog.logBlockUpdates.enabled")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_ALLOW_EC =
     ConfigBuilder("spark.eventLog.erasureCoding.enabled")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -158,12 +186,14 @@ package object config {
     ConfigBuilder("spark.eventLog.testing")
       .internal()
       .version("1.0.1")
+      .scope(EffectTiming.TESTING)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_OUTPUT_BUFFER_SIZE = ConfigBuilder("spark.eventLog.buffer.kb")
     .doc("Buffer size to use when writing to output streams, in KiB unless otherwise specified.")
     .version("1.0.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .bytesConf(ByteUnit.KiB)
     .createWithDefaultString("100k")
 
@@ -172,6 +202,7 @@ package object config {
       .doc("Whether to write per-stage peaks of executor metrics (for each executor) " +
         "to the event log.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -181,6 +212,7 @@ package object config {
         " the return of GarbageCollectorMXBean.getName. The built-in young generation garbage " +
         s"collectors are ${GarbageCollectionMetrics.YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS}")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .toSequence
       .createWithDefault(GarbageCollectionMetrics.YOUNG_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
@@ -191,6 +223,7 @@ package object config {
         "the return of GarbageCollectorMXBean.getName. The built-in old generation garbage " +
         s"collectors are ${GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS}")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .toSequence
       .createWithDefault(GarbageCollectionMetrics.OLD_GENERATION_BUILTIN_GARBAGE_COLLECTORS)
@@ -198,12 +231,14 @@ package object config {
   private[spark] val EVENT_LOG_OVERWRITE =
     ConfigBuilder("spark.eventLog.overwrite")
       .version("1.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EVENT_LOG_CALLSITE_LONG_FORM =
     ConfigBuilder("spark.eventLog.longForm.enabled")
       .version("2.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -212,6 +247,7 @@ package object config {
       .doc("Whether rolling over event log files is enabled. If set to true, it cuts down " +
         "each event log file to the configured size.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -220,17 +256,23 @@ package object config {
       .doc(s"When ${EVENT_LOG_ENABLE_ROLLING.key}=true, specifies the max size of event log file" +
         " to be rolled over.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= ByteUnit.MiB.toBytes(10), "Max file size of event log should be " +
         "configured to be at least 10 MiB.")
       .createWithDefaultString("128m")
 
   private[spark] val EXECUTOR_ID =
-    ConfigBuilder("spark.executor.id").version("1.2.0").stringConf.createOptional
+    ConfigBuilder("spark.executor.id")
+      .version("1.2.0")
+      .scope(EffectTiming.RUNTIME)
+      .stringConf
+      .createOptional
 
   private[spark] val EXECUTOR_CLASS_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_CLASSPATH)
       .version("1.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createOptional
 
@@ -238,12 +280,14 @@ package object config {
     ConfigBuilder("spark.executor.heartbeat.dropZeroAccumulatorUpdates")
       .internal()
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
   private[spark] val EXECUTOR_HEARTBEAT_INTERVAL =
     ConfigBuilder("spark.executor.heartbeatInterval")
       .version("1.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("10s")
 
@@ -251,6 +295,7 @@ package object config {
     ConfigBuilder("spark.executor.heartbeat.maxFailures")
       .internal()
       .version("1.6.2")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(60)
 
@@ -259,6 +304,7 @@ package object config {
       .doc("Whether to collect process tree metrics (from the /proc filesystem) when collecting " +
         "executor metrics.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -268,6 +314,7 @@ package object config {
         "If 0, the polling is done on executor heartbeats. " +
         "If positive, the polling is done at this interval.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("0")
 
@@ -275,6 +322,7 @@ package object config {
     ConfigBuilder("spark.executor.metrics.fileSystemSchemes")
       .doc("The file system schemes to report in executor metrics.")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefaultString("file,hdfs")
 
@@ -282,29 +330,34 @@ package object config {
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_JAVA_OPTIONS)
       .withPrepended(SparkLauncher.EXECUTOR_DEFAULT_JAVA_OPTIONS)
       .version("1.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createOptional
 
   private[spark] val EXECUTOR_LIBRARY_PATH =
     ConfigBuilder(SparkLauncher.EXECUTOR_EXTRA_LIBRARY_PATH)
       .version("1.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createOptional
 
   private[spark] val EXECUTOR_USER_CLASS_PATH_FIRST =
     ConfigBuilder("spark.executor.userClassPathFirst")
       .version("1.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EXECUTOR_CORES = ConfigBuilder(SparkLauncher.EXECUTOR_CORES)
     .version("1.0.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .intConf
     .createWithDefault(1)
 
   private[spark] val EXECUTOR_MEMORY = ConfigBuilder(SparkLauncher.EXECUTOR_MEMORY)
     .doc("Amount of memory to use per executor process, in MiB unless otherwise specified.")
     .version("0.7.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("1g")
 
@@ -312,6 +365,7 @@ package object config {
     .doc("The amount of non-heap memory to be allocated per executor, in MiB unless otherwise" +
       " specified.")
     .version("2.3.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
@@ -322,6 +376,7 @@ package object config {
       "`spark.deploy.defaultCores` on Spark's standalone cluster manager, or infinite " +
       "(all available cores) on Mesos.")
     .version("0.6.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .intConf
     .createOptional
 
@@ -329,6 +384,7 @@ package object config {
     .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
       "If off-heap memory use is enabled, then spark.memory.offHeap.size must be positive.")
     .version("1.6.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .withAlternative("spark.unsafe.offHeap")
     .booleanConf
     .createWithDefault(false)
@@ -340,6 +396,7 @@ package object config {
       "consumption must fit within some hard limit then be sure to shrink your JVM heap size " +
       "accordingly. This must be set to a positive value when spark.memory.offHeap.enabled=true.")
     .version("1.6.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .bytesConf(ByteUnit.BYTE)
     .checkValue(_ >= 0, "The off-heap memory size must not be negative")
     .createWithDefault(0)
@@ -350,6 +407,7 @@ package object config {
       "less working memory may be available to execution and tasks may spill to disk more " +
       "often. Leaving this at the default value is recommended. ")
     .version("1.6.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .doubleConf
     .checkValue(v => v >= 0.0 && v < 1.0, "Storage fraction must be in [0,1)")
     .createWithDefault(0.5)
@@ -361,11 +419,13 @@ package object config {
       "user data structures, and imprecise size estimation in the case of sparse, " +
       "unusually large records. Leaving this at the default value is recommended.  ")
     .version("1.6.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .doubleConf
     .createWithDefault(0.6)
 
   private[spark] val STORAGE_SAFETY_FRACTION = ConfigBuilder("spark.storage.safetyFraction")
     .version("1.1.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .doubleConf
     .createWithDefault(0.9)
 
@@ -373,6 +433,7 @@ package object config {
     ConfigBuilder("spark.storage.unrollMemoryThreshold")
       .doc("Initial memory to request before unrolling any block")
       .version("1.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .longConf
       .createWithDefault(1024 * 1024)
 
@@ -383,6 +444,7 @@ package object config {
         "if there are any existing available replicas. This tries to " +
         "get the replication level of the block to the initial number")
       .version("2.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -394,29 +456,34 @@ package object config {
         "In general, memory mapping has high overhead for blocks close to or below " +
         "the page size of the operating system.")
       .version("0.9.2")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("2m")
 
   private[spark] val STORAGE_REPLICATION_POLICY =
     ConfigBuilder("spark.storage.replication.policy")
       .version("2.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefaultString(classOf[RandomBlockReplicationPolicy].getName)
 
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_MAPPER =
     ConfigBuilder("spark.storage.replication.topologyMapper")
       .version("2.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefaultString(classOf[DefaultTopologyMapper].getName)
 
   private[spark] val STORAGE_CACHED_PEERS_TTL = ConfigBuilder("spark.storage.cachedPeersTtl")
     .version("1.1.1")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .intConf
     .createWithDefault(60 * 1000)
 
   private[spark] val STORAGE_MAX_REPLICATION_FAILURE =
     ConfigBuilder("spark.storage.maxReplicationFailures")
       .version("1.1.1")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(1)
 
@@ -424,6 +491,7 @@ package object config {
     ConfigBuilder("spark.storage.decommission.enabled")
       .doc("Whether to decommission the block manager when decommissioning executor")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -432,6 +500,7 @@ package object config {
       .doc("Whether to transfer shuffle blocks during block manager decommissioning. Requires " +
         "a migratable shuffle resolver (like sort based shuffle)")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -439,6 +508,7 @@ package object config {
     ConfigBuilder("spark.storage.decommission.shuffleBlocks.maxThreads")
       .doc("Maximum number of threads to use in migrating shuffle files.")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .checkValue(_ > 0, "The maximum number of threads should be positive")
       .createWithDefault(8)
@@ -447,6 +517,7 @@ package object config {
     ConfigBuilder("spark.storage.decommission.rddBlocks.enabled")
       .doc("Whether to transfer RDD blocks during block manager decommissioning.")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -457,6 +528,7 @@ package object config {
         "one RDD block when block manager is decommissioning and trying to move its " +
         "existing blocks.")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(3)
 
@@ -466,6 +538,7 @@ package object config {
       .doc("The interval of time between consecutive cache block replication reattempts " +
         "happening on each decommissioning executor (due to storage decommissioning).")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ > 0, "Time interval between two consecutive attempts of " +
         "cache block replication should be positive.")
@@ -477,6 +550,7 @@ package object config {
         "For example, `s3a://spark-storage/`. In case of empty, fallback storage is disabled. " +
         "The storage should be managed by TTL because Spark will not clean it up.")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .checkValue(_.endsWith(java.io.File.separator), "Path should end with separator.")
       .createOptional
@@ -485,6 +559,7 @@ package object config {
     ConfigBuilder("spark.storage.decommission.fallbackStorage.cleanUp")
       .doc("If true, Spark cleans up its fallback storage data during shutting down.")
       .version("3.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -496,24 +571,28 @@ package object config {
         "then shuffle blocks will be lost unless " +
         s"${STORAGE_DECOMMISSION_FALLBACK_STORAGE_PATH.key} is configured.")
       .version("3.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .createOptional
 
   private[spark] val STORAGE_REPLICATION_TOPOLOGY_FILE =
     ConfigBuilder("spark.storage.replication.topologyFile")
       .version("2.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createOptional
 
   private[spark] val STORAGE_EXCEPTION_PIN_LEAK =
     ConfigBuilder("spark.storage.exceptionOnPinLeak")
       .version("1.6.2")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val STORAGE_BLOCKMANAGER_TIMEOUTINTERVAL =
     ConfigBuilder("spark.storage.blockManagerTimeoutIntervalMs")
       .version("0.7.3")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("60s")
 
@@ -521,12 +600,14 @@ package object config {
     ConfigBuilder("spark.storage.blockManagerMasterDriverHeartbeatTimeoutMs")
       .doc("A timeout used for block manager master's driver heartbeat endpoint.")
       .version("3.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("10m")
 
   private[spark] val STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT =
     ConfigBuilder("spark.storage.blockManagerHeartbeatTimeoutMs")
       .version("0.7.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .withAlternative("spark.storage.blockManagerSlaveTimeoutMs")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
@@ -536,6 +617,7 @@ package object config {
       .doc("Whether or not cleanup the files not served by the external shuffle service " +
         "on executor exits.")
       .version("2.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -544,6 +626,7 @@ package object config {
       .doc("Number of subdirectories inside each path listed in spark.local.dir for " +
         "hashing Block files into.")
       .version("0.6.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .checkValue(_ > 0, "The number of subdirectories must be positive.")
       .createWithDefault(64)
@@ -553,57 +636,70 @@ package object config {
       .doc("Max number of failures before this block manager refreshes " +
         "the block locations from the driver.")
       .version("2.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(5)
 
   private[spark] val IS_PYTHON_APP =
     ConfigBuilder("spark.yarn.isPython")
       .internal()
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .version("1.5.0")
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val CPUS_PER_TASK =
-    ConfigBuilder("spark.task.cpus").version("0.5.0").intConf.createWithDefault(1)
+    ConfigBuilder("spark.task.cpus")
+      .version("0.5.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
+      .intConf
+      .createWithDefault(1)
 
   private[spark] val DYN_ALLOCATION_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.enabled")
       .version("1.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val DYN_ALLOCATION_TESTING =
     ConfigBuilder("spark.dynamicAllocation.testing")
       .version("1.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val DYN_ALLOCATION_MIN_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.minExecutors")
       .version("1.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(0)
 
   private[spark] val DYN_ALLOCATION_INITIAL_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.initialExecutors")
       .version("1.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .fallbackConf(DYN_ALLOCATION_MIN_EXECUTORS)
 
   private[spark] val DYN_ALLOCATION_MAX_EXECUTORS =
     ConfigBuilder("spark.dynamicAllocation.maxExecutors")
       .version("1.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(Int.MaxValue)
 
   private[spark] val DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO =
     ConfigBuilder("spark.dynamicAllocation.executorAllocationRatio")
       .version("2.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .doubleConf
       .createWithDefault(1.0)
 
   private[spark] val DYN_ALLOCATION_CACHED_EXECUTOR_IDLE_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.cachedExecutorIdleTimeout")
       .version("1.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
       .createWithDefault(Integer.MAX_VALUE)
@@ -611,6 +707,7 @@ package object config {
   private[spark] val DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.executorIdleTimeout")
       .version("1.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
       .createWithDefault(60)
@@ -618,12 +715,14 @@ package object config {
   private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING_ENABLED =
     ConfigBuilder("spark.dynamicAllocation.shuffleTracking.enabled")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val DYN_ALLOCATION_SHUFFLE_TRACKING_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.shuffleTracking.timeout")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
       .createWithDefault(Long.MaxValue)
@@ -631,11 +730,13 @@ package object config {
   private[spark] val DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.schedulerBacklogTimeout")
       .version("1.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.SECONDS).createWithDefault(1)
 
   private[spark] val DYN_ALLOCATION_SUSTAINED_SCHEDULER_BACKLOG_TIMEOUT =
     ConfigBuilder("spark.dynamicAllocation.sustainedSchedulerBacklogTimeout")
       .version("1.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .fallbackConf(DYN_ALLOCATION_SCHEDULER_BACKLOG_TIMEOUT)
 
   private[spark] val LEGACY_LOCALITY_WAIT_RESET =
@@ -645,17 +746,20 @@ package object config {
       "documentation for more details.")
     .internal()
     .version("3.1.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .booleanConf
     .createWithDefault(false)
 
   private[spark] val LOCALITY_WAIT = ConfigBuilder("spark.locality.wait")
     .version("0.5.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .timeConf(TimeUnit.MILLISECONDS)
     .createWithDefaultString("3s")
 
   private[spark] val SHUFFLE_SERVICE_ENABLED =
     ConfigBuilder("spark.shuffle.service.enabled")
       .version("1.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -666,6 +770,7 @@ package object config {
         "persisted blocks are considered idle after " +
         "'spark.dynamicAllocation.executorIdleTimeout' and will be released accordingly.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -674,11 +779,16 @@ package object config {
       .doc("Whether to use db in ExternalShuffleService. Note that this only affects " +
         "standalone mode.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
   private[spark] val SHUFFLE_SERVICE_PORT =
-    ConfigBuilder("spark.shuffle.service.port").version("1.2.0").intConf.createWithDefault(7337)
+    ConfigBuilder("spark.shuffle.service.port")
+      .version("1.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
+      .intConf
+      .createWithDefault(7337)
 
   private[spark] val SHUFFLE_SERVICE_NAME =
     ConfigBuilder("spark.shuffle.service.name")
@@ -693,16 +803,19 @@ package object config {
   private[spark] val KEYTAB = ConfigBuilder("spark.kerberos.keytab")
     .doc("Location of user's keytab.")
     .version("3.0.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf.createOptional
 
   private[spark] val PRINCIPAL = ConfigBuilder("spark.kerberos.principal")
     .doc("Name of the Kerberos principal.")
     .version("3.0.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .createOptional
 
   private[spark] val KERBEROS_RELOGIN_PERIOD = ConfigBuilder("spark.kerberos.relogin.period")
     .version("3.0.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .timeConf(TimeUnit.SECONDS)
     .createWithDefaultString("1m")
 
@@ -713,6 +826,7 @@ package object config {
         "'keytab', the default, which requires a keytab to be provided, or 'ccache', which uses " +
         "the local credentials cache.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .checkValues(Set("keytab", "ccache"))
       .createWithDefault("keytab")
@@ -722,6 +836,7 @@ package object config {
     .doc("Extra Hadoop filesystem URLs for which to request delegation tokens. The filesystem " +
       "that hosts fs.defaultFS does not need to be listed here.")
     .version("3.0.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .toSequence
     .createWithDefault(Nil)
@@ -740,12 +855,14 @@ package object config {
 
   private[spark] val EXECUTOR_INSTANCES = ConfigBuilder("spark.executor.instances")
     .version("1.0.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .intConf
     .createOptional
 
   private[spark] val PY_FILES = ConfigBuilder("spark.yarn.dist.pyFiles")
     .internal()
     .version("2.2.1")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .toSequence
     .createWithDefault(Nil)
@@ -753,42 +870,49 @@ package object config {
   private[spark] val TASK_MAX_DIRECT_RESULT_SIZE =
     ConfigBuilder("spark.task.maxDirectResultSize")
       .version("2.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(1L << 20)
 
   private[spark] val TASK_MAX_FAILURES =
     ConfigBuilder("spark.task.maxFailures")
       .version("0.8.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(4)
 
   private[spark] val TASK_REAPER_ENABLED =
     ConfigBuilder("spark.task.reaper.enabled")
       .version("2.0.3")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val TASK_REAPER_KILL_TIMEOUT =
     ConfigBuilder("spark.task.reaper.killTimeout")
       .version("2.0.3")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(-1)
 
   private[spark] val TASK_REAPER_POLLING_INTERVAL =
     ConfigBuilder("spark.task.reaper.pollingInterval")
       .version("2.0.3")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("10s")
 
   private[spark] val TASK_REAPER_THREAD_DUMP =
     ConfigBuilder("spark.task.reaper.threadDump")
       .version("2.0.3")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
   private[spark] val EXCLUDE_ON_FAILURE_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.enabled")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .withAlternative("spark.blacklist.enabled")
       .booleanConf
       .createOptional
@@ -796,6 +920,7 @@ package object config {
   private[spark] val MAX_TASK_ATTEMPTS_PER_EXECUTOR =
     ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerExecutor")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .withAlternative("spark.blacklist.task.maxTaskAttemptsPerExecutor")
       .intConf
       .createWithDefault(1)
@@ -803,6 +928,7 @@ package object config {
   private[spark] val MAX_TASK_ATTEMPTS_PER_NODE =
     ConfigBuilder("spark.excludeOnFailure.task.maxTaskAttemptsPerNode")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .withAlternative("spark.blacklist.task.maxTaskAttemptsPerNode")
       .intConf
       .createWithDefault(2)
@@ -810,6 +936,7 @@ package object config {
   private[spark] val MAX_FAILURES_PER_EXEC =
     ConfigBuilder("spark.excludeOnFailure.application.maxFailedTasksPerExecutor")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .withAlternative("spark.blacklist.application.maxFailedTasksPerExecutor")
       .intConf
       .createWithDefault(2)
@@ -817,6 +944,7 @@ package object config {
   private[spark] val MAX_FAILURES_PER_EXEC_STAGE =
     ConfigBuilder("spark.excludeOnFailure.stage.maxFailedTasksPerExecutor")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .withAlternative("spark.blacklist.stage.maxFailedTasksPerExecutor")
       .intConf
       .createWithDefault(2)
@@ -824,6 +952,7 @@ package object config {
   private[spark] val MAX_FAILED_EXEC_PER_NODE =
     ConfigBuilder("spark.excludeOnFailure.application.maxFailedExecutorsPerNode")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .withAlternative("spark.blacklist.application.maxFailedExecutorsPerNode")
       .intConf
       .createWithDefault(2)
@@ -831,6 +960,7 @@ package object config {
   private[spark] val MAX_FAILED_EXEC_PER_NODE_STAGE =
     ConfigBuilder("spark.excludeOnFailure.stage.maxFailedExecutorsPerNode")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .withAlternative("spark.blacklist.stage.maxFailedExecutorsPerNode")
       .intConf
       .createWithDefault(2)
@@ -838,6 +968,7 @@ package object config {
   private[spark] val EXCLUDE_ON_FAILURE_TIMEOUT_CONF =
     ConfigBuilder("spark.excludeOnFailure.timeout")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .withAlternative("spark.blacklist.timeout")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
@@ -845,6 +976,7 @@ package object config {
   private[spark] val EXCLUDE_ON_FAILURE_KILL_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .withAlternative("spark.blacklist.killBlacklistedExecutors")
       .booleanConf
       .createWithDefault(false)
@@ -853,6 +985,7 @@ package object config {
     ConfigBuilder("spark.excludeOnFailure.killExcludedExecutors.decommission")
       .doc("Attempt decommission of excluded nodes instead of going directly to kill")
       .version("3.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -860,6 +993,7 @@ package object config {
     ConfigBuilder("spark.scheduler.executorTaskExcludeOnFailureTime")
       .internal()
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .withAlternative("spark.scheduler.executorTaskBlacklistTime")
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
@@ -867,6 +1001,7 @@ package object config {
   private[spark] val EXCLUDE_ON_FAILURE_FETCH_FAILURE_ENABLED =
     ConfigBuilder("spark.excludeOnFailure.application.fetchFailure.enabled")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .withAlternative("spark.blacklist.application.fetchFailure.enabled")
       .booleanConf
       .createWithDefault(false)
@@ -877,6 +1012,7 @@ package object config {
         " a FetchFailure. This is set default to false, which means, we only un-register the " +
         " outputs related to the exact executor(instead of the host) on a FetchFailure.")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -887,6 +1023,7 @@ package object config {
         ".eventqueue.queueName.capacity` first. If it's not configured, Spark will " +
         "use the default capacity specified by this config.")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .checkValue(_ > 0, "The capacity of listener bus event queue must be positive")
       .createWithDefault(10000)
@@ -895,6 +1032,7 @@ package object config {
     ConfigBuilder("spark.scheduler.listenerbus.metrics.maxListenerClassesTimed")
       .internal()
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(128)
 
@@ -905,6 +1043,7 @@ package object config {
         "discover the event types that cause performance bottlenecks. The time threshold is " +
         "controlled by spark.scheduler.listenerbus.logSlowEvent.threshold.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -914,17 +1053,20 @@ package object config {
       .doc("The time threshold of whether a event is considered to be taking too much time to " +
         s"process. Log the event if ${LISTENER_BUS_LOG_SLOW_EVENT_ENABLED.key} is true.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.NANOSECONDS)
       .createWithDefaultString("1s")
 
   // This property sets the root namespace for metrics reporting
   private[spark] val METRICS_NAMESPACE = ConfigBuilder("spark.metrics.namespace")
     .version("2.1.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .createOptional
 
   private[spark] val METRICS_CONF = ConfigBuilder("spark.metrics.conf")
     .version("0.8.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .createOptional
 
@@ -932,6 +1074,7 @@ package object config {
     ConfigBuilder("spark.metrics.executorMetricsSource.enabled")
       .doc("Whether to register the ExecutorMetrics source with the metrics system.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -939,16 +1082,25 @@ package object config {
     ConfigBuilder("spark.metrics.staticSources.enabled")
       .doc("Whether to register static sources with the metrics system.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
-  private[spark] val PYSPARK_DRIVER_PYTHON = ConfigBuilder("spark.pyspark.driver.python")
+  private[spark] val PYSPARK_DRIVER_PYTHON = ConfigBuilder(SparkLauncher.PYSPARK_DRIVER_PYTHON)
     .version("2.1.0")
+    .scope(EffectTiming.LAUNCHING_DRIVER)
     .stringConf
     .createOptional
 
-  private[spark] val PYSPARK_PYTHON = ConfigBuilder("spark.pyspark.python")
+  private[spark] val PYSPARK_PYTHON = ConfigBuilder(SparkLauncher.PYSPARK_PYTHON)
     .version("2.1.0")
+    .scope(EffectTiming.LAUNCHING_DRIVER)
+    .stringConf
+    .createOptional
+
+  private[spark] val R_SHELL = ConfigBuilder(SparkLauncher.SPARKR_R_SHELL)
+    .version("3.2.0")
+    .scope(EffectTiming.LAUNCHING_DRIVER)
     .stringConf
     .createOptional
 
@@ -956,22 +1108,26 @@ package object config {
   private[spark] val HISTORY_UI_MAX_APPS =
     ConfigBuilder("spark.history.ui.maxApplications")
       .version("2.0.1")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(Integer.MAX_VALUE)
 
   private[spark] val IO_ENCRYPTION_ENABLED = ConfigBuilder("spark.io.encryption.enabled")
     .version("2.1.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .booleanConf
     .createWithDefault(false)
 
   private[spark] val IO_ENCRYPTION_KEYGEN_ALGORITHM =
     ConfigBuilder("spark.io.encryption.keygen.algorithm")
       .version("2.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefault("HmacSHA1")
 
   private[spark] val IO_ENCRYPTION_KEY_SIZE_BITS = ConfigBuilder("spark.io.encryption.keySizeBits")
     .version("2.1.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .intConf
     .checkValues(Set(128, 192, 256))
     .createWithDefault(128)
@@ -980,18 +1136,21 @@ package object config {
     ConfigBuilder("spark.io.crypto.cipher.transformation")
       .internal()
       .version("2.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefaultString("AES/CTR/NoPadding")
 
   private[spark] val DRIVER_HOST_ADDRESS = ConfigBuilder("spark.driver.host")
     .doc("Address of driver endpoints.")
     .version("0.7.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .createWithDefault(Utils.localCanonicalHostName())
 
   private[spark] val DRIVER_PORT = ConfigBuilder("spark.driver.port")
     .doc("Port of driver endpoints.")
     .version("0.7.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .intConf
     .createWithDefault(0)
 
@@ -999,23 +1158,27 @@ package object config {
     .doc("If true, restarts the driver automatically if it fails with a non-zero exit status. " +
       "Only has effect in Spark standalone mode or Mesos cluster deploy mode.")
     .version("1.3.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .booleanConf
     .createWithDefault(false)
 
   private[spark] val DRIVER_BIND_ADDRESS = ConfigBuilder("spark.driver.bindAddress")
     .doc("Address where to bind network listen sockets on the driver.")
     .version("2.1.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .fallbackConf(DRIVER_HOST_ADDRESS)
 
   private[spark] val BLOCK_MANAGER_PORT = ConfigBuilder("spark.blockManager.port")
     .doc("Port to use for the block manager when a more specific setting is not provided.")
     .version("1.1.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .intConf
     .createWithDefault(0)
 
   private[spark] val DRIVER_BLOCK_MANAGER_PORT = ConfigBuilder("spark.driver.blockManager.port")
     .doc("Port to use for the block manager on the driver.")
     .version("2.1.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .fallbackConf(BLOCK_MANAGER_PORT)
 
   private[spark] val IGNORE_CORRUPT_FILES = ConfigBuilder("spark.files.ignoreCorruptFiles")
@@ -1023,6 +1186,7 @@ package object config {
       "encountering corrupted or non-existing files and contents that have been read will still " +
       "be returned.")
     .version("2.1.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .booleanConf
     .createWithDefault(false)
 
@@ -1030,17 +1194,20 @@ package object config {
     .doc("Whether to ignore missing files. If true, the Spark jobs will continue to run when " +
       "encountering missing files and the contents that have been read will still be returned.")
     .version("2.4.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .booleanConf
     .createWithDefault(false)
 
   private[spark] val APP_CALLER_CONTEXT = ConfigBuilder("spark.log.callerContext")
     .version("2.2.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .createOptional
 
   private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .version("2.1.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(128 * 1024 * 1024)
 
@@ -1050,6 +1217,7 @@ package object config {
       " over estimate, then the partitions with small files will be faster than partitions with" +
       " bigger files.")
     .version("2.1.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .bytesConf(ByteUnit.BYTE)
     .createWithDefault(4 * 1024 * 1024)
 
@@ -1058,6 +1226,7 @@ package object config {
       .internal()
       .doc("When true, HadoopRDD/NewHadoopRDD will not create partitions for empty input splits.")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -1068,6 +1237,7 @@ package object config {
         "a property key or value, the value is redacted from the environment UI and various logs " +
         "like YARN and event logs.")
       .version("2.1.2")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .regexConf
       .createWithDefault("(?i)secret|password|token|access[.]key".r)
 
@@ -1077,29 +1247,34 @@ package object config {
         "information. When this regex matches a string part, that string part is replaced by a " +
         "dummy value. This is currently used to redact the output of SQL explain commands.")
       .version("2.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .regexConf
       .createOptional
 
   private[spark] val AUTH_SECRET =
     ConfigBuilder("spark.authenticate.secret")
       .version("1.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createOptional
 
   private[spark] val AUTH_SECRET_BIT_LENGTH =
     ConfigBuilder("spark.authenticate.secretBitLength")
       .version("1.6.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(256)
 
   private[spark] val NETWORK_AUTH_ENABLED =
     ConfigBuilder("spark.authenticate")
       .version("1.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val SASL_ENCRYPTION_ENABLED =
     ConfigBuilder("spark.authenticate.enableSaslEncryption")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .version("1.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -1111,6 +1286,7 @@ package object config {
         "either entity (see below). File-based secret keys are only allowed when using " +
         "Kubernetes.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createOptional
 
@@ -1124,6 +1300,7 @@ package object config {
         "used for both the driver and the executors when running in cluster mode. File-based " +
         "secret keys are only allowed when using Kubernetes.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .fallbackConf(AUTH_SECRET_FILE)
 
   private[spark] val AUTH_SECRET_FILE_EXECUTOR =
@@ -1136,6 +1313,7 @@ package object config {
         "used for both the driver and the executors when running in cluster mode. File-based " +
         "secret keys are only allowed when using Kubernetes.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .fallbackConf(AUTH_SECRET_FILE)
 
   private[spark] val BUFFER_WRITE_CHUNK_SIZE =
@@ -1143,6 +1321,7 @@ package object config {
       .internal()
       .doc("The chunk size in bytes during writing out the bytes of ChunkedByteBuffer.")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
         "The chunk size during writing out the bytes of ChunkedByteBuffer should" +
@@ -1154,6 +1333,7 @@ package object config {
       .doc("Whether to compress RDD checkpoints. Generally a good idea. Compression will use " +
         "spark.io.compression.codec.")
       .version("2.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -1165,6 +1345,7 @@ package object config {
         "time. The drawback is that the cached locations can be possibly outdated and " +
         "lose data locality. If this config is not specified, it will not cache.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MINUTES)
       .checkValue(_ > 0, "The expire time for caching preferred locations cannot be non-positive.")
       .createOptional
@@ -1175,6 +1356,7 @@ package object config {
         "HighlyCompressedMapStatus is accurately recorded. This helps to prevent OOM " +
         "by avoiding underestimating shuffle block size when fetch shuffle blocks.")
       .version("2.2.1")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(100 * 1024 * 1024)
 
@@ -1182,6 +1364,7 @@ package object config {
     ConfigBuilder("spark.shuffle.registration.timeout")
       .doc("Timeout in milliseconds for registration to the external shuffle service.")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(5000)
 
@@ -1190,6 +1373,7 @@ package object config {
       .doc("When we fail to register to the external shuffle service, we will " +
         "retry for maxAttempts times.")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(3)
 
@@ -1210,6 +1394,7 @@ package object config {
         "Node Manager. This is especially useful to reduce the load on the Node Manager when " +
         "external shuffle is enabled. You can mitigate the issue by setting it to a lower value.")
       .version("2.2.1")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .checkValue(_ > 0, "The max no. of blocks in flight cannot be non-positive.")
       .createWithDefault(Int.MaxValue)
@@ -1222,6 +1407,7 @@ package object config {
         "For users who enabled external shuffle service, this feature can only work when " +
         "external shuffle service is at least 2.3.0.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       // fetch-to-mem is guaranteed to fail if the message is bigger than 2 GB, so we might
       // as well use fetch-to-disk in that case.  The message includes some metadata in addition
@@ -1238,6 +1424,7 @@ package object config {
         "tracking the block statuses can use a lot of memory and its not used anywhere within " +
         "spark.")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -1245,6 +1432,7 @@ package object config {
     ConfigBuilder("spark.shuffle.sort.io.plugin.class")
       .doc("Name of the class to use for shuffle IO.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefault(classOf[LocalDiskShuffleDataIO].getName)
 
@@ -1254,6 +1442,7 @@ package object config {
         "otherwise specified. These buffers reduce the number of disk seeks and system calls " +
         "made in creating intermediate shuffle files.")
       .version("1.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
         s"The file buffer size must be positive and less than or equal to" +
@@ -1265,6 +1454,7 @@ package object config {
       .doc("The file system for this buffer size after each partition " +
         "is written in unsafe shuffle writer. In KiB unless otherwise specified.")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.KiB)
       .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH / 1024,
         s"The buffer size must be positive and less than or equal to" +
@@ -1275,6 +1465,7 @@ package object config {
     ConfigBuilder("spark.shuffle.spill.diskWriteBufferSize")
       .doc("The buffer size, in bytes, to use when writing the sorted records to an on-disk file.")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(v => v > 12 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
         s"The buffer size must be greater than 12 and less than or equal to " +
@@ -1287,6 +1478,7 @@ package object config {
       .doc("The memory check period is used to determine how often we should check whether "
         + "there is a need to request more memory when we try to unroll the given block in memory.")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .longConf
       .createWithDefault(16)
 
@@ -1295,6 +1487,7 @@ package object config {
       .internal()
       .doc("Memory to request as a multiple of the size that used to unroll the block.")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .doubleConf
       .createWithDefault(1.5)
 
@@ -1306,6 +1499,7 @@ package object config {
         "https and ftp, or jars required to be in the local YARN client's classpath. Wildcard " +
         "'*' is denoted to download resources for all the schemes.")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .toSequence
       .createWithDefault(Nil)
@@ -1313,6 +1507,7 @@ package object config {
   private[spark] val EXTRA_LISTENERS = ConfigBuilder("spark.extraListeners")
     .doc("Class names of listeners to add to SparkContext during initialization.")
     .version("1.3.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .toSequence
     .createOptional
@@ -1325,6 +1520,7 @@ package object config {
         "until we reach some limitations, like the max page size limitation for the pointer " +
         "array in the sorter.")
       .version("1.6.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(Integer.MAX_VALUE)
 
@@ -1335,6 +1531,7 @@ package object config {
         "or equal to this threshold. Note that the actual parallelism is calculated by number of " +
         "mappers * shuffle partitions / this threshold + 1, so this threshold should be positive.")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .checkValue(v => v > 0, "The threshold should be positive.")
       .createWithDefault(10000000)
@@ -1342,6 +1539,7 @@ package object config {
   private[spark] val MAX_RESULT_SIZE = ConfigBuilder("spark.driver.maxResultSize")
     .doc("Size limit for results.")
     .version("1.2.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("1g")
 
@@ -1349,6 +1547,7 @@ package object config {
     ConfigBuilder("spark.security.credentials.renewalRatio")
       .doc("Ratio of the credential's expiration time when Spark should fetch new credentials.")
       .version("2.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .doubleConf
       .createWithDefault(0.75d)
 
@@ -1356,6 +1555,7 @@ package object config {
     ConfigBuilder("spark.security.credentials.retryWait")
       .doc("How long to wait before retrying to fetch new credentials after a failure.")
       .version("2.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("1h")
 
@@ -1363,6 +1563,7 @@ package object config {
     ConfigBuilder("spark.shuffle.sort.initialBufferSize")
       .internal()
       .version("2.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(v => v > 0 && v <= Int.MaxValue,
         s"The buffer size must be greater than 0 and less than or equal to ${Int.MaxValue}.")
@@ -1392,6 +1593,7 @@ package object config {
       .doc("Whether to compress shuffle output. Compression will use " +
         "spark.io.compression.codec.")
       .version("0.6.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -1400,6 +1602,7 @@ package object config {
       .doc("Whether to compress data spilled during shuffles. Compression will use " +
         "spark.io.compression.codec.")
       .version("0.9.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -1410,6 +1613,7 @@ package object config {
         "By default, Spark provides four codecs: lz4, lzf, snappy, and zstd. You can also " +
         "use fully qualified class names to specify the codec.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefault("zstd")
 
@@ -1419,6 +1623,7 @@ package object config {
       .doc("Initial threshold for the size of a collection before we start tracking its " +
         "memory usage.")
       .version("1.1.1")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(5 * 1024 * 1024)
 
@@ -1427,6 +1632,7 @@ package object config {
       .internal()
       .doc("Size of object batches when reading/writing from serializers.")
       .version("0.9.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .longConf
       .createWithDefault(10000)
 
@@ -1435,12 +1641,14 @@ package object config {
       .doc("In the sort-based shuffle manager, avoid merge-sorting data if there is no " +
         "map-side aggregation and there are at most this many reduce partitions")
       .version("1.1.1")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(200)
 
   private[spark] val SHUFFLE_MANAGER =
     ConfigBuilder("spark.shuffle.manager")
       .version("1.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefault("sort")
 
@@ -1448,6 +1656,7 @@ package object config {
     ConfigBuilder("spark.shuffle.reduceLocality.enabled")
       .doc("Whether to compute locality preferences for reduce tasks")
       .version("1.5.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -1455,12 +1664,14 @@ package object config {
     ConfigBuilder("spark.shuffle.mapOutput.minSizeForBroadcast")
       .doc("The size at which we use Broadcast to send the map output statuses to the executors.")
       .version("2.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("512k")
 
   private[spark] val SHUFFLE_MAPOUTPUT_DISPATCHER_NUM_THREADS =
     ConfigBuilder("spark.shuffle.mapOutput.dispatcher.numThreads")
       .version("2.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(8)
 
@@ -1468,6 +1679,7 @@ package object config {
     ConfigBuilder("spark.shuffle.detectCorrupt")
       .doc("Whether to detect any corruption in fetched blocks.")
       .version("2.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -1478,6 +1690,7 @@ package object config {
         "the task to be retried once and if it fails again with same exception, then " +
         "FetchFailedException will be thrown to retry previous stage")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -1485,6 +1698,7 @@ package object config {
     ConfigBuilder("spark.shuffle.sync")
       .doc("Whether to force outstanding writes to disk.")
       .version("0.8.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -1492,6 +1706,7 @@ package object config {
     ConfigBuilder("spark.shuffle.unsafe.fastMergeEnabled")
       .doc("Whether to perform a fast spill merge.")
       .version("1.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -1500,6 +1715,7 @@ package object config {
       .doc("Whether to use radix sort for sorting in-memory partition ids. Radix sort is much " +
         "faster, but requires additional memory to be reserved memory as pointers are added.")
       .version("2.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -1508,6 +1724,7 @@ package object config {
       .internal()
       .doc("Number of partitions to determine if MapStatus should use HighlyCompressedMapStatus")
       .version("2.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .checkValue(v => v > 0, "The value should be a positive integer.")
       .createWithDefault(2000)
@@ -1518,6 +1735,7 @@ package object config {
         "It is only enabled while we need the compatibility in the scenario of new Spark " +
         "version job fetching shuffle blocks from old version external shuffle service.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -1527,6 +1745,7 @@ package object config {
         "blocks requested from those block managers which are running on the same host are " +
         "read from the disk directly instead of being fetched as remote blocks over the network.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -1538,6 +1757,7 @@ package object config {
         s"persisted RDD blocks or shuffle blocks " +
         s"(when `${SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED.key}` is set) from the same host.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(1000)
 
@@ -1546,6 +1766,7 @@ package object config {
       .internal()
       .doc("For testing only, controls the size of chunks when memory mapping a file")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
 
@@ -1556,6 +1777,7 @@ package object config {
         "configured time, throw a SparkException to fail all the tasks. The default value is set " +
         "to 31536000(3600 * 24 * 365) so the barrier() call shall wait for one year.")
       .version("2.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v > 0, "The value should be a positive time value.")
       .createWithDefaultString("365d")
@@ -1566,6 +1788,7 @@ package object config {
         "before aborting a TaskSet which is unschedulable because all executors are " +
         "excluded due to failures.")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .withAlternative("spark.scheduler.blacklist.unschedulableTaskSetTimeout")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(v => v >= 0, "The value should be a non negative time value.")
@@ -1582,6 +1805,7 @@ package object config {
         "config only applies to jobs that contain one or more barrier stages, we won't perform " +
         "the check on non-barrier jobs.")
       .version("2.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("15s")
 
@@ -1596,6 +1820,7 @@ package object config {
         "applies to jobs that contain one or more barrier stages, we won't perform the check on " +
         "non-barrier jobs.")
       .version("2.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .checkValue(v => v > 0, "The max failures should be a positive value.")
       .createWithDefault(40)
@@ -1604,6 +1829,7 @@ package object config {
     ConfigBuilder("spark.unsafe.exceptionOnMemoryLeak")
       .internal()
       .version("1.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -1611,6 +1837,7 @@ package object config {
     ConfigBuilder("spark.unsafe.sorter.spill.read.ahead.enabled")
       .internal()
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -1618,6 +1845,7 @@ package object config {
     ConfigBuilder("spark.unsafe.sorter.spill.reader.buffer.size")
       .internal()
       .version("2.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(v => 1024 * 1024 <= v && v <= MAX_BUFFER_SIZE_BYTES,
         s"The value must be in allowed range [1,048,576, ${MAX_BUFFER_SIZE_BYTES}].")
@@ -1631,6 +1859,7 @@ package object config {
       .doc("Comma-separated list of class names implementing " +
         "org.apache.spark.api.plugin.SparkPlugin to load into the application.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .toSequence
       .createWithDefault(Nil)
@@ -1638,75 +1867,88 @@ package object config {
   private[spark] val CLEANER_PERIODIC_GC_INTERVAL =
     ConfigBuilder("spark.cleaner.periodicGC.interval")
       .version("1.6.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("30min")
 
   private[spark] val CLEANER_REFERENCE_TRACKING =
     ConfigBuilder("spark.cleaner.referenceTracking")
       .version("1.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
   private[spark] val CLEANER_REFERENCE_TRACKING_BLOCKING =
     ConfigBuilder("spark.cleaner.referenceTracking.blocking")
       .version("1.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
   private[spark] val CLEANER_REFERENCE_TRACKING_BLOCKING_SHUFFLE =
     ConfigBuilder("spark.cleaner.referenceTracking.blocking.shuffle")
       .version("1.1.1")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val CLEANER_REFERENCE_TRACKING_CLEAN_CHECKPOINTS =
     ConfigBuilder("spark.cleaner.referenceTracking.cleanCheckpoints")
       .version("1.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val EXECUTOR_LOGS_ROLLING_STRATEGY =
     ConfigBuilder("spark.executor.logs.rolling.strategy")
       .version("1.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefault("")
 
   private[spark] val EXECUTOR_LOGS_ROLLING_TIME_INTERVAL =
     ConfigBuilder("spark.executor.logs.rolling.time.interval")
       .version("1.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefault("daily")
 
   private[spark] val EXECUTOR_LOGS_ROLLING_MAX_SIZE =
     ConfigBuilder("spark.executor.logs.rolling.maxSize")
       .version("1.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefault((1024 * 1024).toString)
 
   private[spark] val EXECUTOR_LOGS_ROLLING_MAX_RETAINED_FILES =
     ConfigBuilder("spark.executor.logs.rolling.maxRetainedFiles")
       .version("1.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(-1)
 
   private[spark] val EXECUTOR_LOGS_ROLLING_ENABLE_COMPRESSION =
     ConfigBuilder("spark.executor.logs.rolling.enableCompression")
       .version("2.0.2")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val MASTER_REST_SERVER_ENABLED = ConfigBuilder("spark.master.rest.enabled")
     .version("1.3.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .booleanConf
     .createWithDefault(false)
 
   private[spark] val MASTER_REST_SERVER_PORT = ConfigBuilder("spark.master.rest.port")
     .version("1.3.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .intConf
     .createWithDefault(6066)
 
   private[spark] val MASTER_UI_PORT = ConfigBuilder("spark.master.ui.port")
     .version("1.1.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .intConf
     .createWithDefault(8080)
 
@@ -1716,6 +1958,7 @@ package object config {
         "Snappy compression codec is used. Lowering this block size " +
         "will also lower shuffle memory usage when Snappy is used")
       .version("1.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("32k")
 
@@ -1725,6 +1968,7 @@ package object config {
         "codec is used. Lowering this block size will also lower shuffle memory " +
         "usage when LZ4 is used.")
       .version("1.4.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("32k")
 
@@ -1735,6 +1979,7 @@ package object config {
         "lz4, lzf, snappy, and zstd. You can also use fully qualified class names to specify " +
         "the codec")
       .version("0.8.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefaultString("lz4")
 
@@ -1745,6 +1990,7 @@ package object config {
         "memory usage when Zstd is used, but it might increase the compression " +
         "cost because of excessive JNI call overhead")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("32k")
 
@@ -1752,6 +1998,7 @@ package object config {
     ConfigBuilder("spark.io.compression.zstd.bufferPool.enabled")
       .doc("If true, enable buffer pool of ZSTD JNI library.")
       .version("3.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(true)
 
@@ -1760,6 +2007,7 @@ package object config {
       .doc("Compression level for Zstd compression codec. Increasing the compression " +
         "level will result in better compression at the expense of more CPU and memory")
       .version("2.3.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(1)
 
@@ -1769,6 +2017,7 @@ package object config {
       .doc("If the size in bytes of a file loaded by Spark exceeds this threshold, " +
         "a warning is logged with the possible reasons.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefault(1024 * 1024 * 1024)
 
@@ -1778,26 +2027,31 @@ package object config {
         "lz4, lzf, snappy, and zstd. You can also use fully qualified class names to specify " +
         "the codec.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefault("zstd")
 
   private[spark] val BUFFER_SIZE =
     ConfigBuilder("spark.buffer.size")
       .version("0.5.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .checkValue(_ >= 0, "The buffer size must not be negative")
       .createWithDefault(65536)
 
   private[spark] val LOCALITY_WAIT_PROCESS = ConfigBuilder("spark.locality.wait.process")
     .version("0.8.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .fallbackConf(LOCALITY_WAIT)
 
   private[spark] val LOCALITY_WAIT_NODE = ConfigBuilder("spark.locality.wait.node")
     .version("0.8.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .fallbackConf(LOCALITY_WAIT)
 
   private[spark] val LOCALITY_WAIT_RACK = ConfigBuilder("spark.locality.wait.rack")
     .version("0.8.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .fallbackConf(LOCALITY_WAIT)
 
   private[spark] val REDUCER_MAX_SIZE_IN_FLIGHT = ConfigBuilder("spark.reducer.maxSizeInFlight")
@@ -1806,6 +2060,7 @@ package object config {
       "buffer to receive it, this represents a fixed memory overhead per reduce task, " +
       "so keep it small unless you have a large amount of memory")
     .version("1.4.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .bytesConf(ByteUnit.MiB)
     .createWithDefaultString("48m")
 
@@ -1816,6 +2071,7 @@ package object config {
       "causing the workers to fail under load. By allowing it to limit the number of " +
       "fetch requests, this scenario can be mitigated")
     .version("2.0.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .intConf
     .createWithDefault(Int.MaxValue)
 
@@ -1823,6 +2079,7 @@ package object config {
     .doc("Whether to compress broadcast variables before sending them. " +
       "Generally a good idea. Compression will use spark.io.compression.codec")
     .version("0.6.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .booleanConf.createWithDefault(true)
 
   private[spark] val BROADCAST_BLOCKSIZE = ConfigBuilder("spark.broadcast.blockSize")
@@ -1831,6 +2088,7 @@ package object config {
       "parallelism during broadcast (makes it slower); however, " +
       "if it is too small, BlockManager might take a performance hit")
     .version("0.5.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .bytesConf(ByteUnit.KiB)
     .createWithDefaultString("4m")
 
@@ -1841,6 +2099,7 @@ package object config {
       "more data. It's possible to disable it if the network has other " +
       "mechanisms to guarantee data won't be corrupted during broadcast")
     .version("2.1.1")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .booleanConf
     .createWithDefault(true)
 
@@ -1849,6 +2108,7 @@ package object config {
       .doc("The threshold at which user-defined functions (UDFs) and Python RDD commands " +
         "are compressed by broadcast in bytes unless otherwise specified")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .checkValue(v => v >= 0, "The threshold should be non-negative.")
       .createWithDefault(1L * 1024 * 1024)
@@ -1860,45 +2120,53 @@ package object config {
       "space at the cost of some extra CPU time. " +
       "Compression will use spark.io.compression.codec")
     .version("0.6.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .booleanConf
     .createWithDefault(false)
 
   private[spark] val RDD_PARALLEL_LISTING_THRESHOLD =
     ConfigBuilder("spark.rdd.parallelListingThreshold")
       .version("2.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(10)
 
   private[spark] val RDD_LIMIT_SCALE_UP_FACTOR =
     ConfigBuilder("spark.rdd.limit.scaleUpFactor")
       .version("2.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(4)
 
   private[spark] val SERIALIZER = ConfigBuilder("spark.serializer")
     .version("0.5.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .createWithDefault("org.apache.spark.serializer.JavaSerializer")
 
   private[spark] val SERIALIZER_OBJECT_STREAM_RESET =
     ConfigBuilder("spark.serializer.objectStreamReset")
       .version("1.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(100)
 
   private[spark] val SERIALIZER_EXTRA_DEBUG_INFO = ConfigBuilder("spark.serializer.extraDebugInfo")
     .version("1.3.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .booleanConf
     .createWithDefault(true)
 
   private[spark] val JARS = ConfigBuilder("spark.jars")
     .version("0.9.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   private[spark] val FILES = ConfigBuilder("spark.files")
     .version("1.0.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .toSequence
     .createWithDefault(Nil)
@@ -1909,17 +2177,20 @@ package object config {
       "executor. .jar, .tar.gz, .tgz and .zip are supported. You can specify the directory " +
       "name to unpack via adding '#' after the file name to unpack, for example, " +
       "'file.zip#directory'. This configuration is experimental.")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .toSequence
     .createWithDefault(Nil)
 
   private[spark] val SUBMIT_DEPLOY_MODE = ConfigBuilder("spark.submit.deployMode")
     .version("1.5.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .createWithDefault("client")
 
   private[spark] val SUBMIT_PYTHON_FILES = ConfigBuilder("spark.submit.pyFiles")
     .version("1.0.1")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .toSequence
     .createWithDefault(Nil)
@@ -1927,24 +2198,28 @@ package object config {
   private[spark] val SCHEDULER_ALLOCATION_FILE =
     ConfigBuilder("spark.scheduler.allocation.file")
       .version("0.8.1")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createOptional
 
   private[spark] val SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO =
     ConfigBuilder("spark.scheduler.minRegisteredResourcesRatio")
       .version("1.1.1")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .doubleConf
       .createOptional
 
   private[spark] val SCHEDULER_MAX_REGISTERED_RESOURCE_WAITING_TIME =
     ConfigBuilder("spark.scheduler.maxRegisteredResourcesWaitingTime")
       .version("1.1.1")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefaultString("30s")
 
   private[spark] val SCHEDULER_MODE =
     ConfigBuilder("spark.scheduler.mode")
       .version("0.8.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .createWithDefault(SchedulingMode.FIFO.toString)
@@ -1952,30 +2227,35 @@ package object config {
   private[spark] val SCHEDULER_REVIVE_INTERVAL =
     ConfigBuilder("spark.scheduler.revive.interval")
       .version("0.8.1")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
   private[spark] val SPECULATION_ENABLED =
     ConfigBuilder("spark.speculation")
       .version("0.6.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
   private[spark] val SPECULATION_INTERVAL =
     ConfigBuilder("spark.speculation.interval")
       .version("0.6.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
   private[spark] val SPECULATION_MULTIPLIER =
     ConfigBuilder("spark.speculation.multiplier")
       .version("0.6.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .doubleConf
       .createWithDefault(1.5)
 
   private[spark] val SPECULATION_QUANTILE =
     ConfigBuilder("spark.speculation.quantile")
       .version("0.6.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .doubleConf
       .createWithDefault(0.75)
 
@@ -1984,6 +2264,7 @@ package object config {
       .doc("Minimum amount of time a task runs before being considered for speculation. " +
         "This can be used to avoid launching speculative copies of tasks that are very short.")
       .version("3.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(100)
 
@@ -1998,6 +2279,7 @@ package object config {
         "even though the threshold hasn't been reached. The number of slots is computed based " +
         "on the conf values of spark.executor.cores and spark.task.cpus minimum 1.")
       .version("3.0.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.MILLISECONDS)
       .createOptional
 
@@ -2011,6 +2293,7 @@ package object config {
         s"With decommission enabled, Spark will also decommission an executor instead of " +
         s"killing when ${DYN_ALLOCATION_ENABLED.key} enabled.")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -2023,6 +2306,7 @@ package object config {
         "in aws spot nodes, 1/2 hrs in spot block nodes etc. This config is currently " +
         "used to decide what tasks running on decommission executors to speculate.")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.SECONDS)
       .createOptional
 
@@ -2032,6 +2316,7 @@ package object config {
         " this should be set to a high value in most situations as low values will prevent " +
         " block migrations from having enough time to complete.")
       .version("3.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .timeConf(TimeUnit.SECONDS)
       .createOptional
 
@@ -2039,18 +2324,21 @@ package object config {
     ConfigBuilder("spark.executor.decommission.signal")
       .doc("The signal that used to trigger the executor to start decommission.")
       .version("3.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .stringConf
       .createWithDefaultString("PWR")
 
   private[spark] val STAGING_DIR = ConfigBuilder("spark.yarn.stagingDir")
     .doc("Staging directory used while submitting applications.")
     .version("2.0.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .stringConf
     .createOptional
 
   private[spark] val BUFFER_PAGESIZE = ConfigBuilder("spark.buffer.pageSize")
     .doc("The amount of memory used per page in bytes")
     .version("1.5.0")
+    .scope(EffectTiming.DEPLOYING_APPLICATION)
     .bytesConf(ByteUnit.BYTE)
     .createOptional
 
@@ -2062,6 +2350,7 @@ package object config {
         "default of false results in Spark throwing an exception if multiple different " +
         "ResourceProfiles are found in RDDs going into the same stage.")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -2071,6 +2360,7 @@ package object config {
         "application completes. If set to true, the client process will stay alive polling " +
         "the driver's status. Otherwise, the client process will exit after submission.")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -2078,6 +2368,7 @@ package object config {
     ConfigBuilder("spark.executor.allowSparkContext")
       .doc("If set to true, SparkContext can be created in executors.")
       .version("3.0.1")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -2088,6 +2379,7 @@ package object config {
         "error, 1 means checking only the exception but not the cause, and so on.")
       .internal()
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .checkValue(_ >= 0, "needs to be a non-negative value")
       .createWithDefault(5)
@@ -2100,6 +2392,7 @@ package object config {
         "org.apache.spark.network.shuffle.MergedShuffleFileManager implementation for push-based " +
         "shuffle to be enabled")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .booleanConf
       .createWithDefault(false)
 
@@ -2131,6 +2424,7 @@ package object config {
         "which are responsible for handling pushed blocks and merging them and serving " +
         "merged blocks for later shuffle fetch.")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(500)
 
@@ -2142,6 +2436,7 @@ package object config {
         "default value 0.05 requires at least 5 unique merger locations to enable push based " +
         "shuffle. Merger locations are currently defined as external shuffle services.")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .doubleConf
       .createWithDefault(0.05)
 
@@ -2157,6 +2452,7 @@ package object config {
         s"${SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO.key} set to 0.05, we would need " +
         "at least 50 mergers to enable push based shuffle for that stage.")
       .version("3.1.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createWithDefault(5)
 
@@ -2166,6 +2462,7 @@ package object config {
         "in creating connections and pushing blocks to remote shuffle services. By default, the " +
         "threadpool size is equal to the number of spark executor cores.")
       .version("3.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .intConf
       .createOptional
 
@@ -2175,6 +2472,7 @@ package object config {
        "larger than this threshold are not pushed to be merged remotely. These shuffle blocks " +
        "will be fetched by the executors in the original manner.")
       .version("3.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("1m")
 
@@ -2182,6 +2480,7 @@ package object config {
     ConfigBuilder("spark.shuffle.push.maxBlockBatchSize")
       .doc("The max size of a batch of shuffle blocks to be grouped into a single push request.")
       .version("3.2.0")
+      .scope(EffectTiming.DEPLOYING_APPLICATION)
       .bytesConf(ByteUnit.BYTE)
       // Default is 3m because it is greater than 2m which is the default value for
       // TransportConf#memoryMapBytes. If this defaults to 2m as well it is very likely that each
