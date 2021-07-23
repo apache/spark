@@ -65,14 +65,13 @@ private[k8s] class PodStatusWatcherImpl(conf: KubernetesDriverConf)
 
   override def eventReceived(action: Action, pod: Pod): Unit = {
     this.pod = Option(pod)
+    notifyStatusChanged()
     action match {
       case Action.DELETED | Action.ERROR =>
-        notifyStatusChanged()
         closeWatch()
 
       case _ =>
         logLongStatus()
-        notifyStatusChanged()
         if (hasCompleted) {
           closeWatch()
         }
@@ -102,7 +101,7 @@ private[k8s] class PodStatusWatcherImpl(conf: KubernetesDriverConf)
         case "Running" => reportStatusChanged(SparkAppHandle.State.RUNNING)
         case "Succeeded" => reportStatusChanged(SparkAppHandle.State.FINISHED)
         case "Failed" => reportStatusChanged(SparkAppHandle.State.FAILED)
-        case "Unknown" => reportStatusChanged(SparkAppHandle.State.LOST)
+        case "Unknown" => reportStatusChanged(SparkAppHandle.State.UNKNOWN)
         case _ => reportStatusChanged(SparkAppHandle.State.UNKNOWN)
       }
     }
