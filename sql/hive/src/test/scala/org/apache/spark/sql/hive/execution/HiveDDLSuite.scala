@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
@@ -2391,6 +2390,90 @@ class HiveDDLSuite
           }
         }
       }
+    }
+  }
+
+  test("SPARK-36241: support creating tables with void datatype") {
+    // CTAS with void type
+    withTable("t1", "t2", "t3") {
+      assertAnalysisError(
+        "CREATE TABLE t1 USING PARQUET AS SELECT NULL AS null_col",
+        "Parquet data source does not support void data type")
+      sql("CREATE TABLE t2 AS SELECT NULL AS null_col")
+      checkAnswer(sql("SELECT * FROM t2"), Row(null))
+//      sql("CREATE TABLE t3 STORED AS PARQUET AS SELECT NULL AS null_col")
+//      checkAnswer(sql("SELECT * FROM t3"), Row(null))
+    }
+
+    // Replace table AS SELECT with void type
+//    withTable("t") {
+//      sql("CREATE OR REPLACE TABLE t AS SELECT NULL as null_col")
+//      checkAnswer(sql("SELECT * FROM t"), Row(null))
+//    }
+
+    // Create table with void type
+    withTable("t1", "t2", "t3", "t4") {
+      assertAnalysisError(
+        "CREATE TABLE t1 (v VOID) USING PARQUET",
+        "Parquet data source does not support void data type")
+      sql("CREATE TABLE t2 (v VOID) USING hive")
+      checkAnswer(sql("SELECT * FROM t2"), Seq.empty)
+      sql("CREATE TABLE t3 (v VOID)")
+      checkAnswer(sql("SELECT * FROM t3"), Seq.empty)
+//      sql("CREATE TABLE t4 (v VOID) STORED AS PARQUET")
+//      checkAnswer(sql("SELECT * FROM t4"), Seq.empty)
+    }
+
+    // Replace table with void type
+//    withTable("t") {
+//      sql("CREATE OR REPLACE TABLE t (v VOID)")
+//      checkAnswer(sql("SELECT * FROM t"), Seq.empty)
+//    }
+
+    // Make sure spark.catalog.createTable with void type will fail
+    val schema1 = new StructType().add("c", NullType)
+//    checkHiveTableNullType(schema1)
+    checkDSTableNullType(schema1)
+
+    val schema2 = new StructType()
+      .add("c", StructType(Seq(StructField.apply("c1", NullType))))
+//    checkHiveTableNullType(schema2)
+    checkDSTableNullType(schema2)
+
+    val schema3 = new StructType().add("c", ArrayType(NullType))
+//    checkHiveTableNullType(schema3)
+    checkDSTableNullType(schema3)
+
+    val schema4 = new StructType()
+      .add("c", MapType(StringType, NullType))
+//    checkHiveTableNullType(schema4)
+    checkDSTableNullType(schema4)
+
+    val schema5 = new StructType()
+      .add("c", MapType(NullType, StringType))
+//    checkHiveTableNullType(schema5)
+    checkDSTableNullType(schema5)
+  }
+
+  private def checkHiveTableNullType(schema: StructType): Unit = {
+    withTable("t") {
+      spark.catalog.createTable(
+        tableName = "t",
+        source = "hive",
+        schema = schema,
+        options = Map("fileFormat" -> "parquet"))
+      checkAnswer(sql("SELECT * FROM t"), Seq.empty)
+    }
+  }
+
+  private def checkDSTableNullType(schema: StructType): Unit = {
+    withTable("t") {
+      spark.catalog.createTable(
+        tableName = "t",
+        source = "json",
+        schema = schema,
+        options = Map.empty[String, String])
+      checkAnswer(sql("SELECT * FROM t"), Seq.empty)
     }
   }
 
