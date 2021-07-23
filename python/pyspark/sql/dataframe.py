@@ -301,7 +301,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
-        parameters
+        Parameters
         ----------
         extended : bool, optional
             default ``False``. If ``False``, prints only the physical plan.
@@ -1840,25 +1840,27 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         A user can retrieve the metrics by accessing `Observation.get`.
 
-        Example:
-            >>> from pyspark.sql.functions import col, count, lit, max
-            >>> from pyspark.sql.observation import Observation
-            >>> observation = Observation("my_metrics")
-            >>> observed_df = df.observe(observation, count(lit(1)), max(col("age")))
-            >>> observed_df.count()
-            >>> metrics = observation.get
-
-        parameters
+        Parameters
         ----------
         observation : :class:`Observation`
             an :class:`Observation` instance to obtain the metric.
         exprs : list of :class:`Column`
             column expressions (:class:`Column`).
 
-        returns
+        Returns
         -------
         :class:`DataFrame`
             the observed :class:`DataFrame`.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import col, count, lit, max
+        >>> from pyspark.sql.observation import Observation
+        >>> observation = Observation("my_metrics")
+        >>> observed_df = df.observe(observation, count(lit(1)), max(col("age")))
+        >>> observed_df.count()
+        >>> observation.get
+        Row(count(1)=2, max(age)=5)
         """
         from pyspark.sql.observation import Observation
         assert isinstance(observation, Observation), "observation should be Observation"

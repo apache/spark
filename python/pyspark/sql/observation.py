@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Optional
 from uuid import uuid4
 
 from pyspark.sql import column, Column, DataFrame, Row
@@ -44,24 +43,26 @@ class Observation:
     contain references to the input Dataset's columns must always be wrapped in an aggregate
     function.
 
-    Example:
-        >>> from pyspark.sql.functions import col, count, lit, max
-        >>> from pyspark.sql.observation import Observation
-        >>> observation = Observation("my_metrics")
-        >>> observed_df = df.observe(observation, count(lit(1)), max(col("age")))
-        >>> observed_df.count()
-        >>> metrics = observation.get
-
     An Observation instance collects the metrics while the first action is executed. Subsequent
     actions do not modify the metrics returned by `Observation.get`. Retrieval of the metric via
     `Observation.get` blocks until the first action has finished and metrics become available.
 
     This class does not support streaming datasets.
+
+    Examples
+    --------
+    >>> from pyspark.sql.functions import col, count, lit, max
+    >>> from pyspark.sql.observation import Observation
+    >>> observation = Observation("my_metrics")
+    >>> observed_df = df.observe(observation, count(lit(1)), max(col("age")))
+    >>> observed_df.count()
+    >>> observation.get
+    Row(count(1)=2, max(age)=5)
     """
-    def __init__(self, name: Optional[str] = None):
+    def __init__(self, name=None):
         """Constructs a named or unnamed Observation instance.
 
-        parameters
+        Parameters
         ----------
         name : str, optional
             default is a random UUID string. This is the name of the Observation and the metric.
@@ -71,17 +72,17 @@ class Observation:
         self._jvm = None
         self._jo = None
 
-    def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
+    def _on(self, df, *exprs):
         """Attaches this observation to the given :class:`DataFrame` to observe aggregations.
 
-        parameters
+        Parameters
         ----------
         df : :class:`DataFrame`
             the :class:`DataFrame` to be observed
         exprs : list of :class:`Column`
             column expressions (:class:`Column`).
 
-        returns
+        Returns
         -------
         :class:`DataFrame`
             the observed :class:`DataFrame`.
@@ -98,13 +99,13 @@ class Observation:
         return DataFrame(observed_df, df.sql_ctx)
 
     @property
-    def get(self) -> Row:
+    def get(self):
         """Get the observed metrics.
 
         Waits until the observed dataset finishes its first action. Only the result of the
         first action is available. Subsequent actions do not modify the result.
 
-        returns
+        Returns
         -------
         :class:`Row`
             the observed metrics
@@ -115,9 +116,9 @@ class Observation:
 
     def _to_row(self, jrow):
         field_names = jrow.schema().fieldNames()
-        valuesScalaMap = jrow.getValuesMap(self._jvm.PythonUtils.toSeq(list(field_names)))
-        valuesJavaMap = self._jvm.scala.collection.JavaConversions.mapAsJavaMap(valuesScalaMap)
-        return Row(**valuesJavaMap)
+        values_scala_map = jrow.getValuesMap(self._jvm.PythonUtils.toSeq(list(field_names)))
+        values_java_map = self._jvm.scala.collection.JavaConversions.mapAsJavaMap(values_scala_map)
+        return Row(**values_java_map)
 
 
 def _test():
@@ -134,9 +135,7 @@ def _test():
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
 
-    (failure_count, test_count) = doctest.testmod(
-        pyspark.sql.dataframe, globs=globs,
-        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
+    (failure_count, test_count) = doctest.testmod(pyspark.sql.dataframe, globs=globs)
     globs['sc'].stop()
     if failure_count:
         sys.exit(-1)
