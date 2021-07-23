@@ -243,6 +243,28 @@ class KubernetesSuite extends SparkFunSuite
       Option((interval, None)))
   }
 
+  protected def runMiniReadWriteAndVerifyCompletion(
+      wordCount: Int,
+      appResource: String = containerLocalSparkDistroExamplesJar,
+      driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
+      executorPodChecker: Pod => Unit = doBasicExecutorPodCheck,
+      appArgs: Array[String] = Array.empty[String],
+      isJVM: Boolean = true,
+      interval: Option[PatienceConfiguration.Interval] = None): Unit = {
+    runSparkApplicationAndVerifyCompletion(
+      appResource,
+      SPARK_MINI_READ_WRITE_TEST,
+      Seq(s"Success! Local Word Count $wordCount and " +
+    s"D Word Count $wordCount agree."),
+      Seq(),
+      appArgs,
+      driverPodChecker,
+      executorPodChecker,
+      isJVM,
+      None,
+      Option((interval, None)))
+  }
+
   protected def runSparkRemoteCheckAndVerifyCompletion(
       appResource: String = containerLocalSparkDistroExamplesJar,
       driverPodChecker: Pod => Unit = doBasicDriverPodCheck,
@@ -576,6 +598,7 @@ private[spark] object KubernetesSuite {
   val MinikubeTag = Tag("minikube")
   val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"
   val SPARK_DFS_READ_WRITE_TEST = "org.apache.spark.examples.DFSReadWriteTest"
+  val SPARK_MINI_READ_WRITE_TEST = "org.apache.spark.examples.MiniReadWriteTest"
   val SPARK_REMOTE_MAIN_CLASS: String = "org.apache.spark.examples.SparkRemoteFileTest"
   val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"
   val TIMEOUT = PatienceConfiguration.Timeout(Span(3, Minutes))

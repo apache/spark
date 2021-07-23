@@ -43,8 +43,7 @@ private[spark] class ExecutorPodsAllocator(
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
-    clock: Clock) extends AbstractPodsAllocator(
-    conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, clock) with Logging {
+    clock: Clock) extends AbstractPodsAllocator() with Logging {
 
   private val EXECUTOR_ID_COUNTER = new AtomicInteger(0)
 
