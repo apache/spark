@@ -121,6 +121,26 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         self.assertRaises(ValueError, lambda: psser.cat.remove_categories(4))
         self.assertRaises(ValueError, lambda: psser.cat.remove_categories([4, None]))
 
+    def test_remove_unused_categories(self):
+        pdf, psdf = self.df_pair
+
+        pser = pdf.a
+        psser = psdf.a
+
+        self.assert_eq(pser.cat.remove_unused_categories(), psser.cat.remove_unused_categories())
+
+        pser.cat.add_categories(4, inplace=True)
+        pser.cat.remove_categories(2, inplace=True)
+        psser.cat.add_categories(4, inplace=True)
+        psser.cat.remove_categories(2, inplace=True)
+
+        self.assert_eq(pser.cat.remove_unused_categories(), psser.cat.remove_unused_categories())
+
+        pser.cat.remove_unused_categories(inplace=True)
+        psser.cat.remove_unused_categories(inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
     def test_as_ordered_unordered(self):
         pdf, psdf = self.df_pair
 
