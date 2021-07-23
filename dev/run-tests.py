@@ -270,7 +270,12 @@ def exec_sbt(sbt_args=()):
     """Will call SBT in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
-    sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")] + sbt_args
+    sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")]
+
+    if "GITHUB_ACTIONS" in os.environ:
+        sbt_cmd = sbt_cmd + ['-mem', '2300']
+
+    sbt_cmd = sbt_cmd + sbt_args
 
     sbt_output_filter = re.compile(b"^.*[info].*Resolving" + b"|" +
                                    b"^.*[warn].*Merging" + b"|" +
