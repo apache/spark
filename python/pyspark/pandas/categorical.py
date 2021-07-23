@@ -682,7 +682,7 @@ class CategoricalAccessor(object):
 
     def set_categories(
         self,
-        new_categories: pd.Index,
+        new_categories: Union[pd.Index, List],
         ordered: bool = None,
         rename: bool = False,
         inplace: bool = False,
@@ -739,6 +739,11 @@ class CategoricalAccessor(object):
         """
         from pyspark.pandas.frame import DataFrame
 
+        if not is_list_like(new_categories):
+            raise TypeError(
+                "Parameter 'new_categories' must be list-like, was '{}'".format(new_categories)
+            )
+
         if ordered is None:
             ordered = self.ordered
 
@@ -767,10 +772,17 @@ class CategoricalAccessor(object):
                     psser.spark.column, field=psser._internal.data_fields[0]
                 )
         else:
+            psser = self._data.astype(new_dtype)
             if inplace:
-                raise NotImplementedError("inplace must be False when rename is False")
+                internal = self._data._psdf._internal.with_new_spark_column(
+                    self._data._column_label,
+                    psser.spark.column,
+                    field=psser._internal.data_fields[0],
+                )
+                self._data._psdf._update_internal_frame(internal)
+                return None
             else:
-                return self._data.astype(new_dtype)
+                return psser
 
 
 def _test() -> None:

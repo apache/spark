@@ -713,17 +713,76 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             psser.cat.set_categories(pd.Index([0, 1, 3, 2, 4]), ordered=True),
         )
 
+        pser.cat.set_categories(pd.Index([0, 1, 3, 2]), inplace=True, rename=True)
+        psser.cat.set_categories(pd.Index([0, 1, 3, 2]), inplace=True, rename=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        pser.cat.set_categories(pd.Index([2, 3, 1, 0]), inplace=True, rename=False),
+        psser.cat.set_categories(pd.Index([2, 3, 1, 0]), inplace=True, rename=False),
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        pdf, psdf = self.df_pair
+
+        pser = pdf.b
+        psser = psdf.b
+
         self.assert_eq(
-            pser.cat.set_categories(pd.Index([0, 1, 3, 2]), inplace=True, rename=True),
-            psser.cat.set_categories(pd.Index([0, 1, 3, 2]), inplace=True, rename=True),
+            pser.cat.set_categories([0, 1, 3, 2]),
+            psser.cat.set_categories([0, 1, 3, 2]),
+        )
+        self.assert_eq(
+            pser.cat.set_categories([0, 1, 3]),
+            psser.cat.set_categories([0, 1, 3]),
+        )
+        self.assert_eq(
+            pser.cat.set_categories([0, 1, 3, 2, 4]),
+            psser.cat.set_categories([0, 1, 3, 2, 4]),
+        )
+
+        self.assert_eq(
+            pser.cat.set_categories([0, 1, 3, 2], rename=True),
+            psser.cat.set_categories([0, 1, 3, 2], rename=True),
+        )
+        self.assert_eq(
+            pser.cat.set_categories([0, 1, 3], rename=True),
+            psser.cat.set_categories([0, 1, 3], rename=True),
+        )
+        self.assert_eq(
+            pser.cat.set_categories([0, 1, 3, 2, 4], rename=True),
+            psser.cat.set_categories([0, 1, 3, 2, 4], rename=True),
+        )
+
+        self.assert_eq(
+            pser.cat.set_categories([0, 1, 3, 2], ordered=True),
+            psser.cat.set_categories([0, 1, 3, 2], ordered=True),
+        )
+        self.assert_eq(
+            pser.cat.set_categories([0, 1, 3], ordered=True),
+            psser.cat.set_categories([0, 1, 3], ordered=True),
+        )
+        self.assert_eq(
+            pser.cat.set_categories([0, 1, 3, 2, 4], ordered=True),
+            psser.cat.set_categories([0, 1, 3, 2, 4], ordered=True),
+        )
+
+        self.assert_eq(
+            pser.cat.set_categories([0, 1, 3, 2], inplace=True, rename=True),
+            psser.cat.set_categories([0, 1, 3, 2], inplace=True, rename=True),
         )
         self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
+        pser.cat.set_categories([2, 3, 1, 0], inplace=True, rename=False),
+        psser.cat.set_categories([2, 3, 1, 0], inplace=True, rename=False),
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
         self.assertRaisesRegex(
-            NotImplementedError,
-            "inplace must be False when rename is False",
-            lambda: psser.cat.set_categories(pd.Index([0, 1, 3, 2]), inplace=True, rename=False),
+            TypeError,
+            "Parameter 'new_categories' must be list-like, was",
+            lambda: psser.cat.set_categories(None),
         )
 
 

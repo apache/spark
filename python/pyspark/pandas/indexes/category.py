@@ -519,7 +519,7 @@ class CategoricalIndex(Index):
 
     def set_categories(
         self,
-        new_categories: pd.Index,
+        new_categories: Union[pd.Index, List],
         ordered: bool = None,
         rename: bool = False,
         inplace: bool = False,
