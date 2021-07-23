@@ -132,6 +132,34 @@ class Catalog(object):
                 isTemporary=jfunction.isTemporary()))
         return functions
 
+    def functionExists(self, functionName, dbName=None):
+        """Check if the function with the specified name exists.
+        This can either be a temporary function or a function.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        functionName : str
+            name of the function to check existence
+        dbName : str, optional
+            name of the database to check function existence in.
+            If no database is specified, the current database is used
+
+        Returns
+        -------
+        bool
+            Indicating whether the function exists
+
+        Examples
+        --------
+        >>> spark.catalog.functionExists("unexisting_function")
+        False
+        """
+        if dbName is None:
+            dbName = self.currentDatabase()
+        return self._jcatalog.functionExists(dbName, functionName)
+
     def listColumns(self, tableName, dbName=None):
         """Returns a list of columns for the given table/view in the specified database.
 
