@@ -178,6 +178,7 @@ Categorical components
    CategoricalIndex.remove_categories
    CategoricalIndex.as_ordered
    CategoricalIndex.as_unordered
+   CategoricalIndex.rename_categories
 
 .. _api.multiindex:
 

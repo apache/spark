@@ -257,6 +257,31 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(psidx.insert(1, "w"), pidx.insert(1, "w"))
 
+    def test_rename_categories(self):
+        pidx = pd.CategoricalIndex(["a", "b", "c", "d"])
+        psidx = ps.from_pandas(pidx)
+        self.assert_eq(pidx.rename_categories([0, 1, 3, 2]), psidx.rename_categories([0, 1, 3, 2]))
+        self.assert_eq(
+            pidx.rename_categories({"a": "A", "c": "C"}),
+            psidx.rename_categories({"a": "A", "c": "C"}),
+        )
+        self.assert_eq(
+            pidx.rename_categories(lambda x: x.upper()),
+            psidx.rename_categories(lambda x: x.upper()),
+        )
+        self.assertRaises(
+            TypeError,
+            lambda: psidx.rename_categories(None),
+        )
+        self.assertRaises(
+            TypeError,
+            lambda: psidx.rename_categories(1),
+        )
+        self.assertRaises(
+            TypeError,
+            lambda: psidx.rename_categories("x"),
+        )
+
 
 if __name__ == "__main__":
     import unittest

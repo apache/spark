@@ -560,6 +560,57 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(psdf.a.unstack().sort_index(), pdf.a.unstack().sort_index())
         self.assert_eq(psdf.b.unstack().sort_index(), pdf.b.unstack().sort_index())
 
+    def test_rename_categories(self):
+        pdf, psdf = self.df_pair
+
+        pser = pdf.b
+        psser = psdf.b
+
+        self.assert_eq(
+            pser.cat.rename_categories([0, 1, 3, 2]), psser.cat.rename_categories([0, 1, 3, 2])
+        )
+        self.assert_eq(
+            pser.cat.rename_categories({"a": "A", "c": "C"}),
+            psser.cat.rename_categories({"a": "A", "c": "C"}),
+        )
+        self.assert_eq(
+            pser.cat.rename_categories(lambda x: x.upper()),
+            psser.cat.rename_categories(lambda x: x.upper()),
+        )
+
+        pser.cat.rename_categories({"a": "A", "c": "C"}, inplace=True)
+        psser.cat.rename_categories({"a": "A", "c": "C"}, inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        pser.cat.rename_categories(lambda x: x.upper(), inplace=True)
+        psser.cat.rename_categories(lambda x: x.upper(), inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        pser.cat.rename_categories([0, 1, 3, 2], inplace=True)
+        psser.cat.rename_categories([0, 1, 3, 2], inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        self.assertRaisesRegex(
+            ValueError,
+            "new categories need to have the same number of items as the old categories",
+            lambda: psser.cat.rename_categories([0, 1, 2]),
+        )
+        self.assertRaises(
+            TypeError,
+            lambda: psser.cat.rename_categories(None),
+        )
+        self.assertRaises(
+            TypeError,
+            lambda: psser.cat.rename_categories(1),
+        )
+        self.assertRaises(
+            TypeError,
+            lambda: psser.cat.rename_categories("x"),
+        )
+
 
 if __name__ == "__main__":
     import unittest
