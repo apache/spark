@@ -14,10 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Any, List, Optional, Union, TYPE_CHECKING, cast
+from typing import Any, Callable, List, Optional, Union, TYPE_CHECKING, cast
 
 import pandas as pd
-from pandas.api.types import CategoricalDtype, is_list_like
+from pandas.api.types import CategoricalDtype, is_dict_like, is_list_like
 
 from pyspark.pandas.internal import InternalField
 from pyspark.sql.types import StructField
@@ -442,8 +442,110 @@ class CategoricalAccessor(object):
     def remove_unused_categories(self) -> "ps.Series":
         raise NotImplementedError()
 
-    def rename_categories(self, new_categories: pd.Index, inplace: bool = False) -> "ps.Series":
-        raise NotImplementedError()
+    def rename_categories(
+        self, new_categories: Union[list, dict, Callable], inplace: bool = False
+    ) -> Optional["ps.Series"]:
+        """
+        Rename categories.
+
+        Parameters
+        ----------
+        new_categories : list-like, dict-like or callable
+
+            New categories which will replace old categories.
+
+            * list-like: all items must be unique and the number of items in
+              the new categories must match the existing number of categories.
+
+            * dict-like: specifies a mapping from
+              old categories to new. Categories not contained in the mapping
+              are passed through and extra categories in the mapping are
+              ignored.
+
+            * callable : a callable that is called on all items in the old
+              categories and whose return values comprise the new categories.
+
+        inplace : bool, default False
+            Whether or not to rename the categories inplace or return a copy of
+            this categorical with renamed categories.
+
+        Returns
+        -------
+        cat : Series or None
+            Categorical with removed categories or None if ``inplace=True``.
+
+        Raises
+        ------
+        ValueError
+            If new categories are list-like and do not have the same number of
+            items than the current categories or do not validate as categories
+
+        See Also
+        --------
+        reorder_categories : Reorder categories.
+        add_categories : Add new categories.
+        remove_categories : Remove the specified categories.
+        remove_unused_categories : Remove categories which are not used.
+        set_categories : Set the categories to the specified ones.
+
+        Examples
+        --------
+        >>> s = ps.Series(["a", "a", "b"], dtype="category")
+        >>> s.cat.rename_categories([0, 1])  # doctest: +SKIP
+        0    0
+        1    0
+        2    1
+        dtype: category
+        Categories (2, int64): [0, 1]
+
+        For dict-like ``new_categories``, extra keys are ignored and
+        categories not in the dictionary are passed through
+
+        >>> s.cat.rename_categories({'a': 'A', 'c': 'C'})  # doctest: +SKIP
+        0    A
+        1    A
+        2    b
+        dtype: category
+        Categories (2, object): ['A', 'b']
+
+        You may also provide a callable to create the new categories
+
+        >>> s.cat.rename_categories(lambda x: x.upper())  # doctest: +SKIP
+        0    A
+        1    A
+        2    B
+        dtype: category
+        Categories (2, object): ['A', 'B']
+        """
+        from pyspark.pandas.frame import DataFrame
+
+        if is_dict_like(new_categories):
+            categories = [cast(dict, new_categories).get(item, item) for item in self.categories]
+        elif callable(new_categories):
+            categories = [new_categories(item) for item in self.categories]
+        elif is_list_like(new_categories):
+            if len(self.categories) != len(new_categories):
+                raise ValueError(
+                    "new categories need to have the same number of items as the old categories!"
+                )
+            categories = cast(list, new_categories)
+        else:
+            raise TypeError("new_categories must be list-like, dict-like or callable.")
+
+        internal = self._data._psdf._internal.with_new_spark_column(
+            self._data._column_label,
+            self._data.spark.column,
+            field=self._data._internal.data_fields[0].copy(
+                dtype=CategoricalDtype(categories=categories, ordered=self.ordered)
+            ),
+        )
+
+        if inplace:
+            self._data._psdf._update_internal_frame(internal)
+            return None
+        else:
+            psser = DataFrame(internal)._psser_for(self._data._column_label)
+            return psser._with_new_scol(psser.spark.column, field=psser._internal.data_fields[0])
 
     def reorder_categories(
         self, new_categories: pd.Index, ordered: bool = None, inplace: bool = False
