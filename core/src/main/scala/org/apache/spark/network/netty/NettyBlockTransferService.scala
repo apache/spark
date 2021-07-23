@@ -120,7 +120,7 @@ private[spark] class NettyBlockTransferService(
         override def createAndStart(blockIds: Array[String],
             listener: BlockTransferListener): Unit = {
           assert(listener.isInstanceOf[BlockFetchingListener],
-            "Expecting a BlockFetchingListener, but got a BlockPushingListener")
+            s"Expecting a BlockFetchingListener, but got ${listener.getClass}")
           try {
             val client = clientFactory.createClient(host, port, maxRetries > 0)
             new OneForOneBlockFetcher(client, appId, execId, blockIds,
