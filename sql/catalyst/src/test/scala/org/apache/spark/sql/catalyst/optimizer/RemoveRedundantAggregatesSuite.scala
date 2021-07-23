@@ -21,7 +21,8 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Expression, PythonUDF}
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.IntegerType
@@ -33,6 +34,10 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
       RemoveRedundantAggregates) :: Nil
   }
 
+  private val relation = LocalRelation('a.int, 'b.int)
+  private val x = relation.subquery('x)
+  private val y = relation.subquery('y)
+
   private def aggregates(e: Expression): Seq[Expression] = {
     Seq(
       count(e),
@@ -42,7 +47,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Remove redundant aggregate") {
-    val relation = LocalRelation('a.int, 'b.int)
     for (agg <- aggregates('b)) {
       val query = relation
         .groupBy('a)('a, agg)
@@ -57,7 +61,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Remove 2 redundant aggregates") {
-    val relation = LocalRelation('a.int, 'b.int)
     for (agg <- aggregates('b)) {
       val query = relation
         .groupBy('a)('a, agg)
@@ -73,7 +76,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Remove redundant aggregate with different grouping") {
-    val relation = LocalRelation('a.int, 'b.int)
     val query = relation
       .groupBy('a, 'b)('a)
       .groupBy('a)('a)
@@ -86,7 +88,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Remove redundant aggregate with aliases") {
-    val relation = LocalRelation('a.int, 'b.int)
     for (agg <- aggregates('b)) {
       val query = relation
         .groupBy('a + 'b)(('a + 'b) as 'c, agg)
@@ -101,7 +102,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Remove redundant aggregate with non-deterministic upper") {
-    val relation = LocalRelation('a.int, 'b.int)
     val query = relation
       .groupBy('a)('a)
       .groupBy('a)('a, rand(0) as 'c)
@@ -114,7 +114,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Remove redundant aggregate with non-deterministic lower") {
-    val relation = LocalRelation('a.int, 'b.int)
     val query = relation
       .groupBy('a, 'c)('a, rand(0) as 'c)
       .groupBy('a, 'c)('a, 'c)
@@ -127,7 +126,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Keep non-redundant aggregate - upper has duplicate sensitive agg expression") {
-    val relation = LocalRelation('a.int, 'b.int)
     for (agg <- aggregates('b)) {
       val query = relation
         .groupBy('a, 'b)('a, 'b)
@@ -140,7 +138,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Remove redundant aggregate - upper has duplicate agnostic agg expression") {
-    val relation = LocalRelation('a.int, 'b.int)
     val query = relation
       .groupBy('a, 'b)('a, 'b)
       // The max and countDistinct does not change if there are duplicate values
@@ -154,7 +151,6 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Keep non-redundant aggregate - upper references agg expression") {
-    val relation = LocalRelation('a.int, 'b.int)
     for (agg <- aggregates('b)) {
       val query = relation
         .groupBy('a)('a, agg as 'c)
@@ -166,12 +162,101 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
   }
 
   test("Keep non-redundant aggregate - upper references non-deterministic non-grouping") {
-    val relation = LocalRelation('a.int, 'b.int)
     val query = relation
       .groupBy('a)('a, ('a + rand(0)) as 'c)
       .groupBy('a, 'c)('a, 'c)
       .analyze
     val optimized = Optimize.execute(query)
     comparePlans(optimized, query)
+  }
+
+  test("SPARK-36194: Remove aggregation from left semi/anti join if aggregation the same") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.groupBy('a, 'b)('a, 'b)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .groupBy("x.a".attr, "x.b".attr)("x.a".attr, "x.b".attr)
+      val correctAnswer = x.groupBy('a, 'b)('a, 'b)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .select("x.a".attr, "x.b".attr)
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, correctAnswer.analyze)
+    }
+  }
+
+  test("SPARK-36194: Remove aggregation from left semi/anti join if it is the sub aggregateExprs") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.groupBy('a, 'b)('a, 'b)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .groupBy("x.a".attr, "x.b".attr)("x.a".attr)
+      val correctAnswer = x.groupBy('a, 'b)('a, 'b)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .select("x.a".attr)
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, correctAnswer.analyze)
+    }
+  }
+
+  test("SPARK-36194: Transform down to remove more aggregates") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.groupBy('a, 'b)('a, 'b)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .groupBy("x.a".attr, "x.b".attr)("x.a".attr, "x.b".attr)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .groupBy("x.a".attr, "x.b".attr)("x.a".attr)
+      val correctAnswer = x.groupBy('a, 'b)('a, 'b)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .select("x.a".attr, "x.b".attr)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .select("x.a".attr)
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, correctAnswer.analyze)
+    }
+  }
+
+  test("SPARK-36194: Negative case: The grouping expressions not same") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.groupBy('a, 'b)('a, 'b)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .groupBy("x.a".attr)("x.a".attr)
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, originalQuery.analyze)
+    }
+  }
+
+  test("SPARK-36194: Negative case: The aggregate expressions not the sub aggregateExprs") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.groupBy('a, 'b)('a, 'b)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .groupBy("x.a".attr, "x.b".attr)(TrueLiteral)
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, originalQuery.analyze)
+    }
+  }
+
+  test("SPARK-36194: Negative case: The aggregate expressions not same") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.groupBy('a, 'b)('a, 'b)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr))
+        .groupBy("x.a".attr)(count("x.b".attr))
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, originalQuery.analyze)
+    }
+  }
+
+  test("SPARK-36194: Negative case: The aggregate expressions with Literal") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.groupBy('a, 'b)('a, TrueLiteral)
+        .join(y, joinType, Some("x.a".attr === "y.a".attr))
+        .groupBy("x.a".attr)("x.a".attr, TrueLiteral)
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, originalQuery.analyze)
+    }
   }
 }
