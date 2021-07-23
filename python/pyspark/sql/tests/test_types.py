@@ -29,8 +29,8 @@ from pyspark.sql.functions import col
 from pyspark.sql.udf import UserDefinedFunction
 from pyspark.sql.utils import AnalysisException
 from pyspark.sql.types import ByteType, ShortType, IntegerType, FloatType, DateType, \
-    TimestampType, MapType, StringType, StructType, StructField, ArrayType, DoubleType, LongType, \
-    DecimalType, BinaryType, BooleanType, NullType
+    TimestampType, MapType, StringType, StructType, StructField,\
+    ArrayType, DoubleType, LongType, DecimalType, BinaryType, BooleanType, NullType
 from pyspark.sql.types import (  # type: ignore
     _array_signed_int_typecode_ctype_mappings, _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings, _infer_type, _make_type_verifier, _merge_type

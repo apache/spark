@@ -34,8 +34,9 @@ from pyspark.serializers import CloudPickleSerializer
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
-    "TimestampType", "DecimalType", "DoubleType", "FloatType", "ByteType", "IntegerType",
-    "LongType", "ShortType", "ArrayType", "MapType", "StructField", "StructType"]
+    "TimestampType", "TimestampNTZType", "DecimalType", "DoubleType", "FloatType",
+    "ByteType", "IntegerType", "LongType", "ShortType", "ArrayType", "MapType",
+    "StructField", "StructType"]
 
 
 class DataType(object):
@@ -186,6 +187,20 @@ class TimestampType(AtomicType, metaclass=DataTypeSingleton):
         if ts is not None:
             # using int to avoid precision loss in float
             return datetime.datetime.fromtimestamp(ts // 1000000).replace(microsecond=ts % 1000000)
+
+
+class TimestampNTZType(TimestampType):
+    """Timestamp (datetime.datetime) data type without timezone information.
+    """
+
+    @classmethod
+    def typeName(cls):
+        return 'timestamp_ntz'
+
+    def toInternal(self, dt):
+        if dt is not None:
+            seconds = time.mktime(dt.timetuple())
+            return int(seconds) * 1000000 + dt.microsecond
 
 
 class DecimalType(FractionalType):
@@ -767,7 +782,8 @@ class UserDefinedType(DataType):
 
 
 _atomic_types = [StringType, BinaryType, BooleanType, DecimalType, FloatType, DoubleType,
-                 ByteType, ShortType, IntegerType, LongType, DateType, TimestampType, NullType]
+                 ByteType, ShortType, IntegerType, LongType, DateType, TimestampType,
+                 TimestampNTZType, NullType]
 _all_atomic_types = dict((t.typeName(), t) for t in _atomic_types)
 _all_complex_types = dict((v.typeName(), v)
                           for v in [ArrayType, MapType, StructType])
@@ -901,6 +917,8 @@ def _parse_datatype_json_value(json_value):
             return _all_atomic_types[json_value]()
         elif json_value == 'decimal':
             return DecimalType()
+        elif json_value == 'timestamp_ntz':
+            return TimestampNTZType()
         elif _FIXED_DECIMAL.match(json_value):
             m = _FIXED_DECIMAL.match(json_value)
             return DecimalType(int(m.group(1)), int(m.group(2)))
@@ -1211,6 +1229,7 @@ _acceptable_types = {
     BinaryType: (bytearray, bytes),
     DateType: (datetime.date, datetime.datetime),
     TimestampType: (datetime.datetime,),
+    TimestampNTZType: (datetime.datetime,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),
     StructType: (tuple, list, dict),

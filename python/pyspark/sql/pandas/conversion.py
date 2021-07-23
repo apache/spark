@@ -22,7 +22,7 @@ from pyspark.rdd import _load_from_socket
 from pyspark.sql.pandas.serializers import ArrowCollectSerializer
 from pyspark.sql.types import IntegralType
 from pyspark.sql.types import ByteType, ShortType, IntegerType, LongType, FloatType, \
-    DoubleType, BooleanType, MapType, TimestampType, StructType, DataType
+    DoubleType, BooleanType, MapType, TimestampType, TimestampNTZType, StructType, DataType
 from pyspark.traceback_utils import SCCallSiteSync
 
 
@@ -212,6 +212,9 @@ class PandasConversionMixin(object):
                 if isinstance(field.dataType, TimestampType):
                     pdf[field.name] = \
                         _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
+                if isinstance(field.dataType, TimestampNTZType):
+                    pdf[field.name] = \
+                        _check_series_convert_timestamps_local_tz(pdf[field.name], None)
             return pdf
 
     @staticmethod
@@ -237,6 +240,8 @@ class PandasConversionMixin(object):
         elif type(dt) == BooleanType:
             return np.bool
         elif type(dt) == TimestampType:
+            return np.datetime64
+        elif type(dt) == TimestampNTZType:
             return np.datetime64
         else:
             return None

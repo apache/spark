@@ -22,7 +22,7 @@ pandas instances during the type conversion.
 
 from pyspark.sql.types import BooleanType, ByteType, ShortType, IntegerType, LongType, \
     FloatType, DoubleType, DecimalType, StringType, BinaryType, DateType, TimestampType, \
-    ArrayType, MapType, StructType, StructField, NullType
+    TimestampNTZType, ArrayType, MapType, StructType, StructField, NullType
 
 
 def to_arrow_type(dt):
@@ -55,15 +55,18 @@ def to_arrow_type(dt):
     elif type(dt) == TimestampType:
         # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
         arrow_type = pa.timestamp('us', tz='UTC')
+    elif type(dt) == TimestampNTZType:
+        # Timestamps should be in UTC, JVM Arrow timestamps require a timezone to be read
+        arrow_type = pa.timestamp('us', tz='UTC')
     elif type(dt) == ArrayType:
-        if type(dt.elementType) in [StructType, TimestampType]:
+        if type(dt.elementType) in [StructType, TimestampType, TimestampNTZType]:
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
         arrow_type = pa.list_(to_arrow_type(dt.elementType))
     elif type(dt) == MapType:
         if LooseVersion(pa.__version__) < LooseVersion("2.0.0"):
             raise TypeError("MapType is only supported with pyarrow 2.0.0 and above")
-        if type(dt.keyType) in [StructType, TimestampType] or \
-                type(dt.valueType) in [StructType, TimestampType]:
+        if type(dt.keyType) in [StructType, TimestampType, TimestampNTZType] or \
+                type(dt.valueType) in [StructType, TimestampType, TimestampNTZType]:
             raise TypeError("Unsupported type in conversion to Arrow: " + str(dt))
         arrow_type = pa.map_(to_arrow_type(dt.keyType), to_arrow_type(dt.valueType))
     elif type(dt) == StructType:
