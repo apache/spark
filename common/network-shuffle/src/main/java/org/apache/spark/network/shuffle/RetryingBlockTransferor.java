@@ -222,7 +222,7 @@ public class RetryingBlockTransferor {
 
     private void handleBlockTransferFailure(String blockId, Throwable exception) {
       // We will only forward this failure to our parent listener if this block request is
-      // outstanding, we are still the active listener, AND we cannot retry the fetch.
+      // outstanding, we are still the active listener, AND we cannot retry the transfer.
       boolean shouldForwardFailure = false;
       synchronized (RetryingBlockTransferor.this) {
         if (this == currentListener && outstandingBlocksIds.contains(blockId)) {
