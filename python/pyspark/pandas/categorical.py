@@ -439,8 +439,47 @@ class CategoricalAccessor(object):
             else:
                 return psser
 
-    def remove_unused_categories(self) -> "ps.Series":
-        raise NotImplementedError()
+    def remove_unused_categories(self, inplace: bool = False) -> Optional["ps.Series"]:
+        """
+        Remove categories which are not used.
+
+        Parameters
+        ----------
+        inplace : bool, default False
+           Whether or not to drop unused categories inplace or return a copy of
+           this categorical with unused categories dropped.
+
+        Returns
+        -------
+        cat : Series or None
+            Categorical with unused categories dropped or None if ``inplace=True``.
+
+        Examples
+        --------
+        >>> s = ps.Series(pd.Categorical(list("abbccc"), categories=['a', 'b', 'c', 'd']))
+        >>> s  # doctest: +SKIP
+        0    a
+        1    b
+        2    b
+        3    c
+        4    c
+        5    c
+        dtype: category
+        Categories (4, object): ['a', 'b', 'c', 'd']
+
+        >>> s.cat.remove_unused_categories()  # doctest: +SKIP
+        0    a
+        1    b
+        2    b
+        3    c
+        4    c
+        5    c
+        dtype: category
+        Categories (3, object): ['a', 'b', 'c']
+        """
+        categories = set(self._data.drop_duplicates().to_pandas())
+        removals = [cat for cat in self.categories if cat not in categories]
+        return self.remove_categories(removals=removals, inplace=inplace)
 
     def rename_categories(
         self, new_categories: Union[list, dict, Callable], inplace: bool = False
