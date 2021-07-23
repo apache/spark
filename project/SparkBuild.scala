@@ -767,6 +767,9 @@ object Hive {
   lazy val settings = Seq(
     // Specially disable assertions since some Hive tests fail them
     (Test / javaOptions) := (Test / javaOptions).value.filterNot(_ == "-ea"),
+    // Hive tests need higher metaspace size
+    (Test / javaOptions) := (Test / javaOptions).value.filterNot(_.contains("MaxMetaspaceSize")),
+    (Test / javaOptions) += "-XX:MaxMetaspaceSize=2g",
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
     // only for this subproject.
     scalacOptions := (scalacOptions map { currentOpts: Seq[String] =>

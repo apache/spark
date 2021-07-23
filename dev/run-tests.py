@@ -272,6 +272,9 @@ def exec_sbt(sbt_args=()):
 
     sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")] + sbt_args
 
+    if "GITHUB_ACTIONS" in os.environ:
+        sbt_cmd = sbt_cmd + ['-mem 2300']
+
     sbt_output_filter = re.compile(b"^.*[info].*Resolving" + b"|" +
                                    b"^.*[warn].*Merging" + b"|" +
                                    b"^.*[info].*Including")
