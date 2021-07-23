@@ -387,6 +387,7 @@ class DecimalOps(FractionalOps):
         )
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
+        # TODO(SPARK-36230): check index_ops.hasnans after fixing SPARK-36230
         dtype, spark_type = pandas_on_spark_type(dtype)
         return _non_fractional_astype(index_ops, dtype, spark_type)
 
