@@ -40,8 +40,7 @@ private[spark] class StatefulsetPodsAllocator(
     executorBuilder: KubernetesExecutorBuilder,
     kubernetesClient: KubernetesClient,
     snapshotsStore: ExecutorPodsSnapshotsStore,
-    clock: Clock) extends AbstractPodsAllocator(
-    conf, secMgr, executorBuilder, kubernetesClient, snapshotsStore, clock) with Logging {
+    clock: Clock) extends AbstractPodsAllocator() with Logging {
 
   private val rpIdToResourceProfile = new mutable.HashMap[Int, ResourceProfile]
 
@@ -117,22 +116,46 @@ private[spark] class StatefulsetPodsAllocator(
 
       val meta = executorPod.pod.getMetadata()
 
-      // Create a pod template spec from the pod.
-      val podTemplateSpec = new PodTemplateSpec(meta, podWithAttachedContainer)
       // Resources that need to be created, volumes are per-pod which is all we care about here.
       val resources = resolvedExecutorSpec.executorKubernetesResources
       // We'll let PVCs be handled by the statefulset. Note user is responsible for
       // cleaning up PVCs. Future work: integrate with KEP1847 once stabilized.
-      val volumes = resources
-        .filter(_.getKind == "PersistentVolumeClaim")
-        .map { hm =>
-          val v = hm.asInstanceOf[PersistentVolumeClaim]
-          new PersistentVolumeClaimBuilder(v)
-            .editMetadata()
-              .withName(v.getMetadata().getName().replace("EXECID", ""))
-            .endMetadata()
-            .build()
-        }.asJava
+      val dynamicVolumeClaims = resources.filter(_.getKind == "PersistentVolumeClaim").map(_.asInstanceOf[PersistentVolumeClaim])
+      // Remove the dynamic volumes from our pod
+      val dynamicVolumeClaimNames: Set[String] = dynamicVolumeClaims.map(_.getMetadata().getName()).toSet
+      val podVolumes = podWithAttachedContainer.getVolumes().asScala
+      val staticVolumes = podVolumes.filter { v =>
+        val pvc = v.getPersistentVolumeClaim()
+        pvc match {
+          case null => true
+          case _ =>
+            !dynamicVolumeClaimNames.contains(pvc.getClaimName())
+        }
+      }
+      val dynamicClaimToVolumeName = podVolumes.filter { v =>
+        val pvc = v.getPersistentVolumeClaim()
+        pvc match {
+          case null => false
+          case _ =>
+            dynamicVolumeClaimNames.contains(pvc.getClaimName())
+        }
+      }.map { v =>
+        (v.getPersistentVolumeClaim().getClaimName(), v.getName())
+      }.toMap
+      // This just mutates it. Java style API
+      podWithAttachedContainer.setVolumes(staticVolumes.asJava)
+      // Rewrite the dynamic volume names to not ref our fake EXECID.
+      val newNamedVolumes = dynamicVolumeClaims.zipWithIndex.map { case (v, i) =>
+        new PersistentVolumeClaimBuilder(v)
+          .editMetadata()
+            .withName(dynamicClaimToVolumeName.get(v.getMetadata().getName()).get)
+          .endMetadata()
+          .build()
+      }
+      logError(s"HEYGIRLHEY: Were trying to make with \ndynamicvolumeclaims ${dynamicVolumeClaims}\n dynamicvolumeclaimnames ${dynamicVolumeClaimNames}\n podVolumes ${podVolumes}\n staticVolume ${staticVolumes}\n newNamedvolumes ${newNamedVolumes}")
+
+      // Create a pod template spec from the pod.
+      val podTemplateSpec = new PodTemplateSpec(meta, podWithAttachedContainer)
 
       val statefulSet = new io.fabric8.kubernetes.api.model.apps.StatefulSetBuilder()
         .withNewMetadata()
@@ -148,7 +171,7 @@ private[spark] class StatefulsetPodsAllocator(
             .addToMatchLabels(SPARK_RESOURCE_PROFILE_ID_LABEL, resourceProfileId.toString)
           .endSelector()
           .withTemplate(podTemplateSpec)
-          .addAllToVolumeClaimTemplates(volumes)
+          .addAllToVolumeClaimTemplates(newNamedVolumes.asJava)
         .endSpec()
         .build()
 
