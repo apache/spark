@@ -105,8 +105,8 @@ private[spark] trait DecommissionSuite { k8sSuite: KubernetesSuite =>
       // give enough time to validate the labels are set.
       .set("spark.storage.decommission.replicationReattemptInterval", "60")
       // Configure labels for decommissioning pods.
-      .set("spark.kubernetes.executor.pod.decommmissionLabel", "solong")
-      .set("spark.kubernetes.executor.pod.decommmissionLabelValue", "cruelworld")
+      .set("spark.kubernetes.executor.decommmissionLabel", "solong")
+      .set("spark.kubernetes.executor.decommmissionLabelValue", "cruelworld")
 
     // This is called on all exec pods but we only care about exec 0 since it's the "first."
     // We only do this inside of this test since the other tests trigger k8s side deletes where we

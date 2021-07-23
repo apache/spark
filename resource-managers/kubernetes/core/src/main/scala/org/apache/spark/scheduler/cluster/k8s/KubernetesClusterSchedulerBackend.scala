@@ -187,7 +187,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
 
   private def labelDecommissioningExecs(execIds: Seq[String]) = {
     // Only kick off the labeling task if we have a label.
-    conf.get(KUBERNETES_EXECUTOR_POD_DECOMMISSION_LABEL).foreach { label =>
+    conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL).foreach { label =>
       val labelTask = new Runnable() {
         override def run(): Unit = Utils.tryLogNonFatalError {
 
@@ -203,7 +203,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
               .withName(pod.getMetadata.getName)
               .edit({p: Pod => new PodBuilder(p).editMetadata()
                 .addToLabels(label,
-                  conf.get(KUBERNETES_EXECUTOR_POD_DECOMMISSION_LABEL_VALUE).getOrElse(""))
+                  conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE).getOrElse(""))
                 .endMetadata()
                 .build()})
           }
