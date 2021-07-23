@@ -1832,8 +1832,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     @since(3.3)
     def observe(self, observation, *exprs):
-        """
-        Observe (named) metrics through an :class:`Observation` instance.
+        """Observe (named) metrics through an :class:`Observation` instance.
+
         This method does not support streaming datasets.
 
         .. versionadded:: 3.3.0
@@ -1841,16 +1841,24 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         A user can retrieve the metrics by accessing `Observation.get`.
 
         Example:
-            >>> from pyspark.sql.functions import col, lit, count, max
+            >>> from pyspark.sql.functions import col, count, lit, max
             >>> from pyspark.sql.observation import Observation
             >>> observation = Observation("my_metrics")
-            >>> observed_df = df.observe(observation, count(lit(1)).as("rows"), max(col("id")).as("maxid"))
-            >>> observed_df.write.parquet("ds.parquet")
+            >>> observed_df = df.observe(observation, count(lit(1)), max(col("age")))
+            >>> observed_df.count()
             >>> metrics = observation.get
 
-        :param observation: :class:`Observation` instance
-        :param exprs: aggregation expressions
-        :return: observed :class:`DataFrame`
+        parameters
+        ----------
+        observation : :class:`Observation`
+            an :class:`Observation` instance to obtain the metric.
+        exprs : list of :class:`Column`
+            column expressions (:class:`Column`).
+
+        returns
+        -------
+        :class:`DataFrame`
+            the observed :class:`DataFrame`.
         """
         from pyspark.sql.observation import Observation
         assert isinstance(observation, Observation), "observation should be Observation"

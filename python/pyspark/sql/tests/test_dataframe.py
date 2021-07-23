@@ -392,6 +392,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(3, logical_plan.toString().count("itworks"))
 
     def test_observe(self):
+        # SPARK-36263: tests the DataFrame.observe(Observation, *Column) method
         df = SparkSession(self.sc).createDataFrame([
             (1, 1.0, 'one'),
             (2, 2.0, 'two'),

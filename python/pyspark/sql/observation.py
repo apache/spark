@@ -25,9 +25,10 @@ __all__ = ["Observation"]
 
 
 class Observation:
-    """
-    Class to observe (named) metrics on a :class:`DataFrame`. Metrics are aggregation expressions,
-    which are applied to the DataFrame while is is being processed by an action.
+    """Class to observe (named) metrics on a :class:`DataFrame`.
+
+    Metrics are aggregation expressions, which are applied to the DataFrame while is is being
+    processed by an action.
 
     .. versionadded:: 3.3.0
 
@@ -44,9 +45,11 @@ class Observation:
     function.
 
     Example:
+        >>> from pyspark.sql.functions import col, count, lit, max
+        >>> from pyspark.sql.observation import Observation
         >>> observation = Observation("my_metrics")
-        >>> observed_df = df.observe(observation, count(lit(1)).as("rows"), max($"id").as("maxid"))
-        >>> observed_df.write.parquet("ds.parquet")
+        >>> observed_df = df.observe(observation, count(lit(1)), max(col("age")))
+        >>> observed_df.count()
         >>> metrics = observation.get
 
     An Observation instance collects the metrics while the first action is executed. Subsequent
@@ -56,18 +59,32 @@ class Observation:
     This class does not support streaming datasets.
     """
     def __init__(self, name: Optional[str] = None):
+        """Constructs a named or unnamed Observation instance.
+
+        parameters
+        ----------
+        name : str, optional
+            default is a random UUID string. This is the name of the Observation and the metric.
+        """
         assert isinstance(name, basestring), "name should be a string"
         self._name = name or str(uuid4())
         self._jvm = None
         self._jo = None
 
     def _on(self, df: DataFrame, *exprs: Column) -> DataFrame:
-        """
-        Attaches this observation to the given :class:`Dataset` to observe aggregation expressions.
+        """Attaches this observation to the given :class:`DataFrame` to observe aggregations.
 
-        :param df: the `DataFrame` to be observe
-        :param exprs: aggregation expressions
-        :return: the observed `DataFrame`
+        parameters
+        ----------
+        df : :class:`DataFrame`
+            the :class:`DataFrame` to be observed
+        exprs : list of :class:`Column`
+            column expressions (:class:`Column`).
+
+        returns
+        -------
+        :class:`DataFrame`
+            the observed :class:`DataFrame`.
         """
         assert exprs, "exprs should not be empty"
         assert all(isinstance(c, Column) for c in exprs), "all exprs should be Column"
@@ -82,14 +99,17 @@ class Observation:
 
     @property
     def get(self) -> Row:
-        """
-        Get the observed metrics. This waits until the observed dataset finishes its first action.
-        Only the result of the first action is available. Subsequent actions do not modify the
-        result.
+        """Get the observed metrics.
 
-        :return: the metrics :class:`Row`
+        Waits until the observed dataset finishes its first action. Only the result of the
+        first action is available. Subsequent actions do not modify the result.
+
+        returns
+        -------
+        :class:`Row`
+            the observed metrics
         """
-        assert self._jo is not None, 'call DataFrame.observe / Observation.on first'
+        assert self._jo is not None, 'call DataFrame.observe'
         jrow = self._jo.get()
         return self._to_row(jrow)
 
@@ -98,3 +118,29 @@ class Observation:
         valuesScalaMap = jrow.getValuesMap(self._jvm.PythonUtils.toSeq(list(field_names)))
         valuesJavaMap = self._jvm.scala.collection.JavaConversions.mapAsJavaMap(valuesScalaMap)
         return Row(**valuesJavaMap)
+
+
+def _test():
+    import doctest
+    import sys
+    from pyspark.context import SparkContext
+    from pyspark.sql import SparkSession
+    from pyspark.sql.types import StructType, StructField, IntegerType, StringType
+    import pyspark.sql.observation
+    globs = pyspark.sql.observation.__dict__.copy()
+    sc = SparkContext('local[4]', 'PythonTest')
+    globs['spark'] = SparkSession(sc)
+    globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
+        .toDF(StructType([StructField('age', IntegerType()),
+                          StructField('name', StringType())]))
+
+    (failure_count, test_count) = doctest.testmod(
+        pyspark.sql.dataframe, globs=globs,
+        optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
+    globs['sc'].stop()
+    if failure_count:
+        sys.exit(-1)
+
+
+if __name__ == "__main__":
+    _test()
