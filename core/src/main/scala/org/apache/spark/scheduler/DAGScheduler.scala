@@ -2056,7 +2056,7 @@ private[spark] class DAGScheduler(
           // TODO: SPARK-35536: Cancel finalizeShuffleMerge if the stage is cancelled
           // TODO: during shuffleMergeFinalizeWaitSec
           shuffleClient.finalizeShuffleMerge(shuffleServiceLoc.host,
-            shuffleServiceLoc.port, shuffleId, stage.shuffleDep.shuffleSequenceId,
+            shuffleServiceLoc.port, shuffleId, stage.shuffleDep.shuffleMergeId,
             new MergeFinalizerListener {
               override def onShuffleMergeSuccess(statuses: MergeStatuses): Unit = {
                 assert(shuffleId == statuses.shuffleId)

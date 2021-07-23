@@ -83,23 +83,23 @@ public interface ErrorHandler {
 
     /**
      * String constant used for generating exception messages indicating the server rejecting a block
-     * push since shuffle blocks of a higher shuffle sequence id for a shuffle is already being pushed.
+     * push since shuffle blocks of a higher shuffleMergeIdd for a shuffle is already being pushed.
      * This typically happens in the case of indeterminate stage retries where if a stage attempt fails
      * then the entirety of the shuffle output needs to be rolled back. For more details refer
      * SPARK-23243, SPARK-25341 and SPARK-32923.
      */
     public static final String STALE_BLOCK_PUSH =
-        "stale block push as shuffle blocks of a higher shuffle sequence id for the shuffle is already being pushed";
+        "stale block push as shuffle blocks of a higher shuffleMergeId for the shuffle is already being pushed";
 
     /**
      * String constant used for generating exception messages indicating the server rejecting a shuffle
-     * finalize request since shuffle blocks of a higher shuffle sequence id for a shuffle is already
+     * finalize request since shuffle blocks of a higher shuffleMergeId for a shuffle is already
      * being pushed. This typically happens in the case of indeterminate stage retries where if a
      * stage attempt fails then the entirety of the shuffle output needs to be rolled back. For more
      * details refer SPARK-23243, SPARK-25341 and SPARK-32923.
      */
     public static final String STALE_SHUFFLE_FINALIZE =
-        "stale shuffle finalize request as shuffle blocks of a higher shuffle sequence id for the shuffle is already"
+        "stale shuffle finalize request as shuffle blocks of a higher shuffleMergeId for the shuffle is already"
             + " being pushed";
 
     @Override
@@ -131,13 +131,13 @@ public interface ErrorHandler {
   class BlockFetchErrorHandler implements ErrorHandler {
     /**
      * String constant used for generating exception messages indicating the server rejecting a block
-     * fetch since shuffle blocks of a higher shuffle sequence id for a shuffle is already found.
+     * fetch since shuffle blocks of a higher shuffleMergeId for a shuffle is already found.
      * This typically happens in the case of indeterminate stage retries where if a stage attempt fails
      * then the entirety of the shuffle output needs to be rolled back. For more details refer
      * SPARK-23243 and SPARK-25341.
      */
     public static final String STALE_BLOCK_FETCH =
-        "stale fetch as the shuffleSequenceId is older than the latest shuffleSequenceId";
+        "stale fetch as the shuffleMergeId is older than the latest shuffleMergeId";
 
     @Override
     public boolean shouldRetryError(Throwable t) {

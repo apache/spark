@@ -1084,13 +1084,13 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
         val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         Future {
           val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-          val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+          val shuffleMergeId = invocation.getArguments()(3).asInstanceOf[Int]
           val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
           logInfo(s"acquiring semaphore for host = ${invocation.getArguments()(0)}, " +
             s"port = ${invocation.getArguments()(1)}, " +
-            s"shuffleId = $shuffleId, shuffleSequenceId = $shuffleSequenceId, reduceId = $reduceId")
+            s"shuffleId = $shuffleId, shuffleMergeId = $shuffleMergeId, reduceId = $reduceId")
           metaSem.acquire()
-          metaListener.onSuccess(shuffleId, shuffleSequenceId, reduceId, pushMergedBlockMeta)
+          metaListener.onSuccess(shuffleId, shuffleMergeId, reduceId, pushMergedBlockMeta)
         }
       })
     val iterator = createShuffleBlockIteratorWithDefaults(blocksByAddress)
@@ -1134,10 +1134,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       .thenAnswer((invocation: InvocationOnMock) => {
         val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-        val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val shuffleMergeId = invocation.getArguments()(3).asInstanceOf[Int]
         val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
         Future {
-          metaListener.onFailure(shuffleId, shuffleSequenceId, reduceId,
+          metaListener.onFailure(shuffleId, shuffleMergeId, reduceId,
             new RuntimeException("forced error"))
         }
       })
@@ -1175,10 +1175,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       .thenAnswer((invocation: InvocationOnMock) => {
         val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-        val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val shuffleMergeId = invocation.getArguments()(3).asInstanceOf[Int]
         val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
         Future {
-          metaListener.onFailure(shuffleId, shuffleSequenceId, reduceId,
+          metaListener.onFailure(shuffleId, shuffleMergeId, reduceId,
             new RuntimeException("forced error"))
         }
       })
@@ -1501,10 +1501,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       .thenAnswer((invocation: InvocationOnMock) => {
         val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-        val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val shuffleMergeId = invocation.getArguments()(3).asInstanceOf[Int]
         val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
         Future {
-          metaListener.onSuccess(shuffleId, shuffleSequenceId, reduceId, pushMergedBlockMeta)
+          metaListener.onSuccess(shuffleId, shuffleMergeId, reduceId, pushMergedBlockMeta)
         }
       })
     val fallbackBlocksByAddr = Seq[(BlockManagerId, Seq[(BlockId, Long, Int)])](
@@ -1545,10 +1545,10 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       .thenAnswer((invocation: InvocationOnMock) => {
         val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-        val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val shuffleMergeId = invocation.getArguments()(3).asInstanceOf[Int]
         val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
         Future {
-          metaListener.onSuccess(shuffleId, shuffleSequenceId, reduceId, pushMergedBlockMeta)
+          metaListener.onSuccess(shuffleId, shuffleMergeId, reduceId, pushMergedBlockMeta)
         }
       })
     val remoteMergedBlockMgrId = BlockManagerId(
@@ -1589,14 +1589,14 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       .thenAnswer((invocation: InvocationOnMock) => {
         val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-        val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val shuffleMergeId = invocation.getArguments()(3).asInstanceOf[Int]
         val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
         Future {
           logInfo(s"acquiring semaphore for host = ${invocation.getArguments()(0)}, " +
             s"port = ${invocation.getArguments()(1)}, " +
-            s"shuffleId = $shuffleId, shuffleSequenceId = $shuffleSequenceId, reduceId = $reduceId")
+            s"shuffleId = $shuffleId, shuffleMergeId = $shuffleMergeId, reduceId = $reduceId")
           metaSem.release()
-          metaListener.onSuccess(shuffleId, shuffleSequenceId, reduceId, pushMergedBlockMeta)
+          metaListener.onSuccess(shuffleId, shuffleMergeId, reduceId, pushMergedBlockMeta)
         }
       })
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
@@ -1659,14 +1659,14 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       .thenAnswer((invocation: InvocationOnMock) => {
         val metaListener = invocation.getArguments()(5).asInstanceOf[MergedBlocksMetaListener]
         val shuffleId = invocation.getArguments()(2).asInstanceOf[Int]
-        val shuffleSequenceId = invocation.getArguments()(3).asInstanceOf[Int]
+        val shuffleMergeId = invocation.getArguments()(3).asInstanceOf[Int]
         val reduceId = invocation.getArguments()(4).asInstanceOf[Int]
         Future {
           logInfo(s"acquiring semaphore for host = ${invocation.getArguments()(0)}, " +
             s"port = ${invocation.getArguments()(1)}, " +
-            s"shuffleId = $shuffleId, shuffleSequenceId = $shuffleSequenceId, reduceId = $reduceId")
+            s"shuffleId = $shuffleId, shuffleMergeId = $shuffleMergeId, reduceId = $reduceId")
           metaSem.release()
-          metaListener.onSuccess(shuffleId, shuffleSequenceId, reduceId, pushMergedBlockMeta)
+          metaListener.onSuccess(shuffleId, shuffleMergeId, reduceId, pushMergedBlockMeta)
         }
       })
     val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)

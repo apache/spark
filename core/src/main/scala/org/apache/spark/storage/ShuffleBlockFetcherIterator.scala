@@ -902,9 +902,9 @@ final class ShuffleBlockFetcherIterator(
           result = null
 
           case PushMergedLocalMetaFetchResult(
-            shuffleId, shuffleSequenceId, reduceId, bitmaps, localDirs) =>
+            shuffleId, shuffleMergeId, reduceId, bitmaps, localDirs) =>
             // Fetch push-merged-local shuffle block data as multiple shuffle chunks
-            val shuffleBlockId = ShuffleMergedBlockId(shuffleId, shuffleSequenceId, reduceId)
+            val shuffleBlockId = ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId)
             try {
               val bufs: Seq[ManagedBuffer] = blockManager.getLocalMergedBlockData(shuffleBlockId,
                 localDirs)
@@ -916,7 +916,7 @@ final class ShuffleBlockFetcherIterator(
               numBlocksToFetch += bufs.size
               bufs.zipWithIndex.foreach { case (buf, chunkId) =>
                 buf.retain()
-                val shuffleChunkId = ShuffleBlockChunkId(shuffleId, shuffleSequenceId, reduceId,
+                val shuffleChunkId = ShuffleBlockChunkId(shuffleId, shuffleMergeId, reduceId,
                   chunkId)
                 pushBasedFetchHelper.addChunk(shuffleChunkId, bitmaps(chunkId))
                 results.put(SuccessFetchResult(shuffleChunkId, SHUFFLE_PUSH_MAP_ID,
@@ -936,14 +936,14 @@ final class ShuffleBlockFetcherIterator(
             result = null
 
         case PushMergedRemoteMetaFetchResult(
-          shuffleId, shuffleSequenceId, reduceId, blockSize, bitmaps, address) =>
+          shuffleId, shuffleMergeId, reduceId, blockSize, bitmaps, address) =>
           // The original meta request is processed so we decrease numBlocksToFetch and
           // numBlocksInFlightPerAddress by 1. We will collect new shuffle chunks request and the
           // count of this is added to numBlocksToFetch in collectFetchReqsFromMergedBlocks.
           numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
           numBlocksToFetch -= 1
           val blocksToFetch = pushBasedFetchHelper.createChunkBlockInfosFromMetaResponse(
-            shuffleId, shuffleSequenceId, reduceId, blockSize, bitmaps)
+            shuffleId, shuffleMergeId, reduceId, blockSize, bitmaps)
           val additionalRemoteReqs = new ArrayBuffer[FetchRequest]
           collectFetchRequests(address, blocksToFetch.toSeq, additionalRemoteReqs)
           fetchRequests ++= additionalRemoteReqs
@@ -951,13 +951,13 @@ final class ShuffleBlockFetcherIterator(
           result = null
 
         case PushMergedRemoteMetaFailedFetchResult(
-          shuffleId, shuffleSequenceId, reduceId, address) =>
+          shuffleId, shuffleMergeId, reduceId, address) =>
           // The original meta request failed so we decrease numBlocksInFlightPerAddress by 1.
           numBlocksInFlightPerAddress(address) = numBlocksInFlightPerAddress(address) - 1
           // If we fail to fetch the meta of a push-merged block, we fall back to fetching the
           // original blocks.
           pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(
-            ShuffleMergedBlockId(shuffleId, shuffleSequenceId, reduceId), address)
+            ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId), address)
           // Set result to null to force another iteration.
           result = null
       }
@@ -1425,7 +1425,7 @@ object ShuffleBlockFetcherIterator {
    * Result of a successful fetch of meta information for a remote push-merged block.
    *
    * @param shuffleId shuffle id.
-   * @param shuffleSequenceId shuffle sequence ID for a shuffle ID
+   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
    * @param reduceId reduce id.
    * @param blockSize size of each push-merged block.
    * @param bitmaps bitmaps for every chunk.
@@ -1433,7 +1433,7 @@ object ShuffleBlockFetcherIterator {
    */
   private[storage] case class PushMergedRemoteMetaFetchResult(
       shuffleId: Int,
-      shuffleSequenceId: Int,
+      shuffleMergeId: Int,
       reduceId: Int,
       blockSize: Long,
       bitmaps: Array[RoaringBitmap],
@@ -1443,13 +1443,13 @@ object ShuffleBlockFetcherIterator {
    * Result of a failure while fetching the meta information for a remote push-merged block.
    *
    * @param shuffleId shuffle id.
-   * @param shuffleSequenceId shuffle sequence ID for a shuffle ID
+   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
    * @param reduceId reduce id.
    * @param address BlockManager that the meta was fetched from.
    */
   private[storage] case class PushMergedRemoteMetaFailedFetchResult(
       shuffleId: Int,
-      shuffleSequenceId: Int,
+      shuffleMergeId: Int,
       reduceId: Int,
       address: BlockManagerId) extends FetchResult
 
@@ -1457,14 +1457,14 @@ object ShuffleBlockFetcherIterator {
    * Result of a successful fetch of meta information for a push-merged-local block.
    *
    * @param shuffleId shuffle id.
-   * @param shuffleSequenceId shuffle sequence ID for a shuffle ID.
+   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
    * @param reduceId reduce id.
    * @param bitmaps bitmaps for every chunk.
    * @param localDirs local directories where the push-merged shuffle files are storedl
    */
   private[storage] case class PushMergedLocalMetaFetchResult(
       shuffleId: Int,
-      shuffleSequenceId: Int,
+      shuffleMergeId: Int,
       reduceId: Int,
       bitmaps: Array[RoaringBitmap],
       localDirs: Array[String]) extends FetchResult

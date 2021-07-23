@@ -123,16 +123,12 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   private[this] var _shuffleMergedFinalized: Boolean = false
 
   /**
-   * shuffleSequenceId is used to give temporal ordering to the executions of a ShuffleDependency.
+   * shuffleMergeId is used to give temporal ordering to the executions of a ShuffleDependency.
    * This is required in order to handle indeterministic stage retries for push-based shuffle.
    */
-  private[this] var _shuffleSequenceId: Int = -1
+  private[this] var _shuffleMergeId: Int = -1
 
-  def newShuffleSequenceId(): Unit = {
-    _shuffleSequenceId = _shuffleSequenceId + 1
-  }
-
-  def shuffleSequenceId: Int = _shuffleSequenceId
+  def shuffleMergeId: Int = _shuffleMergeId
 
   def setMergerLocs(mergerLocs: Seq[BlockManagerId]): Unit = {
     if (mergerLocs != null) {
@@ -164,7 +160,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     _shuffleMergeEnabled = canShuffleMergeBeEnabled()
     _shuffleMergedFinalized = false
     mergerLocs = Nil
-    _shuffleSequenceId = _shuffleSequenceId + 1
+    _shuffleMergeId = _shuffleMergeId + 1
   }
 
   private def canShuffleMergeBeEnabled(): Boolean = {

@@ -43,7 +43,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] class MergeStatus(
     private[this] var loc: BlockManagerId,
-    private[this] var _shuffleSequenceId: Int,
+    private[this] var _shuffleMergeId: Int,
     private[this] var mapTracker: RoaringBitmap,
     private[this] var size: Long)
   extends Externalizable with ShuffleOutputStatus {
@@ -52,7 +52,7 @@ private[spark] class MergeStatus(
 
   def location: BlockManagerId = loc
 
-  def shuffleSequenceId: Int = _shuffleSequenceId
+  def shuffleMergeId: Int = _shuffleMergeId
 
   def totalSize: Long = size
 
@@ -103,10 +103,10 @@ private[spark] object MergeStatus {
     assert(mergeStatuses.bitmaps.length == mergeStatuses.reduceIds.length &&
       mergeStatuses.bitmaps.length == mergeStatuses.sizes.length)
     val mergerLoc = BlockManagerId(BlockManagerId.SHUFFLE_MERGER_IDENTIFIER, loc.host, loc.port)
-    val shuffleSequenceId = mergeStatuses.shuffleSequenceId
+    val shuffleMergeId = mergeStatuses.shuffleMergeId
     mergeStatuses.bitmaps.zipWithIndex.map {
       case (bitmap, index) =>
-        val mergeStatus = new MergeStatus(mergerLoc, shuffleSequenceId, bitmap,
+        val mergeStatus = new MergeStatus(mergerLoc, shuffleMergeId, bitmap,
           mergeStatuses.sizes(index))
         (mergeStatuses.reduceIds(index), mergeStatus)
     }
@@ -114,9 +114,9 @@ private[spark] object MergeStatus {
 
   def apply(
       loc: BlockManagerId,
-      shuffleSequenceId: Int,
+      shuffleMergeId: Int,
       bitmap: RoaringBitmap,
       size: Long): MergeStatus = {
-    new MergeStatus(loc, shuffleSequenceId, bitmap, size)
+    new MergeStatus(loc, shuffleMergeId, bitmap, size)
   }
 }

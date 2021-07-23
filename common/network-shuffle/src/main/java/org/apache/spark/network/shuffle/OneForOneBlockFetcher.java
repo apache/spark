@@ -169,7 +169,7 @@ public class OneForOneBlockFetcher {
   private AbstractFetchShuffleBlocks createFetchShuffleChunksMsg(String appId, String execId, String[] blockIds) {
     String[] firstBlock = splitBlockId(blockIds[0]);
     int shuffleId = Integer.parseInt(firstBlock[1]);
-    int shuffleSequenceId = Integer.parseInt(firstBlock[2]);
+    int shuffleMergeId = Integer.parseInt(firstBlock[2]);
 
     Map<Integer, BlocksInfo> reduceIdToBlocksInfo = new LinkedHashMap<>();
     for (String blockId : blockIds) {
@@ -188,7 +188,7 @@ public class OneForOneBlockFetcher {
     int[][] chunkIdsArray = getSecondaryIds(reduceIdToBlocksInfo);
     int[] reduceIds = Ints.toArray(reduceIdToBlocksInfo.keySet());
 
-    return new FetchShuffleBlockChunks(appId, execId, shuffleId, shuffleSequenceId, reduceIds, chunkIdsArray);
+    return new FetchShuffleBlockChunks(appId, execId, shuffleId, shuffleMergeId, reduceIds, chunkIdsArray);
   }
 
   private int[][] getSecondaryIds(Map<? extends Number, BlocksInfo> primaryIdsToBlockInfo) {
@@ -213,7 +213,7 @@ public class OneForOneBlockFetcher {
 
   /**
    * Split the blockId and return accordingly
-   * shuffleChunk - return shuffleId, shuffleSequenceId, reduceId and chunkIds
+   * shuffleChunk - return shuffleId, shuffleMergeId, reduceId and chunkIds
    * shuffle block - return shuffleId, mapId, reduceId
    * shuffle batch block - return shuffleId, mapId, begin reduceId and end reduceId
    */
@@ -221,7 +221,7 @@ public class OneForOneBlockFetcher {
     String[] blockIdParts = blockId.split("_");
     // For batch block id, the format contains shuffleId, mapId, begin reduceId, end reduceId.
     // For single block id, the format contains shuffleId, mapId, reduceId.
-    // For single block chunk id, the format contains shuffleId, shuffleSequenceId, reduceId, chunkId.
+    // For single block chunk id, the format contains shuffleId, shuffleMergeId, reduceId, chunkId.
     if (blockIdParts.length < 4 || blockIdParts.length > 5) {
       throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
     }

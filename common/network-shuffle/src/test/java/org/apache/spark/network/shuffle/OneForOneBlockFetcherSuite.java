@@ -289,7 +289,7 @@ import org.apache.spark.network.util.TransportConf;
   }
 
   @Test
-  public void testChunkFetchWithNegativeShuffleSequenceId() {
+  public void testChunkFetchWithNegativeShuffleMergeId() {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
     blocks.put("shuffleChunk_0_-1_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("shuffleChunk_0_-1_0_1", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));

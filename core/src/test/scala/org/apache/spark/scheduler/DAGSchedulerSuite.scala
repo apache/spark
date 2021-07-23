@@ -316,7 +316,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       if (shuffleMergeRegister) {
         for (part <- 0 until shuffleMapStage.shuffleDep.partitioner.numPartitions) {
           val mergeStatuses = Seq((part, makeMergeStatus("",
-            shuffleMapStage.shuffleDep.shuffleSequenceId)))
+            shuffleMapStage.shuffleDep.shuffleMergeId)))
           handleRegisterMergeStatuses(shuffleMapStage, mergeStatuses)
         }
         if (shuffleMergeFinalize) {
@@ -3728,10 +3728,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }.toSeq)
     val shuffleMapStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
     scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((0, makeMergeStatus("hostA",
-      shuffleDep.shuffleSequenceId))))
+      shuffleDep.shuffleMergeId))))
     scheduler.handleShuffleMergeFinalized(shuffleMapStage)
     scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((1, makeMergeStatus("hostA",
-      shuffleDep.shuffleSequenceId))))
+      shuffleDep.shuffleMergeId))))
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 1)
   }
 
@@ -3822,13 +3822,13 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     completeShuffleMapStageSuccessfully(0, 1, 2)
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
     assert(mapOutputTracker.shuffleStatuses.get(shuffleId1).forall(
-      _.mergeStatuses.forall(x => x.shuffleSequenceId == 1)))
+      _.mergeStatuses.forall(x => x.shuffleMergeId == 1)))
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleId1) == 2)
 
     completeShuffleMapStageSuccessfully(1, 2, 2, Seq("hostC", "hostD"))
     assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
     assert(mapOutputTracker.shuffleStatuses.get(shuffleId2).forall(
-      _.mergeStatuses.forall(x => x.shuffleSequenceId == 2)))
+      _.mergeStatuses.forall(x => x.shuffleMergeId == 2)))
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleId2) == 2)
 
     complete(taskSets(6), Seq((Success, 11), (Success, 12)))
@@ -3903,8 +3903,8 @@ object DAGSchedulerSuite {
     BlockManagerId(host + "-exec", host, 12345)
   }
 
-  def makeMergeStatus(host: String, shuffleSequenceId: Int, size: Long = 1000): MergeStatus =
-    MergeStatus(makeBlockManagerId(host), shuffleSequenceId, mock(classOf[RoaringBitmap]), size)
+  def makeMergeStatus(host: String, shuffleMergeId: Int, size: Long = 1000): MergeStatus =
+    MergeStatus(makeBlockManagerId(host), shuffleMergeId, mock(classOf[RoaringBitmap]), size)
 
   def addMergerLocs(locs: Seq[String]): Unit = {
     locs.foreach { loc => mergerLocs.append(makeBlockManagerId(loc)) }

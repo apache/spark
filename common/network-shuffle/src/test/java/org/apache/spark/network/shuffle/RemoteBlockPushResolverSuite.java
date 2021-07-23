@@ -1060,7 +1060,7 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test
-  public void testBlockPushWithOlderShuffleSequenceId() throws IOException {
+  public void testBlockPushWithOlderShuffleMergeId() throws IOException {
     StreamCallbackWithID stream1 =
         pushResolver.receiveBlockDataAsStream(
             new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
@@ -1072,11 +1072,11 @@ public class RemoteBlockPushResolverSuite {
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     try {
-      // stream 1 push should be rejected as it is from an older shuffleSequenceId
+      // stream 1 push should be rejected as it is from an older shuffleMergeId
       stream1.onComplete(stream1.getID());
     } catch(RuntimeException re) {
-      assertEquals("Block shufflePush_0_0_0_0 is stale block push as shuffle blocks of a higher shuffle"
-          + " sequence id for the shuffle is already being pushed", re.getMessage());
+      assertEquals("Block shufflePush_0_0_0_0 is stale block push as shuffle blocks of a higher"
+          + " shuffleMergeId for the shuffle is already being pushed", re.getMessage());
     }
     // stream 2 now completes
     stream2.onComplete(stream2.getID());
@@ -1086,7 +1086,7 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test
-  public void testFinalizeWithOlderShuffleSequenceId() throws IOException {
+  public void testFinalizeWithOlderShuffleMergeId() throws IOException {
     StreamCallbackWithID stream1 =
         pushResolver.receiveBlockDataAsStream(
             new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
@@ -1098,11 +1098,11 @@ public class RemoteBlockPushResolverSuite {
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     try {
-      // stream 1 push should be rejected as it is from an older shuffleSequenceId
+      // stream 1 push should be rejected as it is from an older shuffleMergeId
       stream1.onComplete(stream1.getID());
     } catch(RuntimeException re) {
-      assertEquals("Block shufflePush_0_0_0_0 is stale block push as shuffle blocks of a higher shuffle"
-          + " sequence id for the shuffle is already being pushed", re.getMessage());
+      assertEquals("Block shufflePush_0_0_0_0 is stale block push as shuffle blocks of a higher"
+          + " shuffleMergeId for the shuffle is already being pushed", re.getMessage());
     }
     // stream 2 now completes
     stream2.onComplete(stream2.getID());
@@ -1112,12 +1112,12 @@ public class RemoteBlockPushResolverSuite {
       mergeStatuses =
           pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     } catch(RuntimeException re) {
-      assertEquals("Shuffle merge finalize request for shuffle 0 with shuffleSequenceId 0 is stale shuffle"
-          + " finalize request as shuffle blocks of a higher shuffle sequence id for the shuffle is already being"
+      assertEquals("Shuffle merge finalize request for shuffle 0 with shuffleMergeId 0 is stale shuffle"
+          + " finalize request as shuffle blocks of a higher shuffleMergeId for the shuffle is already being"
           + " pushed", re.getMessage());
     }
     RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo = pushResolver.validateAndGetAppShuffleInfo(TEST_APP);
-    assertTrue("Older shuffleSequenceId of a shuffleId should point to INVALID_SHUFFLE_PARTITIONS map",
+    assertTrue("Older shuffleMergeId of a shuffleId should point to INVALID_SHUFFLE_PARTITIONS map",
         appShuffleInfo.getPartitions().get(0).get(0) == RemoteBlockPushResolver.STALE_SHUFFLE_PARTITIONS);
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 1));
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 1, 0);
@@ -1125,7 +1125,7 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test
-  public void testBlockFetchWithOlderShuffleSequenceId() throws IOException {
+  public void testBlockFetchWithOlderShuffleMergeId() throws IOException {
     StreamCallbackWithID stream1 =
         pushResolver.receiveBlockDataAsStream(
             new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
@@ -1137,11 +1137,11 @@ public class RemoteBlockPushResolverSuite {
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     try {
-      // stream 1 push should be rejected as it is from an older shuffleSequenceId
+      // stream 1 push should be rejected as it is from an older shuffleMergeId
       stream1.onComplete(stream1.getID());
     } catch(RuntimeException re) {
-      assertEquals("Block shufflePush_0_0_0_0 is stale block push as shuffle blocks of a higher shuffle"
-          + " sequence id for the shuffle is already being pushed", re.getMessage());
+      assertEquals("Block shufflePush_0_0_0_0 is stale block push as shuffle blocks of a higher"
+          + " shuffleMergeId for the shuffle is already being pushed", re.getMessage());
     }
     // stream 2 now completes
     stream2.onComplete(stream2.getID());
@@ -1149,16 +1149,16 @@ public class RemoteBlockPushResolverSuite {
     try {
       pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     } catch(RuntimeException re) {
-      assertEquals("MergedBlock meta fetch for shuffleId 0 shuffleSequenceId 0 reduceId 0 is stale fetch"
-          + " as the shuffleSequenceId is older than the latest shuffleSequenceId", re.getMessage());
+      assertEquals("MergedBlock meta fetch for shuffleId 0 shuffleMergeId 0 reduceId 0 is stale fetch"
+          + " as the shuffleMergeId is older than the latest shuffleMergeId", re.getMessage());
     }
 
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 1));
     try {
       pushResolver.getMergedBlockData(TEST_APP, 0, 0, 0, 0);
     } catch(RuntimeException re) {
-      assertEquals("MergedBlock data fetch for shuffleId 0 shuffleSequenceId 0 reduceId 0 is stale fetch"
-          + " as the shuffleSequenceId is older than the latest shuffleSequenceId", re.getMessage());
+      assertEquals("MergedBlock data fetch for shuffleId 0 shuffleMergeId 0 reduceId 0 is stale fetch"
+          + " as the shuffleMergeId is older than the latest shuffleMergeId", re.getMessage());
     }
 
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 1, 0);
@@ -1166,7 +1166,7 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test
-  public void testCleanupOlderShuffleSequenceId() throws IOException, InterruptedException {
+  public void testCleanupOlderShuffleMergeId() throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
     pushResolver = new RemoteBlockPushResolver(conf) {
       @Override
@@ -1175,7 +1175,7 @@ public class RemoteBlockPushResolverSuite {
         closed.release();
       }
     };
-    String testApp = "testCleanupOlderShuffleSequenceId";
+    String testApp = "testCleanupOlderShuffleMergeId";
     registerExecutor(testApp, prepareLocalDirs(localDirs, MERGE_DIRECTORY), MERGE_DIRECTORY_META);
     StreamCallbackWithID stream1 =
         pushResolver.receiveBlockDataAsStream(
@@ -1186,7 +1186,7 @@ public class RemoteBlockPushResolverSuite {
             new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 1, 0, 0, 0));
     RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo = pushResolver.validateAndGetAppShuffleInfo(testApp);
     closed.acquire();
-    assertTrue("Older shuffleSequence partitions should be cleaned up",
+    assertTrue("Older shuffleMerge partitions should be cleaned up",
         appShuffleInfo.getPartitions().get(0).get(0) == RemoteBlockPushResolver.STALE_SHUFFLE_PARTITIONS);
     assertFalse("Data files on the disk should be cleaned up",
         appShuffleInfo.getMergedShuffleDataFile(0, 0, 0).exists());
@@ -1204,7 +1204,7 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test
-  public void testBlockPushAndFetchWithNegativeShuffleSequenceId() throws IOException {
+  public void testBlockPushAndFetchWithNegativeshuffleMergeId() throws IOException {
     StreamCallbackWithID stream1 =
         pushResolver.receiveBlockDataAsStream(
             new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, -1, 0, 0, 0));
@@ -1221,13 +1221,13 @@ public class RemoteBlockPushResolverSuite {
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {
     pushResolver = new RemoteBlockPushResolver(conf) {
       @Override
-      AppShufflePartitionInfo newAppShufflePartitionInfo(String appId, int shuffleId, int shuffleSequenceId,
+      AppShufflePartitionInfo newAppShufflePartitionInfo(String appId, int shuffleId, int shuffleMergeId,
           int reduceId, File dataFile, File indexFile, File metaFile) throws IOException {
         MergeShuffleFile mergedIndexFile = useTestIndexFile ? new TestMergeShuffleFile(indexFile)
           : new MergeShuffleFile(indexFile);
         MergeShuffleFile mergedMetaFile = useTestMetaFile ? new TestMergeShuffleFile(metaFile) :
           new MergeShuffleFile(metaFile);
-        return new AppShufflePartitionInfo(appId, shuffleId, shuffleSequenceId, reduceId, dataFile, mergedIndexFile,
+        return new AppShufflePartitionInfo(appId, shuffleId, shuffleMergeId, reduceId, dataFile, mergedIndexFile,
           mergedMetaFile);
       }
     };
@@ -1274,7 +1274,7 @@ public class RemoteBlockPushResolverSuite {
   private void validateChunks(
       String appId,
       int shuffleId,
-      int shuffleSequenceId,
+      int shuffleMergeId,
       int reduceId,
       MergedBlockMeta meta,
       int[] expectedSizes,
@@ -1288,7 +1288,7 @@ public class RemoteBlockPushResolverSuite {
     }
     for (int i = 0; i < meta.getNumChunks(); i++) {
       FileSegmentManagedBuffer mb =
-        (FileSegmentManagedBuffer) pushResolver.getMergedBlockData(appId, shuffleId, shuffleSequenceId, reduceId, i);
+        (FileSegmentManagedBuffer) pushResolver.getMergedBlockData(appId, shuffleId, shuffleMergeId, reduceId, i);
       assertEquals(expectedSizes[i], mb.getLength());
     }
   }
@@ -1300,7 +1300,7 @@ public class RemoteBlockPushResolverSuite {
     for (PushBlock block : blocks) {
       StreamCallbackWithID stream = pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(appId, attemptId, block.shuffleId, block.mapIndex,
-          block.shuffleSequenceId, block.reduceId, 0));
+          block.shuffleMergeId, block.reduceId, 0));
       stream.onData(stream.getID(), block.buffer);
       stream.onComplete(stream.getID());
     }
@@ -1308,13 +1308,13 @@ public class RemoteBlockPushResolverSuite {
 
   private static class PushBlock {
     private final int shuffleId;
-    private final int shuffleSequenceId;
+    private final int shuffleMergeId;
     private final int mapIndex;
     private final int reduceId;
     private final ByteBuffer buffer;
-    PushBlock(int shuffleId, int shuffleSequenceId, int mapIndex, int reduceId, ByteBuffer buffer) {
+    PushBlock(int shuffleId, int shuffleMergeId, int mapIndex, int reduceId, ByteBuffer buffer) {
       this.shuffleId = shuffleId;
-      this.shuffleSequenceId = shuffleSequenceId;
+      this.shuffleMergeId = shuffleMergeId;
       this.mapIndex = mapIndex;
       this.reduceId = reduceId;
       this.buffer = buffer;

@@ -111,7 +111,7 @@ class BlockIdSuite extends SparkFunSuite {
     assert(id.name === "shuffleMerged_app_000_8_0_9.data")
     assert(id.asRDDId === None)
     assert(id.appId === "app_000")
-    assert(id.shuffleSequenceId == 0)
+    assert(id.shuffleMergeId == 0)
     assert(id.shuffleId=== 8)
     assert(id.reduceId === 9)
     assertSame(id, BlockId(id.toString))
@@ -125,7 +125,7 @@ class BlockIdSuite extends SparkFunSuite {
     assert(id.asRDDId === None)
     assert(id.appId === "app_000")
     assert(id.shuffleId=== 8)
-    assert(id.shuffleSequenceId == 0)
+    assert(id.shuffleMergeId == 0)
     assert(id.reduceId === 9)
     assertSame(id, BlockId(id.toString))
   }
@@ -138,7 +138,7 @@ class BlockIdSuite extends SparkFunSuite {
     assert(id.asRDDId === None)
     assert(id.appId === "app_000")
     assert(id.shuffleId=== 8)
-    assert(id.shuffleSequenceId == 0)
+    assert(id.shuffleMergeId == 0)
     assert(id.reduceId === 9)
     assertSame(id, BlockId(id.toString))
   }

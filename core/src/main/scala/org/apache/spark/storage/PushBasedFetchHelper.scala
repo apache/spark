@@ -110,14 +110,14 @@ private class PushBasedFetchHelper(
    */
   def createChunkBlockInfosFromMetaResponse(
       shuffleId: Int,
-      shuffleSequenceId: Int,
+      shuffleMergeId: Int,
       reduceId: Int,
       blockSize: Long,
       bitmaps: Array[RoaringBitmap]): ArrayBuffer[(BlockId, Long, Int)] = {
     val approxChunkSize = blockSize / bitmaps.length
     val blocksToFetch = new ArrayBuffer[(BlockId, Long, Int)]()
     for (i <- bitmaps.indices) {
-      val blockChunkId = ShuffleBlockChunkId(shuffleId, shuffleSequenceId, reduceId, i)
+      val blockChunkId = ShuffleBlockChunkId(shuffleId, shuffleMergeId, reduceId, i)
       chunksMetaMap.put(blockChunkId, bitmaps(i))
       logDebug(s"adding block chunk $blockChunkId of size $approxChunkSize")
       blocksToFetch += ((blockChunkId, approxChunkSize, SHUFFLE_PUSH_MAP_ID))
@@ -140,36 +140,36 @@ private class PushBasedFetchHelper(
     }.toMap
     val address = req.address
     val mergedBlocksMetaListener = new MergedBlocksMetaListener {
-      override def onSuccess(shuffleId: Int, shuffleSequenceId: Int, reduceId: Int,
+      override def onSuccess(shuffleId: Int, shuffleMergeId: Int, reduceId: Int,
           meta: MergedBlockMeta): Unit = {
-        logInfo(s"Received the meta of push-merged block for ($shuffleId, $shuffleSequenceId," +
+        logInfo(s"Received the meta of push-merged block for ($shuffleId, $shuffleMergeId," +
           s" $reduceId) from ${req.address.host}:${req.address.port}")
         try {
-          iterator.addToResultsQueue(PushMergedRemoteMetaFetchResult(shuffleId, shuffleSequenceId,
+          iterator.addToResultsQueue(PushMergedRemoteMetaFetchResult(shuffleId, shuffleMergeId,
             reduceId, sizeMap((shuffleId, reduceId)), meta.readChunkBitmaps(), address))
         } catch {
           case exception: Exception =>
             logError(s"Failed to parse the meta of push-merged block for ($shuffleId, " +
-              s"$shuffleSequenceId, $reduceId) from" +
+              s"$shuffleMergeId, $reduceId) from" +
               s" ${req.address.host}:${req.address.port}", exception)
             iterator.addToResultsQueue(
-              PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleSequenceId, reduceId,
+              PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleMergeId, reduceId,
                 address))
         }
       }
 
-      override def onFailure(shuffleId: Int, shuffleSequenceId: Int, reduceId: Int,
+      override def onFailure(shuffleId: Int, shuffleMergeId: Int, reduceId: Int,
           exception: Throwable): Unit = {
         logError(s"Failed to get the meta of push-merged block for ($shuffleId, $reduceId) " +
           s"from ${req.address.host}:${req.address.port}", exception)
         iterator.addToResultsQueue(
-          PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleSequenceId, reduceId, address))
+          PushMergedRemoteMetaFailedFetchResult(shuffleId, shuffleMergeId, reduceId, address))
       }
     }
     req.blocks.foreach { block =>
       val shuffleBlockId = block.blockId.asInstanceOf[ShuffleMergedBlockId]
       shuffleClient.getMergedBlockMeta(address.host, address.port, shuffleBlockId.shuffleId,
-        shuffleBlockId.shuffleSequenceId, shuffleBlockId.reduceId, mergedBlocksMetaListener)
+        shuffleBlockId.shuffleMergeId, shuffleBlockId.reduceId, mergedBlocksMetaListener)
     }
   }
 
@@ -249,7 +249,7 @@ private class PushBasedFetchHelper(
       val shuffleBlockId = blockId.asInstanceOf[ShuffleMergedBlockId]
       val chunksMeta = blockManager.getLocalMergedBlockMeta(shuffleBlockId, localDirs)
       iterator.addToResultsQueue(PushMergedLocalMetaFetchResult(
-        shuffleBlockId.shuffleId, shuffleBlockId.shuffleSequenceId,
+        shuffleBlockId.shuffleId, shuffleBlockId.shuffleMergeId,
         shuffleBlockId.reduceId, chunksMeta.readChunkBitmaps(), localDirs))
     } catch {
       case e: Exception =>
