@@ -702,6 +702,9 @@ object Hive {
   lazy val settings = Seq(
     // Specially disable assertions since some Hive tests fail them
     javaOptions in Test := (javaOptions in Test).value.filterNot(_ == "-ea"),
+    // Hive tests need higher metaspace size
+    javaOptions in Test := (javaOptions in Test).value.filterNot(_.contains("MaxMetaspaceSize")),
+    javaOptions in Test += "-XX:MaxMetaspaceSize=2g",
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
     // only for this subproject.
     scalacOptions := (scalacOptions map { currentOpts: Seq[String] =>
@@ -1002,9 +1005,15 @@ object TestSettings {
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test += "-ea",
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
-    javaOptions in Test ++= "-Xmx4g -Xss4m -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
-      .split(" ").toSeq,
-    javaOptions += "-Xmx3g",
+    javaOptions in Test ++= {
+      val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
+      s"-Xmx3200m -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
+        .split(" ").toSeq
+    },
+    javaOptions ++= {
+      val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
+      s"-Xmx3g -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
+    },
     // Exclude tags defined in a system property
     testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,
       sys.props.get("test.exclude.tags").map { tags =>
