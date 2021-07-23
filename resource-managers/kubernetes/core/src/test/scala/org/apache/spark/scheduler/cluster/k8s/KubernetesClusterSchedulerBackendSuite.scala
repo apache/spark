@@ -19,8 +19,9 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
-import io.fabric8.kubernetes.api.model.{Pod, PodList}
+import io.fabric8.kubernetes.api.model.{ObjectMeta, Pod, PodList}
 import io.fabric8.kubernetes.client.KubernetesClient
+import io.fabric8.kubernetes.client.dsl.{NonNamespaceOperation, PodResource}
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
@@ -44,6 +45,8 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
   private val sparkConf = new SparkConf(false)
     .set("spark.executor.instances", "3")
     .set("spark.app.id", TEST_SPARK_APP_ID)
+    .set("spark.kubernetes.executor.decommmissionLabel", "soLong")
+    .set("spark.kubernetes.executor.decommmissionLabelValue", "cruelWorld")
 
   @Mock
   private var sc: SparkContext = _
@@ -166,25 +169,65 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
 
   test("Kill executors") {
     schedulerBackendUnderTest.start()
+
+    val operation = mock(classOf[NonNamespaceOperation[
+      Pod, PodList, PodResource[Pod]]])
+
+    when(podOperations.inNamespace(any())).thenReturn(operation)
     when(podOperations.withField(any(), any())).thenReturn(labeledPods)
+    when(podOperations.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID)).thenReturn(labeledPods)
     when(labeledPods.withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)).thenReturn(labeledPods)
     when(labeledPods.withLabelIn(SPARK_EXECUTOR_ID_LABEL, "1", "2")).thenReturn(labeledPods)
 
+    val pod1 = mock(classOf[Pod])
+    val pod1Metadata = mock(classOf[ObjectMeta])
+    when(pod1Metadata.getNamespace).thenReturn("coffeeIsLife")
+    when(pod1Metadata.getName).thenReturn("pod1")
+    when(pod1.getMetadata).thenReturn(pod1Metadata)
+
+    val pod2 = mock(classOf[Pod])
+    val pod2Metadata = mock(classOf[ObjectMeta])
+    when(pod2Metadata.getNamespace).thenReturn("coffeeIsLife")
+    when(pod2Metadata.getName).thenReturn("pod2")
+    when(pod2.getMetadata).thenReturn(pod2Metadata)
+
+    val pod1op = mock(classOf[PodResource[Pod]])
+    val pod2op = mock(classOf[PodResource[Pod]])
+    when(operation.withName("pod1")).thenReturn(pod1op)
+    when(operation.withName("pod2")).thenReturn(pod2op)
+
     val podList = mock(classOf[PodList])
     when(labeledPods.list()).thenReturn(podList)
     when(podList.getItems()).thenReturn(Arrays.asList[Pod]())
+    schedulerExecutorService.tick(sparkConf.get(KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD) * 2,
+      TimeUnit.MILLISECONDS)
+    verify(labeledPods, never()).delete()
 
     schedulerBackendUnderTest.doKillExecutors(Seq("1", "2"))
     verify(driverEndpointRef).send(RemoveExecutor("1", ExecutorKilled))
     verify(driverEndpointRef).send(RemoveExecutor("2", ExecutorKilled))
     verify(labeledPods, never()).delete()
+    verify(pod1op, never()).edit(any(
+      classOf[java.util.function.UnaryOperator[io.fabric8.kubernetes.api.model.Pod]]))
+    verify(pod2op, never()).edit(any(
+      classOf[java.util.function.UnaryOperator[io.fabric8.kubernetes.api.model.Pod]]))
     schedulerExecutorService.tick(sparkConf.get(KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD) * 2,
       TimeUnit.MILLISECONDS)
     verify(labeledPods, never()).delete()
+    verify(pod1op, never()).edit(any(
+      classOf[java.util.function.UnaryOperator[io.fabric8.kubernetes.api.model.Pod]]))
+    verify(pod2op, never()).edit(any(
+      classOf[java.util.function.UnaryOperator[io.fabric8.kubernetes.api.model.Pod]]))
 
-    when(podList.getItems()).thenReturn(Arrays.asList(mock(classOf[Pod])))
+    when(podList.getItems()).thenReturn(Arrays.asList(pod1))
     schedulerBackendUnderTest.doKillExecutors(Seq("1", "2"))
+    verify(labeledPods, never()).delete()
+    schedulerExecutorService.runUntilIdle()
+    verify(pod1op).edit(any(
+      classOf[java.util.function.UnaryOperator[io.fabric8.kubernetes.api.model.Pod]]))
+    verify(pod2op, never()).edit(any(
+      classOf[java.util.function.UnaryOperator[io.fabric8.kubernetes.api.model.Pod]]))
     verify(labeledPods, never()).delete()
     schedulerExecutorService.tick(sparkConf.get(KUBERNETES_DYN_ALLOC_KILL_GRACE_PERIOD) * 2,
       TimeUnit.MILLISECONDS)
