@@ -1122,12 +1122,12 @@ object TestSettings {
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
     (Test / javaOptions) ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xms1024m -Xmx3200m -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m"
+      s"-Xmx3200m -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m"
         .split(" ").toSeq
     },
     javaOptions ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xms1024m -Xmx3200m -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
+      s"-Xmx3200m -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
     },
     (Test / javaOptions) ++= {
       val jdwpEnabled = sys.props.getOrElse("test.jdwp.enabled", "false").toBoolean
@@ -1203,7 +1203,7 @@ object TestSettings {
     (Global / concurrentRestrictions) := {
       // The number of concurrent test groups is empirically chosen based on experience
       // with Jenkins flakiness.
-      if (sys.env.contains("SERIAL_SBT_TESTS")) Seq(Tags.limit(Tags.Test, 1))
+      if (sys.env.contains("SERIAL_SBT_TESTS")) (Global / concurrentRestrictions).value
       else Seq(Tags.limit(Tags.ForkedTestGroup, 4))
     }
   )
