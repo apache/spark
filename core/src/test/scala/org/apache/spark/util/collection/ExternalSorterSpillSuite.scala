@@ -18,6 +18,7 @@
 package org.apache.spark.util.collection
 
 import java.io.{File, IOException}
+import java.util.UUID
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -31,7 +32,7 @@ import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.serializer.{KryoSerializer, SerializerInstance, SerializerManager}
-import org.apache.spark.storage.{BlockId, BlockManager, DiskBlockManager, DiskBlockObjectWriter}
+import org.apache.spark.storage.{BlockId, BlockManager, DiskBlockManager, DiskBlockObjectWriter, TempShuffleBlockId}
 import org.apache.spark.util
 
 class ExternalSorterSpillSuite extends SparkFunSuite with BeforeAndAfterEach {
@@ -75,8 +76,6 @@ class ExternalSorterSpillSuite extends SparkFunSuite with BeforeAndAfterEach {
 
     when(diskBlockManager.createTempShuffleBlock())
       .thenAnswer((_: InvocationOnMock) => {
-        import org.apache.spark.storage.TempShuffleBlockId
-        import java.util.UUID
         val blockId = TempShuffleBlockId(UUID.randomUUID)
         val file = File.createTempFile("spillFile", ".spill", tempDir)
         spillFilesCreated += file
