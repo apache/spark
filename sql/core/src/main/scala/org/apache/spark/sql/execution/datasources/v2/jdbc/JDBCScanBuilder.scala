@@ -67,7 +67,7 @@ case class JDBCScanBuilder(
     var outputSchema = new StructType()
     aggregation.groupByColumns.foreach { col =>
       val structField = getStructFieldForCol(col)
-      outputSchema = outputSchema.add(StructField(structField.name, structField.dataType))
+      outputSchema = outputSchema.add(structField)
       pushedAggregateColumn = pushedAggregateColumn :+ dialect.quoteIdentifier(structField.name)
     }
 

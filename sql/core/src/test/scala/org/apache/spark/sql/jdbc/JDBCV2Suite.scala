@@ -238,203 +238,231 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
     }
   }
 
-  test("scan with aggregate push-down") {
-    val df1 = sql("select MAX(SALARY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
+  test("scan with aggregate push-down: MAX MIN with filter and group by") {
+    val df = sql("select MAX(SALARY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
       " group by DEPT")
-    val filters1 = df1.queryExecution.optimizedPlan.collect {
+    val filters = df.queryExecution.optimizedPlan.collect {
       case f: Filter => f
     }
-    assert(filters1.isEmpty)
-    df1.queryExecution.optimizedPlan.collect {
+    assert(filters.isEmpty)
+    df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Max(SALARY), Min(BONUS)], " +
             "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
             "PushedGroupby: [DEPT]"
-        checkKeywordsExistsInExplain(df1, expected_plan_fragment)
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df1, Seq(Row(10000, 1000), Row(12000, 1200), Row(12000, 1200)))
+    checkAnswer(df, Seq(Row(10000, 1000), Row(12000, 1200), Row(12000, 1200)))
+  }
 
-    val df2 = sql("select MAX(ID), MIN(ID) FROM h2.test.people where id > 0")
-    val filters2 = df2.queryExecution.optimizedPlan.collect {
+  test("scan with aggregate push-down: MAX MIN with filter without group by") {
+    val df = sql("select MAX(ID), MIN(ID) FROM h2.test.people where id > 0")
+    val filters = df.queryExecution.optimizedPlan.collect {
       case f: Filter => f
     }
-    assert(filters2.isEmpty)
-    df2.queryExecution.optimizedPlan.collect {
+    assert(filters.isEmpty)
+    df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Max(ID), Min(ID)], " +
             "PushedFilters: [IsNotNull(ID), GreaterThan(ID,0)], " +
             "PushedGroupby: []"
-        checkKeywordsExistsInExplain(df2, expected_plan_fragment)
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df2, Seq(Row(2, 1)))
+    checkAnswer(df, Seq(Row(2, 1)))
+  }
 
-    val df3 = sql("select MAX(SALARY) + 1 FROM h2.test.employee")
-    df3.queryExecution.optimizedPlan.collect {
+  test("scan with aggregate push-down: aggregate + number") {
+    val df = sql("select MAX(SALARY) + 1 FROM h2.test.employee")
+    df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Max(SALARY)]"
-        checkKeywordsExistsInExplain(df3, expected_plan_fragment)
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df3, Seq(Row(12001)))
+    checkAnswer(df, Seq(Row(12001)))
+  }
 
-    val df4 = sql("select COUNT(*) FROM h2.test.employee")
-    df4.queryExecution.optimizedPlan.collect {
+  test("scan with aggregate push-down: COUNT(*)") {
+    val df = sql("select COUNT(*) FROM h2.test.employee")
+    df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [CountStar()]"
-        checkKeywordsExistsInExplain(df4, expected_plan_fragment)
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df4, Seq(Row(5)))
+    checkAnswer(df, Seq(Row(5)))
+  }
 
-    val df5 = sql("select COUNT(DEPT) FROM h2.test.employee")
-    df5.queryExecution.optimizedPlan.collect {
+  test("scan with aggregate push-down: COUNT(col)") {
+    val df = sql("select COUNT(DEPT) FROM h2.test.employee")
+    df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Count(DEPT,false)]"
-        checkKeywordsExistsInExplain(df5, expected_plan_fragment)
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df5, Seq(Row(5)))
+    checkAnswer(df, Seq(Row(5)))
+  }
 
-    val df6 = sql("select COUNT(DISTINCT DEPT) FROM h2.test.employee")
-    df6.queryExecution.optimizedPlan.collect {
+  test("scan with aggregate push-down: COUNT(DISTINCT col)") {
+    val df = sql("select COUNT(DISTINCT DEPT) FROM h2.test.employee")
+    df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Count(DEPT,true)]"
-        checkKeywordsExistsInExplain(df6, expected_plan_fragment)
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df6, Seq(Row(3)))
+    checkAnswer(df, Seq(Row(3)))
+  }
 
-    val df7 = sql("SELECT SUM(SALARY) FROM h2.test.employee")
-    df7.queryExecution.optimizedPlan.collect {
+  test("scan with aggregate push-down: SUM without filer and group by") {
+    val df = sql("SELECT SUM(SALARY) FROM h2.test.employee")
+    df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Sum(SALARY,DecimalType(30,2),false)]"
-        checkKeywordsExistsInExplain(df7, expected_plan_fragment)
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df7, Seq(Row(53000)))
+    checkAnswer(df, Seq(Row(53000)))
+  }
 
-    val df8 = sql("SELECT SUM(DISTINCT SALARY) FROM h2.test.employee")
-    df8.queryExecution.optimizedPlan.collect {
+  test("scan with aggregate push-down: DISTINCT SUM without filer and group by") {
+    val df = sql("SELECT SUM(DISTINCT SALARY) FROM h2.test.employee")
+    df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Sum(SALARY,DecimalType(30,2),true)]"
-        checkKeywordsExistsInExplain(df8, expected_plan_fragment)
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df8, Seq(Row(31000)))
+    checkAnswer(df, Seq(Row(31000)))
+  }
 
-    val df9 = sql("SELECT SUM(SALARY) FROM h2.test.employee GROUP BY DEPT")
-    df9.queryExecution.optimizedPlan.collect {
+  test("scan with aggregate push-down: SUM with group by") {
+    val df = sql("SELECT SUM(SALARY) FROM h2.test.employee GROUP BY DEPT")
+    df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Sum(SALARY,DecimalType(30,2),false)], " +
             "PushedFilters: [], " +
             "PushedGroupby: [DEPT]"
-        checkKeywordsExistsInExplain(df9, expected_plan_fragment)
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df9, Seq(Row(19000), Row(22000), Row(12000)))
+    checkAnswer(df, Seq(Row(19000), Row(22000), Row(12000)))
+  }
 
-    val df10 = sql("SELECT SUM(DISTINCT SALARY) FROM h2.test.employee GROUP BY DEPT")
-    df10.queryExecution.optimizedPlan.collect {
+  test("scan with aggregate push-down: DISTINCT SUM with group by") {
+    val df = sql("SELECT SUM(DISTINCT SALARY) FROM h2.test.employee GROUP BY DEPT")
+    df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Sum(SALARY,DecimalType(30,2),true)], " +
             "PushedFilters: [], " +
             "PushedGroupby: [DEPT]"
-        checkKeywordsExistsInExplain(df10, expected_plan_fragment)
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df10, Seq(Row(19000), Row(22000), Row(12000)))
+    checkAnswer(df, Seq(Row(19000), Row(22000), Row(12000)))
+  }
 
-    val df11 = sql("select MAX(SALARY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
+  test("scan with aggregate push-down: with multiple group by columns") {
+    val df = sql("select MAX(SALARY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
       " group by DEPT, NAME")
-    val filters11 = df11.queryExecution.optimizedPlan.collect {
+    val filters11 = df.queryExecution.optimizedPlan.collect {
       case f: Filter => f
     }
     assert(filters11.isEmpty)
-    df11.queryExecution.optimizedPlan.collect {
+    df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Max(SALARY), Min(BONUS)], " +
             "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
             "PushedGroupby: [DEPT, NAME]"
-        checkKeywordsExistsInExplain(df11, expected_plan_fragment)
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df11, Seq(Row(9000, 1200), Row(12000, 1200), Row(10000, 1300),
+    checkAnswer(df, Seq(Row(9000, 1200), Row(12000, 1200), Row(10000, 1300),
       Row(10000, 1000), Row(12000, 1200)))
+  }
 
-    val df12 = sql("select MAX(SALARY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
+  test("scan with aggregate push-down: with having clause") {
+    val df = sql("select MAX(SALARY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
       " group by DEPT having MIN(BONUS) > 1000")
-    val filters12 = df12.queryExecution.optimizedPlan.collect {
+    val filters = df.queryExecution.optimizedPlan.collect {
       case f: Filter => f  // filter over aggregate not push down
     }
-    assert(filters12.nonEmpty)
-    df12.queryExecution.optimizedPlan.collect {
+    assert(filters.nonEmpty)
+    df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Max(SALARY), Min(BONUS)], " +
           "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
           "PushedGroupby: [DEPT]"
-        checkKeywordsExistsInExplain(df12, expected_plan_fragment)
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df12, Seq(Row(12000, 1200), Row(12000, 1200)))
+    checkAnswer(df, Seq(Row(12000, 1200), Row(12000, 1200)))
   }
 
-  test("aggregate pushdown with alias") {
-    val df1 = sql("select * from h2.test.employee")
+  test("scan with aggregate push-down: alias over aggregate") {
+    val df = sql("select * from h2.test.employee")
       .groupBy($"DEPT")
       .min("SALARY").as("total")
-    df1.queryExecution.optimizedPlan.collect {
+    df.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Min(SALARY)], " +
-          "PushedFilters: [], " +
-          "PushedGroupby: [DEPT]"
-        checkKeywordsExistsInExplain(df1, expected_plan_fragment)
+            "PushedFilters: [], " +
+            "PushedGroupby: [DEPT]"
+        checkKeywordsExistsInExplain(df, expected_plan_fragment)
     }
-    checkAnswer(df1, Seq(Row(1, 9000), Row(2, 10000), Row(6, 12000)))
+    checkAnswer(df, Seq(Row(1, 9000), Row(2, 10000), Row(6, 12000)))
+  }
 
-    val df2 = spark.table("h2.test.employee")
-    val query1 = df2.select($"DEPT", $"SALARY")
+  test("scan with aggregate push-down: order by alias over aggregate") {
+    val df = spark.table("h2.test.employee")
+    val query = df.select($"DEPT", $"SALARY")
       .filter($"DEPT" > 0)
       .groupBy($"DEPT")
       .agg(sum($"SALARY").as("total"))
       .filter($"total" > 1000)
       .orderBy($"total")
-    val filters = query1.queryExecution.optimizedPlan.collect {
+    val filters = query.queryExecution.optimizedPlan.collect {
       case f: Filter => f
     }
-    assert(filters.nonEmpty)  // filter over aggregate not pushed down
-    query1.queryExecution.optimizedPlan.collect {
+    assert(filters.nonEmpty) // filter over aggregate not pushed down
+    query.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Sum(SALARY,DecimalType(30,2),false)], " +
-          "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
-          "PushedGroupby: [DEPT]"
-        checkKeywordsExistsInExplain(query1, expected_plan_fragment)
+            "PushedFilters: [IsNotNull(DEPT), GreaterThan(DEPT,0)], " +
+            "PushedGroupby: [DEPT]"
+        checkKeywordsExistsInExplain(query, expected_plan_fragment)
     }
-    checkAnswer(query1, Seq(Row(6, 12000), Row(1, 19000), Row(2, 22000)))
+    checkAnswer(query, Seq(Row(6, 12000), Row(1, 19000), Row(2, 22000)))
+  }
 
-    val decrease = udf { (x: Double, y: Double) => x - y}
-
-    val query2 = df2.select(decrease(sum($"SALARY"), sum($"BONUS")).as("value"))
-    query2.queryExecution.optimizedPlan.collect {
+  test("scan with aggregate push-down: udf over aggregate") {
+    val df = spark.table("h2.test.employee")
+    val decrease = udf { (x: Double, y: Double) => x - y }
+    val query = df.select(decrease(sum($"SALARY"), sum($"BONUS")).as("value"))
+    query.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
           "PushedAggregates: [Sum(SALARY,DecimalType(30,2),false), Sum(BONUS,DoubleType,false)"
-        checkKeywordsExistsInExplain(query2, expected_plan_fragment)
+        checkKeywordsExistsInExplain(query, expected_plan_fragment)
     }
-    checkAnswer(query2, Seq(Row(47100.0)))
+    checkAnswer(query, Seq(Row(47100.0)))
+  }
 
+  test("scan with aggregate push-down: aggregate over alias") {
     val cols = Seq("a", "b", "c", "d")
-    val df3 = sql("select * from h2.test.employee").toDF(cols: _*)
-    val df4 = df3.groupBy().sum("c")
-    df4.queryExecution.optimizedPlan.collect {
+    val df1 = sql("select * from h2.test.employee").toDF(cols: _*)
+    val df2 = df1.groupBy().sum("c")
+    df2.queryExecution.optimizedPlan.collect {
       case _: DataSourceV2ScanRelation =>
         val expected_plan_fragment =
-          "PushedAggregates: []"  // alias over aggregate not push down
-        checkKeywordsExistsInExplain(df4, expected_plan_fragment)
+          "PushedAggregates: []"  // aggregate over alias not push down
+        checkKeywordsExistsInExplain(df2, expected_plan_fragment)
     }
-    checkAnswer(df4, Seq(Row(53000.00)))
+    checkAnswer(df2, Seq(Row(53000.00)))
   }
 }
