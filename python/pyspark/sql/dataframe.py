@@ -1857,10 +1857,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> from pyspark.sql.functions import col, count, lit, max
         >>> from pyspark.sql.observation import Observation
         >>> observation = Observation("my_metrics")
-        >>> observed_df = df.observe(observation, count(lit(1)), max(col("age")))
+        >>> observed_df = df.observe(observation, count(lit(1)).alias("count"), max(col("age")))
         >>> observed_df.count()
+        2
         >>> observation.get
-        Row(count(1)=2, max(age)=5)
+        Row(count=2, max(age)=5)
         """
         from pyspark.sql.observation import Observation
         assert isinstance(observation, Observation), "observation should be Observation"

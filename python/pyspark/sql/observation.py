@@ -54,10 +54,11 @@ class Observation:
     >>> from pyspark.sql.functions import col, count, lit, max
     >>> from pyspark.sql.observation import Observation
     >>> observation = Observation("my_metrics")
-    >>> observed_df = df.observe(observation, count(lit(1)), max(col("age")))
+    >>> observed_df = df.observe(observation, count(lit(1)).alias("count"), max(col("age")))
     >>> observed_df.count()
+    2
     >>> observation.get
-    Row(count(1)=2, max(age)=5)
+    Row(count=2, max(age)=5)
     """
     def __init__(self, name=None):
         """Constructs a named or unnamed Observation instance.
@@ -130,12 +131,13 @@ def _test():
     import pyspark.sql.observation
     globs = pyspark.sql.observation.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
+    globs['sc'] = sc
     globs['spark'] = SparkSession(sc)
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))
 
-    (failure_count, test_count) = doctest.testmod(pyspark.sql.dataframe, globs=globs)
+    (failure_count, test_count) = doctest.testmod(pyspark.sql.observation, globs=globs)
     globs['sc'].stop()
     if failure_count:
         sys.exit(-1)
