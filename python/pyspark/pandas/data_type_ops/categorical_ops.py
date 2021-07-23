@@ -22,14 +22,11 @@ import pandas as pd
 import numpy as np
 from pandas.api.types import is_list_like, CategoricalDtype
 
-from pyspark.pandas import DataFrame
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import DataTypeOps
-from pyspark.pandas.series import first_series
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
-from pyspark.pandas.utils import combine_frames, same_anchor
 from pyspark.sql import functions as F
 from pyspark.sql.column import Column
 
@@ -126,7 +123,7 @@ def _compare(
         raise TypeError("Cannot compare a Categorical with the given type.")
 
 
-def _to_cat(index_ops):
+def _to_cat(index_ops: IndexOpsLike) -> IndexOpsLike:
     categories = cast(CategoricalDtype, index_ops.dtype).categories
     if len(categories) == 0:
         scol = SF.lit(None)
