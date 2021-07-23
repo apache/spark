@@ -20,6 +20,8 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype, is_dict_like, is_list_like
 
 from pyspark.pandas.internal import InternalField
+from pyspark.pandas.utils import name_like_string
+from pyspark.sql import functions as F
 from pyspark.sql.types import StructField
 
 if TYPE_CHECKING:
@@ -740,19 +742,19 @@ class CategoricalAccessor(object):
         if ordered is None:
             ordered = self.ordered
 
-        if rename:
-            len_new_categories, len_categories = len(new_categories), len(self.categories)
-            if len_new_categories < len_categories:
-                diff = len_categories - len_new_categories
-                new_categories = new_categories.tolist() + diff * [-1]
-            elif len_new_categories > len_categories:
-                new_categories = new_categories.tolist()[:len_categories]
+        new_dtype = CategoricalDtype(new_categories, ordered=ordered)
+        scol = self._data.spark.column
 
-            new_dtype = CategoricalDtype(new_categories, ordered=ordered)
+        if rename:
+            new_scol = (
+                F.when(scol >= len(new_categories), -1)
+                .otherwise(scol)
+                .alias(name_like_string(self._data._column_label))
+            )
 
             internal = self._data._psdf._internal.with_new_spark_column(
                 self._data._column_label,
-                self._data.spark.column,
+                new_scol,
                 field=self._data._internal.data_fields[0].copy(dtype=new_dtype),
             )
 
@@ -761,24 +763,14 @@ class CategoricalAccessor(object):
                 return None
             else:
                 psser = DataFrame(internal)._psser_for(self._data._column_label)
-                return psser._with_new_scol(psser.spark.column, field=psser._internal.data_fields[0])
+                return psser._with_new_scol(
+                    psser.spark.column, field=psser._internal.data_fields[0]
+                )
         else:
             if inplace:
-                # kvs = chain(
-                #     *[(SF.lit(category), SF.lit(code)) for code, category in enumerate(categories)]
-                # )
-                # map_scol = F.create_map(*kvs)
-                #
-                # scol = F.coalesce(map_scol.getItem(index_ops.spark.column), SF.lit(-1))
-                # internal = self._data._psdf._internal.with_new_spark_column(
-                #     self._data._column_label,
-                #     scol,
-                #     field=psser._internal.data_fields[0].copy(dtype=new_dtype),
-                # )
-                pass
+                raise NotImplementedError("inplace must be False when rename is False")
             else:
-                new_dtype = CategoricalDtype(new_categories, ordered=ordered)
-                return self.astype(new_dtype)
+                return self._data.astype(new_dtype)
 
 
 def _test() -> None:

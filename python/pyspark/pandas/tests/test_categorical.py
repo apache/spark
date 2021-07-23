@@ -668,6 +668,64 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             lambda: psser.cat.rename_categories("x"),
         )
 
+    def test_set_categories(self):
+        pdf, psdf = self.df_pair
+
+        pser = pdf.b
+        psser = psdf.b
+
+        self.assert_eq(
+            pser.cat.set_categories(pd.Index([0, 1, 3, 2])),
+            psser.cat.set_categories(pd.Index([0, 1, 3, 2])),
+        )
+        self.assert_eq(
+            pser.cat.set_categories(pd.Index([0, 1, 3])),
+            psser.cat.set_categories(pd.Index([0, 1, 3])),
+        )
+        self.assert_eq(
+            pser.cat.set_categories(pd.Index([0, 1, 3, 2, 4])),
+            psser.cat.set_categories(pd.Index([0, 1, 3, 2, 4])),
+        )
+
+        self.assert_eq(
+            pser.cat.set_categories(pd.Index([0, 1, 3, 2]), rename=True),
+            psser.cat.set_categories(pd.Index([0, 1, 3, 2]), rename=True),
+        )
+        self.assert_eq(
+            pser.cat.set_categories(pd.Index([0, 1, 3]), rename=True),
+            psser.cat.set_categories(pd.Index([0, 1, 3]), rename=True),
+        )
+        self.assert_eq(
+            pser.cat.set_categories(pd.Index([0, 1, 3, 2, 4]), rename=True),
+            psser.cat.set_categories(pd.Index([0, 1, 3, 2, 4]), rename=True),
+        )
+
+        self.assert_eq(
+            pser.cat.set_categories(pd.Index([0, 1, 3, 2]), ordered=True),
+            psser.cat.set_categories(pd.Index([0, 1, 3, 2]), ordered=True),
+        )
+        self.assert_eq(
+            pser.cat.set_categories(pd.Index([0, 1, 3]), ordered=True),
+            psser.cat.set_categories(pd.Index([0, 1, 3]), ordered=True),
+        )
+        self.assert_eq(
+            pser.cat.set_categories(pd.Index([0, 1, 3, 2, 4]), ordered=True),
+            psser.cat.set_categories(pd.Index([0, 1, 3, 2, 4]), ordered=True),
+        )
+
+        self.assert_eq(
+            pser.cat.set_categories(pd.Index([0, 1, 3, 2]), inplace=True, rename=True),
+            psser.cat.set_categories(pd.Index([0, 1, 3, 2]), inplace=True, rename=True),
+        )
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        self.assertRaisesRegex(
+            NotImplementedError,
+            "inplace must be False when rename is False",
+            lambda: psser.cat.set_categories(pd.Index([0, 1, 3, 2]), inplace=True, rename=False),
+        )
+
 
 if __name__ == "__main__":
     import unittest

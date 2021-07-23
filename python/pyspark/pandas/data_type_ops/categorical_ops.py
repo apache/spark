@@ -42,6 +42,16 @@ class CategoricalOps(DataTypeOps):
 
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""
+        try:
+            pd.Categorical.from_codes(
+                col.replace(np.nan, -1).astype(int),
+                categories=cast(CategoricalDtype, self.dtype).categories,
+                ordered=cast(CategoricalDtype, self.dtype).ordered,
+            )
+        except:
+            print(col)
+            print(self.dtype.categories)
+
         return pd.Series(
             pd.Categorical.from_codes(
                 col.replace(np.nan, -1).astype(int),
