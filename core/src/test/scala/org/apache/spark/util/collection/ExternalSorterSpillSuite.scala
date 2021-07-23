@@ -33,7 +33,7 @@ import org.apache.spark.internal.config
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.serializer.{KryoSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.storage.{BlockId, BlockManager, DiskBlockManager, DiskBlockObjectWriter, TempShuffleBlockId}
-import org.apache.spark.util
+import org.apache.spark.util.{Utils => UUtils}
 
 class ExternalSorterSpillSuite extends SparkFunSuite with BeforeAndAfterEach {
 
@@ -48,7 +48,7 @@ class ExternalSorterSpillSuite extends SparkFunSuite with BeforeAndAfterEach {
   private var taskContext: TaskContext = _
 
   override protected def beforeEach(): Unit = {
-    tempDir = util.Utils.createTempDir(null, "test")
+    tempDir = UUtils.createTempDir(null, "test")
     spillFilesCreated.clear()
 
     val env: SparkEnv = mock(classOf[SparkEnv])
@@ -84,7 +84,7 @@ class ExternalSorterSpillSuite extends SparkFunSuite with BeforeAndAfterEach {
   }
 
   override protected def afterEach(): Unit = {
-    util.Utils.deleteRecursively(tempDir)
+    UUtils.deleteRecursively(tempDir)
     SparkEnv.set(null)
 
     val leakedMemory = taskMemoryManager.cleanUpAllAllocatedMemory
