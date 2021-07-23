@@ -128,7 +128,6 @@ function mypy_test {
     local MYPY_REPORT=
     local MYPY_STATUS=
 
-    # TODO(SPARK-32797): Install mypy on the Jenkins CI workers
     if ! hash "$MYPY_BUILD" 2> /dev/null; then
         echo "The $MYPY_BUILD command was not found. Skipping for now."
         return
