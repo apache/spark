@@ -396,8 +396,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       }
   }
 
-  // We adjust building's memory settings and it seems affecting this test.
-  // We need to investigate how to re-enable this.
+  // TODO (SPARK-36272): Reenable this after we figure out why the expected size doesn't
+  // match after we adjust building's memory settings.
   ignore("SPARK-32629: ShuffledHashJoin(full outer) metrics") {
     val uniqueLeftDf = Seq(("1", "1"), ("11", "11")).toDF("key", "value")
     val nonUniqueLeftDf = Seq(("1", "1"), ("1", "2"), ("11", "11")).toDF("key", "value")
