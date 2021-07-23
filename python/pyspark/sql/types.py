@@ -398,9 +398,9 @@ class StructField(DataType):
         name of the field.
     dataType : :class:`DataType`
         :class:`DataType` of the field.
-    nullable : bool
+    nullable : bool, optional
         whether the field can be null (None) or not.
-    metadata : dict
+    metadata : dict, optional
         a dict from string to simple type that can be toInternald to JSON automatically
 
     Examples
@@ -498,20 +498,20 @@ class StructType(DataType):
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
-        Construct a StructType by adding new elements to it, to define the schema.
+        Construct a :class:`StructType` by adding new elements to it, to define the schema.
         The method accepts either:
 
-            a) A single parameter which is a StructField object.
+            a) A single parameter which is a :class:`StructField` object.
             b) Between 2 and 4 parameters as (name, data_type, nullable (optional),
                metadata(optional). The data_type parameter may be either a String or a
-               DataType object.
+               :class:`DataType` object.
 
         Parameters
         ----------
         field : str or :class:`StructField`
-            Either the name of the field or a StructField object
+            Either the name of the field or a :class:`StructField` object
         data_type : :class:`DataType`, optional
-            If present, the DataType of the StructField to create
+            If present, the DataType of the :class:`StructField` to create
         nullable : bool, optional
             Whether the field to add should be nullable (default True)
         metadata : dict, optional
