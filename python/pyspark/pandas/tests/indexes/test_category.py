@@ -311,6 +311,55 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
             lambda: psidx.rename_categories("x"),
         )
 
+    def test_set_categories(self):
+        pidx = pd.CategoricalIndex(["a", "b", "c", "d"])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(
+            pidx.set_categories(pd.Index([0, 1, 3, 2])),
+            psidx.set_categories(pd.Index([0, 1, 3, 2])),
+        )
+        self.assert_eq(
+            pidx.set_categories(pd.Index([0, 1, 3])),
+            psidx.set_categories(pd.Index([0, 1, 3])),
+        )
+        self.assert_eq(
+            pidx.set_categories(pd.Index([0, 1, 3, 2, 4])),
+            psidx.set_categories(pd.Index([0, 1, 3, 2, 4])),
+        )
+
+        self.assert_eq(
+            pidx.set_categories(pd.Index([0, 1, 3, 2]), rename=True),
+            psidx.set_categories(pd.Index([0, 1, 3, 2]), rename=True),
+        )
+        self.assert_eq(
+            pidx.set_categories(pd.Index([0, 1, 3]), rename=True),
+            psidx.set_categories(pd.Index([0, 1, 3]), rename=True),
+        )
+        self.assert_eq(
+            pidx.set_categories(pd.Index([0, 1, 3, 2, 4]), rename=True),
+            psidx.set_categories(pd.Index([0, 1, 3, 2, 4]), rename=True),
+        )
+
+        self.assert_eq(
+            pidx.set_categories(pd.Index([0, 1, 3, 2]), ordered=True),
+            psidx.set_categories(pd.Index([0, 1, 3, 2]), ordered=True),
+        )
+        self.assert_eq(
+            pidx.set_categories(pd.Index([0, 1, 3]), ordered=True),
+            psidx.set_categories(pd.Index([0, 1, 3]), ordered=True),
+        )
+        self.assert_eq(
+            pidx.set_categories(pd.Index([0, 1, 3, 2, 4]), ordered=True),
+            psidx.set_categories(pd.Index([0, 1, 3, 2, 4]), ordered=True),
+        )
+
+        self.assertRaisesRegex(
+            ValueError,
+            "cannot use inplace with CategoricalIndex",
+            lambda: psidx.set_categories(pd.Index([0, 1, 3, 2]), inplace=True),
+        )
+
 
 if __name__ == "__main__":
     import unittest
