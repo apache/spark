@@ -424,12 +424,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     @property
     def isStreaming(self):
-        """Returns ``True`` if this :class:`DataFrame` contains one or more sources that continuously
-        return data as it arrives. A :class:`DataFrame` that reads data from a streaming source
-        must be executed as a :class:`StreamingQuery` using the :func:`start` method in
-        :class:`DataStreamWriter`.  Methods that return a single answer, (e.g., :func:`count` or
-        :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
-        source present.
+        """Returns ``True`` if this :class:`DataFrame` contains one or more sources that
+        continuously return data as it arrives. A :class:`DataFrame` that reads data from a
+        streaming source must be executed as a :class:`StreamingQuery` using the :func:`start`
+        method in :class:`DataStreamWriter`.  Methods that return a single answer, (e.g.,
+        :func:`count` or :func:`collect`) will throw an :class:`AnalysisException` when there
+        is a streaming source present.
 
         .. versionadded:: 2.0.0
 
