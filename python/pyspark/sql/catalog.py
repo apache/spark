@@ -151,6 +151,10 @@ class Catalog(object):
         bool
             Indicating whether the function exists
 
+        Examples
+        --------
+        >>> spark.catalog.functionExists("unexisting_function")
+        False
         """
         if dbName is None:
             dbName = self.currentDatabase()
