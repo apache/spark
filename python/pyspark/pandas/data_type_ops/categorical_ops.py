@@ -63,16 +63,7 @@ class CategoricalOps(DataTypeOps):
         if isinstance(dtype, CategoricalDtype) and cast(CategoricalDtype, dtype).categories is None:
             return index_ops.copy()
 
-        categories = cast(CategoricalDtype, index_ops.dtype).categories
-        if len(categories) == 0:
-            scol = SF.lit(None)
-        else:
-            kvs = chain(
-                *[(SF.lit(code), SF.lit(category)) for code, category in enumerate(categories)]
-            )
-            map_scol = F.create_map(*kvs)
-            scol = map_scol[index_ops.spark.column]
-        return index_ops._with_new_scol(scol).astype(dtype)
+        return _to_cat(index_ops).astype(dtype)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         return _compare(left, right, Column.__eq__, is_equality_comparison=True)
@@ -124,39 +115,7 @@ def _compare(
         if cast(CategoricalDtype, left.dtype).ordered:
             return column_op(f)(left, right)
         else:
-
-            def map_scol_to_cat(index_op, scol):
-                categories = cast(CategoricalDtype, index_op.dtype).categories
-                kvs = chain(
-                    *[(SF.lit(code), SF.lit(category)) for code, category in enumerate(categories)]
-                )
-                map_scol = F.create_map(*kvs)
-                return map_scol.getItem(scol)
-
-            if same_anchor(left, right):
-                combined = left._psdf
-                this_scol = left.spark.column
-                that_scol = right.spark.column
-            else:
-                combined = combine_frames(left._psdf, right._psdf)
-                this_scol = combined["this"]._internal.spark_column_for(left._column_label)
-                that_scol = combined["that"]._internal.spark_column_for(right._column_label)
-
-            left_scol = map_scol_to_cat(left, this_scol)
-            right_scol = map_scol_to_cat(right, that_scol)
-
-            index_scols = combined._internal.index_spark_columns
-            sdf = combined._internal.spark_frame.select(
-                *index_scols,
-                f(left_scol, right_scol).alias(left._internal.data_spark_column_names[0])
-            )
-            internal = left._internal.with_new_sdf(
-                sdf, index_fields=combined._internal.index_fields, data_fields=[None]
-            )
-
-            psser = first_series(DataFrame(internal))
-            return psser if left is right else psser.rename(None)
-
+            return column_op(f)(_to_cat(left), _to_cat(right))
     elif not is_list_like(right):
         categories = cast(CategoricalDtype, left.dtype).categories
         if right not in categories:
@@ -165,3 +124,14 @@ def _compare(
         return column_op(f)(left, right_code)
     else:
         raise TypeError("Cannot compare a Categorical with the given type.")
+
+
+def _to_cat(index_ops):
+    categories = cast(CategoricalDtype, index_ops.dtype).categories
+    if len(categories) == 0:
+        scol = SF.lit(None)
+    else:
+        kvs = chain(*[(SF.lit(code), SF.lit(category)) for code, category in enumerate(categories)])
+        map_scol = F.create_map(*kvs)
+        scol = map_scol[index_ops.spark.column]
+    return index_ops._with_new_scol(scol)
