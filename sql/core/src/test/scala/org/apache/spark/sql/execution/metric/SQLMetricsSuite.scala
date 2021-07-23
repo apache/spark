@@ -403,7 +403,7 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     val rightDf = (1 to 10).map(i => (i.toString, i.toString)).toDF("key2", "value")
     Seq(
       // Test unique key on build side
-      (uniqueLeftDf, rightDf, 11, 134228048, 10, 134221824),
+      (uniqueLeftDf, rightDf, 11, 134228048, 10, 134221824)
     ).foreach { case (leftDf, rightDf, fojRows, fojBuildSize, rojRows, rojBuildSize) =>
       val fojDf = leftDf.hint("shuffle_hash").join(
         rightDf, $"key" === $"key2", "full_outer")
