@@ -1250,6 +1250,13 @@ class ParquetV2PartitionDiscoverySuite extends ParquetPartitionDiscoverySuite {
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
+  test("SPARK-35561: remove leading zeros from empty static number type partition") {
+    val spec = Map("p_int"-> "010", "p_float"-> "01.00")
+    val schema = new StructType().add("p_int", "int").add("p_float", "float")
+    val path = PartitioningUtils.getPathFragment(spec, schema)
+    assert("p_int=10/p_float=1.0" === path)
+  }
+
   test("read partitioned table - partition key included in Parquet file") {
     withTempDir { base =>
       for {
