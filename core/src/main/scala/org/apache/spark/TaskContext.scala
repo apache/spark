@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io.Serializable
 import java.util.Properties
 
-import org.apache.spark.annotation.{DeveloperApi, Evolving}
+import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
@@ -180,7 +180,7 @@ abstract class TaskContext extends Serializable {
   /**
    * CPUs allocated to the task.
    */
-  @Evolving
+  @Since("3.1.3")
   def cpus(): Int
 
   /**

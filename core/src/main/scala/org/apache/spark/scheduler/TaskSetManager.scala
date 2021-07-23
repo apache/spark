@@ -418,6 +418,8 @@ private[spark] class TaskSetManager(
    * @param execId the executor Id of the offered resource
    * @param host  the host Id of the offered resource
    * @param maxLocality the maximum locality we want to schedule the tasks at
+   * @param taskCpus the number of cpus for the task
+   * @param taskResourceAssignments the resource assignments for the task
    *
    * @return Triple containing:
    *         (TaskDescription of launched task if any,
@@ -429,7 +431,7 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
-      taskCpuAssignments: Int = 1,
+      taskCpus: Int,
       taskResourceAssignments: Map[String, ResourceInformation] = Map.empty)
     : (Option[TaskDescription], Boolean, Int) =
   {
@@ -475,7 +477,7 @@ private[spark] class TaskSetManager(
                 index,
                 taskLocality,
                 speculative,
-                taskCpuAssignments,
+                taskCpus,
                 taskResourceAssignments,
                 curTime)
             }
@@ -497,7 +499,7 @@ private[spark] class TaskSetManager(
       index: Int,
       taskLocality: TaskLocality.Value,
       speculative: Boolean,
-      taskCpuAssignments: Int,
+      taskCpus: Int,
       taskResourceAssignments: Map[String, ResourceInformation],
       launchTime: Long): TaskDescription = {
     // Found a task; do some bookkeeping and return a task description
@@ -551,7 +553,7 @@ private[spark] class TaskSetManager(
       addedJars,
       addedArchives,
       task.localProperties,
-      taskCpuAssignments,
+      taskCpus,
       taskResourceAssignments,
       serializedTask)
   }
