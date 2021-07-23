@@ -315,11 +315,9 @@ private[spark] class ExecutorPodsAllocator(
       // there are no useful updates.
       if (log.isDebugEnabled && snapshots.nonEmpty) {
         val outstanding = pendingCountForRpId + newlyCreatedExecutorsForRpId.size
-        if (currentRunningCount >= targetNum) {
-          if (!dynamicAllocationEnabled) {
-            logDebug(s"Current number of running executors for ResourceProfile Id $rpId is " +
-              "equal to the number of requested executors. Not scaling up further.")
-          }
+        if (currentRunningCount >= targetNum && !dynamicAllocationEnabled) {
+          logDebug(s"Current number of running executors for ResourceProfile Id $rpId is " +
+            "equal to the number of requested executors. Not scaling up further.")
         } else {
           if (newlyCreatedExecutorsForRpId.nonEmpty) {
             logDebug(s"Still waiting for ${newlyCreatedExecutorsForRpId.size} executors for " +
