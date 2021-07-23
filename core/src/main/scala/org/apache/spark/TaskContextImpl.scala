@@ -54,7 +54,7 @@ private[spark] class TaskContextImpl(
     @transient private val metricsSystem: MetricsSystem,
     // The default value is only used in tests.
     override val taskMetrics: TaskMetrics = TaskMetrics.empty,
-    override val cpus: Int = 0,
+    override val cpus: Int = 1,
     override val resources: Map[String, ResourceInformation] = Map.empty)
   extends TaskContext
   with Logging {
