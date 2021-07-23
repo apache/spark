@@ -25,7 +25,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
  * code reuse for handling block push and fetch retry.
  */
 public interface BlockPushingListener extends BlockTransferListener  {
-  String transferTerm = "push";
+  String transferType = "push";
 
   /**
    * Called once per successfully pushed block. After this call returns, data will be released
@@ -51,6 +51,6 @@ public interface BlockPushingListener extends BlockTransferListener  {
 
   @Override
   default String getTransferType() {
-    return transferTerm;
+    return transferType;
   }
 }
