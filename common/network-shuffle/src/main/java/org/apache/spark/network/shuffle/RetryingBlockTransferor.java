@@ -34,8 +34,8 @@ import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
 /**
- * Wraps another BlockFetcher or BlockPusher with the ability to automatically retry fetches or
- * pushes which fail due to IOExceptions, which we hope are due to transient network conditions.
+ * Wraps another BlockFetcher or BlockPusher with the ability to automatically retry block
+ * transfers which fail due to IOExceptions, which we hope are due to transient network conditions.
  *
  * This transferor provides stronger guarantees regarding the parent BlockTransferListener. In
  * particular, the listener will be invoked exactly once per blockId, with a success or failure.
@@ -43,12 +43,12 @@ import org.apache.spark.network.util.TransportConf;
 public class RetryingBlockTransferor {
 
   /**
-   * Used to initiate the first fetch or push for all blocks, and subsequently for retrying the
-   * fetch or push on any remaining blocks.
+   * Used to initiate the first transfer for all blocks, and subsequently for retrying the
+   * transfer on any remaining blocks.
    */
   public interface BlockTransferStarter {
     /**
-     * Creates a new BlockFetcher or BlockPusher to fetch or push the given block ids which may do
+     * Creates a new BlockFetcher or BlockPusher to transfer the given block ids which may do
      * some synchronous bootstrapping followed by fully asynchronous block transferring.
      * The BlockFetcher or BlockPusher must eventually invoke the Listener on every input blockId,
      * or else this method must throw an exception.
@@ -66,10 +66,6 @@ public class RetryingBlockTransferor {
     NettyUtils.createThreadFactory("Block Transfer Retry"));
 
   private static final Logger logger = LoggerFactory.getLogger(RetryingBlockTransferor.class);
-
-  private static final String blockFetchTerm = "fetch";
-
-  private static final String blockPushTerm = "push";
 
   /** Used to initiate new Block transfer on our remaining blocks. */
   private final BlockTransferStarter transferStarter;
@@ -105,12 +101,6 @@ public class RetryingBlockTransferor {
 
   private final ErrorHandler errorHandler;
 
-  /**
-   * Term indicating whether this RetryingBlockTransferor is for block fetch or push. Useful for
-   * printing more meaningful logs.
-   */
-  private final String transferTerm;
-
   public RetryingBlockTransferor(
       TransportConf conf,
       BlockTransferStarter transferStarter,
@@ -119,8 +109,6 @@ public class RetryingBlockTransferor {
       ErrorHandler errorHandler) {
     this.transferStarter = transferStarter;
     this.listener = listener;
-    this.transferTerm = (listener instanceof BlockFetchingListener) ?
-      blockFetchTerm : blockPushTerm;
     this.maxRetries = conf.maxIORetries();
     this.retryWaitTime = conf.ioRetryWaitTimeMs();
     this.outstandingBlocksIds = Sets.newLinkedHashSet();
@@ -138,7 +126,7 @@ public class RetryingBlockTransferor {
   }
 
   /**
-   * Initiates the fetch or push of all blocks provided in the constructor, with possible retries
+   * Initiates the transfer of all blocks provided in the constructor, with possible retries
    * in the event of transient IOExceptions.
    */
   public void start() {
@@ -146,7 +134,7 @@ public class RetryingBlockTransferor {
   }
 
   /**
-   * Fires off a request to fetch or push all blocks that have not been transferred successfully or
+   * Fires off a request to transfer all blocks that have not been transferred successfully or
    * permanently failed (i.e., by a non-IOException).
    */
   private void transferAllOutstanding() {
@@ -166,7 +154,7 @@ public class RetryingBlockTransferor {
       transferStarter.createAndStart(blockIdsToTransfer, myListener);
     } catch (Exception e) {
       logger.error(String.format("Exception while beginning %s of %s outstanding blocks %s",
-        transferTerm, blockIdsToTransfer.length,
+        listener.getTransferType(), blockIdsToTransfer.length,
         numRetries > 0 ? "(after " + numRetries + " retries)" : ""), e);
 
       if (shouldRetry(e)) {
@@ -188,7 +176,8 @@ public class RetryingBlockTransferor {
     currentListener = new RetryingBlockTransferListener();
 
     logger.info("Retrying {} ({}/{}) for {} outstanding blocks after {} ms",
-      transferTerm, retryCount, maxRetries, outstandingBlocksIds.size(), retryWaitTime);
+      listener.getTransferType(), retryCount, maxRetries, outstandingBlocksIds.size(),
+      retryWaitTime);
 
     executorService.submit(() -> {
       Uninterruptibles.sleepUninterruptibly(retryWaitTime, TimeUnit.MILLISECONDS);
@@ -243,11 +232,11 @@ public class RetryingBlockTransferor {
             if (errorHandler.shouldLogError(exception)) {
               logger.error(
                 String.format("Failed to %s block %s, and will not retry (%s retries)",
-                  transferTerm, blockId, retryCount), exception);
+                  listener.getTransferType(), blockId, retryCount), exception);
             } else {
               logger.debug(
                 String.format("Failed to %s block %s, and will not retry (%s retries)",
-                  transferTerm, blockId, retryCount), exception);
+                  listener.getTransferType(), blockId, retryCount), exception);
             }
             outstandingBlocksIds.remove(blockId);
             shouldForwardFailure = true;
@@ -295,5 +284,10 @@ public class RetryingBlockTransferor {
         "Invocation on RetryingBlockTransferListener.onBlockTransferFailure is unexpected.");
     }
 
+    @Override
+    public String getTransferType() {
+      throw new RuntimeException(
+        "Invocation on RetryingBlockTransferListener.getTransferType is unexpected.");
+    }
   }
 }

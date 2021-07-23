@@ -100,7 +100,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
             // Unless this client is closed.
             if (clientFactory != null) {
               assert inputListener instanceof BlockFetchingListener :
-                "Expecting a BlockFetchingListener, but got a BlockPushingListener";;
+                "Expecting a BlockFetchingListener, but got " + inputListener.getClass();
               TransportClient client = clientFactory.createClient(host, port, maxRetries > 0);
               new OneForOneBlockFetcher(client, appId, execId, inputBlockId,
                 (BlockFetchingListener) inputListener, conf, downloadFileManager).start();
@@ -144,7 +144,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
           (inputBlockId, inputListener) -> {
             if (clientFactory != null) {
               assert inputListener instanceof BlockPushingListener :
-                "Expecting a BlockPushingListener, but got a BlockFetchingListener";
+                "Expecting a BlockPushingListener, but got " + inputListener.getClass();
               TransportClient client = clientFactory.createClient(host, port);
               new OneForOneBlockPusher(client, appId, conf.appAttemptId(), inputBlockId,
                 (BlockPushingListener) inputListener, buffersWithId).start();

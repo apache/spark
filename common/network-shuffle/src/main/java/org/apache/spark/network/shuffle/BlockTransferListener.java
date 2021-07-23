@@ -36,4 +36,9 @@ public interface BlockTransferListener extends EventListener {
    * Called at least once per block transfer failures.
    */
   void onBlockTransferFailure(String blockId, Throwable exception);
+
+  /**
+   * Return a string indicating the type of the listener such as fetch, push, or something else
+   */
+  String getTransferType();
 }
