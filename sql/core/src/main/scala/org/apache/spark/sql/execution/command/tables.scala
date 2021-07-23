@@ -692,7 +692,7 @@ case class DescribeTableCommand(
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
     val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
       partitionSpec,
-      metadata.partitionSchema,
+      metadata.partitionSchema.fieldNames,
       table.quotedString,
       spark.sessionState.conf.resolver)
     val partition = catalog.getPartition(table, normalizedPartSpec)
