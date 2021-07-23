@@ -684,8 +684,101 @@ class CategoricalAccessor(object):
         ordered: bool = None,
         rename: bool = False,
         inplace: bool = False,
-    ) -> "ps.Series":
-        raise NotImplementedError()
+    ) -> Optional["ps.Series"]:
+        """
+        Set the categories to the specified new_categories.
+
+        `new_categories` can include new categories (which will result in
+        unused categories) or remove old categories (which results in values
+        set to NaN). If `rename==True`, the categories will simple be renamed
+        (less or more items than in old categories will result in values set to
+        NaN or in unused categories respectively).
+
+        This method can be used to perform more than one action of adding,
+        removing, and reordering simultaneously and is therefore faster than
+        performing the individual steps via the more specialised methods.
+
+        On the other hand this methods does not do checks (e.g., whether the
+        old categories are included in the new categories on a reorder), which
+        can result in surprising changes, for example when using special string
+        dtypes, which does not considers a S1 string equal to a single char
+        python string.
+
+        Parameters
+        ----------
+        new_categories : Index-like
+           The categories in new order.
+        ordered : bool, default False
+           Whether or not the categorical is treated as a ordered categorical.
+           If not given, do not change the ordered information.
+        rename : bool, default False
+           Whether or not the new_categories should be considered as a rename
+           of the old categories or as reordered categories.
+        inplace : bool, default False
+           Whether or not to reorder the categories in-place or return a copy
+           of this categorical with reordered categories.
+
+        Returns
+        -------
+        Series with reordered categories or None if inplace.
+
+        Raises
+        ------
+        ValueError
+            If new_categories does not validate as categories
+
+        See Also
+        --------
+        rename_categories : Rename categories.
+        reorder_categories : Reorder categories.
+        add_categories : Add new categories.
+        remove_categories : Remove the specified categories.
+        remove_unused_categories : Remove categories which are not used.
+        """
+        from pyspark.pandas.frame import DataFrame
+
+        if ordered is None:
+            ordered = self.ordered
+
+        if rename:
+            len_new_categories, len_categories = len(new_categories), len(self.categories)
+            if len_new_categories < len_categories:
+                diff = len_categories - len_new_categories
+                new_categories = new_categories.tolist() + diff * [-1]
+            elif len_new_categories > len_categories:
+                new_categories = new_categories.tolist()[:len_categories]
+
+            new_dtype = CategoricalDtype(new_categories, ordered=ordered)
+
+            internal = self._data._psdf._internal.with_new_spark_column(
+                self._data._column_label,
+                self._data.spark.column,
+                field=self._data._internal.data_fields[0].copy(dtype=new_dtype),
+            )
+
+            if inplace:
+                self._data._psdf._update_internal_frame(internal)
+                return None
+            else:
+                psser = DataFrame(internal)._psser_for(self._data._column_label)
+                return psser._with_new_scol(psser.spark.column, field=psser._internal.data_fields[0])
+        else:
+            if inplace:
+                # kvs = chain(
+                #     *[(SF.lit(category), SF.lit(code)) for code, category in enumerate(categories)]
+                # )
+                # map_scol = F.create_map(*kvs)
+                #
+                # scol = F.coalesce(map_scol.getItem(index_ops.spark.column), SF.lit(-1))
+                # internal = self._data._psdf._internal.with_new_spark_column(
+                #     self._data._column_label,
+                #     scol,
+                #     field=psser._internal.data_fields[0].copy(dtype=new_dtype),
+                # )
+                pass
+            else:
+                new_dtype = CategoricalDtype(new_categories, ordered=ordered)
+                return self.astype(new_dtype)
 
 
 def _test() -> None:
