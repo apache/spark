@@ -160,6 +160,81 @@ SELECT * FROM t;
 +---+
 ```
 
+### Type coercion
+#### Type Promotion and Precedence
+Spark SQL uses several rules that govern how conflicts between data types are resolved.
+At the heart of this conflict resolution is the Type Precedence List which defines whether values of a given data type can be promoted to another data type implicitly.
+
+| Data type | precedence list(from narrowest to widest)                        |
+|-----------|------------------------------------------------------------------|
+| Byte      | Byte -> Short -> Int -> Long -> Decimal -> Float* -> Double      |
+| Short     | Short -> Int -> Long -> Decimal-> Float* -> Double               |
+| Int       | Int -> Long -> Decimal -> Float* -> Double                       |
+| Long      | Long -> Decimal -> Float* -> Double                              |
+| Decimal   | Decimal -> Float* -> Double                                      |
+| Float     | Float -> Double                                                  |
+| Double    | Double                                                           |
+| Date      | Date->  Timestamp                                                |
+| Timestamp | Timestamp                                                        |
+| String    | String                                                           |
+| Binary    | Binary                                                           |
+| Boolean   | Boolean                                                          |
+| Interval  | Interval                                                         |
+| Map       | Map**                                                            |
+| Array     | Array**                                                          |
+| Struct    | Struct**                                                         |
+
+\* For least common type resolution float is skipped to avoid loss of precision.
+
+\*\* For a complex type, the precedence rule applies recursively to its component elements.
+
+Special rules apply for string literals and untyped NULL.
+A NULL can be promoted to any other type, while a string literal can be promoted to any simple data type.
+
+This is a graphical depiction of the precedence list as a directed tree:
+<img src="img/type-precedence-list.png" width="80%" title="Type Precedence List" alt="Type Precedence List">
+
+#### Least Common Type Resolution
+The least common type from a set of types is the narrowest type reachable from the precedence list by all elements of the set of types.
+
+The least common type resolution is used to:
+- Decide whether a function expecting a parameter of a type can be invoked using an argument of a narrower type.
+- Derive the argument  type for functions which expect a shared argument type for multiple parameters, such as coalesce, least, or greatest.
+- Derive the operand types for operators such as arithmetic operations or comparisons.
+- Derive the result type for expressions such as the case expression.
+- Derive the element, key, or value types for array and map constructors.
+Special rules are applied if the least common type resolves to FLOAT. If any of the types is INT, BIGINT, or DECIMAL the least common type is pushed to DOUBLE to avoid potential loss of digits.
+
+#### Examples
+The coalesce function accepts any set of argument types as long as they share a least common type.
+The result type is the least common type of the arguments.
+```sql
+> SELECT typeof(coalesce(1Y, 1L, NULL));
+BIGINT
+> SELECT typeof(coalesce(1, DATE’2020-01-01’));
+Error: Incompatible types [INT, DATE]
+
+> SELECT typeof(coalesce(ARRAY(1Y), ARRAY(1L)))
+ARRAY<BIGINT>
+> SELECT typeof(coalesce(1, 1F))
+DOUBLE
+> SELECT typeof(coalesce(1L, 1F))
+DOUBLE
+> SELECT (typeof(coalesce(1BD, 1F))
+DOUBLE
+
+-- The substring function expects arguments of type INT for the start and length parameters.
+> SELECT substring(‘hello’, 1, 2);
+He
+> SELECT substring(‘hello’, ‘1’, 2);
+he
+> SELECT substring(‘hello’, 1L, 2);
+Error: Argument 2 requires an INT type.
+> SELECT substring(‘hello’, str, 2)
+FROM VALUES(CAST(‘1’ AS TRING)) AS T(str);
+Error: Argument 2 requires an INT type.
+```
+
 ### SQL Functions
 
 The behavior of some SQL functions can be different under ANSI mode (`spark.sql.ansi.enabled=true`).
