@@ -344,7 +344,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
    * since there is a higher shuffleSequenceId request made for a shuffleId, therefore clean
    * up older shuffleSequenceId partitions. The cleanup will be executed in a separate thread.
    */
-  private void closeAndDeletePartitionFiles(Map<Integer, AppShufflePartitionInfo> partitions) {
+  @VisibleForTesting
+  void closeAndDeletePartitionFiles(Map<Integer, AppShufflePartitionInfo> partitions) {
     for (AppShufflePartitionInfo partitionInfo : partitions.values()) {
       synchronized (partitionInfo) {
         partitionInfo.closeAllFilesAndDeleteIfNeeded(true);

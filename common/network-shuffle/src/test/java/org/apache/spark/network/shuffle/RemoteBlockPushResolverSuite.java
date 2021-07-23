@@ -1166,15 +1166,26 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test
-  public void testCleanupOlderShuffleSequenceId() throws IOException {
+  public void testCleanupOlderShuffleSequenceId() throws IOException, InterruptedException {
+    Semaphore closed = new Semaphore(0);
+    pushResolver = new RemoteBlockPushResolver(conf) {
+      @Override
+      void closeAndDeletePartitionFiles(Map<Integer, AppShufflePartitionInfo> partitions) {
+        super.closeAndDeletePartitionFiles(partitions);
+        closed.release();
+      }
+    };
+    String testApp = "testCleanupOlderShuffleSequenceId";
+    registerExecutor(testApp, prepareLocalDirs(localDirs, MERGE_DIRECTORY), MERGE_DIRECTORY_META);
     StreamCallbackWithID stream1 =
         pushResolver.receiveBlockDataAsStream(
-            new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
+            new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     StreamCallbackWithID stream2 =
         pushResolver.receiveBlockDataAsStream(
-            new PushBlockStream(TEST_APP, NO_ATTEMPT_ID, 0, 1, 0, 0, 0));
-    RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo = pushResolver.validateAndGetAppShuffleInfo(TEST_APP);
+            new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 1, 0, 0, 0));
+    RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo = pushResolver.validateAndGetAppShuffleInfo(testApp);
+    closed.acquire();
     assertTrue("Older shuffleSequence partitions should be cleaned up",
         appShuffleInfo.getPartitions().get(0).get(0) == RemoteBlockPushResolver.STALE_SHUFFLE_PARTITIONS);
     assertFalse("Data files on the disk should be cleaned up",
@@ -1187,9 +1198,9 @@ public class RemoteBlockPushResolverSuite {
     stream2.onData(stream2.getID(), ByteBuffer.wrap(new byte[2]));
     // stream 2 now completes
     stream2.onComplete(stream2.getID());
-    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 1));
-    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 1, 0);
-    validateChunks(TEST_APP, 0, 1, 0, blockMeta, new int[]{4}, new int[][]{{0}});
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 1));
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(testApp, 0, 1, 0);
+    validateChunks(testApp, 0, 1, 0, blockMeta, new int[]{4}, new int[][]{{0}});
   }
 
   @Test
