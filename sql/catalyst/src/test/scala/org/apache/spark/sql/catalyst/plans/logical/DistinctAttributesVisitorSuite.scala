@@ -42,7 +42,7 @@ class DistinctAttributesVisitorSuite extends PlanTest {
 
   implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
 
-  test("1") {
+  test("Check distinct attributes visitor") {
     // Aggregate
     checkDistinctAttributes(testRelation.groupBy('a)('a), Seq(a))
     checkDistinctAttributes(testRelation.groupBy('a, 'b)('a, 'b), Seq(a, b))
