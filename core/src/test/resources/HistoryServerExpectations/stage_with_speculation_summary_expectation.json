@@ -1,10 +1,748 @@
 {
-  "numTasks" : 1,
+  "status" : "COMPLETE",
+  "stageId" : 0,
+  "attemptId" : 0,
+  "numTasks" : 10,
   "numActiveTasks" : 0,
-  "numCompletedTasks" : 0,
+  "numCompleteTasks" : 10,
   "numFailedTasks" : 0,
   "numKilledTasks" : 1,
+  "numCompletedIndices" : 10,
+  "submissionTime" : "2020-01-11T17:46:05.293GMT",
+  "firstTaskLaunchedTime" : "2021-07-08T20:52:35.233GMT",
+  "completionTime" : "2020-01-11T17:46:10.543GMT",
+  "executorDeserializeTime" : 2857,
+  "executorDeserializeCpuTime" : 2450186653,
+  "executorRunTime" : 40185,
+  "executorCpuTime" : 158872515,
+  "resultSize" : 8023,
+  "jvmGcTime" : 0,
+  "resultSerializationTime" : 1,
+  "memoryBytesSpilled" : 0,
+  "diskBytesSpilled" : 0,
+  "peakExecutionMemory" : 0,
+  "inputBytes" : 0,
+  "inputRecords" : 0,
+  "outputBytes" : 0,
+  "outputRecords" : 0,
+  "shuffleRemoteBlocksFetched" : 0,
+  "shuffleLocalBlocksFetched" : 0,
+  "shuffleFetchWaitTime" : 0,
+  "shuffleRemoteBytesRead" : 0,
+  "shuffleRemoteBytesReadToDisk" : 0,
+  "shuffleLocalBytesRead" : 0,
+  "shuffleReadBytes" : 0,
+  "shuffleReadRecords" : 0,
+  "shuffleWriteBytes" : 0,
+  "shuffleWriteTime" : 0,
+  "shuffleWriteRecords" : 0,
+  "name" : "collect at <console>:29",
+  "details" : "org.apache.spark.rdd.RDD.collect(RDD.scala:1004)\n$line37.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw.<init>(<console>:29)\n$line37.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw.<init>(<console>:33)\n$line37.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw$$iw.<init>(<console>:35)\n$line37.$read$$iw$$iw$$iw$$iw$$iw$$iw$$iw.<init>(<console>:37)\n$line37.$read$$iw$$iw$$iw$$iw$$iw$$iw.<init>(<console>:39)\n$line37.$read$$iw$$iw$$iw$$iw$$iw.<init>(<console>:41)\n$line37.$read$$iw$$iw$$iw$$iw.<init>(<console>:43)\n$line37.$read$$iw$$iw$$iw.<init>(<console>:45)\n$line37.$read$$iw$$iw.<init>(<console>:47)\n$line37.$read$$iw.<init>(<console>:49)\n$line37.$read.<init>(<console>:51)\n$line37.$read$.<init>(<console>:55)\n$line37.$read$.<clinit>(<console>)\n$line37.$eval$.$print$lzycompute(<console>:7)\n$line37.$eval$.$print(<console>:6)\n$line37.$eval.$print(<console>)\nsun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)\nsun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)\nsun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)",
+  "schedulingPool" : "default",
+  "rddIds" : [ 1, 0 ],
+  "accumulatorUpdates" : [ ],
+  "tasks" : {
+    "0" : {
+      "taskId" : 0,
+      "index" : 0,
+      "attempt" : 0,
+      "launchTime" : "2021-07-08T20:52:35.233GMT",
+      "duration" : 21291,
+      "executorId" : "2",
+      "host" : "ltx1-hcl25211.grid.linkedin.com",
+      "status" : "SUCCESS",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 1165,
+        "executorDeserializeCpuTime" : 1047689020,
+        "executorRunTime" : 20059,
+        "executorCpuTime" : 58264209,
+        "resultSize" : 798,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      },
+      "executorLogs" : {
+        "stdout" : "http://ltx1-hcl25211.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000003/vsowrira/stdout?start=-4096",
+        "stderr" : "http://ltx1-hcl25211.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000003/vsowrira/stderr?start=-4096"
+      },
+      "schedulerDelay" : 67,
+      "gettingResultTime" : 0
+    },
+    "5" : {
+      "taskId" : 5,
+      "index" : 5,
+      "attempt" : 0,
+      "launchTime" : "2021-07-08T20:52:56.523GMT",
+      "duration" : 16,
+      "executorId" : "2",
+      "host" : "ltx1-hcl25211.grid.linkedin.com",
+      "status" : "SUCCESS",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 3,
+        "executorDeserializeCpuTime" : 3175472,
+        "executorRunTime" : 1,
+        "executorCpuTime" : 1390876,
+        "resultSize" : 798,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      },
+      "executorLogs" : {
+        "stdout" : "http://ltx1-hcl25211.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000003/vsowrira/stdout?start=-4096",
+        "stderr" : "http://ltx1-hcl25211.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000003/vsowrira/stderr?start=-4096"
+      },
+      "schedulerDelay" : 12,
+      "gettingResultTime" : 0
+    },
+    "10" : {
+      "taskId" : 10,
+      "index" : 8,
+      "attempt" : 1,
+      "launchTime" : "2021-07-08T20:52:57.196GMT",
+      "duration" : 19390,
+      "executorId" : "1",
+      "host" : "ltx1-hcl7639.grid.linkedin.com",
+      "status" : "KILLED",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : true,
+      "accumulatorUpdates" : [ ],
+      "errorMessage" : "another attempt succeeded",
+      "taskMetrics" : {
+        "executorDeserializeTime" : 0,
+        "executorDeserializeCpuTime" : 0,
+        "executorRunTime" : 0,
+        "executorCpuTime" : 0,
+        "resultSize" : 0,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      },
+      "executorLogs" : {
+        "stdout" : "http://ltx1-hcl7639.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000002/vsowrira/stdout?start=-4096",
+        "stderr" : "http://ltx1-hcl7639.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000002/vsowrira/stderr?start=-4096"
+      },
+      "schedulerDelay" : 19390,
+      "gettingResultTime" : 0
+    },
+    "1" : {
+      "taskId" : 1,
+      "index" : 1,
+      "attempt" : 0,
+      "launchTime" : "2021-07-08T20:52:35.251GMT",
+      "duration" : 1796,
+      "executorId" : "1",
+      "host" : "ltx1-hcl7639.grid.linkedin.com",
+      "status" : "SUCCESS",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 1644,
+        "executorDeserializeCpuTime" : 1365571047,
+        "executorRunTime" : 82,
+        "executorCpuTime" : 81902510,
+        "resultSize" : 841,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 1,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      },
+      "executorLogs" : {
+        "stdout" : "http://ltx1-hcl7639.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000002/vsowrira/stdout?start=-4096",
+        "stderr" : "http://ltx1-hcl7639.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000002/vsowrira/stderr?start=-4096"
+      },
+      "schedulerDelay" : 69,
+      "gettingResultTime" : 0
+    },
+    "6" : {
+      "taskId" : 6,
+      "index" : 6,
+      "attempt" : 0,
+      "launchTime" : "2021-07-08T20:52:56.538GMT",
+      "duration" : 15,
+      "executorId" : "2",
+      "host" : "ltx1-hcl25211.grid.linkedin.com",
+      "status" : "SUCCESS",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 5,
+        "executorDeserializeCpuTime" : 3075385,
+        "executorRunTime" : 1,
+        "executorCpuTime" : 1370050,
+        "resultSize" : 798,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      },
+      "executorLogs" : {
+        "stdout" : "http://ltx1-hcl25211.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000003/vsowrira/stdout?start=-4096",
+        "stderr" : "http://ltx1-hcl25211.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000003/vsowrira/stderr?start=-4096"
+      },
+      "schedulerDelay" : 9,
+      "gettingResultTime" : 0
+    },
+    "9" : {
+      "taskId" : 9,
+      "index" : 9,
+      "attempt" : 0,
+      "launchTime" : "2021-07-08T20:52:57.128GMT",
+      "duration" : 27,
+      "executorId" : "1",
+      "host" : "ltx1-hcl7639.grid.linkedin.com",
+      "status" : "SUCCESS",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 4,
+        "executorDeserializeCpuTime" : 4405123,
+        "executorRunTime" : 10,
+        "executorCpuTime" : 2894274,
+        "resultSize" : 798,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      },
+      "executorLogs" : {
+        "stdout" : "http://ltx1-hcl7639.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000002/vsowrira/stdout?start=-4096",
+        "stderr" : "http://ltx1-hcl7639.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000002/vsowrira/stderr?start=-4096"
+      },
+      "schedulerDelay" : 13,
+      "gettingResultTime" : 0
+    },
+    "2" : {
+      "taskId" : 2,
+      "index" : 2,
+      "attempt" : 0,
+      "launchTime" : "2021-07-08T20:52:37.042GMT",
+      "duration" : 24,
+      "executorId" : "1",
+      "host" : "ltx1-hcl7639.grid.linkedin.com",
+      "status" : "SUCCESS",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 5,
+        "executorDeserializeCpuTime" : 5966165,
+        "executorRunTime" : 3,
+        "executorCpuTime" : 2953493,
+        "resultSize" : 798,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      },
+      "executorLogs" : {
+        "stdout" : "http://ltx1-hcl7639.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000002/vsowrira/stdout?start=-4096",
+        "stderr" : "http://ltx1-hcl7639.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000002/vsowrira/stderr?start=-4096"
+      },
+      "schedulerDelay" : 16,
+      "gettingResultTime" : 0
+    },
+    "7" : {
+      "taskId" : 7,
+      "index" : 7,
+      "attempt" : 0,
+      "launchTime" : "2021-07-08T20:52:56.552GMT",
+      "duration" : 19,
+      "executorId" : "2",
+      "host" : "ltx1-hcl25211.grid.linkedin.com",
+      "status" : "SUCCESS",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 8,
+        "executorDeserializeCpuTime" : 4968915,
+        "executorRunTime" : 1,
+        "executorCpuTime" : 1872289,
+        "resultSize" : 798,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      },
+      "executorLogs" : {
+        "stdout" : "http://ltx1-hcl25211.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000003/vsowrira/stdout?start=-4096",
+        "stderr" : "http://ltx1-hcl25211.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000003/vsowrira/stderr?start=-4096"
+      },
+      "schedulerDelay" : 10,
+      "gettingResultTime" : 0
+    },
+    "3" : {
+      "taskId" : 3,
+      "index" : 3,
+      "attempt" : 0,
+      "launchTime" : "2021-07-08T20:52:37.065GMT",
+      "duration" : 47,
+      "executorId" : "1",
+      "host" : "ltx1-hcl7639.grid.linkedin.com",
+      "status" : "SUCCESS",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 14,
+        "executorDeserializeCpuTime" : 6266301,
+        "executorRunTime" : 16,
+        "executorCpuTime" : 3048868,
+        "resultSize" : 798,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      },
+      "executorLogs" : {
+        "stdout" : "http://ltx1-hcl7639.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000002/vsowrira/stdout?start=-4096",
+        "stderr" : "http://ltx1-hcl7639.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000002/vsowrira/stderr?start=-4096"
+      },
+      "schedulerDelay" : 17,
+      "gettingResultTime" : 0
+    },
+    "8" : {
+      "taskId" : 8,
+      "index" : 8,
+      "attempt" : 0,
+      "launchTime" : "2021-07-08T20:52:56.571GMT",
+      "duration" : 20014,
+      "executorId" : "2",
+      "host" : "ltx1-hcl25211.grid.linkedin.com",
+      "status" : "SUCCESS",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 4,
+        "executorDeserializeCpuTime" : 4405123,
+        "executorRunTime" : 10,
+        "executorCpuTime" : 2894274,
+        "resultSize" : 798,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      },
+      "executorLogs" : {
+        "stdout" : "http://ltx1-hcl25211.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000003/vsowrira/stdout?start=-4096",
+        "stderr" : "http://ltx1-hcl25211.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000003/vsowrira/stderr?start=-4096"
+      },
+      "schedulerDelay" : 20000,
+      "gettingResultTime" : 0
+    },
+    "4" : {
+      "taskId" : 4,
+      "index" : 4,
+      "attempt" : 0,
+      "launchTime" : "2021-07-08T20:52:37.111GMT",
+      "duration" : 20017,
+      "executorId" : "1",
+      "host" : "ltx1-hcl7639.grid.linkedin.com",
+      "status" : "SUCCESS",
+      "taskLocality" : "PROCESS_LOCAL",
+      "speculative" : false,
+      "accumulatorUpdates" : [ ],
+      "taskMetrics" : {
+        "executorDeserializeTime" : 5,
+        "executorDeserializeCpuTime" : 4664102,
+        "executorRunTime" : 20002,
+        "executorCpuTime" : 2281672,
+        "resultSize" : 798,
+        "jvmGcTime" : 0,
+        "resultSerializationTime" : 0,
+        "memoryBytesSpilled" : 0,
+        "diskBytesSpilled" : 0,
+        "peakExecutionMemory" : 0,
+        "inputMetrics" : {
+          "bytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "outputMetrics" : {
+          "bytesWritten" : 0,
+          "recordsWritten" : 0
+        },
+        "shuffleReadMetrics" : {
+          "remoteBlocksFetched" : 0,
+          "localBlocksFetched" : 0,
+          "fetchWaitTime" : 0,
+          "remoteBytesRead" : 0,
+          "remoteBytesReadToDisk" : 0,
+          "localBytesRead" : 0,
+          "recordsRead" : 0
+        },
+        "shuffleWriteMetrics" : {
+          "bytesWritten" : 0,
+          "writeTime" : 0,
+          "recordsWritten" : 0
+        }
+      },
+      "executorLogs" : {
+        "stdout" : "http://ltx1-hcl7639.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000002/vsowrira/stdout?start=-4096",
+        "stderr" : "http://ltx1-hcl7639.grid.linkedin.com:8042/node/containerlogs/container_e17_1625351839633_843287_01_000002/vsowrira/stderr?start=-4096"
+      },
+      "schedulerDelay" : 10,
+      "gettingResultTime" : 0
+    }
+  },
+  "executorSummary" : {
+    "1" : {
+      "taskTime" : 41301,
+      "failedTasks" : 0,
+      "succeededTasks" : 5,
+      "killedTasks" : 1,
+      "inputBytes" : 0,
+      "inputRecords" : 0,
+      "outputBytes" : 0,
+      "outputRecords" : 0,
+      "shuffleRead" : 0,
+      "shuffleReadRecords" : 0,
+      "shuffleWrite" : 0,
+      "shuffleWriteRecords" : 0,
+      "memoryBytesSpilled" : 0,
+      "diskBytesSpilled" : 0,
+      "isBlacklistedForStage" : false,
+      "peakMemoryMetrics" : {
+        "JVMHeapMemory" : 278874192,
+        "JVMOffHeapMemory" : 64736488,
+        "OnHeapExecutionMemory" : 0,
+        "OffHeapExecutionMemory" : 0,
+        "OnHeapStorageMemory" : 6401,
+        "OffHeapStorageMemory" : 0,
+        "OnHeapUnifiedMemory" : 6401,
+        "OffHeapUnifiedMemory" : 0,
+        "DirectPoolMemory" : 7466,
+        "MappedPoolMemory" : 0,
+        "ProcessTreeJVMVMemory" : 0,
+        "ProcessTreeJVMRSSMemory" : 0,
+        "ProcessTreePythonVMemory" : 0,
+        "ProcessTreePythonRSSMemory" : 0,
+        "ProcessTreeOtherVMemory" : 0,
+        "ProcessTreeOtherRSSMemory" : 0,
+        "MinorGCCount" : 2,
+        "MinorGCTime" : 88,
+        "MajorGCCount" : 2,
+        "MajorGCTime" : 161
+      },
+      "isExcludedForStage" : false
+    },
+    "2" : {
+      "taskTime" : 41355,
+      "failedTasks" : 0,
+      "succeededTasks" : 5,
+      "killedTasks" : 0,
+      "inputBytes" : 0,
+      "inputRecords" : 0,
+      "outputBytes" : 0,
+      "outputRecords" : 0,
+      "shuffleRead" : 0,
+      "shuffleReadRecords" : 0,
+      "shuffleWrite" : 0,
+      "shuffleWriteRecords" : 0,
+      "memoryBytesSpilled" : 0,
+      "diskBytesSpilled" : 0,
+      "isBlacklistedForStage" : false,
+      "peakMemoryMetrics" : {
+        "JVMHeapMemory" : 352766752,
+        "JVMOffHeapMemory" : 66089584,
+        "OnHeapExecutionMemory" : 0,
+        "OffHeapExecutionMemory" : 0,
+        "OnHeapStorageMemory" : 6401,
+        "OffHeapStorageMemory" : 0,
+        "OnHeapUnifiedMemory" : 6401,
+        "OffHeapUnifiedMemory" : 0,
+        "DirectPoolMemory" : 7845,
+        "MappedPoolMemory" : 0,
+        "ProcessTreeJVMVMemory" : 0,
+        "ProcessTreeJVMRSSMemory" : 0,
+        "ProcessTreePythonVMemory" : 0,
+        "ProcessTreePythonRSSMemory" : 0,
+        "ProcessTreeOtherVMemory" : 0,
+        "ProcessTreeOtherRSSMemory" : 0,
+        "MinorGCCount" : 2,
+        "MinorGCTime" : 124,
+        "MajorGCCount" : 2,
+        "MajorGCTime" : 161
+      },
+      "isExcludedForStage" : false
+    }
+  },
+  "speculationSummary" : {
+    "numTasks" : 1,
+    "numActiveTasks" : 0,
+    "numCompletedTasks" : 0,
+    "numFailedTasks" : 0,
+    "numKilledTasks" : 1,
+    "killedTasksSummary" : {
+      "original attempt succeeded" : 1
+    }
+  },
   "killedTasksSummary" : {
-    "original attempt succeeded" : 1
+    "another attempt succeeded" : 1
+  },
+  "resourceProfileId" : 3,
+  "peakExecutorMetrics" : {
+    "JVMHeapMemory" : 352766752,
+    "JVMOffHeapMemory" : 66089584,
+    "OnHeapExecutionMemory" : 0,
+    "OffHeapExecutionMemory" : 0,
+    "OnHeapStorageMemory" : 6401,
+    "OffHeapStorageMemory" : 0,
+    "OnHeapUnifiedMemory" : 6401,
+    "OffHeapUnifiedMemory" : 0,
+    "DirectPoolMemory" : 7845,
+    "MappedPoolMemory" : 0,
+    "ProcessTreeJVMVMemory" : 0,
+    "ProcessTreeJVMRSSMemory" : 0,
+    "ProcessTreePythonVMemory" : 0,
+    "ProcessTreePythonRSSMemory" : 0,
+    "ProcessTreeOtherVMemory" : 0,
+    "ProcessTreeOtherRSSMemory" : 0,
+    "MinorGCCount" : 2,
+    "MinorGCTime" : 124,
+    "MajorGCCount" : 2,
+    "MajorGCTime" : 161
   }
 }

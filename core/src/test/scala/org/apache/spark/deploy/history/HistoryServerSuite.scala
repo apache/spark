@@ -195,7 +195,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     "miscellaneous process" ->
       "applications/application_1555004656427_0144/allmiscellaneousprocess",
     "stage with speculation summary" ->
-      "applications/application_1625351839633_843287/stages/0/0/speculationSummary"
+      "applications/application_1625351839633_843287/stages/0/0/"
   )
 
   // run a bunch of characterization tests -- just verify the behavior is the same as what is saved
