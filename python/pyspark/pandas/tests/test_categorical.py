@@ -141,6 +141,43 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(pser, psser)
         self.assert_eq(pdf, psdf)
 
+    def test_reorder_categories(self):
+        pdf, psdf = self.df_pair
+
+        pser = pdf.a
+        psser = psdf.a
+
+        self.assert_eq(
+            pser.cat.reorder_categories([1, 2, 3]), psser.cat.reorder_categories([1, 2, 3])
+        )
+        self.assert_eq(
+            pser.cat.reorder_categories([1, 2, 3], ordered=True),
+            psser.cat.reorder_categories([1, 2, 3], ordered=True),
+        )
+        self.assert_eq(
+            pser.cat.reorder_categories([3, 2, 1]), psser.cat.reorder_categories([3, 2, 1])
+        )
+        self.assert_eq(
+            pser.cat.reorder_categories([3, 2, 1], ordered=True),
+            psser.cat.reorder_categories([3, 2, 1], ordered=True),
+        )
+
+        pser.cat.reorder_categories([1, 2, 3], inplace=True)
+        psser.cat.reorder_categories([1, 2, 3], inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        pser.cat.reorder_categories([3, 2, 1], ordered=True, inplace=True)
+        psser.cat.reorder_categories([3, 2, 1], ordered=True, inplace=True)
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        self.assertRaises(ValueError, lambda: psser.cat.reorder_categories([1, 2]))
+        self.assertRaises(ValueError, lambda: psser.cat.reorder_categories([1, 2, 4]))
+        self.assertRaises(ValueError, lambda: psser.cat.reorder_categories([1, 2, 2]))
+        self.assertRaises(TypeError, lambda: psser.cat.reorder_categories(1))
+        self.assertRaises(TypeError, lambda: psdf.b.cat.reorder_categories("abcd"))
+
     def test_as_ordered_unordered(self):
         pdf, psdf = self.df_pair
 

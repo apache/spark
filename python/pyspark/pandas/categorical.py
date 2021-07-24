@@ -587,9 +587,96 @@ class CategoricalAccessor(object):
             return psser._with_new_scol(psser.spark.column, field=psser._internal.data_fields[0])
 
     def reorder_categories(
-        self, new_categories: pd.Index, ordered: bool = None, inplace: bool = False
-    ) -> "ps.Series":
-        raise NotImplementedError()
+        self,
+        new_categories: Union[pd.Index, List],
+        ordered: Optional[bool] = None,
+        inplace: bool = False,
+    ) -> Optional["ps.Series"]:
+        """
+        Reorder categories as specified in new_categories.
+
+        `new_categories` need to include all old categories and no new category
+        items.
+
+        Parameters
+        ----------
+        new_categories : Index-like
+           The categories in new order.
+        ordered : bool, optional
+           Whether or not the categorical is treated as a ordered categorical.
+           If not given, do not change the ordered information.
+        inplace : bool, default False
+           Whether or not to reorder the categories inplace or return a copy of
+           this categorical with reordered categories.
+
+        Returns
+        -------
+        cat : Series or None
+            Categorical with removed categories or None if ``inplace=True``.
+
+        Raises
+        ------
+        ValueError
+            If the new categories do not contain all old category items or any
+            new ones
+
+        Examples
+        --------
+        >>> s = ps.Series(list("abbccc"), dtype="category")
+        >>> s  # doctest: +SKIP
+        0    a
+        1    b
+        2    b
+        3    c
+        4    c
+        5    c
+        dtype: category
+        Categories (3, object): ['a', 'b', 'c']
+
+        >>> s.cat.reorder_categories(['c', 'b', 'a'], ordered=True)  # doctest: +SKIP
+        0    a
+        1    b
+        2    b
+        3    c
+        4    c
+        5    c
+        dtype: category
+        Categories (3, object): ['c' < 'b' < 'a']
+        """
+        if not is_list_like(new_categories):
+            raise TypeError(
+                "Parameter 'new_categories' must be list-like, was '{}'".format(new_categories)
+            )
+        elif len(set(new_categories)) != len(set(self.categories)) or any(
+            cat not in self.categories for cat in new_categories
+        ):
+            raise ValueError("items in new_categories are not the same as in old categories")
+
+        if ordered is None:
+            ordered = self.ordered
+
+        if new_categories == list(self.categories) and ordered == self.ordered:
+            if inplace:
+                return None
+            else:
+                psser = self._data
+                return psser._with_new_scol(
+                    psser.spark.column, field=psser._internal.data_fields[0]
+                )
+        else:
+            dtype = CategoricalDtype(categories=new_categories, ordered=ordered)
+            psser = self._data.astype(dtype)
+
+            if inplace:
+                internal = self._data._psdf._internal.with_new_spark_column(
+                    self._data._column_label,
+                    psser.spark.column,
+                    field=psser._internal.data_fields[0],
+                )
+                self._data._psdf._update_internal_frame(internal)
+                return None
+            else:
+                return psser
 
     def set_categories(
         self,
