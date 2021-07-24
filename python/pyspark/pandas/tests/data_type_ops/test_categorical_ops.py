@@ -48,6 +48,9 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 "that_ordered_string_cat": pd.Categorical(
                     ["z", "y", "x"], categories=["x", "z", "y"], ordered=True
                 ),
+                "this_given_cat_string_cat": pd.Series(
+                    pd.Categorical(["x", "y", "z"], categories=list("zyx"))
+                ),
             }
         )
 
@@ -253,6 +256,18 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             psdf["this_string_cat"] == psdf["that_string_cat"],
         )
 
+        self.assert_eq(
+            pdf["this_string_cat"] == pdf["this_given_cat_string_cat"],
+            psdf["this_string_cat"] == psdf["this_given_cat_string_cat"],
+        )
+
+        pser1 = pd.Series(pd.Categorical(list("abca")))
+        pser2 = pd.Series(pd.Categorical(list("bcaa"), categories=list("bca")))
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(pser1 == pser2, (psser1 == psser2).sort_index())
+
     def test_ne(self):
         pdf, psdf = self.pdf, self.psdf
 
@@ -302,6 +317,17 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             pdf["this_string_cat"] != pdf["that_string_cat"],
             psdf["this_string_cat"] != psdf["that_string_cat"],
         )
+        self.assert_eq(
+            pdf["this_string_cat"] != pdf["this_given_cat_string_cat"],
+            psdf["this_string_cat"] != psdf["this_given_cat_string_cat"],
+        )
+
+        pser1 = pd.Series(pd.Categorical(list("abca")))
+        pser2 = pd.Series(pd.Categorical(list("bcaa"), categories=list("bca")))
+        psser1 = ps.from_pandas(pser1)
+        psser2 = ps.from_pandas(pser2)
+        with option_context("compute.ops_on_diff_frames", True):
+            self.assert_eq(pser1 != pser2, (psser1 != psser2).sort_index())
 
     def test_lt(self):
         pdf, psdf = self.pdf, self.psdf
