@@ -358,9 +358,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
             if isinstance(psser.spark.data_type, DecimalType):
-                self.assertRaisesRegex(
-                    TypeError, "< can not be applied to", lambda: psser < psser
-                )
+                self.assertRaisesRegex(TypeError, "< can not be applied to", lambda: psser < psser)
             else:
                 self.assert_eq(pser < pser, psser < psser)
 
@@ -380,9 +378,7 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for col in self.numeric_df_cols:
             pser, psser = pdf[col], psdf[col]
             if isinstance(psser.spark.data_type, DecimalType):
-                self.assertRaisesRegex(
-                    TypeError, "> can not be applied to", lambda: psser > psser
-                )
+                self.assertRaisesRegex(TypeError, "> can not be applied to", lambda: psser > psser)
             else:
                 self.assert_eq(pser > pser, psser > psser)
 

@@ -415,7 +415,7 @@ jobs:
     - name: Java linter
       run: ./dev/lint-java
     - name: Python linter
-      run: ./dev/lint-python
+      run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
     - name: R linter
       run: ./dev/lint-r
     - name: JS linter
