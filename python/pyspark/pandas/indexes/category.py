@@ -386,6 +386,58 @@ class CategoricalIndex(Index):
 
         return CategoricalIndex(self.to_series().cat.remove_unused_categories()).rename(self.name)
 
+    def reorder_categories(
+        self,
+        new_categories: Union[pd.Index, Any, List],
+        ordered: Optional[bool] = None,
+        inplace: bool = False,
+    ) -> Optional["CategoricalIndex"]:
+        """
+        Reorder categories as specified in new_categories.
+
+        `new_categories` need to include all old categories and no new category
+        items.
+
+        Parameters
+        ----------
+        new_categories : Index-like
+           The categories in new order.
+        ordered : bool, optional
+           Whether or not the categorical is treated as a ordered categorical.
+           If not given, do not change the ordered information.
+        inplace : bool, default False
+           Whether or not to reorder the categories inplace or return a copy of
+           this categorical with reordered categories.
+
+        Returns
+        -------
+        cat : CategoricalIndex or None
+            Categorical with removed categories or None if ``inplace=True``.
+
+        Raises
+        ------
+        ValueError
+            If the new categories do not contain all old category items or any
+            new ones
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(list("abbccc"))
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+
+        >>> idx.reorder_categories(['c', 'b', 'a'])  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['c', 'b', 'a'], ordered=False, dtype='category')
+        """
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(
+            self.to_series().cat.reorder_categories(new_categories=new_categories, ordered=ordered)
+        ).rename(self.name)
+
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeCategoricalIndex, item):
             property_or_func = getattr(MissingPandasLikeCategoricalIndex, item)
