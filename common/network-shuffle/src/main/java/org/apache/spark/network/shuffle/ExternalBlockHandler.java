@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import com.codahale.metrics.Gauge;
@@ -43,6 +44,7 @@ import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.shuffle.ExternalShuffleBlockResolver.AppExecId;
 import org.apache.spark.network.shuffle.protocol.*;
+import org.apache.spark.network.util.TimerWithCustomTimeUnit;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
 
@@ -222,9 +224,11 @@ public class ExternalBlockHandler extends RpcHandler {
   public class ShuffleMetrics implements MetricSet {
     private final Map<String, Metric> allMetrics;
     // Time latency for open block request in ms
-    private final Timer openBlockRequestLatencyMillis = new Timer();
+    private final Timer openBlockRequestLatencyMillis =
+        new TimerWithCustomTimeUnit(TimeUnit.MILLISECONDS);
     // Time latency for executor registration latency in ms
-    private final Timer registerExecutorRequestLatencyMillis = new Timer();
+    private final Timer registerExecutorRequestLatencyMillis =
+        new TimerWithCustomTimeUnit(TimeUnit.MILLISECONDS);
     // Block transfer rate in byte per second
     private final Meter blockTransferRateBytes = new Meter();
     // Number of active connections to the shuffle service
