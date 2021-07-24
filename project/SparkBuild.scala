@@ -1006,12 +1006,12 @@ object TestSettings {
     javaOptions in Test += "-ea",
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
     javaOptions in Test ++= {
-      val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
+      val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1500m")
       s"-Xmx3200m -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
         .split(" ").toSeq
     },
     javaOptions ++= {
-      val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
+      val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1500m")
       s"-Xmx3g -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
     },
     // Exclude tags defined in a system property
