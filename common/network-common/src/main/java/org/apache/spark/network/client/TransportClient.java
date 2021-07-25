@@ -206,7 +206,8 @@ public class TransportClient implements Closeable {
    *
    * @param appId applicationId.
    * @param shuffleId shuffle id.
-   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
+   *                       attempt of a shuffle Id.
    * @param reduceId reduce id.
    * @param callback callback the handle the reply.
    */

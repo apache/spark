@@ -78,10 +78,10 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         if (t.getCause != null && t.getCause.isInstanceOf[FileNotFoundException]) {
           return false
         }
+        val errorStackTraceString = Throwables.getStackTraceAsString(t)
         // If the block is too late or the invalid block push, there is no need to retry it
-        !(Throwables.getStackTraceAsString(t)
-          .contains(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX) ||
-          Throwables.getStackTraceAsString(t).contains(BlockPushErrorHandler.STALE_BLOCK_PUSH));
+        !(errorStackTraceString.contains(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX) ||
+          errorStackTraceString.contains(BlockPushErrorHandler.STALE_BLOCK_PUSH_SUFFIX))
       }
     }
   }
@@ -342,7 +342,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
    * @param partitionLengths array of sizes of blocks in the shuffle data file
    * @param mergerLocs target locations to push blocks to
    * @param transportConf transportConf used to create FileSegmentManagedBuffer
-   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
+   *                       attempt of a shuffle Id.
    * @return List of the PushRequest, randomly shuffled.
    *
    * VisibleForTesting
@@ -366,7 +367,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     for (reduceId <- 0 until numPartitions) {
       val blockSize = partitionLengths(reduceId)
       logDebug(
-        s"Block ${ShufflePushBlockId(shuffleId, partitionId, shuffleMergeId,
+        s"Block ${ShufflePushBlockId(shuffleId, shuffleMergeId, partitionId,
           reduceId)} is of size $blockSize")
       // Skip 0-length blocks and blocks that are large enough
       if (blockSize > 0) {

@@ -195,8 +195,8 @@ object BlockId {
   val SHUFFLE_BATCH = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
-  val SHUFFLE_PUSH = "shufflePush_([0-9]+)_(-?[0-9]+)_([0-9]+)_([0-9]+)".r
-  val SHUFFLE_MERGED = "shuffleMerged_([0-9]+)_(-?[0-9]+)_([0-9]+)".r
+  val SHUFFLE_PUSH = "shufflePush_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
+  val SHUFFLE_MERGED = "shuffleMerged_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_MERGED_DATA =
     "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_(-?[0-9]+)_([0-9]+).data".r
   val SHUFFLE_MERGED_INDEX =

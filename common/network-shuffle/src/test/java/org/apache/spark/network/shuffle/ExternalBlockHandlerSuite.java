@@ -313,8 +313,8 @@ public class ExternalBlockHandlerSuite {
     if (useOpenBlocks) {
       OpenBlocks openBlocks =
         new OpenBlocks("app0", "exec1",
-          new String[] {"shuffleChunk_0_0_0", "shuffleChunk_0_0_1", "shuffleChunk_0_1_0",
-            "shuffleChunk_0_1_1"});
+          new String[] {"shuffleChunk_0_0_0_0", "shuffleChunk_0_0_0_1", "shuffleChunk_0_0_1_0",
+            "shuffleChunk_0_0_1_1"});
       buffer = openBlocks.toByteBuffer();
     } else {
       FetchShuffleBlockChunks fetchChunks = new FetchShuffleBlockChunks(

@@ -30,7 +30,8 @@ public interface MergedBlocksMetaListener extends EventListener {
    * Called after successfully receiving the meta of a merged block.
    *
    * @param shuffleId shuffle id.
-   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
+   *                       attempt of a shuffle Id.
    * @param reduceId reduce id.
    * @param meta contains meta information of a merged block.
    */
@@ -40,7 +41,8 @@ public interface MergedBlocksMetaListener extends EventListener {
    * Called when there is an exception while fetching the meta of a merged block.
    *
    * @param shuffleId shuffle id.
-   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
+   *                       attempt of a shuffle Id.
    * @param reduceId reduce id.
    * @param exception exception getting chunk counts.
    */

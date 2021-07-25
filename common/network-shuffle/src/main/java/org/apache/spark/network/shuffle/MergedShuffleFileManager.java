@@ -85,7 +85,8 @@ public interface MergedShuffleFileManager {
    *
    * @param appId application ID
    * @param shuffleId shuffle ID
-   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
+   *                       attempt of a shuffle Id.
    * @param reduceId reducer ID
    * @param chunkId merged shuffle file chunk ID
    * @return The {@link ManagedBuffer} for the given merged shuffle chunk
@@ -98,7 +99,8 @@ public interface MergedShuffleFileManager {
    *
    * @param appId application ID
    * @param shuffleId shuffle ID
-   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
+   *                       common/network-shuffle/src/main/java/org/apache/spark/network/shuffle/MergedShuffleFileManager.javaattempt of a shuffle Id.
    * @param reduceId reducer ID
    * @return meta information of a merged block
    */

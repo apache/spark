@@ -88,7 +88,7 @@ public interface ErrorHandler {
      * then the entirety of the shuffle output needs to be rolled back. For more details refer
      * SPARK-23243, SPARK-25341 and SPARK-32923.
      */
-    public static final String STALE_BLOCK_PUSH =
+    public static final String STALE_BLOCK_PUSH_SUFFIX =
         "stale block push as shuffle blocks of a higher shuffleMergeId for the shuffle is already being pushed";
 
     /**
@@ -98,7 +98,7 @@ public interface ErrorHandler {
      * stage attempt fails then the entirety of the shuffle output needs to be rolled back. For more
      * details refer SPARK-23243, SPARK-25341 and SPARK-32923.
      */
-    public static final String STALE_SHUFFLE_FINALIZE =
+    public static final String STALE_SHUFFLE_FINALIZE_SUFFIX =
         "stale shuffle finalize request as shuffle blocks of a higher shuffleMergeId for the shuffle is already"
             + " being pushed";
 
@@ -112,10 +112,12 @@ public interface ErrorHandler {
           t.getCause() instanceof FileNotFoundException)) {
         return false;
       }
+
+      String errorStackTrace = Throwables.getStackTraceAsString(t);
       // If the block is too late or an stale block push, there is no need to retry it
-      return !(Throwables.getStackTraceAsString(t).contains(TOO_LATE_MESSAGE_SUFFIX) ||
-          Throwables.getStackTraceAsString(t).contains(STALE_BLOCK_PUSH) ||
-          Throwables.getStackTraceAsString(t).contains(STALE_SHUFFLE_FINALIZE));
+      return !(errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX) ||
+          errorStackTrace.contains(STALE_BLOCK_PUSH_SUFFIX) ||
+          errorStackTrace.contains(STALE_SHUFFLE_FINALIZE_SUFFIX));
     }
 
     @Override
@@ -123,8 +125,8 @@ public interface ErrorHandler {
       String errorStackTrace = Throwables.getStackTraceAsString(t);
       return !errorStackTrace.contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) &&
         !errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX) &&
-          !errorStackTrace.contains(STALE_BLOCK_PUSH) &&
-            !errorStackTrace.contains(STALE_SHUFFLE_FINALIZE);
+          !errorStackTrace.contains(STALE_BLOCK_PUSH_SUFFIX) &&
+            !errorStackTrace.contains(STALE_SHUFFLE_FINALIZE_SUFFIX);
     }
   }
 
@@ -136,18 +138,18 @@ public interface ErrorHandler {
      * then the entirety of the shuffle output needs to be rolled back. For more details refer
      * SPARK-23243 and SPARK-25341.
      */
-    public static final String STALE_BLOCK_FETCH =
+    public static final String STALE_BLOCK_FETCH_SUFFIX =
         "stale fetch as the shuffleMergeId is older than the latest shuffleMergeId";
 
     @Override
     public boolean shouldRetryError(Throwable t) {
-      return !Throwables.getStackTraceAsString(t).contains(STALE_BLOCK_FETCH);
+      return !Throwables.getStackTraceAsString(t).contains(STALE_BLOCK_FETCH_SUFFIX);
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
       String errorStackTrace = Throwables.getStackTraceAsString(t);
-      return !errorStackTrace.contains(STALE_BLOCK_FETCH);
+      return !errorStackTrace.contains(STALE_BLOCK_FETCH_SUFFIX);
     }
   }
 }

@@ -1425,7 +1425,8 @@ object ShuffleBlockFetcherIterator {
    * Result of a successful fetch of meta information for a remote push-merged block.
    *
    * @param shuffleId shuffle id.
-   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
+   *                       attempt of a shuffle Id.
    * @param reduceId reduce id.
    * @param blockSize size of each push-merged block.
    * @param bitmaps bitmaps for every chunk.
@@ -1443,7 +1444,8 @@ object ShuffleBlockFetcherIterator {
    * Result of a failure while fetching the meta information for a remote push-merged block.
    *
    * @param shuffleId shuffle id.
-   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
+   *                       attempt of a shuffle Id.
    * @param reduceId reduce id.
    * @param address BlockManager that the meta was fetched from.
    */
@@ -1457,7 +1459,8 @@ object ShuffleBlockFetcherIterator {
    * Result of a successful fetch of meta information for a push-merged-local block.
    *
    * @param shuffleId shuffle id.
-   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
+   *                       attempt of a shuffle Id.
    * @param reduceId reduce id.
    * @param bitmaps bitmaps for every chunk.
    * @param localDirs local directories where the push-merged shuffle files are storedl

@@ -40,7 +40,9 @@ import org.apache.spark.network.protocol.Encoders;
 public class MergeStatuses extends BlockTransferMessage {
   /** Shuffle ID **/
   public final int shuffleId;
-  /** shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id. **/
+  /**
+   * shuffleMergeId is used to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   */
   public final int shuffleMergeId;
   /**
    * Array of bitmaps tracking the set of mapper partition blocks merged for each
@@ -95,7 +97,7 @@ public class MergeStatuses extends BlockTransferMessage {
     if (other != null && other instanceof MergeStatuses) {
       MergeStatuses o = (MergeStatuses) other;
       return Objects.equal(shuffleId, o.shuffleId)
-        &&  Objects.equal(shuffleMergeId, o.shuffleMergeId)
+        && Objects.equal(shuffleMergeId, o.shuffleMergeId)
         && Arrays.equals(bitmaps, o.bitmaps)
         && Arrays.equals(reduceIds, o.reduceIds)
         && Arrays.equals(sizes, o.sizes);

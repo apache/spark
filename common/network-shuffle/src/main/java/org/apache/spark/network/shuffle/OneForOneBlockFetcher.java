@@ -174,8 +174,10 @@ public class OneForOneBlockFetcher {
     Map<Integer, BlocksInfo> reduceIdToBlocksInfo = new LinkedHashMap<>();
     for (String blockId : blockIds) {
       String[] blockIdParts = splitBlockId(blockId);
-      if (Integer.parseInt(blockIdParts[1]) != shuffleId) {
-        throw new IllegalArgumentException("Expected shuffleId=" + shuffleId + ", got:" + blockId);
+      if (Integer.parseInt(blockIdParts[1]) != shuffleId ||
+          Integer.parseInt(blockIdParts[2]) != shuffleMergeId) {
+        throw new IllegalArgumentException(String.format("Expected shuffleId = %s and shuffleMergeId = %s"
+            + " but got %s", shuffleId, shuffleMergeId, blockId));
       }
 
       int reduceId = Integer.parseInt(blockIdParts[3]);

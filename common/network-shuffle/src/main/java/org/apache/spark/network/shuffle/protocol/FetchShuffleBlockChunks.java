@@ -36,7 +36,7 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
   public final int[] reduceIds;
   // The i-th int[] in chunkIds contains all the chunks for the i-th reduceId in reduceIds.
   public final int[][] chunkIds;
-  // shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
+  // shuffleMergeId is used to uniquely identify a indeterminate stage attempt of a shuffle Id.
   public final int shuffleMergeId;
 
   public FetchShuffleBlockChunks(
@@ -78,7 +78,7 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
 
   @Override
   public int hashCode() {
-    int result = super.hashCode() + shuffleMergeId;
+    int result = super.hashCode() * 31 + shuffleMergeId;
     result = 31 * result + Arrays.hashCode(reduceIds);
     result = 31 * result + Arrays.deepHashCode(chunkIds);
     return result;

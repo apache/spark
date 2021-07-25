@@ -167,7 +167,8 @@ public abstract class BlockStoreClient implements Closeable {
    * @param host host of shuffle server
    * @param port port of shuffle server.
    * @param shuffleId shuffle ID of the shuffle to be finalized
-   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
+   *                       attempt of a shuffle Id.
    * @param listener the listener to receive MergeStatuses
    *
    * @since 3.1.0
@@ -187,7 +188,8 @@ public abstract class BlockStoreClient implements Closeable {
    * @param host the host of the remote node.
    * @param port the port of the remote node.
    * @param shuffleId shuffle id.
-   * @param shuffleMergeId shuffleMergeId is to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
+   *                       attempt of a shuffle Id.
    * @param reduceId reduce id.
    * @param listener the listener to receive chunk counts.
    *
