@@ -561,29 +561,19 @@ case class JsonToStructs(
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
     case _: StructType | _: ArrayType | _: MapType =>
-      checkInputDataTypesRec(nullableSchema)
+      val checkMapKeyType = nullableSchema.existsRecursively( dataType => dataType match {
+        case MapType(keyType, _, _) if (keyType != StringType) => true
+        case _ => false
+      })
+      if(checkMapKeyType) {
+        TypeCheckResult.TypeCheckFailure(
+          s"Input schema ${nullableSchema.catalogString} can only contain StringType " +
+            "as a key type for a MapType.")
+      } else {
+        super.checkInputDataTypes()
+      }
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
-  }
-
-  private def checkInputDataTypesRec(schema: DataType): TypeCheckResult = schema match {
-    case StructType(fields) =>
-      fields.map(f => checkInputDataTypesRec(f.dataType))
-        .filter(_.isInstanceOf[TypeCheckResult.TypeCheckFailure])
-        .headOption.getOrElse{
-          super.checkInputDataTypes()
-        }
-    case ArrayType(elemType, _) => checkInputDataTypesRec(elemType) match {
-        case fail : TypeCheckResult.TypeCheckFailure => fail
-        case _ => super.checkInputDataTypes()
-      }
-    case MapType(keyType, _, _) if (keyType != StringType) =>
-      TypeCheckResult.TypeCheckFailure(
-        s"Input schema ${nullableSchema.catalogString} can only contain StringType as a key type.")
-    case MapType(_, valueType, _) => checkInputDataTypesRec(valueType) match {
-        case fail : TypeCheckResult.TypeCheckFailure => fail
-        case _ => super.checkInputDataTypes()
-      }
   }
 
   // This converts parsed rows to the desired output by the given schema.
