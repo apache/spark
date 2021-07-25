@@ -29,6 +29,7 @@ import org.apache.spark.sql.internal.StaticSQLConf.{QUERY_EXECUTION_LISTENERS, S
 import org.apache.spark.util.Utils
 
 class SparkSQLEnvSuite extends SparkFunSuite {
+  // add comment for test
   test("SPARK-29604 external listeners should be initialized with Spark classloader") {
     val metastorePath = Utils.createTempDir("spark_derby")
     FileUtils.forceDelete(metastorePath)
