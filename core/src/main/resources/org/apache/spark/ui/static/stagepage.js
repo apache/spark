@@ -656,11 +656,11 @@ $(document).ready(function () {
         $("#speculationSummary").hide()
         var speculationSummaryInfo = responseBody.speculationSummary;
         var speculationData = [[
-            speculationSummaryInfo.numTasks,
-            speculationSummaryInfo.numActiveTasks,
-            speculationSummaryInfo.numCompletedTasks,
-            speculationSummaryInfo.numFailedTasks,
-            speculationSummaryInfo.numKilledTasks
+          speculationSummaryInfo.numTasks,
+          speculationSummaryInfo.numActiveTasks,
+          speculationSummaryInfo.numCompletedTasks,
+          speculationSummaryInfo.numFailedTasks,
+          speculationSummaryInfo.numKilledTasks
         ]];
         if (speculationSummaryInfo.numTasks > 0) {
           // Show speculationSummary if there is atleast one speculated task ran
