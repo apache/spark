@@ -117,8 +117,8 @@ case class ShuffleMergedBlockId(
     shuffleId: Int,
     shuffleMergeId: Int,
     reduceId: Int) extends BlockId {
-  override def name: String = "shuffleMerge_" + shuffleId + "_" +
-    shuffleMergeId + "_" + reduceId + ""
+  override def name: String = "shuffleMerged_" + shuffleId + "_" +
+    shuffleMergeId + "_" + reduceId
 }
 
 @Since("3.2.0")
@@ -196,7 +196,7 @@ object BlockId {
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
   val SHUFFLE_PUSH = "shufflePush_([0-9]+)_(-?[0-9]+)_([0-9]+)_([0-9]+)".r
-  val SHUFFLE_MERGE = "shuffleMerge_([0-9]+)_(-?[0-9]+)_([0-9]+)".r
+  val SHUFFLE_MERGED = "shuffleMerged_([0-9]+)_(-?[0-9]+)_([0-9]+)".r
   val SHUFFLE_MERGED_DATA =
     "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_(-?[0-9]+)_([0-9]+).data".r
   val SHUFFLE_MERGED_INDEX =
@@ -225,7 +225,7 @@ object BlockId {
     case SHUFFLE_PUSH(shuffleId, shuffleMergeId, mapIndex, reduceId) =>
       ShufflePushBlockId(shuffleId.toInt, shuffleMergeId.toInt, mapIndex.toInt,
         reduceId.toInt)
-    case SHUFFLE_MERGE(shuffleId, shuffleMergeId, reduceId) =>
+    case SHUFFLE_MERGED(shuffleId, shuffleMergeId, reduceId) =>
       ShuffleMergedBlockId(shuffleId.toInt, shuffleMergeId.toInt, reduceId.toInt)
     case SHUFFLE_MERGED_DATA(appId, shuffleId, shuffleMergeId, reduceId) =>
       ShuffleMergedDataBlockId(appId, shuffleId.toInt, shuffleMergeId.toInt, reduceId.toInt)

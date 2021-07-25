@@ -159,7 +159,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         if (shuffleMergePartitionsMap == null) {
           logger.info("Creating a new attempt for shuffle blocks push request for"
               + " shuffle {} with shuffleMergeId {} for application {}_{}", shuffleId,
-              shuffleMergeId, appShuffleInfo.appId, appShuffleInfo.attemptId));
+              shuffleMergeId, appShuffleInfo.appId, appShuffleInfo.attemptId);
           Map<Integer, Map<Integer, AppShufflePartitionInfo>> newShuffleMergePartitions
             = new ConcurrentHashMap<>();
           Map<Integer, AppShufflePartitionInfo> newPartitionsMap = new ConcurrentHashMap<>();
@@ -174,7 +174,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
             logger.info("Rejecting shuffle blocks push request for shuffle {} with"
                 + " shuffleMergeId {} for application {}_{} as a higher shuffleMergeId"
                 + " {} request is already seen", shuffleId, shuffleMergeId,
-                appShuffleInfo.appId, appShuffleInfo.attemptId, latestShuffleMergeId));
+                appShuffleInfo.appId, appShuffleInfo.attemptId, latestShuffleMergeId);
             // Reject the request as we have already seen a higher shuffleMergeId than the
             // current incoming one
             return null;
@@ -186,7 +186,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
                + " shuffle {} with shuffleMergeId {} for application {}_{} since it is"
                + " higher than the latest shuffleMergeId {} already seen", shuffleId,
                shuffleMergeId, appShuffleInfo.appId, appShuffleInfo.attemptId,
-               latestShuffleMergeId));
+               latestShuffleMergeId);
             if (null != shuffleMergePartitionsMap.get(latestShuffleMergeId)) {
               Map<Integer, AppShufflePartitionInfo> shufflePartitions =
                 shuffleMergePartitionsMap.get(latestShuffleMergeId);
