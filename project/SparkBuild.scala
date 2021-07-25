@@ -704,7 +704,7 @@ object Hive {
     javaOptions in Test := (javaOptions in Test).value.filterNot(_ == "-ea"),
     // Hive tests need higher metaspace size
     javaOptions in Test := (javaOptions in Test).value.filterNot(_.contains("MaxMetaspaceSize")),
-    javaOptions in Test += "-XX:MaxMetaspaceSize=2g",
+    javaOptions in Test += "-XX:MaxMetaspaceSize=2500m",
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
     // only for this subproject.
     scalacOptions := (scalacOptions map { currentOpts: Seq[String] =>
