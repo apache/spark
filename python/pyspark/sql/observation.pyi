@@ -20,12 +20,10 @@ from typing import Optional
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
-from pyspark.sql import Column, DataFrame, Row
+from pyspark.sql import Row
 
 
 class Observation:
     def __init__(self, name: Optional[str] = ...): ...
-    def _on(self, df: DataFrame, *exprs: Column) -> DataFrame: ...
     @property
     def get(self) -> Row: ...
-    def _to_row(self, jrow: JavaObject) -> Row: ...

@@ -1834,11 +1834,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def observe(self, observation, *exprs):
         """Observe (named) metrics through an :class:`Observation` instance.
 
-        This method does not support streaming datasets.
+        A user can retrieve the metrics by accessing `Observation.get`.
 
         .. versionadded:: 3.3.0
-
-        A user can retrieve the metrics by accessing `Observation.get`.
 
         Parameters
         ----------
@@ -1852,18 +1850,22 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         :class:`DataFrame`
             the observed :class:`DataFrame`.
 
+        Notes
+        -----
+        This method does not support streaming datasets.
+
         Examples
         --------
         >>> from pyspark.sql.functions import col, count, lit, max
-        >>> from pyspark.sql.observation import Observation
-        >>> observation = Observation("my_metrics")
+        >>> from pyspark.sql import Observation
+        >>> observation = Observation("my metrics")
         >>> observed_df = df.observe(observation, count(lit(1)).alias("count"), max(col("age")))
         >>> observed_df.count()
         2
         >>> observation.get
         Row(count=2, max(age)=5)
         """
-        from pyspark.sql.observation import Observation
+        from pyspark.sql import Observation
         assert isinstance(observation, Observation), "observation should be Observation"
         return observation._on(self, *exprs)
 

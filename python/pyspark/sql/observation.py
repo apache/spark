@@ -14,11 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from uuid import uuid4
-
 from pyspark.sql import column, Column, DataFrame, Row
-
-basestring = unicode = str
 
 __all__ = ["Observation"]
 
@@ -28,8 +24,6 @@ class Observation:
 
     Metrics are aggregation expressions, which are applied to the DataFrame while is is being
     processed by an action.
-
-    .. versionadded:: 3.3.0
 
     The metrics have the following guarantees:
 
@@ -47,13 +41,18 @@ class Observation:
     actions do not modify the metrics returned by `Observation.get`. Retrieval of the metric via
     `Observation.get` blocks until the first action has finished and metrics become available.
 
+    .. versionadded:: 3.3.0
+
+    Notes
+    -----
     This class does not support streaming datasets.
 
     Examples
     --------
     >>> from pyspark.sql.functions import col, count, lit, max
-    >>> from pyspark.sql.observation import Observation
-    >>> observation = Observation("my_metrics")
+    >>> from pyspark.sql import Observation
+    >>> df = spark.createDataFrame([["Alice", 2], ["Bob", 5]], ["name", "age"])
+    >>> observation = Observation("my metrics")
     >>> observed_df = df.observe(observation, count(lit(1)).alias("count"), max(col("age")))
     >>> observed_df.count()
     2
@@ -68,8 +67,12 @@ class Observation:
         name : str, optional
             default is a random UUID string. This is the name of the Observation and the metric.
         """
-        assert isinstance(name, basestring), "name should be a string"
-        self._name = name or str(uuid4())
+        if name is not None:
+            if not isinstance(name, str):
+                raise TypeError("name should be a string")
+            if name == '':
+                raise ValueError("name should not be empty")
+        self._name = name
         self._jvm = None
         self._jo = None
 
@@ -93,7 +96,8 @@ class Observation:
         assert self._jo is None, "an Observation can be used with a DataFrame only once"
 
         self._jvm = df._sc._jvm
-        self._jo = self._jvm.org.apache.spark.sql.Observation(self._name)
+        cls = self._jvm.org.apache.spark.sql.Observation
+        self._jo = cls(self._name) if self._name is not None else cls()
         observed_df = self._jo.on(df._jdf,
                                   exprs[0]._jc,
                                   column._to_seq(df._sc, [c._jc for c in exprs[1:]]))
@@ -127,18 +131,13 @@ def _test():
     import sys
     from pyspark.context import SparkContext
     from pyspark.sql import SparkSession
-    from pyspark.sql.types import StructType, StructField, IntegerType, StringType
     import pyspark.sql.observation
     globs = pyspark.sql.observation.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
-    globs['sc'] = sc
     globs['spark'] = SparkSession(sc)
-    globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \
-        .toDF(StructType([StructField('age', IntegerType()),
-                          StructField('name', StringType())]))
 
     (failure_count, test_count) = doctest.testmod(pyspark.sql.observation, globs=globs)
-    globs['sc'].stop()
+    sc.stop()
     if failure_count:
         sys.exit(-1)
 
