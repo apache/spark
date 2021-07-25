@@ -96,8 +96,11 @@ object Benchmarks {
       require(args.length > 0, "Benchmark class to run should be specified.")
       if (
           info.getName.endsWith("Benchmark") &&
-          // TODO(SPARK-34927): Support TPCDSQueryBenchmark in Benchmarks
-          !info.getName.endsWith("TPCDSQueryBenchmark") &&
+          (
+            !info.getName.endsWith("TPCDSQueryBenchmark") ||
+            // Is TPCDS Datset provided?
+            (info.getName.endsWith("TPCDSQueryBenchmark") && args.contains("--data-location"))
+          ) &&
           matcher.matches(Paths.get(info.getName)) &&
           Try(runBenchmark).isSuccess && // Does this has a main method?
           !Modifier.isAbstract(clazz.getModifiers) // Is this a regular class?
