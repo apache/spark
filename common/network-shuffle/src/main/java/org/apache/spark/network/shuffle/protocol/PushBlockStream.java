@@ -123,6 +123,7 @@ public class PushBlockStream extends BlockTransferMessage {
     int mapIdx = buf.readInt();
     int reduceId = buf.readInt();
     int index = buf.readInt();
-    return new PushBlockStream(appId, attemptId, shuffleId, shuffleMergeId, mapIdx, reduceId, index);
+    return new PushBlockStream(appId, attemptId, shuffleId, shuffleMergeId, mapIdx, reduceId,
+      index);
   }
 }

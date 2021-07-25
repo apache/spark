@@ -102,8 +102,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       mapIndex: Int): Unit = {
     val numPartitions = dep.partitioner.numPartitions
     val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle")
-    val requests = prepareBlockPushRequests(numPartitions, mapIndex, dep.shuffleId, dataFile,
-      partitionLengths, dep.getMergerLocs, transportConf, dep.shuffleMergeId)
+    val requests = prepareBlockPushRequests(numPartitions, mapIndex, dep.shuffleId,
+      dep.shuffleMergeId, dataFile, partitionLengths, dep.getMergerLocs, transportConf)
     // Randomize the orders of the PushRequest, so different mappers pushing blocks at the same
     // time won't be pushing the same ranges of shuffle partitions.
     pushRequests ++= Utils.randomize(requests)
@@ -338,12 +338,12 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
    * @param numPartitions number of shuffle partitions in the shuffle file
    * @param partitionId map index of the current mapper
    * @param shuffleId shuffleId of current shuffle
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
+   *                       attempt of a shuffle Id.
    * @param dataFile shuffle data file
    * @param partitionLengths array of sizes of blocks in the shuffle data file
    * @param mergerLocs target locations to push blocks to
    * @param transportConf transportConf used to create FileSegmentManagedBuffer
-   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
-   *                       attempt of a shuffle Id.
    * @return List of the PushRequest, randomly shuffled.
    *
    * VisibleForTesting
@@ -352,11 +352,11 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
       numPartitions: Int,
       partitionId: Int,
       shuffleId: Int,
+      shuffleMergeId: Int,
       dataFile: File,
       partitionLengths: Array[Long],
       mergerLocs: Seq[BlockManagerId],
-      transportConf: TransportConf,
-      shuffleMergeId: Int): Seq[PushRequest] = {
+      transportConf: TransportConf): Seq[PushRequest] = {
     var offset = 0L
     var currentReqSize = 0
     var currentReqOffset = 0L

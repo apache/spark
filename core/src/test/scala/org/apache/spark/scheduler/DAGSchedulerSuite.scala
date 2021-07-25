@@ -3799,7 +3799,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(failedStages.collect {
       case stage: ResultStage => stage
     }.head.findMissingPartitions() == Seq(0, 1))
-
+    // shuffleMergeId for indeterminate stages would start from 1
+    assert(failedStages.collect {
+      case stage: ShuffleMapStage => stage.shuffleDep.shuffleMergeId
+    }.forall(x => x == 1))
     scheduler.resubmitFailedStages()
 
     // The first task of the `shuffleMapRdd2` failed with fetch failure
@@ -3810,7 +3813,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
 
     val newFailedStages = scheduler.failedStages.toSeq
     assert(newFailedStages.map(_.id) == Seq(0, 1))
-
+    // shuffleMergeId for indeterminate failed stages should be 2
+    assert(failedStages.collect {
+      case stage: ShuffleMapStage => stage.shuffleDep.shuffleMergeId
+    }.forall(x => x == 2))
     scheduler.resubmitFailedStages()
 
     // First shuffle map stage resubmitted and reran all tasks.
@@ -3821,14 +3827,16 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // Finish all stage.
     completeShuffleMapStageSuccessfully(0, 1, 2)
     assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+    // shuffleMergeId should be 2 for the attempt number 1 for stage 0
     assert(mapOutputTracker.shuffleStatuses.get(shuffleId1).forall(
-      _.mergeStatuses.forall(x => x.shuffleMergeId == 1)))
+      _.mergeStatuses.forall(x => x.shuffleMergeId == 2)))
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleId1) == 2)
 
     completeShuffleMapStageSuccessfully(1, 2, 2, Seq("hostC", "hostD"))
     assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+    // shuffleMergeId should be 2 for the attempt number 2 for stage 1
     assert(mapOutputTracker.shuffleStatuses.get(shuffleId2).forall(
-      _.mergeStatuses.forall(x => x.shuffleMergeId == 2)))
+      _.mergeStatuses.forall(x => x.shuffleMergeId == 3)))
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleId2) == 2)
 
     complete(taskSets(6), Seq((Success, 11), (Success, 12)))

@@ -21,10 +21,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
 
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
@@ -133,7 +131,10 @@ public class OneForOneBlockFetcher {
     }
   }
 
-  private AbstractFetchShuffleBlocks createFetchShuffleBlocksMsg(String appId, String execId, String[] blockIds) {
+  private AbstractFetchShuffleBlocks createFetchShuffleBlocksMsg(
+      String appId,
+      String execId,
+      String[] blockIds) {
     String[] firstBlock = splitBlockId(blockIds[0]);
     int shuffleId = Integer.parseInt(firstBlock[1]);
     boolean batchFetchEnabled = firstBlock.length == 5;
@@ -166,7 +167,10 @@ public class OneForOneBlockFetcher {
         appId, execId, shuffleId, mapIds, reduceIdsArray, batchFetchEnabled);
   }
 
-  private AbstractFetchShuffleBlocks createFetchShuffleChunksMsg(String appId, String execId, String[] blockIds) {
+  private AbstractFetchShuffleBlocks createFetchShuffleChunksMsg(
+      String appId,
+      String execId,
+      String[] blockIds) {
     String[] firstBlock = splitBlockId(blockIds[0]);
     int shuffleId = Integer.parseInt(firstBlock[1]);
     int shuffleMergeId = Integer.parseInt(firstBlock[2]);
@@ -176,8 +180,8 @@ public class OneForOneBlockFetcher {
       String[] blockIdParts = splitBlockId(blockId);
       if (Integer.parseInt(blockIdParts[1]) != shuffleId ||
           Integer.parseInt(blockIdParts[2]) != shuffleMergeId) {
-        throw new IllegalArgumentException(String.format("Expected shuffleId = %s and shuffleMergeId = %s"
-            + " but got %s", shuffleId, shuffleMergeId, blockId));
+        throw new IllegalArgumentException(String.format("Expected shuffleId = %s and"
+          + " shuffleMergeId = %s but got %s", shuffleId, shuffleMergeId, blockId));
       }
 
       int reduceId = Integer.parseInt(blockIdParts[3]);
@@ -221,17 +225,16 @@ public class OneForOneBlockFetcher {
    */
   private String[] splitBlockId(String blockId) {
     String[] blockIdParts = blockId.split("_");
-    // For batch block id, the format contains shuffleId, mapId, begin reduceId, end reduceId.
-    // For single block id, the format contains shuffleId, mapId, reduceId.
-    // For single block chunk id, the format contains shuffleId, shuffleMergeId, reduceId, chunkId.
     if (blockIdParts.length < 4 || blockIdParts.length > 5) {
       throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
     }
-
-    if(!(blockIdParts[0].equals("shuffle") || blockIdParts[0].equals("shuffleChunk"))) {
+    if (blockIdParts.length == 4 && !blockIdParts[0].equals("shuffle")) {
       throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
     }
-
+    if (blockIdParts.length == 5 &&
+      !(blockIdParts[0].equals("shuffle") || blockIdParts[0].equals("shuffleChunk"))) {
+      throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
+    }
     return blockIdParts;
   }
 

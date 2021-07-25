@@ -356,7 +356,8 @@ public class ExternalBlockHandlerSuite {
       }
     }
     assertFalse(bufferIter.hasNext());
-    verify(mergedShuffleManager, never()).getMergedBlockMeta(anyString(), anyInt(), anyInt(), anyInt());
+    verify(mergedShuffleManager, never()).getMergedBlockMeta(anyString(), anyInt(), anyInt(),
+        anyInt());
     verify(blockResolver, never()).getBlockData(
       anyString(), anyString(), anyInt(), anyInt(), anyInt());
     verify(mergedShuffleManager, times(1)).getMergedBlockData("app0", 0, 0, 0, 0);

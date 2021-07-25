@@ -237,8 +237,8 @@ public class ExternalBlockHandler extends RpcHandler
     try {
       checkAuth(client, metaRequest.appId);
       MergedBlockMeta mergedMeta =
-        mergeManager.getMergedBlockMeta(metaRequest.appId, metaRequest.shuffleId, metaRequest.shuffleMergeId,
-          metaRequest.reduceId);
+        mergeManager.getMergedBlockMeta(metaRequest.appId, metaRequest.shuffleId,
+          metaRequest.shuffleMergeId, metaRequest.reduceId);
       logger.debug(
         "Merged block chunks appId {} shuffleId {} reduceId {} num-chunks : {} ",
           metaRequest.appId, metaRequest.shuffleId, metaRequest.reduceId,
@@ -380,10 +380,11 @@ public class ExternalBlockHandler extends RpcHandler
       } else if (blockId0Parts.length == 5 && blockId0Parts[0].equals(SHUFFLE_CHUNK_ID)) {
         final int shuffleId = Integer.parseInt(blockId0Parts[1]);
         final int shuffleMergeId = Integer.parseInt(blockId0Parts[2]);
-        final int[] reduceIdAndChunkIds = shuffleReduceIdAndChunkIds(blockIds, shuffleId, shuffleMergeId);
+        final int[] reduceIdAndChunkIds = shuffleReduceIdAndChunkIds(blockIds, shuffleId,
+          shuffleMergeId);
         size = reduceIdAndChunkIds.length;
-        blockDataForIndexFn = index -> mergeManager.getMergedBlockData(msg.appId, shuffleId, shuffleMergeId,
-          reduceIdAndChunkIds[index], reduceIdAndChunkIds[index + 1]);
+        blockDataForIndexFn = index -> mergeManager.getMergedBlockData(msg.appId, shuffleId,
+          shuffleMergeId, reduceIdAndChunkIds[index], reduceIdAndChunkIds[index + 1]);
       } else if (blockId0Parts.length == 3 && blockId0Parts[0].equals("rdd")) {
         final int[] rddAndSplitIds = rddAndSplitIds(blockIds);
         size = rddAndSplitIds.length;
@@ -425,7 +426,9 @@ public class ExternalBlockHandler extends RpcHandler
     }
 
     private int[] shuffleReduceIdAndChunkIds(
-        String[] blockIds, int shuffleId, int shuffleMergeId) {
+        String[] blockIds,
+        int shuffleId,
+        int shuffleMergeId) {
       final int[] reduceIdAndChunkIds = new int[2 * blockIds.length];
       for(int i = 0; i < blockIds.length; i++) {
         String[] blockIdParts = blockIds[i].split("_");
@@ -435,7 +438,7 @@ public class ExternalBlockHandler extends RpcHandler
         if (Integer.parseInt(blockIdParts[1]) != shuffleId ||
             Integer.parseInt(blockIdParts[2]) != shuffleMergeId) {
           throw new IllegalArgumentException(String.format("Expected shuffleId = %s"
-              + " and shuffleMergeId = %s but got %s", shuffleId, shuffleMergeId, blockIds[i]));
+            + " and shuffleMergeId = %s but got %s", shuffleId, shuffleMergeId, blockIds[i]));
         }
         reduceIdAndChunkIds[2 * i] = Integer.parseInt(blockIdParts[3]);
         reduceIdAndChunkIds[2 * i + 1] = Integer.parseInt(blockIdParts[4]);
@@ -595,13 +598,20 @@ public class ExternalBlockHandler extends RpcHandler
 
     @Override
     public ManagedBuffer getMergedBlockData(
-        String appId, int shuffleId, int shuffleMergeId, int reduceId, int chunkId) {
+        String appId,
+        int shuffleId,
+        int shuffleMergeId,
+        int reduceId,
+        int chunkId) {
       throw new UnsupportedOperationException("Cannot handle shuffle block merge");
     }
 
     @Override
     public MergedBlockMeta getMergedBlockMeta(
-        String appId, int shuffleId, int shuffleMergeId, int reduceId) {
+        String appId,
+        int shuffleId,
+        int shuffleMergeId,
+        int reduceId) {
       throw new UnsupportedOperationException("Cannot handle shuffle block merge");
     }
 

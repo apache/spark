@@ -386,12 +386,12 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     masterTracker.registerMapOutput(10, 2, MapStatus(blockMgrId, Array(1000L), 2))
     masterTracker.registerMapOutput(10, 3, MapStatus(blockMgrId, Array(1000L), 3))
 
-    masterTracker.registerMergeResult(10, 0, MergeStatus(blockMgrId, -1,
+    masterTracker.registerMergeResult(10, 0, MergeStatus(blockMgrId, 0,
       bitmap, 3000L))
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq ===
-      Seq((blockMgrId, ArrayBuffer((ShuffleMergedBlockId(10, -1, 0), 3000, -1),
+      Seq((blockMgrId, ArrayBuffer((ShuffleMergedBlockId(10, 0, 0), 3000, -1),
         (ShuffleBlockId(10, 2, 0), size1000, 2)))))
 
     masterTracker.stop()

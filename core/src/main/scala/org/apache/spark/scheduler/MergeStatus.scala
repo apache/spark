@@ -76,12 +76,14 @@ private[spark] class MergeStatus(
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
+    out.writeInt(_shuffleMergeId)
     mapTracker.writeExternal(out)
     out.writeLong(size)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     loc = BlockManagerId(in)
+    _shuffleMergeId = in.readInt()
     mapTracker = new RoaringBitmap()
     mapTracker.readExternal(in)
     size = in.readLong()

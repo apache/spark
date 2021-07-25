@@ -24,6 +24,7 @@ import io.netty.buffer.ByteBuf;
 import org.apache.spark.network.protocol.Encoders;
 
 // Needed by ScalaDoc. See SPARK-7726
+import static org.apache.spark.network.shuffle.protocol.BlockTransferMessage.Type;
 
 
 /**
@@ -72,7 +73,8 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
 
     FetchShuffleBlockChunks that = (FetchShuffleBlockChunks) o;
     if (!super.equals(that)) return false;
-    if (shuffleMergeId != that.shuffleMergeId || !Arrays.equals(reduceIds, that.reduceIds)) return false;
+    if (shuffleMergeId != that.shuffleMergeId ||
+      !Arrays.equals(reduceIds, that.reduceIds)) return false;
     return Arrays.deepEquals(chunkIds, that.chunkIds);
   }
 
@@ -93,7 +95,7 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
     return super.encodedLength()
       + Encoders.IntArrays.encodedLength(reduceIds)
       + 4 /* encoded length of chunkIds.size() */
-      + 4  // encoded length of shuffleMergeId
+      + 4 /* encoded length of shuffleMergeId */
       + encodedLengthOfChunkIds;
   }
 
@@ -130,6 +132,7 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
     for (int i = 0; i < chunkIdsLen; i++) {
       chunkIds[i] = Encoders.IntArrays.decode(buf);
     }
-    return new FetchShuffleBlockChunks(appId, execId, shuffleId, shuffleMergeId, reduceIds, chunkIds);
+    return new FetchShuffleBlockChunks(appId, execId, shuffleId, shuffleMergeId, reduceIds,
+      chunkIds);
   }
 }

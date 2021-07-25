@@ -1450,8 +1450,7 @@ private[spark] object MapOutputTracker extends Logging {
           val remainingMapStatuses = if (mergeStatus != null && mergeStatus.totalSize > 0) {
             // If MergeStatus is available for the given partition, add location of the
             // pre-merged shuffle partition for this partition ID. Here we create a
-            // ShufflePushBlockId with mapId being SHUFFLE_PUSH_MAP_ID to indicate this is
-            // a merged shuffle block.
+            // ShuffleMergedBlockId to indicate this is a merged shuffle block.
             splitsByAddress.getOrElseUpdate(mergeStatus.location, ListBuffer()) +=
               ((ShuffleMergedBlockId(shuffleId, mergeStatus.shuffleMergeId, partId),
                 mergeStatus.totalSize, SHUFFLE_PUSH_MAP_ID))

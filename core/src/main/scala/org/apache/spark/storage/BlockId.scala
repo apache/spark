@@ -198,12 +198,12 @@ object BlockId {
   val SHUFFLE_PUSH = "shufflePush_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_MERGED = "shuffleMerged_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_MERGED_DATA =
-    "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_(-?[0-9]+)_([0-9]+).data".r
+    "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_MERGED_INDEX =
-    "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_(-?[0-9]+)_([0-9]+).index".r
+    "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_([0-9]+)_([0-9]+).index".r
   val SHUFFLE_MERGED_META =
-    "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_(-?[0-9]+)_([0-9]+).meta".r
-  val SHUFFLE_CHUNK = "shuffleChunk_([0-9]+)_(-?[0-9]+)_([0-9]+)_([0-9]+)".r
+    "shuffleMerged_([_A-Za-z0-9]*)_([0-9]+)_([0-9]+)_([0-9]+).meta".r
+  val SHUFFLE_CHUNK = "shuffleChunk_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
   val BROADCAST = "broadcast_([0-9]+)([_A-Za-z0-9]*)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r

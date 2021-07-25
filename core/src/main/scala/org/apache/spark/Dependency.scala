@@ -159,7 +159,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
     _shuffleMergeEnabled = canShuffleMergeBeEnabled()
     _shuffleMergedFinalized = false
     mergerLocs = Nil
-    _shuffleMergeId = _shuffleMergeId + 1
+    _shuffleMergeId += 1
   }
 
   private def canShuffleMergeBeEnabled(): Boolean = {

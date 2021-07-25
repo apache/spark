@@ -83,7 +83,7 @@ public interface ErrorHandler {
 
     /**
      * String constant used for generating exception messages indicating the server rejecting a block
-     * push since shuffle blocks of a higher shuffleMergeIdd for a shuffle is already being pushed.
+     * push since shuffle blocks of a higher shuffleMergeId for a shuffle is already being pushed.
      * This typically happens in the case of indeterminate stage retries where if a stage attempt fails
      * then the entirety of the shuffle output needs to be rolled back. For more details refer
      * SPARK-23243, SPARK-25341 and SPARK-32923.
@@ -102,6 +102,12 @@ public interface ErrorHandler {
         "stale shuffle finalize request as shuffle blocks of a higher shuffleMergeId for the shuffle is already"
             + " being pushed";
 
+    /**
+     * String constant used for generating exception messages indicating the server rejecting a shuffle
+     * finalize request since the shuffle with same shuffleId and shuffleMergeId is already finalized.
+     */
+    public static final String ALREADY_FINALIZED_SUFFIX = "is already finalized";
+
     @Override
     public boolean shouldRetryError(Throwable t) {
       // If it is a connection time-out or a connection closed exception, no need to retry.
@@ -114,19 +120,22 @@ public interface ErrorHandler {
       }
 
       String errorStackTrace = Throwables.getStackTraceAsString(t);
-      // If the block is too late or an stale block push, there is no need to retry it
+      // If the block is too late, stale block push or duplicate finalizeMerge request,
+      // there is no need to retry it
       return !(errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX) ||
           errorStackTrace.contains(STALE_BLOCK_PUSH_SUFFIX) ||
-          errorStackTrace.contains(STALE_SHUFFLE_FINALIZE_SUFFIX));
+          errorStackTrace.contains(STALE_SHUFFLE_FINALIZE_SUFFIX) ||
+          errorStackTrace.contains(ALREADY_FINALIZED_SUFFIX));
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
       String errorStackTrace = Throwables.getStackTraceAsString(t);
-      return !errorStackTrace.contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) &&
-        !errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX) &&
-          !errorStackTrace.contains(STALE_BLOCK_PUSH_SUFFIX) &&
-            !errorStackTrace.contains(STALE_SHUFFLE_FINALIZE_SUFFIX);
+      return !(errorStackTrace.contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) ||
+        errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX) ||
+          errorStackTrace.contains(STALE_BLOCK_PUSH_SUFFIX) ||
+          errorStackTrace.contains(STALE_SHUFFLE_FINALIZE_SUFFIX) ||
+          errorStackTrace.contains(ALREADY_FINALIZED_SUFFIX));
     }
   }
 
@@ -148,8 +157,7 @@ public interface ErrorHandler {
 
     @Override
     public boolean shouldLogError(Throwable t) {
-      String errorStackTrace = Throwables.getStackTraceAsString(t);
-      return !errorStackTrace.contains(STALE_BLOCK_FETCH_SUFFIX);
+      return !Throwables.getStackTraceAsString(t).contains(STALE_BLOCK_FETCH_SUFFIX);
     }
   }
 }

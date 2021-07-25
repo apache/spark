@@ -178,7 +178,8 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     try {
       TransportClient client = clientFactory.createClient(host, port);
       ByteBuffer finalizeShuffleMerge =
-        new FinalizeShuffleMerge(appId, conf.appAttemptId(), shuffleId, shuffleMergeId).toByteBuffer();
+        new FinalizeShuffleMerge(appId, conf.appAttemptId(), shuffleId,
+          shuffleMergeId).toByteBuffer();
       client.sendRpc(finalizeShuffleMerge, new RpcResponseCallback() {
         @Override
         public void onSuccess(ByteBuffer response) {
@@ -207,17 +208,18 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       int reduceId,
       MergedBlocksMetaListener listener) {
     checkInit();
-    logger.debug("Get merged blocks meta from {}:{} for shuffleId {} shuffleMergeId {} reduceId {}", host, port,
-      shuffleId, shuffleMergeId, reduceId);
+    logger.debug("Get merged blocks meta from {}:{} for shuffleId {} shuffleMergeId {}"
+      + " reduceId {}", host, port, shuffleId, shuffleMergeId, reduceId);
     try {
       TransportClient client = clientFactory.createClient(host, port);
       client.sendMergedBlockMetaReq(appId, shuffleId, shuffleMergeId, reduceId,
         new MergedBlockMetaResponseCallback() {
           @Override
           public void onSuccess(int numChunks, ManagedBuffer buffer) {
-            logger.trace("Successfully got merged block meta for shuffleId {} shuffleMergeId {} reduceId {}",
-              shuffleId, shuffleMergeId, reduceId);
-            listener.onSuccess(shuffleId, reduceId, shuffleMergeId, new MergedBlockMeta(numChunks, buffer));
+            logger.trace("Successfully got merged block meta for shuffleId {} shuffleMergeId {}"
+              + " reduceId {}", shuffleId, shuffleMergeId, reduceId);
+            listener.onSuccess(shuffleId, reduceId, shuffleMergeId,
+              new MergedBlockMeta(numChunks, buffer));
           }
 
           @Override

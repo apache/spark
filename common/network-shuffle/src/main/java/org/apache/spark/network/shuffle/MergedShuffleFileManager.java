@@ -100,11 +100,12 @@ public interface MergedShuffleFileManager {
    * @param appId application ID
    * @param shuffleId shuffle ID
    * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
-   *                       common/network-shuffle/src/main/java/org/apache/spark/network/shuffle/MergedShuffleFileManager.javaattempt of a shuffle Id.
+   *                       attempt of a shuffle Id.
    * @param reduceId reducer ID
    * @return meta information of a merged block
    */
-  MergedBlockMeta getMergedBlockMeta(String appId, int shuffleId, int shuffleMergeId, int reduceId);
+  MergedBlockMeta getMergedBlockMeta(
+      String appId, int shuffleId, int shuffleMergeId, int reduceId);
 
   /**
    * Get the local directories which stores the merged shuffle files.

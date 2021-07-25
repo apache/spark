@@ -61,7 +61,8 @@ public class OneForOneBlockPusherSuite {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
     blocks.put("shufflePush_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("shufflePush_0_0_1_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
-    blocks.put("shufflePush_0_0_2_0", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
+    blocks.put("shufflePush_0_0_2_0",
+      new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockPushingListener listener = pushBlocks(

@@ -51,7 +51,7 @@ import org.apache.spark.network.shuffle.protocol.StreamHandle;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
 
-  public class OneForOneBlockFetcherSuite {
+public class OneForOneBlockFetcherSuite {
 
   private static final TransportConf conf = new TransportConf("shuffle", MapConfigProvider.EMPTY);
 
@@ -246,7 +246,8 @@ import org.apache.spark.network.util.TransportConf;
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
     blocks.put("shuffleChunk_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("shuffleChunk_0_0_0_1", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
-    blocks.put("shuffleChunk_0_0_0_2", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
+    blocks.put("shuffleChunk_0_0_0_2",
+      new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockFetchingListener listener = fetchBlocks(blocks, blockIds,
@@ -286,23 +287,6 @@ import org.apache.spark.network.util.TransportConf;
       new String[]{"shuffleChunk_0_0_0_0_0"},
       new FetchShuffleBlockChunks("app-id", "exec-id", 0, 0, new int[] { 0 },
         new int[][] {{ 0 }}), conf));
-  }
-
-  @Test
-  public void testChunkFetchWithNegativeShuffleMergeId() {
-    LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
-    blocks.put("shuffleChunk_0_-1_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
-    blocks.put("shuffleChunk_0_-1_0_1", new NioManagedBuffer(ByteBuffer.wrap(new byte[23])));
-    blocks.put("shuffleChunk_0_-1_0_2", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
-    String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
-
-    BlockFetchingListener listener = fetchBlocks(blocks, blockIds,
-        new FetchShuffleBlockChunks("app-id", "exec-id", 0, -1, new int[] { 0 },
-            new int[][] {{ 0, 1, 2 }}), conf);
-    for (int i = 0; i < 3; i ++) {
-      verify(listener, times(1)).onBlockFetchSuccess("shuffleChunk_0_-1_0_" + i,
-          blocks.get("shuffleChunk_0_-1_0_" + i));
-    }
   }
 
   /**
