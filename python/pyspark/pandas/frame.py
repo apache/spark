@@ -10854,7 +10854,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             for column in percentile_col_names:
                 cols_dict[column] = list()
                 for i in range(len(qq)):
-                    cols_dict[column].append(scol_for(sdf, column).getItem(i).alias(column))
+                    cols_dict[column].append(scol_for(sdf, column)[i].alias(column))
 
             internal_index_column = SPARK_DEFAULT_INDEX_NAME
             cols = []

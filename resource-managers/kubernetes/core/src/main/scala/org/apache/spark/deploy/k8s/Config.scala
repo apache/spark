@@ -305,6 +305,24 @@ private[spark] object Config extends Logging {
       .toSequence
       .createWithDefault(Nil)
 
+  val KUBERNETES_EXECUTOR_DECOMMISSION_LABEL =
+    ConfigBuilder("spark.kubernetes.executor.decommmissionLabel")
+      .doc("Label to apply to a pod which is being decommissioned." +
+        " Designed for use with pod disruption budgets and similar mechanism" +
+        " such as pod-deletion-cost.")
+      .version("3.3.0")
+      .stringConf
+      .createOptional
+
+  val KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE =
+    ConfigBuilder("spark.kubernetes.executor.decommmissionLabelValue")
+      .doc("Label value to apply to a pod which is being decommissioned." +
+        " Designed for use with pod disruption budgets and similar mechanism" +
+        " such as pod-deletion-cost.")
+      .version("3.3.0")
+      .stringConf
+      .createOptional
+
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
     ConfigBuilder("spark.kubernetes.allocation.batch.size")
       .doc("Number of pods to launch at once in each round of executor allocation.")

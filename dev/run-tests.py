@@ -270,7 +270,12 @@ def exec_sbt(sbt_args=()):
     """Will call SBT in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
-    sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")] + sbt_args
+    sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")]
+
+    if "GITHUB_ACTIONS" in os.environ:
+        sbt_cmd = sbt_cmd + ['-mem', '2300']
+
+    sbt_cmd = sbt_cmd + sbt_args
 
     sbt_output_filter = re.compile(b"^.*[info].*Resolving" + b"|" +
                                    b"^.*[warn].*Merging" + b"|" +
@@ -693,15 +698,19 @@ def main():
     included_tags = []
     excluded_tags = []
     if should_only_test_modules:
+        # We're likely in the forked repository
+        is_apache_spark_ref = os.environ.get("APACHE_SPARK_REF", "") != ""
+        # We're likely in the main repo build.
+        is_github_prev_sha = os.environ.get("GITHUB_PREV_SHA", "") != ""
+        # Otherwise, we're in either periodic job in Github Actions or somewhere else.
+
         # If we're running the tests in GitHub Actions, attempt to detect and test
         # only the affected modules.
-        if test_env == "github_actions":
-            if "APACHE_SPARK_REF" in os.environ and os.environ["APACHE_SPARK_REF"] != "":
-                # Fork repository
+        if test_env == "github_actions" and (is_apache_spark_ref or is_github_prev_sha):
+            if is_apache_spark_ref:
                 changed_files = identify_changed_files_from_git_commits(
                     "HEAD", target_ref=os.environ["APACHE_SPARK_REF"])
-            else:
-                # Build for each commit.
+            elif is_github_prev_sha:
                 changed_files = identify_changed_files_from_git_commits(
                     os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"])
 

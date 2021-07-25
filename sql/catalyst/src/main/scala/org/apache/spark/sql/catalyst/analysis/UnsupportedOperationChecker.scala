@@ -37,12 +37,6 @@ object UnsupportedOperationChecker extends Logging {
       case p if p.isStreaming =>
         throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
 
-      case f: FlatMapGroupsWithState =>
-        if (f.hasInitialState) {
-          throwError("Initial state is not supported in [flatMap|map]GroupsWithState" +
-            " operation on a batch DataFrame/Dataset")(f)
-        }
-
       case _ =>
     }
   }

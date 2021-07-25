@@ -1580,7 +1580,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                     )
                 )
                 map_scol = F.create_map(*kvs)
-                scol = map_scol.getItem(self.spark.column)
+                scol = map_scol[self.spark.column]
             codes, uniques = self._with_new_scol(
                 scol.alias(self._internal.data_spark_column_names[0])
             ).factorize(na_sentinel=na_sentinel)
@@ -1636,7 +1636,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             map_scol = F.create_map(*kvs)
 
             null_scol = F.when(cond, SF.lit(na_sentinel_code))
-            new_scol = null_scol.otherwise(map_scol.getItem(scol))
+            new_scol = null_scol.otherwise(map_scol[scol])
 
         codes = self._with_new_scol(new_scol.alias(self._internal.data_spark_column_names[0]))
 
