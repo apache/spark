@@ -24,6 +24,15 @@ license: |
 The `TRANSFORM` clause is used to specify a Hive-style transform query specification 
 to transform the inputs by running a user-specified command or script.
 
+Spark's script transform supports two modes:
+
+  1. Hive support disabled: Spark script transform can run without `spark.sql.catalogImplementation=true` 
+  or `SparkSession.builder.enableHiveSupport()`. In this case, now Spark only uses the script transform with 
+  `ROW FORMAT DELIMITED` and treats all values passed to the script as strings. 
+  2. Hive support enabled: When Spark is run with `spark.sql.catalogImplementation=true` or Spark SQL is started
+  with `SparkSession.builder.enableHiveSupport()`, Spark can use the script transform with both Hive SerDe and 
+  `ROW FORMAT DELIMITED`.
+
 ### Syntax
 
 ```sql
@@ -57,19 +66,85 @@ SELECT TRANSFORM ( expression [ , ... ] )
 
     Specifies a command or a path to script to process data.
 
-### SerDe behavior
+### ROW FORMAT DELIMITED BEHAVIOR
 
-Spark uses the Hive SerDe `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, so columns will be casted
-to `STRING` and combined by tabs before feeding to the user script. All `NULL` values will be converted
-to the literal string `"\N"` in order to differentiate `NULL` values from empty strings. The standard output of the
-user script will be treated as tab-separated `STRING` columns, any cell containing only `"\N"` will be re-interpreted
-as a `NULL` value, and then the resulting STRING column will be cast to the data type specified in `col_type`. If the actual
-number of output columns is less than the number of specified output columns, insufficient output columns will be
-supplemented with `NULL`. If the actual number of output columns is more than the number of specified output columns,
-the output columns will only select the corresponding columns and the remaining part will be discarded.
-If there is no `AS` clause after `USING my_script`, an output schema will be `key: STRING, value: STRING`.
-The `key` column contains all the characters before the first tab and the `value` column contains the remaining characters after the first tab.
-If there is no enough tab, Spark will return `NULL` value. These defaults can be overridden with `ROW FORMAT SERDE` or `ROW FORMAT DELIMITED`. 
+When Spark uses `ROW FORMAT DELIMITED` format:
+ - Spark uses the character `\u0001` as the default field delimiter and this delimiter can be overridden by `FIELDS TERMINATED BY`.
+ - Spark uses the character `\n` as the default line delimiter and this delimiter can be overridden by `LINES TERMINATED BY`.
+ - Spark uses a string `\N` as the default `NULL` value in order to differentiate `NULL` values 
+ from the literal string `NULL`. This delimiter can be overridden by `NULL DEFINED AS`.
+ - Spark casts all columns to `STRING` and combines columns by tabs before feeding to the user script.
+ For complex types such as `ARRAY`/`MAP`/`STRUCT`, Spark uses `to_json` casts it to an input `JSON` string and uses 
+ `from_json` to convert the result output `JSON` string to `ARRAY`/`MAP`/`STRUCT` data.
+ - `COLLECTION ITEMS TERMINATED BY` and `MAP KEYS TERMINATED BY` are delimiters to split complex data such as 
+ `ARRAY`/`MAP`/`STRUCT`, Spark uses `to_json` and `from_json` to handle complex data types with `JSON` format. So 
+ `COLLECTION ITEMS TERMINATED BY` and `MAP KEYS TERMINATED BY` won't work in default row format.
+ - The standard output of the user script is treated as tab-separated `STRING` columns. Any cell containing only a string `\N`
+ is re-interpreted as a literal `NULL` value, and then the resulting `STRING` column will be cast to the data types specified in `col_type`.
+ - If the actual number of output columns is less than the number of specified output columns,
+  additional output columns will be filled with `NULL`. For example:
+     ```
+     output tabs: 1, 2
+     output columns: A: INT, B INT, C: INT
+     result: 
+       +---+---+------+
+       |  a|  b|     c|
+       +---+---+------+
+       |  1|  2|  NULL|
+       +---+---+------+
+     ```
+ - If the actual number of output columns is more than the number of specified output columns, 
+ the output columns only select the corresponding columns, and the remaining part will be discarded.
+ For example, if the output has three tabs and there are only two output columns:
+     ```
+     output tabs: 1, 2, 3
+     output columns: A: INT, B INT
+     result: 
+       +---+---+
+       |  a|  b|
+       +---+---+
+       |  1|  2|
+       +---+---+
+     ```
+ - If there is no `AS` clause after `USING my_script`, the output schema is `key: STRING, value: STRING`.
+ The `key` column contains all the characters before the first tab and the `value` column contains the remaining characters after the first tab.
+ If there are no tabs, Spark returns the `NULL` value. For example:
+      ```
+      output tabs: 1, 2, 3
+      output columns: 
+      result: 
+        +-----+-------+
+        |  key|  value|
+        +-----+-------+
+        |    1|      2|
+        +-----+-------+
+   
+      output tabs: 1, 2
+      output columns: 
+      result: 
+        +-----+-------+
+        |  key|  value|
+        +-----+-------+
+        |    1|   NULL|
+        +-----+-------+
+      ```
+
+### Hive SerDe behavior
+
+When Hive support is enabled and Hive SerDe mode is used:
+ - Spark uses the Hive SerDe `org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe` by default, so columns are cast
+ to `STRING` and combined by tabs before feeding to the user script.
+ - All literal `NULL` values are converted to a string `\N` in order to differentiate literal `NULL` values from the literal string `NULL`.
+ - The standard output of the user script is treated as tab-separated `STRING` columns, any cell containing only a string `\N` is re-interpreted
+ as a `NULL` value, and then the resulting STRING column will be cast to the data type specified in `col_type`.
+ - If the actual number of output columns is less than the number of specified output columns,
+  additional output columns will be filled with `NULL`.
+ - If the actual number of output columns is more than the number of specified output columns,
+ the output columns only select the corresponding columns, and the remaining part will be discarded.
+ - If there is no `AS` clause after `USING my_script`, the output schema is `key: STRING, value: STRING`.
+ The `key` column contains all the characters before the first tab and the `value` column contains the remaining characters after the first tab.
+ If there is no tab, Spark returns the `NULL` value.
+ - These defaults can be overridden with `ROW FORMAT SERDE` or `ROW FORMAT DELIMITED`. 
 
 ### Examples
 

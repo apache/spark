@@ -208,7 +208,7 @@ class GroupedData(PandasGroupedOpsMixin):
 
     @df_varargs_api
     def sum(self, *cols):
-        """Compute the sum for each numeric columns for each group.
+        """Computes the sum for each numeric columns for each group.
 
         .. versionadded:: 1.3.0
 
@@ -238,7 +238,7 @@ class GroupedData(PandasGroupedOpsMixin):
         ----------
         pivot_col : str
             Name of the column to pivot.
-        values :
+        values : list, optional
             List of values that will be translated to columns in the output DataFrame.
 
         Examples

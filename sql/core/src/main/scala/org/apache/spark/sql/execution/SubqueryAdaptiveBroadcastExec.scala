@@ -21,6 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
 /**
@@ -34,6 +35,8 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 case class SubqueryAdaptiveBroadcastExec(
     name: String,
     index: Int,
+    onlyInBroadcast: Boolean,
+    @transient buildPlan: LogicalPlan,
     buildKeys: Seq[Expression],
     child: SparkPlan) extends BaseSubqueryExec with UnaryExecNode {
 

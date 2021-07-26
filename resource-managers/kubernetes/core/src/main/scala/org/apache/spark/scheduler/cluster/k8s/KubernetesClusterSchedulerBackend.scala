@@ -18,21 +18,24 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.{ScheduledExecutorService, TimeUnit}
 
+import scala.collection.JavaConverters._
 import scala.concurrent.Future
 
 import io.fabric8.kubernetes.api.model.Pod
+import io.fabric8.kubernetes.api.model.PodBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkContext
+import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants._
-import org.apache.spark.deploy.k8s.KubernetesUtils
 import org.apache.spark.deploy.k8s.submit.KubernetesClientUtils
 import org.apache.spark.deploy.security.HadoopDelegationTokenManager
 import org.apache.spark.internal.config.SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext}
-import org.apache.spark.scheduler.{ExecutorKilled, ExecutorLossReason, TaskSchedulerImpl}
+import org.apache.spark.scheduler.{ExecutorDecommissionInfo, ExecutorKilled, ExecutorLossReason,
+  TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SchedulerBackendUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.RegisterExecutor
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -48,6 +51,7 @@ private[spark] class KubernetesClusterSchedulerBackend(
     watchEvents: ExecutorPodsWatchSnapshotSource,
     pollEvents: ExecutorPodsPollingSnapshotSource)
     extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
+  private val appId = KubernetesConf.getKubernetesAppId()
 
   protected override val minRegisteredRatio =
     if (conf.get(SCHEDULER_MIN_REGISTERED_RESOURCES_RATIO).isEmpty) {
@@ -83,12 +87,12 @@ private[spark] class KubernetesClusterSchedulerBackend(
   /**
    * Get an application ID associated with the job.
    * This returns the string value of spark.app.id if set, otherwise
-   * the locally-generated ID from the superclass.
+   * the locally-generated ID.
    *
    * @return The application ID
    */
   override def applicationId(): String = {
-    conf.getOption("spark.app.id").map(_.toString).getOrElse(super.applicationId)
+    conf.getOption("spark.app.id").map(_.toString).getOrElse(appId)
   }
 
   override def start(): Unit = {
@@ -181,7 +185,52 @@ private[spark] class KubernetesClusterSchedulerBackend(
     super.getExecutorIds()
   }
 
+  private def labelDecommissioningExecs(execIds: Seq[String]) = {
+    // Only kick off the labeling task if we have a label.
+    conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL).foreach { label =>
+      val labelTask = new Runnable() {
+        override def run(): Unit = Utils.tryLogNonFatalError {
+
+          val podsToLabel = kubernetesClient.pods()
+            .withLabel(SPARK_APP_ID_LABEL, applicationId())
+            .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
+            .withLabelIn(SPARK_EXECUTOR_ID_LABEL, execIds: _*)
+            .list().getItems().asScala
+
+          podsToLabel.foreach { pod =>
+            kubernetesClient.pods()
+              .inNamespace(pod.getMetadata.getNamespace)
+              .withName(pod.getMetadata.getName)
+              .edit({p: Pod => new PodBuilder(p).editMetadata()
+                .addToLabels(label,
+                  conf.get(KUBERNETES_EXECUTOR_DECOMMISSION_LABEL_VALUE).getOrElse(""))
+                .endMetadata()
+                .build()})
+          }
+        }
+      }
+      executorService.execute(labelTask)
+    }
+  }
+
+  override def decommissionExecutors(
+      executorsAndDecomInfo: Array[(String, ExecutorDecommissionInfo)],
+      adjustTargetNumExecutors: Boolean,
+      triggeredByExecutor: Boolean): Seq[String] = {
+    // If decommissioning is triggered by the executor the K8s cluster manager has already
+    // picked the pod to evict so we don't need to update the labels.
+    if (!triggeredByExecutor) {
+      labelDecommissioningExecs(executorsAndDecomInfo.map(_._1))
+    }
+    super.decommissionExecutors(executorsAndDecomInfo, adjustTargetNumExecutors,
+      triggeredByExecutor)
+  }
+
   override def doKillExecutors(executorIds: Seq[String]): Future[Boolean] = {
+    // If we've decided to remove some executors we should tell Kubernetes that we don't care.
+    labelDecommissioningExecs(executorIds)
+
+    // Tell the executors to exit themselves.
     executorIds.foreach { id =>
       removeExecutor(id, ExecutorKilled)
     }

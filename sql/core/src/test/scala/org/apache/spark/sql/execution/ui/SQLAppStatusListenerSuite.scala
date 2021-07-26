@@ -21,8 +21,11 @@ import java.util.Properties
 
 import scala.collection.mutable.ListBuffer
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.LocalSparkContext._
@@ -37,9 +40,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.quietly
-import org.apache.spark.sql.connector.{RangeInputPartition, SimpleScanBuilder}
+import org.apache.spark.sql.connector.{CSVDataWriter, CSVDataWriterFactory, RangeInputPartition, SimpleScanBuilder, SimpleWritableDataSource}
+import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.connector.write.{BatchWrite, DataWriter, DataWriterFactory, LogicalWriteInfo, PhysicalWriteInfo, Write, WriteBuilder}
 import org.apache.spark.sql.execution.{LeafExecNode, QueryExecution, SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecution
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -49,8 +54,9 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.UI_RETAINED_EXECUTIONS
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.status.ElementTrackingStore
-import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator}
+import org.apache.spark.util.{AccumulatorMetadata, JsonProtocol, LongAccumulator, SerializableConfiguration}
 import org.apache.spark.util.kvstore.InMemoryStore
 
 
@@ -852,6 +858,33 @@ class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTestUtils
     assert(metrics.contains(expectedMetric.id))
     assert(metrics(expectedMetric.id) === expectedValue)
   }
+
+  test("SPARK-36030: Report metrics from Datasource v2 write") {
+    withTempDir { dir =>
+      val statusStore = spark.sharedState.statusStore
+      val oldCount = statusStore.executionsList().size
+
+      val cls = classOf[CustomMetricsDataSource].getName
+      spark.range(10).select('id as 'i, -'id as 'j).write.format(cls)
+        .option("path", dir.getCanonicalPath).mode("append").save()
+
+      // Wait until the new execution is started and being tracked.
+      eventually(timeout(10.seconds), interval(10.milliseconds)) {
+        assert(statusStore.executionsCount() >= oldCount)
+      }
+
+      // Wait for listener to finish computing the metrics for the execution.
+      eventually(timeout(10.seconds), interval(10.milliseconds)) {
+        assert(statusStore.executionsList().nonEmpty &&
+          statusStore.executionsList().last.metricValues != null)
+      }
+
+      val execId = statusStore.executionsList().last.executionId
+      val metrics = statusStore.executionMetrics(execId)
+      val customMetric = metrics.find(_._2 == "custom_metric: 12345, 12345")
+      assert(customMetric.isDefined)
+    }
+  }
 }
 
 
@@ -972,4 +1005,69 @@ class CustomMetricScanBuilder extends SimpleScanBuilder {
   }
 
   override def createReaderFactory(): PartitionReaderFactory = CustomMetricReaderFactory
+}
+
+class CustomMetricsCSVDataWriter(fs: FileSystem, file: Path) extends CSVDataWriter(fs, file) {
+  override def currentMetricsValues(): Array[CustomTaskMetric] = {
+    val metric = new CustomTaskMetric {
+      override def name(): String = "custom_metric"
+      override def value(): Long = 12345
+    }
+    Array(metric)
+  }
+}
+
+class CustomMetricsWriterFactory(path: String, jobId: String, conf: SerializableConfiguration)
+  extends CSVDataWriterFactory(path, jobId, conf) {
+
+  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
+    val jobPath = new Path(new Path(path, "_temporary"), jobId)
+    val filePath = new Path(jobPath, s"$jobId-$partitionId-$taskId")
+    val fs = filePath.getFileSystem(conf.value)
+    new CustomMetricsCSVDataWriter(fs, filePath)
+  }
+}
+
+class CustomMetricsDataSource extends SimpleWritableDataSource {
+
+  class CustomMetricBatchWrite(queryId: String, path: String, conf: Configuration)
+      extends MyBatchWrite(queryId, path, conf) {
+    override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
+      new CustomMetricsWriterFactory(path, queryId, new SerializableConfiguration(conf))
+    }
+  }
+
+  class CustomMetricWriteBuilder(path: String, info: LogicalWriteInfo)
+      extends MyWriteBuilder(path, info) {
+    override def build(): Write = {
+      new Write {
+        override def toBatch: BatchWrite = {
+          val hadoopPath = new Path(path)
+          val hadoopConf = SparkContext.getActive.get.hadoopConfiguration
+          val fs = hadoopPath.getFileSystem(hadoopConf)
+
+          if (needTruncate) {
+            fs.delete(hadoopPath, true)
+          }
+
+          val pathStr = hadoopPath.toUri.toString
+          new CustomMetricBatchWrite(queryId, pathStr, hadoopConf)
+        }
+
+        override def supportedCustomMetrics(): Array[CustomMetric] = {
+          Array(new SimpleCustomMetric)
+        }
+      }
+    }
+  }
+
+  class CustomMetricTable(options: CaseInsensitiveStringMap) extends MyTable(options) {
+    override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
+      new CustomMetricWriteBuilder(path, info)
+    }
+  }
+
+  override def getTable(options: CaseInsensitiveStringMap): Table = {
+    new CustomMetricTable(options)
+  }
 }

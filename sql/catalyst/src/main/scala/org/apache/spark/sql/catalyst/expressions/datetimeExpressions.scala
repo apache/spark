@@ -217,7 +217,7 @@ case class Now() extends CurrentTimestampLike {
        2020-04-25 15:49:11.914
   """,
   group = "datetime_funcs",
-  since = "3.2.0")
+  since = "3.3.0")
 case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
   with TimeZoneAwareExpression with CodegenFallback {
 
@@ -1096,7 +1096,7 @@ case class GetTimestamp(
        2016-12-31 00:00:00
   """,
   group = "datetime_funcs",
-  since = "3.2.0")
+  since = "3.3.0")
 // scalastyle:on line.size.limit
 case class ParseToTimestampNTZ(
     left: Expression,
@@ -1143,7 +1143,7 @@ case class ParseToTimestampNTZ(
        2016-12-31 00:00:00
   """,
   group = "datetime_funcs",
-  since = "3.2.0")
+  since = "3.3.0")
 // scalastyle:on line.size.limit
 case class ParseToTimestampLTZ(
     left: Expression,
@@ -2381,7 +2381,7 @@ case class MakeDate(
        NULL
   """,
   group = "datetime_funcs",
-  since = "3.2.0")
+  since = "3.3.0")
 // scalastyle:on line.size.limit
 case class MakeTimestampNTZ(
     year: Expression,
@@ -2402,6 +2402,8 @@ case class MakeTimestampNTZ(
     this(year, month, day, hour, min, sec, failOnError = SQLConf.get.ansiEnabled,
       MakeTimestamp(year, month, day, hour, min, sec, dataType = TimestampNTZType))
   }
+
+  override def prettyName: String = "make_timestamp_ntz"
 
   override def exprsReplaced: Seq[Expression] = Seq(year, month, day, hour, min, sec)
 
@@ -2438,7 +2440,7 @@ case class MakeTimestampNTZ(
        NULL
   """,
   group = "datetime_funcs",
-  since = "3.2.0")
+  since = "3.3.0")
 // scalastyle:on line.size.limit
 case class MakeTimestampLTZ(
     year: Expression,
@@ -2472,6 +2474,8 @@ case class MakeTimestampLTZ(
     this(year, month, day, hour, min, sec, Some(timezone), failOnError = SQLConf.get.ansiEnabled,
       MakeTimestamp(year, month, day, hour, min, sec, Some(timezone), dataType = TimestampType))
   }
+
+  override def prettyName: String = "make_timestamp_ltz"
 
   override def exprsReplaced: Seq[Expression] = Seq(year, month, day, hour, min, sec)
 

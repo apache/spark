@@ -45,7 +45,9 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy.{CORRECTED, LEGACY}
+import org.apache.spark.sql.internal.SQLConf.ParquetOutputTimestampType.{INT96, TIMESTAMP_MICROS, TIMESTAMP_MILLIS}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
@@ -73,11 +75,14 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
   protected def createParquetFilters(
       schema: MessageType,
-      caseSensitive: Option[Boolean] = None): ParquetFilters =
+      caseSensitive: Option[Boolean] = None,
+      datetimeRebaseMode: LegacyBehaviorPolicy.Value = LegacyBehaviorPolicy.CORRECTED
+    ): ParquetFilters =
     new ParquetFilters(schema, conf.parquetFilterPushDownDate, conf.parquetFilterPushDownTimestamp,
       conf.parquetFilterPushDownDecimal, conf.parquetFilterPushDownStringStartWith,
       conf.parquetFilterPushDownInFilterThreshold,
-      caseSensitive.getOrElse(conf.caseSensitiveAnalysis))
+      caseSensitive.getOrElse(conf.caseSensitiveAnalysis),
+      datetimeRebaseMode)
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -587,71 +592,75 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
       def date: Date = Date.valueOf(s)
     }
 
-    val data = Seq("2018-03-18", "2018-03-19", "2018-03-20", "2018-03-21")
+    val data = Seq("1000-01-01", "2018-03-19", "2018-03-20", "2018-03-21")
     import testImplicits._
 
     Seq(false, true).foreach { java8Api =>
-      withSQLConf(SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString) {
-        val dates = data.map(i => Tuple1(Date.valueOf(i))).toDF()
-        withNestedParquetDataFrame(dates) { case (inputDF, colName, fun) =>
-          implicit val df: DataFrame = inputDF
+      Seq(CORRECTED, LEGACY).foreach { rebaseMode =>
+        withSQLConf(
+          SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+          SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> rebaseMode.toString) {
+          val dates = data.map(i => Tuple1(Date.valueOf(i))).toDF()
+          withNestedParquetDataFrame(dates) { case (inputDF, colName, fun) =>
+            implicit val df: DataFrame = inputDF
 
-          def resultFun(dateStr: String): Any = {
-            val parsed = if (java8Api) LocalDate.parse(dateStr) else Date.valueOf(dateStr)
-            fun(parsed)
-          }
+            def resultFun(dateStr: String): Any = {
+              val parsed = if (java8Api) LocalDate.parse(dateStr) else Date.valueOf(dateStr)
+              fun(parsed)
+            }
 
-          val dateAttr: Expression = df(colName).expr
-          assert(df(colName).expr.dataType === DateType)
+            val dateAttr: Expression = df(colName).expr
+            assert(df(colName).expr.dataType === DateType)
 
-          checkFilterPredicate(dateAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
-          checkFilterPredicate(dateAttr.isNotNull, classOf[NotEq[_]],
-            data.map(i => Row.apply(resultFun(i))))
+            checkFilterPredicate(dateAttr.isNull, classOf[Eq[_]], Seq.empty[Row])
+            checkFilterPredicate(dateAttr.isNotNull, classOf[NotEq[_]],
+              data.map(i => Row.apply(resultFun(i))))
 
-          checkFilterPredicate(dateAttr === "2018-03-18".date, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr <=> "2018-03-18".date, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr =!= "2018-03-18".date, classOf[NotEq[_]],
-            Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(resultFun(i))))
+            checkFilterPredicate(dateAttr === "1000-01-01".date, classOf[Eq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(dateAttr <=> "1000-01-01".date, classOf[Eq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(dateAttr =!= "1000-01-01".date, classOf[NotEq[_]],
+              Seq("2018-03-19", "2018-03-20", "2018-03-21").map(i => Row.apply(resultFun(i))))
 
-          checkFilterPredicate(dateAttr < "2018-03-19".date, classOf[Lt[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr > "2018-03-20".date, classOf[Gt[_]],
-            resultFun("2018-03-21"))
-          checkFilterPredicate(dateAttr <= "2018-03-18".date, classOf[LtEq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(dateAttr >= "2018-03-21".date, classOf[GtEq[_]],
-            resultFun("2018-03-21"))
+            checkFilterPredicate(dateAttr < "2018-03-19".date, classOf[Lt[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(dateAttr > "2018-03-20".date, classOf[Gt[_]],
+              resultFun("2018-03-21"))
+            checkFilterPredicate(dateAttr <= "1000-01-01".date, classOf[LtEq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(dateAttr >= "2018-03-21".date, classOf[GtEq[_]],
+              resultFun("2018-03-21"))
 
-          checkFilterPredicate(Literal("2018-03-18".date) === dateAttr, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-18".date) <=> dateAttr, classOf[Eq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-19".date) > dateAttr, classOf[Lt[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-20".date) < dateAttr, classOf[Gt[_]],
-            resultFun("2018-03-21"))
-          checkFilterPredicate(Literal("2018-03-18".date) >= dateAttr, classOf[LtEq[_]],
-            resultFun("2018-03-18"))
-          checkFilterPredicate(Literal("2018-03-21".date) <= dateAttr, classOf[GtEq[_]],
-            resultFun("2018-03-21"))
+            checkFilterPredicate(Literal("1000-01-01".date) === dateAttr, classOf[Eq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(Literal("1000-01-01".date) <=> dateAttr, classOf[Eq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(Literal("2018-03-19".date) > dateAttr, classOf[Lt[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(Literal("2018-03-20".date) < dateAttr, classOf[Gt[_]],
+              resultFun("2018-03-21"))
+            checkFilterPredicate(Literal("1000-01-01".date) >= dateAttr, classOf[LtEq[_]],
+              resultFun("1000-01-01"))
+            checkFilterPredicate(Literal("2018-03-21".date) <= dateAttr, classOf[GtEq[_]],
+              resultFun("2018-03-21"))
 
-          checkFilterPredicate(!(dateAttr < "2018-03-21".date), classOf[GtEq[_]],
-            resultFun("2018-03-21"))
-          checkFilterPredicate(
-            dateAttr < "2018-03-19".date || dateAttr > "2018-03-20".date,
-            classOf[Operators.Or],
-            Seq(Row(resultFun("2018-03-18")), Row(resultFun("2018-03-21"))))
+            checkFilterPredicate(!(dateAttr < "2018-03-21".date), classOf[GtEq[_]],
+              resultFun("2018-03-21"))
+            checkFilterPredicate(
+              dateAttr < "2018-03-19".date || dateAttr > "2018-03-20".date,
+              classOf[Operators.Or],
+              Seq(Row(resultFun("1000-01-01")), Row(resultFun("2018-03-21"))))
 
-          Seq(3, 20).foreach { threshold =>
-            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
-              checkFilterPredicate(
-                In(dateAttr, Array("2018-03-19".date, "2018-03-20".date, "2018-03-21".date,
-                  "2018-03-22".date).map(Literal.apply)),
-                if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
-                Seq(Row(resultFun("2018-03-19")), Row(resultFun("2018-03-20")),
-                  Row(resultFun("2018-03-21"))))
+            Seq(3, 20).foreach { threshold =>
+              withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_INFILTERTHRESHOLD.key -> s"$threshold") {
+                checkFilterPredicate(
+                  In(dateAttr, Array("2018-03-19".date, "2018-03-20".date, "2018-03-21".date,
+                    "2018-03-22".date).map(Literal.apply)),
+                  if (threshold == 3) classOf[Operators.And] else classOf[Operators.Or],
+                  Seq(Row(resultFun("2018-03-19")), Row(resultFun("2018-03-20")),
+                    Row(resultFun("2018-03-21"))))
+              }
             }
           }
         }
@@ -661,35 +670,36 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
 
   test("filter pushdown - timestamp") {
     Seq(true, false).foreach { java8Api =>
-      withSQLConf(
-        SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
-        SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED",
-        SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
-        // spark.sql.parquet.outputTimestampType = TIMESTAMP_MILLIS
+      Seq(CORRECTED, LEGACY).foreach { rebaseMode =>
         val millisData = Seq(
           "1000-06-14 08:28:53.123",
           "1582-06-15 08:28:53.001",
           "1900-06-16 08:28:53.0",
           "2018-06-17 08:28:53.999")
-        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
-          ParquetOutputTimestampType.TIMESTAMP_MILLIS.toString) {
+        withSQLConf(
+          SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+          SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> rebaseMode.toString,
+          SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> TIMESTAMP_MILLIS.toString) {
           testTimestampPushdown(millisData, java8Api)
         }
 
-        // spark.sql.parquet.outputTimestampType = TIMESTAMP_MICROS
         val microsData = Seq(
           "1000-06-14 08:28:53.123456",
           "1582-06-15 08:28:53.123456",
           "1900-06-16 08:28:53.123456",
           "2018-06-17 08:28:53.123456")
-        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
-          ParquetOutputTimestampType.TIMESTAMP_MICROS.toString) {
+        withSQLConf(
+          SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+          SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> rebaseMode.toString,
+          SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> TIMESTAMP_MICROS.toString) {
           testTimestampPushdown(microsData, java8Api)
         }
 
-        // spark.sql.parquet.outputTimestampType = INT96 doesn't support pushdown
-        withSQLConf(SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
-          ParquetOutputTimestampType.INT96.toString) {
+        // INT96 doesn't support pushdown
+        withSQLConf(
+          SQLConf.DATETIME_JAVA8API_ENABLED.key -> java8Api.toString,
+          SQLConf.PARQUET_INT96_REBASE_MODE_IN_WRITE.key -> rebaseMode.toString,
+          SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> INT96.toString) {
           import testImplicits._
           withTempPath { file =>
             millisData.map(i => Tuple1(Timestamp.valueOf(i))).toDF
@@ -1562,6 +1572,20 @@ abstract class ParquetFilterSuite extends QueryTest with ParquetTest with Shared
           FilterApi.ltEq(intColumn("a"), 7: Integer))))
       ) {
         parquetFilters.createFilter(sources.In("a", Array(2, 3, 7, null, 6)))
+      }
+
+      assertResult(
+        Some(FilterApi.not(or(
+          FilterApi.eq(intColumn("a"), 2: Integer),
+          FilterApi.eq(intColumn("a"), 3: Integer))))
+      ) {
+        parquetFilters.createFilter(sources.Not(sources.In("a", Array(2, 3))))
+      }
+
+      assertResult(
+        None
+      ) {
+        parquetFilters.createFilter(sources.Not(sources.In("a", Array(2, 3, 7))))
       }
     }
   }
