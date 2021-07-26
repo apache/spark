@@ -573,6 +573,23 @@ class CategoricalIndex(Index):
         add_categories : Add new categories.
         remove_categories : Remove the specified categories.
         remove_unused_categories : Remove categories which are not used.
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(list("abbccc"))
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+
+        >>> idx.set_categories(['b', 'c'])  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex([nan, 'b', 'b', 'c', 'c', 'c'],
+                         categories=['b', 'c'], ordered=False, dtype='category')
+
+        >>> idx.set_categories([1, 2, 3], rename=True)
+        CategoricalIndex([1, 2, 2, 3, 3, 3], categories=[1, 2, 3], ordered=False, dtype='category')
+
+        >>> idx.set_categories([1, 2, 3], rename=True, ordered=True)
+        CategoricalIndex([1, 2, 2, 3, 3, 3], categories=[1, 2, 3], ordered=True, dtype='category')
         """
         if inplace:
             raise ValueError("cannot use inplace with CategoricalIndex")

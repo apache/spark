@@ -736,6 +736,49 @@ class CategoricalAccessor(object):
         add_categories : Add new categories.
         remove_categories : Remove the specified categories.
         remove_unused_categories : Remove categories which are not used.
+
+        Examples
+        --------
+        >>> s = ps.Series(list("abbccc"), dtype="category")
+        >>> s  # doctest: +SKIP
+        0    a
+        1    b
+        2    b
+        3    c
+        4    c
+        5    c
+        dtype: category
+        Categories (3, object): ['a', 'b', 'c']
+
+        >>> s.cat.set_categories(['b', 'c'])  # doctest: +SKIP
+        0    NaN
+        1      b
+        2      b
+        3      c
+        4      c
+        5      c
+        dtype: category
+        Categories (2, object): ['b', 'c']
+
+        >>> s.cat.set_categories([1, 2, 3], rename=True)  # doctest: +SKIP
+        0    1
+        1    2
+        2    2
+        3    3
+        4    3
+        5    3
+        dtype: category
+        Categories (3, int64): [1, 2, 3]
+
+        >>> s.cat.set_categories([1, 2, 3], rename=True, ordered=True)  # doctest: +SKIP
+        0    1
+        1    2
+        2    2
+        3    3
+        4    3
+        5    3
+        dtype: category
+        Categories (3, int64): [1 < 2 < 3]
         """
         from pyspark.pandas.frame import DataFrame
 
