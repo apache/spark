@@ -1982,7 +1982,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +-----+---+------+
         """
         if subset is not None and not isinstance(subset, Iterable):
-            raise TypeError("Parameter 'subset' must be a list of columns or a single column")
+            raise TypeError("Parameter 'subset' must be a list of columns")
 
         if subset is None:
             jdf = self._jdf.dropDuplicates()
