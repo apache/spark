@@ -71,11 +71,11 @@ public class DiagnoseCorruption extends BlockTransferMessage {
     DiagnoseCorruption that = (DiagnoseCorruption) o;
 
     if (checksum != that.checksum) return false;
-    if (!appId.equals(that.appId)) return false;
-    if (!execId.equals(that.execId)) return false;
     if (shuffleId != that.shuffleId) return false;
     if (mapId != that.mapId) return false;
     if (reduceId != that.reduceId) return false;
+    if (!appId.equals(that.appId)) return false;
+    if (!execId.equals(that.execId)) return false;
     return true;
   }
 
