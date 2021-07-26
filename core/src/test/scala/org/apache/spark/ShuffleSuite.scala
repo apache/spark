@@ -449,7 +449,7 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
     }
   }
 
-  test("SPARK-18188: shuffle checksum detect disk corruption") {
+  test("SPARK-36206: shuffle checksum detect disk corruption") {
     conf
       .set(config.SHUFFLE_CHECKSUM_ENABLED, true)
       .set(TEST_NO_STAGE_RETRY, false)

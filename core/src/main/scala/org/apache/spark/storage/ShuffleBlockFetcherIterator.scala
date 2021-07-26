@@ -836,9 +836,15 @@ final class ShuffleBlockFetcherIterator(
               }
             } catch {
               case e: IOException =>
+                // When shuffle checksum is enabled, for a block that is corrupted twice,
+                // we'd calculate the checksum of the block by consuming the remaining data
+                // in the buf. So, we should release the buf later.
+                if (!(checksumEnabled && corruptedBlocks.contains(blockId))) {
+                  buf.release()
+                }
+
                 if (blockId.isShuffleChunk) {
                   // TODO (SPARK-36284): Add shuffle checksum support for push-based shuffle
-                  buf.release()
                   // Retrying a corrupt block may result again in a corrupt block. For shuffle
                   // chunks, we opt to fallback on the original shuffle blocks that belong to that
                   // corrupt shuffle chunk immediately instead of retrying to fetch the corrupt
@@ -849,32 +855,27 @@ final class ShuffleBlockFetcherIterator(
                   pushBasedFetchHelper.initiateFallbackFetchForPushMergedBlock(blockId, address)
                   // Set result to null to trigger another iteration of the while loop.
                   result = null
-                } else {
-                  if (buf.isInstanceOf[FileSegmentManagedBuffer]
-                    || corruptedBlocks.contains(blockId)) {
+                } else if (buf.isInstanceOf[FileSegmentManagedBuffer]) {
+                  throwFetchFailedException(blockId, mapIndex, address, e)
+                } else if (corruptedBlocks.contains(blockId)) {
+                  // It's the second time this block is detected corrupted
+                  if (checksumEnabled) {
+                    // Diagnose the cause of data corruption if shuffle checksum is enabled
+                    val cause = diagnoseCorruption(checkedIn, address, blockId)
                     buf.release()
-                    throwFetchFailedException(blockId, mapIndex, address, e)
+                    val errorMsg = s"Block $blockId is corrupted due to $cause."
+                    logError(errorMsg)
+                    throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
                   } else {
-                    logWarning(s"Got an corrupted block $blockId from $address", e)
-                    // A disk issue indicates the data on disk has already corrupted, so it's
-                    // meaningless to retry on this case. We'll give a retry in the case of
-                    // network issue and other unknown issues (in order to keep the same
-                    // behavior as previously)
-                    val allowRetry = !checksumEnabled ||
-                      diagnoseCorruption(checkedIn, address, blockId) != Cause.DISK_ISSUE
-                    buf.release()
-                    if (allowRetry) {
-                      logInfo(s"Will retry the block $blockId")
-                      corruptedBlocks += blockId
-                      fetchRequests += FetchRequest(
-                        address, Array(FetchBlockInfo(blockId, size, mapIndex)))
-                      result = null
-                    } else {
-                      logError(s"Block $blockId is corrupted due to disk issue, won't retry.")
-                      throwFetchFailedException(blockId, mapIndex, address, e,
-                        Some(s"Block $blockId is corrupted due to disk issue"))
-                    }
+                    throwFetchFailedException(blockId, mapIndex, address, e)
                   }
+                } else {
+                  // It's the first time this block is detected corrupted
+                  logWarning(s"got an corrupted block $blockId from $address, fetch again", e)
+                  corruptedBlocks += blockId
+                  fetchRequests += FetchRequest(
+                    address, Array(FetchBlockInfo(blockId, size, mapIndex)))
+                  result = null
                 }
             } finally {
               if (blockId.isShuffleChunk) {
