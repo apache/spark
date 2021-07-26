@@ -74,6 +74,7 @@ from pyspark.pandas.utils import (
     sql_conf,
     validate_arguments_and_invoke_function,
     validate_axis,
+    validate_mode,
     SPARK_CONF_ARROW_ENABLED,
 )
 
@@ -650,7 +651,7 @@ class Frame(object, metaclass=ABCMeta):
         date_format: Optional[str] = None,
         escapechar: Optional[str] = None,
         num_files: Optional[int] = None,
-        mode: str = "overwrite",
+        mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
         **options: Any
@@ -688,14 +689,16 @@ class Frame(object, metaclass=ABCMeta):
             when appropriate.
         num_files : the number of files to be written in `path` directory when
             this is a path.
-        mode : str {'append', 'overwrite', 'ignore', 'error', 'errorifexists'},
-            default 'overwrite'. Specifies the behavior of the save operation when the
-            destination exists already.
+        mode : str
+            Python write mode, default 'w'.
 
-            - 'append': Append the new data to existing data.
-            - 'overwrite': Overwrite existing data.
-            - 'ignore': Silently ignore this operation if data already exists.
-            - 'error' or 'errorifexists': Throw an exception if data already exists.
+            .. note:: mode can accept the strings for Spark writing mode.
+                Such as 'append', 'overwrite', 'ignore', 'error', 'errorifexists'.
+
+                - 'append' (equivalent to 'a'): Append the new data to existing data.
+                - 'overwrite' (equivalent to 'w'): Overwrite existing data.
+                - 'ignore': Silently ignore this operation if data already exists.
+                - 'error' or 'errorifexists': Throw an exception if data already exists.
 
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
@@ -860,8 +863,14 @@ class Frame(object, metaclass=ABCMeta):
             )
 
         if num_files is not None:
+            warnings.warn(
+                "`num_files` has been deprecated and might be removed in a future version. "
+                "Use `DataFrame.spark.repartition` instead.",
+                FutureWarning,
+            )
             sdf = sdf.repartition(num_files)
 
+        mode = validate_mode(mode)
         builder = sdf.write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
@@ -998,6 +1007,11 @@ class Frame(object, metaclass=ABCMeta):
         sdf = psdf.to_spark(index_col=index_col)  # type: ignore
 
         if num_files is not None:
+            warnings.warn(
+                "`num_files` has been deprecated and might be removed in a future version. "
+                "Use `DataFrame.spark.repartition` instead.",
+                FutureWarning,
+            )
             sdf = sdf.repartition(num_files)
 
         builder = sdf.write.mode(mode)

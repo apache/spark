@@ -298,23 +298,34 @@ private[evaluation] object SquaredEuclideanSilhouette extends Silhouette {
       col(predictionCol).cast(DoubleType), col(featuresCol), col("squaredNorm"), col(weightCol))
       .rdd
       .map { row => (row.getDouble(0), (row.getAs[Vector](1), row.getDouble(2), row.getDouble(3))) }
-      .aggregateByKey
-      [(DenseVector, Double, Double)]((Vectors.zeros(numFeatures).toDense, 0.0, 0.0))(
+      .aggregateByKey[(DenseVector, Double, Double)]((null.asInstanceOf[DenseVector], 0.0, 0.0))(
         seqOp = {
-          case (
-            (featureSum: DenseVector, squaredNormSum: Double, weightSum: Double),
-            (features, squaredNorm, weight)
-            ) =>
-            BLAS.axpy(weight, features, featureSum)
-            (featureSum, squaredNormSum + squaredNorm * weight, weightSum + weight)
+          case t: ((DenseVector, Double, Double), (Vector, Double, Double)) =>
+            val ((featureSum, squaredNormSum, weightSum),
+                 (features: Vector, squaredNorm, weight)) = t
+            val theFeatureSum =
+              if (featureSum == null) {
+                Vectors.zeros(numFeatures).toDense
+              } else {
+                featureSum
+              }
+            BLAS.axpy(weight, features, theFeatureSum)
+            (theFeatureSum, squaredNormSum + squaredNorm * weight, weightSum + weight)
         },
         combOp = {
-          case (
-            (featureSum1, squaredNormSum1, weightSum1),
-            (featureSum2, squaredNormSum2, weightSum2)
-            ) =>
-            BLAS.axpy(1.0, featureSum2, featureSum1)
-            (featureSum1, squaredNormSum1 + squaredNormSum2, weightSum1 + weightSum2)
+          case t: ((DenseVector, Double, Double), (DenseVector, Double, Double)) =>
+            val ((featureSum1, squaredNormSum1, weightSum1),
+                 (featureSum2, squaredNormSum2, weightSum2)) = t
+            val theFeatureSum =
+              if (featureSum1 == null) {
+                featureSum2
+              } else if (featureSum2 == null) {
+                featureSum1
+              } else {
+                BLAS.axpy(1.0, featureSum2, featureSum1)
+                featureSum1
+              }
+            (theFeatureSum, squaredNormSum1 + squaredNormSum2, weightSum1 + weightSum2)
         }
       )
 
@@ -503,17 +514,32 @@ private[evaluation] object CosineSilhouette extends Silhouette {
       col(predictionCol).cast(DoubleType), col(normalizedFeaturesColName), col(weightCol))
       .rdd
       .map { row => (row.getDouble(0), (row.getAs[Vector](1), row.getDouble(2))) }
-      .aggregateByKey[(DenseVector, Double)]((Vectors.zeros(numFeatures).toDense, 0.0))(
+      .aggregateByKey[(DenseVector, Double)]((null.asInstanceOf[DenseVector], 0.0))(
       seqOp = {
-        case ((normalizedFeaturesSum: DenseVector, weightSum: Double),
-        (normalizedFeatures, weight)) =>
-          BLAS.axpy(weight, normalizedFeatures, normalizedFeaturesSum)
-          (normalizedFeaturesSum, weightSum + weight)
+        case t: ((DenseVector, Double), (Vector, Double)) =>
+          val ((normalizedFeaturesSum, weightSum), (normalizedFeatures, weight)) = t
+          val theNormalizedFeaturesSum =
+            if (normalizedFeaturesSum == null) {
+              Vectors.zeros(numFeatures).toDense
+            } else {
+              normalizedFeaturesSum
+            }
+          BLAS.axpy(weight, normalizedFeatures, theNormalizedFeaturesSum)
+          (theNormalizedFeaturesSum, weightSum + weight)
       },
       combOp = {
-        case ((normalizedFeaturesSum1, weightSum1), (normalizedFeaturesSum2, weightSum2)) =>
-          BLAS.axpy(1.0, normalizedFeaturesSum2, normalizedFeaturesSum1)
-          (normalizedFeaturesSum1, weightSum1 + weightSum2)
+        case t: ((DenseVector, Double), (DenseVector, Double)) =>
+          val ((normalizedFeaturesSum1, weightSum1), (normalizedFeaturesSum2, weightSum2)) = t
+          val theNormalizedFeaturesSum =
+            if (normalizedFeaturesSum1 == null) {
+              normalizedFeaturesSum2
+            } else if (normalizedFeaturesSum2 == null) {
+              normalizedFeaturesSum1
+            } else {
+              BLAS.axpy(1.0, normalizedFeaturesSum2, normalizedFeaturesSum1)
+              normalizedFeaturesSum1
+            }
+          (theNormalizedFeaturesSum, weightSum1 + weightSum2)
       }
     )
 

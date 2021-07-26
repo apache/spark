@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 3.2 to 3.3
+
+  - Since Spark 3.3, Spark turns a non-nullable schema into nullable for API `DataFrameReader.schema(schema: StructType).json(jsonDataset: Dataset[String])` and `DataFrameReader.schema(schema: StructType).csv(csvDataset: Dataset[String])` when the schema is specified by the user and contains non-nullable fields.
+
 ## Upgrading from Spark SQL 3.1 to 3.2
 
   - Since Spark 3.2, ADD FILE/JAR/ARCHIVE commands require each path to be enclosed by `"` or `'` if the path contains whitespaces.
@@ -83,7 +87,9 @@ license: |
 
   - In Spark 3.2, `TRANSFORM` operator can support `ArrayType/MapType/StructType` without Hive SerDe, in this mode, we use `StructsToJosn` to convert `ArrayType/MapType/StructType` column to `STRING` and use `JsonToStructs` to parse `STRING` to `ArrayType/MapType/StructType`. In Spark 3.1, Spark just support case `ArrayType/MapType/StructType` column as `STRING` but can't support parse `STRING` to `ArrayType/MapType/StructType` output columns.
 
-  - In Spark 3.2, the unit-to-unit interval literals like `INTERVAL '1-1' YEAR TO MONTH` are converted to ANSI interval types: `YearMonthIntervalType` or `DayTimeIntervalType`. In Spark 3.1 and earlier, such interval literals are converted to `CalendarIntervalType`. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.interval.enabled` to `true`.
+  - In Spark 3.2, the unit-to-unit interval literals like `INTERVAL '1-1' YEAR TO MONTH` and the unit list interval literals like `INTERVAL '3' DAYS '1' HOUR` are converted to ANSI interval types: `YearMonthIntervalType` or `DayTimeIntervalType`. In Spark 3.1 and earlier, such interval literals are converted to `CalendarIntervalType`. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.interval.enabled` to `true`.
+
+  - In Spark 3.2, the unit list interval literals can not mix year-month fields (YEAR and MONTH) and day-time fields (WEEK, DAY, ..., MICROSECOND). For example, `INTERVAL 1 day 1 hour` is invalid in Spark 3.2. In Spark 3.1 and earlier, there is no such limitation and the literal returns value of `CalendarIntervalType`. To restore the behavior before Spark 3.2, you can set `spark.sql.legacy.interval.enabled` to `true`.
 
   - In Spark 3.2, Spark supports `DayTimeIntervalType` and `YearMonthIntervalType` as inputs and outputs of `TRANSFORM` clause in Hive `SERDE` mode, the behavior is different between Hive `SERDE` mode and `ROW FORMAT DELIMITED` mode when these two types are used as inputs. In Hive `SERDE` mode, `DayTimeIntervalType` column is converted to `HiveIntervalDayTime`, its string format is `[-]?d h:m:s.n`, but in `ROW FORMAT DELIMITED` mode the format is `INTERVAL '[-]?d h:m:s.n' DAY TO TIME`. In Hive `SERDE` mode, `YearMonthIntervalType` column is converted to `HiveIntervalYearMonth`, its string format is `[-]?y-m`, but in `ROW FORMAT DELIMITED` mode the format is `INTERVAL '[-]?y-m' YEAR TO MONTH`.
 
@@ -156,6 +162,8 @@ license: |
 ## Upgrading from Spark SQL 3.0 to 3.0.1
 
 - In Spark 3.0, JSON datasource and JSON function `schema_of_json` infer TimestampType from string values if they match to the pattern defined by the JSON option `timestampFormat`. Since version 3.0.1, the timestamp type inference is disabled by default. Set the JSON option `inferTimestamp` to `true` to enable such type inference.
+
+- In Spark 3.0, when casting string to integral types(tinyint, smallint, int and bigint), datetime types(date, timestamp and interval) and boolean type, the leading and trailing characters (<= ASCII 32) will be trimmed. For example, `cast('\b1\b' as int)` results `1`. Since Spark 3.0.1, only the leading and trailing whitespace ASCII characters will be trimmed. For example, `cast('\t1\t' as int)` results `1` but `cast('\b1\b' as int)` results `NULL`.
 
 ## Upgrading from Spark SQL 2.4 to 3.0
 
@@ -325,6 +333,8 @@ license: |
   - In Spark 3.0, when Avro files are written with user provided schema, the fields are matched by field names between catalyst schema and Avro schema instead of positions.
 
   - In Spark 3.0, when Avro files are written with user provided non-nullable schema, even the catalyst schema is nullable, Spark is still able to write the files. However, Spark throws runtime NullPointerException if any of the records contains null.
+
+  - In Spark version 2.4 and below, CSV datasource can detect encoding of input files automatically when the files have BOM at the beginning. For instance, CSV datasource can recognize UTF-8, UTF-16BE, UTF-16LE, UTF-32BE and UTF-32LE in the multi-line mode (the CSV option `multiLine` is set to `true`). In Spark 3.0, CSV datasource reads input files in encoding specified via the CSV option `encoding` which has the default value of UTF-8. In this way, if file encoding doesn't match to the encoding specified via the CSV option, Spark loads the file incorrectly. To solve the issue, users should either set correct encoding via the CSV option `encoding` or set the option to `null` which fallbacks to encoding auto-detection as in Spark versions before 3.0. 
 
 ### Others
 
@@ -762,11 +772,11 @@ and deprecated the old APIs (e.g., `SQLContext.parquetFile`, `SQLContext.jsonFil
 See the API docs for `SQLContext.read` (
   <a href="api/scala/org/apache/spark/sql/SQLContext.html#read:DataFrameReader">Scala</a>,
   <a href="api/java/org/apache/spark/sql/SQLContext.html#read()">Java</a>,
-  <a href="api/python/pyspark.sql.html#pyspark.sql.SQLContext.read">Python</a>
+  <a href="api/python/reference/api/pyspark.sql.SparkSession.read.html#pyspark.sql.SparkSession.read">Python</a>
 ) and `DataFrame.write` (
   <a href="api/scala/org/apache/spark/sql/DataFrame.html#write:DataFrameWriter">Scala</a>,
   <a href="api/java/org/apache/spark/sql/Dataset.html#write()">Java</a>,
-  <a href="api/python/pyspark.sql.html#pyspark.sql.DataFrame.write">Python</a>
+  <a href="api/python/reference/api/pyspark.sql.DataFrame.write.html#pyspark.sql.DataFrame.write">Python</a>
 ) more information.
 
 

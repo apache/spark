@@ -44,6 +44,8 @@ A string literal is used to specify a character string value.
 * **char**
 
     One character from the character set. Use `\` to escape special characters (e.g., `'` or `\`).
+    To represent unicode characters, use 16-bit or 32-bit unicode escape of the form `\uxxxx` or `\Uxxxxxxxx`,
+    where xxxx and xxxxxxxx are 16-bit and 32-bit code points in hexadecimal respectively (e.g., `\u3042` for `あ` and `\U0001F44D` for `👍`).
 
 #### Examples
 

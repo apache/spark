@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.execution
 
 import org.scalatest.matchers.should.Matchers._
 
+import org.apache.spark.metrics.source.HiveCatalogMetrics
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -27,6 +29,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation, PruneFileSourcePartitions}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
@@ -109,9 +112,40 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase {
     }
   }
 
+  test("SPARK-35985 push filters for empty read schema") {
+    // Force datasource v2 for parquet
+    withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
+      withTempPath { dir =>
+        spark.range(10).selectExpr("id", "id % 3 as p")
+            .write.partitionBy("p").parquet(dir.getCanonicalPath)
+        withTempView("tmp") {
+          spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+          assertPrunedPartitions("SELECT COUNT(*) FROM tmp WHERE p = 0", 1, "(tmp.p = 0)")
+          assertPrunedPartitions("SELECT input_file_name() FROM tmp WHERE p = 0", 1, "(tmp.p = 0)")
+        }
+      }
+    }
+  }
+
+  test("SPARK-36128: spark.sql.hive.metastorePartitionPruning should work for file data sources") {
+    Seq(true, false).foreach { enablePruning =>
+      withTable("tbl") {
+        withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> enablePruning.toString) {
+          spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
+          HiveCatalogMetrics.reset()
+          QueryTest.checkAnswer(sql("SELECT id FROM tbl WHERE p = 1"),
+            Seq(1, 4, 7).map(Row.apply(_)), checkToRDD = false) // avoid analyzing the query twice
+          val expectedCount = if (enablePruning) 1 else 3
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == expectedCount)
+        }
+      }
+    }
+  }
+
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {
     plan.collectFirst {
-      case p: FileSourceScanExec => p
-    }.get.selectedPartitions.length
+      case p: FileSourceScanExec => p.selectedPartitions.length
+      case b: BatchScanExec => b.partitions.size
+    }.get
   }
 }

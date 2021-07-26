@@ -3002,8 +3002,28 @@ class HiveDDLSuite
           spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
             s"STORED AS PARQUET SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
         }.getMessage
-        assert(e.contains("Attribute name \"(IF((1 = 1), 1, 0))\" contains" +
-          " invalid character(s) among \" ,;{}()\\n\\t=\". Please use alias to rename it."))
+        assert(e.contains("Column name \"(IF((1 = 1), 1, 0))\" contains invalid character(s). " +
+          "Please use alias to rename it."))
+      }
+    }
+  }
+
+  test("SPARK-36201: Add check for inner field of parquet/orc schema") {
+    withView("v") {
+      spark.range(1).createTempView("v")
+      withTempPath { path =>
+        val e = intercept[AnalysisException] {
+          spark.sql(
+            s"""
+               |INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}'
+               |STORED AS PARQUET
+               |SELECT
+               |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
+               |FROM v
+               """.stripMargin)
+        }.getMessage
+        assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains" +
+          " invalid character(s). Please use alias to rename it."))
       }
     }
   }

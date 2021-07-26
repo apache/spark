@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
 import com.codahale.metrics.Gauge;
@@ -49,6 +50,7 @@ import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
 import org.apache.spark.network.shuffle.protocol.*;
+import org.apache.spark.network.util.TimerWithCustomTimeUnit;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
 import org.apache.spark.network.util.TransportConf;
 
@@ -299,13 +301,17 @@ public class ExternalBlockHandler extends RpcHandler
   public class ShuffleMetrics implements MetricSet {
     private final Map<String, Metric> allMetrics;
     // Time latency for open block request in ms
-    private final Timer openBlockRequestLatencyMillis = new Timer();
+    private final Timer openBlockRequestLatencyMillis =
+        new TimerWithCustomTimeUnit(TimeUnit.MILLISECONDS);
     // Time latency for executor registration latency in ms
-    private final Timer registerExecutorRequestLatencyMillis = new Timer();
+    private final Timer registerExecutorRequestLatencyMillis =
+        new TimerWithCustomTimeUnit(TimeUnit.MILLISECONDS);
     // Time latency for processing fetch merged blocks meta request latency in ms
-    private final Timer fetchMergedBlocksMetaLatencyMillis = new Timer();
+    private final Timer fetchMergedBlocksMetaLatencyMillis =
+        new TimerWithCustomTimeUnit(TimeUnit.MILLISECONDS);
     // Time latency for processing finalize shuffle merge request latency in ms
-    private final Timer finalizeShuffleMergeLatencyMillis = new Timer();
+    private final Timer finalizeShuffleMergeLatencyMillis =
+        new TimerWithCustomTimeUnit(TimeUnit.MILLISECONDS);
     // Block transfer rate in blocks per second
     private final Meter blockTransferRate = new Meter();
     // Block fetch message rate per second. When using non-batch fetches

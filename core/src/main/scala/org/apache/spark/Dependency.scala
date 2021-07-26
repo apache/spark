@@ -97,6 +97,8 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   val shuffleHandle: ShuffleHandle = _rdd.context.env.shuffleManager.registerShuffle(
     shuffleId, this)
 
+  private[this] val numPartitions = rdd.partitions.length
+
   // By default, shuffle merge is enabled for ShuffleDependency if push based shuffle
   // is enabled
   private[this] var _shuffleMergeEnabled =
@@ -141,7 +143,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
    */
   def shuffleMergeFinalized: Boolean = {
     // Empty RDD won't be computed therefore shuffle merge finalized should be true by default.
-    if (shuffleMergeEnabled && rdd.getNumPartitions > 0) {
+    if (shuffleMergeEnabled && numPartitions > 0) {
       _shuffleMergedFinalized
     } else {
       true

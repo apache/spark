@@ -388,7 +388,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
             return True
 
         # We want all batches to finish for this test.
-        eventually(condition, catch_assertions=True)
+        eventually(condition, 90, catch_assertions=True)
 
         w = array(model_weights)
         diff = w[1:] - w[:-1]

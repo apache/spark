@@ -867,6 +867,9 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
         Some(TimestampType)
 
+      case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
+        Some(TimestampNTZType)
+
       case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
 

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.text.ParseException
-import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId}
+import java.time.{DateTimeException, LocalDate, LocalDateTime, ZoneId, ZoneOffset}
 import java.time.format.DateTimeParseException
 import java.util.Locale
 
@@ -201,6 +201,44 @@ case class Now() extends CurrentTimestampLike {
 }
 
 /**
+ * Returns the current timestamp without time zone at the start of query evaluation.
+ * There is no code generation since this expression should get constant folded by the optimizer.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_() - Returns the current timestamp without time zone at the start of query evaluation. All calls of localtimestamp within the same query return the same value.
+
+    _FUNC_ - Returns the current local date-time at the session time zone at the start of query evaluation.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_();
+       2020-04-25 15:49:11.914
+  """,
+  group = "datetime_funcs",
+  since = "3.3.0")
+case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
+  with TimeZoneAwareExpression with CodegenFallback {
+
+  def this() = this(None)
+
+  override def foldable: Boolean = true
+  override def nullable: Boolean = false
+
+  override def dataType: DataType = TimestampNTZType
+
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(CURRENT_LIKE)
+
+  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
+    copy(timeZoneId = Option(timeZoneId))
+
+  override def eval(input: InternalRow): Any = localDateTimeToMicros(LocalDateTime.now(zoneId))
+
+  override def prettyName: String = "localtimestamp"
+}
+
+/**
  * Expression representing the current batch time, which is used by StreamExecution to
  * 1. prevent optimizer from pushing this expression below a stateful operator
  * 2. allow IncrementalExecution to substitute this expression with a Literal(timestamp)
@@ -236,6 +274,8 @@ case class CurrentBatchTimestamp(
     val timestampUs = millisToMicros(timestampMs)
     dataType match {
       case _: TimestampType => Literal(timestampUs, TimestampType)
+      case _: TimestampNTZType =>
+        Literal(convertTz(timestampUs, ZoneOffset.UTC, zoneId), TimestampNTZType)
       case _: DateType => Literal(microsToDays(timestampUs, zoneId), DateType)
     }
   }
@@ -1008,17 +1048,17 @@ case class UnixTimestamp(
     copy(timeExp = newLeft, format = newRight)
 }
 
-case class GetTimestampNTZ(
+/**
+ * Gets a timestamp from a string or a date.
+ */
+case class GetTimestamp(
     left: Expression,
     right: Expression,
+    override val dataType: DataType,
     timeZoneId: Option[String] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled) extends ToTimestamp {
 
-  override val forTimestampNTZ: Boolean = true
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(StringType, StringType)
-
-  override def dataType: DataType = TimestampNTZType
+  override val forTimestampNTZ: Boolean = dataType == TimestampNTZType
 
   override protected def downScaleFactor: Long = 1
 
@@ -1056,7 +1096,7 @@ case class GetTimestampNTZ(
        2016-12-31 00:00:00
   """,
   group = "datetime_funcs",
-  since = "3.2.0")
+  since = "3.3.0")
 // scalastyle:on line.size.limit
 case class ParseToTimestampNTZ(
     left: Expression,
@@ -1064,7 +1104,7 @@ case class ParseToTimestampNTZ(
     child: Expression) extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), GetTimestampNTZ(left, format))
+    this(left, Option(format), GetTimestamp(left, format, TimestampNTZType))
   }
 
   def this(left: Expression) = this(left, None, Cast(left, TimestampNTZType))
@@ -1076,6 +1116,53 @@ case class ParseToTimestampNTZ(
   override def dataType: DataType = TimestampNTZType
 
   override protected def withNewChildInternal(newChild: Expression): ParseToTimestampNTZ =
+    copy(child = newChild)
+}
+
+/**
+ * Parses a column to a timestamp with local time zone based on the supplied format.
+ */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = """
+    _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
+      to a timestamp with local time zone. Returns null with invalid input. By default, it follows casting rules to
+      a timestamp if the `fmt` is omitted.
+  """,
+  arguments = """
+    Arguments:
+      * timestamp_str - A string to be parsed to timestamp with local time zone.
+      * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
+              date and time format patterns.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('2016-12-31 00:12:00');
+       2016-12-31 00:12:00
+      > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
+       2016-12-31 00:00:00
+  """,
+  group = "datetime_funcs",
+  since = "3.3.0")
+// scalastyle:on line.size.limit
+case class ParseToTimestampLTZ(
+    left: Expression,
+    format: Option[Expression],
+    child: Expression) extends RuntimeReplaceable {
+
+  def this(left: Expression, format: Expression) = {
+    this(left, Option(format), GetTimestamp(left, format, TimestampType))
+  }
+
+  def this(left: Expression) = this(left, None, Cast(left, TimestampType))
+
+  override def flatArguments: Iterator[Any] = Iterator(left, format)
+  override def exprsReplaced: Seq[Expression] = left +: format.toSeq
+
+  override def prettyName: String = "to_timestamp_ltz"
+  override def dataType: DataType = TimestampType
+
+  override protected def withNewChildInternal(newChild: Expression): ParseToTimestampLTZ =
     copy(child = newChild)
 }
 
@@ -1091,8 +1178,10 @@ abstract class ToTimestamp
   override protected def formatString: Expression = right
   override protected def isParsing = true
 
+  override def forTimestampNTZ: Boolean = left.dataType == TimestampNTZType
+
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(TypeCollection(StringType, DateType, TimestampType), StringType)
+    Seq(TypeCollection(StringType, DateType, TimestampType, TimestampNTZType), StringType)
 
   override def dataType: DataType = LongType
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
@@ -1112,7 +1201,7 @@ abstract class ToTimestamp
       left.dataType match {
         case DateType =>
           daysToMicros(t.asInstanceOf[Int], zoneId) / downScaleFactor
-        case TimestampType =>
+        case TimestampType | TimestampNTZType =>
           t.asInstanceOf[Long] / downScaleFactor
         case StringType =>
           val fmt = right.eval(input)
@@ -1192,7 +1281,7 @@ abstract class ToTimestamp
              |}
              |""".stripMargin)
       }
-      case TimestampType =>
+      case TimestampType | TimestampNTZType =>
         val eval1 = left.genCode(ctx)
         ev.copy(code = code"""
           ${eval1.code}
@@ -1884,7 +1973,7 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), Cast(GetTimestamp(left, format), DateType))
+    this(left, Option(format), Cast(GetTimestamp(left, format, TimestampType), DateType))
   }
 
   def this(left: Expression) = {
@@ -1909,7 +1998,8 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   usage = """
     _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
       to a timestamp. Returns null with invalid input. By default, it follows casting rules to
-      a timestamp if the `fmt` is omitted.
+      a timestamp if the `fmt` is omitted. The result data type is consistent with the value of
+      configuration `spark.sql.timestampType`.
   """,
   arguments = """
     Arguments:
@@ -1927,20 +2017,24 @@ case class ParseToDate(left: Expression, format: Option[Expression], child: Expr
   group = "datetime_funcs",
   since = "2.2.0")
 // scalastyle:on line.size.limit
-case class ParseToTimestamp(left: Expression, format: Option[Expression], child: Expression)
-  extends RuntimeReplaceable {
+case class ParseToTimestamp(
+    left: Expression,
+    format: Option[Expression],
+    override val dataType: DataType,
+    child: Expression) extends RuntimeReplaceable {
 
   def this(left: Expression, format: Expression) = {
-    this(left, Option(format), GetTimestamp(left, format))
+    this(left, Option(format), SQLConf.get.timestampType,
+      GetTimestamp(left, format, SQLConf.get.timestampType))
   }
 
-  def this(left: Expression) = this(left, None, Cast(left, TimestampType))
+  def this(left: Expression) =
+    this(left, None, SQLConf.get.timestampType, Cast(left, SQLConf.get.timestampType))
 
   override def flatArguments: Iterator[Any] = Iterator(left, format)
   override def exprsReplaced: Seq[Expression] = left +: format.toSeq
 
   override def prettyName: String = "to_timestamp"
-  override def dataType: DataType = TimestampType
 
   override protected def withNewChildInternal(newChild: Expression): ParseToTimestamp =
     copy(child = newChild)
@@ -2196,27 +2290,6 @@ case class DateDiff(endDate: Expression, startDate: Expression)
     copy(endDate = newLeft, startDate = newRight)
 }
 
-/**
- * Gets timestamps from strings using given pattern.
- */
-private case class GetTimestamp(
-    left: Expression,
-    right: Expression,
-    timeZoneId: Option[String] = None,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
-  extends ToTimestamp {
-
-  override val downScaleFactor = 1
-  override def dataType: DataType = TimestampType
-
-  override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
-    copy(timeZoneId = Option(timeZoneId))
-
-  override protected def withNewChildrenInternal(
-      newLeft: Expression, newRight: Expression): GetTimestamp =
-    copy(left = newLeft, right = newRight)
-}
-
 @ExpressionDescription(
   usage = "_FUNC_(year, month, day) - Create date from year, month and day fields.",
   arguments = """
@@ -2286,7 +2359,134 @@ case class MakeDate(
 
 // scalastyle:off line.size.limit
 @ExpressionDescription(
-  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields.",
+  usage = "_FUNC_(year, month, day, hour, min, sec) - Create local date-time from year, month, day, hour, min, sec fields. ",
+  arguments = """
+    Arguments:
+      * year - the year to represent, from 1 to 9999
+      * month - the month-of-year to represent, from 1 (January) to 12 (December)
+      * day - the day-of-month to represent, from 1 to 31
+      * hour - the hour-of-day to represent, from 0 to 23
+      * min - the minute-of-hour to represent, from 0 to 59
+      * sec - the second-of-minute and its micro-fraction to represent, from
+              0 to 60. If the sec argument equals to 60, the seconds field is set
+              to 0 and 1 minute is added to the final timestamp.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
+       2014-12-28 06:30:45.887
+      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
+       2019-07-01 00:00:00
+      > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
+       NULL
+  """,
+  group = "datetime_funcs",
+  since = "3.3.0")
+// scalastyle:on line.size.limit
+case class MakeTimestampNTZ(
+    year: Expression,
+    month: Expression,
+    day: Expression,
+    hour: Expression,
+    min: Expression,
+    sec: Expression,
+    failOnError: Boolean = SQLConf.get.ansiEnabled,
+    child: Expression) extends RuntimeReplaceable {
+  def this(
+      year: Expression,
+      month: Expression,
+      day: Expression,
+      hour: Expression,
+      min: Expression,
+      sec: Expression) = {
+    this(year, month, day, hour, min, sec, failOnError = SQLConf.get.ansiEnabled,
+      MakeTimestamp(year, month, day, hour, min, sec, dataType = TimestampNTZType))
+  }
+
+  override def prettyName: String = "make_timestamp_ntz"
+
+  override def exprsReplaced: Seq[Expression] = Seq(year, month, day, hour, min, sec)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create the current timestamp with local time zone from year, month, day, hour, min, sec and timezone fields. ",
+  arguments = """
+    Arguments:
+      * year - the year to represent, from 1 to 9999
+      * month - the month-of-year to represent, from 1 (January) to 12 (December)
+      * day - the day-of-month to represent, from 1 to 31
+      * hour - the hour-of-day to represent, from 0 to 23
+      * min - the minute-of-hour to represent, from 0 to 59
+      * sec - the second-of-minute and its micro-fraction to represent, from
+              0 to 60. If the sec argument equals to 60, the seconds field is set
+              to 0 and 1 minute is added to the final timestamp.
+      * timezone - the time zone identifier. For example, CET, UTC and etc.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887);
+       2014-12-28 06:30:45.887
+      > SELECT _FUNC_(2014, 12, 28, 6, 30, 45.887, 'CET');
+       2014-12-27 21:30:45.887
+      > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
+       2019-07-01 00:00:00
+      > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 'PST');
+       NULL
+      > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
+       NULL
+  """,
+  group = "datetime_funcs",
+  since = "3.3.0")
+// scalastyle:on line.size.limit
+case class MakeTimestampLTZ(
+    year: Expression,
+    month: Expression,
+    day: Expression,
+    hour: Expression,
+    min: Expression,
+    sec: Expression,
+    timezone: Option[Expression],
+    failOnError: Boolean = SQLConf.get.ansiEnabled,
+    child: Expression) extends RuntimeReplaceable {
+  def this(
+     year: Expression,
+     month: Expression,
+     day: Expression,
+     hour: Expression,
+     min: Expression,
+     sec: Expression) = {
+    this(year, month, day, hour, min, sec, None, failOnError = SQLConf.get.ansiEnabled,
+      MakeTimestamp(year, month, day, hour, min, sec, dataType = TimestampType))
+  }
+
+  def this(
+      year: Expression,
+      month: Expression,
+      day: Expression,
+      hour: Expression,
+      min: Expression,
+      sec: Expression,
+      timezone: Expression) = {
+    this(year, month, day, hour, min, sec, Some(timezone), failOnError = SQLConf.get.ansiEnabled,
+      MakeTimestamp(year, month, day, hour, min, sec, Some(timezone), dataType = TimestampType))
+  }
+
+  override def prettyName: String = "make_timestamp_ltz"
+
+  override def exprsReplaced: Seq[Expression] = Seq(year, month, day, hour, min, sec)
+
+  override protected def withNewChildInternal(newChild: Expression): Expression =
+    copy(child = newChild)
+}
+
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(year, month, day, hour, min, sec[, timezone]) - Create timestamp from year, month, day, hour, min, sec and timezone fields. " +
+    "The result data type is consistent with the value of configuration `spark.sql.timestampType`",
   arguments = """
     Arguments:
       * year - the year to represent, from 1 to 9999
@@ -2324,7 +2524,8 @@ case class MakeTimestamp(
     sec: Expression,
     timezone: Option[Expression] = None,
     timeZoneId: Option[String] = None,
-    failOnError: Boolean = SQLConf.get.ansiEnabled)
+    failOnError: Boolean = SQLConf.get.ansiEnabled,
+    override val dataType: DataType = SQLConf.get.timestampType)
   extends SeptenaryExpression with TimeZoneAwareExpression with ImplicitCastInputTypes
     with NullIntolerant {
 
@@ -2335,7 +2536,8 @@ case class MakeTimestamp(
       hour: Expression,
       min: Expression,
       sec: Expression) = {
-    this(year, month, day, hour, min, sec, None, None, SQLConf.get.ansiEnabled)
+    this(year, month, day, hour, min, sec, None, None, SQLConf.get.ansiEnabled,
+      SQLConf.get.timestampType)
   }
 
   def this(
@@ -2346,7 +2548,8 @@ case class MakeTimestamp(
       min: Expression,
       sec: Expression,
       timezone: Expression) = {
-    this(year, month, day, hour, min, sec, Some(timezone), None, SQLConf.get.ansiEnabled)
+    this(year, month, day, hour, min, sec, Some(timezone), None, SQLConf.get.ansiEnabled,
+      SQLConf.get.timestampType)
   }
 
   override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec) ++ timezone
@@ -2355,7 +2558,6 @@ case class MakeTimestamp(
   override def inputTypes: Seq[AbstractDataType] =
     Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(8, 6)) ++
     timezone.map(_ => StringType)
-  override def dataType: DataType = TimestampType
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -2388,7 +2590,11 @@ case class MakeTimestamp(
       } else {
         LocalDateTime.of(year, month, day, hour, min, seconds, nanos)
       }
-      instantToMicros(ldt.atZone(zoneId).toInstant)
+      if (dataType == TimestampType) {
+        instantToMicros(ldt.atZone(zoneId).toInstant)
+      } else {
+        localDateTimeToMicros(ldt)
+      }
     } catch {
       case _: DateTimeException if !failOnError => null
     }
@@ -2422,6 +2628,14 @@ case class MakeTimestamp(
     val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
     nullSafeCodeGen(ctx, ev, (year, month, day, hour, min, secAndNanos, timezone) => {
       val zoneId = timezone.map(tz => s"$dtu.getZoneId(${tz}.toString())").getOrElse(zid)
+      val toMicrosCode = if (dataType == TimestampType) {
+        s"""
+           |java.time.Instant instant = ldt.atZone($zoneId).toInstant();
+           |${ev.value} = $dtu.instantToMicros(instant);
+           |""".stripMargin
+      } else {
+        s"${ev.value} = $dtu.localDateTimeToMicros(ldt);"
+      }
       s"""
       try {
         org.apache.spark.sql.types.Decimal secFloor = $secAndNanos.floor();
@@ -2439,8 +2653,7 @@ case class MakeTimestamp(
         } else {
           ldt = java.time.LocalDateTime.of($year, $month, $day, $hour, $min, seconds, nanos);
         }
-        java.time.Instant instant = ldt.atZone($zoneId).toInstant();
-        ${ev.value} = $dtu.instantToMicros(instant);
+        $toMicrosCode
       } catch (java.time.DateTimeException e) {
         $failOnErrorBranch
       }"""
@@ -2526,7 +2739,7 @@ object DatePart {
        224
       > SELECT _FUNC_('SECONDS', timestamp'2019-10-01 00:00:01.000001');
        1.000001
-      > SELECT _FUNC_('days', interval 1 year 10 months 5 days);
+      > SELECT _FUNC_('days', interval 5 days 3 hours 7 minutes);
        5
       > SELECT _FUNC_('seconds', interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001
@@ -2595,7 +2808,7 @@ case class DatePart(field: Expression, source: Expression, child: Expression)
        224
       > SELECT _FUNC_(SECONDS FROM timestamp'2019-10-01 00:00:01.000001');
        1.000001
-      > SELECT _FUNC_(days FROM interval 1 year 10 months 5 days);
+      > SELECT _FUNC_(days FROM interval 5 days 3 hours 7 minutes);
        5
       > SELECT _FUNC_(seconds FROM interval 5 hours 30 seconds 1 milliseconds 1 microseconds);
        30.001001

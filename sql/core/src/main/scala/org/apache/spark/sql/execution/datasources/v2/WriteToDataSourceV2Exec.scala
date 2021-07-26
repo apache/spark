@@ -32,9 +32,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, StagedTable, StagingTableCatalog, SupportsWrite, Table, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.write.{BatchWrite, DataWriterFactory, LogicalWriteInfoImpl, PhysicalWriteInfoImpl, V1Write, Write, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.{LongAccumulator, Utils}
 
@@ -46,7 +48,8 @@ import org.apache.spark.util.{LongAccumulator, Utils}
 case class WriteToDataSourceV2(
     relation: Option[DataSourceV2Relation],
     batchWrite: BatchWrite,
-    query: LogicalPlan) extends UnaryNode {
+    query: LogicalPlan,
+    customMetrics: Seq[CustomMetric]) extends UnaryNode {
   override def child: LogicalPlan = query
   override def output: Seq[Attribute] = Nil
   override protected def withNewChildInternal(newChild: LogicalPlan): WriteToDataSourceV2 =
@@ -276,7 +279,12 @@ case class OverwritePartitionsDynamicExec(
 case class WriteToDataSourceV2Exec(
     batchWrite: BatchWrite,
     refreshCache: () => Unit,
-    query: SparkPlan) extends V2TableWriteExec {
+    query: SparkPlan,
+    writeMetrics: Seq[CustomMetric]) extends V2TableWriteExec {
+
+  override val customMetrics: Map[String, SQLMetric] = writeMetrics.map { customMetric =>
+    customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
+  }.toMap
 
   override protected def run(): Seq[InternalRow] = {
     val writtenRows = writeWithV2(batchWrite)
@@ -291,6 +299,11 @@ case class WriteToDataSourceV2Exec(
 trait V2ExistingTableWriteExec extends V2TableWriteExec {
   def refreshCache: () => Unit
   def write: Write
+
+  override val customMetrics: Map[String, SQLMetric] =
+    write.supportedCustomMetrics().map { customMetric =>
+      customMetric.name() -> SQLMetrics.createV2CustomMetric(sparkContext, customMetric)
+    }.toMap
 
   override protected def run(): Seq[InternalRow] = {
     val writtenRows = writeWithV2(write.toBatch)
@@ -309,6 +322,10 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
 
   override def child: SparkPlan = query
   override def output: Seq[Attribute] = Nil
+
+  protected val customMetrics: Map[String, SQLMetric] = Map.empty
+
+  override lazy val metrics = customMetrics
 
   protected def writeWithV2(batchWrite: BatchWrite): Seq[InternalRow] = {
     val rdd: RDD[InternalRow] = {
@@ -330,11 +347,15 @@ trait V2TableWriteExec extends V2CommandExec with UnaryExecNode {
     logInfo(s"Start processing data source write support: $batchWrite. " +
       s"The input RDD has ${messages.length} partitions.")
 
+    // Avoid object not serializable issue.
+    val writeMetrics: Map[String, SQLMetric] = customMetrics
+
     try {
       sparkContext.runJob(
         rdd,
         (context: TaskContext, iter: Iterator[InternalRow]) =>
-          DataWritingSparkTask.run(writerFactory, context, iter, useCommitCoordinator),
+          DataWritingSparkTask.run(writerFactory, context, iter, useCommitCoordinator,
+            writeMetrics),
         rdd.partitions.indices,
         (index, result: DataWritingSparkTaskResult) => {
           val commitMessage = result.writerCommitMessage
@@ -376,7 +397,8 @@ object DataWritingSparkTask extends Logging {
       writerFactory: DataWriterFactory,
       context: TaskContext,
       iter: Iterator[InternalRow],
-      useCommitCoordinator: Boolean): DataWritingSparkTaskResult = {
+      useCommitCoordinator: Boolean,
+      customMetrics: Map[String, SQLMetric]): DataWritingSparkTaskResult = {
     val stageId = context.stageId()
     val stageAttempt = context.stageAttemptNumber()
     val partId = context.partitionId()
@@ -388,10 +410,16 @@ object DataWritingSparkTask extends Logging {
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
       while (iter.hasNext) {
+        if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+          CustomMetrics.updateMetrics(dataWriter.currentMetricsValues, customMetrics)
+        }
+
         // Count is here.
         count += 1
         dataWriter.write(iter.next())
       }
+
+      CustomMetrics.updateMetrics(dataWriter.currentMetricsValues, customMetrics)
 
       val msg = if (useCommitCoordinator) {
         val coordinator = SparkEnv.get.outputCommitCoordinator

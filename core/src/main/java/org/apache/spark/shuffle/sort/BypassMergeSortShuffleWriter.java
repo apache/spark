@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 import java.util.Optional;
+import java.util.zip.Checksum;
 import javax.annotation.Nullable;
 
 import scala.None$;
@@ -38,6 +39,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.Partitioner;
 import org.apache.spark.ShuffleDependency;
 import org.apache.spark.SparkConf;
+import org.apache.spark.SparkException;
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents;
 import org.apache.spark.shuffle.api.ShuffleMapOutputWriter;
 import org.apache.spark.shuffle.api.ShufflePartitionWriter;
@@ -49,6 +51,7 @@ import org.apache.spark.serializer.Serializer;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter;
 import org.apache.spark.shuffle.ShuffleWriter;
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.storage.*;
 import org.apache.spark.util.Utils;
 
@@ -93,6 +96,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
   private FileSegment[] partitionWriterSegments;
   @Nullable private MapStatus mapStatus;
   private long[] partitionLengths;
+  /** Checksum calculator for each partition. Empty when shuffle checksum disabled. */
+  private final Checksum[] partitionChecksums;
 
   /**
    * Are we in the process of stopping? Because map tasks can call stop() with success = true
@@ -107,7 +112,7 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       long mapId,
       SparkConf conf,
       ShuffleWriteMetricsReporter writeMetrics,
-      ShuffleExecutorComponents shuffleExecutorComponents) {
+      ShuffleExecutorComponents shuffleExecutorComponents) throws SparkException {
     // Use getSizeAsKb (not bytes) to maintain backwards compatibility if no units are provided
     this.fileBufferSize = (int) (long) conf.get(package$.MODULE$.SHUFFLE_FILE_BUFFER_SIZE()) * 1024;
     this.transferToEnabled = conf.getBoolean("spark.file.transferTo", true);
@@ -120,6 +125,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
     this.writeMetrics = writeMetrics;
     this.serializer = dep.serializer();
     this.shuffleExecutorComponents = shuffleExecutorComponents;
+    this.partitionChecksums =
+      ShuffleChecksumHelper.createPartitionChecksumsIfEnabled(numPartitions, conf);
   }
 
   @Override
@@ -129,7 +136,8 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
         .createMapOutputWriter(shuffleId, mapId, numPartitions);
     try {
       if (!records.hasNext()) {
-        partitionLengths = mapOutputWriter.commitAllPartitions().getPartitionLengths();
+        partitionLengths = mapOutputWriter.commitAllPartitions(
+          ShuffleChecksumHelper.EMPTY_CHECKSUM_VALUE).getPartitionLengths();
         mapStatus = MapStatus$.MODULE$.apply(
           blockManager.shuffleServerId(), partitionLengths, mapId);
         return;
@@ -143,8 +151,12 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
             blockManager.diskBlockManager().createTempShuffleBlock();
         final File file = tempShuffleBlockIdPlusFile._2();
         final BlockId blockId = tempShuffleBlockIdPlusFile._1();
-        partitionWriters[i] =
-            blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics);
+        DiskBlockObjectWriter writer =
+          blockManager.getDiskWriter(blockId, file, serInstance, fileBufferSize, writeMetrics);
+        if (partitionChecksums.length > 0) {
+          writer.setChecksum(partitionChecksums[i]);
+        }
+        partitionWriters[i] = writer;
       }
       // Creating the file to write to and creating a disk writer both involve interacting with
       // the disk, and can take a long time in aggregate when we open many files, so should be
@@ -218,7 +230,9 @@ final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> {
       }
       partitionWriters = null;
     }
-    return mapOutputWriter.commitAllPartitions().getPartitionLengths();
+    return mapOutputWriter.commitAllPartitions(
+      ShuffleChecksumHelper.getChecksumValues(partitionChecksums)
+    ).getPartitionLengths();
   }
 
   private void writePartitionedDataWithChannel(

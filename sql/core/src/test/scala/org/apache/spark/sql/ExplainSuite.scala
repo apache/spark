@@ -536,7 +536,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
     // AdaptiveSparkPlan (21)
     // +- == Final Plan ==
     //    * HashAggregate (12)
-    //    +- CustomShuffleReader (11)
+    //    +- AQEShuffleRead (11)
     //       +- ShuffleQueryStage (10)
     //          +- Exchange (9)
     //             +- * HashAggregate (8)
@@ -570,7 +570,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         |Output [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
         |Arguments: 1""".stripMargin,
       """
-        |(11) CustomShuffleReader
+        |(11) AQEShuffleRead
         |Input [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
         |""".stripMargin,
       """
