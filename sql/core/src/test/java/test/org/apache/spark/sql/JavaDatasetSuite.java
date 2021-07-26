@@ -32,7 +32,6 @@ import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
-import scala.collection.JavaConverters;
 
 import com.google.common.base.Objects;
 import org.apache.spark.sql.streaming.TestGroupState;
@@ -398,41 +397,51 @@ public class JavaDatasetSuite implements Serializable {
     Observation unnamedObservation = new Observation();
 
     Dataset<Long> df = spark
-            .range(100)
-            .observe(
-                    namedObservation,
-                    min(col("id")).as("min_val"),
-                    max(col("id")).as("max_val"),
-                    sum(col("id")).as("sum_val"),
-                    count(when(pmod(col("id"), lit(2)).$eq$eq$eq(0), 1)).as("num_even")
-            )
-            .observe(
-                    unnamedObservation,
-                    avg(col("id")).cast("int").as("avg_val")
-            );
+      .range(100)
+      .observe(
+        namedObservation,
+        min(col("id")).as("min_val"),
+        max(col("id")).as("max_val"),
+        sum(col("id")).as("sum_val"),
+        count(when(pmod(col("id"), lit(2)).$eq$eq$eq(0), 1)).as("num_even")
+      )
+      .observe(
+        unnamedObservation,
+        avg(col("id")).cast("int").as("avg_val")
+      );
 
     df.collect();
-    List<?> namedMetrics = null;
-    List<?> unnamedMetrics = null;
+    Map<String, Object> namedMetrics = null;
+    Map<String, Object> unnamedMetrics = null;
 
     try {
-      namedMetrics = JavaConverters.seqAsJavaList(namedObservation.get().toSeq());
-      unnamedMetrics = JavaConverters.seqAsJavaList(unnamedObservation.get().toSeq());
+      namedMetrics = namedObservation.getAsJavaMap();
+      unnamedMetrics = unnamedObservation.getAsJavaMap();
     } catch (InterruptedException e) {
       Assert.fail();
     }
-    Assert.assertEquals(Arrays.asList(0L, 99L, 4950L, 50L), namedMetrics);
-    Assert.assertEquals(Arrays.asList(49), unnamedMetrics);
+    Map<String, Object> expectedNamedMetrics = new HashMap<String, Object>() {{
+      put("min_val", 0L);
+      put("max_val", 99L);
+      put("sum_val", 4950L);
+      put("num_even", 50L);
+    }};
+    Assert.assertEquals(expectedNamedMetrics, namedMetrics);
+
+    Map<String, Object> expectedUnnamedMetrics = new HashMap<String, Object>() {{
+      put("avg_val", 49);
+    }};
+    Assert.assertEquals(expectedUnnamedMetrics, unnamedMetrics);
 
     // we can get the result multiple times
     try {
-      namedMetrics = JavaConverters.seqAsJavaList(namedObservation.get().toSeq());
-      unnamedMetrics = JavaConverters.seqAsJavaList(unnamedObservation.get().toSeq());
+      namedMetrics = namedObservation.getAsJavaMap();
+      unnamedMetrics = unnamedObservation.getAsJavaMap();
     } catch (InterruptedException e) {
       Assert.fail();
     }
-    Assert.assertEquals(Arrays.asList(0L, 99L, 4950L, 50L), namedMetrics);
-    Assert.assertEquals(Arrays.asList(49), unnamedMetrics);
+    Assert.assertEquals(expectedNamedMetrics, namedMetrics);
+    Assert.assertEquals(expectedUnnamedMetrics, unnamedMetrics);
   }
 
   @Test

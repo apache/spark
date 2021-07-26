@@ -719,15 +719,20 @@ class DatasetSuite extends QueryTest
         avg($"id").cast("int").as("avg_val")
       )
 
-    def checkMetrics(namedMetric: Row, unnamedMetric: Row): Unit = {
-      assert(namedMetric === Row(0L, 99L, 4950L, 50L))
-      assert(unnamedMetric === Row(49))
+    def checkMetrics(namedMetric: Observation, unnamedMetric: Observation): Unit = {
+      assert(namedMetric.getAsRow === Row(0L, 99L, 4950L, 50L))
+      assert(namedMetric.getAsMap === Map(
+        "min_val" -> 0L, "max_val" -> 99L, "sum_val" -> 4950L, "num_even" -> 50L)
+      )
+
+      assert(unnamedMetric.getAsRow === Row(49))
+      assert(unnamedMetric.getAsMap === Map("avg_val" -> 49))
     }
 
     observed_df.collect()
     // we can get the result multiple times
-    checkMetrics(namedObservation.get, unnamedObservation.get)
-    checkMetrics(namedObservation.get, unnamedObservation.get)
+    checkMetrics(namedObservation, unnamedObservation)
+    checkMetrics(namedObservation, unnamedObservation)
 
     // an observation can be used only once
     val err = intercept[IllegalArgumentException] {

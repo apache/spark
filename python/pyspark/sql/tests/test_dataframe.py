@@ -418,8 +418,11 @@ class DataFrameTests(ReusedSQLTestCase):
         ], [row.asDict() for row in actual])
 
         # test that we retrieve the metrics
-        self.assertEqual(named_observation.get, Row(cnt=3, sum=6, mean=2.0))
-        self.assertEqual(unnamed_observation.get, Row(rows=3))
+        self.assertEqual(named_observation.getAsRow, Row(cnt=3, sum=6, mean=2.0))
+        self.assertEqual(named_observation.getAsDict, dict(cnt=3, sum=6, mean=2.0))
+
+        self.assertEqual(unnamed_observation.getAsRow, Row(rows=3))
+        self.assertEqual(unnamed_observation.getAsDict, dict(rows=3))
 
         # observation requires name (if given) to be non empty string
         with self.assertRaisesRegex(TypeError, 'name should be a string'):

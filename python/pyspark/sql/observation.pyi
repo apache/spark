@@ -16,7 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from py4j.java_gateway import JavaObject  # type: ignore[import]
 
@@ -26,4 +26,5 @@ from pyspark.sql import Row
 class Observation:
     def __init__(self, name: Optional[str] = ...): ...
     @property
-    def get(self) -> Row: ...
+    def getAsRow(self) -> Row: ...
+    def getAsDict(self) -> Dict[str, Any]: ...
