@@ -855,31 +855,19 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
     }
   }
 
-  def checkMapTypeKeyError(schema: DataType, jsonData: String): Unit = {
-    assert( JsonToStructs(schema, Map.empty, Literal(jsonData)).checkInputDataTypes() match {
-      case TypeCheckFailure(_) => true
-      case _ => false
-    })
-  }
-
   test("SPARK-35320: from_json should fail with a key type different of StringType") {
-    checkMapTypeKeyError(MapType(IntegerType, StringType), """{"1": "test"}""")
-  }
-
-  test("SPARK-35320: from_json should fail with a key type different of StringType " +
-    "anidated in a StructType") {
-    checkMapTypeKeyError(StructType(Seq(StructField("test", MapType(IntegerType, StringType)))),
-      """"test": {"1": "test"}""")
-  }
-
-  test("SPARK-35320: from_json should fail with a key type different of StringType " +
-    "anidated in a ArrayType") {
-    checkMapTypeKeyError(ArrayType(MapType(IntegerType, StringType)), """[{"1": "test"}]""")
-  }
-
-  test("SPARK-35320: from_json should fail with a key type different of StringType " +
-    "anidated in a MapType") {
-    checkMapTypeKeyError(MapType(StringType, MapType(IntegerType, StringType)),
-    """{"key": {"1" : "test"}}""")
+    Seq(
+      (MapType(IntegerType, StringType), """{"1": "test"}"""),
+      (StructType(Seq(StructField("test", MapType(IntegerType, StringType)))),
+        """"test": {"1": "test"}"""),
+      (ArrayType(MapType(IntegerType, StringType)), """[{"1": "test"}]"""),
+      (MapType(StringType, MapType(IntegerType, StringType)), """{"key": {"1" : "test"}}""")
+    ).foreach{
+      case(schema, jsonData) =>
+        assert(JsonToStructs(schema, Map.empty, Literal(jsonData)).checkInputDataTypes() match {
+          case TypeCheckFailure(_) => true
+          case _ => false
+        })
+      }
   }
 }
