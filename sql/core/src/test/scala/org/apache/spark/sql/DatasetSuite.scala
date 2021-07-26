@@ -705,8 +705,8 @@ class DatasetSuite extends QueryTest
     val namedObservation = Observation("named")
     val unnamedObservation = Observation()
 
-    val df = spark
-      .range(100)
+    val df = spark.range(100)
+    val observed_df = df
       .observe(
         namedObservation,
         min($"id").as("min_val"),
@@ -724,14 +724,14 @@ class DatasetSuite extends QueryTest
       assert(unnamedMetric === Row(49))
     }
 
-    df.collect()
+    observed_df.collect()
     // we can get the result multiple times
     checkMetrics(namedObservation.get, unnamedObservation.get)
     checkMetrics(namedObservation.get, unnamedObservation.get)
 
     // an observation can be used only once
     val err = intercept[IllegalArgumentException] {
-      spark.range(100).observe(namedObservation, sum($"id").as("sum_val"))
+      df.observe(namedObservation, sum($"id").as("sum_val"))
     }
     assert(err.getMessage.contains("An Observation can be used with a Dataset only once"))
 
@@ -742,6 +742,12 @@ class DatasetSuite extends QueryTest
       streamDf.observe(streamObservation, avg($"value").cast("int").as("avg_val"))
     }
     assert(streamErr.getMessage.contains("Observation does not support streaming Datasets"))
+
+    // an observation cannot have an empty name
+    val err2 = intercept[IllegalArgumentException] {
+      Observation("")
+    }
+    assert(err2.getMessage.contains("Name must not be empty"))
   }
 
   test("sample with replacement") {

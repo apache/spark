@@ -45,6 +45,8 @@ import org.apache.spark.sql.util.QueryExecutionListener
  */
 class Observation(name: String) {
 
+  if (name.isEmpty) throw new IllegalArgumentException("Name must not be empty")
+
   /**
    * Create an Observation instance without providing a name. This generates a random name.
    */
