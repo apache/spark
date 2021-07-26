@@ -332,9 +332,9 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     when(shuffleClient.pushBlocks(any(), any(), any(), any(), any()))
       .thenAnswer((invocation: InvocationOnMock) => {
         val pushedBlocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
-        val blockFetchListener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
+        val blockPushListener = invocation.getArguments()(4).asInstanceOf[BlockPushingListener]
         pushedBlocks.foreach(blockId => {
-          blockFetchListener.onBlockFetchFailure(
+          blockPushListener.onBlockPushFailure(
             blockId, new IOException("Failed to send RPC",
               new FileNotFoundException("file not found")))
         })
