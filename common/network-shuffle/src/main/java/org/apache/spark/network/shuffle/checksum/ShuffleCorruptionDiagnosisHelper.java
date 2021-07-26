@@ -92,9 +92,9 @@ public class ShuffleCorruptionDiagnosisHelper {
    * Diagnose the possible cause of the shuffle data corruption by verifying the shuffle checksums.
    *
    * There're 3 different kinds of checksums for the same shuffle partition:
-   *   - checksum (c1) that calculated by the shuffle data reader
-   *   - checksum (c2) that calculated by the shuffle data writer and stored in the checksum file
-   *   - checksum (c3) that recalculated during diagnosis
+   *   - checksum (c1) that is calculated by the shuffle data reader
+   *   - checksum (c2) that is calculated by the shuffle data writer and stored in the checksum file
+   *   - checksum (c3) that is recalculated during diagnosis
    *
    * And the diagnosis mechanism works like this:
    * If c2 != c3, we suspect the corruption is caused by the DISK_ISSUE. Otherwise, if c1 != c3,
