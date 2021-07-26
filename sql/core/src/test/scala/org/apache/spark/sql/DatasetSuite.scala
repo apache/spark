@@ -701,6 +701,49 @@ class DatasetSuite extends QueryTest
       1 -> "a", 2 -> "bc", 3 -> "d")
   }
 
+  test("SPARK-34806: observation on datasets") {
+    val namedObservation = Observation("named")
+    val unnamedObservation = Observation()
+
+    val df = spark
+      .range(100)
+      .observe(
+        namedObservation,
+        min($"id").as("min_val"),
+        max($"id").as("max_val"),
+        sum($"id").as("sum_val"),
+        count(when($"id" % 2 === 0, 1)).as("num_even")
+      )
+      .observe(
+        unnamedObservation,
+        avg($"id").cast("int").as("avg_val")
+      )
+
+    def checkMetrics(namedMetric: Row, unnamedMetric: Row): Unit = {
+      assert(namedMetric === Row(0L, 99L, 4950L, 50L))
+      assert(unnamedMetric === Row(49))
+    }
+
+    df.collect()
+    // we can get the result multiple times
+    checkMetrics(namedObservation.get, unnamedObservation.get)
+    checkMetrics(namedObservation.get, unnamedObservation.get)
+
+    // an observation can be used only once
+    val err = intercept[IllegalArgumentException] {
+      spark.range(100).observe(namedObservation, sum($"id").as("sum_val"))
+    }
+    assert(err.getMessage.contains("An Observation can be used with a Dataset only once"))
+
+    // streaming datasets are not supported
+    val streamDf = new MemoryStream[Int](0, sqlContext).toDF()
+    val streamObservation = Observation("stream")
+    val streamErr = intercept[IllegalArgumentException] {
+      streamDf.observe(streamObservation, avg($"value").cast("int").as("avg_val"))
+    }
+    assert(streamErr.getMessage.contains("Observation does not support streaming Datasets"))
+  }
+
   test("sample with replacement") {
     val n = 100
     val data = sparkContext.parallelize(1 to n, 2).toDS()
