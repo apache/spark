@@ -767,6 +767,9 @@ object Hive {
   lazy val settings = Seq(
     // Specially disable assertions since some Hive tests fail them
     (Test / javaOptions) := (Test / javaOptions).value.filterNot(_ == "-ea"),
+    // Hive tests need higher metaspace size
+    (Test / javaOptions) := (Test / javaOptions).value.filterNot(_.contains("MaxMetaspaceSize")),
+    (Test / javaOptions) += "-XX:MaxMetaspaceSize=2g",
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
     // only for this subproject.
     scalacOptions := (scalacOptions map { currentOpts: Seq[String] =>
@@ -1120,9 +1123,15 @@ object TestSettings {
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
     (Test / javaOptions) += "-ea",
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
-    (Test / javaOptions) ++= "-Xmx4g -Xss4m -XX:MaxMetaspaceSize=2g -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
-      .split(" ").toSeq,
-    javaOptions ++= "-Xmx4g -XX:MaxMetaspaceSize=2g".split(" ").toSeq,
+    (Test / javaOptions) ++= {
+      val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
+      s"-Xmx3200m -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads -XX:ReservedCodeCacheSize=128m"
+        .split(" ").toSeq
+    },
+    javaOptions ++= {
+      val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
+      s"-Xmx3200m -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
+    },
     (Test / javaOptions) ++= {
       val jdwpEnabled = sys.props.getOrElse("test.jdwp.enabled", "false").toBoolean
 

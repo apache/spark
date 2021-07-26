@@ -123,11 +123,6 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
 class MissingPandasLikeCategoricalIndex(MissingPandasLikeIndex):
 
     # Functions
-    rename_categories = _unsupported_function("rename_categories", cls="CategoricalIndex")
-    reorder_categories = _unsupported_function("reorder_categories", cls="CategoricalIndex")
-    remove_unused_categories = _unsupported_function(
-        "remove_unused_categories", cls="CategoricalIndex"
-    )
     set_categories = _unsupported_function("set_categories", cls="CategoricalIndex")
     map = _unsupported_function("map", cls="CategoricalIndex")
 

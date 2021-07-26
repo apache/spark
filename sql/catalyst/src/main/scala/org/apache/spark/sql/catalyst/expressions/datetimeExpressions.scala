@@ -217,7 +217,7 @@ case class Now() extends CurrentTimestampLike {
        2020-04-25 15:49:11.914
   """,
   group = "datetime_funcs",
-  since = "3.2.0")
+  since = "3.3.0")
 case class LocalTimestamp(timeZoneId: Option[String] = None) extends LeafExpression
   with TimeZoneAwareExpression with CodegenFallback {
 
@@ -1096,7 +1096,7 @@ case class GetTimestamp(
        2016-12-31 00:00:00
   """,
   group = "datetime_funcs",
-  since = "3.2.0")
+  since = "3.3.0")
 // scalastyle:on line.size.limit
 case class ParseToTimestampNTZ(
     left: Expression,
@@ -1143,7 +1143,7 @@ case class ParseToTimestampNTZ(
        2016-12-31 00:00:00
   """,
   group = "datetime_funcs",
-  since = "3.2.0")
+  since = "3.3.0")
 // scalastyle:on line.size.limit
 case class ParseToTimestampLTZ(
     left: Expression,
@@ -2381,7 +2381,7 @@ case class MakeDate(
        NULL
   """,
   group = "datetime_funcs",
-  since = "3.2.0")
+  since = "3.3.0")
 // scalastyle:on line.size.limit
 case class MakeTimestampNTZ(
     year: Expression,
@@ -2440,7 +2440,7 @@ case class MakeTimestampNTZ(
        NULL
   """,
   group = "datetime_funcs",
-  since = "3.2.0")
+  since = "3.3.0")
 // scalastyle:on line.size.limit
 case class MakeTimestampLTZ(
     year: Expression,

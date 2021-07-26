@@ -2981,7 +2981,7 @@ object functions {
    * All calls of localtimestamp within the same query return the same value.
    *
    * @group datetime_funcs
-   * @since 3.2.0
+   * @since 3.3.0
    */
   def localtimestamp(): Column = withExpr { LocalTimestamp() }
 

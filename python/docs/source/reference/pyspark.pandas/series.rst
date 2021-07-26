@@ -399,10 +399,13 @@ the ``Series.cat`` accessor.
    Series.cat.categories
    Series.cat.ordered
    Series.cat.codes
+   Series.cat.reorder_categories
    Series.cat.add_categories
    Series.cat.remove_categories
+   Series.cat.remove_unused_categories
    Series.cat.as_ordered
    Series.cat.as_unordered
+   Series.cat.rename_categories
 
 .. _api.series.plot:
 

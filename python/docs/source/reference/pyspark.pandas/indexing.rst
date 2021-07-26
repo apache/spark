@@ -174,10 +174,13 @@ Categorical components
    CategoricalIndex.codes
    CategoricalIndex.categories
    CategoricalIndex.ordered
+   CategoricalIndex.reorder_categories
    CategoricalIndex.add_categories
    CategoricalIndex.remove_categories
+   CategoricalIndex.remove_unused_categories
    CategoricalIndex.as_ordered
    CategoricalIndex.as_unordered
+   CategoricalIndex.rename_categories
 
 .. _api.multiindex:
 
