@@ -15,19 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read;
+package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Evolving;
 
 /**
- * An interface for building the {@link Scan}. Implementations can mixin SupportsPushDownXYZ
- * interfaces to do operator pushdown, and keep the operator pushdown result in the returned
- * {@link Scan}. When pushing down operators, Spark pushes down filters first, then pushes down
- * aggregates or applies column pruning.
+ * An aggregate function that returns the number of the specific row in a group.
  *
- * @since 3.0.0
+ * @since 3.2.0
  */
 @Evolving
-public interface ScanBuilder {
-  Scan build();
+public final class Count implements AggregateFunc {
+    private FieldReference column;
+    private boolean isDistinct;
+
+    public Count(FieldReference column, boolean isDistinct) {
+        this.column = column;
+        this.isDistinct = isDistinct;
+    }
+
+    public FieldReference column() {
+        return column;
+    }
+    public boolean isDinstinct() {
+        return isDistinct;
+    }
+
+    @Override
+    public String toString() { return "Count(" + column.describe() + "," + isDistinct + ")"; }
+
+    @Override
+    public String describe() { return this.toString(); }
 }

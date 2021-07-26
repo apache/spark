@@ -15,19 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.read;
+package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Evolving;
 
+import java.io.Serializable;
+
 /**
- * An interface for building the {@link Scan}. Implementations can mixin SupportsPushDownXYZ
- * interfaces to do operator pushdown, and keep the operator pushdown result in the returned
- * {@link Scan}. When pushing down operators, Spark pushes down filters first, then pushes down
- * aggregates or applies column pruning.
+ * Base class of the Aggregate Functions.
  *
- * @since 3.0.0
+ * @since 3.2.0
  */
 @Evolving
-public interface ScanBuilder {
-  Scan build();
+public interface AggregateFunc extends Expression, Serializable {
 }
