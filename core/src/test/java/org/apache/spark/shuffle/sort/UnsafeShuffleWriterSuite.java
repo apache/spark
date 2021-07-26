@@ -307,7 +307,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
         checksumBlockId.name(), conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM())));
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
-    when(diskBlockManager.getFile(checksumBlockId)).thenReturn(checksumFile);
+    when(diskBlockManager.getFile(checksumBlockId.name())).thenReturn(checksumFile);
     when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
       .thenReturn(dataFile);
     when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0)))
@@ -336,7 +336,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
         checksumBlockId.name(), conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM())));
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
-    when(diskBlockManager.getFile(checksumBlockId)).thenReturn(checksumFile);
+    when(diskBlockManager.getFile(checksumBlockId.name())).thenReturn(checksumFile);
     when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
       .thenReturn(dataFile);
     when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0)))
