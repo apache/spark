@@ -201,13 +201,13 @@ class AdaptiveQueryExecSuite
       // The pre-shuffle partition size is [0, 0, 0, 72, 0]
       // We exclude the 0-size partitions, so only one partition, advisoryParallelism = 1
       // the final parallelism is
-      // math.max(1, advisoryParallelism / numMappers): math.max(1, 1/2) = 1
-      // and the partitions length is 1 * numMappers = 2
-      assert(localShuffleRDD0.getPartitions.length == 2)
+      // advisoryParallelism = 1 since advisoryParallelism < numMappers
+      // and the partitions length is 1
+      assert(localShuffleRDD0.getPartitions.length == 1)
       // The pre-shuffle partition size is [0, 72, 0, 72, 126]
       // We exclude the 0-size partitions, so only 3 partition, advisoryParallelism = 3
       // the final parallelism is
-      // math.max(1, advisoryParallelism / numMappers): math.max(1, 3/2) = 1
+      // advisoryParallelism / numMappers: 3/2 = 1 since advisoryParallelism >= numMappers
       // and the partitions length is 1 * numMappers = 2
       assert(localShuffleRDD1.getPartitions.length == 2)
     }

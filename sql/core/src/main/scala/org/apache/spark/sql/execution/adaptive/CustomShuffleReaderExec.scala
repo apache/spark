@@ -105,7 +105,8 @@ case class CustomShuffleReaderExec private(
     partitionSpecs.exists(_.isInstanceOf[PartialReducerPartitionSpec])
 
   def isLocalReader: Boolean =
-    partitionSpecs.exists(_.isInstanceOf[PartialMapperPartitionSpec])
+    partitionSpecs.exists(_.isInstanceOf[PartialMapperPartitionSpec]) ||
+      partitionSpecs.exists(_.isInstanceOf[CoalescedMapperPartitionSpec])
 
   private def shuffleStage = child match {
     case stage: ShuffleQueryStageExec => Some(stage)
