@@ -543,12 +543,13 @@ private[spark] class IndexShuffleBlockResolver(
       dirs: Option[Array[String]] = None): File = {
     val blockId = ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
     val fileName = ShuffleChecksumHelper.getChecksumFileName(blockId, conf)
-    // We should use the blockId.name as the file name first to create the file so that
+    val fileNameWithoutChecksum = fileName.substring(0, fileName.lastIndexOf('.'))
+    // We should use the file name without checksum first to create the file so that
     // readers (e.g., shuffle external service) without knowing the checksum algorithm
-    // could also find the file.
+    // can also find the file.
     val file = dirs
-      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, blockId.name))
-      .getOrElse(blockManager.diskBlockManager.getFile(blockId))
+      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, fileNameWithoutChecksum))
+      .getOrElse(blockManager.diskBlockManager.getFile(fileNameWithoutChecksum))
 
     // Return the file with the checksum algorithm as extension
     new File(file.getParentFile, fileName)
