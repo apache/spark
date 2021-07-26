@@ -1132,5 +1132,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         |GROUP BY c.x
         |ORDER BY c.x
         |""".stripMargin))
+
+    assertAnalysisError(parsePlan(
+     """
+        |SELECT c.x
+        |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
+        |GROUP BY c.x
+        |ORDER BY c.x + c.y
+        |""".stripMargin), "cannot resolve 'c.y' given input columns: [x]" :: Nil)
   }
 }
