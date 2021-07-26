@@ -32,6 +32,7 @@ import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
+import scala.collection.JavaConverters;
 
 import com.google.common.base.Objects;
 import org.apache.spark.sql.streaming.TestGroupState;
@@ -47,8 +48,7 @@ import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.util.LongAccumulator;
 
-import static org.apache.spark.sql.functions.col;
-import static org.apache.spark.sql.functions.expr;
+import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDatasetSuite implements Serializable {
@@ -389,6 +389,50 @@ public class JavaDatasetSuite implements Serializable {
       Encoders.STRING());
 
     Assert.assertEquals(asSet("1a#2", "3foobar#6", "5#10"), toSet(cogrouped.collectAsList()));
+  }
+
+  @Test
+  public void testObservation() {
+    // SPARK-34806: tests the Java API of Observation and Dataset.observe(Observation, Column, Column*)
+    Observation namedObservation = new Observation("named");
+    Observation unnamedObservation = new Observation();
+
+    Dataset<Long> df = spark
+            .range(100)
+            .observe(
+                    namedObservation,
+                    min(col("id")).as("min_val"),
+                    max(col("id")).as("max_val"),
+                    sum(col("id")).as("sum_val"),
+                    count(when(pmod(col("id"), lit(2)).$eq$eq$eq(0), 1)).as("num_even")
+            )
+            .observe(
+                    unnamedObservation,
+                    avg(col("id")).cast("int").as("avg_val")
+            );
+
+    df.collect();
+    List<?> namedMetrics = null;
+    List<?> unnamedMetrics = null;
+
+    try {
+      namedMetrics = JavaConverters.seqAsJavaList(namedObservation.get().toSeq());
+      unnamedMetrics = JavaConverters.seqAsJavaList(unnamedObservation.get().toSeq());
+    } catch (InterruptedException e) {
+      Assert.fail();
+    }
+    Assert.assertEquals(Arrays.asList(0L, 99L, 4950L, 50L), namedMetrics);
+    Assert.assertEquals(Arrays.asList(49), unnamedMetrics);
+
+    // we can get the result multiple times
+    try {
+      namedMetrics = JavaConverters.seqAsJavaList(namedObservation.get().toSeq());
+      unnamedMetrics = JavaConverters.seqAsJavaList(unnamedObservation.get().toSeq());
+    } catch (InterruptedException e) {
+      Assert.fail();
+    }
+    Assert.assertEquals(Arrays.asList(0L, 99L, 4950L, 50L), namedMetrics);
+    Assert.assertEquals(Arrays.asList(49), unnamedMetrics);
   }
 
   @Test
