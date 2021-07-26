@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.{CaseWhen, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.CollectSet
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LocalRelation, LogicalPlan}
@@ -29,9 +29,16 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
   val nullString = Literal(null, StringType)
   val testRelation = LocalRelation('a.string, 'b.string, 'c.string, 'd.string, 'e.int)
 
-  private def checkRewrite(rewrite: LogicalPlan): Unit = rewrite match {
-    case Aggregate(_, _, Aggregate(_, _, _: Expand)) =>
-    case _ => fail(s"Plan is not rewritten:\n$rewrite")
+  private def checkRewrite(
+    rewrite: LogicalPlan,
+    rewriteCountDistinctCaseWhen: Boolean = false): Unit = rewriteCountDistinctCaseWhen match {
+    case true => rewrite match {
+      case Aggregate(_, _, Aggregate(_, _, _)) =>
+    }
+    case false => rewrite match {
+      case Aggregate(_, _, Aggregate(_, _, _: Expand)) =>
+      case _ => fail(s"Plan is not rewritten:\n$rewrite")
+    }
   }
 
   test("single distinct group") {
@@ -74,5 +81,33 @@ class RewriteDistinctAggregatesSuite extends PlanTest {
         CollectSet('b).toAggregateExpression())
       .analyze
     checkRewrite(RewriteDistinctAggregates(input))
+  }
+
+  test("rewrite count distinct case when") {
+    val originRewriteCaseWhenCountDistinctAggregates = testRelation.conf
+      .getConfString("spark.sql.optimizer.rewriteCaseWhenCountDistinctAggregates")
+    val originRewriteCaseWhenCountDistinctAggregatesUseBitVector = testRelation.conf
+      .getConfString("spark.sql.optimizer.rewriteCaseWhenCountDistinctAggregates.useBitvector")
+
+    testRelation.conf
+      .setConfString("spark.sql.optimizer.rewriteCaseWhenCountDistinctAggregates", "true")
+    testRelation.conf
+      .setConfString("spark.sql.optimizer.rewriteCaseWhenCountDistinctAggregates.useBitvector", "true")
+    val input = testRelation
+      .groupBy('a)(
+        countDistinct(
+          CaseWhen(Seq((EqualTo('e, Literal(1)), 'c.as("c1"))),
+            None)),
+        countDistinct(
+          CaseWhen(Seq((EqualTo('e, Literal(2)), 'c.as("c2"))),
+            None)))
+      .analyze
+    checkRewrite(RewriteDistinctAggregates(input), true)
+    testRelation.conf
+      .setConfString("spark.sql.optimizer.rewriteCaseWhenCountDistinctAggregates",
+        originRewriteCaseWhenCountDistinctAggregates)
+    testRelation.conf
+      .setConfString("spark.sql.optimizer.rewriteCaseWhenCountDistinctAggregates.useBitvector",
+        originRewriteCaseWhenCountDistinctAggregatesUseBitVector)
   }
 }

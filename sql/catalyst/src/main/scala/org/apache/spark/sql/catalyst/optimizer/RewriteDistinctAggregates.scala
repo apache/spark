@@ -22,7 +22,8 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.AGGREGATE
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, LongType}
 
 /**
  * This rule rewrites an aggregate query with distinct aggregations into an expanded double
@@ -162,8 +163,50 @@ import org.apache.spark.sql.types.IntegerType
  *       LocalTableScan [...]
  * }}}
  *
+ * Fourth example: aggregate function with count distinct + case when (in sql):
+ * {{{
+ *    SELECT
+ *      cat1,
+ *      COUNT(DISTINCT CASE WHEN cond1 THEN cat2 ELSE null end) as cat2_cnt1,
+ *      COUNT(DISTINCT CASE WHEN cond2 THEN cat2 ELSE null end) as cat2_cnt2,
+ *      FROM
+ *        data
+ *      GROUP BY
+ *        key
+ * }}}
+ *
+ * This translates to the following (pseudo) logical plan:
+ * {{{
+ * Aggregate(
+ *    key = ['key]
+ *    functions = ['cat1
+ *                 COUNT(DISTINCT 'cat2 CASE WHEN cond1 THEN cat2 ELSE null end),
+ *                 COUNT(DISTINCT 'cat2 CASE WHEN cond1 THEN cat2 ELSE null end)
+ *    output = ['key, 'cat1, 'cat2_cnt1, 'cat2_cnt2, 'total])
+ *   LocalTableScan [...]
+ * }}}
+ *
+ * This rule rewrites this logical plan to the following (pseudo) logical plan:
+ * {{{
+ * Aggregate(
+ *    key = ['key]
+ *    functions = [count(if (01 & 'bit_vector != 0) 0 else null),
+ *                 count(if (10 & 'bit_vector != 0) 0 else null)]
+ *    output = ['key, 'cat2_cnt1, 'cat2_cnt2])
+ *   Aggregate(
+ *      key = ['key, 'cat1]
+ *      functions = [bit_or(if (cond1) 01 else 00, if (cond2) 10 else 00)]
+ *      output = ['key, 'cat1, 'bit_vector])
+ *       LocalTableScan [...]
+ * }}}
+ *
  * The rule does the following things here:
- * 1. Expand the data. There are three aggregation groups in this query:
+ * 1. If this query satisfies the following conditions:
+ *    i. multiple case when expr in this query;
+ *    ii. all case when expr input is a single attribute;
+ *    iii. all AggregateExpressions are case when expr.
+ *    go to step 2. Otherwise, expand the data.
+ *    There are three aggregation groups in this query:
  *    i. the non-distinct group;
  *    ii. the distinct 'cat1 group;
  *    iii. the distinct 'cat2 group.
@@ -197,7 +240,7 @@ import org.apache.spark.sql.types.IntegerType
  */
 object RewriteDistinctAggregates extends Rule[LogicalPlan] {
 
-  private def mayNeedtoRewrite(a: Aggregate): Boolean = {
+  private def mayNeedtoRewriteDistinctAgg(a: Aggregate): Boolean = {
     val aggExpressions = collectAggregateExprs(a)
     val distinctAggs = aggExpressions.filter(_.isDistinct)
     // We need at least two distinct aggregates or the single distinct aggregate group exists filter
@@ -207,12 +250,110 @@ object RewriteDistinctAggregates extends Rule[LogicalPlan] {
     distinctAggs.size > 1 || distinctAggs.exists(_.filter.isDefined)
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
-    _.containsPattern(AGGREGATE)) {
-    case a: Aggregate if mayNeedtoRewrite(a) => rewrite(a)
+  private def mayNeedtoRewriteCaseWhenCountDistinct(a: Aggregate): Boolean = {
+    val aggExpressions = collectAggregateExprs(a)
+    val caseWhenInputAttrs = aggExpressions.collect {
+      case AggregateExpression(
+      Count(Seq(CaseWhen(Seq((_, a: AttributeReference)), None | Some(Literal(null, _))))),
+      _, true, None, _) => a
+    }
+
+    caseWhenInputAttrs.size > 1 && caseWhenInputAttrs.size == aggExpressions.size &&
+      caseWhenInputAttrs.distinct.size == 1
   }
 
-  def rewrite(a: Aggregate): Aggregate = {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
+    _.containsPattern(AGGREGATE)) {
+    case a: Aggregate if mayNeedtoRewriteCaseWhenCountDistinct(a)
+      && SQLConf.get.rewriteCaseWhenCountDistinctAggregates => rewriteCaseWhenCountDistinct(a)
+    case a: Aggregate if mayNeedtoRewriteDistinctAgg(a) => rewriteDistinctAgg(a)
+  }
+
+  def rewriteCaseWhenCountDistinct(a: Aggregate): Aggregate = {
+
+    val aggExpressions = collectAggregateExprs(a)
+    val caseWhenExprs = aggExpressions.collect {
+      case AggregateExpression(Count(Seq(c@CaseWhen(_, _))), _, true, None, _) => c
+    }
+
+    val inputAttr = caseWhenExprs.head.branches.head._2.asInstanceOf[AttributeReference]
+
+    // Create the attributes for the group by clause.
+    val groupByMap = a.groupingExpressions.collect {
+      case ne: NamedExpression => ne -> ne.toAttribute
+      case e => e -> AttributeReference(e.sql, e.dataType, e.nullable)()
+    }
+    val groupByAttrs = groupByMap.map(_._2)
+
+    var firstAggOperators: Seq[NamedExpression] = null
+    var finalAggOperatorMap: Seq[(Expression, Expression)] = null
+
+    if (caseWhenExprs.size < 64 && SQLConf.get.rewriteCaseWhenCountDistinctAggregatesUseBitvector) {
+      val zero = Literal(0L, LongType)
+      val bitmasks = caseWhenExprs.indices.map(i => Literal(1L << i, LongType))
+      val bitvector = caseWhenExprs.zipWithIndex.map {
+        case (CaseWhen(Seq((cond, _)), _), index) =>
+          CaseWhen(Seq((cond, bitmasks(index))), Some(zero))
+      }.reduce(BitwiseOr)
+
+      def evalWithinGroup(bitvector: Expression, index: Int) =
+        If(Not(EqualTo(BitwiseAnd(bitvector, bitmasks(index)), zero)), zero, nullify(zero))
+
+      val firstAgg = Alias(
+        AggregateExpression(BitOrAgg(bitvector), Complete, isDistinct = false),
+        "bitvector")()
+      firstAggOperators = Seq(firstAgg)
+
+      finalAggOperatorMap = aggExpressions.zipWithIndex.map {
+        case (ae, index) =>
+          val count = Count(evalWithinGroup(firstAgg.toAttribute, index))
+          (ae, ae.copy(aggregateFunction = count, isDistinct = false))
+      }
+    } else {
+      // Functions used to modify aggregate functions and their inputs.
+      val one = Literal(1L, LongType)
+
+      def evalWithinGroup(sum: Expression) = If(GreaterThanOrEqual(sum, one), one, nullify(one))
+
+      val firstAggOperatorMap = aggExpressions.zip(caseWhenExprs).map {
+        case (ae, CaseWhen(Seq((cond, _)), _)) =>
+          val nae = ae.copy(aggregateFunction = Sum(CaseWhen(Seq((cond, one)))), isDistinct = false)
+          (ae, Alias(nae, nae.sql)())
+      }
+      firstAggOperators = firstAggOperatorMap.map(_._2)
+
+      finalAggOperatorMap = firstAggOperatorMap.map {
+        case (ae, alias@Alias(_, _)) =>
+          val count = Count(evalWithinGroup(alias.toAttribute))
+          (ae, ae.copy(aggregateFunction = count, isDistinct = false))
+      }
+    }
+
+    val firstAggregateGroupBy = groupByAttrs ++ Seq(inputAttr)
+    val firstAggregate = Aggregate(
+      firstAggregateGroupBy,
+      firstAggregateGroupBy ++ firstAggOperators,
+      a.child)
+
+    // Construct the second aggregate
+    val transformations: Map[Expression, Expression] = finalAggOperatorMap.toMap
+
+    val patchedAggExpressions = a.aggregateExpressions.map { e =>
+      e.transformDown {
+        case e: Expression =>
+          // The same GROUP BY clauses can have different forms (different names for instance) in
+          // the groupBy and aggregate expressions of an aggregate. This makes a map lookup
+          // tricky. So we do a linear search for a semantically equal group by expression.
+          groupByMap
+            .find(ge => e.semanticEquals(ge._1))
+            .map(_._2)
+            .getOrElse(transformations.getOrElse(e, e))
+      }.asInstanceOf[NamedExpression]
+    }
+    Aggregate(groupByAttrs, patchedAggExpressions, firstAggregate)
+  }
+
+  def rewriteDistinctAgg(a: Aggregate): Aggregate = {
 
     val aggExpressions = collectAggregateExprs(a)
     val distinctAggs = aggExpressions.filter(_.isDistinct)

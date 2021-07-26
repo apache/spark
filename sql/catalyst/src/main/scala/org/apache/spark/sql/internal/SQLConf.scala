@@ -1269,6 +1269,20 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val REWRITE_CASE_WHEN_COUNT_DISTINCT_AGGREGATES =
+    buildConf("spark.sql.optimizer.rewriteCaseWhenCountDistinctAggregates")
+      .doc("When true, rewrite case-when count distinct aggregates")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
+  val REWRITE_CASE_WHEN_COUNT_DISTINCT_AGGREGATES_USE_BITVECTOR =
+    buildConf("spark.sql.optimizer.rewriteCaseWhenCountDistinctAggregates.useBitvector")
+      .doc("When true, rewrite case-when count distinct aggregates using bitvectors")
+      .version("3.2.0")
+      .booleanConf
+      .createWithDefault(false)
+
   // Whether to automatically resolve ambiguity in join conditions for self-joins.
   // See SPARK-6231.
   val DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY =
@@ -3800,6 +3814,12 @@ class SQLConf extends Serializable with Logging {
   def variableSubstituteEnabled: Boolean = getConf(VARIABLE_SUBSTITUTE_ENABLED)
 
   def warehousePath: String = new Path(getConf(StaticSQLConf.WAREHOUSE_PATH)).toString
+
+  def rewriteCaseWhenCountDistinctAggregates: Boolean =
+    getConf(REWRITE_CASE_WHEN_COUNT_DISTINCT_AGGREGATES)
+
+  def rewriteCaseWhenCountDistinctAggregatesUseBitvector: Boolean =
+    getConf(REWRITE_CASE_WHEN_COUNT_DISTINCT_AGGREGATES_USE_BITVECTOR)
 
   def hiveThriftServerSingleSession: Boolean =
     getConf(StaticSQLConf.HIVE_THRIFT_SERVER_SINGLESESSION)
