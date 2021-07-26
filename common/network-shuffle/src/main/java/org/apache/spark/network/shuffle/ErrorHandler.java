@@ -82,29 +82,31 @@ public interface ErrorHandler {
       "IOExceptions exceeded the threshold";
 
     /**
-     * String constant used for generating exception messages indicating the server rejecting a block
-     * push since shuffle blocks of a higher shuffleMergeId for a shuffle is already being pushed.
-     * This typically happens in the case of indeterminate stage retries where if a stage attempt fails
-     * then the entirety of the shuffle output needs to be rolled back. For more details refer
-     * SPARK-23243, SPARK-25341 and SPARK-32923.
-     */
-    public static final String STALE_BLOCK_PUSH_SUFFIX =
-        "stale block push as shuffle blocks of a higher shuffleMergeId for the shuffle is already being pushed";
-
-    /**
-     * String constant used for generating exception messages indicating the server rejecting a shuffle
-     * finalize request since shuffle blocks of a higher shuffleMergeId for a shuffle is already
-     * being pushed. This typically happens in the case of indeterminate stage retries where if a
-     * stage attempt fails then the entirety of the shuffle output needs to be rolled back. For more
+     * String constant used for generating exception messages indicating the server rejecting a
+     * block push since shuffle blocks of a higher shuffleMergeId for a shuffle is already being
+     * pushed. This typically happens in the case of indeterminate stage retries where if a stage
+     * attempt fails then the entirety of the shuffle output needs to be rolled back. For more
      * details refer SPARK-23243, SPARK-25341 and SPARK-32923.
      */
-    public static final String STALE_SHUFFLE_FINALIZE_SUFFIX =
-        "stale shuffle finalize request as shuffle blocks of a higher shuffleMergeId for the shuffle is already"
-            + " being pushed";
+    public static final String STALE_BLOCK_PUSH_SUFFIX =
+      "stale block push as shuffle blocks of a higher shuffleMergeId for the shuffle is already"
+        + " being pushed";
 
     /**
-     * String constant used for generating exception messages indicating the server rejecting a shuffle
-     * finalize request since the shuffle with same shuffleId and shuffleMergeId is already finalized.
+     * String constant used for generating exception messages indicating the server rejecting a
+     * shuffle finalize request since shuffle blocks of a higher shuffleMergeId for a shuffle is
+     * already being pushed. This typically happens in the case of indeterminate stage retries
+     * where if a stage attempt fails then the entirety of the shuffle output needs to be rolled
+     * back. For more details refer SPARK-23243, SPARK-25341 and SPARK-32923.
+     */
+    public static final String STALE_SHUFFLE_FINALIZE_SUFFIX =
+      "stale shuffle finalize request as shuffle blocks of a higher shuffleMergeId for the"
+        + " shuffle is already being pushed";
+
+    /**
+     * String constant used for generating exception messages indicating the server rejecting a
+     * shuffle finalize request since the shuffle with same shuffleId and shuffleMergeId is
+     * already finalized.
      */
     public static final String ALREADY_FINALIZED_SUFFIX = "is already finalized";
 
@@ -112,8 +114,8 @@ public interface ErrorHandler {
     public boolean shouldRetryError(Throwable t) {
       // If it is a connection time-out or a connection closed exception, no need to retry.
       // If it is a FileNotFoundException originating from the client while pushing the shuffle
-      // blocks to the server, even then there is no need to retry. We will still log this exception
-      // once which helps with debugging.
+      // blocks to the server, even then there is no need to retry. We will still log this
+      // exception once which helps with debugging.
       if (t.getCause() != null && (t.getCause() instanceof ConnectException ||
           t.getCause() instanceof FileNotFoundException)) {
         return false;
@@ -123,7 +125,7 @@ public interface ErrorHandler {
       // If the block is too late, stale block push or duplicate finalizeMerge request,
       // there is no need to retry it
       return !(errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX) ||
-          errorStackTrace.contains(STALE_BLOCK_PUSH_SUFFIX) ||
+        errorStackTrace.contains(STALE_BLOCK_PUSH_SUFFIX) ||
           errorStackTrace.contains(STALE_SHUFFLE_FINALIZE_SUFFIX) ||
           errorStackTrace.contains(ALREADY_FINALIZED_SUFFIX));
     }
@@ -141,11 +143,11 @@ public interface ErrorHandler {
 
   class BlockFetchErrorHandler implements ErrorHandler {
     /**
-     * String constant used for generating exception messages indicating the server rejecting a block
-     * fetch since shuffle blocks of a higher shuffleMergeId for a shuffle is already found.
-     * This typically happens in the case of indeterminate stage retries where if a stage attempt fails
-     * then the entirety of the shuffle output needs to be rolled back. For more details refer
-     * SPARK-23243 and SPARK-25341.
+     * String constant used for generating exception messages indicating the server rejecting a
+     * block fetch since shuffle blocks of a higher shuffleMergeId for a shuffle is already found.
+     * This typically happens in the case of indeterminate stage retries where if a stage attempt
+     * fails then the entirety of the shuffle output needs to be rolled back. For more details
+     * refer SPARK-23243 and SPARK-25341.
      */
     public static final String STALE_BLOCK_FETCH_SUFFIX =
         "stale fetch as the shuffleMergeId is older than the latest shuffleMergeId";

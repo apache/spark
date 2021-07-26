@@ -225,7 +225,8 @@ public class TransportClient implements Closeable {
     handler.addRpcRequest(requestId, callback);
     RpcChannelListener listener = new RpcChannelListener(requestId, callback);
     channel.writeAndFlush(
-      new MergedBlockMetaRequest(requestId, appId, shuffleId, shuffleMergeId, reduceId)).addListener(listener);
+      new MergedBlockMetaRequest(requestId, appId, shuffleId, shuffleMergeId,
+        reduceId)).addListener(listener);
   }
 
   /**

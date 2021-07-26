@@ -194,7 +194,8 @@ public class OneForOneBlockFetcher {
     int[][] chunkIdsArray = getSecondaryIds(reduceIdToBlocksInfo);
     int[] reduceIds = Ints.toArray(reduceIdToBlocksInfo.keySet());
 
-    return new FetchShuffleBlockChunks(appId, execId, shuffleId, shuffleMergeId, reduceIds, chunkIdsArray);
+    return new FetchShuffleBlockChunks(appId, execId, shuffleId, shuffleMergeId, reduceIds,
+      chunkIdsArray);
   }
 
   private int[][] getSecondaryIds(Map<? extends Number, BlocksInfo> primaryIdsToBlockInfo) {

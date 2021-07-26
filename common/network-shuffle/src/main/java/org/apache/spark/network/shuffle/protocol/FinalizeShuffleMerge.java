@@ -72,7 +72,7 @@ public class FinalizeShuffleMerge extends BlockTransferMessage {
     if (other != null && other instanceof FinalizeShuffleMerge) {
       FinalizeShuffleMerge o = (FinalizeShuffleMerge) other;
       return Objects.equal(appId, o.appId)
-        && appAttemptId == appAttemptId
+        && appAttemptId == o.appAttemptId
         && shuffleId == o.shuffleId
         && shuffleMergeId == o.shuffleMergeId;
     }

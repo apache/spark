@@ -1110,13 +1110,15 @@ public class RemoteBlockPushResolverSuite {
     try {
       pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
     } catch(RuntimeException re) {
-      assertEquals("Shuffle merge finalize request for shuffle 0 with shuffleMergeId 0 is stale shuffle"
-        + " finalize request as shuffle blocks of a higher shuffleMergeId for the shuffle is already being"
-          + " pushed", re.getMessage());
+      assertEquals("Shuffle merge finalize request for shuffle 0 with shuffleMergeId 0 is stale"
+        + " shuffle finalize request as shuffle blocks of a higher shuffleMergeId for the shuffle"
+          + " is already being pushed", re.getMessage());
     }
-    RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo = pushResolver.validateAndGetAppShuffleInfo(TEST_APP);
-    assertSame("Older shuffleMergeId of a shuffleId should point to INVALID_SHUFFLE_PARTITIONS map",
-      appShuffleInfo.getPartitions().get(0).get(0), RemoteBlockPushResolver.STALE_SHUFFLE_PARTITIONS);
+    RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo =
+      pushResolver.validateAndGetAppShuffleInfo(TEST_APP);
+    assertSame("Older shuffleMergeId of a shuffleId should point to INVALID_SHUFFLE_PARTITIONS"
+      + " map", appShuffleInfo.getPartitions().get(0).get(0),
+        RemoteBlockPushResolver.STALE_SHUFFLE_PARTITIONS);
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 1));
 
     // Duplicate finalizeShuffleMerge request should throw RuntimeException
@@ -1190,13 +1192,14 @@ public class RemoteBlockPushResolverSuite {
     String testApp = "testCleanupOlderShuffleMergeId";
     registerExecutor(testApp, prepareLocalDirs(localDirs, MERGE_DIRECTORY), MERGE_DIRECTORY_META);
     StreamCallbackWithID stream1 =
-        pushResolver.receiveBlockDataAsStream(
-            new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
+      pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 0, 0, 0, 0));
     stream1.onData(stream1.getID(), ByteBuffer.wrap(new byte[2]));
     StreamCallbackWithID stream2 =
-        pushResolver.receiveBlockDataAsStream(
-            new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 1, 0, 0, 0));
-    RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo = pushResolver.validateAndGetAppShuffleInfo(testApp);
+      pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 1, 0, 0, 0));
+    RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo =
+      pushResolver.validateAndGetAppShuffleInfo(testApp);
     closed.acquire();
     assertTrue("Older shuffleMerge partitions should be cleaned up",
       appShuffleInfo.getPartitions().get(0).get(0) ==
@@ -1217,8 +1220,8 @@ public class RemoteBlockPushResolverSuite {
 
     // Check whether the metadata is cleaned up or not
     StreamCallbackWithID stream3 =
-        pushResolver.receiveBlockDataAsStream(
-            new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 2, 0, 0, 0));
+      pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 2, 0, 0, 0));
     closed.acquire();
     int[] shuffleMergeIds = appShuffleInfo.getPartitions().get(0).keySet().stream()
         .mapToInt(Integer::intValue).toArray();

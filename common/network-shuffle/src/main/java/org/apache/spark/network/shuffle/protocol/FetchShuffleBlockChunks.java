@@ -74,7 +74,9 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
     FetchShuffleBlockChunks that = (FetchShuffleBlockChunks) o;
     if (!super.equals(that)) return false;
     if (shuffleMergeId != that.shuffleMergeId ||
-      !Arrays.equals(reduceIds, that.reduceIds)) return false;
+      !Arrays.equals(reduceIds, that.reduceIds)) {
+      return false;
+    }
     return Arrays.deepEquals(chunkIds, that.chunkIds);
   }
 
