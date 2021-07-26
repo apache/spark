@@ -51,6 +51,8 @@ public interface SupportsPushDownAggregates extends ScanBuilder {
    * Pushes down Aggregation to datasource. The order of the datasource scan output columns should
    * be: grouping columns, aggregate columns (in the same order as the aggregate functions in
    * the given Aggregation).
+   *
+   * Returns true if the aggregation can be pushed down to datasource.
    */
   boolean pushAggregation(Aggregation aggregation);
 }
