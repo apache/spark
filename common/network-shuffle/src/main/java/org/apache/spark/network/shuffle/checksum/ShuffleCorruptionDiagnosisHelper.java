@@ -23,6 +23,7 @@ import java.util.zip.CRC32;
 import java.util.zip.CheckedInputStream;
 import java.util.zip.Checksum;
 
+import com.google.common.io.ByteStreams;
 import org.apache.spark.annotation.Private;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.corruption.Cause;
@@ -71,7 +72,7 @@ public class ShuffleCorruptionDiagnosisHelper {
 
   private static long readChecksumByReduceId(File checksumFile, int reduceId) throws IOException {
     try (DataInputStream in = new DataInputStream(new FileInputStream(checksumFile))) {
-      in.skip(reduceId * 8L);
+      ByteStreams.skipFully(in, reduceId * 8);
       return in.readLong();
     }
   }
