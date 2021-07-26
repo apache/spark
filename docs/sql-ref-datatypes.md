@@ -53,26 +53,28 @@ Spark SQL and DataFrames support the following data types:
   - `YearMonthIntervalType(startField, endField)`: Represents a year-month interval which is made up of a contiguous subset of the following fields:
     - MONTH, months within years `[0..11]`,
     - YEAR, years in the range `[0..178956970]`.
-  `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0(MONTH) and 1(YEAR). Supported year-month interval types are:
-    - `YearMonthIntervalType(YEAR, YEAR)` or `YearMonthIntervalType(YEAR)`. For instance, a value of the type is `INTERVAL '2021' YEAR`.
-    - `YearMonthIntervalType(YEAR, MONTH)`. For instance, a value of the type is `INTERVAL '2021-07' YEAR TO MONTH`.
-    - `YearMonthIntervalType(MONTH, MONTH)` or `YearMonthIntervalType(MONTH)`. For example, `INTERVAL '10' MONTH` is a value of the type. 
+
+    `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0(MONTH) and 1(YEAR). Supported year-month interval types are:
+      - `YearMonthIntervalType(YEAR, YEAR)` or `YearMonthIntervalType(YEAR)`. For instance, a value of the type is `INTERVAL '2021' YEAR`.
+      - `YearMonthIntervalType(YEAR, MONTH)`. For instance, a value of the type is `INTERVAL '2021-07' YEAR TO MONTH`.
+      - `YearMonthIntervalType(MONTH, MONTH)` or `YearMonthIntervalType(MONTH)`. For example, `INTERVAL '10' MONTH` is a value of the type.
   - `DayTimeIntervalType(startField, endField)`: Represents a day-time interval which is made up of a contiguous subset of the following fields:
     - SECOND, seconds within minutes and possibly fractions of a second [0..59.999999],
     - MINUTE, minutes within hours [0..59],
     - HOUR, hours within days [0..23],
     - DAY, days in the range [0..106751991].
-  `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND). Supported year-month interval types are:
-    - `DayTimeIntervalType(DAY, DAY)` or `DayTimeIntervalType(DAY)`. For instance, `INTERVAL '100' DAY`.
-    - `DayTimeIntervalType(DAY, HOUR)`. `INTERVAL '100 10' DAY TO HOUR` is a value of the type.
-    - `DayTimeIntervalType(DAY, MINUTE)`. For example, `INTERVAL '100 10:30' DAY TO MINUTE`.
-    - `DayTimeIntervalType(DAY, SECOND)`. For example, `INTERVAL '100 10:30:40.999999' DAY TO SECOND`.
-    - `DayTimeIntervalType(HOUR, HOUR)` or `DayTimeIntervalType(HOUR)`. `INTERVAL '123' HOUR` is a value of the interval type.
-    - `DayTimeIntervalType(HOUR, MINUTE)`. This is a value of the type: `INTERVAL '123:10' HOUR TO MINUTE`.
-    - `DayTimeIntervalType(HOUR, SECOND)`. For instance, `INTERVAL '123:10:59' HOUR TO SECOND`.
-    - `DayTimeIntervalType(MINUTE, MINUTE)` or `DayTimeIntervalType(MINUTE)`. `INTERVAL '1000' MINUTE` is a value of the type.
-    - `DayTimeIntervalType(MINUTE, SECOND)`. For instance, `INTERVAL '1000:01.001' MINUTE TO SECOND`.
-    - `DayTimeIntervalType(SECOND, SECOND)` or `DayTimeIntervalType(SECOND)`. For instance, `INTERVAL '1000.000001' SECOND`.
+
+    `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND). Supported year-month interval types are:
+      - `DayTimeIntervalType(DAY, DAY)` or `DayTimeIntervalType(DAY)`. For instance, `INTERVAL '100' DAY`.
+      - `DayTimeIntervalType(DAY, HOUR)`. `INTERVAL '100 10' DAY TO HOUR` is a value of the type.
+      - `DayTimeIntervalType(DAY, MINUTE)`. For example, `INTERVAL '100 10:30' DAY TO MINUTE`.
+      - `DayTimeIntervalType(DAY, SECOND)`. For example, `INTERVAL '100 10:30:40.999999' DAY TO SECOND`.
+      - `DayTimeIntervalType(HOUR, HOUR)` or `DayTimeIntervalType(HOUR)`. `INTERVAL '123' HOUR` is a value of the interval type.
+      - `DayTimeIntervalType(HOUR, MINUTE)`. This is a value of the type: `INTERVAL '123:10' HOUR TO MINUTE`.
+      - `DayTimeIntervalType(HOUR, SECOND)`. For instance, `INTERVAL '123:10:59' HOUR TO SECOND`.
+      - `DayTimeIntervalType(MINUTE, MINUTE)` or `DayTimeIntervalType(MINUTE)`. `INTERVAL '1000' MINUTE` is a value of the type.
+      - `DayTimeIntervalType(MINUTE, SECOND)`. For instance, `INTERVAL '1000:01.001' MINUTE TO SECOND`.
+      - `DayTimeIntervalType(SECOND, SECOND)` or `DayTimeIntervalType(SECOND)`. For instance, `INTERVAL '1000.000001' SECOND`.
 
 * Complex types
   - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
