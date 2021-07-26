@@ -837,6 +837,7 @@ final class ShuffleBlockFetcherIterator(
             } catch {
               case e: IOException =>
                 if (blockId.isShuffleChunk) {
+                  // TODO (SPARK-36284): Add shuffle checksum support for push-based shuffle
                   buf.release()
                   // Retrying a corrupt block may result again in a corrupt block. For shuffle
                   // chunks, we opt to fallback on the original shuffle blocks that belong to that
