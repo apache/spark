@@ -302,12 +302,12 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
-    File checksumFile = new File(tempDir,
-      ShuffleChecksumHelper.getChecksumFileName(
-        checksumBlockId.name(), conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM())));
+    String checksumFileName = ShuffleChecksumHelper.getChecksumFileName(
+      checksumBlockId.name(), conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM()));
+    File checksumFile = new File(tempDir, checksumFileName);
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
-    when(diskBlockManager.getFile(checksumBlockId.name())).thenReturn(checksumFile);
+    when(diskBlockManager.getFile(checksumFileName)).thenReturn(checksumFile);
     when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
       .thenReturn(dataFile);
     when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0)))
@@ -331,12 +331,12 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
-    File checksumFile =
-      new File(tempDir, ShuffleChecksumHelper.getChecksumFileName(
-        checksumBlockId.name(), conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM())));
+    String checksumFileName = ShuffleChecksumHelper.getChecksumFileName(
+      checksumBlockId.name(), conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM()));
+    File checksumFile = new File(tempDir, checksumFileName);
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
-    when(diskBlockManager.getFile(checksumBlockId.name())).thenReturn(checksumFile);
+    when(diskBlockManager.getFile(checksumFileName)).thenReturn(checksumFile);
     when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
       .thenReturn(dataFile);
     when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0)))
