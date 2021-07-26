@@ -66,7 +66,7 @@ SELECT abs(-2147483648);
 +----------------+
 ```
 
-### Type Conversion
+### Cast
 
 Spark SQL has three kinds of type conversions: explicit casting, type coercion, and store assignment casting.
 When `spark.sql.ansi.enabled` is set to `true`, explicit casting by `CAST` syntax throws a runtime exception for illegal cast patterns defined in the standard, e.g. casts from a string to an integer.
@@ -162,7 +162,7 @@ SELECT * FROM t;
 
 ### Type coercion
 #### Type Promotion and Precedence
-Spark SQL uses several rules that govern how conflicts between data types are resolved.
+When `spark.sql.ansi.enabled` is set to `true`, Spark SQL uses several rules that govern how conflicts between data types are resolved.
 At the heart of this conflict resolution is the Type Precedence List which defines whether values of a given data type can be promoted to another data type implicitly.
 
 | Data type | precedence list(from narrowest to widest)                        |
@@ -209,29 +209,29 @@ Special rules are applied if the least common type resolves to FLOAT. If any of 
 The coalesce function accepts any set of argument types as long as they share a least common type.
 The result type is the least common type of the arguments.
 ```sql
+> SET spark.sql.ansi.enabled=true;
 > SELECT typeof(coalesce(1Y, 1L, NULL));
 BIGINT
-> SELECT typeof(coalesce(1, DATE’2020-01-01’));
+> SELECT typeof(coalesce(1, DATE'2020-01-01'));
 Error: Incompatible types [INT, DATE]
 
-> SELECT typeof(coalesce(ARRAY(1Y), ARRAY(1L)))
+> SELECT typeof(coalesce(ARRAY(1Y), ARRAY(1L)));
 ARRAY<BIGINT>
-> SELECT typeof(coalesce(1, 1F))
+> SELECT typeof(coalesce(1, 1F));
 DOUBLE
-> SELECT typeof(coalesce(1L, 1F))
+> SELECT typeof(coalesce(1L, 1F));
 DOUBLE
-> SELECT (typeof(coalesce(1BD, 1F))
+> SELECT (typeof(coalesce(1BD, 1F)));
 DOUBLE
 
 -- The substring function expects arguments of type INT for the start and length parameters.
-> SELECT substring(‘hello’, 1, 2);
-He
-> SELECT substring(‘hello’, ‘1’, 2);
+> SELECT substring('hello', 1, 2);
 he
-> SELECT substring(‘hello’, 1L, 2);
+> SELECT substring('hello', '1', 2);
+he
+> SELECT substring('hello', 1L, 2);
 Error: Argument 2 requires an INT type.
-> SELECT substring(‘hello’, str, 2)
-FROM VALUES(CAST(‘1’ AS TRING)) AS T(str);
+> SELECT substring('hello', str, 2) FROM VALUES(CAST('1' AS STRING)) AS T(str);
 Error: Argument 2 requires an INT type.
 ```
 
