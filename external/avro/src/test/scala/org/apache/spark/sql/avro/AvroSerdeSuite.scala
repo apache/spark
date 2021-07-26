@@ -86,18 +86,18 @@ class AvroSerdeSuite extends SparkFunSuite {
     // deserialize should have no issues when 'bar' is nullable but fail when it is nonnull
     Deserializer.create(CATALYST_STRUCT, avro, BY_NAME)
     assertFailedConversionMessage(avro, Deserializer, BY_NAME,
-      "Cannot find field 'foo.bar' (at position 0) in Avro schema at field 'foo'",
+      "Cannot find field 'foo.bar' in Avro schema",
       nonnullCatalyst)
     assertFailedConversionMessage(avro, Deserializer, BY_POSITION,
-      "Cannot find field at position 1 ('foo.baz') in Avro schema at field 'foo'",
+      "Cannot find field at position 1 of field 'foo' from Avro schema",
       extraNonnullCatalyst)
 
     // serialize fails whether or not 'bar' is nullable
-    val expectMsg = "Cannot find field 'foo.bar' (at position 0) in Avro schema at field 'foo'"
-    assertFailedConversionMessage(avro, Serializer, BY_NAME, expectMsg)
-    assertFailedConversionMessage(avro, Serializer, BY_NAME, expectMsg, nonnullCatalyst)
+    val byNameMsg = "Cannot find field 'foo.bar' in Avro schema"
+    assertFailedConversionMessage(avro, Serializer, BY_NAME, byNameMsg)
+    assertFailedConversionMessage(avro, Serializer, BY_NAME, byNameMsg, nonnullCatalyst)
     assertFailedConversionMessage(avro, Serializer, BY_POSITION,
-      "Cannot find field at position 1 ('foo.baz') in Avro schema at field 'foo'",
+      "Cannot find field at position 1 of field 'foo' from Avro schema",
       extraNonnullCatalyst)
   }
 
@@ -122,21 +122,27 @@ class AvroSerdeSuite extends SparkFunSuite {
 
   test("Fail to convert for serialization with field count mismatch") {
     // Note that this is allowed for deserialization, but not serialization
-    withFieldMatchType { fieldMatch =>
+    val tooManyFields =
+      createAvroSchemaWithTopLevelFields(_.optionalInt("foo").optionalLong("bar"))
+    assertFailedConversionMessage(tooManyFields, Serializer, BY_NAME,
+      "Found field 'bar' in Avro schema but there is no match in the SQL schema")
+    assertFailedConversionMessage(tooManyFields, Serializer, BY_POSITION,
+      "Found field 'bar' at position 1 of top-level record from Avro schema but there is no " +
+        "match in the SQL schema at top-level record")
 
-      def toFieldStr(name: String, pos: Int): String =
-        AvroUtils.toFieldStr(name :: Nil, Some(pos), MatchType.isPositional(fieldMatch))
+    val tooManyFieldsNested =
+      createNestedAvroSchemaWithFields("foo", _.optionalInt("bar").optionalInt("baz"))
+    assertFailedConversionMessage(tooManyFieldsNested, Serializer, BY_NAME,
+      "Found field 'foo.baz' in Avro schema but there is no match in the SQL schema")
+    assertFailedConversionMessage(tooManyFieldsNested, Serializer, BY_POSITION,
+      s"Found field 'baz' at position 1 of field 'foo' from Avro schema but there is no match " +
+        s"in the SQL schema at field 'foo'")
 
-      val tooManyFields =
-        createAvroSchemaWithTopLevelFields(_.optionalInt("foo").optionalLong("bar"))
-      assertFailedConversionMessage(tooManyFields, Serializer, fieldMatch,
-        s"Found ${toFieldStr("bar", 1)} in Avro schema but there is no match " +
-          s"in the SQL schema at top-level record")
-
-      val tooFewFields = createAvroSchemaWithTopLevelFields(f => f)
-      assertFailedConversionMessage(tooFewFields, Serializer, fieldMatch,
-        s"Cannot find ${toFieldStr("foo", 0)} in Avro schema at top-level record")
-    }
+    val tooFewFields = createAvroSchemaWithTopLevelFields(f => f)
+    assertFailedConversionMessage(tooFewFields, Serializer, BY_NAME,
+      "Cannot find field 'foo' in Avro schema")
+    assertFailedConversionMessage(tooFewFields, Serializer, BY_POSITION,
+      "Cannot find field at position 0 of top-level record from Avro schema")
   }
 
   /**

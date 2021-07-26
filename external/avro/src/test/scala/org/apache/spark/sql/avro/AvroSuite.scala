@@ -1402,8 +1402,7 @@ abstract class AvroSuite
         val e = intercept[SparkException] {
           df.write.option("avroSchema", avroSchema).format("avro").save(s"$tempDir/save2")
         }
-        assertExceptionMsg[IncompatibleSchemaException](e,
-          "Cannot find field 'FOO' (at position 0) in Avro schema at top-level record")
+        assertExceptionMsg[IncompatibleSchemaException](e, "Cannot find field 'FOO' in Avro schema")
       }
     }
   }
