@@ -62,13 +62,13 @@ public abstract class BlockStoreClient implements Closeable {
    * @return The cause of the shuffle block corruption
    */
   public Cause diagnoseCorruption(
-     String host,
-     int port,
-     String execId,
-     int shuffleId,
-     long mapId,
-     int reduceId,
-     long checksum) throws IOException, InterruptedException {
+      String host,
+      int port,
+      String execId,
+      int shuffleId,
+      long mapId,
+      int reduceId,
+      long checksum) throws IOException, InterruptedException {
     TransportClient client = clientFactory.createClient(host, port);
     try {
       ByteBuffer response = client.sendRpcSync(
