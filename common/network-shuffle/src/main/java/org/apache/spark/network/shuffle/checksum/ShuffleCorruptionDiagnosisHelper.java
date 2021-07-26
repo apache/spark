@@ -63,8 +63,7 @@ public class ShuffleCorruptionDiagnosisHelper {
     }
   }
 
-  public static Checksum getChecksumByFileExtension(String fileName)
-    throws UnsupportedOperationException {
+  public static Checksum getChecksumByFileExtension(String fileName) {
     int index = fileName.lastIndexOf(".");
     String algorithm = fileName.substring(index + 1);
     return getChecksumByAlgorithm(1, algorithm)[0];
