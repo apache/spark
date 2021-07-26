@@ -2399,8 +2399,13 @@ class HiveDDLSuite
       assertAnalysisError(
         "CREATE TABLE t1 USING PARQUET AS SELECT NULL AS null_col",
         "Parquet data source does not support null data type")
-      sql("CREATE TABLE t2 AS SELECT NULL AS null_col")
-      checkAnswer(sql("SELECT * FROM t2"), Row(null))
+
+      assertAnalysisError(
+        "CREATE TABLE t2 STORED AS PARQUET AS SELECT null as null_col",
+        "Unknown field type: void")
+
+      sql("CREATE TABLE t3 AS SELECT NULL AS null_col")
+      checkAnswer(sql("SELECT * FROM t3"), Row(null))
     }
 
     // Create table with null type
@@ -2408,34 +2413,21 @@ class HiveDDLSuite
       assertAnalysisError(
         "CREATE TABLE t1 (v VOID) USING PARQUET",
         "Parquet data source does not support null data type")
-      sql("CREATE TABLE t2 (v VOID) USING hive")
-      checkAnswer(sql("SELECT * FROM t2"), Seq.empty)
-      sql("CREATE TABLE t3 (v VOID)")
+
+      assertAnalysisError(
+        "CREATE TABLE t2 (v VOID) STORED AS PARQUET",
+        "Unknown field type: void")
+
+      sql("CREATE TABLE t3 (v VOID) USING hive")
       checkAnswer(sql("SELECT * FROM t3"), Seq.empty)
+
+      sql("CREATE TABLE t4 (v VOID)")
+      checkAnswer(sql("SELECT * FROM t4"), Seq.empty)
     }
 
-    // Make sure spark.catalog.createTable with null type will fail
-    val schema1 = new StructType().add("c", NullType)
-    checkDSTableNullType(schema1)
-
-    val schema2 = new StructType()
-      .add("c", StructType(Seq(StructField.apply("c1", NullType))))
-    checkDSTableNullType(schema2)
-
-    val schema3 = new StructType().add("c", ArrayType(NullType))
-    checkDSTableNullType(schema3)
-
-    val schema4 = new StructType()
-      .add("c", MapType(StringType, NullType))
-    checkDSTableNullType(schema4)
-
-    val schema5 = new StructType()
-      .add("c", MapType(NullType, StringType))
-    checkDSTableNullType(schema5)
-  }
-
-  private def checkDSTableNullType(schema: StructType): Unit = {
+    // Create table with null type using spark.catalog.createTable
     withTable("t") {
+      val schema = new StructType().add("c", NullType)
       spark.catalog.createTable(
         tableName = "t",
         source = "json",
