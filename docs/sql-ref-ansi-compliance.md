@@ -174,7 +174,7 @@ At the heart of this conflict resolution is the Type Precedence List which defin
 | Decimal   | Decimal -> Float* -> Double                                      |
 | Float     | Float -> Double                                                  |
 | Double    | Double                                                           |
-| Date      | Date->  Timestamp                                                |
+| Date      | Date -> Timestamp                                                |
 | Timestamp | Timestamp                                                        |
 | String    | String                                                           |
 | Binary    | Binary                                                           |
@@ -199,7 +199,7 @@ The least common type from a set of types is the narrowest type reachable from t
 
 The least common type resolution is used to:
 - Decide whether a function expecting a parameter of a type can be invoked using an argument of a narrower type.
-- Derive the argument  type for functions which expect a shared argument type for multiple parameters, such as coalesce, least, or greatest.
+- Derive the argument type for functions which expect a shared argument type for multiple parameters, such as coalesce, least, or greatest.
 - Derive the operand types for operators such as arithmetic operations or comparisons.
 - Derive the result type for expressions such as the case expression.
 - Derive the element, key, or value types for array and map constructors.
