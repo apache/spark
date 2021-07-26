@@ -3002,8 +3002,8 @@ class HiveDDLSuite
           spark.sql(s"INSERT OVERWRITE LOCAL DIRECTORY '${path.getCanonicalPath}' " +
             s"STORED AS PARQUET SELECT ID, if(1=1, 1, 0), abs(id), '^-' FROM v")
         }.getMessage
-        assert(e.contains("Attribute name \"(IF((1 = 1), 1, 0))\" contains" +
-          " invalid character(s) among \" ,;{}()\\n\\t=\". Please use alias to rename it."))
+        assert(e.contains("Column name \"(IF((1 = 1), 1, 0))\" contains invalid character(s). " +
+          "Please use alias to rename it."))
       }
     }
   }
@@ -3022,8 +3022,8 @@ class HiveDDLSuite
                |FROM v
                """.stripMargin)
         }.getMessage
-        assert(e.contains("Attribute name \"IF(ID=1,ID,0)\" contains" +
-          " invalid character(s) among \" ,;{}()\\n\\t=\". Please use alias to rename it."))
+        assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains" +
+          " invalid character(s). Please use alias to rename it."))
       }
     }
   }
