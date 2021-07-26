@@ -1037,7 +1037,7 @@ final class ShuffleBlockFetcherIterator(
     val buffer = new Array[Byte](ShuffleCorruptionDiagnosisHelper.CHECKSUM_CALCULATION_BUFFER)
     // consume the remaining data to calculate the checksum
     try {
-      while (checkedIn.read(buffer, 0, 8192) != -1) {}
+      while (checkedIn.read(buffer) != -1) {}
     } catch {
       case e: IOException =>
         logWarning("IOException throws while consuming the rest stream of the corrupted block", e)
