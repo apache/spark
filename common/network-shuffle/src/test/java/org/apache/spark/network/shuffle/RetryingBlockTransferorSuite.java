@@ -85,6 +85,7 @@ public class RetryingBlockTransferorSuite {
 
     verify(listener).onBlockTransferFailure(eq("b0"), any());
     verify(listener).onBlockTransferSuccess("b1", block1);
+    verify(listener, atLeastOnce()).getTransferType();
     verifyNoMoreInteractions(listener);
   }
 
@@ -108,6 +109,7 @@ public class RetryingBlockTransferorSuite {
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferSuccess("b1", block1);
+    verify(listener, atLeastOnce()).getTransferType();
     verifyNoMoreInteractions(listener);
   }
 
@@ -130,6 +132,7 @@ public class RetryingBlockTransferorSuite {
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferSuccess("b1", block1);
+    verify(listener, atLeastOnce()).getTransferType();
     verifyNoMoreInteractions(listener);
   }
 
@@ -158,6 +161,7 @@ public class RetryingBlockTransferorSuite {
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferSuccess("b1", block1);
+    verify(listener, atLeastOnce()).getTransferType();
     verifyNoMoreInteractions(listener);
   }
 
@@ -190,6 +194,7 @@ public class RetryingBlockTransferorSuite {
 
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferFailure(eq("b1"), any());
+    verify(listener, atLeastOnce()).getTransferType();
     verifyNoMoreInteractions(listener);
   }
 
@@ -221,6 +226,7 @@ public class RetryingBlockTransferorSuite {
     verify(listener, timeout(5000)).onBlockTransferSuccess("b0", block0);
     verify(listener, timeout(5000)).onBlockTransferFailure(eq("b1"), any());
     verify(listener, timeout(5000)).onBlockTransferSuccess("b2", block2);
+    verify(listener, atLeastOnce()).getTransferType();
     verifyNoMoreInteractions(listener);
   }
 

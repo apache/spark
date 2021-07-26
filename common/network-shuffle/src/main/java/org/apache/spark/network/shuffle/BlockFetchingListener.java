@@ -20,8 +20,6 @@ package org.apache.spark.network.shuffle;
 import org.apache.spark.network.buffer.ManagedBuffer;
 
 public interface BlockFetchingListener extends BlockTransferListener {
-  String transferType = "fetch";
-
   /**
    * Called once per successfully fetched block. After this call returns, data will be released
    * automatically. If the data will be passed to another thread, the receiver should retain()
@@ -46,6 +44,6 @@ public interface BlockFetchingListener extends BlockTransferListener {
 
   @Override
   default String getTransferType() {
-    return transferType;
+    return "fetch";
   }
 }
