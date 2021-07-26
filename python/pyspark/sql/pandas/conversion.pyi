@@ -38,6 +38,7 @@ from pyspark.sql.types import (  # noqa: F401
     ShortType as ShortType,
     StructType as StructType,
     TimestampType as TimestampType,
+    TimestampNTZType as TimestampNTZType,
 )
 from pyspark.traceback_utils import SCCallSiteSync as SCCallSiteSync  # noqa: F401
 

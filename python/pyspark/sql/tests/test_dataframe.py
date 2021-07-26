@@ -25,7 +25,7 @@ import unittest
 from pyspark.sql import SparkSession, Row
 from pyspark.sql.functions import col, lit, count, sum, mean
 from pyspark.sql.types import StringType, IntegerType, DoubleType, StructType, StructField, \
-    BooleanType, DateType, TimestampType, FloatType
+    BooleanType, DateType, TimestampType, TimestampNTZType, FloatType
 from pyspark.sql.utils import AnalysisException, IllegalArgumentException
 from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils, have_pyarrow, have_pandas, \
     pandas_requirement_message, pyarrow_requirement_message
@@ -557,12 +557,13 @@ class DataFrameTests(ReusedSQLTestCase):
         from datetime import datetime, date
         schema = StructType().add("a", IntegerType()).add("b", StringType())\
                              .add("c", BooleanType()).add("d", FloatType())\
-                             .add("dt", DateType()).add("ts", TimestampType())
+                             .add("dt", DateType()).add("ts", TimestampType())\
+                             .add("ts_ntz", TimestampNTZType())
         data = [
-            (1, "foo", True, 3.0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
-            (2, "foo", True, 5.0, None, None),
-            (3, "bar", False, -1.0, date(2012, 3, 3), datetime(2012, 3, 3, 3, 3, 3)),
-            (4, "bar", False, 6.0, date(2100, 4, 4), datetime(2100, 4, 4, 4, 4, 4)),
+            (1, "foo", True, 3.0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+            (2, "foo", True, 5.0, None, None, None),
+            (3, "bar", False, -1.0, date(2012, 3, 3), datetime(2012, 3, 3, 3, 3, 3), datetime(2012, 3, 3, 3, 3, 3)),
+            (4, "bar", False, 6.0, date(2100, 4, 4), datetime(2100, 4, 4, 4, 4, 4), datetime(2100, 4, 4, 4, 4, 4)),
         ]
         df = self.spark.createDataFrame(data, schema)
         return df.toPandas()
@@ -578,6 +579,7 @@ class DataFrameTests(ReusedSQLTestCase):
         self.assertEqual(types[3], np.float32)
         self.assertEqual(types[4], np.object)  # datetime.date
         self.assertEqual(types[5], 'datetime64[ns]')
+        self.assertEqual(types[6], 'datetime64[ns]')
 
     @unittest.skipIf(not have_pandas, pandas_requirement_message)  # type: ignore
     def test_to_pandas_with_duplicated_column_names(self):
