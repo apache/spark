@@ -20,9 +20,8 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype, is_dict_like, is_list_like
 
 from pyspark.pandas.internal import InternalField
-from pyspark.pandas.utils import name_like_string
 from pyspark.sql import functions as F
-from pyspark.sql.types import StructField
+from pyspark.sql.types import IntegerType, StructField
 
 if TYPE_CHECKING:
     import pyspark.pandas as ps  # noqa: F401 (SPARK-34943)
@@ -803,7 +802,9 @@ class CategoricalAccessor(object):
             internal = self._data._psdf._internal.with_new_spark_column(
                 self._data._column_label,
                 new_scol,
-                field=self._data._internal.data_fields[0].copy(dtype=new_dtype),
+                field=self._data._internal.data_fields[0].copy(
+                    dtype=new_dtype, spark_type=IntegerType()
+                ),
             )
 
             if inplace:
