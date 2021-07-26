@@ -31,7 +31,10 @@ trait BlockDataManager {
   /**
    * Diagnose the possible cause of the shuffle data corruption by verify the shuffle checksums
    */
-  def diagnoseShuffleBlockCorruption(blockId: BlockId, checksumByReader: Long): Cause
+  def diagnoseShuffleBlockCorruption(
+      blockId: BlockId,
+      checksumByReader: Long,
+      algorithm: String): Cause
 
   /**
    * Get the local directories that used by BlockManager to save the blocks to disk

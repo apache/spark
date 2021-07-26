@@ -1045,8 +1045,9 @@ final class ShuffleBlockFetcherIterator(
         return Cause.UNKNOWN_ISSUE
     }
     val checksum = checkedIn.getChecksum.getValue
+    val algorithm = SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
     val cause = shuffleClient.diagnoseCorruption(address.host, address.port, address.executorId,
-      shuffleBlock.shuffleId, shuffleBlock.mapId, shuffleBlock.reduceId, checksum)
+      shuffleBlock.shuffleId, shuffleBlock.mapId, shuffleBlock.reduceId, checksum, algorithm)
     val duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
     logInfo(s"Finished corruption diagnosis in ${duration} ms, cause: $cause")
     cause

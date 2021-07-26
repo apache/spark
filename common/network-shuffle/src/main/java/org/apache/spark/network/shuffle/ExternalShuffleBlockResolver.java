@@ -388,34 +388,16 @@ public class ExternalShuffleBlockResolver {
       int shuffleId,
       long mapId,
       int reduceId,
-      long checksumByReader) {
+      long checksumByReader,
+      String algorithm) {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
-    String fileName = "shuffle_" + shuffleId + "_" + mapId + "_0.checksum";
-    try {
-      // This's consistent with `IndexShuffleBlockResolver.getChecksumFile`.
-      // We firstly use `fileName` to get the location of the checksum file.
-      // Then, we use `Files.newDirectoryStream` to list all the files under the same directory
-      // with `probeFile`. Since there's only one single checksum file for a certain map task,
-      // so it's supposed to return one matched file too.
-      File probeFile = ExecutorDiskUtils.getFile(
-        executor.localDirs,
-        executor.subDirsPerLocalDir,
-        fileName);
-      Path parentPath = probeFile.getParentFile().toPath();
-      // we don't the exact checksum algorithm, so we have to list all the files here.
-      DirectoryStream<Path> stream =
-        Files.newDirectoryStream(parentPath, f -> f.getFileName().startsWith(fileName));
-      Iterator<Path> pathIterator = stream.iterator();
-      if (pathIterator.hasNext()) {
-        ManagedBuffer data = getBlockData(appId, execId, shuffleId, mapId, reduceId);
-        return ShuffleChecksumHelper.diagnoseCorruption(
-          pathIterator.next().toFile(), reduceId, data, checksumByReader);
-      } else {
-        return Cause.UNKNOWN_ISSUE;
-      }
-    } catch (IOException e) {
-      return Cause.UNKNOWN_ISSUE;
-    }
+    String fileName = "shuffle_" + shuffleId + "_" + mapId + "_0.checksum." + algorithm;
+    File checksumFile = ExecutorDiskUtils.getFile(
+      executor.localDirs,
+      executor.subDirsPerLocalDir,
+      fileName);
+    ManagedBuffer data = getBlockData(appId, execId, shuffleId, mapId, reduceId);
+    return  ShuffleChecksumHelper.diagnoseCorruption(checksumFile, reduceId, data, checksumByReader);
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */

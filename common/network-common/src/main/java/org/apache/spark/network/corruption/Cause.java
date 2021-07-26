@@ -21,5 +21,5 @@ package org.apache.spark.network.corruption;
  * The cause of shuffle data corruption.
  */
 public enum Cause {
-  DISK_ISSUE, NETWORK_ISSUE, UNKNOWN_ISSUE, CHECKSUM_VERIFY_PASS
+  DISK_ISSUE, NETWORK_ISSUE, UNKNOWN_ISSUE, CHECKSUM_VERIFY_PASS, UNSUPPORTED_CHECKSUM_ALGORITHM
 }

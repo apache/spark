@@ -129,8 +129,11 @@ public class ShuffleChecksumHelper {
     Cause cause;
     try {
       long diagnoseStart = System.currentTimeMillis();
-      long checksumByWriter = readChecksumByReduceId(checksumFile, reduceId);
+      // Try to get the checksum instance before reading the checksum file so that
+      // `UnsupportedOperationException` can be thrown first before `FileNotFoundException`
+      // when the checksum algorithm isn't supported.
       Checksum checksumAlgo = getChecksumByFileExtension(checksumFile.getName());
+      long checksumByWriter = readChecksumByReduceId(checksumFile, reduceId);
       long checksumByReCalculation = calculateChecksumForPartition(partitionData, checksumAlgo);
       long duration = System.currentTimeMillis() - diagnoseStart;
       logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}",
@@ -142,6 +145,8 @@ public class ShuffleChecksumHelper {
       } else {
         cause = Cause.CHECKSUM_VERIFY_PASS;
       }
+    } catch (UnsupportedOperationException e) {
+      cause = Cause.UNSUPPORTED_CHECKSUM_ALGORITHM;
     } catch (FileNotFoundException e) {
       // Even if checksum is enabled, a checksum file may not exist if error throws during writing.
       logger.warn("Checksum file " + checksumFile.getName() + " doesn't exit");

@@ -284,12 +284,23 @@ private[spark] class BlockManager(
 
   override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString
 
-  override def diagnoseShuffleBlockCorruption(blockId: BlockId, checksumByReader: Long): Cause = {
+  /**
+   * Diagnose the possible cause of the shuffle data corruption by verify the shuffle checksums
+   *
+   * @param blockId The blockId of the corrupted shuffle block
+   * @param checksumByReader The checksum value of the corrupted block
+   * @param algorithm The cheksum algorithm that is used when calculating the checksum value
+   */
+  override def diagnoseShuffleBlockCorruption(
+      blockId: BlockId,
+      checksumByReader: Long,
+      algorithm: String): Cause = {
     assert(blockId.isInstanceOf[ShuffleBlockId],
       s"Corruption diagnosis only supports shuffle block yet, but got $blockId")
     val shuffleBlock = blockId.asInstanceOf[ShuffleBlockId]
     val resolver = shuffleManager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
-    val checksumFile = resolver.getChecksumFile(shuffleBlock.shuffleId, shuffleBlock.mapId)
+    val checksumFile =
+      resolver.getChecksumFile(shuffleBlock.shuffleId, shuffleBlock.mapId, algorithm)
     val reduceId = shuffleBlock.reduceId
     ShuffleChecksumHelper.diagnoseCorruption(
       checksumFile, reduceId, resolver.getBlockData(shuffleBlock), checksumByReader)

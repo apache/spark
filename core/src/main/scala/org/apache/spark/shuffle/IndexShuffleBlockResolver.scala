@@ -157,7 +157,7 @@ private[spark] class IndexShuffleBlockResolver(
       logWarning(s"Error deleting index ${file.getPath()}")
     }
 
-    file = getChecksumFile(shuffleId, mapId)
+    file = getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
     if (file.exists() && !file.delete()) {
       logWarning(s"Error deleting checksum ${file.getPath()}")
     }
@@ -339,7 +339,8 @@ private[spark] class IndexShuffleBlockResolver(
     val (checksumFileOpt, checksumTmpOpt) = if (checksumEnabled) {
       assert(lengths.length == checksums.length,
         "The size of partition lengths and checksums should be equal")
-      val checksumFile = getChecksumFile(shuffleId, mapId)
+      val checksumFile =
+        getChecksumFile(shuffleId, mapId, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
       (Some(checksumFile), Some(Utils.tempFileWith(checksumFile)))
     } else {
       (None, None)
@@ -540,20 +541,13 @@ private[spark] class IndexShuffleBlockResolver(
   def getChecksumFile(
       shuffleId: Int,
       mapId: Long,
+      algorithm: String,
       dirs: Option[Array[String]] = None): File = {
     val blockId = ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
-    val fileName = ShuffleChecksumHelper.getChecksumFileName(
-      blockId.name, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
-    val fileNameWithoutChecksum = fileName.substring(0, fileName.lastIndexOf('.'))
-    // We should use the file name without checksum first to create the file so that
-    // readers (e.g., shuffle external service) without knowing the checksum algorithm
-    // can also find the file.
-    val file = dirs
-      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, fileNameWithoutChecksum))
-      .getOrElse(blockManager.diskBlockManager.getFile(fileNameWithoutChecksum))
-
-    // Return the file with the checksum algorithm as extension
-    new File(file.getParentFile, fileName)
+    val fileName = ShuffleChecksumHelper.getChecksumFileName(blockId.name, algorithm)
+    dirs
+      .map(ExecutorDiskUtils.getFile(_, blockManager.subDirsPerLocalDir, fileName))
+      .getOrElse(blockManager.diskBlockManager.getFile(fileName))
   }
 
   override def getBlockData(

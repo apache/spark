@@ -228,7 +228,7 @@ public class ExternalBlockHandler extends RpcHandler
       DiagnoseCorruption msg = (DiagnoseCorruption) msgObj;
       checkAuth(client, msg.appId);
       Cause cause = blockManager.diagnoseShuffleBlockCorruption(
-        msg.appId, msg.execId, msg.shuffleId, msg.mapId, msg.reduceId, msg.checksum);
+        msg.appId, msg.execId, msg.shuffleId, msg.mapId, msg.reduceId, msg.checksum, msg.algorithm);
       // In any cases of the error, diagnoseShuffleBlockCorruption should return UNKNOWN_ISSUE,
       // so it should always reply as success.
       callback.onSuccess(new CorruptionCause(cause).toByteBuffer());

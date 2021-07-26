@@ -68,11 +68,13 @@ public abstract class BlockStoreClient implements Closeable {
       int shuffleId,
       long mapId,
       int reduceId,
-      long checksum) throws IOException, InterruptedException {
+      long checksum,
+      String algorithm) throws IOException, InterruptedException {
     TransportClient client = clientFactory.createClient(host, port);
     try {
       ByteBuffer response = client.sendRpcSync(
-        new DiagnoseCorruption(appId, execId, shuffleId, mapId, reduceId, checksum).toByteBuffer(),
+        new DiagnoseCorruption(appId, execId, shuffleId, mapId, reduceId, checksum, algorithm)
+          .toByteBuffer(),
         transportConf.connectionTimeoutMs()
       );
       CorruptionCause cause =

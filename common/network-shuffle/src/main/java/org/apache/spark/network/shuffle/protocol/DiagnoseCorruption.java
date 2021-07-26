@@ -30,6 +30,7 @@ public class DiagnoseCorruption extends BlockTransferMessage {
   public final long mapId;
   public final int reduceId;
   public final long checksum;
+  public final String algorithm;
 
   public DiagnoseCorruption(
       String appId,
@@ -37,13 +38,15 @@ public class DiagnoseCorruption extends BlockTransferMessage {
       int shuffleId,
       long mapId,
       int reduceId,
-      long checksum) {
+      long checksum,
+      String algorithm) {
     this.appId = appId;
     this.execId = execId;
     this.shuffleId = shuffleId;
     this.mapId = mapId;
     this.reduceId = reduceId;
     this.checksum = checksum;
+    this.algorithm = algorithm;
   }
 
   @Override
@@ -60,6 +63,7 @@ public class DiagnoseCorruption extends BlockTransferMessage {
       .append("mapId", mapId)
       .append("reduceId", reduceId)
       .append("checksum", checksum)
+      .append("algorithm", algorithm)
       .toString();
   }
 
@@ -74,6 +78,7 @@ public class DiagnoseCorruption extends BlockTransferMessage {
     if (shuffleId != that.shuffleId) return false;
     if (mapId != that.mapId) return false;
     if (reduceId != that.reduceId) return false;
+    if (!algorithm.equals(that.algorithm)) return false;
     if (!appId.equals(that.appId)) return false;
     if (!execId.equals(that.execId)) return false;
     return true;
@@ -87,6 +92,7 @@ public class DiagnoseCorruption extends BlockTransferMessage {
     result = 31 * result + Long.hashCode(mapId);
     result = 31 * result + Integer.hashCode(reduceId);
     result = 31 * result + Long.hashCode(checksum);
+    result = 31 * result + algorithm.hashCode();
     return result;
   }
 
@@ -97,7 +103,8 @@ public class DiagnoseCorruption extends BlockTransferMessage {
       + 4 /* encoded length of shuffleId */
       + 8 /* encoded length of mapId */
       + 4 /* encoded length of reduceId */
-      + 8; /* encoded length of checksum */
+      + 8 /* encoded length of checksum */
+      + Encoders.Strings.encodedLength(algorithm); /* encoded length of algorithm */
   }
 
   @Override
@@ -108,6 +115,7 @@ public class DiagnoseCorruption extends BlockTransferMessage {
     buf.writeLong(mapId);
     buf.writeInt(reduceId);
     buf.writeLong(checksum);
+    Encoders.Strings.encode(buf, algorithm);
   }
 
   public static DiagnoseCorruption decode(ByteBuf buf) {
@@ -117,6 +125,7 @@ public class DiagnoseCorruption extends BlockTransferMessage {
     long mapId = buf.readLong();
     int reduceId = buf.readInt();
     long checksum = buf.readLong();
-    return new DiagnoseCorruption(appId, execId, shuffleId, mapId, reduceId, checksum);
+    String algorithm = Encoders.Strings.decode(buf);
+    return new DiagnoseCorruption(appId, execId, shuffleId, mapId, reduceId, checksum, algorithm);
   }
 }

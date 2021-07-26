@@ -137,7 +137,8 @@ class NettyBlockRpcServer(
       case diagnose: DiagnoseCorruption =>
         val cause = blockManager.diagnoseShuffleBlockCorruption(
           ShuffleBlockId(diagnose.shuffleId, diagnose.mapId, diagnose.reduceId ),
-          diagnose.checksum)
+          diagnose.checksum,
+          diagnose.algorithm)
         responseContext.onSuccess(new CorruptionCause(cause).toByteBuffer)
     }
   }
