@@ -89,7 +89,7 @@ public class ShuffleCorruptionDiagnosisHelper {
   }
 
   /**
-   * Diagnose the possible cause of the shuffle data corruption by verify the shuffle checksums.
+   * Diagnose the possible cause of the shuffle data corruption by verifying the shuffle checksums.
    *
    * There're 3 different kinds of checksums for the same shuffle partition:
    *   - checksum (c1) that calculated by the shuffle data reader
