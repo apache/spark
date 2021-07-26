@@ -683,7 +683,7 @@ class CategoricalAccessor(object):
     def set_categories(
         self,
         new_categories: Union[pd.Index, List],
-        ordered: bool = None,
+        ordered: Optional[bool] = None,
         rename: bool = False,
         inplace: bool = False,
     ) -> Optional["ps.Series"]:
@@ -754,7 +754,7 @@ class CategoricalAccessor(object):
             new_scol = (
                 F.when(scol >= len(new_categories), -1)
                 .otherwise(scol)
-                .alias(name_like_string(self._data._column_label))
+                .alias(self._data._internal.data_spark_column_names[0])
             )
 
             internal = self._data._psdf._internal.with_new_spark_column(
