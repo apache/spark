@@ -18,7 +18,10 @@
 package org.apache.spark.network.shuffle;
 
 import java.io.*;
+import java.nio.file.DirectoryStream;
+import java.nio.file.Files;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ExecutionException;
@@ -388,18 +391,31 @@ public class ExternalShuffleBlockResolver {
       long checksumByReader) {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
     String fileName = "shuffle_" + shuffleId + "_" + mapId + "_0.checksum";
-    File probeFile = ExecutorDiskUtils.getFile(
-      executor.localDirs,
-      executor.subDirsPerLocalDir,
-      fileName);
-    File parentFile = probeFile.getParentFile();
-
-    File[] checksumFiles = parentFile.listFiles(f -> f.getName().startsWith(fileName));
-    assert checksumFiles.length == 1;
-    File checksumFile = checksumFiles[0];
-    ManagedBuffer data = getBlockData(appId, execId, shuffleId, mapId, reduceId);
-    return ShuffleCorruptionDiagnosisHelper
-      .diagnoseCorruption(checksumFile, reduceId, data, checksumByReader);
+    try {
+      // This's consistent with `IndexShuffleBlockResolver.getChecksumFile`.
+      // We firstly use `fileName` to get the location of the checksum file.
+      // Then, we use `Files.newDirectoryStream` to list all the files under the same directory
+      // with `probeFile`. Since there's only one single checksum file for a certain map task,
+      // so it's supposed to return one matched file too.
+      File probeFile = ExecutorDiskUtils.getFile(
+        executor.localDirs,
+        executor.subDirsPerLocalDir,
+        fileName);
+      Path parentPath = probeFile.getParentFile().toPath();
+      // we don't the exact checksum algorithm, so we have to list all the files here.
+      DirectoryStream<Path> stream =
+        Files.newDirectoryStream(parentPath, f -> f.getFileName().startsWith(fileName));
+      Iterator<Path> pathIterator = stream.iterator();
+      if (pathIterator.hasNext()) {
+        ManagedBuffer data = getBlockData(appId, execId, shuffleId, mapId, reduceId);
+        return ShuffleCorruptionDiagnosisHelper
+          .diagnoseCorruption(pathIterator.next().toFile(), reduceId, data, checksumByReader);
+      } else {
+        return Cause.UNKNOWN_ISSUE;
+      }
+    } catch (IOException e) {
+      return Cause.UNKNOWN_ISSUE;
+    }
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */
