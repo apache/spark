@@ -34,14 +34,19 @@ import org.slf4j.LoggerFactory;
  * A set of utility functions for the shuffle checksum.
  */
 @Private
-public class ShuffleCorruptionDiagnosisHelper {
+public class ShuffleChecksumHelper {
   private static final Logger logger =
-    LoggerFactory.getLogger(ShuffleCorruptionDiagnosisHelper.class);
+    LoggerFactory.getLogger(ShuffleChecksumHelper.class);
 
   public static final int CHECKSUM_CALCULATION_BUFFER = 8192;
+  public static final Checksum[] EMPTY_CHECKSUM = new Checksum[0];
+  public static final long[] EMPTY_CHECKSUM_VALUE = new long[0];
 
-  private static Checksum[] getChecksumByAlgorithm(int num, String algorithm)
-    throws UnsupportedOperationException {
+  public static Checksum[] createPartitionChecksums(int numPartitions, String algorithm) {
+    return getChecksumsByAlgorithm(numPartitions, algorithm);
+  }
+
+  private static Checksum[] getChecksumsByAlgorithm(int num, String algorithm) {
     Checksum[] checksums;
     switch (algorithm) {
       case "ADLER32":
@@ -59,15 +64,24 @@ public class ShuffleCorruptionDiagnosisHelper {
         return checksums;
 
       default:
-        throw new UnsupportedOperationException("Unsupported shuffle checksum algorithm: " +
-          algorithm);
+        throw new UnsupportedOperationException(
+          "Unsupported shuffle checksum algorithm: " + algorithm);
     }
+  }
+
+  public static Checksum getChecksumByAlgorithm(String algorithm) {
+    return getChecksumsByAlgorithm(1, algorithm)[0];
+  }
+
+  public static String getChecksumFileName(String blockName, String algorithm) {
+    // append the shuffle checksum algorithm as the file extension
+    return String.format("%s.%s", blockName, algorithm);
   }
 
   public static Checksum getChecksumByFileExtension(String fileName) {
     int index = fileName.lastIndexOf(".");
     String algorithm = fileName.substring(index + 1);
-    return getChecksumByAlgorithm(1, algorithm)[0];
+    return getChecksumsByAlgorithm(1, algorithm)[0];
   }
 
   private static long readChecksumByReduceId(File checksumFile, int reduceId) throws IOException {

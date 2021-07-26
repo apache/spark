@@ -27,7 +27,7 @@ import com.codahale.metrics.Metric;
 import com.codahale.metrics.Timer;
 import com.google.common.io.Files;
 import org.apache.spark.network.corruption.Cause;
-import org.apache.spark.network.shuffle.checksum.ShuffleCorruptionDiagnosisHelper;
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -136,7 +136,7 @@ public class ExternalBlockHandlerSuite {
 
     // Checksum for the blockMarkers[0] using adler32 is 196609.
     when(blockResolver.getBlockData(appId, execId, shuffleId, mapId, reduceId)).thenReturn(blockMarkers[0]);
-    Cause actualCause = ShuffleCorruptionDiagnosisHelper.diagnoseCorruption(checksumFile, reduceId,
+    Cause actualCause = ShuffleChecksumHelper.diagnoseCorruption(checksumFile, reduceId,
       blockResolver.getBlockData(appId, execId, shuffleId, mapId, reduceId), checksumByReader);
     when(blockResolver
       .diagnoseShuffleBlockCorruption(appId, execId, shuffleId, mapId, reduceId, checksumByReader))

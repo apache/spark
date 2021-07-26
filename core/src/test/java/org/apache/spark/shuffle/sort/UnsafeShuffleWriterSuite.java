@@ -23,8 +23,8 @@ import java.nio.file.Files;
 import java.util.*;
 
 import org.apache.spark.*;
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.shuffle.ShuffleChecksumTestHelper;
-import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper;
 import org.mockito.stubbing.Answer;
 import scala.*;
 import scala.collection.Iterator;
@@ -38,6 +38,7 @@ import org.mockito.MockitoAnnotations;
 
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.LZ4CompressionCodec;
 import org.apache.spark.io.LZFCompressionCodec;
@@ -302,7 +303,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
     File checksumFile = new File(tempDir,
-      ShuffleChecksumHelper.getChecksumFileName(checksumBlockId, conf));
+      ShuffleChecksumHelper.getChecksumFileName(
+        checksumBlockId.name(), conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM())));
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
     when(diskBlockManager.getFile(checksumBlockId)).thenReturn(checksumFile);
@@ -330,7 +332,8 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
     File checksumFile =
-      new File(tempDir, ShuffleChecksumHelper.getChecksumFileName(checksumBlockId, conf));
+      new File(tempDir, ShuffleChecksumHelper.getChecksumFileName(
+        checksumBlockId.name(), conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM())));
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
     when(diskBlockManager.getFile(checksumBlockId)).thenReturn(checksumFile);

@@ -38,10 +38,9 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.corruption.Cause
 import org.apache.spark.network.shuffle._
-import org.apache.spark.network.shuffle.checksum.ShuffleCorruptionDiagnosisHelper
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.network.util.{NettyUtils, TransportConf}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
-import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper.getChecksumByConf
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 
 /**
@@ -797,7 +796,8 @@ final class ShuffleBlockFetcherIterator(
           val in = try {
             var bufIn = buf.createInputStream()
             if (checksumEnabled) {
-              val checksum = getChecksumByConf(SparkEnv.get.conf)
+              val checksum = ShuffleChecksumHelper.getChecksumByAlgorithm(
+                SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
               checkedIn = new CheckedInputStream(bufIn, checksum)
               bufIn = checkedIn
             }
@@ -1034,7 +1034,7 @@ final class ShuffleBlockFetcherIterator(
     val startTimeNs = System.nanoTime()
     assert(blockId.isInstanceOf[ShuffleBlockId], s"Expected ShuffleBlockId, but got $blockId")
     val shuffleBlock = blockId.asInstanceOf[ShuffleBlockId]
-    val buffer = new Array[Byte](ShuffleCorruptionDiagnosisHelper.CHECKSUM_CALCULATION_BUFFER)
+    val buffer = new Array[Byte](ShuffleChecksumHelper.CHECKSUM_CALCULATION_BUFFER)
     // consume the remaining data to calculate the checksum
     try {
       while (checkedIn.read(buffer) != -1) {}

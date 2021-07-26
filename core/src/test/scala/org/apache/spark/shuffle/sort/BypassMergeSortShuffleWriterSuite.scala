@@ -31,11 +31,12 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
+import org.apache.spark.internal.config
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleChecksumTestHelper}
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
-import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -248,8 +249,8 @@ class BypassMergeSortShuffleWriterSuite
     val checksumBlockId = ShuffleChecksumBlockId(shuffleId, mapId, 0)
     val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, 0)
     val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, 0)
-    val checksumFile = new File(tempDir,
-      ShuffleChecksumHelper.getChecksumFileName(checksumBlockId, conf))
+    val checksumFile = new File(tempDir, ShuffleChecksumHelper.getChecksumFileName(
+      checksumBlockId.name, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)))
     val dataFile = new File(tempDir, dataBlockId.name)
     val indexFile = new File(tempDir, indexBlockId.name)
     reset(diskBlockManager)

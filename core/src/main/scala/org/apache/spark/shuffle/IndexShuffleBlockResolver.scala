@@ -31,9 +31,9 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.{ExecutorDiskUtils, MergedBlockMeta}
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.serializer.SerializerManager
 import org.apache.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID
-import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
@@ -542,7 +542,8 @@ private[spark] class IndexShuffleBlockResolver(
       mapId: Long,
       dirs: Option[Array[String]] = None): File = {
     val blockId = ShuffleChecksumBlockId(shuffleId, mapId, NOOP_REDUCE_ID)
-    val fileName = ShuffleChecksumHelper.getChecksumFileName(blockId, conf)
+    val fileName = ShuffleChecksumHelper.getChecksumFileName(
+      blockId.name, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
     val fileNameWithoutChecksum = fileName.substring(0, fileName.lastIndexOf('.'))
     // We should use the file name without checksum first to create the file so that
     // readers (e.g., shuffle external service) without knowing the checksum algorithm

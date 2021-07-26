@@ -49,7 +49,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.corruption.Cause;
-import org.apache.spark.network.shuffle.checksum.ShuffleCorruptionDiagnosisHelper;
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.util.LevelDBProvider;
 import org.apache.spark.network.util.LevelDBProvider.StoreVersion;
@@ -408,8 +408,8 @@ public class ExternalShuffleBlockResolver {
       Iterator<Path> pathIterator = stream.iterator();
       if (pathIterator.hasNext()) {
         ManagedBuffer data = getBlockData(appId, execId, shuffleId, mapId, reduceId);
-        return ShuffleCorruptionDiagnosisHelper
-          .diagnoseCorruption(pathIterator.next().toFile(), reduceId, data, checksumByReader);
+        return ShuffleChecksumHelper.diagnoseCorruption(
+          pathIterator.next().toFile(), reduceId, data, checksumByReader);
       } else {
         return Cause.UNKNOWN_ISSUE;
       }

@@ -50,7 +50,7 @@ import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.corruption.Cause
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle._
-import org.apache.spark.network.shuffle.checksum.ShuffleCorruptionDiagnosisHelper.diagnoseCorruption
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
@@ -291,7 +291,7 @@ private[spark] class BlockManager(
     val resolver = shuffleManager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
     val checksumFile = resolver.getChecksumFile(shuffleBlock.shuffleId, shuffleBlock.mapId)
     val reduceId = shuffleBlock.reduceId
-    diagnoseCorruption(
+    ShuffleChecksumHelper.diagnoseCorruption(
       checksumFile, reduceId, resolver.getBlockData(shuffleBlock), checksumByReader)
   }
 
