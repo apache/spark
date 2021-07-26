@@ -13,7 +13,7 @@ WholeStageCodegen (14)
                         WholeStageCodegen (18)
                           HashAggregate [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size,ss_net_paid] [sum,sum]
                             Project [ss_net_paid,s_store_name,s_state,i_current_price,i_size,i_color,i_units,i_manager_id,c_first_name,c_last_name,ca_state]
-                              SortMergeJoin [c_birth_country,s_zip,ca_country,ca_zip]
+                              SortMergeJoin [c_birth_country,s_zip,upper(spark_catalog.default.customer_address.ca_country),ca_zip]
                                 InputAdapter
                                   WholeStageCodegen (15)
                                     Sort [c_birth_country,s_zip]
@@ -81,14 +81,15 @@ WholeStageCodegen (14)
                                                         ReusedExchange [sr_item_sk,sr_ticket_number] #7
                                 InputAdapter
                                   WholeStageCodegen (17)
-                                    Sort [ca_country,ca_zip]
+                                    Sort [upper(spark_catalog.default.customer_address.ca_country),ca_zip]
                                       InputAdapter
-                                        Exchange [ca_country,ca_zip] #18
+                                        Exchange [upper(spark_catalog.default.customer_address.ca_country),ca_zip] #18
                                           WholeStageCodegen (16)
-                                            Filter [ca_country,ca_zip]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.customer_address [ca_state,ca_zip,ca_country]
+                                            Project [ca_state,ca_zip,ca_country]
+                                              Filter [ca_country,ca_zip]
+                                                ColumnarToRow
+                                                  InputAdapter
+                                                    Scan parquet default.customer_address [ca_state,ca_zip,ca_country]
     HashAggregate [c_last_name,c_first_name,s_store_name,sum,isEmpty] [sum(netpaid),paid,sum,isEmpty]
       InputAdapter
         Exchange [c_last_name,c_first_name,s_store_name] #1
@@ -100,7 +101,7 @@ WholeStageCodegen (14)
                     WholeStageCodegen (12)
                       HashAggregate [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size,ss_net_paid] [sum,sum]
                         Project [ss_net_paid,s_store_name,s_state,i_current_price,i_size,i_color,i_units,i_manager_id,c_first_name,c_last_name,ca_state]
-                          BroadcastHashJoin [ss_store_sk,c_birth_country,s_store_sk,ca_country]
+                          BroadcastHashJoin [ss_store_sk,c_birth_country,s_store_sk,upper(spark_catalog.default.customer_address.ca_country)]
                             Project [ss_store_sk,ss_net_paid,i_current_price,i_size,i_color,i_units,i_manager_id,c_first_name,c_last_name,c_birth_country]
                               SortMergeJoin [ss_ticket_number,ss_item_sk,sr_ticket_number,sr_item_sk]
                                 InputAdapter

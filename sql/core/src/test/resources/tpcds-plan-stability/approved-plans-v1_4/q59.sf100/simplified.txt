@@ -1,7 +1,7 @@
 TakeOrderedAndProject [s_store_name1,s_store_id1,d_week_seq1,(sun_sales1 / sun_sales2),(mon_sales1 / mon_sales2),(tue_sales1 / tue_sales2),(wed_sales1 / wed_sales2),(thu_sales1 / thu_sales2),(fri_sales1 / fri_sales2),(sat_sales1 / sat_sales2)]
   WholeStageCodegen (10)
     Project [s_store_name1,s_store_id1,d_week_seq1,sun_sales1,sun_sales2,mon_sales1,mon_sales2,tue_sales1,tue_sales2,wed_sales1,wed_sales2,thu_sales1,thu_sales2,fri_sales1,fri_sales2,sat_sales1,sat_sales2]
-      BroadcastHashJoin [s_store_id1,d_week_seq1,s_store_id2,d_week_seq2]
+      BroadcastHashJoin [s_store_id1,d_week_seq1,s_store_id2,(x.d_week_seq2 - 52)]
         Project [s_store_name,d_week_seq,s_store_id,sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales]
           BroadcastHashJoin [d_week_seq,d_week_seq]
             Project [d_week_seq,sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales,s_store_id,s_store_name]
@@ -42,7 +42,7 @@ TakeOrderedAndProject [s_store_name1,s_store_id1,d_week_seq1,(sun_sales1 / sun_s
         InputAdapter
           BroadcastExchange #5
             WholeStageCodegen (9)
-              Project [d_week_seq,s_store_id,sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales]
+              Project [s_store_id,sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales,d_week_seq]
                 BroadcastHashJoin [d_week_seq,d_week_seq]
                   Project [d_week_seq,sun_sales,mon_sales,tue_sales,wed_sales,thu_sales,fri_sales,sat_sales,s_store_id]
                     BroadcastHashJoin [ss_store_sk,s_store_sk]

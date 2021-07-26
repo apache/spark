@@ -356,261 +356,261 @@ Right keys [1]: [ca_county#42]
 Join condition: None
 
 (54) Project [codegen id : 42]
-Output [5]: [store_sales#16, store_sales#31, ca_county#42, d_year#38, store_sales#47]
+Output [7]: [store_sales#16, store_sales#31, ca_county#42, d_year#38, store_sales#47, CASE WHEN (store_sales#47 > 0.00) THEN CheckOverflow((promote_precision(store_sales#16) / promote_precision(store_sales#47)), DecimalType(37,20), true) ELSE null END AS CASE WHEN (ss1.store_sales > 0.00BD) THEN (ss2.store_sales / ss1.store_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#49, CASE WHEN (store_sales#16 > 0.00) THEN CheckOverflow((promote_precision(store_sales#31) / promote_precision(store_sales#16)), DecimalType(37,20), true) ELSE null END AS CASE WHEN (ss2.store_sales > 0.00BD) THEN (ss3.store_sales / ss2.store_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#50]
 Input [6]: [ca_county#10, store_sales#16, store_sales#31, ca_county#42, d_year#38, store_sales#47]
 
 (55) Scan parquet default.web_sales
-Output [3]: [ws_bill_addr_sk#49, ws_ext_sales_price#50, ws_sold_date_sk#51]
+Output [3]: [ws_bill_addr_sk#51, ws_ext_sales_price#52, ws_sold_date_sk#53]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(ws_sold_date_sk#51), dynamicpruningexpression(ws_sold_date_sk#51 IN dynamicpruning#36)]
+PartitionFilters: [isnotnull(ws_sold_date_sk#53), dynamicpruningexpression(ws_sold_date_sk#53 IN dynamicpruning#36)]
 PushedFilters: [IsNotNull(ws_bill_addr_sk)]
 ReadSchema: struct<ws_bill_addr_sk:int,ws_ext_sales_price:decimal(7,2)>
 
 (56) ColumnarToRow [codegen id : 22]
-Input [3]: [ws_bill_addr_sk#49, ws_ext_sales_price#50, ws_sold_date_sk#51]
+Input [3]: [ws_bill_addr_sk#51, ws_ext_sales_price#52, ws_sold_date_sk#53]
 
 (57) Filter [codegen id : 22]
-Input [3]: [ws_bill_addr_sk#49, ws_ext_sales_price#50, ws_sold_date_sk#51]
-Condition : isnotnull(ws_bill_addr_sk#49)
+Input [3]: [ws_bill_addr_sk#51, ws_ext_sales_price#52, ws_sold_date_sk#53]
+Condition : isnotnull(ws_bill_addr_sk#51)
 
 (58) ReusedExchange [Reuses operator id: 122]
-Output [3]: [d_date_sk#52, d_year#53, d_qoy#54]
+Output [3]: [d_date_sk#54, d_year#55, d_qoy#56]
 
 (59) BroadcastHashJoin [codegen id : 22]
-Left keys [1]: [ws_sold_date_sk#51]
-Right keys [1]: [d_date_sk#52]
+Left keys [1]: [ws_sold_date_sk#53]
+Right keys [1]: [d_date_sk#54]
 Join condition: None
 
 (60) Project [codegen id : 22]
-Output [4]: [ws_bill_addr_sk#49, ws_ext_sales_price#50, d_year#53, d_qoy#54]
-Input [6]: [ws_bill_addr_sk#49, ws_ext_sales_price#50, ws_sold_date_sk#51, d_date_sk#52, d_year#53, d_qoy#54]
+Output [4]: [ws_bill_addr_sk#51, ws_ext_sales_price#52, d_year#55, d_qoy#56]
+Input [6]: [ws_bill_addr_sk#51, ws_ext_sales_price#52, ws_sold_date_sk#53, d_date_sk#54, d_year#55, d_qoy#56]
 
 (61) Exchange
-Input [4]: [ws_bill_addr_sk#49, ws_ext_sales_price#50, d_year#53, d_qoy#54]
-Arguments: hashpartitioning(ws_bill_addr_sk#49, 5), ENSURE_REQUIREMENTS, [id=#55]
+Input [4]: [ws_bill_addr_sk#51, ws_ext_sales_price#52, d_year#55, d_qoy#56]
+Arguments: hashpartitioning(ws_bill_addr_sk#51, 5), ENSURE_REQUIREMENTS, [id=#57]
 
 (62) Sort [codegen id : 23]
-Input [4]: [ws_bill_addr_sk#49, ws_ext_sales_price#50, d_year#53, d_qoy#54]
-Arguments: [ws_bill_addr_sk#49 ASC NULLS FIRST], false, 0
+Input [4]: [ws_bill_addr_sk#51, ws_ext_sales_price#52, d_year#55, d_qoy#56]
+Arguments: [ws_bill_addr_sk#51 ASC NULLS FIRST], false, 0
 
 (63) ReusedExchange [Reuses operator id: 12]
-Output [2]: [ca_address_sk#56, ca_county#57]
+Output [2]: [ca_address_sk#58, ca_county#59]
 
 (64) Sort [codegen id : 25]
-Input [2]: [ca_address_sk#56, ca_county#57]
-Arguments: [ca_address_sk#56 ASC NULLS FIRST], false, 0
+Input [2]: [ca_address_sk#58, ca_county#59]
+Arguments: [ca_address_sk#58 ASC NULLS FIRST], false, 0
 
 (65) SortMergeJoin [codegen id : 26]
-Left keys [1]: [ws_bill_addr_sk#49]
-Right keys [1]: [ca_address_sk#56]
+Left keys [1]: [ws_bill_addr_sk#51]
+Right keys [1]: [ca_address_sk#58]
 Join condition: None
 
 (66) Project [codegen id : 26]
-Output [4]: [ws_ext_sales_price#50, d_year#53, d_qoy#54, ca_county#57]
-Input [6]: [ws_bill_addr_sk#49, ws_ext_sales_price#50, d_year#53, d_qoy#54, ca_address_sk#56, ca_county#57]
+Output [4]: [ws_ext_sales_price#52, d_year#55, d_qoy#56, ca_county#59]
+Input [6]: [ws_bill_addr_sk#51, ws_ext_sales_price#52, d_year#55, d_qoy#56, ca_address_sk#58, ca_county#59]
 
 (67) HashAggregate [codegen id : 26]
-Input [4]: [ws_ext_sales_price#50, d_year#53, d_qoy#54, ca_county#57]
-Keys [3]: [ca_county#57, d_qoy#54, d_year#53]
-Functions [1]: [partial_sum(UnscaledValue(ws_ext_sales_price#50))]
-Aggregate Attributes [1]: [sum#58]
-Results [4]: [ca_county#57, d_qoy#54, d_year#53, sum#59]
+Input [4]: [ws_ext_sales_price#52, d_year#55, d_qoy#56, ca_county#59]
+Keys [3]: [ca_county#59, d_qoy#56, d_year#55]
+Functions [1]: [partial_sum(UnscaledValue(ws_ext_sales_price#52))]
+Aggregate Attributes [1]: [sum#60]
+Results [4]: [ca_county#59, d_qoy#56, d_year#55, sum#61]
 
 (68) Exchange
-Input [4]: [ca_county#57, d_qoy#54, d_year#53, sum#59]
-Arguments: hashpartitioning(ca_county#57, d_qoy#54, d_year#53, 5), ENSURE_REQUIREMENTS, [id=#60]
+Input [4]: [ca_county#59, d_qoy#56, d_year#55, sum#61]
+Arguments: hashpartitioning(ca_county#59, d_qoy#56, d_year#55, 5), ENSURE_REQUIREMENTS, [id=#62]
 
 (69) HashAggregate [codegen id : 41]
-Input [4]: [ca_county#57, d_qoy#54, d_year#53, sum#59]
-Keys [3]: [ca_county#57, d_qoy#54, d_year#53]
-Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#50))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#50))#61]
-Results [2]: [ca_county#57, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#50))#61,17,2) AS web_sales#62]
+Input [4]: [ca_county#59, d_qoy#56, d_year#55, sum#61]
+Keys [3]: [ca_county#59, d_qoy#56, d_year#55]
+Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#52))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#52))#63]
+Results [2]: [ca_county#59, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#52))#63,17,2) AS web_sales#64]
 
 (70) Scan parquet default.web_sales
-Output [3]: [ws_bill_addr_sk#63, ws_ext_sales_price#64, ws_sold_date_sk#65]
+Output [3]: [ws_bill_addr_sk#65, ws_ext_sales_price#66, ws_sold_date_sk#67]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(ws_sold_date_sk#65), dynamicpruningexpression(ws_sold_date_sk#65 IN dynamicpruning#4)]
+PartitionFilters: [isnotnull(ws_sold_date_sk#67), dynamicpruningexpression(ws_sold_date_sk#67 IN dynamicpruning#4)]
 PushedFilters: [IsNotNull(ws_bill_addr_sk)]
 ReadSchema: struct<ws_bill_addr_sk:int,ws_ext_sales_price:decimal(7,2)>
 
 (71) ColumnarToRow [codegen id : 28]
-Input [3]: [ws_bill_addr_sk#63, ws_ext_sales_price#64, ws_sold_date_sk#65]
+Input [3]: [ws_bill_addr_sk#65, ws_ext_sales_price#66, ws_sold_date_sk#67]
 
 (72) Filter [codegen id : 28]
-Input [3]: [ws_bill_addr_sk#63, ws_ext_sales_price#64, ws_sold_date_sk#65]
-Condition : isnotnull(ws_bill_addr_sk#63)
+Input [3]: [ws_bill_addr_sk#65, ws_ext_sales_price#66, ws_sold_date_sk#67]
+Condition : isnotnull(ws_bill_addr_sk#65)
 
 (73) ReusedExchange [Reuses operator id: 114]
-Output [3]: [d_date_sk#66, d_year#67, d_qoy#68]
+Output [3]: [d_date_sk#68, d_year#69, d_qoy#70]
 
 (74) BroadcastHashJoin [codegen id : 28]
-Left keys [1]: [ws_sold_date_sk#65]
-Right keys [1]: [d_date_sk#66]
+Left keys [1]: [ws_sold_date_sk#67]
+Right keys [1]: [d_date_sk#68]
 Join condition: None
 
 (75) Project [codegen id : 28]
-Output [4]: [ws_bill_addr_sk#63, ws_ext_sales_price#64, d_year#67, d_qoy#68]
-Input [6]: [ws_bill_addr_sk#63, ws_ext_sales_price#64, ws_sold_date_sk#65, d_date_sk#66, d_year#67, d_qoy#68]
+Output [4]: [ws_bill_addr_sk#65, ws_ext_sales_price#66, d_year#69, d_qoy#70]
+Input [6]: [ws_bill_addr_sk#65, ws_ext_sales_price#66, ws_sold_date_sk#67, d_date_sk#68, d_year#69, d_qoy#70]
 
 (76) Exchange
-Input [4]: [ws_bill_addr_sk#63, ws_ext_sales_price#64, d_year#67, d_qoy#68]
-Arguments: hashpartitioning(ws_bill_addr_sk#63, 5), ENSURE_REQUIREMENTS, [id=#69]
+Input [4]: [ws_bill_addr_sk#65, ws_ext_sales_price#66, d_year#69, d_qoy#70]
+Arguments: hashpartitioning(ws_bill_addr_sk#65, 5), ENSURE_REQUIREMENTS, [id=#71]
 
 (77) Sort [codegen id : 29]
-Input [4]: [ws_bill_addr_sk#63, ws_ext_sales_price#64, d_year#67, d_qoy#68]
-Arguments: [ws_bill_addr_sk#63 ASC NULLS FIRST], false, 0
+Input [4]: [ws_bill_addr_sk#65, ws_ext_sales_price#66, d_year#69, d_qoy#70]
+Arguments: [ws_bill_addr_sk#65 ASC NULLS FIRST], false, 0
 
 (78) ReusedExchange [Reuses operator id: 12]
-Output [2]: [ca_address_sk#70, ca_county#71]
+Output [2]: [ca_address_sk#72, ca_county#73]
 
 (79) Sort [codegen id : 31]
-Input [2]: [ca_address_sk#70, ca_county#71]
-Arguments: [ca_address_sk#70 ASC NULLS FIRST], false, 0
+Input [2]: [ca_address_sk#72, ca_county#73]
+Arguments: [ca_address_sk#72 ASC NULLS FIRST], false, 0
 
 (80) SortMergeJoin [codegen id : 32]
-Left keys [1]: [ws_bill_addr_sk#63]
-Right keys [1]: [ca_address_sk#70]
+Left keys [1]: [ws_bill_addr_sk#65]
+Right keys [1]: [ca_address_sk#72]
 Join condition: None
 
 (81) Project [codegen id : 32]
-Output [4]: [ws_ext_sales_price#64, d_year#67, d_qoy#68, ca_county#71]
-Input [6]: [ws_bill_addr_sk#63, ws_ext_sales_price#64, d_year#67, d_qoy#68, ca_address_sk#70, ca_county#71]
+Output [4]: [ws_ext_sales_price#66, d_year#69, d_qoy#70, ca_county#73]
+Input [6]: [ws_bill_addr_sk#65, ws_ext_sales_price#66, d_year#69, d_qoy#70, ca_address_sk#72, ca_county#73]
 
 (82) HashAggregate [codegen id : 32]
-Input [4]: [ws_ext_sales_price#64, d_year#67, d_qoy#68, ca_county#71]
-Keys [3]: [ca_county#71, d_qoy#68, d_year#67]
-Functions [1]: [partial_sum(UnscaledValue(ws_ext_sales_price#64))]
-Aggregate Attributes [1]: [sum#72]
-Results [4]: [ca_county#71, d_qoy#68, d_year#67, sum#73]
+Input [4]: [ws_ext_sales_price#66, d_year#69, d_qoy#70, ca_county#73]
+Keys [3]: [ca_county#73, d_qoy#70, d_year#69]
+Functions [1]: [partial_sum(UnscaledValue(ws_ext_sales_price#66))]
+Aggregate Attributes [1]: [sum#74]
+Results [4]: [ca_county#73, d_qoy#70, d_year#69, sum#75]
 
 (83) Exchange
-Input [4]: [ca_county#71, d_qoy#68, d_year#67, sum#73]
-Arguments: hashpartitioning(ca_county#71, d_qoy#68, d_year#67, 5), ENSURE_REQUIREMENTS, [id=#74]
+Input [4]: [ca_county#73, d_qoy#70, d_year#69, sum#75]
+Arguments: hashpartitioning(ca_county#73, d_qoy#70, d_year#69, 5), ENSURE_REQUIREMENTS, [id=#76]
 
 (84) HashAggregate [codegen id : 33]
-Input [4]: [ca_county#71, d_qoy#68, d_year#67, sum#73]
-Keys [3]: [ca_county#71, d_qoy#68, d_year#67]
-Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#64))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#64))#75]
-Results [2]: [ca_county#71, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#64))#75,17,2) AS web_sales#76]
+Input [4]: [ca_county#73, d_qoy#70, d_year#69, sum#75]
+Keys [3]: [ca_county#73, d_qoy#70, d_year#69]
+Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#66))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#66))#77]
+Results [2]: [ca_county#73, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#66))#77,17,2) AS web_sales#78]
 
 (85) BroadcastExchange
-Input [2]: [ca_county#71, web_sales#76]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#77]
+Input [2]: [ca_county#73, web_sales#78]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#79]
 
 (86) BroadcastHashJoin [codegen id : 41]
-Left keys [1]: [ca_county#57]
-Right keys [1]: [ca_county#71]
+Left keys [1]: [ca_county#59]
+Right keys [1]: [ca_county#73]
 Join condition: None
 
 (87) Project [codegen id : 41]
-Output [3]: [ca_county#57, web_sales#62, web_sales#76]
-Input [4]: [ca_county#57, web_sales#62, ca_county#71, web_sales#76]
+Output [3]: [ca_county#59, web_sales#64, web_sales#78]
+Input [4]: [ca_county#59, web_sales#64, ca_county#73, web_sales#78]
 
 (88) Scan parquet default.web_sales
-Output [3]: [ws_bill_addr_sk#78, ws_ext_sales_price#79, ws_sold_date_sk#80]
+Output [3]: [ws_bill_addr_sk#80, ws_ext_sales_price#81, ws_sold_date_sk#82]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(ws_sold_date_sk#80), dynamicpruningexpression(ws_sold_date_sk#80 IN dynamicpruning#20)]
+PartitionFilters: [isnotnull(ws_sold_date_sk#82), dynamicpruningexpression(ws_sold_date_sk#82 IN dynamicpruning#20)]
 PushedFilters: [IsNotNull(ws_bill_addr_sk)]
 ReadSchema: struct<ws_bill_addr_sk:int,ws_ext_sales_price:decimal(7,2)>
 
 (89) ColumnarToRow [codegen id : 35]
-Input [3]: [ws_bill_addr_sk#78, ws_ext_sales_price#79, ws_sold_date_sk#80]
+Input [3]: [ws_bill_addr_sk#80, ws_ext_sales_price#81, ws_sold_date_sk#82]
 
 (90) Filter [codegen id : 35]
-Input [3]: [ws_bill_addr_sk#78, ws_ext_sales_price#79, ws_sold_date_sk#80]
-Condition : isnotnull(ws_bill_addr_sk#78)
+Input [3]: [ws_bill_addr_sk#80, ws_ext_sales_price#81, ws_sold_date_sk#82]
+Condition : isnotnull(ws_bill_addr_sk#80)
 
 (91) ReusedExchange [Reuses operator id: 118]
-Output [3]: [d_date_sk#81, d_year#82, d_qoy#83]
+Output [3]: [d_date_sk#83, d_year#84, d_qoy#85]
 
 (92) BroadcastHashJoin [codegen id : 35]
-Left keys [1]: [ws_sold_date_sk#80]
-Right keys [1]: [d_date_sk#81]
+Left keys [1]: [ws_sold_date_sk#82]
+Right keys [1]: [d_date_sk#83]
 Join condition: None
 
 (93) Project [codegen id : 35]
-Output [4]: [ws_bill_addr_sk#78, ws_ext_sales_price#79, d_year#82, d_qoy#83]
-Input [6]: [ws_bill_addr_sk#78, ws_ext_sales_price#79, ws_sold_date_sk#80, d_date_sk#81, d_year#82, d_qoy#83]
+Output [4]: [ws_bill_addr_sk#80, ws_ext_sales_price#81, d_year#84, d_qoy#85]
+Input [6]: [ws_bill_addr_sk#80, ws_ext_sales_price#81, ws_sold_date_sk#82, d_date_sk#83, d_year#84, d_qoy#85]
 
 (94) Exchange
-Input [4]: [ws_bill_addr_sk#78, ws_ext_sales_price#79, d_year#82, d_qoy#83]
-Arguments: hashpartitioning(ws_bill_addr_sk#78, 5), ENSURE_REQUIREMENTS, [id=#84]
+Input [4]: [ws_bill_addr_sk#80, ws_ext_sales_price#81, d_year#84, d_qoy#85]
+Arguments: hashpartitioning(ws_bill_addr_sk#80, 5), ENSURE_REQUIREMENTS, [id=#86]
 
 (95) Sort [codegen id : 36]
-Input [4]: [ws_bill_addr_sk#78, ws_ext_sales_price#79, d_year#82, d_qoy#83]
-Arguments: [ws_bill_addr_sk#78 ASC NULLS FIRST], false, 0
+Input [4]: [ws_bill_addr_sk#80, ws_ext_sales_price#81, d_year#84, d_qoy#85]
+Arguments: [ws_bill_addr_sk#80 ASC NULLS FIRST], false, 0
 
 (96) ReusedExchange [Reuses operator id: 12]
-Output [2]: [ca_address_sk#85, ca_county#86]
+Output [2]: [ca_address_sk#87, ca_county#88]
 
 (97) Sort [codegen id : 38]
-Input [2]: [ca_address_sk#85, ca_county#86]
-Arguments: [ca_address_sk#85 ASC NULLS FIRST], false, 0
+Input [2]: [ca_address_sk#87, ca_county#88]
+Arguments: [ca_address_sk#87 ASC NULLS FIRST], false, 0
 
 (98) SortMergeJoin [codegen id : 39]
-Left keys [1]: [ws_bill_addr_sk#78]
-Right keys [1]: [ca_address_sk#85]
+Left keys [1]: [ws_bill_addr_sk#80]
+Right keys [1]: [ca_address_sk#87]
 Join condition: None
 
 (99) Project [codegen id : 39]
-Output [4]: [ws_ext_sales_price#79, d_year#82, d_qoy#83, ca_county#86]
-Input [6]: [ws_bill_addr_sk#78, ws_ext_sales_price#79, d_year#82, d_qoy#83, ca_address_sk#85, ca_county#86]
+Output [4]: [ws_ext_sales_price#81, d_year#84, d_qoy#85, ca_county#88]
+Input [6]: [ws_bill_addr_sk#80, ws_ext_sales_price#81, d_year#84, d_qoy#85, ca_address_sk#87, ca_county#88]
 
 (100) HashAggregate [codegen id : 39]
-Input [4]: [ws_ext_sales_price#79, d_year#82, d_qoy#83, ca_county#86]
-Keys [3]: [ca_county#86, d_qoy#83, d_year#82]
-Functions [1]: [partial_sum(UnscaledValue(ws_ext_sales_price#79))]
-Aggregate Attributes [1]: [sum#87]
-Results [4]: [ca_county#86, d_qoy#83, d_year#82, sum#88]
+Input [4]: [ws_ext_sales_price#81, d_year#84, d_qoy#85, ca_county#88]
+Keys [3]: [ca_county#88, d_qoy#85, d_year#84]
+Functions [1]: [partial_sum(UnscaledValue(ws_ext_sales_price#81))]
+Aggregate Attributes [1]: [sum#89]
+Results [4]: [ca_county#88, d_qoy#85, d_year#84, sum#90]
 
 (101) Exchange
-Input [4]: [ca_county#86, d_qoy#83, d_year#82, sum#88]
-Arguments: hashpartitioning(ca_county#86, d_qoy#83, d_year#82, 5), ENSURE_REQUIREMENTS, [id=#89]
+Input [4]: [ca_county#88, d_qoy#85, d_year#84, sum#90]
+Arguments: hashpartitioning(ca_county#88, d_qoy#85, d_year#84, 5), ENSURE_REQUIREMENTS, [id=#91]
 
 (102) HashAggregate [codegen id : 40]
-Input [4]: [ca_county#86, d_qoy#83, d_year#82, sum#88]
-Keys [3]: [ca_county#86, d_qoy#83, d_year#82]
-Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#79))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#79))#90]
-Results [2]: [ca_county#86, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#79))#90,17,2) AS web_sales#91]
+Input [4]: [ca_county#88, d_qoy#85, d_year#84, sum#90]
+Keys [3]: [ca_county#88, d_qoy#85, d_year#84]
+Functions [1]: [sum(UnscaledValue(ws_ext_sales_price#81))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ws_ext_sales_price#81))#92]
+Results [2]: [ca_county#88, MakeDecimal(sum(UnscaledValue(ws_ext_sales_price#81))#92,17,2) AS web_sales#93]
 
 (103) BroadcastExchange
-Input [2]: [ca_county#86, web_sales#91]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#92]
+Input [2]: [ca_county#88, web_sales#93]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#94]
 
 (104) BroadcastHashJoin [codegen id : 41]
-Left keys [1]: [ca_county#57]
-Right keys [1]: [ca_county#86]
+Left keys [1]: [ca_county#59]
+Right keys [1]: [ca_county#88]
 Join condition: None
 
 (105) Project [codegen id : 41]
-Output [4]: [ca_county#57, web_sales#62, web_sales#76, web_sales#91]
-Input [5]: [ca_county#57, web_sales#62, web_sales#76, ca_county#86, web_sales#91]
+Output [6]: [ca_county#59, web_sales#64, web_sales#78, web_sales#93, CASE WHEN (web_sales#64 > 0.00) THEN CheckOverflow((promote_precision(web_sales#78) / promote_precision(web_sales#64)), DecimalType(37,20), true) ELSE null END AS CASE WHEN (ws1.web_sales > 0.00BD) THEN (ws2.web_sales / ws1.web_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#95, CASE WHEN (web_sales#78 > 0.00) THEN CheckOverflow((promote_precision(web_sales#93) / promote_precision(web_sales#78)), DecimalType(37,20), true) ELSE null END AS CASE WHEN (ws2.web_sales > 0.00BD) THEN (ws3.web_sales / ws2.web_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#96]
+Input [5]: [ca_county#59, web_sales#64, web_sales#78, ca_county#88, web_sales#93]
 
 (106) BroadcastExchange
-Input [4]: [ca_county#57, web_sales#62, web_sales#76, web_sales#91]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#93]
+Input [6]: [ca_county#59, web_sales#64, web_sales#78, web_sales#93, CASE WHEN (ws1.web_sales > 0.00BD) THEN (ws2.web_sales / ws1.web_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#95, CASE WHEN (ws2.web_sales > 0.00BD) THEN (ws3.web_sales / ws2.web_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#96]
+Arguments: HashedRelationBroadcastMode(List(input[0, string, true]),false), [id=#97]
 
 (107) BroadcastHashJoin [codegen id : 42]
 Left keys [1]: [ca_county#42]
-Right keys [1]: [ca_county#57]
-Join condition: ((CASE WHEN (web_sales#62 > 0.00) THEN CheckOverflow((promote_precision(web_sales#76) / promote_precision(web_sales#62)), DecimalType(37,20), true) ELSE null END > CASE WHEN (store_sales#47 > 0.00) THEN CheckOverflow((promote_precision(store_sales#16) / promote_precision(store_sales#47)), DecimalType(37,20), true) ELSE null END) AND (CASE WHEN (web_sales#76 > 0.00) THEN CheckOverflow((promote_precision(web_sales#91) / promote_precision(web_sales#76)), DecimalType(37,20), true) ELSE null END > CASE WHEN (store_sales#16 > 0.00) THEN CheckOverflow((promote_precision(store_sales#31) / promote_precision(store_sales#16)), DecimalType(37,20), true) ELSE null END))
+Right keys [1]: [ca_county#59]
+Join condition: ((CASE WHEN (ws1.web_sales > 0.00BD) THEN (ws2.web_sales / ws1.web_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#95 > CASE WHEN (ss1.store_sales > 0.00BD) THEN (ss2.store_sales / ss1.store_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#49) AND (CASE WHEN (ws2.web_sales > 0.00BD) THEN (ws3.web_sales / ws2.web_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#96 > CASE WHEN (ss2.store_sales > 0.00BD) THEN (ss3.store_sales / ss2.store_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#50))
 
 (108) Project [codegen id : 42]
-Output [6]: [ca_county#42, d_year#38, CheckOverflow((promote_precision(web_sales#76) / promote_precision(web_sales#62)), DecimalType(37,20), true) AS web_q1_q2_increase#94, CheckOverflow((promote_precision(store_sales#16) / promote_precision(store_sales#47)), DecimalType(37,20), true) AS store_q1_q2_increase#95, CheckOverflow((promote_precision(web_sales#91) / promote_precision(web_sales#76)), DecimalType(37,20), true) AS web_q2_q3_increase#96, CheckOverflow((promote_precision(store_sales#31) / promote_precision(store_sales#16)), DecimalType(37,20), true) AS store_q2_q3_increase#97]
-Input [9]: [store_sales#16, store_sales#31, ca_county#42, d_year#38, store_sales#47, ca_county#57, web_sales#62, web_sales#76, web_sales#91]
+Output [6]: [ca_county#42, d_year#38, CheckOverflow((promote_precision(web_sales#78) / promote_precision(web_sales#64)), DecimalType(37,20), true) AS web_q1_q2_increase#98, CheckOverflow((promote_precision(store_sales#16) / promote_precision(store_sales#47)), DecimalType(37,20), true) AS store_q1_q2_increase#99, CheckOverflow((promote_precision(web_sales#93) / promote_precision(web_sales#78)), DecimalType(37,20), true) AS web_q2_q3_increase#100, CheckOverflow((promote_precision(store_sales#31) / promote_precision(store_sales#16)), DecimalType(37,20), true) AS store_q2_q3_increase#101]
+Input [13]: [store_sales#16, store_sales#31, ca_county#42, d_year#38, store_sales#47, CASE WHEN (ss1.store_sales > 0.00BD) THEN (ss2.store_sales / ss1.store_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#49, CASE WHEN (ss2.store_sales > 0.00BD) THEN (ss3.store_sales / ss2.store_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#50, ca_county#59, web_sales#64, web_sales#78, web_sales#93, CASE WHEN (ws1.web_sales > 0.00BD) THEN (ws2.web_sales / ws1.web_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#95, CASE WHEN (ws2.web_sales > 0.00BD) THEN (ws3.web_sales / ws2.web_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END#96]
 
 (109) Exchange
-Input [6]: [ca_county#42, d_year#38, web_q1_q2_increase#94, store_q1_q2_increase#95, web_q2_q3_increase#96, store_q2_q3_increase#97]
-Arguments: rangepartitioning(ca_county#42 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#98]
+Input [6]: [ca_county#42, d_year#38, web_q1_q2_increase#98, store_q1_q2_increase#99, web_q2_q3_increase#100, store_q2_q3_increase#101]
+Arguments: rangepartitioning(ca_county#42 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#102]
 
 (110) Sort [codegen id : 43]
-Input [6]: [ca_county#42, d_year#38, web_q1_q2_increase#94, store_q1_q2_increase#95, web_q2_q3_increase#96, store_q2_q3_increase#97]
+Input [6]: [ca_county#42, d_year#38, web_q1_q2_increase#98, store_q1_q2_increase#99, web_q2_q3_increase#100, store_q2_q3_increase#101]
 Arguments: [ca_county#42 ASC NULLS FIRST], true, 0
 
 ===== Subqueries =====
@@ -638,7 +638,7 @@ Condition : ((((isnotnull(d_qoy#7) AND isnotnull(d_year#6)) AND (d_qoy#7 = 2)) A
 
 (114) BroadcastExchange
 Input [3]: [d_date_sk#5, d_year#6, d_qoy#7]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#99]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#103]
 
 Subquery:2 Hosting operator id = 19 Hosting Expression = ss_sold_date_sk#19 IN dynamicpruning#20
 BroadcastExchange (118)
@@ -663,7 +663,7 @@ Condition : ((((isnotnull(d_qoy#23) AND isnotnull(d_year#22)) AND (d_qoy#23 = 3)
 
 (118) BroadcastExchange
 Input [3]: [d_date_sk#21, d_year#22, d_qoy#23]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#100]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#104]
 
 Subquery:3 Hosting operator id = 37 Hosting Expression = ss_sold_date_sk#35 IN dynamicpruning#36
 BroadcastExchange (122)
@@ -688,12 +688,12 @@ Condition : ((((isnotnull(d_qoy#39) AND isnotnull(d_year#38)) AND (d_qoy#39 = 1)
 
 (122) BroadcastExchange
 Input [3]: [d_date_sk#37, d_year#38, d_qoy#39]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#101]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#105]
 
-Subquery:4 Hosting operator id = 55 Hosting Expression = ws_sold_date_sk#51 IN dynamicpruning#36
+Subquery:4 Hosting operator id = 55 Hosting Expression = ws_sold_date_sk#53 IN dynamicpruning#36
 
-Subquery:5 Hosting operator id = 70 Hosting Expression = ws_sold_date_sk#65 IN dynamicpruning#4
+Subquery:5 Hosting operator id = 70 Hosting Expression = ws_sold_date_sk#67 IN dynamicpruning#4
 
-Subquery:6 Hosting operator id = 88 Hosting Expression = ws_sold_date_sk#80 IN dynamicpruning#20
+Subquery:6 Hosting operator id = 88 Hosting Expression = ws_sold_date_sk#82 IN dynamicpruning#20
 
 

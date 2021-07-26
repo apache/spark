@@ -6,12 +6,12 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
           WholeStageCodegen (14)
             HashAggregate [s_store_name,ss_net_profit] [sum,sum]
               Project [ss_net_profit,s_store_name]
-                SortMergeJoin [s_zip,ca_zip]
+                SortMergeJoin [substr(spark_catalog.default.store.s_zip, 1, 2),substr(V1.ca_zip, 1, 2)]
                   InputAdapter
                     WholeStageCodegen (4)
-                      Sort [s_zip]
+                      Sort [substr(spark_catalog.default.store.s_zip, 1, 2)]
                         InputAdapter
-                          Exchange [s_zip] #2
+                          Exchange [substr(spark_catalog.default.store.s_zip, 1, 2)] #2
                             WholeStageCodegen (3)
                               Project [ss_net_profit,s_store_name,s_zip]
                                 BroadcastHashJoin [ss_store_sk,s_store_sk]
@@ -40,21 +40,22 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                               Scan parquet default.store [s_store_sk,s_store_name,s_zip]
                   InputAdapter
                     WholeStageCodegen (13)
-                      Sort [ca_zip]
+                      Sort [substr(V1.ca_zip, 1, 2)]
                         InputAdapter
-                          Exchange [ca_zip] #5
+                          Exchange [substr(V1.ca_zip, 1, 2)] #5
                             WholeStageCodegen (12)
-                              HashAggregate [ca_zip]
+                              HashAggregate [ca_zip] [substr(V1.ca_zip, 1, 2)]
                                 InputAdapter
                                   Exchange [ca_zip] #6
                                     WholeStageCodegen (11)
                                       HashAggregate [ca_zip]
                                         Project [ca_zip]
-                                          BroadcastHashJoin [ca_zip,ca_zip]
-                                            Filter [ca_zip]
-                                              ColumnarToRow
-                                                InputAdapter
-                                                  Scan parquet default.customer_address [ca_zip]
+                                          BroadcastHashJoin [substr(spark_catalog.default.customer_address.ca_zip, 1, 5),ca_zip]
+                                            Project [ca_zip]
+                                              Filter [ca_zip]
+                                                ColumnarToRow
+                                                  InputAdapter
+                                                    Scan parquet default.customer_address [ca_zip]
                                             InputAdapter
                                               BroadcastExchange #7
                                                 WholeStageCodegen (10)

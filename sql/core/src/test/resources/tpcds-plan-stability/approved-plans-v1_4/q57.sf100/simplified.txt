@@ -1,11 +1,11 @@
 TakeOrderedAndProject [sum_sales,avg_monthly_sales,cc_name,i_category,i_brand,d_year,d_moy,psum,nsum]
   WholeStageCodegen (36)
     Project [i_category,i_brand,cc_name,d_year,d_moy,avg_monthly_sales,sum_sales,sum_sales,sum_sales]
-      SortMergeJoin [i_category,i_brand,cc_name,rn,i_category,i_brand,cc_name,rn]
+      SortMergeJoin [i_category,i_brand,cc_name,rn,i_category,i_brand,cc_name,(v1_lead.rn - 1)]
         InputAdapter
           WholeStageCodegen (24)
             Project [i_category,i_brand,cc_name,d_year,d_moy,sum_sales,avg_monthly_sales,rn,sum_sales]
-              SortMergeJoin [i_category,i_brand,cc_name,rn,i_category,i_brand,cc_name,rn]
+              SortMergeJoin [i_category,i_brand,cc_name,rn,i_category,i_brand,cc_name,(v1_lag.rn + 1)]
                 InputAdapter
                   WholeStageCodegen (12)
                     Sort [i_category,i_brand,cc_name,rn]
@@ -74,9 +74,9 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,cc_name,i_category,i_brand,d_
                                                                                       Scan parquet default.item [i_item_sk,i_brand,i_category]
                 InputAdapter
                   WholeStageCodegen (23)
-                    Sort [i_category,i_brand,cc_name,rn]
+                    Sort [i_category,i_brand,cc_name,(v1_lag.rn + 1)]
                       InputAdapter
-                        Exchange [i_category,i_brand,cc_name,rn] #8
+                        Exchange [i_category,i_brand,cc_name,(v1_lag.rn + 1)] #8
                           WholeStageCodegen (22)
                             Project [i_category,i_brand,cc_name,sum_sales,rn]
                               InputAdapter
@@ -91,9 +91,9 @@ TakeOrderedAndProject [sum_sales,avg_monthly_sales,cc_name,i_category,i_brand,d_
                                                 ReusedExchange [i_category,i_brand,cc_name,d_year,d_moy,sum] #3
         InputAdapter
           WholeStageCodegen (35)
-            Sort [i_category,i_brand,cc_name,rn]
+            Sort [i_category,i_brand,cc_name,(v1_lead.rn - 1)]
               InputAdapter
-                Exchange [i_category,i_brand,cc_name,rn] #10
+                Exchange [i_category,i_brand,cc_name,(v1_lead.rn - 1)] #10
                   WholeStageCodegen (34)
                     Project [i_category,i_brand,cc_name,sum_sales,rn]
                       InputAdapter

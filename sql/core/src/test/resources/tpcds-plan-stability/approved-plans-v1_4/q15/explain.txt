@@ -1,12 +1,12 @@
 == Physical Plan ==
-TakeOrderedAndProject (22)
-+- * HashAggregate (21)
-   +- Exchange (20)
-      +- * HashAggregate (19)
-         +- * Project (18)
-            +- * BroadcastHashJoin Inner BuildRight (17)
-               :- * Project (15)
-               :  +- * BroadcastHashJoin Inner BuildRight (14)
+TakeOrderedAndProject (23)
++- * HashAggregate (22)
+   +- Exchange (21)
+      +- * HashAggregate (20)
+         +- * Project (19)
+            +- * BroadcastHashJoin Inner BuildRight (18)
+               :- * Project (16)
+               :  +- * BroadcastHashJoin Inner BuildRight (15)
                :     :- * Project (9)
                :     :  +- * BroadcastHashJoin Inner BuildRight (8)
                :     :     :- * Filter (3)
@@ -16,11 +16,12 @@ TakeOrderedAndProject (22)
                :     :        +- * Filter (6)
                :     :           +- * ColumnarToRow (5)
                :     :              +- Scan parquet default.customer (4)
-               :     +- BroadcastExchange (13)
-               :        +- * Filter (12)
-               :           +- * ColumnarToRow (11)
-               :              +- Scan parquet default.customer_address (10)
-               +- ReusedExchange (16)
+               :     +- BroadcastExchange (14)
+               :        +- * Project (13)
+               :           +- * Filter (12)
+               :              +- * ColumnarToRow (11)
+               :                 +- Scan parquet default.customer_address (10)
+               +- ReusedExchange (17)
 
 
 (1) Scan parquet default.catalog_sales
@@ -62,100 +63,104 @@ Right keys [1]: [c_customer_sk#5]
 Join condition: None
 
 (9) Project [codegen id : 4]
-Output [3]: [cs_sales_price#2, cs_sold_date_sk#3, c_current_addr_sk#6]
+Output [4]: [cs_sales_price#2, cs_sold_date_sk#3, c_current_addr_sk#6, (cs_sales_price#2 > 500.00) AS (spark_catalog.default.catalog_sales.cs_sales_price > 500.00BD)#8]
 Input [5]: [cs_bill_customer_sk#1, cs_sales_price#2, cs_sold_date_sk#3, c_customer_sk#5, c_current_addr_sk#6]
 
 (10) Scan parquet default.customer_address
-Output [3]: [ca_address_sk#8, ca_state#9, ca_zip#10]
+Output [3]: [ca_address_sk#9, ca_state#10, ca_zip#11]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/customer_address]
 PushedFilters: [IsNotNull(ca_address_sk)]
 ReadSchema: struct<ca_address_sk:int,ca_state:string,ca_zip:string>
 
 (11) ColumnarToRow [codegen id : 2]
-Input [3]: [ca_address_sk#8, ca_state#9, ca_zip#10]
+Input [3]: [ca_address_sk#9, ca_state#10, ca_zip#11]
 
 (12) Filter [codegen id : 2]
-Input [3]: [ca_address_sk#8, ca_state#9, ca_zip#10]
-Condition : isnotnull(ca_address_sk#8)
+Input [3]: [ca_address_sk#9, ca_state#10, ca_zip#11]
+Condition : isnotnull(ca_address_sk#9)
 
-(13) BroadcastExchange
-Input [3]: [ca_address_sk#8, ca_state#9, ca_zip#10]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#11]
+(13) Project [codegen id : 2]
+Output [3]: [ca_address_sk#9, ca_zip#11, (substr(ca_zip#11, 1, 5) IN (85669,86197,88274,83405,86475,85392,85460,80348,81792) OR ca_state#10 IN (CA,WA,GA)) AS ((substr(spark_catalog.default.customer_address.ca_zip, 1, 5) IN ('85669', '86197', '88274', '83405', '86475', '85392', '85460', '80348', '81792')) OR (spark_catalog.default.customer_address.ca_state IN ('CA', 'WA', 'GA')))#12]
+Input [3]: [ca_address_sk#9, ca_state#10, ca_zip#11]
 
-(14) BroadcastHashJoin [codegen id : 4]
+(14) BroadcastExchange
+Input [3]: [ca_address_sk#9, ca_zip#11, ((substr(spark_catalog.default.customer_address.ca_zip, 1, 5) IN ('85669', '86197', '88274', '83405', '86475', '85392', '85460', '80348', '81792')) OR (spark_catalog.default.customer_address.ca_state IN ('CA', 'WA', 'GA')))#12]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#13]
+
+(15) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [c_current_addr_sk#6]
-Right keys [1]: [ca_address_sk#8]
-Join condition: ((substr(ca_zip#10, 1, 5) IN (85669,86197,88274,83405,86475,85392,85460,80348,81792) OR ca_state#9 IN (CA,WA,GA)) OR (cs_sales_price#2 > 500.00))
+Right keys [1]: [ca_address_sk#9]
+Join condition: (((substr(spark_catalog.default.customer_address.ca_zip, 1, 5) IN ('85669', '86197', '88274', '83405', '86475', '85392', '85460', '80348', '81792')) OR (spark_catalog.default.customer_address.ca_state IN ('CA', 'WA', 'GA')))#12 OR (spark_catalog.default.catalog_sales.cs_sales_price > 500.00BD)#8)
 
-(15) Project [codegen id : 4]
-Output [3]: [cs_sales_price#2, cs_sold_date_sk#3, ca_zip#10]
-Input [6]: [cs_sales_price#2, cs_sold_date_sk#3, c_current_addr_sk#6, ca_address_sk#8, ca_state#9, ca_zip#10]
+(16) Project [codegen id : 4]
+Output [3]: [cs_sales_price#2, cs_sold_date_sk#3, ca_zip#11]
+Input [7]: [cs_sales_price#2, cs_sold_date_sk#3, c_current_addr_sk#6, (spark_catalog.default.catalog_sales.cs_sales_price > 500.00BD)#8, ca_address_sk#9, ca_zip#11, ((substr(spark_catalog.default.customer_address.ca_zip, 1, 5) IN ('85669', '86197', '88274', '83405', '86475', '85392', '85460', '80348', '81792')) OR (spark_catalog.default.customer_address.ca_state IN ('CA', 'WA', 'GA')))#12]
 
-(16) ReusedExchange [Reuses operator id: 27]
-Output [1]: [d_date_sk#12]
+(17) ReusedExchange [Reuses operator id: 28]
+Output [1]: [d_date_sk#14]
 
-(17) BroadcastHashJoin [codegen id : 4]
+(18) BroadcastHashJoin [codegen id : 4]
 Left keys [1]: [cs_sold_date_sk#3]
-Right keys [1]: [d_date_sk#12]
+Right keys [1]: [d_date_sk#14]
 Join condition: None
 
-(18) Project [codegen id : 4]
-Output [2]: [cs_sales_price#2, ca_zip#10]
-Input [4]: [cs_sales_price#2, cs_sold_date_sk#3, ca_zip#10, d_date_sk#12]
+(19) Project [codegen id : 4]
+Output [2]: [cs_sales_price#2, ca_zip#11]
+Input [4]: [cs_sales_price#2, cs_sold_date_sk#3, ca_zip#11, d_date_sk#14]
 
-(19) HashAggregate [codegen id : 4]
-Input [2]: [cs_sales_price#2, ca_zip#10]
-Keys [1]: [ca_zip#10]
+(20) HashAggregate [codegen id : 4]
+Input [2]: [cs_sales_price#2, ca_zip#11]
+Keys [1]: [ca_zip#11]
 Functions [1]: [partial_sum(UnscaledValue(cs_sales_price#2))]
-Aggregate Attributes [1]: [sum#13]
-Results [2]: [ca_zip#10, sum#14]
+Aggregate Attributes [1]: [sum#15]
+Results [2]: [ca_zip#11, sum#16]
 
-(20) Exchange
-Input [2]: [ca_zip#10, sum#14]
-Arguments: hashpartitioning(ca_zip#10, 5), ENSURE_REQUIREMENTS, [id=#15]
+(21) Exchange
+Input [2]: [ca_zip#11, sum#16]
+Arguments: hashpartitioning(ca_zip#11, 5), ENSURE_REQUIREMENTS, [id=#17]
 
-(21) HashAggregate [codegen id : 5]
-Input [2]: [ca_zip#10, sum#14]
-Keys [1]: [ca_zip#10]
+(22) HashAggregate [codegen id : 5]
+Input [2]: [ca_zip#11, sum#16]
+Keys [1]: [ca_zip#11]
 Functions [1]: [sum(UnscaledValue(cs_sales_price#2))]
-Aggregate Attributes [1]: [sum(UnscaledValue(cs_sales_price#2))#16]
-Results [2]: [ca_zip#10, MakeDecimal(sum(UnscaledValue(cs_sales_price#2))#16,17,2) AS sum(cs_sales_price)#17]
+Aggregate Attributes [1]: [sum(UnscaledValue(cs_sales_price#2))#18]
+Results [2]: [ca_zip#11, MakeDecimal(sum(UnscaledValue(cs_sales_price#2))#18,17,2) AS sum(cs_sales_price)#19]
 
-(22) TakeOrderedAndProject
-Input [2]: [ca_zip#10, sum(cs_sales_price)#17]
-Arguments: 100, [ca_zip#10 ASC NULLS FIRST], [ca_zip#10, sum(cs_sales_price)#17]
+(23) TakeOrderedAndProject
+Input [2]: [ca_zip#11, sum(cs_sales_price)#19]
+Arguments: 100, [ca_zip#11 ASC NULLS FIRST], [ca_zip#11, sum(cs_sales_price)#19]
 
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 1 Hosting Expression = cs_sold_date_sk#3 IN dynamicpruning#4
-BroadcastExchange (27)
-+- * Project (26)
-   +- * Filter (25)
-      +- * ColumnarToRow (24)
-         +- Scan parquet default.date_dim (23)
+BroadcastExchange (28)
++- * Project (27)
+   +- * Filter (26)
+      +- * ColumnarToRow (25)
+         +- Scan parquet default.date_dim (24)
 
 
-(23) Scan parquet default.date_dim
-Output [3]: [d_date_sk#12, d_year#18, d_qoy#19]
+(24) Scan parquet default.date_dim
+Output [3]: [d_date_sk#14, d_year#20, d_qoy#21]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_qoy), IsNotNull(d_year), EqualTo(d_qoy,2), EqualTo(d_year,2001), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_qoy:int>
 
-(24) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#12, d_year#18, d_qoy#19]
+(25) ColumnarToRow [codegen id : 1]
+Input [3]: [d_date_sk#14, d_year#20, d_qoy#21]
 
-(25) Filter [codegen id : 1]
-Input [3]: [d_date_sk#12, d_year#18, d_qoy#19]
-Condition : ((((isnotnull(d_qoy#19) AND isnotnull(d_year#18)) AND (d_qoy#19 = 2)) AND (d_year#18 = 2001)) AND isnotnull(d_date_sk#12))
+(26) Filter [codegen id : 1]
+Input [3]: [d_date_sk#14, d_year#20, d_qoy#21]
+Condition : ((((isnotnull(d_qoy#21) AND isnotnull(d_year#20)) AND (d_qoy#21 = 2)) AND (d_year#20 = 2001)) AND isnotnull(d_date_sk#14))
 
-(26) Project [codegen id : 1]
-Output [1]: [d_date_sk#12]
-Input [3]: [d_date_sk#12, d_year#18, d_qoy#19]
+(27) Project [codegen id : 1]
+Output [1]: [d_date_sk#14]
+Input [3]: [d_date_sk#14, d_year#20, d_qoy#21]
 
-(27) BroadcastExchange
-Input [1]: [d_date_sk#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#20]
+(28) BroadcastExchange
+Input [1]: [d_date_sk#14]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#22]
 
 
