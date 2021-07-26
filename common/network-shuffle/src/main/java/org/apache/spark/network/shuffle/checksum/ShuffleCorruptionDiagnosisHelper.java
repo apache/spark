@@ -113,29 +113,27 @@ public class ShuffleCorruptionDiagnosisHelper {
       ManagedBuffer partitionData,
       long checksumByReader) {
     Cause cause;
-    if (checksumFile.exists()) {
-      try {
-        long diagnoseStart = System.currentTimeMillis();
-        long checksumByWriter = readChecksumByReduceId(checksumFile, reduceId);
-        Checksum checksumAlgo = getChecksumByFileExtension(checksumFile.getName());
-        long checksumByReCalculation = calculateChecksumForPartition(partitionData, checksumAlgo);
-        long duration = System.currentTimeMillis() - diagnoseStart;
-        logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}",
-          duration, checksumFile.getAbsolutePath());
-        if (checksumByWriter != checksumByReCalculation) {
-          cause = Cause.DISK_ISSUE;
-        } else if (checksumByWriter != checksumByReader) {
-          cause = Cause.NETWORK_ISSUE;
-        } else {
-          cause = Cause.CHECKSUM_VERIFY_PASS;
-        }
-      } catch (Exception e) {
-        logger.warn("Exception throws while diagnosing shuffle block corruption.", e);
-        cause = Cause.UNKNOWN_ISSUE;
+    try {
+      long diagnoseStart = System.currentTimeMillis();
+      long checksumByWriter = readChecksumByReduceId(checksumFile, reduceId);
+      Checksum checksumAlgo = getChecksumByFileExtension(checksumFile.getName());
+      long checksumByReCalculation = calculateChecksumForPartition(partitionData, checksumAlgo);
+      long duration = System.currentTimeMillis() - diagnoseStart;
+      logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}",
+        duration, checksumFile.getAbsolutePath());
+      if (checksumByWriter != checksumByReCalculation) {
+        cause = Cause.DISK_ISSUE;
+      } else if (checksumByWriter != checksumByReader) {
+        cause = Cause.NETWORK_ISSUE;
+      } else {
+        cause = Cause.CHECKSUM_VERIFY_PASS;
       }
-    } else {
+    } catch (FileNotFoundException e) {
       // Even if checksum is enabled, a checksum file may not exist if error throws during writing.
       logger.warn("Checksum file " + checksumFile.getName() + " doesn't exit");
+      cause = Cause.UNKNOWN_ISSUE;
+    } catch (Exception e) {
+      logger.warn("Exception throws while diagnosing shuffle block corruption.", e);
       cause = Cause.UNKNOWN_ISSUE;
     }
     return cause;
