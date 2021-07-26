@@ -17,33 +17,28 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.util.EventListener;
+
 import org.apache.spark.network.buffer.ManagedBuffer;
 
-public interface BlockFetchingListener extends BlockTransferListener {
+/**
+ * This interface unifies both {@link BlockFetchingListener} and {@link BlockPushingListener}
+ * under a single interface to allow code reuse, while also keeping the existing public interface
+ * to facilitate backward compatibility.
+ */
+public interface BlockTransferListener extends EventListener {
   /**
-   * Called once per successfully fetched block. After this call returns, data will be released
-   * automatically. If the data will be passed to another thread, the receiver should retain()
-   * and release() the buffer on their own, or copy the data to a new buffer.
+   * Called once per successfully transferred block.
    */
-  void onBlockFetchSuccess(String blockId, ManagedBuffer data);
+  void onBlockTransferSuccess(String blockId, ManagedBuffer data);
 
   /**
-   * Called at least once per block upon failures.
+   * Called at least once per block transfer failures.
    */
-  void onBlockFetchFailure(String blockId, Throwable exception);
+  void onBlockTransferFailure(String blockId, Throwable exception);
 
-  @Override
-  default void onBlockTransferSuccess(String blockId, ManagedBuffer data) {
-    onBlockFetchSuccess(blockId, data);
-  }
-
-  @Override
-  default void onBlockTransferFailure(String blockId, Throwable exception) {
-    onBlockFetchFailure(blockId, exception);
-  }
-
-  @Override
-  default String getTransferType() {
-    return "fetch";
-  }
+  /**
+   * Return a string indicating the type of the listener such as fetch, push, or something else
+   */
+  String getTransferType();
 }

@@ -95,13 +95,15 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     logger.debug("External shuffle fetch from {}:{} (executor id {})", host, port, execId);
     try {
       int maxRetries = conf.maxIORetries();
-      RetryingBlockFetcher.BlockFetchStarter blockFetchStarter =
+      RetryingBlockTransferor.BlockTransferStarter blockFetchStarter =
           (inputBlockId, inputListener) -> {
             // Unless this client is closed.
             if (clientFactory != null) {
+              assert inputListener instanceof BlockFetchingListener :
+                "Expecting a BlockFetchingListener, but got " + inputListener.getClass();
               TransportClient client = clientFactory.createClient(host, port, maxRetries > 0);
-              new OneForOneBlockFetcher(client, appId, execId,
-                inputBlockId, inputListener, conf, downloadFileManager).start();
+              new OneForOneBlockFetcher(client, appId, execId, inputBlockId,
+                (BlockFetchingListener) inputListener, conf, downloadFileManager).start();
             } else {
               logger.info("This clientFactory was closed. Skipping further block fetch retries.");
             }
@@ -110,7 +112,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       if (maxRetries > 0) {
         // Note this Fetcher will correctly handle maxRetries == 0; we avoid it just in case there's
         // a bug in this code. We should remove the if statement once we're sure of the stability.
-        new RetryingBlockFetcher(conf, blockFetchStarter, blockIds, listener).start();
+        new RetryingBlockTransferor(conf, blockFetchStarter, blockIds, listener).start();
       } else {
         blockFetchStarter.createAndStart(blockIds, listener);
       }
@@ -128,7 +130,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
       int port,
       String[] blockIds,
       ManagedBuffer[] buffers,
-      BlockFetchingListener listener) {
+      BlockPushingListener listener) {
     checkInit();
     assert blockIds.length == buffers.length : "Number of block ids and buffers do not match.";
 
@@ -138,15 +140,21 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     }
     logger.debug("Push {} shuffle blocks to {}:{}", blockIds.length, host, port);
     try {
-      RetryingBlockFetcher.BlockFetchStarter blockPushStarter =
+      RetryingBlockTransferor.BlockTransferStarter blockPushStarter =
           (inputBlockId, inputListener) -> {
-            TransportClient client = clientFactory.createClient(host, port);
-            new OneForOneBlockPusher(client, appId, conf.appAttemptId(), inputBlockId,
-              inputListener, buffersWithId).start();
+            if (clientFactory != null) {
+              assert inputListener instanceof BlockPushingListener :
+                "Expecting a BlockPushingListener, but got " + inputListener.getClass();
+              TransportClient client = clientFactory.createClient(host, port);
+              new OneForOneBlockPusher(client, appId, conf.appAttemptId(), inputBlockId,
+                (BlockPushingListener) inputListener, buffersWithId).start();
+            } else {
+              logger.info("This clientFactory was closed. Skipping further block push retries.");
+            }
           };
       int maxRetries = conf.maxIORetries();
       if (maxRetries > 0) {
-        new RetryingBlockFetcher(
+        new RetryingBlockTransferor(
           conf, blockPushStarter, blockIds, listener, PUSH_ERROR_HANDLER).start();
       } else {
         blockPushStarter.createAndStart(blockIds, listener);
@@ -154,7 +162,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
     } catch (Exception e) {
       logger.error("Exception while beginning pushBlocks", e);
       for (String blockId : blockIds) {
-        listener.onBlockFetchFailure(blockId, e);
+        listener.onBlockPushFailure(blockId, e);
       }
     }
   }
