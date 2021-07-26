@@ -212,6 +212,9 @@ class PandasConversionMixin(object):
                 if isinstance(field.dataType, TimestampType):
                     pdf[field.name] = \
                         _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
+                if isinstance(field.dataType, TimestampNTZType):
+                    pdf[field.name] = \
+                        _check_series_convert_timestamps_local_tz(pdf[field.name], timezone)
             return pdf
 
     @staticmethod
