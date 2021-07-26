@@ -17,7 +17,7 @@
 
 package org.apache.spark.shuffle
 
-import java.io.File
+import java.io.{File, FileNotFoundException, IOException}
 import java.net.ConnectException
 import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
@@ -324,8 +324,32 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(pusher.unreachableBlockMgrs.size == 2)
   }
 
+  test("SPARK-36255: FileNotFoundException stops the push") {
+    when(dependency.getMergerLocs).thenReturn(
+      Seq(BlockManagerId("client1", "client1", 1), BlockManagerId("client2", "client2", 2)))
+    conf.set("spark.reducer.maxReqsInFlight", "1")
+    val pusher = new TestShuffleBlockPusher(conf)
+    when(shuffleClient.pushBlocks(any(), any(), any(), any(), any()))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val pushedBlocks = invocation.getArguments()(2).asInstanceOf[Array[String]]
+        val blockFetchListener = invocation.getArguments()(4).asInstanceOf[BlockFetchingListener]
+        pushedBlocks.foreach(blockId => {
+          blockFetchListener.onBlockFetchFailure(
+            blockId, new IOException("Failed to send RPC",
+              new FileNotFoundException("file not found")))
+        })
+      })
+    pusher.initiateBlockPush(
+      mock(classOf[File]), Array.fill(dependency.partitioner.numPartitions) { 2 }, dependency, 0)
+    pusher.runPendingTasks()
+    verify(shuffleClient, times(1))
+      .pushBlocks(any(), any(), any(), any(), any())
+    assert(pusher.tasks.isEmpty)
+    ShuffleBlockPusher.stop()
+  }
+
   private class TestShuffleBlockPusher(conf: SparkConf) extends ShuffleBlockPusher(conf) {
-   private[this] val tasks = new LinkedBlockingQueue[Runnable]
+    val tasks = new LinkedBlockingQueue[Runnable]
 
     override protected def submitTask(task: Runnable): Unit = {
       tasks.add(task)

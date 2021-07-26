@@ -45,6 +45,75 @@ class TestCasesUtils(object):
     """A utility holding common test cases for arithmetic operations of different data types."""
 
     @property
+    def numeric_pdf(self):
+        dtypes = [np.int32, int, np.float32, float]
+        sers = [pd.Series([1, 2, 3], dtype=dtype) for dtype in dtypes]
+        sers.append(pd.Series([decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(3)]))
+        pdf = pd.concat(sers, axis=1)
+        pdf.columns = [dtype.__name__ for dtype in dtypes] + ["decimal"]
+        return pdf
+
+    @property
+    def numeric_psdf(self):
+        return ps.from_pandas(self.numeric_pdf)
+
+    @property
+    def numeric_df_cols(self):
+        return self.numeric_pdf.columns
+
+    # TODO(SPARK-36031): Merge self.numeric_w_nan_p(s)df into self.numeric_p(s)df
+    @property
+    def numeric_w_nan_pdf(self):
+        psers = {
+            "float_w_nan": pd.Series([1, 2, np.nan]),
+            "decimal_w_nan": pd.Series(
+                [decimal.Decimal(1), decimal.Decimal(2), decimal.Decimal(np.nan)]
+            ),
+        }
+        return pd.concat(psers, axis=1)
+
+    @property
+    def numeric_w_nan_psdf(self):
+        return ps.from_pandas(self.numeric_w_nan_pdf)
+
+    @property
+    def numeric_w_nan_df_cols(self):
+        return self.numeric_w_nan_pdf.columns
+
+    @property
+    def non_numeric_pdf(self):
+        psers = {
+            "string": pd.Series(["x", "y", "z"]),
+            "bool": pd.Series([True, True, False]),
+            "date": pd.Series(
+                [datetime.date(1994, 1, 1), datetime.date(1994, 1, 2), datetime.date(1994, 1, 3)]
+            ),
+            "datetime": pd.to_datetime(pd.Series([1, 2, 3])),
+            "categorical": pd.Series(["a", "b", "a"], dtype="category"),
+        }
+        return pd.concat(psers, axis=1)
+
+    @property
+    def non_numeric_psdf(self):
+        return ps.from_pandas(self.non_numeric_pdf)
+
+    @property
+    def non_numeric_df_cols(self):
+        return self.non_numeric_pdf.columns
+
+    @property
+    def pdf(self):
+        return pd.concat([self.numeric_pdf, self.non_numeric_pdf], axis=1)
+
+    @property
+    def psdf(self):
+        return ps.from_pandas(self.pdf)
+
+    @property
+    def df_cols(self):
+        return self.pdf.columns
+
+    @property
     def numeric_psers(self):
         dtypes = [np.float32, float, int, np.int32]
         sers = [pd.Series([1, 2, 3], dtype=dtype) for dtype in dtypes]
@@ -65,7 +134,7 @@ class TestCasesUtils(object):
 
     @property
     def float_withnan_pser(self):
-        return pd.Series([1, 2, np.nan], dtype=float)
+        return pd.Series([1, 2, np.nan])
 
     @property
     def float_withnan_psser(self):

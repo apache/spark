@@ -116,7 +116,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
     def registerTempTable(self, name):
-        """Registers this DataFrame as a temporary table using the given name.
+        """Registers this :class:`DataFrame` as a temporary table using the given name.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -424,12 +424,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     @property
     def isStreaming(self):
-        """Returns ``True`` if this :class:`Dataset` contains one or more sources that continuously
-        return data as it arrives. A :class:`Dataset` that reads data from a streaming source
-        must be executed as a :class:`StreamingQuery` using the :func:`start` method in
-        :class:`DataStreamWriter`.  Methods that return a single answer, (e.g., :func:`count` or
-        :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
-        source present.
+        """Returns ``True`` if this :class:`DataFrame` contains one or more sources that
+        continuously return data as it arrives. A :class:`DataFrame` that reads data from a
+        streaming source must be executed as a :class:`StreamingQuery` using the :func:`start`
+        method in :class:`DataStreamWriter`.  Methods that return a single answer, (e.g.,
+        :func:`count` or :func:`collect`) will throw an :class:`AnalysisException` when there
+        is a streaming source present.
 
         .. versionadded:: 2.0.0
 
@@ -542,10 +542,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             return None
 
     def checkpoint(self, eager=True):
-        """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
-        logical plan of this :class:`DataFrame`, which is especially useful in iterative algorithms
-        where the plan may grow exponentially. It will be saved to files inside the checkpoint
-        directory set with :meth:`SparkContext.setCheckpointDir`.
+        """Returns a checkpointed version of this :class:`DataFrame`. Checkpointing can be used to
+        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
+        iterative algorithms where the plan may grow exponentially. It will be saved to files
+        inside the checkpoint directory set with :meth:`SparkContext.setCheckpointDir`.
 
         .. versionadded:: 2.1.0
 
@@ -562,8 +562,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sql_ctx)
 
     def localCheckpoint(self, eager=True):
-        """Returns a locally checkpointed version of this Dataset. Checkpointing can be used to
-        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
+        """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can be
+        used to truncate the logical plan of this :class:`DataFrame`, which is especially useful in
         iterative algorithms where the plan may grow exponentially. Local checkpoints are
         stored in the executors using the caching subsystem and therefore they are not reliable.
 
