@@ -120,7 +120,8 @@ public class ShuffleCorruptionDiagnosisHelper {
         Checksum checksumAlgo = getChecksumByFileExtension(checksumFile.getName());
         long checksumByReCalculation = calculateChecksumForPartition(partitionData, checksumAlgo);
         long duration = System.currentTimeMillis() - diagnoseStart;
-        logger.info("Shuffle corruption diagnosis took " + duration + " ms");
+        logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}",
+          duration, checksumFile.getAbsolutePath());
         if (checksumByWriter != checksumByReCalculation) {
           cause = Cause.DISK_ISSUE;
         } else if (checksumByWriter != checksumByReader) {
