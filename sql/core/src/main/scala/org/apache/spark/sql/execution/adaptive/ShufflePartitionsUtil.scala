@@ -86,7 +86,7 @@ object ShufflePartitionsUtil extends Logging {
     // we should skip it when calculating the `partitionStartIndices`.
     val validMetrics = mapOutputStatistics.flatten
     val numShuffles = mapOutputStatistics.length
-    // If all input RDDs have 0 partition, we create an empty partition for every shuffle reader.
+    // If all input RDDs have 0 partition, we create an empty partition for every shuffle read.
     if (validMetrics.isEmpty) {
       return Seq.fill(numShuffles)(Seq(CoalescedPartitionSpec(0, 0, 0)))
     }
