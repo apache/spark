@@ -34,12 +34,8 @@ public final class Count implements AggregateFunc {
     this.isDistinct = isDistinct;
   }
 
-  public FieldReference column() {
-        return column;
-    }
-  public boolean isDistinct() {
-        return isDistinct;
-    }
+  public FieldReference column() { return column; }
+  public boolean isDistinct() { return isDistinct; }
 
   @Override
   public String toString() { return "Count(" + column.describe() + "," + isDistinct + ")"; }

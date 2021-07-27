@@ -31,9 +31,7 @@ public final class CountStar implements AggregateFunc {
   }
 
   @Override
-  public String toString() {
-        return "CountStar()";
-    }
+  public String toString() { return "CountStar()"; }
 
   @Override
   public String describe() { return this.toString(); }

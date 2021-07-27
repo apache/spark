@@ -37,20 +37,14 @@ public final class Sum implements AggregateFunc {
     this.isDistinct = isDistinct;
   }
 
-  public FieldReference column() {
-        return column;
-    }
-  public DataType dataType() {
-        return dataType;
-    }
-  public boolean isDistinct() {
-        return isDistinct;
-    }
+  public FieldReference column() { return column; }
+  public DataType dataType() { return dataType; }
+  public boolean isDistinct() { return isDistinct; }
 
   @Override
   public String toString() {
-        return "Sum(" + column.describe() + "," + dataType + "," + isDistinct + ")";
-    }
+    return "Sum(" + column.describe() + "," + dataType + "," + isDistinct + ")";
+  }
 
   @Override
   public String describe() { return this.toString(); }
