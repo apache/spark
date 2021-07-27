@@ -183,6 +183,18 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 else:
                     self.assertRaises(TypeError, lambda: psser ** psdf[n_col])
 
+    # TODO(SPARK-36031): Merge test_pow_with_nan into test_pow
+    def test_pow_with_float_nan(self):
+        for col in self.numeric_w_nan_df_cols:
+            if col == "float_w_nan":
+                pser, psser = self.numeric_w_nan_pdf[col], self.numeric_w_nan_psdf[col]
+                self.assert_eq(pser ** pser, psser ** psser)
+                self.assert_eq(pser ** pser.astype(bool), psser ** psser.astype(bool))
+                self.assert_eq(pser ** True, psser ** True)
+                self.assert_eq(pser ** False, psser ** False)
+                self.assert_eq(pser ** 1, psser ** 1)
+                self.assert_eq(pser ** 0, psser ** 0)
+
     def test_radd(self):
         pdf, psdf = self.pdf, self.psdf
         for col in self.numeric_df_cols:
