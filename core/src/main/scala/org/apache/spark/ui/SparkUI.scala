@@ -34,7 +34,6 @@ import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.ui.jobs.{JobsTab, StagesTab}
 import org.apache.spark.ui.storage.StorageTab
 
-
 /**
  * Top level user interface for a Spark application.
  */
@@ -58,7 +57,7 @@ private[spark] class SparkUI private (
 
   private var streamingJobProgressListener: Option[SparkListener] = None
 
-  protected val initHandler: ServletContextHandler = {
+  private val initHandler: ServletContextHandler = {
     val servlet = new HttpServlet() {
       override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
         res.setContentType("text/html;charset=utf-8")
