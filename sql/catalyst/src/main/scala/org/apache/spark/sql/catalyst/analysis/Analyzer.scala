@@ -3300,6 +3300,41 @@ class Analyzer(override val catalogManager: CatalogManager)
         } else {
           v2Write
         }
+
+      case u: UpdateTable if !u.skipSchemaResolution && u.resolved =>
+        resolveAssignments(u)
+
+      case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved =>
+        resolveAssignments(m)
+    }
+
+    private def resolveAssignments(p: LogicalPlan): LogicalPlan = {
+      p.transformExpressions {
+        case assignment: Assignment =>
+          val nullHandled = if (!assignment.key.nullable && assignment.value.nullable) {
+            AssertNotNull(assignment.value)
+          } else {
+            assignment.value
+          }
+          val casted = if (assignment.key.dataType != nullHandled.dataType) {
+            AnsiCast(nullHandled, assignment.key.dataType)
+          } else {
+            nullHandled
+          }
+          val rawKeyType = assignment.key.transform {
+            case a: AttributeReference =>
+              CharVarcharUtils.getRawType(a.metadata).map(a.withDataType).getOrElse(a)
+          }.dataType
+          val finalValue = if (CharVarcharUtils.hasCharVarchar(rawKeyType)) {
+            CharVarcharUtils.stringLengthCheck(casted, rawKeyType)
+          } else {
+            casted
+          }
+          val cleanedKey = assignment.key.transform {
+            case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
+          }
+          Assignment(cleanedKey, finalValue)
+      }
     }
   }
 
@@ -4216,14 +4251,6 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     } else {
       None
     }
-  }
-
-  private def padOuterRefAttrCmp(outerAttr: Attribute, attr: Attribute): Seq[Expression] = {
-    val Seq(r, newAttr) = CharVarcharUtils.addPaddingInStringComparison(Seq(outerAttr, attr))
-    val newOuterRef = r.transform {
-      case ar: Attribute if ar.semanticEquals(outerAttr) => OuterReference(ar)
-    }
-    Seq(newOuterRef, newAttr)
   }
 
   private def addPadding(expr: Expression, charLength: Int, targetLength: Int): Expression = {
