@@ -169,6 +169,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
+      SKIP_MIMA: true
       METASPACE_SIZE: 128m
     steps:
     - name: Checkout Spark repository
@@ -251,6 +252,7 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
+      SKIP_MIMA: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -622,6 +624,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       ORACLE_DOCKER_IMAGE_NAME: oracle/database:18.4.0-xe
+      SKIP_MIMA: true
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
