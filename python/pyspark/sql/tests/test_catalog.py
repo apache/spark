@@ -135,7 +135,7 @@ class CatalogTests(ReusedSQLTestCase):
             self.assertEqual(functions, functionsDefault)
 
             with self.function("func1", "some_db.func2"):
-                spark.catalog.registerFunction("temp_func", lambda x: str(x))
+                spark.udf.register("temp_func", lambda x: str(x))
                 spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
                 spark.sql("CREATE FUNCTION some_db.func2 AS 'org.apache.spark.data.bricks'")
                 newFunctions = dict((f.name, f) for f in spark.catalog.listFunctions())
@@ -153,6 +153,16 @@ class CatalogTests(ReusedSQLTestCase):
                     AnalysisException,
                     "does_not_exist",
                     lambda: spark.catalog.listFunctions("does_not_exist"))
+
+    def test_function_exists(self):
+        # SPARK-36258: testing that function_exists returns correct boolean
+        spark = self.spark
+        with self.function("func1"):
+            self.assertFalse(spark.catalog.functionExists('func1'))
+            self.assertFalse(spark.catalog.functionExists('func1', 'default'))
+            spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
+            self.assertTrue(spark.catalog.functionExists('func1'))
+            self.assertTrue(spark.catalog.functionExists('func1', 'default'))
 
     def test_list_columns(self):
         from pyspark.sql.catalog import Column

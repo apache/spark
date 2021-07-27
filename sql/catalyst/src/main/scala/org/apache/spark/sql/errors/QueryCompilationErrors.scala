@@ -2265,7 +2265,7 @@ private[spark] object QueryCompilationErrors {
       s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}""")
   }
 
-  def cannotParseTimeDelayError(delayThreshold: String, e: IllegalArgumentException): Throwable = {
+  def cannotParseTimeDelayError(delayThreshold: String, e: Throwable): Throwable = {
     new AnalysisException(s"Unable to parse time delay '$delayThreshold'", cause = Some(e))
   }
 

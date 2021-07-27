@@ -97,13 +97,13 @@ case class AdaptiveSparkPlanExec(
   @transient private val queryStageOptimizerRules: Seq[Rule[SparkPlan]] = Seq(
     PlanAdaptiveDynamicPruningFilters(this),
     ReuseAdaptiveSubquery(context.subqueryCache),
-    // Skew join does not handle `CustomShuffleReader` so needs to be applied first.
+    // Skew join does not handle `AQEShuffleRead` so needs to be applied first.
     OptimizeSkewedJoin,
     OptimizeSkewInRebalancePartitions,
     CoalesceShufflePartitions(context.session),
-    // `OptimizeLocalShuffleReader` needs to make use of 'CustomShuffleReaderExec.partitionSpecs'
+    // `OptimizeShuffleWithLocalRead` needs to make use of 'AQEShuffleReadExec.partitionSpecs'
     // added by `CoalesceShufflePartitions`, and must be executed after it.
-    OptimizeLocalShuffleReader
+    OptimizeShuffleWithLocalRead
   )
 
   // A list of physical optimizer rules to be applied right after a new stage is created. The input
@@ -116,7 +116,7 @@ case class AdaptiveSparkPlanExec(
   // The partitioning of the query output depends on the shuffle(s) in the final stage. If the
   // original plan contains a repartition operator, we need to preserve the specified partitioning,
   // whether or not the repartition-introduced shuffle is optimized out because of an underlying
-  // shuffle of the same partitioning. Thus, we need to exclude some `CustomShuffleReaderRule`s
+  // shuffle of the same partitioning. Thus, we need to exclude some `AQEShuffleReadRule`s
   // from the final stage, depending on the presence and properties of repartition operators.
   private def finalStageOptimizerRules: Seq[Rule[SparkPlan]] = {
     val origins = inputPlan.collect {
@@ -124,7 +124,7 @@ case class AdaptiveSparkPlanExec(
     }
     val allRules = queryStageOptimizerRules ++ postStageCreationRules
     allRules.filter {
-      case c: CustomShuffleReaderRule =>
+      case c: AQEShuffleReadRule =>
         origins.forall(c.supportedShuffleOrigins.contains)
       case _ => true
     }
@@ -134,7 +134,7 @@ case class AdaptiveSparkPlanExec(
     val optimized = rules.foldLeft(plan) { case (latestPlan, rule) =>
       val applied = rule.apply(latestPlan)
       val result = rule match {
-        case c: CustomShuffleReaderRule if c.mayAddExtraShuffles =>
+        case c: AQEShuffleReadRule if c.mayAddExtraShuffles =>
           if (ValidateRequirements.validate(applied)) {
             applied
           } else {

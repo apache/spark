@@ -163,9 +163,10 @@ jobs:
     - name: Run tests
       env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
       run: |
-        # Hive and SQL tests become flaky when running in parallel as it's too intensive.
-        if [[ "$MODULES_TO_TEST" == "hive" ]] || [[ "$MODULES_TO_TEST" == "sql" ]]; then export SERIAL_SBT_TESTS=1; fi
-        ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
+        # Hive "other tests" test needs larger metaspace size based on experiment.
+        if [[ "$MODULES_TO_TEST" == "hive" ]] && [[ "$EXCLUDED_TAGS" == "org.apache.spark.tags.SlowHiveTest" ]]; then export METASPACE_SIZE=2g; fi
+        export SERIAL_SBT_TESTS=1
+        ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST" --included-tags "$INCLUDED_TAGS" --excluded-tags "$EXCLUDED_TAGS"
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v2
@@ -205,6 +206,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
+      METASPACE_SIZE: 128m
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -250,7 +252,7 @@ jobs:
     - name: Run tests
       run: |
         export PATH=$PATH:$HOME/miniconda/bin
-        ./dev/run-tests --parallelism 2 --modules "$MODULES_TO_TEST"
+        ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v2
@@ -316,7 +318,7 @@ jobs:
         # R issues at docker environment
         export TZ=UTC
         export _R_CHECK_SYSTEM_CLOCK_=FALSE
-        ./dev/run-tests --parallelism 2 --modules sparkr
+        ./dev/run-tests --parallelism 1 --modules sparkr
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v2
@@ -413,7 +415,7 @@ jobs:
     - name: Java linter
       run: ./dev/lint-java
     - name: Python linter
-      run: ./dev/lint-python
+      run: PYTHON_EXECUTABLE=python3.9 ./dev/lint-python
     - name: R linter
       run: ./dev/lint-r
     - name: JS linter
@@ -715,7 +717,7 @@ jobs:
         ./buildContainerImage.sh -v 18.4.0 -x
     - name: Run tests
       run: |
-        ./dev/run-tests --parallelism 2 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
+        ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v2

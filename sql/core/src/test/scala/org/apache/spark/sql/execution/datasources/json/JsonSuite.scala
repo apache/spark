@@ -2919,6 +2919,31 @@ abstract class JsonSuite
       }
     }
   }
+
+  test("SPARK-35912: turn non-nullable schema into a nullable schema") {
+    // JSON field is missing.
+    val missingFieldInput = """{"c1": 1}"""
+    // JSON filed is null.
+    val nullValueInput = """{"c1": 1, "c2": null}"""
+
+    val schema = StructType(Seq(
+      StructField("c1", IntegerType, nullable = false),
+      StructField("c2", IntegerType, nullable = false)))
+    val expected = schema.asNullable
+
+    Seq(missingFieldInput, nullValueInput).foreach { jsonString =>
+      Seq("DROPMALFORMED", "FAILFAST", "PERMISSIVE").foreach { mode =>
+        val json = spark.createDataset(
+          spark.sparkContext.parallelize(jsonString:: Nil))(Encoders.STRING)
+        val df = spark.read
+          .option("mode", mode)
+          .schema(schema)
+          .json(json)
+        assert(df.schema == expected)
+        checkAnswer(df, Row(1, null) :: Nil)
+      }
+    }
+  }
 }
 
 class JsonV1Suite extends JsonSuite {

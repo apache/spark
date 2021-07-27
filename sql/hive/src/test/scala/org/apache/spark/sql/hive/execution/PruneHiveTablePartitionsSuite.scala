@@ -18,13 +18,16 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.datasources.PrunePartitionSuiteBase
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
-class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
+class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase with TestHiveSingleton {
 
   override def format(): String = "hive"
 
@@ -129,6 +132,10 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
             maxLen = Some(LongType.defaultSize))))
       }
     }
+  }
+
+  protected def collectPartitionFiltersFn(): PartialFunction[SparkPlan, Seq[Expression]] = {
+    case scan: HiveTableScanExec => scan.partitionPruningPred
   }
 
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {

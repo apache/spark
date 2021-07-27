@@ -24,289 +24,273 @@ import numpy as np
 from pandas.api.types import CategoricalDtype
 
 from pyspark import pandas as ps
-from pyspark.pandas.config import option_context
 from pyspark.pandas.tests.data_type_ops.testing_utils import TestCasesUtils
 from pyspark.pandas.typedef.typehints import (
     extension_float_dtypes_available,
     extension_object_dtypes_available,
 )
-from pyspark.sql.types import BooleanType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
-    def pser(self):
-        return pd.Series([True, True, False])
+    def bool_pdf(self):
+        return pd.DataFrame({"this": [True, False, True], "that": [False, True, True]})
 
     @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
-
-    @property
-    def float_pser(self):
-        return pd.Series([1, 2, 3], dtype=float)
-
-    @property
-    def float_psser(self):
-        return ps.from_pandas(self.float_pser)
-
-    @property
-    def other_pser(self):
-        return pd.Series([False, False, True])
-
-    @property
-    def other_psser(self):
-        return ps.from_pandas(self.other_pser)
+    def bool_psdf(self):
+        return ps.from_pandas(self.bool_pdf)
 
     def test_add(self):
-        pser = self.pser
-        psser = self.psser
-        self.assert_eq(pser + 1, psser + 1)
-        self.assert_eq(pser + 0.1, psser + 0.1)
-        self.assert_eq(pser + pser.astype(int), psser + psser.astype(int))
-        self.assert_eq(pser + pser, psser + psser)
-        self.assert_eq(pser + True, psser + True)
-        self.assert_eq(pser + False, psser + False)
+        pdf, psdf = self.pdf, self.psdf
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for pser, psser in self.numeric_pser_psser_pairs:
-                self.assert_eq(self.pser + pser, (self.psser + psser).sort_index())
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
+        self.assert_eq(b_pser + 1, b_psser + 1)
+        self.assert_eq(b_pser + 0.1, b_psser + 0.1)
+        self.assert_eq(b_pser + b_pser.astype(int), b_psser + b_psser.astype(int))
+        self.assert_eq(b_pser + b_pser, b_psser + b_psser)
+        self.assert_eq(b_pser + True, b_psser + True)
+        self.assert_eq(b_pser + False, b_psser + False)
 
-            for pser, psser in self.non_numeric_pser_psser_pairs:
-                if isinstance(psser.spark.data_type, BooleanType):
-                    self.assert_eq(self.pser + pser, (self.psser + psser).sort_index())
-                else:
-                    self.assertRaises(TypeError, lambda: self.psser + psser)
+        for col in self.numeric_df_cols:
+            pser, psser = pdf[col], psdf[col]
+            self.assert_eq(b_pser + pser, b_psser + psser)
+        for col in self.non_numeric_df_cols:
+            pser, psser = pdf[col], psdf[col]
+            if col == "bool":
+                self.assert_eq(b_pser + pser, b_psser + psser)
+            else:
+                self.assertRaises(TypeError, lambda: b_psser + psser)
 
     def test_sub(self):
-        pser = self.pser
-        psser = self.psser
-        self.assert_eq(pser - 1, psser - 1)
-        self.assert_eq(pser - 0.1, psser - 0.1)
-        self.assert_eq(pser - pser.astype(int), psser - psser.astype(int))
-        self.assertRaises(TypeError, lambda: psser - psser)
-        self.assertRaises(TypeError, lambda: psser - True)
+        pdf, psdf = self.pdf, self.psdf
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for pser, psser in self.numeric_pser_psser_pairs:
-                self.assert_eq(self.pser - pser, (self.psser - psser).sort_index())
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
+        self.assert_eq(b_pser - 1, b_psser - 1)
+        self.assert_eq(b_pser - 0.1, b_psser - 0.1)
+        self.assert_eq(b_pser - b_pser.astype(int), b_psser - b_psser.astype(int))
+        self.assertRaises(TypeError, lambda: b_psser - b_psser)
+        self.assertRaises(TypeError, lambda: b_psser - True)
 
-            for psser in self.non_numeric_pssers.values():
-                self.assertRaises(TypeError, lambda: self.psser - psser)
+        for col in self.numeric_df_cols:
+            self.assert_eq(b_pser - pdf[col], b_psser - psdf[col])
+
+        for col in self.non_numeric_df_cols:
+            self.assertRaises(TypeError, lambda: b_psser - psdf[col])
 
     def test_mul(self):
-        pser = self.pser
-        psser = self.psser
-        self.assert_eq(pser * 1, psser * 1)
-        self.assert_eq(pser * 0.1, psser * 0.1)
-        self.assert_eq(pser * pser.astype(int), psser * psser.astype(int))
-        self.assert_eq(pser * pser, psser * psser)
-        self.assert_eq(pser * True, psser * True)
-        self.assert_eq(pser * False, psser * False)
+        pdf, psdf = self.pdf, self.psdf
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for pser, psser in self.numeric_pser_psser_pairs:
-                self.assert_eq(self.pser * pser, (self.psser * psser).sort_index())
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
+        self.assert_eq(b_pser * 1, b_psser * 1)
+        self.assert_eq(b_pser * 0.1, b_psser * 0.1)
+        self.assert_eq(b_pser * b_pser.astype(int), b_psser * b_psser.astype(int))
+        self.assert_eq(b_pser * b_pser, b_psser * b_psser)
+        self.assert_eq(b_pser * True, b_psser * True)
+        self.assert_eq(b_pser * False, b_psser * False)
 
-            for pser, psser in self.non_numeric_pser_psser_pairs:
-                if isinstance(psser.spark.data_type, BooleanType):
-                    self.assert_eq(self.pser * pser, (self.psser * psser).sort_index())
-                else:
-                    self.assertRaises(TypeError, lambda: self.psser * psser)
+        for col in self.numeric_df_cols:
+            self.assert_eq(b_pser * pdf[col], b_psser * psdf[col])
+
+        for col in self.non_numeric_df_cols:
+            pser, psser = pdf[col], psdf[col]
+            if col == "bool":
+                self.assert_eq(b_pser * pser, b_psser * psser)
+            else:
+                self.assertRaises(TypeError, lambda: b_psser * psser)
 
     def test_truediv(self):
-        pser = self.pser
-        psser = self.psser
-        self.assert_eq(pser / 1, psser / 1)
-        self.assert_eq(pser / 0.1, psser / 0.1)
-        self.assert_eq(pser / pser.astype(int), psser / psser.astype(int))
-        self.assertRaises(TypeError, lambda: psser / psser)
-        self.assertRaises(TypeError, lambda: psser / True)
+        pdf, psdf = self.pdf, self.psdf
 
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser / self.float_pser, (self.psser / self.float_psser).sort_index()
-            )
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
+        self.assert_eq(b_pser / 1, b_psser / 1)
+        self.assert_eq(b_pser / 0.1, b_psser / 0.1)
+        self.assert_eq(b_pser / b_pser.astype(int), b_psser / b_psser.astype(int))
+        self.assertRaises(TypeError, lambda: b_psser / b_psser)
+        self.assertRaises(TypeError, lambda: b_psser / True)
 
-            for psser in self.non_numeric_pssers.values():
-                self.assertRaises(TypeError, lambda: self.psser / psser)
+        self.assert_eq(b_pser / pdf["float"], b_psser / psdf["float"])
+
+        for col in self.non_numeric_df_cols:
+            self.assertRaises(TypeError, lambda: b_psser / psdf[col])
 
     def test_floordiv(self):
-        pser = self.pser
-        psser = self.psser
+        pdf, psdf = self.pdf, self.psdf
+
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
 
         # float is always returned in pandas-on-Spark
-        self.assert_eq((pser // 1).astype("float"), psser // 1)
+        self.assert_eq((b_pser // 1).astype("float"), b_psser // 1)
 
         # in pandas, 1 // 0.1 = 9.0; in pandas-on-Spark, 1 // 0.1 = 10.0
-        # self.assert_eq(pser // 0.1, psser // 0.1)
+        # self.assert_eq(b_pser // 0.1, b_psser // 0.1)
 
-        self.assert_eq(pser // pser.astype(int), psser // psser.astype(int))
-        self.assertRaises(TypeError, lambda: psser // psser)
-        self.assertRaises(TypeError, lambda: psser // True)
+        self.assert_eq(b_pser // b_pser.astype(int), b_psser // b_psser.astype(int))
+        self.assertRaises(TypeError, lambda: b_psser // b_psser)
+        self.assertRaises(TypeError, lambda: b_psser // True)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser // self.float_pser, (self.psser // self.float_psser).sort_index()
-            )
+        self.assert_eq(b_pser // pdf["float"], b_psser // psdf["float"])
 
-            for psser in self.non_numeric_pssers.values():
-                self.assertRaises(TypeError, lambda: self.psser // psser)
+        for col in self.non_numeric_df_cols:
+            self.assertRaises(TypeError, lambda: b_psser // psdf[col])
 
     def test_mod(self):
-        pser = self.pser
-        psser = self.psser
-        self.assert_eq(pser % 1, psser % 1)
-        self.assert_eq(pser % 0.1, psser % 0.1)
-        self.assert_eq(pser % pser.astype(float), psser % psser.astype(float))
-        self.assertRaises(TypeError, lambda: psser % psser)
-        self.assertRaises(TypeError, lambda: psser % True)
+        pdf, psdf = self.pdf, self.psdf
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for pser, psser in self.numeric_pser_psser_pairs:
-                self.assert_eq(self.pser % pser, (self.psser % psser).sort_index())
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
+        self.assert_eq(b_pser % 1, b_psser % 1)
+        self.assert_eq(b_pser % 0.1, b_psser % 0.1)
+        self.assert_eq(b_pser % b_pser.astype(float), b_psser % b_psser.astype(float))
+        self.assertRaises(TypeError, lambda: b_psser % b_psser)
+        self.assertRaises(TypeError, lambda: b_psser % True)
 
-            for psser in self.non_numeric_pssers.values():
-                self.assertRaises(TypeError, lambda: self.psser % psser)
+        for col in self.numeric_df_cols:
+            self.assert_eq(b_pser % pdf[col], b_psser % psdf[col])
+
+        for col in self.non_numeric_df_cols:
+            self.assertRaises(TypeError, lambda: b_psser % psdf[col])
 
     def test_pow(self):
-        pser = self.pser
-        psser = self.psser
+        pdf, psdf = self.pdf, self.psdf
+
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
         # float is always returned in pandas-on-Spark
-        self.assert_eq((pser ** 1).astype("float"), psser ** 1)
-        self.assert_eq(pser ** 0.1, self.psser ** 0.1)
-        self.assert_eq(pser ** pser.astype(float), psser ** psser.astype(float))
-        self.assertRaises(TypeError, lambda: psser ** psser)
-        self.assertRaises(TypeError, lambda: psser ** True)
+        self.assert_eq((b_pser ** 1).astype("float"), b_psser ** 1)
+        self.assert_eq(b_pser ** 0.1, b_psser ** 0.1)
+        self.assert_eq(b_pser ** b_pser.astype(float), b_psser ** b_psser.astype(float))
+        self.assertRaises(TypeError, lambda: b_psser ** b_psser)
+        self.assertRaises(TypeError, lambda: b_psser ** True)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser ** self.float_pser, (self.psser ** self.float_psser).sort_index()
-            )
-
-            for psser in self.non_numeric_pssers.values():
-                self.assertRaises(TypeError, lambda: self.psser ** psser)
+        self.assert_eq(b_pser % pdf["float"], b_psser % psdf["float"])
+        for col in self.non_numeric_df_cols:
+            self.assertRaises(TypeError, lambda: b_psser % psdf[col])
 
     def test_radd(self):
-        self.assert_eq(1 + self.pser, 1 + self.psser)
-        self.assert_eq(0.1 + self.pser, 0.1 + self.psser)
-        self.assert_eq(True + self.pser, True + self.psser)
-        self.assert_eq(False + self.pser, False + self.psser)
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + self.psser)
-        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + self.psser)
+        pdf, psdf = self.pdf, self.psdf
+
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
+        self.assert_eq(1 + b_pser, 1 + b_psser)
+        self.assert_eq(0.1 + b_pser, 0.1 + b_psser)
+        self.assert_eq(True + b_pser, True + b_psser)
+        self.assert_eq(False + b_pser, False + b_psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + b_psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + b_psser)
 
     def test_rsub(self):
-        self.assert_eq(1 - self.pser, 1 - self.psser)
-        self.assert_eq(0.1 - self.pser, 0.1 - self.psser)
-        self.assertRaises(TypeError, lambda: "x" - self.psser)
-        self.assertRaises(TypeError, lambda: True - self.psser)
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - self.psser)
-        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - self.psser)
+        pdf, psdf = self.pdf, self.psdf
+
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
+        self.assert_eq(1 - b_pser, 1 - b_psser)
+        self.assert_eq(0.1 - b_pser, 0.1 - b_psser)
+        self.assertRaises(TypeError, lambda: "x" - b_psser)
+        self.assertRaises(TypeError, lambda: True - b_psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - b_psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - b_psser)
 
     def test_rmul(self):
-        self.assert_eq(1 * self.pser, 1 * self.psser)
-        self.assert_eq(0.1 * self.pser, 0.1 * self.psser)
-        self.assertRaises(TypeError, lambda: "x" * self.psser)
-        self.assert_eq(True * self.pser, True * self.psser)
-        self.assert_eq(False * self.pser, False * self.psser)
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * self.psser)
-        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * self.psser)
+        pdf, psdf = self.pdf, self.psdf
+
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
+        self.assert_eq(1 * b_pser, 1 * b_psser)
+        self.assert_eq(0.1 * b_pser, 0.1 * b_psser)
+        self.assertRaises(TypeError, lambda: "x" * b_psser)
+        self.assert_eq(True * b_pser, True * b_psser)
+        self.assert_eq(False * b_pser, False * b_psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * b_psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * b_psser)
 
     def test_rtruediv(self):
-        self.assert_eq(1 / self.pser, 1 / self.psser)
-        self.assert_eq(0.1 / self.pser, 0.1 / self.psser)
-        self.assertRaises(TypeError, lambda: "x" / self.psser)
-        self.assertRaises(TypeError, lambda: True / self.psser)
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) / self.psser)
-        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) / self.psser)
+        pdf, psdf = self.pdf, self.psdf
+
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
+        self.assert_eq(1 / b_pser, 1 / b_psser)
+        self.assert_eq(0.1 / b_pser, 0.1 / b_psser)
+        self.assertRaises(TypeError, lambda: "x" / b_psser)
+        self.assertRaises(TypeError, lambda: True / b_psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) / b_psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) / b_psser)
 
     def test_rfloordiv(self):
+        pdf, psdf = self.pdf, self.psdf
+
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
         if LooseVersion(pd.__version__) >= LooseVersion("0.25.3"):
-            self.assert_eq(1 // self.pser, 1 // self.psser)
-            self.assert_eq(0.1 // self.pser, 0.1 // self.psser)
+            self.assert_eq(1 // b_pser, 1 // b_psser)
+            self.assert_eq(0.1 // b_pser, 0.1 // b_psser)
         else:
-            self.assert_eq(1 // self.psser, ps.Series([1.0, 1.0, np.inf]))
-            self.assert_eq(0.1 // self.psser, ps.Series([0.0, 0.0, np.inf]))
-        self.assertRaises(TypeError, lambda: "x" // self.psser)
-        self.assertRaises(TypeError, lambda: True // self.psser)
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // self.psser)
-        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // self.psser)
+            self.assert_eq(1 // b_psser, pd.Series([1.0, 1.0, np.inf], name="bool"))
+            self.assert_eq(0.1 // b_psser, pd.Series([0.0, 0.0, np.inf], name="bool"))
+        self.assertRaises(TypeError, lambda: "x" // b_psser)
+        self.assertRaises(TypeError, lambda: True // b_psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // b_psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // b_psser)
 
     def test_rpow(self):
+        pdf, psdf = self.pdf, self.psdf
+
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
         # float is returned always in pandas-on-Spark
-        self.assert_eq((1 ** self.pser).astype(float), 1 ** self.psser)
-        self.assert_eq(0.1 ** self.pser, 0.1 ** self.psser)
-        self.assertRaises(TypeError, lambda: "x" ** self.psser)
-        self.assertRaises(TypeError, lambda: True ** self.psser)
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) ** self.psser)
-        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** self.psser)
+        self.assert_eq((1 ** b_pser).astype(float), 1 ** b_psser)
+        self.assert_eq(0.1 ** b_pser, 0.1 ** b_psser)
+        self.assertRaises(TypeError, lambda: "x" ** b_psser)
+        self.assertRaises(TypeError, lambda: True ** b_psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) ** b_psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** b_psser)
 
     def test_rmod(self):
+        pdf, psdf = self.pdf, self.psdf
+
+        b_pser, b_psser = pdf["bool"], psdf["bool"]
         # 1 % False is 0.0 in pandas
-        self.assert_eq(ps.Series([0, 0, None], dtype=float), 1 % self.psser)
+        self.assert_eq(pd.Series([0, 0, None], dtype=float, name="bool"), 1 % b_psser)
         # 0.1 / True is 0.1 in pandas
         self.assert_eq(
-            ps.Series([0.10000000000000009, 0.10000000000000009, None], dtype=float),
-            0.1 % self.psser,
+            pd.Series([0.10000000000000009, 0.10000000000000009, None], dtype=float, name="bool"),
+            0.1 % b_psser,
         )
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % self.psser)
-        self.assertRaises(TypeError, lambda: True % self.psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % b_psser)
+        self.assertRaises(TypeError, lambda: True % b_psser)
 
     def test_and(self):
-        pser = pd.Series([True, False, None], dtype="bool")
-        psser = ps.from_pandas(pser)
+        pdf, psdf = self.bool_pdf, self.bool_psdf
+        pser, other_pser = pdf["this"], pdf["that"]
+        psser, other_psser = psdf["this"], psdf["that"]
+
         self.assert_eq(pser & True, psser & True)
         self.assert_eq(pser & False, psser & False)
         self.assert_eq(pser & pser, psser & psser)
-
-        other_pser = pd.Series([False, None, True], dtype="bool")
-        other_psser = ps.from_pandas(other_pser)
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(pser & other_pser, (psser & other_psser).sort_index())
-            self.check_extension(
-                pser & other_pser.astype("boolean"),
-                (psser & other_psser.astype("boolean")).sort_index(),
-            )
-            self.assert_eq(other_pser & pser, (other_psser & psser).sort_index())
+        self.assert_eq(pser & other_pser, psser & other_psser)
+        self.assert_eq(other_pser & pser, other_psser & psser)
 
     def test_rand(self):
-        pser = pd.Series([True, False, None], dtype="bool")
-        psser = ps.from_pandas(pser)
+        pser, psser = self.pdf["bool"], self.psdf["bool"]
         self.assert_eq(True & pser, True & psser)
         self.assert_eq(False & pser, False & psser)
 
     def test_or(self):
-        pser = pd.Series([True, False, None], dtype="bool")
-        psser = ps.from_pandas(pser)
+        pdf, psdf = self.bool_pdf, self.bool_psdf
+        pser, other_pser = pdf["this"], pdf["that"]
+        psser, other_psser = psdf["this"], psdf["that"]
+
         self.assert_eq(pser | True, psser | True)
         self.assert_eq(pser | False, psser | False)
         self.assert_eq(pser | pser, psser | psser)
         self.assert_eq(True | pser, True | psser)
         self.assert_eq(False | pser, False | psser)
 
-        other_pser = pd.Series([False, None, True], dtype="bool")
-        other_psser = ps.from_pandas(other_pser)
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(pser | other_pser, (psser | other_psser).sort_index())
-            self.check_extension(
-                pser | other_pser.astype("boolean"),
-                (psser | other_psser.astype("boolean")).sort_index(),
-            )
-            self.assert_eq(other_pser | pser, (other_psser | psser).sort_index())
+        self.assert_eq(pser | other_pser, psser | other_psser)
+        self.assert_eq(other_pser | pser, other_psser | psser)
 
     def test_ror(self):
-        pser = pd.Series([True, False, None], dtype="bool")
-        psser = ps.from_pandas(pser)
+        pser, psser = self.pdf["bool"], self.psdf["bool"]
         self.assert_eq(True | pser, True | psser)
         self.assert_eq(False | pser, False | psser)
 
     def test_isnull(self):
-        self.assert_eq(self.pser.isnull(), self.psser.isnull())
+        self.assert_eq(self.pdf["bool"].isnull(), self.psdf["bool"].isnull())
 
     def test_astype(self):
-        pser = self.pser
-        psser = self.psser
+        pser, psser = self.pdf["bool"], self.psdf["bool"]
         self.assert_eq(pser.astype(int), psser.astype(int))
         self.assert_eq(pser.astype(float), psser.astype(float))
         self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
@@ -320,55 +304,55 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
 
     def test_neg(self):
-        self.assert_eq(-self.pser, -self.psser)
+        self.assert_eq(-self.pdf["bool"], -self.psdf["bool"])
 
     def test_abs(self):
-        self.assert_eq(abs(self.pser), abs(self.psser))
+        self.assert_eq(abs(self.pdf["bool"]), abs(self.psdf["bool"]))
 
     def test_invert(self):
-        self.assert_eq(~self.pser, ~self.psser)
+        self.assert_eq(~self.pdf["bool"], ~self.psdf["bool"])
 
     def test_eq(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser == self.other_pser, (self.psser == self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser == self.pser, (self.psser == self.psser).sort_index())
+        pdf, psdf = self.bool_pdf, self.bool_psdf
+        pser, other_pser = pdf["this"], pdf["that"]
+        psser, other_psser = psdf["this"], psdf["that"]
+        self.assert_eq(pser == other_pser, psser == other_psser)
+        self.assert_eq(pser == pser, psser == psser)
 
     def test_ne(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser != self.other_pser, (self.psser != self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser != self.pser, (self.psser != self.psser).sort_index())
+        pdf, psdf = self.bool_pdf, self.bool_psdf
+        pser, other_pser = pdf["this"], pdf["that"]
+        psser, other_psser = psdf["this"], psdf["that"]
+        self.assert_eq(pser != other_pser, psser != other_psser)
+        self.assert_eq(pser != pser, psser != psser)
 
     def test_lt(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser < self.other_pser, (self.psser < self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser < self.pser, (self.psser < self.psser).sort_index())
+        pdf, psdf = self.bool_pdf, self.bool_psdf
+        pser, other_pser = pdf["this"], pdf["that"]
+        psser, other_psser = psdf["this"], psdf["that"]
+        self.assert_eq(pser < other_pser, psser < other_psser)
+        self.assert_eq(pser < pser, psser < psser)
 
     def test_le(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser <= self.other_pser, (self.psser <= self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser <= self.pser, (self.psser <= self.psser).sort_index())
+        pdf, psdf = self.bool_pdf, self.bool_psdf
+        pser, other_pser = pdf["this"], pdf["that"]
+        psser, other_psser = psdf["this"], psdf["that"]
+        self.assert_eq(pser <= other_pser, psser <= other_psser)
+        self.assert_eq(pser <= pser, psser <= psser)
 
     def test_gt(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser > self.other_pser, (self.psser > self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser > self.pser, (self.psser > self.psser).sort_index())
+        pdf, psdf = self.bool_pdf, self.bool_psdf
+        pser, other_pser = pdf["this"], pdf["that"]
+        psser, other_psser = psdf["this"], psdf["that"]
+        self.assert_eq(pser > other_pser, psser > other_psser)
+        self.assert_eq(pser > pser, psser > psser)
 
     def test_ge(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser >= self.other_pser, (self.psser >= self.other_psser).sort_index()
-            )
-            self.assert_eq(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
+        pdf, psdf = self.bool_pdf, self.bool_psdf
+        pser, other_pser = pdf["this"], pdf["that"]
+        psser, other_psser = psdf["this"], psdf["that"]
+        self.assert_eq(pser >= other_pser, psser >= other_psser)
+        self.assert_eq(pser >= pser, psser >= psser)
 
 
 @unittest.skipIf(
@@ -376,32 +360,33 @@ class BooleanOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 )
 class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     @property
-    def pser(self):
-        return pd.Series([True, False, None], dtype="boolean")
+    def boolean_pdf(self):
+        return pd.DataFrame(
+            {"this": [True, False, None], "that": [False, None, True]}, dtype="boolean"
+        )
 
     @property
-    def psser(self):
-        return ps.from_pandas(self.pser)
+    def boolean_psdf(self):
+        return ps.from_pandas(self.boolean_pdf)
 
     @property
-    def other_pser(self):
-        return pd.Series([False, None, True], dtype="boolean")
+    def boolean_numeric_pdf(self):
+        return pd.concat([self.boolean_pdf, self.numeric_pdf], axis=1)
 
     @property
-    def other_psser(self):
-        return ps.from_pandas(self.other_pser)
+    def boolean_numeric_psdf(self):
+        return ps.from_pandas(self.boolean_numeric_pdf)
 
     @property
-    def float_pser(self):
-        return pd.Series([1, 2, 3], dtype=float)
+    def boolean_non_numeric_pdf(self):
+        return pd.concat([self.boolean_pdf, self.non_numeric_pdf], axis=1)
 
     @property
-    def float_psser(self):
-        return ps.from_pandas(self.float_pser)
+    def boolean_non_numeric_psdf(self):
+        return ps.from_pandas(self.boolean_non_numeric_pdf)
 
     def test_add(self):
-        pser = self.pser
-        psser = self.psser
+        pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
         self.check_extension(pser + 1, psser + 1)
         if extension_float_dtypes_available:
             self.check_extension(pser + 0.1, psser + 0.1)
@@ -409,23 +394,25 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(pser + 0.1, psser + 0.1)
 
         # In pandas, NA | True is NA, whereas NA | True is True in pandas-on-Spark
-        self.check_extension(ps.Series([True, True, True], dtype="boolean"), psser + True)
+        self.check_extension(
+            pd.Series([True, True, True], dtype="boolean", name=psser.name), psser + True
+        )
         self.check_extension(pser + False, psser + False)
         self.check_extension(pser + pser, psser + psser)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for pser, psser in self.numeric_pser_psser_pairs:
-                self.assert_eq(self.pser + pser, (self.psser + psser).sort_index(), almost=True)
-            for psser in self.non_numeric_pssers.values():
-                if not isinstance(psser.spark.data_type, BooleanType):
-                    self.assertRaises(TypeError, lambda: self.psser + psser)
-            bool_pser = pd.Series([False, False, False])
-            bool_psser = ps.from_pandas(bool_pser)
-            self.check_extension(self.pser + bool_pser, (self.psser + bool_psser).sort_index())
+        pdf, psdf = self.boolean_numeric_pdf, self.boolean_numeric_psdf
+        for col in self.numeric_df_cols:
+            self.assert_eq(pdf["this"] + pdf[col], psdf["this"] + psdf[col], almost=True)
+
+        pdf, psdf = self.boolean_non_numeric_pdf, self.boolean_non_numeric_psdf
+        for col in self.non_numeric_df_cols:
+            if col == "bool":
+                self.check_extension(pdf["this"] + pdf[col], psdf["this"] + psdf[col])
+            else:
+                self.assertRaises(TypeError, lambda: psdf["this"] + psdf[col])
 
     def test_sub(self):
-        pser = self.pser
-        psser = self.psser
+        pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
         self.check_extension(pser - 1, psser - 1)
         if extension_float_dtypes_available:
             self.check_extension(pser - 0.1, psser - 0.1)
@@ -434,15 +421,16 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: psser - psser)
         self.assertRaises(TypeError, lambda: psser - True)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for pser, psser in self.numeric_pser_psser_pairs:
-                self.assert_eq(self.pser - pser, (self.psser - psser).sort_index(), almost=True)
-            for psser in self.non_numeric_pssers.values():
-                self.assertRaises(TypeError, lambda: self.psser - psser)
+        pdf, psdf = self.boolean_numeric_pdf, self.boolean_numeric_psdf
+        for col in self.numeric_df_cols:
+            self.assert_eq(pdf["this"] - pdf[col], psdf["this"] - psdf[col], almost=True)
+
+        pdf, psdf = self.boolean_non_numeric_pdf, self.boolean_non_numeric_psdf
+        for col in self.non_numeric_df_cols:
+            self.assertRaises(TypeError, lambda: psdf["this"] - psdf[col])
 
     def test_mul(self):
-        pser = self.pser
-        psser = self.psser
+        pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
         self.check_extension(pser * 1, psser * 1)
         if extension_float_dtypes_available:
             self.check_extension(pser * 0.1, psser * 0.1)
@@ -451,22 +439,25 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
 
         # In pandas, NA & False is NA, whereas NA & False is False in pandas-on-Spark
         self.check_extension(pser * True, psser * True)
-        self.check_extension(ps.Series([False, False, False], dtype="boolean"), psser * False)
+        self.check_extension(
+            pd.Series([False, False, False], dtype="boolean", name=psser.name), psser * False
+        )
         self.check_extension(pser * pser, psser * psser)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for pser, psser in self.numeric_pser_psser_pairs:
-                self.assert_eq(self.pser * pser, (self.psser * psser).sort_index(), almost=True)
-            for psser in self.non_numeric_pssers.values():
-                if not isinstance(psser.spark.data_type, BooleanType):
-                    self.assertRaises(TypeError, lambda: self.psser * psser)
-            bool_pser = pd.Series([True, True, True])
-            bool_psser = ps.from_pandas(bool_pser)
-            self.check_extension(self.pser * bool_pser, (self.psser * bool_psser).sort_index())
+        pdf, psdf = self.boolean_numeric_pdf, self.boolean_numeric_psdf
+        for col in self.numeric_df_cols:
+            self.assert_eq(pdf["this"] * pdf[col], psdf["this"] * psdf[col], almost=True)
+
+        pdf, psdf = self.boolean_non_numeric_pdf, self.boolean_non_numeric_psdf
+        for col in self.non_numeric_df_cols:
+            if col == "bool":
+                self.check_extension(pdf["that"] * pdf[col], psdf["that"] * psdf[col])
+            else:
+                self.assertRaises(TypeError, lambda: psdf["this"] * psdf[col])
 
     def test_truediv(self):
-        pser = self.pser
-        psser = self.psser
+        pdf, psdf = self.boolean_numeric_pdf, self.boolean_numeric_psdf
+        pser, psser = pdf["this"], psdf["this"]
         if extension_float_dtypes_available:
             self.check_extension(pser / 1, psser / 1)
             self.check_extension(pser / 0.1, psser / 0.1)
@@ -476,18 +467,18 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: psser / psser)
         self.assertRaises(TypeError, lambda: psser / True)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser / self.float_pser,
-                (self.psser / self.float_psser).sort_index(),
-                almost=True,
-            )
-            for psser in self.non_numeric_pssers.values():
-                self.assertRaises(TypeError, lambda: self.psser / psser)
+        self.assert_eq(
+            pser / pdf["float"],
+            psser / psdf["float"],
+            almost=True,
+        )
+        psdf = self.boolean_non_numeric_psdf
+        for col in self.non_numeric_df_cols:
+            self.assertRaises(TypeError, lambda: psdf["this"] / psdf[col])
 
     def test_floordiv(self):
-        pser = self.pser
-        psser = self.psser
+        pdf, psdf = self.boolean_numeric_pdf, self.boolean_numeric_psdf
+        pser, psser = pdf["this"], psdf["this"]
 
         # float is always returned in pandas-on-Spark
         if extension_float_dtypes_available:
@@ -501,18 +492,18 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: psser // psser)
         self.assertRaises(TypeError, lambda: psser // True)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser // self.float_pser,
-                (self.psser // self.float_psser).sort_index(),
-                almost=True,
-            )
-            for psser in self.non_numeric_pssers.values():
-                self.assertRaises(TypeError, lambda: self.psser // psser)
+        self.assert_eq(
+            pser // pdf["float"],
+            psser // psdf["float"],
+            almost=True,
+        )
+        psdf = self.boolean_non_numeric_psdf
+        for col in self.non_numeric_df_cols:
+            self.assertRaises(TypeError, lambda: psdf["this"] // psdf[col])
 
     def test_mod(self):
-        pser = self.pser
-        psser = self.psser
+        pdf, psdf = self.boolean_numeric_pdf, self.boolean_numeric_psdf
+        pser, psser = pdf["this"], psdf["this"]
         self.check_extension(pser % 1, psser % 1)
         if extension_float_dtypes_available:
             self.check_extension(pser % 0.1, psser % 0.1)
@@ -521,158 +512,179 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assertRaises(TypeError, lambda: psser % psser)
         self.assertRaises(TypeError, lambda: psser % True)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            for pser, psser in self.numeric_pser_psser_pairs:
-                self.assert_eq(self.pser % pser, (self.psser % psser).sort_index(), almost=True)
-            for psser in self.non_numeric_pssers.values():
-                self.assertRaises(TypeError, lambda: self.psser % psser)
+        pdf, psdf = self.boolean_numeric_pdf, self.boolean_numeric_psdf
+        for col in self.numeric_df_cols:
+            self.assert_eq(pdf["this"] % pdf[col], psdf["this"] % psdf[col], almost=True)
+
+        psdf = self.boolean_non_numeric_psdf
+        for col in self.non_numeric_df_cols:
+            self.assertRaises(TypeError, lambda: psdf["this"] % psdf[col])
 
     def test_pow(self):
-        pser = self.pser
-        psser = self.psser
+        pdf, psdf = self.boolean_numeric_pdf, self.boolean_numeric_psdf
+        pser, psser = pdf["this"], psdf["this"]
         # float is always returned in pandas-on-Spark
         if extension_float_dtypes_available:
             self.check_extension((pser ** 1).astype("Float64"), psser ** 1)
-            self.check_extension((pser ** 0.1).astype("Float64"), self.psser ** 0.1)
+            self.check_extension((pser ** 0.1).astype("Float64"), psser ** 0.1)
             self.check_extension(
                 (pser ** pser.astype(float)).astype("Float64"), psser ** psser.astype(float)
             )
         else:
             self.assert_eq((pser ** 1).astype("float"), psser ** 1)
-            self.assert_eq((pser ** 0.1).astype("float"), self.psser ** 0.1)
+            self.assert_eq((pser ** 0.1).astype("float"), psser ** 0.1)
             self.assert_eq(
                 (pser ** pser.astype(float)).astype("float"), psser ** psser.astype(float)
             )
         self.assertRaises(TypeError, lambda: psser ** psser)
         self.assertRaises(TypeError, lambda: psser ** True)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            self.assert_eq(
-                self.pser ** self.float_pser,
-                (self.psser ** self.float_psser).sort_index(),
-                almost=True,
-            )
-
-            for psser in self.non_numeric_pssers.values():
-                self.assertRaises(TypeError, lambda: self.psser ** psser)
+        self.assert_eq(
+            pser ** pdf["float"],
+            psser ** psdf["float"],
+            almost=True,
+        )
+        psdf = self.boolean_non_numeric_psdf
+        for col in self.non_numeric_df_cols:
+            self.assertRaises(TypeError, lambda: psdf["this"] % psdf[col])
 
     def test_radd(self):
-        self.check_extension(1 + self.pser, 1 + self.psser)
+        pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
+
+        self.check_extension(1 + pser, 1 + psser)
         if extension_float_dtypes_available:
-            self.check_extension(0.1 + self.pser, 0.1 + self.psser)
+            self.check_extension(0.1 + pser, 0.1 + psser)
         else:
-            self.assert_eq(0.1 + self.pser, 0.1 + self.psser)
-        self.assertRaises(TypeError, lambda: "x" + self.psser)
+            self.assert_eq(0.1 + pser, 0.1 + psser)
+        self.assertRaises(TypeError, lambda: "x" + psser)
 
         # In pandas, NA | True is NA, whereas NA | True is True in pandas-on-Spark
-        self.check_extension(ps.Series([True, True, True], dtype="boolean"), True + self.psser)
-        self.check_extension(False + self.pser, False + self.psser)
+        self.check_extension(
+            ps.Series([True, True, True], dtype="boolean", name=psser.name), True + psser
+        )
+        self.check_extension(False + pser, False + psser)
 
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + self.psser)
-        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + self.psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) + psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) + psser)
 
     def test_rsub(self):
-        self.check_extension(1 - self.pser, 1 - self.psser)
+        pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
+        self.check_extension(1 - pser, 1 - psser)
         if extension_float_dtypes_available:
-            self.check_extension(0.1 - self.pser, 0.1 - self.psser)
+            self.check_extension(0.1 - pser, 0.1 - psser)
         else:
-            self.assert_eq(0.1 - self.pser, 0.1 - self.psser)
-        self.assertRaises(TypeError, lambda: "x" - self.psser)
-        self.assertRaises(TypeError, lambda: True - self.psser)
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - self.psser)
-        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - self.psser)
+            self.assert_eq(0.1 - pser, 0.1 - psser)
+        self.assertRaises(TypeError, lambda: "x" - psser)
+        self.assertRaises(TypeError, lambda: True - psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) - psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) - psser)
 
     def test_rmul(self):
-        self.check_extension(1 * self.pser, 1 * self.psser)
+        pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
+        self.check_extension(1 * pser, 1 * psser)
         if extension_float_dtypes_available:
-            self.check_extension(0.1 * self.pser, 0.1 * self.psser)
+            self.check_extension(0.1 * pser, 0.1 * psser)
         else:
-            self.assert_eq(0.1 * self.pser, 0.1 * self.psser)
-        self.assertRaises(TypeError, lambda: "x" * self.psser)
+            self.assert_eq(0.1 * pser, 0.1 * psser)
+        self.assertRaises(TypeError, lambda: "x" * psser)
 
         # In pandas, NA & False is NA, whereas NA & False is False in pandas-on-Spark
-        self.check_extension(True * self.pser, True * self.psser)
-        self.check_extension(ps.Series([False, False, False], dtype="boolean"), False * self.psser)
+        self.check_extension(True * pser, True * psser)
+        self.check_extension(
+            pd.Series([False, False, False], dtype="boolean", name=psser.name), False * psser
+        )
 
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * self.psser)
-        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * self.psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) * psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) * psser)
 
     def test_rtruediv(self):
+        pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
         if extension_float_dtypes_available:
-            self.check_extension(1 / self.pser, 1 / self.psser)
-            self.check_extension(0.1 / self.pser, 0.1 / self.psser)
+            self.check_extension(1 / pser, 1 / psser)
+            self.check_extension(0.1 / pser, 0.1 / psser)
         else:
-            self.assert_eq(1 / self.pser, 1 / self.psser)
-            self.assert_eq(0.1 / self.pser, 0.1 / self.psser)
-        self.assertRaises(TypeError, lambda: "x" / self.psser)
-        self.assertRaises(TypeError, lambda: True / self.psser)
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) / self.psser)
-        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) / self.psser)
+            self.assert_eq(1 / pser, 1 / psser)
+            self.assert_eq(0.1 / pser, 0.1 / psser)
+        self.assertRaises(TypeError, lambda: "x" / psser)
+        self.assertRaises(TypeError, lambda: True / psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) / psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) / psser)
 
     def test_rfloordiv(self):
-        self.assert_eq(pd.Series([1.0, np.inf, np.nan]), (1 // self.psser).astype(float))
-        self.assert_eq(pd.Series([0.0, np.inf, np.nan]), (0.1 // self.psser).astype(float))
-        self.assertRaises(TypeError, lambda: "x" // self.psser)
-        self.assertRaises(TypeError, lambda: True // self.psser)
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // self.psser)
-        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // self.psser)
+        psser = self.boolean_psdf["this"]
+        self.assert_eq(
+            pd.Series([1.0, np.inf, np.nan], name=psser.name), (1 // psser).astype(float)
+        )
+        self.assert_eq(
+            pd.Series([0.0, np.inf, np.nan], name=psser.name), (0.1 // psser).astype(float)
+        )
+        self.assertRaises(TypeError, lambda: "x" // psser)
+        self.assertRaises(TypeError, lambda: True // psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) // psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) // psser)
 
     def test_rpow(self):
+        pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
         if extension_float_dtypes_available:
-            self.check_extension(pd.Series([1, 1, 1], dtype="Float64"), 1 ** self.psser)
-            self.check_extension((0.1 ** self.pser).astype("Float64"), 0.1 ** self.psser)
+            self.check_extension(pd.Series([1, 1, 1], dtype="Float64", name=psser.name), 1 ** psser)
+            self.check_extension((0.1 ** pser).astype("Float64"), 0.1 ** psser)
         else:
-            self.assert_eq(pd.Series([1, 1, 1], dtype="float"), 1 ** self.psser)
-            self.assert_eq((0.1 ** self.pser).astype("float"), 0.1 ** self.psser)
-        self.assertRaises(TypeError, lambda: "x" ** self.psser)
-        self.assertRaises(TypeError, lambda: True ** self.psser)
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) ** self.psser)
-        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** self.psser)
+            self.assert_eq(pd.Series([1, 1, 1], dtype="float", name=psser.name), 1 ** psser)
+            self.assert_eq((0.1 ** pser).astype("float"), 0.1 ** psser)
+        self.assertRaises(TypeError, lambda: "x" ** psser)
+        self.assertRaises(TypeError, lambda: True ** psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) ** psser)
+        self.assertRaises(TypeError, lambda: datetime.datetime(1994, 1, 1) ** psser)
 
     def test_rmod(self):
-        self.check_extension(ps.Series([0, np.nan, np.nan], dtype="Int64"), 1 % self.psser)
+        psser = self.boolean_psdf["this"]
+        self.check_extension(
+            ps.Series([0, np.nan, np.nan], dtype="Int64", name=psser.name), 1 % psser
+        )
         if extension_float_dtypes_available:
             self.check_extension(
-                pd.Series([0.10000000000000009, np.nan, np.nan], dtype="Float64"),
-                0.1 % self.psser,
+                pd.Series([0.10000000000000009, np.nan, np.nan], dtype="Float64", name=psser.name),
+                0.1 % psser,
             )
         else:
             self.assert_eq(
-                pd.Series([0.10000000000000009, np.nan, np.nan], dtype="float"),
-                0.1 % self.psser,
+                pd.Series([0.10000000000000009, np.nan, np.nan], dtype="float", name=psser.name),
+                0.1 % psser,
             )
-        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % self.psser)
-        self.assertRaises(TypeError, lambda: True % self.psser)
+        self.assertRaises(TypeError, lambda: datetime.date(1994, 1, 1) % psser)
+        self.assertRaises(TypeError, lambda: True % psser)
 
     def test_and(self):
-        pser = self.pser
-        psser = self.psser
+        pdf, psdf = self.boolean_pdf, self.boolean_psdf
+        pser, psser = pdf["this"], psdf["this"]
+        other_pser, other_psser = pdf["that"], psdf["that"]
         self.check_extension(pser & True, psser & True)
         self.check_extension(pser & False, psser & False)
         self.check_extension(pser & pser, psser & psser)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            self.check_extension(pser & self.other_pser, (psser & self.other_psser).sort_index())
-            self.check_extension(self.other_pser & pser, (self.other_psser & psser).sort_index())
+        self.check_extension(pser & other_pser, psser & other_psser)
+        self.check_extension(other_pser & pser, other_psser & psser)
 
     def test_rand(self):
-        self.check_extension(True & self.pser, True & self.psser)
-        self.check_extension(False & self.pser, False & self.psser)
+        pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
+        self.check_extension(True & pser, True & psser)
+        self.check_extension(False & pser, False & psser)
 
     def test_or(self):
-        pser = self.pser
-        psser = self.psser
+        pdf, psdf = self.boolean_pdf, self.boolean_psdf
+        pser, psser = pdf["this"], psdf["this"]
+        other_pser, other_psser = pdf["that"], psdf["that"]
         self.check_extension(pser | True, psser | True)
         self.check_extension(pser | False, psser | False)
         self.check_extension(pser | pser, psser | psser)
 
-        with option_context("compute.ops_on_diff_frames", True):
-            self.check_extension(pser | self.other_pser, (psser | self.other_psser).sort_index())
-            self.check_extension(self.other_pser | pser, (self.other_psser | psser).sort_index())
+        self.check_extension(pser | other_pser, psser | other_psser)
+        self.check_extension(other_pser | pser, other_psser | psser)
 
     def test_ror(self):
-        self.check_extension(True | self.pser, True | self.psser)
-        self.check_extension(False | self.pser, False | self.psser)
+        pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
+        self.check_extension(True | pser, True | psser)
+        self.check_extension(False | pser, False | psser)
 
     def test_from_to_pandas(self):
         data = [True, True, False, None]
@@ -682,14 +694,13 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.check_extension(ps.from_pandas(pser), psser)
 
     def test_isnull(self):
-        self.assert_eq(self.pser.isnull(), self.psser.isnull())
+        self.assert_eq(self.boolean_pdf["this"].isnull(), self.boolean_psdf["this"].isnull())
 
     def test_astype(self):
-        pser = self.pser
-        psser = self.psser
+        pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
 
         # TODO(SPARK-35976): [True, False, <NA>] is returned in pandas
-        self.assert_eq(["True", "False", "None"], self.psser.astype(str).tolist())
+        self.assert_eq(["True", "False", "None"], psser.astype(str).tolist())
 
         self.assert_eq(pser.astype("category"), psser.astype("category"))
         cat_type = CategoricalDtype(categories=[False, True])
@@ -697,7 +708,7 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for dtype in self.extension_dtypes:
             if dtype in self.fractional_extension_dtypes:
                 # A pandas boolean extension series cannot be casted to fractional extension dtypes
-                self.assert_eq([1.0, 0.0, np.nan], self.psser.astype(dtype).tolist())
+                self.assert_eq([1.0, 0.0, np.nan], psser.astype(dtype).tolist())
             elif dtype in self.string_extension_dtype:
                 if LooseVersion(pd.__version__) >= LooseVersion("1.1.0"):
                     # Limit pandas version due to https://github.com/pandas-dev/pandas/issues/31204
@@ -706,55 +717,55 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                 self.check_extension(pser.astype(dtype), psser.astype(dtype))
 
     def test_neg(self):
-        self.assertRaises(TypeError, lambda: -self.psser)
+        self.assertRaises(TypeError, lambda: -self.boolean_psdf["this"])
 
     def test_abs(self):
-        self.assertRaises(TypeError, lambda: abs(self.psser))
+        self.assertRaises(TypeError, lambda: abs(self.boolean_psdf["this"]))
 
     def test_invert(self):
-        self.assertRaises(TypeError, lambda: ~self.psser)
+        self.assertRaises(TypeError, lambda: ~self.boolean_psdf["this"])
 
     def test_eq(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.check_extension(
-                self.pser == self.other_pser, (self.psser == self.other_psser).sort_index()
-            )
-            self.check_extension(self.pser == self.pser, (self.psser == self.psser).sort_index())
+        pdf, psdf = self.boolean_pdf, self.boolean_psdf
+        pser, psser = pdf["this"], psdf["this"]
+        other_pser, other_psser = pdf["that"], psdf["that"]
+        self.check_extension(pser == other_pser, psser == other_psser)
+        self.check_extension(pser == pser, psser == psser)
 
     def test_ne(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.check_extension(
-                self.pser != self.other_pser, (self.psser != self.other_psser).sort_index()
-            )
-            self.check_extension(self.pser != self.pser, (self.psser != self.psser).sort_index())
+        pdf, psdf = self.boolean_pdf, self.boolean_psdf
+        pser, psser = pdf["this"], psdf["this"]
+        other_pser, other_psser = pdf["that"], psdf["that"]
+        self.check_extension(pser != other_pser, psser != other_psser)
+        self.check_extension(pser != pser, psser != psser)
 
     def test_lt(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.check_extension(
-                self.pser < self.other_pser, (self.psser < self.other_psser).sort_index()
-            )
-            self.check_extension(self.pser < self.pser, (self.psser < self.psser).sort_index())
+        pdf, psdf = self.boolean_pdf, self.boolean_psdf
+        pser, psser = pdf["this"], psdf["this"]
+        other_pser, other_psser = pdf["that"], psdf["that"]
+        self.check_extension(pser < other_pser, psser < other_psser)
+        self.check_extension(pser < pser, psser < psser)
 
     def test_le(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.check_extension(
-                self.pser <= self.other_pser, (self.psser <= self.other_psser).sort_index()
-            )
-            self.check_extension(self.pser <= self.pser, (self.psser <= self.psser).sort_index())
+        pdf, psdf = self.boolean_pdf, self.boolean_psdf
+        pser, psser = pdf["this"], psdf["this"]
+        other_pser, other_psser = pdf["that"], psdf["that"]
+        self.check_extension(pser <= other_pser, psser <= other_psser)
+        self.check_extension(pser <= pser, psser <= psser)
 
     def test_gt(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.check_extension(
-                self.pser > self.other_pser, (self.psser > self.other_psser).sort_index()
-            )
-            self.check_extension(self.pser > self.pser, (self.psser > self.psser).sort_index())
+        pdf, psdf = self.boolean_pdf, self.boolean_psdf
+        pser, psser = pdf["this"], psdf["this"]
+        other_pser, other_psser = pdf["that"], psdf["that"]
+        self.check_extension(pser > other_pser, psser > other_psser)
+        self.check_extension(pser > pser, psser > psser)
 
     def test_ge(self):
-        with option_context("compute.ops_on_diff_frames", True):
-            self.check_extension(
-                self.pser >= self.other_pser, (self.psser >= self.other_psser).sort_index()
-            )
-            self.check_extension(self.pser >= self.pser, (self.psser >= self.psser).sort_index())
+        pdf, psdf = self.boolean_pdf, self.boolean_psdf
+        pser, psser = pdf["this"], psdf["this"]
+        other_pser, other_psser = pdf["that"], psdf["that"]
+        self.check_extension(pser >= other_pser, psser >= other_psser)
+        self.check_extension(pser >= pser, psser >= psser)
 
 
 if __name__ == "__main__":

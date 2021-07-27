@@ -157,6 +157,23 @@ object DecorrelateInnerQuery extends PredicateHelper {
   }
 
   /**
+   * Replace all outer references in the given named expressions and keep the output
+   * attributes unchanged.
+   */
+  private def replaceOuterInNamedExpressions(
+      expressions: Seq[NamedExpression],
+      outerReferenceMap: AttributeMap[Attribute]): Seq[NamedExpression] = {
+    expressions.map { expr =>
+      val newExpr = replaceOuterReference(expr, outerReferenceMap)
+      if (!newExpr.toAttribute.semanticEquals(expr.toAttribute)) {
+        Alias(newExpr, expr.name)(expr.exprId)
+      } else {
+        newExpr
+      }
+    }
+  }
+
+  /**
    * Return all references that are presented in the join conditions but not in the output
    * of the given named expressions.
    */
@@ -429,8 +446,9 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newOuterReferences = parentOuterReferences ++ outerReferences
             val (newChild, joinCond, outerReferenceMap) =
               decorrelate(child, newOuterReferences, aggregated)
-            // Replace all outer references in the original project list.
-            val newProjectList = replaceOuterReferences(projectList, outerReferenceMap)
+            // Replace all outer references in the original project list and keep the output
+            // attributes unchanged.
+            val newProjectList = replaceOuterInNamedExpressions(projectList, outerReferenceMap)
             // Preserve required domain attributes in the join condition by adding the missing
             // references to the new project list.
             val referencesToAdd = missingReferences(newProjectList, joinCond)
@@ -442,9 +460,10 @@ object DecorrelateInnerQuery extends PredicateHelper {
             val newOuterReferences = parentOuterReferences ++ outerReferences
             val (newChild, joinCond, outerReferenceMap) =
               decorrelate(child, newOuterReferences, aggregated = true)
-            // Replace all outer references in grouping and aggregate expressions.
+            // Replace all outer references in grouping and aggregate expressions, and keep
+            // the output attributes unchanged.
             val newGroupingExpr = replaceOuterReferences(groupingExpressions, outerReferenceMap)
-            val newAggExpr = replaceOuterReferences(aggregateExpressions, outerReferenceMap)
+            val newAggExpr = replaceOuterInNamedExpressions(aggregateExpressions, outerReferenceMap)
             // Add all required domain attributes to both grouping and aggregate expressions.
             val referencesToAdd = missingReferences(newAggExpr, joinCond)
             val newAggregate = a.copy(

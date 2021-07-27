@@ -85,9 +85,9 @@ class ContinuousExecution(
     uniqueSources = sources.distinct.map(s => s -> ReadLimit.allAvailable()).toMap
 
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
-    WriteToContinuousDataSource(
-      createStreamingWrite(
-        plan.sink.asInstanceOf[SupportsWrite], extraOptions, _logicalPlan), _logicalPlan)
+    val (streamingWrite, customMetrics) = createStreamingWrite(
+      plan.sink.asInstanceOf[SupportsWrite], extraOptions, _logicalPlan)
+    WriteToContinuousDataSource(streamingWrite, _logicalPlan, customMetrics)
   }
 
   private val triggerExecutor = trigger match {
