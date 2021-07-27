@@ -28,7 +28,12 @@ trait ShuffleChecksumTestHelper {
   /**
    * Ensure that the checksum values are consistent between write and read side.
    */
-  def compareChecksums(numPartition: Int, checksum: File, data: File, index: File): Unit = {
+  def compareChecksums(
+      numPartition: Int,
+      algorithm: String,
+      checksum: File,
+      data: File,
+      index: File): Unit = {
     assert(checksum.exists(), "Checksum file doesn't exist")
     assert(data.exists(), "Data file doesn't exist")
     assert(index.exists(), "Index file doesn't exist")
@@ -55,8 +60,7 @@ trait ShuffleChecksumTestHelper {
         val curOffset = indexIn.readLong
         val limit = (curOffset - prevOffset).toInt
         val bytes = new Array[Byte](limit)
-        val checksumCal =
-          ShuffleChecksumHelper.getChecksumByFileExtension(checksum.getName)
+        val checksumCal = ShuffleChecksumHelper.getChecksumByAlgorithm(algorithm)
         checkedIn = new CheckedInputStream(
           new LimitedInputStream(dataIn, curOffset - prevOffset), checksumCal)
         checkedIn.read(bytes, 0, limit)

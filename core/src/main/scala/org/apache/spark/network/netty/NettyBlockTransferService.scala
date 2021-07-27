@@ -36,13 +36,8 @@ import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap}
 import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
 import org.apache.spark.network.server._
-<<<<<<< HEAD
 import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockTransferListener, DownloadFileManager, OneForOneBlockFetcher, RetryingBlockTransferor}
-import org.apache.spark.network.shuffle.protocol.{BlockTransferMessage, CorruptionCause, DiagnoseCorruption, UploadBlock, UploadBlockStream}
-=======
-import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, OneForOneBlockFetcher, RetryingBlockFetcher}
 import org.apache.spark.network.shuffle.protocol.{UploadBlock, UploadBlockStream}
->>>>>>> update
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.serializer.JavaSerializer

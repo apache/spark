@@ -398,7 +398,8 @@ public class ExternalShuffleBlockResolver {
       executor.subDirsPerLocalDir,
       fileName);
     ManagedBuffer data = getBlockData(appId, execId, shuffleId, mapId, reduceId);
-    return  ShuffleChecksumHelper.diagnoseCorruption(checksumFile, reduceId, data, checksumByReader);
+    return ShuffleChecksumHelper.diagnoseCorruption(
+      algorithm, checksumFile, reduceId, data, checksumByReader);
   }
 
   /** Simply encodes an executor's full ID, which is appId + execId. */

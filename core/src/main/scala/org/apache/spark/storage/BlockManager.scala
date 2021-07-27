@@ -303,7 +303,7 @@ private[spark] class BlockManager(
       resolver.getChecksumFile(shuffleBlock.shuffleId, shuffleBlock.mapId, algorithm)
     val reduceId = shuffleBlock.reduceId
     ShuffleChecksumHelper.diagnoseCorruption(
-      checksumFile, reduceId, resolver.getBlockData(shuffleBlock), checksumByReader)
+      algorithm, checksumFile, reduceId, resolver.getBlockData(shuffleBlock), checksumByReader)
   }
 
   /**

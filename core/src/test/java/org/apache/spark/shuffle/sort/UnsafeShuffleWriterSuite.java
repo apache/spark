@@ -302,8 +302,9 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
+    String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
     String checksumFileName = ShuffleChecksumHelper.getChecksumFileName(
-      checksumBlockId.name(), conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM()));
+      checksumBlockId.name(), checksumAlgorithm);
     File checksumFile = new File(tempDir, checksumFileName);
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
@@ -323,7 +324,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     writer1.stop(true);
     assertTrue(checksumFile.exists());
     assertEquals(checksumFile.length(), 8 * NUM_PARTITIONS);
-    compareChecksums(NUM_PARTITIONS, checksumFile, dataFile, indexFile);
+    compareChecksums(NUM_PARTITIONS, checksumAlgorithm, checksumFile, dataFile, indexFile);
   }
 
   @Test
@@ -331,8 +332,9 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
+    String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
     String checksumFileName = ShuffleChecksumHelper.getChecksumFileName(
-      checksumBlockId.name(), conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM()));
+      checksumBlockId.name(), checksumAlgorithm);
     File checksumFile = new File(tempDir, checksumFileName);
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
@@ -358,7 +360,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     writer1.closeAndWriteOutput();
     assertTrue(checksumFile.exists());
     assertEquals(checksumFile.length(), 8 * NUM_PARTITIONS);
-    compareChecksums(NUM_PARTITIONS, checksumFile, dataFile, indexFile);
+    compareChecksums(NUM_PARTITIONS, checksumAlgorithm, checksumFile, dataFile, indexFile);
   }
 
   private void testMergingSpills(

@@ -249,8 +249,9 @@ class BypassMergeSortShuffleWriterSuite
     val checksumBlockId = ShuffleChecksumBlockId(shuffleId, mapId, 0)
     val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, 0)
     val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, 0)
+    val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
     val checksumFileName = ShuffleChecksumHelper.getChecksumFileName(
-      checksumBlockId.name, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
+      checksumBlockId.name, checksumAlgorithm)
     val checksumFile = new File(tempDir, checksumFileName)
     val dataFile = new File(tempDir, dataBlockId.name)
     val indexFile = new File(tempDir, indexBlockId.name)
@@ -279,6 +280,6 @@ class BypassMergeSortShuffleWriterSuite
     writer.stop( /* success = */ true)
     assert(checksumFile.exists())
     assert(checksumFile.length() === 8 * numPartition)
-    compareChecksums(numPartition, checksumFile, dataFile, indexFile)
+    compareChecksums(numPartition, checksumAlgorithm, checksumFile, dataFile, indexFile)
   }
 }

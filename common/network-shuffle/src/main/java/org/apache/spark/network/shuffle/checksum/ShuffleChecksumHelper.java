@@ -78,12 +78,6 @@ public class ShuffleChecksumHelper {
     return String.format("%s.%s", blockName, algorithm);
   }
 
-  public static Checksum getChecksumByFileExtension(String fileName) {
-    int index = fileName.lastIndexOf(".");
-    String algorithm = fileName.substring(index + 1);
-    return getChecksumsByAlgorithm(1, algorithm)[0];
-  }
-
   private static long readChecksumByReduceId(File checksumFile, int reduceId) throws IOException {
     try (DataInputStream in = new DataInputStream(new FileInputStream(checksumFile))) {
       ByteStreams.skipFully(in, reduceId * 8);
@@ -115,6 +109,7 @@ public class ShuffleChecksumHelper {
    * we suspect the corruption is caused by the NETWORK_ISSUE. Otherwise, the cause remains
    * CHECKSUM_VERIFY_PASS. In case of the any other failures, the cause remains UNKNOWN_ISSUE.
    *
+   * @param algorithm The checksum algorithm that is used for calculating checksum value of partitionData
    * @param checksumFile The checksum file that written by the shuffle writer
    * @param reduceId The reduceId of the shuffle block
    * @param partitionData The partition data of the shuffle block
@@ -122,6 +117,7 @@ public class ShuffleChecksumHelper {
    * @return The cause of data corruption
    */
   public static Cause diagnoseCorruption(
+      String algorithm,
       File checksumFile,
       int reduceId,
       ManagedBuffer partitionData,
@@ -132,7 +128,7 @@ public class ShuffleChecksumHelper {
       // Try to get the checksum instance before reading the checksum file so that
       // `UnsupportedOperationException` can be thrown first before `FileNotFoundException`
       // when the checksum algorithm isn't supported.
-      Checksum checksumAlgo = getChecksumByFileExtension(checksumFile.getName());
+      Checksum checksumAlgo = getChecksumByAlgorithm(algorithm);
       long checksumByWriter = readChecksumByReduceId(checksumFile, reduceId);
       long checksumByReCalculation = calculateChecksumForPartition(partitionData, checksumAlgo);
       long duration = System.currentTimeMillis() - diagnoseStart;

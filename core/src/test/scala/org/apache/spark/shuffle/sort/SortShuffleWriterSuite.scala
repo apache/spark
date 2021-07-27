@@ -166,13 +166,13 @@ class SortShuffleWriterSuite
       val expectSpillSize = if (doSpill) records.size else 0
       assert(sorter.numSpills === expectSpillSize)
       writer.stop(success = true)
-      val checksumFile = shuffleBlockResolver
-        .getChecksumFile(shuffleId, 0, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
+      val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
+      val checksumFile = shuffleBlockResolver.getChecksumFile(shuffleId, 0, checksumAlgorithm)
       assert(checksumFile.exists())
       assert(checksumFile.length() === 8 * numPartition)
       val dataFile = shuffleBlockResolver.getDataFile(shuffleId, 0)
       val indexFile = shuffleBlockResolver.getIndexFile(shuffleId, 0)
-      compareChecksums(numPartition, checksumFile, dataFile, indexFile)
+      compareChecksums(numPartition, checksumAlgorithm, checksumFile, dataFile, indexFile)
       localSC.stop()
     }
   }
