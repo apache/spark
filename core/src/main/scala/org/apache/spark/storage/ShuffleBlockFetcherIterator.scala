@@ -861,25 +861,11 @@ final class ShuffleBlockFetcherIterator(
                   // It's the second time this block is detected corrupted
                   if (checksumEnabled) {
                     // Diagnose the cause of data corruption if shuffle checksum is enabled
-                    val cause = diagnoseCorruption(checkedIn, address, blockId)
+                    val diagnosisResponse = diagnoseCorruption(checkedIn, address, blockId)
                     buf.release()
-                    val errorMsg = cause match {
-                      case Cause.UNSUPPORTED_CHECKSUM_ALGORITHM =>
-                        s"Block $blockId is corrupted but corruption diagnosis failed due to " +
-                          s"unsupported checksum algorithm: " +
-                          s"${SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)}"
-
-                      case Cause.CHECKSUM_VERIFY_PASS =>
-                        s"Block $blockId is corrupted but checksum verification passed"
-
-                      case Cause.UNKNOWN_ISSUE =>
-                        s"Block $blockId is corrupted but the cause is unknown"
-
-                      case otherCause =>
-                        s"Block $blockId is corrupted due to $otherCause"
-                    }
-                    logError(errorMsg)
-                    throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
+                    logError(diagnosisResponse)
+                    throwFetchFailedException(
+                      blockId, mapIndex, address, e, Some(diagnosisResponse))
                   } else {
                     throwFetchFailedException(blockId, mapIndex, address, e)
                   }
@@ -1039,32 +1025,48 @@ final class ShuffleBlockFetcherIterator(
    * @param checkedIn the [[CheckedInputStream]] which is used to calculate the checksum.
    * @param address the address where the corrupted block is fetched from.
    * @param blockId the blockId of the corrupted block.
-   * @return the cause of corruption, which should be one of the [[Cause]].
+   * @return The corruption diagnosis response for different causes.
    */
   private[storage] def diagnoseCorruption(
       checkedIn: CheckedInputStream,
       address: BlockManagerId,
-      blockId: BlockId): Cause = {
+      blockId: BlockId): String = {
     logInfo("Start corruption diagnosis.")
     val startTimeNs = System.nanoTime()
     assert(blockId.isInstanceOf[ShuffleBlockId], s"Expected ShuffleBlockId, but got $blockId")
     val shuffleBlock = blockId.asInstanceOf[ShuffleBlockId]
     val buffer = new Array[Byte](ShuffleChecksumHelper.CHECKSUM_CALCULATION_BUFFER)
     // consume the remaining data to calculate the checksum
+    var cause: Cause = null
     try {
       while (checkedIn.read(buffer) != -1) {}
     } catch {
       case e: IOException =>
         logWarning("IOException throws while consuming the rest stream of the corrupted block", e)
-        return Cause.UNKNOWN_ISSUE
+        cause = Cause.UNKNOWN_ISSUE
     }
     val checksum = checkedIn.getChecksum.getValue
     val algorithm = SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
-    val cause = shuffleClient.diagnoseCorruption(address.host, address.port, address.executorId,
+    cause = shuffleClient.diagnoseCorruption(address.host, address.port, address.executorId,
       shuffleBlock.shuffleId, shuffleBlock.mapId, shuffleBlock.reduceId, checksum, algorithm)
     val duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
-    logInfo(s"Finished corruption diagnosis in ${duration} ms, cause: $cause")
-    cause
+    val diagnosisResponse = cause match {
+      case Cause.UNSUPPORTED_CHECKSUM_ALGORITHM =>
+        s"Block $blockId is corrupted but corruption diagnosis failed due to " +
+          s"unsupported checksum algorithm: " +
+          s"${SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)}"
+
+      case Cause.CHECKSUM_VERIFY_PASS =>
+        s"Block $blockId is corrupted but checksum verification passed"
+
+      case Cause.UNKNOWN_ISSUE =>
+        s"Block $blockId is corrupted but the cause is unknown"
+
+      case otherCause =>
+        s"Block $blockId is corrupted due to $otherCause"
+    }
+    logInfo(s"Finished corruption diagnosis in $duration ms. $diagnosisResponse")
+    diagnosisResponse
   }
 
   def toCompletionIterator: Iterator[(BlockId, InputStream)] = {
@@ -1297,14 +1299,13 @@ private class BufferReleasingInputStream(
       block
     } catch {
       case e: IOException if detectCorruption =>
-        val message = checkedInOpt.map { checkedIn =>
-          val cause = iterator.diagnoseCorruption(checkedIn, address, blockId)
-          s"Block $blockId is corrupted due to $cause"
+        val diagnosisResponse = checkedInOpt.map { checkedIn =>
+          iterator.diagnoseCorruption(checkedIn, address, blockId)
         }.orNull
         IOUtils.closeQuietly(this)
         // We'd never retry the block whatever the cause is since the block has been
         // partially consumed by downstream RDDs.
-        iterator.throwFetchFailedException(blockId, mapIndex, address, e, Some(message))
+        iterator.throwFetchFailedException(blockId, mapIndex, address, e, Some(diagnosisResponse))
     }
   }
 }
