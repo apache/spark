@@ -22,6 +22,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{Node, Unparsed}
 
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
@@ -48,7 +49,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       case (None, None, Some(d)) =>
         s"${workDir.getPath}/$d/"
       case _ =>
-        throw new Exception("Request must specify either application or driver identifiers")
+        throw SparkCoreErrors.requestMustSpecifyApplicationOrDriverError()
     }
 
     val (logText, startByte, endByte, logLength) = getLog(logDir, logType, offset, byteLength)
@@ -71,7 +72,7 @@ private[ui] class LogPage(parent: WorkerWebUI) extends WebUIPage("logPage") with
       case (None, None, Some(d)) =>
         (s"${workDir.getPath}/$d/", s"driverId=$d", d)
       case _ =>
-        throw new Exception("Request must specify either application or driver identifiers")
+        throw SparkCoreErrors.requestMustSpecifyApplicationOrDriverError()
     }
 
     val (logText, startByte, endByte, logLength) = getLog(logDir, logType, offset, byteLength)

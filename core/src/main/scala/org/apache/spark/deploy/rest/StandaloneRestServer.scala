@@ -23,6 +23,7 @@ import javax.servlet.http.HttpServletResponse
 import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.config
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
@@ -127,10 +128,10 @@ private[rest] class StandaloneSubmitRequestServlet(
   private def buildDriverDescription(request: CreateSubmissionRequest): DriverDescription = {
     // Required fields, including the main class because python is not yet supported
     val appResource = Option(request.appResource).getOrElse {
-      throw new SubmitRestMissingFieldException("Application jar is missing.")
+      throw SparkCoreErrors.applicationJarMissingError()
     }
     val mainClass = Option(request.mainClass).getOrElse {
-      throw new SubmitRestMissingFieldException("Main class is missing.")
+      throw SparkCoreErrors.mainClassMissingError()
     }
 
     // Optional fields

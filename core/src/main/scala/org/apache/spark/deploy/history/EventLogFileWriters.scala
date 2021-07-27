@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.io.CompressionCodec
@@ -135,7 +136,7 @@ abstract class EventLogFileWriter(
           logWarning(s"Error deleting $dest")
         }
       } else {
-        throw new IOException(s"Target log file already exists ($dest)")
+        throw SparkCoreErrors.logFileAlreadyExistsError(dest)
       }
     }
     fileSystem.rename(src, dest)
@@ -315,7 +316,7 @@ class RollingEventLogFilesWriter(
     }
 
     if (fileSystem.exists(logDirForAppPath)) {
-      throw new IOException(s"Target log directory already exists ($logDirForAppPath)")
+      throw SparkCoreErrors.logDirectoryAlreadyExistsError(logDirForAppPath)
     }
 
     // SPARK-30860: use the class method to avoid the umask causing permission issues

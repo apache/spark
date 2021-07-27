@@ -51,6 +51,7 @@ import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBibl
 import org.apache.spark._
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
@@ -925,14 +926,14 @@ private[spark] class SparkSubmit extends Logging {
           logInfo(s"Failed to load main class $childMainClass.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
-        throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
+        throw SparkCoreErrors.sparkUserAppError(CLASS_NOT_FOUND_EXIT_STATUS)
       case e: NoClassDefFoundError =>
         logError(s"Failed to load $childMainClass: ${e.getMessage()}")
         if (e.getMessage.contains("org/apache/hadoop/hive")) {
           logInfo(s"Failed to load hive class.")
           logInfo("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
-        throw new SparkUserAppException(CLASS_NOT_FOUND_EXIT_STATUS)
+        throw SparkCoreErrors.sparkUserAppError(CLASS_NOT_FOUND_EXIT_STATUS)
     }
 
     val app: SparkApplication = if (classOf[SparkApplication].isAssignableFrom(mainClass)) {
@@ -1309,7 +1310,7 @@ private[spark] object SparkSubmitUtils extends Logging {
       ivySettings.load(file)
     } catch {
       case e @ (_: IOException | _: ParseException) =>
-        throw new SparkException(s"Failed when loading Ivy settings from $settingsFile", e)
+        throw SparkCoreErrors.failedLoadIvySettingError(settingsFile, e)
     }
     processIvyPathArg(ivySettings, ivyPath)
     processRemoteRepoArg(ivySettings, remoteRepos)
@@ -1473,7 +1474,7 @@ private[spark] object SparkSubmitUtils extends Logging {
   def parseSparkConfProperty(pair: String): (String, String) = {
     pair.split("=", 2).toSeq match {
       case Seq(k, v) => (k, v)
-      case _ => throw new SparkException(s"Spark config without '=': $pair")
+      case _ => throw SparkCoreErrors.lackSparkConfigError(pair)
     }
   }
 
@@ -1486,8 +1487,7 @@ private[spark] object SparkSubmitUtils extends Logging {
 
     serviceLoaders.size match {
       case x if x > 1 =>
-        throw new SparkException(s"Multiple($x) external SparkSubmitOperations " +
-          s"clients registered for master url ${master}.")
+        throw SparkCoreErrors.multipleExternalSparkSubmitOperationsRegisteredError(x, master)
       case 1 => serviceLoaders.headOption.get
       case _ =>
         throw new IllegalArgumentException(s"No external SparkSubmitOperations " +
