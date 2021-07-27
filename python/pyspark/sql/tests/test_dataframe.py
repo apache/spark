@@ -75,7 +75,7 @@ class DataFrameTests(ReusedSQLTestCase):
         )
 
         df = self.spark.createDataFrame(
-            [('Alice', 50), ('Alice', 60)],
+            [("Alice", 50), ("Alice", 60)],
             schema
         )
 
