@@ -863,7 +863,21 @@ final class ShuffleBlockFetcherIterator(
                     // Diagnose the cause of data corruption if shuffle checksum is enabled
                     val cause = diagnoseCorruption(checkedIn, address, blockId)
                     buf.release()
-                    val errorMsg = s"Block $blockId is corrupted due to $cause."
+                    val errorMsg = cause match {
+                      case Cause.UNSUPPORTED_CHECKSUM_ALGORITHM =>
+                        s"Block $blockId is corrupted but corruption diagnosis failed due to " +
+                          s"unsupported checksum algorithm: " +
+                          s"${SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)}"
+
+                      case Cause.CHECKSUM_VERIFY_PASS =>
+                        s"Block $blockId is corrupted but checksum verification passed"
+
+                      case Cause.UNKNOWN_ISSUE =>
+                        s"Block $blockId is corrupted but the cause is unknown"
+
+                      case otherCause =>
+                        s"Block $blockId is corrupted due to $otherCause"
+                    }
                     logError(errorMsg)
                     throwFetchFailedException(blockId, mapIndex, address, e, Some(errorMsg))
                   } else {
