@@ -57,9 +57,13 @@ Spark SQL and DataFrames support the following data types:
     Individual interval fields are non-negative, but an interval itself can have a sign, and be negative.
 
     `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0(MONTH) and 1(YEAR). Supported year-month interval types are:
-      - `YearMonthIntervalType(YEAR, YEAR)` or `YearMonthIntervalType(YEAR)`. For instance, a value of the type is `INTERVAL '2021' YEAR`.
-      - `YearMonthIntervalType(YEAR, MONTH)`. For instance, a value of the type is `INTERVAL '2021-07' YEAR TO MONTH`.
-      - `YearMonthIntervalType(MONTH, MONTH)` or `YearMonthIntervalType(MONTH)`. For example, `INTERVAL '10' MONTH` is a value of the type.
+    
+    |Year-Month Interval Type|Short form|An instance of the type|
+    |---------|----|-------------------|
+    |`YearMonthIntervalType(YEAR, YEAR)`|`YearMonthIntervalType(YEAR)`|`INTERVAL '2021' YEAR`|
+    |`YearMonthIntervalType(YEAR, MONTH)`||`INTERVAL '2021-07' YEAR TO MONTH`|
+    |`YearMonthIntervalType(MONTH, MONTH)`|`YearMonthIntervalType(MONTH)`|`INTERVAL '10' MONTH`|
+
   - `DayTimeIntervalType(startField, endField)`: Represents a day-time interval which is made up of a contiguous subset of the following fields:
     - SECOND, seconds within minutes and possibly fractions of a second `[0..59.999999]`,
     - MINUTE, minutes within hours `[0..59]`,
@@ -69,16 +73,19 @@ Spark SQL and DataFrames support the following data types:
     Individual interval fields are non-negative, but an interval itself can have a sign, and be negative.
 
     `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND). Supported day-time interval types are:
-      - `DayTimeIntervalType(DAY, DAY)` or `DayTimeIntervalType(DAY)`. For instance, `INTERVAL '100' DAY`.
-      - `DayTimeIntervalType(DAY, HOUR)`. `INTERVAL '100 10' DAY TO HOUR` is a value of the type.
-      - `DayTimeIntervalType(DAY, MINUTE)`. For example, `INTERVAL '100 10:30' DAY TO MINUTE`.
-      - `DayTimeIntervalType(DAY, SECOND)`. For example, `INTERVAL '100 10:30:40.999999' DAY TO SECOND`.
-      - `DayTimeIntervalType(HOUR, HOUR)` or `DayTimeIntervalType(HOUR)`. `INTERVAL '123' HOUR` is a value of the interval type.
-      - `DayTimeIntervalType(HOUR, MINUTE)`. This is a value of the type: `INTERVAL '123:10' HOUR TO MINUTE`.
-      - `DayTimeIntervalType(HOUR, SECOND)`. For instance, `INTERVAL '123:10:59' HOUR TO SECOND`.
-      - `DayTimeIntervalType(MINUTE, MINUTE)` or `DayTimeIntervalType(MINUTE)`. `INTERVAL '1000' MINUTE` is a value of the type.
-      - `DayTimeIntervalType(MINUTE, SECOND)`. For instance, `INTERVAL '1000:01.001' MINUTE TO SECOND`.
-      - `DayTimeIntervalType(SECOND, SECOND)` or `DayTimeIntervalType(SECOND)`. For instance, `INTERVAL '1000.000001' SECOND`.
+
+    |Day-Time Interval Type|Short form|An instance of the type|
+    |---------|----|-------------------|
+    |`DayTimeIntervalType(DAY, DAY)`|`DayTimeIntervalType(DAY)`|`INTERVAL '100' DAY`|
+    |`DayTimeIntervalType(DAY, HOUR)`||`INTERVAL '100 10' DAY TO HOUR`|
+    |`DayTimeIntervalType(DAY, MINUTE)`||`INTERVAL '100 10:30' DAY TO MINUTE`|
+    |`DayTimeIntervalType(DAY, SECOND)`||`INTERVAL '100 10:30:40.999999' DAY TO SECOND`|
+    |`DayTimeIntervalType(HOUR, HOUR)`|`DayTimeIntervalType(HOUR)`|`INTERVAL '123' HOUR`|
+    |`DayTimeIntervalType(HOUR, MINUTE)`||`INTERVAL '123:10' HOUR TO MINUTE`|
+    |`DayTimeIntervalType(HOUR, SECOND)`||`INTERVAL '123:10:59' HOUR TO SECOND`|
+    |`DayTimeIntervalType(MINUTE, MINUTE)`|`DayTimeIntervalType(MINUTE)`|`INTERVAL '1000' MINUTE`|
+    |`DayTimeIntervalType(MINUTE, SECOND)`||`INTERVAL '1000:01.001' MINUTE TO SECOND`|
+    |`DayTimeIntervalType(SECOND, SECOND)`|`DayTimeIntervalType(SECOND)`|`INTERVAL '1000.000001' SECOND`|
 
 * Complex types
   - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
