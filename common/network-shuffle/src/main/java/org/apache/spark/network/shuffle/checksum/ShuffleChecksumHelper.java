@@ -148,7 +148,7 @@ public class ShuffleChecksumHelper {
       logger.warn("Checksum file " + checksumFile.getName() + " doesn't exit");
       cause = Cause.UNKNOWN_ISSUE;
     } catch (Exception e) {
-      logger.warn("Exception throws while diagnosing shuffle block corruption.", e);
+      logger.warn("Unable to diagnose shuffle block corruption", e);
       cause = Cause.UNKNOWN_ISSUE;
     }
     return cause;
