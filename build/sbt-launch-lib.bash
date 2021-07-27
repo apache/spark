@@ -117,11 +117,9 @@ addDebugger () {
 # so they need not be dicked around with individually.
 get_mem_opts () {
   local mem=${1:-$sbt_default_mem}
-  local codecache=$(( $mem / 8 ))
-  (( $codecache > 128 )) || codecache=128
-  (( $codecache < 2048 )) || codecache=2048
+  local codecache=128
 
-  echo "-Xms${mem}m -Xmx${mem}m -XX:ReservedCodeCacheSize=${codecache}m"
+  echo "-Xms$256m -Xmx${mem}m -XX:ReservedCodeCacheSize=${codecache}m"
 }
 
 require_arg () {

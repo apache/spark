@@ -113,7 +113,6 @@ public interface Scan {
    * By default it returns empty array.
    */
   default CustomMetric[] supportedCustomMetrics() {
-    CustomMetric[] NO_METRICS = {};
-    return NO_METRICS;
+    return new CustomMetric[]{};
   }
 }

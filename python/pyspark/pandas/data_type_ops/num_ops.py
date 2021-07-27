@@ -79,7 +79,11 @@ class NumericOps(DataTypeOps):
             raise TypeError("Exponentiation can not be applied to given types.")
 
         def pow_func(left: Column, right: Any) -> Column:
-            return F.when(left == 1, left).otherwise(Column.__pow__(left, right))
+            return (
+                F.when(left == 1, left)
+                .when(SF.lit(right) == 0, 1)
+                .otherwise(Column.__pow__(left, right))
+            )
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return column_op(pow_func)(left, right)
@@ -355,10 +359,10 @@ class DecimalOps(FractionalOps):
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("<= can not be applied to %s." % self.pretty_name)
 
-    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError("> can not be applied to %s." % self.pretty_name)
 
-    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         raise TypeError(">= can not be applied to %s." % self.pretty_name)
 
     def isnull(self, index_ops: IndexOpsLike) -> IndexOpsLike:

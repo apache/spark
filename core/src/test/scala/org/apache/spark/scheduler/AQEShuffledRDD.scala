@@ -65,7 +65,7 @@ class CoalescedPartitioner(val parent: Partitioner, val partitionStartIndices: A
   }
 }
 
-private[spark] class CustomShuffledRDDPartition(
+private[spark] class AQEShuffledRDDPartition(
     val index: Int, val startIndexInParent: Int, val endIndexInParent: Int)
   extends Partition {
 
@@ -78,7 +78,7 @@ private[spark] class CustomShuffledRDDPartition(
  * A special ShuffledRDD that supports a ShuffleDependency object from outside and launching reduce
  * tasks that read multiple map output partitions.
  */
-class CustomShuffledRDD[K, V, C](
+class AQEShuffledRDD[K, V, C](
     var dependency: ShuffleDependency[K, V, C],
     partitionStartIndices: Array[Int])
   extends RDD[(K, C)](dependency.rdd.context, Seq(dependency)) {
@@ -98,12 +98,12 @@ class CustomShuffledRDD[K, V, C](
     Array.tabulate[Partition](partitionStartIndices.length) { i =>
       val startIndex = partitionStartIndices(i)
       val endIndex = if (i < partitionStartIndices.length - 1) partitionStartIndices(i + 1) else n
-      new CustomShuffledRDDPartition(i, startIndex, endIndex)
+      new AQEShuffledRDDPartition(i, startIndex, endIndex)
     }
   }
 
   override def compute(p: Partition, context: TaskContext): Iterator[(K, C)] = {
-    val part = p.asInstanceOf[CustomShuffledRDDPartition]
+    val part = p.asInstanceOf[AQEShuffledRDDPartition]
     val metrics = context.taskMetrics().createTempShuffleReadMetrics()
     SparkEnv.get.shuffleManager.getReader(
       dependency.shuffleHandle, part.startIndexInParent, part.endIndexInParent, context, metrics)

@@ -149,16 +149,24 @@ class UDTOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(self.pser != self.pser, (self.psser != self.psser).sort_index())
 
     def test_lt(self):
-        self.assertRaises(TypeError, lambda: self.psser < self.psser)
+        self.assertRaisesRegex(
+            TypeError, "< can not be applied to", lambda: self.psser < self.psser
+        )
 
     def test_le(self):
-        self.assertRaises(TypeError, lambda: self.psser <= self.psser)
+        self.assertRaisesRegex(
+            TypeError, "<= can not be applied to", lambda: self.psser <= self.psser
+        )
 
     def test_gt(self):
-        self.assertRaises(TypeError, lambda: self.psser > self.psser)
+        self.assertRaisesRegex(
+            TypeError, "> can not be applied to", lambda: self.psser > self.psser
+        )
 
     def test_ge(self):
-        self.assertRaises(TypeError, lambda: self.psser >= self.psser)
+        self.assertRaisesRegex(
+            TypeError, ">= can not be applied to", lambda: self.psser >= self.psser
+        )
 
 
 if __name__ == "__main__":

@@ -424,6 +424,12 @@ case class UpdateTable(
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): UpdateTable =
     copy(table = newChild)
+
+  def skipSchemaResolution: Boolean = table match {
+    case r: NamedRelation => r.skipSchemaResolution
+    case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
+    case _ => false
+  }
 }
 
 /**
@@ -436,6 +442,13 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction]) extends BinaryCommand with SupportsSubquery {
   def duplicateResolved: Boolean = targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
+
+  def skipSchemaResolution: Boolean = targetTable match {
+    case r: NamedRelation => r.skipSchemaResolution
+    case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
+    case _ => false
+  }
+
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
   override protected def withNewChildrenInternal(
@@ -465,7 +478,7 @@ case class UpdateAction(
       newChildren: IndexedSeq[Expression]): UpdateAction =
     copy(
       condition = if (condition.isDefined) Some(newChildren.head) else None,
-      assignments = newChildren.tail.asInstanceOf[Seq[Assignment]])
+      assignments = newChildren.takeRight(assignments.length).asInstanceOf[Seq[Assignment]])
 }
 
 case class UpdateStarAction(condition: Option[Expression]) extends MergeAction {
@@ -484,7 +497,7 @@ case class InsertAction(
       newChildren: IndexedSeq[Expression]): InsertAction =
     copy(
       condition = if (condition.isDefined) Some(newChildren.head) else None,
-      assignments = newChildren.tail.asInstanceOf[Seq[Assignment]])
+      assignments = newChildren.takeRight(assignments.length).asInstanceOf[Seq[Assignment]])
 }
 
 case class InsertStarAction(condition: Option[Expression]) extends MergeAction {
@@ -1078,9 +1091,7 @@ trait AlterTableColumnCommand extends UnaryCommand {
 case class AlterTableAddColumns(
     table: LogicalPlan,
     columnsToAdd: Seq[QualifiedColType]) extends AlterTableColumnCommand {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   columnsToAdd.foreach { c =>
-    failNullType(c.dataType)
     TypeUtils.failWithIntervalType(c.dataType)
   }
 
@@ -1111,9 +1122,7 @@ case class AlterTableAddColumns(
 case class AlterTableReplaceColumns(
     table: LogicalPlan,
     columnsToAdd: Seq[QualifiedColType]) extends AlterTableColumnCommand {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Util._
   columnsToAdd.foreach { c =>
-    failNullType(c.dataType)
     TypeUtils.failWithIntervalType(c.dataType)
   }
 
@@ -1185,9 +1194,6 @@ case class AlterTableAlterColumn(
     nullable: Option[Boolean],
     comment: Option[String],
     position: Option[FieldPosition]) extends AlterTableColumnCommand {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Util._
-  dataType.foreach(failNullType)
-
   override def changes: Seq[TableChange] = {
     require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
     val colName = column.name.toArray

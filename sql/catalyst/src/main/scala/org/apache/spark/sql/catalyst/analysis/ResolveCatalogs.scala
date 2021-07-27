@@ -33,7 +33,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case c @ CreateTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      assertNoNullTypeInSchema(c.tableSchema)
       CreateV2Table(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -45,9 +44,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case c @ CreateTableAsSelectStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _, _) =>
-      if (c.asSelect.resolved) {
-        assertNoNullTypeInSchema(c.asSelect.schema)
-      }
       CreateTableAsSelect(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -60,7 +56,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case c @ ReplaceTableStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
-      assertNoNullTypeInSchema(c.tableSchema)
       ReplaceTable(
         catalog.asTableCatalog,
         tbl.asIdentifier,
@@ -72,9 +67,6 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
 
     case c @ ReplaceTableAsSelectStatement(
          NonSessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      if (c.asSelect.resolved) {
-        assertNoNullTypeInSchema(c.asSelect.schema)
-      }
       ReplaceTableAsSelect(
         catalog.asTableCatalog,
         tbl.asIdentifier,

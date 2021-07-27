@@ -1393,10 +1393,6 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("multi-part identifier cannot be empty.")
   }
 
-  def cannotCreateTablesWithNullTypeError(): Throwable = {
-    new AnalysisException(s"Cannot create tables with ${NullType.simpleString} type.")
-  }
-
   def functionUnsupportedInV2CatalogError(): Throwable = {
     new AnalysisException("function is only supported in v1 catalog")
   }
@@ -2265,7 +2261,7 @@ private[spark] object QueryCompilationErrors {
       s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}""")
   }
 
-  def cannotParseTimeDelayError(delayThreshold: String, e: IllegalArgumentException): Throwable = {
+  def cannotParseTimeDelayError(delayThreshold: String, e: Throwable): Throwable = {
     new AnalysisException(s"Unable to parse time delay '$delayThreshold'", cause = Some(e))
   }
 

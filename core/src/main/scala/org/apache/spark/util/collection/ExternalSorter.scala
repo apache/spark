@@ -31,6 +31,7 @@ import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.serializer._
 import org.apache.spark.shuffle.ShufflePartitionPairsWriter
 import org.apache.spark.shuffle.api.{ShuffleMapOutputWriter, ShufflePartitionWriter}
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.storage.{BlockId, DiskBlockObjectWriter, ShuffleBlockId}
 import org.apache.spark.util.{CompletionIterator, Utils => TryUtils}
 
@@ -140,6 +141,11 @@ private[spark] class ExternalSorter[K, V, C](
   @volatile private var isShuffleSort: Boolean = true
   private val forceSpillFiles = new ArrayBuffer[SpilledFile]
   @volatile private var readingIterator: SpillableIterator = null
+
+  private val partitionChecksums =
+    ShuffleChecksumHelper.createPartitionChecksumsIfEnabled(numPartitions, conf)
+
+  def getChecksums: Array[Long] = ShuffleChecksumHelper.getChecksumValues(partitionChecksums)
 
   // A comparator for keys K that orders them within a partition to allow aggregation or sorting.
   // Can be a partial ordering by hash code if a total ordering is not provided through by the
@@ -307,14 +313,13 @@ private[spark] class ExternalSorter[K, V, C](
       }
       if (objectsWritten > 0) {
         flush()
+        writer.close()
       } else {
         writer.revertPartialWritesAndClose()
       }
       success = true
     } finally {
-      if (success) {
-        writer.close()
-      } else {
+      if (!success) {
         // This code path only happens if an exception was thrown above before we set success;
         // close our stuff and let the exception be thrown further
         writer.revertPartialWritesAndClose()
@@ -762,7 +767,8 @@ private[spark] class ExternalSorter[K, V, C](
             serializerManager,
             serInstance,
             blockId,
-            context.taskMetrics().shuffleWriteMetrics)
+            context.taskMetrics().shuffleWriteMetrics,
+            if (partitionChecksums.nonEmpty) partitionChecksums(partitionId) else null)
           while (it.hasNext && it.nextPartition() == partitionId) {
             it.writeNext(partitionPairsWriter)
           }
@@ -786,7 +792,8 @@ private[spark] class ExternalSorter[K, V, C](
             serializerManager,
             serInstance,
             blockId,
-            context.taskMetrics().shuffleWriteMetrics)
+            context.taskMetrics().shuffleWriteMetrics,
+            if (partitionChecksums.nonEmpty) partitionChecksums(id) else null)
           if (elements.hasNext) {
             for (elem <- elements) {
               partitionPairsWriter.write(elem._1, elem._2)

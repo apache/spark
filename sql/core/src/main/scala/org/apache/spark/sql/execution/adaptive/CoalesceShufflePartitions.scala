@@ -27,7 +27,7 @@ import org.apache.spark.sql.internal.SQLConf
  * A rule to coalesce the shuffle partitions based on the map output statistics, which can
  * avoid many small reduce tasks that hurt performance.
  */
-case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffleReaderRule {
+case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleReadRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REBALANCE_PARTITIONS_BY_NONE,
@@ -88,23 +88,23 @@ case class CoalesceShufflePartitions(session: SparkSession) extends CustomShuffl
         val specsMap = shuffleStageInfos.zip(newPartitionSpecs).map { case (stageInfo, partSpecs) =>
           (stageInfo.shuffleStage.id, partSpecs)
         }.toMap
-        updateShuffleReaders(plan, specsMap)
+        updateShuffleReads(plan, specsMap)
       } else {
         plan
       }
     }
   }
 
-  private def updateShuffleReaders(
+  private def updateShuffleReads(
       plan: SparkPlan, specsMap: Map[Int, Seq[ShufflePartitionSpec]]): SparkPlan = plan match {
     // Even for shuffle exchange whose input RDD has 0 partition, we should still update its
     // `partitionStartIndices`, so that all the leaf shuffles in a stage have the same
     // number of output partitions.
     case ShuffleStageInfo(stage, _) =>
       specsMap.get(stage.id).map { specs =>
-        CustomShuffleReaderExec(stage, specs)
+        AQEShuffleReadExec(stage, specs)
       }.getOrElse(plan)
-    case other => other.mapChildren(updateShuffleReaders(_, specsMap))
+    case other => other.mapChildren(updateShuffleReads(_, specsMap))
   }
 
   private def supportCoalesce(s: ShuffleExchangeLike): Boolean = {
@@ -121,7 +121,7 @@ private object ShuffleStageInfo {
   : Option[(ShuffleQueryStageExec, Option[Seq[ShufflePartitionSpec]])] = plan match {
     case stage: ShuffleQueryStageExec =>
       Some((stage, None))
-    case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs) =>
+    case AQEShuffleReadExec(s: ShuffleQueryStageExec, partitionSpecs) =>
       Some((s, Some(partitionSpecs)))
     case _ => None
   }

@@ -160,7 +160,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // session catalog and the table provider is not v2.
     case c @ CreateTableStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      assertNoNullTypeInSchema(c.tableSchema)
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.provider, c.options, c.location, c.serde, ctas = false)
       if (!isV2Provider(provider)) {
@@ -182,9 +181,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case c @ CreateTableAsSelectStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _, _) =>
-      if (c.asSelect.resolved) {
-        assertNoNullTypeInSchema(c.asSelect.schema)
-      }
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.provider, c.options, c.location, c.serde, ctas = true)
       if (!isV2Provider(provider)) {
@@ -215,7 +211,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // session catalog and the table provider is not v2.
     case c @ ReplaceTableStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
-      assertNoNullTypeInSchema(c.tableSchema)
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.replaceTableOnlySupportedWithV2TableError
@@ -232,9 +227,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case c @ ReplaceTableAsSelectStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      if (c.asSelect.resolved) {
-        assertNoNullTypeInSchema(c.asSelect.schema)
-      }
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.replaceTableAsSelectOnlySupportedWithV2TableError
