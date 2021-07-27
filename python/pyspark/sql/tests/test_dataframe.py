@@ -69,14 +69,9 @@ class DataFrameTests(ReusedSQLTestCase):
 
     def test_drop_duplicates(self):
         # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
-        schema = StructType([
-            StructField("name", StringType(), True),
-            StructField("age", IntegerType(), True)]
-        )
-
         df = self.spark.createDataFrame(
             [("Alice", 50), ("Alice", 60)],
-            schema
+            ["name", "age"]
         )
 
         # shouldn't drop a non-null row
