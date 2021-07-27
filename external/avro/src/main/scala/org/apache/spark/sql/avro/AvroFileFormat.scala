@@ -54,7 +54,7 @@ private[sql] class AvroFileFormat extends FileFormat
       spark: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-      AvroUtils.inferSchema(spark, options, files)
+    AvroUtils.inferSchema(spark, options, files)
   }
 
   override def shortName(): String = "avro"
@@ -144,7 +144,6 @@ private[sql] class AvroFileFormat extends FileFormat
           override val stopPosition = file.start + file.length
 
           override def hasNext: Boolean = hasNextRow
-
           override def next(): InternalRow = nextRow
         }
       } else {
