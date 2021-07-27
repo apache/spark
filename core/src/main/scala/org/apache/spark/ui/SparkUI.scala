@@ -118,6 +118,10 @@ private[spark] class SparkUI private (
     appId = id
   }
 
+  /**
+   * When start SparUI, Spark start Jetty Server first to bind address then after
+   * Spark application fully started, call [attachAllHandlers] to start all handler.
+   */
   override def bind(): Unit = {
     assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
     try {
