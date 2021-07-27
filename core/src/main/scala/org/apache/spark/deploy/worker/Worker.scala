@@ -234,7 +234,6 @@ private[deploy] class Worker(
     setupWorkerResources()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
-    webUi.attachAllHandler()
 
     workerWebUiUrl = s"${webUi.scheme}$publicAddress:${webUi.boundPort}"
     registerWithMaster()

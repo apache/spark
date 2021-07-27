@@ -56,7 +56,7 @@ private[spark] abstract class WebUI(
   protected var serverInfo: Option[ServerInfo] = None
   protected val publicHostName = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(
     conf.get(DRIVER_HOST_ADDRESS))
-  private val className = Utils.getFormattedClassName(this)
+  protected val className = Utils.getFormattedClassName(this)
 
   def getBasePath: String = basePath
   def getTabs: Seq[WebUITab] = tabs.toSeq
