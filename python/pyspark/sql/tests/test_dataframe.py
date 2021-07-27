@@ -74,24 +74,21 @@ class DataFrameTests(ReusedSQLTestCase):
             StructField("age", IntegerType(), True)]
         )
 
+        df = self.spark.createDataFrame(
+            [(u'Alice', 50), (u'Alice', 60)],
+            schema
+        )
+
         # shouldn't drop a non-null row
-        self.assertEqual(self.spark.createDataFrame(
-            [(u'Alice', 50), (u'Alice', 60)], schema).dropDuplicates().count(),
-            2)
+        self.assertEqual(df.dropDuplicates().count(), 2)
 
-        self.assertEqual(self.spark.createDataFrame(
-            [(u'Alice', 50), (u'Alice', 60)], schema).dropDuplicates(["name"]).count(),
-            1)
+        self.assertEqual(df.dropDuplicates(["name"]).count(), 1)
 
-        self.assertEqual(self.spark.createDataFrame(
-            [(u'Alice', 50), (u'Alice', 60)], schema).dropDuplicates(["name", "age"]).count(),
-            2)
+        self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
 
         type_error_msg = "Parameter 'subset' must be a list of columns"
         with self.assertRaisesRegex(TypeError, type_error_msg):
-            self.spark.createDataFrame(
-                [(u'Alice', 50), (u'Alice', 60)], schema
-            ).dropDuplicates("name").count()
+            df.dropDuplicates("name")
 
     def test_dropna(self):
         schema = StructType([
