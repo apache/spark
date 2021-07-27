@@ -25,7 +25,7 @@ import org.apache.spark.api.r.JVMObjectId
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
  */
-private[spark] object SparkCoreErrors {
+object SparkCoreErrors {
   def juRemoveError(): Throwable = {
     new UnsupportedOperationException("remove")
   }
