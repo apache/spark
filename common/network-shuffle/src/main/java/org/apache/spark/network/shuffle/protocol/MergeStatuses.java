@@ -41,7 +41,8 @@ public class MergeStatuses extends BlockTransferMessage {
   /** Shuffle ID **/
   public final int shuffleId;
   /**
-   * shuffleMergeId is used to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   * shuffleMergeId is used to uniquely identify merging process of an indeterminate stage
+   * attempt.
    */
   public final int shuffleMergeId;
   /**

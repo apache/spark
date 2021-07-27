@@ -55,12 +55,14 @@ public interface ErrorHandler {
   class BlockPushErrorHandler implements ErrorHandler {
     /**
      * String constant used for generating exception messages indicating a block to be merged
-     * arrives too late on the server side, and also for later checking such exceptions on the
-     * client side. When we get a block push failure because of the block arrives too late, we
-     * will not retry pushing the block nor log the exception on the client side.
+     * arrives too late or stale block push in the case of indeterminate stage retries on the
+     * server side, and also for later checking such exceptions on the client side. When we get
+     * a block push failure because of the block push being stale or arrives too late, we will
+     * not retry pushing the block nor log the exception on the client side.
      */
-    public static final String TOO_LATE_MESSAGE_SUFFIX =
-      "received after merged shuffle is finalized";
+    public static final String TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX =
+      "received after merged shuffle is finalized or stale block push as shuffle blocks of a"
+        + " higher shuffleMergeId for the shuffle is being pushed";
 
     /**
      * String constant used for generating exception messages indicating the server couldn't
@@ -83,17 +85,6 @@ public interface ErrorHandler {
 
     /**
      * String constant used for generating exception messages indicating the server rejecting a
-     * block push since shuffle blocks of a higher shuffleMergeId for a shuffle is already being
-     * pushed. This typically happens in the case of indeterminate stage retries where if a stage
-     * attempt fails then the entirety of the shuffle output needs to be rolled back. For more
-     * details refer SPARK-23243, SPARK-25341 and SPARK-32923.
-     */
-    public static final String STALE_BLOCK_PUSH_SUFFIX =
-      "stale block push as shuffle blocks of a higher shuffleMergeId for the shuffle is already"
-        + " being pushed";
-
-    /**
-     * String constant used for generating exception messages indicating the server rejecting a
      * shuffle finalize request since shuffle blocks of a higher shuffleMergeId for a shuffle is
      * already being pushed. This typically happens in the case of indeterminate stage retries
      * where if a stage attempt fails then the entirety of the shuffle output needs to be rolled
@@ -102,13 +93,6 @@ public interface ErrorHandler {
     public static final String STALE_SHUFFLE_FINALIZE_SUFFIX =
       "stale shuffle finalize request as shuffle blocks of a higher shuffleMergeId for the"
         + " shuffle is already being pushed";
-
-    /**
-     * String constant used for generating exception messages indicating the server rejecting a
-     * shuffle finalize request since the shuffle with same shuffleId and shuffleMergeId is
-     * already finalized.
-     */
-    public static final String ALREADY_FINALIZED_SUFFIX = "is already finalized";
 
     @Override
     public boolean shouldRetryError(Throwable t) {
@@ -122,44 +106,15 @@ public interface ErrorHandler {
       }
 
       String errorStackTrace = Throwables.getStackTraceAsString(t);
-      // If the block is too late, stale block push or duplicate finalizeMerge request,
-      // there is no need to retry it
-      return !(errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX) ||
-        errorStackTrace.contains(STALE_BLOCK_PUSH_SUFFIX) ||
-          errorStackTrace.contains(STALE_SHUFFLE_FINALIZE_SUFFIX) ||
-          errorStackTrace.contains(ALREADY_FINALIZED_SUFFIX));
+      // If the block is too late or stale block push, there is no need to retry it
+      return !errorStackTrace.contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX);
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
       String errorStackTrace = Throwables.getStackTraceAsString(t);
       return !(errorStackTrace.contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) ||
-        errorStackTrace.contains(TOO_LATE_MESSAGE_SUFFIX) ||
-          errorStackTrace.contains(STALE_BLOCK_PUSH_SUFFIX) ||
-          errorStackTrace.contains(STALE_SHUFFLE_FINALIZE_SUFFIX) ||
-          errorStackTrace.contains(ALREADY_FINALIZED_SUFFIX));
-    }
-  }
-
-  class BlockFetchErrorHandler implements ErrorHandler {
-    /**
-     * String constant used for generating exception messages indicating the server rejecting a
-     * block fetch since shuffle blocks of a higher shuffleMergeId for a shuffle is already found.
-     * This typically happens in the case of indeterminate stage retries where if a stage attempt
-     * fails then the entirety of the shuffle output needs to be rolled back. For more details
-     * refer SPARK-23243 and SPARK-25341.
-     */
-    public static final String STALE_BLOCK_FETCH_SUFFIX =
-        "stale fetch as the shuffleMergeId is older than the latest shuffleMergeId";
-
-    @Override
-    public boolean shouldRetryError(Throwable t) {
-      return !Throwables.getStackTraceAsString(t).contains(STALE_BLOCK_FETCH_SUFFIX);
-    }
-
-    @Override
-    public boolean shouldLogError(Throwable t) {
-      return !Throwables.getStackTraceAsString(t).contains(STALE_BLOCK_FETCH_SUFFIX);
+        errorStackTrace.contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX));
     }
   }
 }

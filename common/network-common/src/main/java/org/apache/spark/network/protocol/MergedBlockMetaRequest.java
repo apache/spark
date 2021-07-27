@@ -86,8 +86,9 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
   public boolean equals(Object other) {
     if (other instanceof MergedBlockMetaRequest) {
       MergedBlockMetaRequest o = (MergedBlockMetaRequest) other;
-      return requestId == o.requestId && shuffleId == o.shuffleId && reduceId == o.reduceId
-        && Objects.equal(appId, o.appId);
+      return requestId == o.requestId && shuffleId == o.shuffleId &&
+        shuffleMergeId == o.shuffleMergeId && reduceId == o.reduceId
+          && Objects.equal(appId, o.appId);
     }
     return false;
   }
@@ -97,6 +98,7 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
     return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
       .append("requestId", requestId)
       .append("appId", appId)
+      .append("shuffleMergeId", shuffleMergeId)
       .append("shuffleId", shuffleId)
       .append("reduceId", reduceId)
       .toString();

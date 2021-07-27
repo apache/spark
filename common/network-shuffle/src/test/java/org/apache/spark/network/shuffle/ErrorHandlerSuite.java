@@ -32,40 +32,20 @@ public class ErrorHandlerSuite {
   public void testErrorRetry() {
     ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
     assertFalse(pushHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))));
+      ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))));
     assertFalse(pushHandler.shouldRetryError(new RuntimeException(new ConnectException())));
     assertTrue(pushHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
       ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))));
     assertTrue(pushHandler.shouldRetryError(new Throwable()));
-    assertFalse(pushHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.STALE_BLOCK_PUSH_SUFFIX))));
-    assertFalse(pushHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.STALE_SHUFFLE_FINALIZE_SUFFIX))));
-    assertFalse(pushHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.ALREADY_FINALIZED_SUFFIX))));
-
-    ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();
-    assertFalse(fetchHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockFetchErrorHandler.STALE_BLOCK_FETCH_SUFFIX))));
   }
 
   @Test
   public void testErrorLogging() {
     ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
     assertFalse(pushHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))));
+      ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))));
     assertFalse(pushHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
       ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))));
-    assertFalse(pushHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.STALE_BLOCK_PUSH_SUFFIX))));
-    assertFalse(pushHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.STALE_SHUFFLE_FINALIZE_SUFFIX))));
-    assertFalse(pushHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
-        ErrorHandler.BlockPushErrorHandler.ALREADY_FINALIZED_SUFFIX))));
     assertTrue(pushHandler.shouldLogError(new Throwable()));
-
-    ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();
-    assertFalse(fetchHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockFetchErrorHandler.STALE_BLOCK_FETCH_SUFFIX))));
   }
 }

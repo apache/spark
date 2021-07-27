@@ -56,6 +56,8 @@ public class OneForOneBlockFetcher {
   private static final Logger logger = LoggerFactory.getLogger(OneForOneBlockFetcher.class);
   private static final String SHUFFLE_BLOCK_PREFIX = "shuffle_";
   private static final String SHUFFLE_CHUNK_PREFIX = "shuffleChunk_";
+  private static final String SHUFFLE_BLOCK_SPLIT = "shuffle";
+  private static final String SHUFFLE_CHUNK_SPLIT = "shuffleChunk";
 
   private final TransportClient client;
   private final BlockTransferMessage message;
@@ -137,7 +139,8 @@ public class OneForOneBlockFetcher {
       String[] blockIds) {
     String[] firstBlock = splitBlockId(blockIds[0]);
     int shuffleId = Integer.parseInt(firstBlock[1]);
-    boolean batchFetchEnabled = firstBlock.length == 5;
+    boolean batchFetchEnabled = (firstBlock.length == 5 &&
+      firstBlock[0].equals(SHUFFLE_BLOCK_SPLIT));
     Map<Long, BlocksInfo> mapIdToBlocksInfo = new LinkedHashMap<>();
     for (String blockId : blockIds) {
       String[] blockIdParts = splitBlockId(blockId);
@@ -164,7 +167,7 @@ public class OneForOneBlockFetcher {
     int[][] reduceIdsArray = getSecondaryIds(mapIdToBlocksInfo);
     long[] mapIds = Longs.toArray(mapIdToBlocksInfo.keySet());
     return new FetchShuffleBlocks(
-        appId, execId, shuffleId, mapIds, reduceIdsArray, batchFetchEnabled);
+      appId, execId, shuffleId, mapIds, reduceIdsArray, batchFetchEnabled);
   }
 
   private AbstractFetchShuffleBlocks createFetchShuffleChunksMsg(
@@ -186,7 +189,7 @@ public class OneForOneBlockFetcher {
 
       int reduceId = Integer.parseInt(blockIdParts[3]);
       BlocksInfo blocksInfoByReduceId = reduceIdToBlocksInfo.computeIfAbsent(reduceId,
-          id -> new BlocksInfo());
+        id -> new BlocksInfo());
       blocksInfoByReduceId.blockIds.add(blockId);
       blocksInfoByReduceId.ids.add(Integer.parseInt(blockIdParts[4]));
     }
@@ -229,11 +232,12 @@ public class OneForOneBlockFetcher {
     if (blockIdParts.length < 4 || blockIdParts.length > 5) {
       throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
     }
-    if (blockIdParts.length == 4 && !blockIdParts[0].equals("shuffle")) {
+    if (blockIdParts.length == 4 && !blockIdParts[0].equals(SHUFFLE_BLOCK_SPLIT)) {
       throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
     }
     if (blockIdParts.length == 5 &&
-      !(blockIdParts[0].equals("shuffle") || blockIdParts[0].equals("shuffleChunk"))) {
+      !(blockIdParts[0].equals(SHUFFLE_BLOCK_SPLIT) ||
+        blockIdParts[0].equals(SHUFFLE_CHUNK_SPLIT))) {
       throw new IllegalArgumentException("Unexpected shuffle block id format: " + blockId);
     }
     return blockIdParts;

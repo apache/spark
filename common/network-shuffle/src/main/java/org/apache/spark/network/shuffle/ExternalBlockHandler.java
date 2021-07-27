@@ -373,6 +373,7 @@ public class ExternalBlockHandler extends RpcHandler
       String[] blockId0Parts = blockIds[0].split("_");
       if (blockId0Parts.length == 4 && blockId0Parts[0].equals(SHUFFLE_BLOCK_ID)) {
         final int shuffleId = Integer.parseInt(blockId0Parts[1]);
+        // For regular shuffle blocks, blockIdParts[2] is mapId and blockIdParts[3] is reduceId
         final int[] mapIdAndReduceIds = shuffleMapIdAndReduceIds(blockIds, shuffleId);
         size = mapIdAndReduceIds.length;
         blockDataForIndexFn = index -> blockManager.getBlockData(appId, execId, shuffleId,
@@ -380,6 +381,7 @@ public class ExternalBlockHandler extends RpcHandler
       } else if (blockId0Parts.length == 5 && blockId0Parts[0].equals(SHUFFLE_CHUNK_ID)) {
         final int shuffleId = Integer.parseInt(blockId0Parts[1]);
         final int shuffleMergeId = Integer.parseInt(blockId0Parts[2]);
+        // For shuffle chunks, blockIdParts[3] is reduceId and blockIdParts[4] is chunkId
         final int[] reduceIdAndChunkIds = shuffleReduceIdAndChunkIds(blockIds, shuffleId,
           shuffleMergeId);
         size = reduceIdAndChunkIds.length;
@@ -419,7 +421,9 @@ public class ExternalBlockHandler extends RpcHandler
           throw new IllegalArgumentException("Expected shuffleId=" + shuffleId +
             ", got:" + blockIds[i]);
         }
+        // mapId
         mapIdAndReduceIds[2 * i] = Integer.parseInt(blockIdParts[2]);
+        // reduceId
         mapIdAndReduceIds[2 * i + 1] = Integer.parseInt(blockIdParts[3]);
       }
       return mapIdAndReduceIds;
@@ -440,7 +444,9 @@ public class ExternalBlockHandler extends RpcHandler
           throw new IllegalArgumentException(String.format("Expected shuffleId = %s"
             + " and shuffleMergeId = %s but got %s", shuffleId, shuffleMergeId, blockIds[i]));
         }
+        // reduceId
         reduceIdAndChunkIds[2 * i] = Integer.parseInt(blockIdParts[3]);
+        // chunkId
         reduceIdAndChunkIds[2 * i + 1] = Integer.parseInt(blockIdParts[4]);
       }
       return reduceIdAndChunkIds;

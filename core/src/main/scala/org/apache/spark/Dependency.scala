@@ -123,7 +123,8 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   private[this] var _shuffleMergedFinalized: Boolean = false
 
   /**
-   * shuffleMergeId is used to uniquely identify a indeterminate stage attempt of a shuffle Id.
+   * shuffleMergeId is used to uniquely identify merging process of an indeterminate stage
+   * attempt.
    */
   private[this] var _shuffleMergeId: Int = 0
 
@@ -163,10 +164,11 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   }
 
   private def canShuffleMergeBeEnabled(): Boolean = {
-    if (rdd.isBarrier()) {
+    val isPushShuffleEnabled = Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf)
+    if (isPushShuffleEnabled && rdd.isBarrier()) {
       logWarning("Push-based shuffle is currently not supported for barrier stages")
     }
-    Utils.isPushBasedShuffleEnabled(rdd.sparkContext.getConf) &&
+    isPushShuffleEnabled &&
       // TODO: SPARK-35547: Push based shuffle is currently unsupported for Barrier stages
       !rdd.isBarrier()
   }

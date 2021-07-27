@@ -80,8 +80,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         }
         val errorStackTraceString = Throwables.getStackTraceAsString(t)
         // If the block is too late or the invalid block push, there is no need to retry it
-        !(errorStackTraceString.contains(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX) ||
-          errorStackTraceString.contains(BlockPushErrorHandler.STALE_BLOCK_PUSH_SUFFIX))
+        !errorStackTraceString.contains(
+          BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX)
       }
     }
   }
@@ -338,8 +338,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
    * @param numPartitions number of shuffle partitions in the shuffle file
    * @param partitionId map index of the current mapper
    * @param shuffleId shuffleId of current shuffle
-   * @param shuffleMergeId shuffleMergeId is used to uniquely identify a indeterminate stage
-   *                       attempt of a shuffle Id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify merging process
+   *                       of an indeterminate stage attempt.
    * @param dataFile shuffle data file
    * @param partitionLengths array of sizes of blocks in the shuffle data file
    * @param mergerLocs target locations to push blocks to

@@ -220,7 +220,8 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val errorHandler = pusher.createErrorHandler()
     assert(
       !errorHandler.shouldRetryError(new RuntimeException(
-        new IllegalArgumentException(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))))
+        new IllegalArgumentException(
+          BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))))
     assert(errorHandler.shouldRetryError(new RuntimeException(new ConnectException())))
     assert(
       errorHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
@@ -233,7 +234,8 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val errorHandler = pusher.createErrorHandler()
     assert(
       !errorHandler.shouldLogError(new RuntimeException(
-        new IllegalArgumentException(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))))
+        new IllegalArgumentException(
+          BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))))
     assert(!errorHandler.shouldLogError(new RuntimeException(
       new IllegalArgumentException(
         BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))))
@@ -284,7 +286,8 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
             failBlock = false
             // Fail the first block with the too late exception.
             blockPushListener.onBlockPushFailure(blockId, new RuntimeException(
-              new IllegalArgumentException(BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX)))
+              new IllegalArgumentException(
+                BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX)))
           } else {
             pushedBlocks += blockId
             blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))
