@@ -70,7 +70,7 @@ SELECT abs(-2147483648);
 
 When `spark.sql.ansi.enabled` is set to `true`, explicit casting by `CAST` syntax throws a runtime exception for illegal cast patterns defined in the standard, e.g. casts from a string to an integer.
 
-The type conversion of Spark ANSI mode follows the syntax rules of section 6.13 "cast specification" in [ISO/IEC 9075-2:2011 Information technology — Database languages - SQL — Part 2: Foundation (SQL/Foundation)](https://www.iso.org/standard/53682.html), except it specially allows the following
+The `CAST` clause of Spark ANSI mode follows the syntax rules of section 6.13 "cast specification" in [ISO/IEC 9075-2:2011 Information technology — Database languages - SQL — Part 2: Foundation (SQL/Foundation)](https://www.iso.org/standard/53682.html), except it specially allows the following
  straightforward type conversions which are disallowed as per the ANSI standard:
 * NumericType <=> BooleanType
 * StringType <=> BinaryType
@@ -100,9 +100,6 @@ In the table above, all the `CAST`s that can cause runtime exceptions are marked
 * CAST(Array AS Array): raise an exception if there is any on the conversion of the elements.
 * CAST(Map AS Map): raise an exception if there is any on the conversion of the keys and the values.
 * CAST(Struct AS Struct): raise an exception if there is any on the conversion of the struct fields.
-
-Currently, the ANSI mode affects explicit casting and assignment casting only.
-In future releases, the behaviour of type coercion might change along with the other two type conversion rules.
 
 ```sql
 -- Examples of explicit casting
@@ -204,7 +201,7 @@ The least common type resolution is used to:
 - Derive the operand types for operators such as arithmetic operations or comparisons.
 - Derive the result type for expressions such as the case expression.
 - Derive the element, key, or value types for array and map constructors.
-Special rules are applied if the least common type resolves to FLOAT. If any of the types is INT, BIGINT, or DECIMAL the least common type is pushed to DOUBLE to avoid potential loss of digits.
+Special rules are applied if the least common type resolves to FLOAT. With float type values, if any of the types is INT, BIGINT, or DECIMAL the least common type is pushed to DOUBLE to avoid potential loss of digits.
   
 ```sql
 -- The coalesce function accepts any set of argument types as long as they share a least common type. 
