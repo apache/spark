@@ -32,9 +32,9 @@ import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.commons.io.IOUtils
 import org.roaringbitmap.RoaringBitmap
 
-import org.apache.spark.{MapOutputTracker, SparkEnv, SparkException, TaskContext}
+import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
-import org.apache.spark.internal.{config, Logging}
+import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.corruption.Cause
 import org.apache.spark.network.shuffle._
@@ -72,7 +72,11 @@ import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
  * @param maxReqSizeShuffleToMem max size (in bytes) of a request that can be shuffled to memory.
  * @param maxAttemptsOnNettyOOM The max number of a block could retry due to Netty OOM before
  *                              throwing the fetch failure.
- * @param detectCorrupt whether to detect any corruption in fetched blocks.
+ * @param detectCorrupt         whether to detect any corruption in fetched blocks.
+ * @param checksumEnabled whether the shuffle checksum is enabled. When enabled, Spark will try to
+ *                        diagnose the cause of the block corruption.
+ * @param checksumAlgorithm the checksum algorithm that is used when calculating the checksum value
+ *                         for the block data.
  * @param shuffleMetrics used to report shuffle metrics.
  * @param doBatchFetch fetch continuous shuffle blocks from same executor in batch if the server
  *                     side supports.
@@ -92,6 +96,8 @@ final class ShuffleBlockFetcherIterator(
     maxAttemptsOnNettyOOM: Int,
     detectCorrupt: Boolean,
     detectCorruptUseExtraMemory: Boolean,
+    checksumEnabled: Boolean,
+    checksumAlgorithm: String,
     shuffleMetrics: ShuffleReadMetricsReporter,
     doBatchFetch: Boolean)
   extends Iterator[(BlockId, InputStream)] with DownloadFileManager with Logging {
@@ -163,8 +169,6 @@ final class ShuffleBlockFetcherIterator(
    * at most once for those corrupted blocks.
    */
   private[this] val corruptedBlocks = mutable.HashSet[BlockId]()
-
-  private[this] val checksumEnabled = SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ENABLED)
 
   /**
    * Whether the iterator is still active. If isZombie is true, the callback interface will no
@@ -796,8 +800,7 @@ final class ShuffleBlockFetcherIterator(
           val in = try {
             var bufIn = buf.createInputStream()
             if (checksumEnabled) {
-              val checksum = ShuffleChecksumHelper.getChecksumByAlgorithm(
-                SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
+              val checksum = ShuffleChecksumHelper.getChecksumByAlgorithm(checksumAlgorithm)
               checkedIn = new CheckedInputStream(bufIn, checksum)
               bufIn = checkedIn
             }
@@ -1046,15 +1049,14 @@ final class ShuffleBlockFetcherIterator(
         cause = Cause.UNKNOWN_ISSUE
     }
     val checksum = checkedIn.getChecksum.getValue
-    val algorithm = SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
     cause = shuffleClient.diagnoseCorruption(address.host, address.port, address.executorId,
-      shuffleBlock.shuffleId, shuffleBlock.mapId, shuffleBlock.reduceId, checksum, algorithm)
+      shuffleBlock.shuffleId, shuffleBlock.mapId, shuffleBlock.reduceId, checksum,
+      checksumAlgorithm)
     val duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
     val diagnosisResponse = cause match {
       case Cause.UNSUPPORTED_CHECKSUM_ALGORITHM =>
         s"Block $blockId is corrupted but corruption diagnosis failed due to " +
-          s"unsupported checksum algorithm: " +
-          s"${SparkEnv.get.conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)}"
+          s"unsupported checksum algorithm: $checksumAlgorithm"
 
       case Cause.CHECKSUM_VERIFY_PASS =>
         s"Block $blockId is corrupted but checksum verification passed"

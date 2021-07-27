@@ -21,6 +21,7 @@ import java.io._
 import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.{CompletableFuture, Semaphore}
+import java.util.zip.CheckedInputStream
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -142,9 +143,9 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   // Create a mock managed buffer for testing
-  def createMockManagedBuffer(size: Int = 1): ManagedBuffer = {
+  def createMockManagedBuffer(size: Int = 1, checksumEnabled: Boolean = true): ManagedBuffer = {
     val mockManagedBuffer = mock(classOf[ManagedBuffer])
-    val in = mock(classOf[InputStream])
+    val in = if (checksumEnabled) mock(classOf[CheckedInputStream]) else mock(classOf[InputStream])
     when(in.read(any())).thenReturn(1)
     when(in.read(any(), any(), any())).thenReturn(1)
     when(mockManagedBuffer.createInputStream()).thenReturn(in)
@@ -180,6 +181,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       maxAttemptsOnNettyOOM: Int = 10,
       detectCorrupt: Boolean = true,
       detectCorruptUseExtraMemory: Boolean = true,
+      checksumEnabled: Boolean = false,
+      checksumAlgorithm: String = "ADLER32",
       shuffleMetrics: Option[ShuffleReadMetricsReporter] = None,
       doBatchFetch: Boolean = false): ShuffleBlockFetcherIterator = {
     val tContext = taskContext.getOrElse(TaskContext.empty())
@@ -197,6 +200,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       maxAttemptsOnNettyOOM,
       detectCorrupt,
       detectCorruptUseExtraMemory,
+      checksumEnabled,
+      checksumAlgorithm,
       shuffleMetrics.getOrElse(tContext.taskMetrics().createTempShuffleReadMetrics()),
       doBatchFetch)
   }
