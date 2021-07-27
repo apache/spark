@@ -143,9 +143,9 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
   }
 
   // Create a mock managed buffer for testing
-  def createMockManagedBuffer(size: Int = 1, checksumEnabled: Boolean = true): ManagedBuffer = {
+  def createMockManagedBuffer(size: Int = 1): ManagedBuffer = {
     val mockManagedBuffer = mock(classOf[ManagedBuffer])
-    val in = if (checksumEnabled) mock(classOf[CheckedInputStream]) else mock(classOf[InputStream])
+    val in = mock(classOf[InputStream])
     when(in.read(any())).thenReturn(1)
     when(in.read(any(), any(), any())).thenReturn(1)
     when(mockManagedBuffer.createInputStream()).thenReturn(in)
@@ -158,14 +158,19 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val wrappedInputStream = inputStream.asInstanceOf[BufferReleasingInputStream]
     verify(buffer, times(0)).release()
     val delegateAccess = PrivateMethod[InputStream](Symbol("delegate"))
-
-    verify(wrappedInputStream.invokePrivate(delegateAccess()), times(0)).close()
+    var in = wrappedInputStream.invokePrivate(delegateAccess())
+    if (in.isInstanceOf[CheckedInputStream]) {
+      val underlyingInputFiled = classOf[CheckedInputStream].getSuperclass.getDeclaredField("in")
+      underlyingInputFiled.setAccessible(true)
+      in = underlyingInputFiled.get(in.asInstanceOf[CheckedInputStream]).asInstanceOf[InputStream]
+    }
+    verify(in, times(0)).close()
     wrappedInputStream.close()
     verify(buffer, times(1)).release()
-    verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
+    verify(in, times(1)).close()
     wrappedInputStream.close() // close should be idempotent
     verify(buffer, times(1)).release()
-    verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
+    verify(in, times(1)).close()
   }
 
   // scalastyle:off argcount
@@ -181,7 +186,7 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       maxAttemptsOnNettyOOM: Int = 10,
       detectCorrupt: Boolean = true,
       detectCorruptUseExtraMemory: Boolean = true,
-      checksumEnabled: Boolean = false,
+      checksumEnabled: Boolean = true,
       checksumAlgorithm: String = "ADLER32",
       shuffleMetrics: Option[ShuffleReadMetricsReporter] = None,
       doBatchFetch: Boolean = false): ShuffleBlockFetcherIterator = {
