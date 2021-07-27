@@ -58,11 +58,11 @@ Spark SQL and DataFrames support the following data types:
 
     `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0(MONTH) and 1(YEAR). Supported year-month interval types are:
     
-    |Year-Month Interval Type|Short form|An instance of the type|
+    |Year-Month Interval Type|SQL type|An instance of the type|
     |---------|----|-------------------|
-    |`YearMonthIntervalType(YEAR, YEAR)`|`YearMonthIntervalType(YEAR)`|`INTERVAL '2021' YEAR`|
-    |`YearMonthIntervalType(YEAR, MONTH)`||`INTERVAL '2021-07' YEAR TO MONTH`|
-    |`YearMonthIntervalType(MONTH, MONTH)`|`YearMonthIntervalType(MONTH)`|`INTERVAL '10' MONTH`|
+    |`YearMonthIntervalType(YEAR, YEAR)` or `YearMonthIntervalType(YEAR)`|INTERVAL YEAR|`INTERVAL '2021' YEAR`|
+    |`YearMonthIntervalType(YEAR, MONTH)`|INTERVAL YEAR TO MONTH|`INTERVAL '2021-07' YEAR TO MONTH`|
+    |`YearMonthIntervalType(MONTH, MONTH)` or `YearMonthIntervalType(MONTH)`|INTERVAL MONTH|`INTERVAL '10' MONTH`|
 
   - `DayTimeIntervalType(startField, endField)`: Represents a day-time interval which is made up of a contiguous subset of the following fields:
     - SECOND, seconds within minutes and possibly fractions of a second `[0..59.999999]`,
@@ -74,18 +74,18 @@ Spark SQL and DataFrames support the following data types:
 
     `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND). Supported day-time interval types are:
 
-    |Day-Time Interval Type|Short form|An instance of the type|
+    |Day-Time Interval Type|SQL type|An instance of the type|
     |---------|----|-------------------|
-    |`DayTimeIntervalType(DAY, DAY)`|`DayTimeIntervalType(DAY)`|`INTERVAL '100' DAY`|
-    |`DayTimeIntervalType(DAY, HOUR)`||`INTERVAL '100 10' DAY TO HOUR`|
-    |`DayTimeIntervalType(DAY, MINUTE)`||`INTERVAL '100 10:30' DAY TO MINUTE`|
-    |`DayTimeIntervalType(DAY, SECOND)`||`INTERVAL '100 10:30:40.999999' DAY TO SECOND`|
-    |`DayTimeIntervalType(HOUR, HOUR)`|`DayTimeIntervalType(HOUR)`|`INTERVAL '123' HOUR`|
-    |`DayTimeIntervalType(HOUR, MINUTE)`||`INTERVAL '123:10' HOUR TO MINUTE`|
-    |`DayTimeIntervalType(HOUR, SECOND)`||`INTERVAL '123:10:59' HOUR TO SECOND`|
-    |`DayTimeIntervalType(MINUTE, MINUTE)`|`DayTimeIntervalType(MINUTE)`|`INTERVAL '1000' MINUTE`|
-    |`DayTimeIntervalType(MINUTE, SECOND)`||`INTERVAL '1000:01.001' MINUTE TO SECOND`|
-    |`DayTimeIntervalType(SECOND, SECOND)`|`DayTimeIntervalType(SECOND)`|`INTERVAL '1000.000001' SECOND`|
+    |`DayTimeIntervalType(DAY, DAY)` or `DayTimeIntervalType(DAY)`|INTERVAL DAY|`INTERVAL '100' DAY`|
+    |`DayTimeIntervalType(DAY, HOUR)`|INTERVAL DAY TO HOUR|`INTERVAL '100 10' DAY TO HOUR`|
+    |`DayTimeIntervalType(DAY, MINUTE)`|INTERVAL DAY TO MINUTE|`INTERVAL '100 10:30' DAY TO MINUTE`|
+    |`DayTimeIntervalType(DAY, SECOND)`|INTERVAL DAY TO SECOND|`INTERVAL '100 10:30:40.999999' DAY TO SECOND`|
+    |`DayTimeIntervalType(HOUR, HOUR)` or `DayTimeIntervalType(HOUR)`|INTERVAL HOUR|`INTERVAL '123' HOUR`|
+    |`DayTimeIntervalType(HOUR, MINUTE)`|INTERVAL HOUR TO MINUTE|`INTERVAL '123:10' HOUR TO MINUTE`|
+    |`DayTimeIntervalType(HOUR, SECOND)`|INTERVAL HOUR TO SECOND|`INTERVAL '123:10:59' HOUR TO SECOND`|
+    |`DayTimeIntervalType(MINUTE, MINUTE)` or `DayTimeIntervalType(MINUTE)`|INTERVAL MINUTE|`INTERVAL '1000' MINUTE`|
+    |`DayTimeIntervalType(MINUTE, SECOND)`|INTERVAL MINUTE TO SECOND|`INTERVAL '1000:01.001' MINUTE TO SECOND`|
+    |`DayTimeIntervalType(SECOND, SECOND)` or `DayTimeIntervalType(SECOND)`|INTERVAL SECOND|`INTERVAL '1000.000001' SECOND`|
 
 * Complex types
   - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
