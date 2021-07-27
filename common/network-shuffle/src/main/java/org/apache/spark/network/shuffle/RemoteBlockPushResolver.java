@@ -221,7 +221,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     Map<Integer, AppShufflePartitionInfo> shufflePartitions =
         shuffleMergePartitionsRef.get().get(shuffleMergeId);
-    if (shufflePartitions == null || isStaleOrTooLate(shufflePartitions)) {
+    if (null == shufflePartitions || isStaleOrTooLate(shufflePartitions)) {
       // It only gets here when shufflePartitions is either FINALIZED_SHUFFLE_PARTITIONS or
       // STALE_SHUFFLE_PARTITIONS or null. This happens in 2 cases:
       // 1. Incoming block request is for an older shuffleMergeId of a shuffle (i.e already
@@ -279,7 +279,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       int shuffleMergeId,
       int reduceId) {
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(appId);
-    if (appShuffleInfo.partitions.get(shuffleId).get(shuffleMergeId) == STALE_SHUFFLE_PARTITIONS) {
+    if (null != appShuffleInfo.partitions.get(shuffleId) &&
+        null != appShuffleInfo.partitions.get(shuffleId).get(shuffleMergeId) &&
+        appShuffleInfo.partitions.get(shuffleId).get(shuffleMergeId) == STALE_SHUFFLE_PARTITIONS) {
       throw new RuntimeException(String.format(
         "MergedBlock meta fetch for shuffleId %s shuffleMergeId %s reduceId %s is %s", shuffleId,
         shuffleMergeId, reduceId, ErrorHandler.BlockFetchErrorHandler.STALE_BLOCK_FETCH_SUFFIX));
@@ -311,7 +313,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   public ManagedBuffer getMergedBlockData(
       String appId, int shuffleId, int shuffleMergeId, int reduceId, int chunkId) {
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(appId);
-    if (appShuffleInfo.partitions.get(shuffleId).get(shuffleMergeId) == STALE_SHUFFLE_PARTITIONS) {
+    if (null != appShuffleInfo.partitions.get(shuffleId) &&
+        null != appShuffleInfo.partitions.get(shuffleId).get(shuffleMergeId) &&
+        appShuffleInfo.partitions.get(shuffleId).get(shuffleMergeId) == STALE_SHUFFLE_PARTITIONS) {
       throw new RuntimeException(String.format(
         "MergedBlock data fetch for shuffleId %s shuffleMergeId %s reduceId %s is %s", shuffleId,
         shuffleMergeId, reduceId, ErrorHandler.BlockFetchErrorHandler.STALE_BLOCK_FETCH_SUFFIX));
@@ -545,23 +549,29 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       appShuffleInfo.partitions.get(msg.shuffleId);
     AtomicReference<Map<Integer, AppShufflePartitionInfo>> shufflePartitionsRef
       = new AtomicReference<>(null);
-    shuffleMergePartitions.compute(msg.shuffleMergeId, (id, partitions) -> {
-      if (null == partitions || STALE_SHUFFLE_PARTITIONS == partitions) {
-        throw new RuntimeException(String.format("Shuffle merge finalize request for shuffle %s"
-          + " with shuffleMergeId %s is %s", msg.shuffleId, msg.shuffleMergeId,
-          ErrorHandler.BlockPushErrorHandler.STALE_SHUFFLE_FINALIZE_SUFFIX));
-      } else if (FINALIZED_SHUFFLE_PARTITIONS == partitions) {
-        throw new RuntimeException(String.format("Shuffle merge finalize request for shuffle %s"
-          + " with shuffleMergeId %s %s", msg.shuffleId, msg.shuffleMergeId,
-          ErrorHandler.BlockPushErrorHandler.ALREADY_FINALIZED_SUFFIX));
-      } else {
-        shuffleMergePartitions.put(msg.shuffleMergeId, FINALIZED_SHUFFLE_PARTITIONS);
-        shufflePartitionsRef.set(partitions);
-        return FINALIZED_SHUFFLE_PARTITIONS;
-      }
-    });
+    if (null != shuffleMergePartitions) {
+      shuffleMergePartitions.compute(msg.shuffleMergeId, (id, partitions) -> {
+        if (null == partitions) {
+          return null;
+        } if (STALE_SHUFFLE_PARTITIONS == partitions) {
+          throw new RuntimeException(
+            String.format("Shuffle merge finalize request for shuffle %s"
+              + " with shuffleMergeId %s is %s", msg.shuffleId, msg.shuffleMergeId,
+              ErrorHandler.BlockPushErrorHandler.STALE_SHUFFLE_FINALIZE_SUFFIX));
+        } else if (FINALIZED_SHUFFLE_PARTITIONS == partitions) {
+          throw new RuntimeException(
+            String.format("Shuffle merge finalize request for shuffle %s"
+              + " with shuffleMergeId %s %s", msg.shuffleId, msg.shuffleMergeId,
+              ErrorHandler.BlockPushErrorHandler.ALREADY_FINALIZED_SUFFIX));
+        } else {
+          shuffleMergePartitions.put(msg.shuffleMergeId, FINALIZED_SHUFFLE_PARTITIONS);
+          shufflePartitionsRef.set(partitions);
+          return FINALIZED_SHUFFLE_PARTITIONS;
+        }
+      });
+    }
     MergeStatuses mergeStatuses;
-    if (shufflePartitionsRef.get() == null || shufflePartitionsRef.get().isEmpty()) {
+    if (null == shufflePartitionsRef.get() || shufflePartitionsRef.get().isEmpty()) {
       mergeStatuses =
         new MergeStatuses(msg.shuffleId, msg.shuffleMergeId,
           new RoaringBitmap[0], new int[0], new long[0]);
