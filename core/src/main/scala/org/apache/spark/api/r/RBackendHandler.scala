@@ -26,7 +26,7 @@ import io.netty.handler.timeout.ReadTimeoutException
 
 import org.apache.spark.{SparkConf, SparkEnv}
 import org.apache.spark.api.r.SerDe._
-import org.apache.spark.errors.ExecutionErrors
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.R._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -159,7 +159,7 @@ private[r] class RBackendHandler(server: RBackend)
           selectedMethods.foreach { method =>
             logWarning(s"$methodName(${method.getParameterTypes.mkString(",")})")
           }
-          throw ExecutionErrors.noMatchedMethodFoundError(cls, methodName)
+          throw SparkCoreErrors.noMatchedMethodFoundError(cls, methodName)
         }
 
         val ret = selectedMethods(index.get).invoke(obj, args : _*)
@@ -180,7 +180,7 @@ private[r] class RBackendHandler(server: RBackend)
           ctors.foreach { ctor =>
             logWarning(s"$cls(${ctor.getParameterTypes.mkString(",")})")
           }
-          throw ExecutionErrors.noMatchedConstructorFoundError(cls)
+          throw SparkCoreErrors.noMatchedConstructorFoundError(cls)
         }
 
         val obj = ctors(index.get).newInstance(args : _*)

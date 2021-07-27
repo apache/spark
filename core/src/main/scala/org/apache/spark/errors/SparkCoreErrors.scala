@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.errors
 
 import java.io.EOFException
@@ -21,7 +22,10 @@ import java.io.EOFException
 import org.apache.spark.{SparkException, TaskKilledException}
 import org.apache.spark.api.r.JVMObjectId
 
-private[spark] object ExecutionErrors {
+/**
+ * Object for grouping error messages from (most) exceptions thrown during query execution.
+ */
+private[spark] object SparkCoreErrors {
   def juRemoveError(): Throwable = {
     new UnsupportedOperationException("remove")
   }

@@ -27,7 +27,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 
 import org.apache.spark._
-import org.apache.spark.errors.ExecutionErrors
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Python._
 import org.apache.spark.security.SocketAuthHelper
@@ -186,7 +186,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
         return (socket, Some(pid))
       } catch {
         case e: Exception =>
-          throw ExecutionErrors.failedToConnectBackPythonWorkerError(e)
+          throw SparkCoreErrors.failedToConnectBackPythonWorkerError(e)
       }
     } finally {
       if (serverSocket != null) {
@@ -220,9 +220,9 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
           daemonPort = in.readInt()
         } catch {
           case _: EOFException if daemon.isAlive =>
-            throw ExecutionErrors.eofExceptionWhileReadPortNumberFromAliveDaemonError(daemonModule)
+            throw SparkCoreErrors.eofExceptionWhileReadPortNumberFromAliveDaemonError(daemonModule)
           case _: EOFException =>
-            throw ExecutionErrors.
+            throw SparkCoreErrors.
               eofExceptionWhileReadPortNumberError(daemonModule, daemon.exitValue)
         }
 
@@ -240,7 +240,7 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
             |  $pythonPath
             |Also, check if you have a sitecustomize.py module in your python path,
             |or in your python installation, that is printing to standard output"""
-          throw ExecutionErrors.invalidPortNumberError(exceptionMessage.stripMargin)
+          throw SparkCoreErrors.invalidPortNumberError(exceptionMessage.stripMargin)
         }
 
         // Redirect daemon stdout and stderr

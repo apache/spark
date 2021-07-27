@@ -20,7 +20,7 @@ package org.apache.spark.api.r
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.errors.ExecutionErrors
+import org.apache.spark.errors.SparkCoreErrors
 
 /** JVM object ID wrapper */
 private[spark] case class JVMObjectId(id: String) {
@@ -47,7 +47,7 @@ private[r] class JVMObjectTracker {
   @throws[NoSuchElementException]("if key does not exist.")
   final def apply(id: JVMObjectId): Object = {
     get(id).getOrElse(
-      throw ExecutionErrors.jvmObjectIdNotExistError(id)
+      throw SparkCoreErrors.jvmObjectIdNotExistError(id)
     )
   }
 

@@ -22,7 +22,7 @@ import java.util.Arrays
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.api.java.JavaSparkContext
-import org.apache.spark.errors.ExecutionErrors
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.config._
 
 private[spark] object RUtils {
@@ -88,7 +88,7 @@ private[spark] object RUtils {
     } else {
       // Otherwise, assume the package is local
       val sparkRPkgPath = localSparkRPackagePath.getOrElse {
-          throw ExecutionErrors.cannotLocateSparkRPackage()
+          throw SparkCoreErrors.cannotLocateSparkRPackage()
       }
       if (!rPackages.isEmpty) {
         Seq(sparkRPkgPath, rPackages.get)

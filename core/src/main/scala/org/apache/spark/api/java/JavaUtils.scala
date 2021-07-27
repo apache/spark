@@ -22,7 +22,7 @@ import java.util.Map.Entry
 
 import scala.collection.mutable
 
-import org.apache.spark.errors.ExecutionErrors
+import org.apache.spark.errors.SparkCoreErrors
 
 private[spark] object JavaUtils {
   def optionToOptional[T](option: Option[T]): Optional[T] =
@@ -91,7 +91,7 @@ private[spark] object JavaUtils {
                   mm.remove(k)
                   prev = None
                 case _ =>
-                  throw ExecutionErrors.juRemoveError()
+                  throw SparkCoreErrors.juRemoveError()
               }
             case _ =>
               throw new IllegalStateException("next must be called at least once before remove")
