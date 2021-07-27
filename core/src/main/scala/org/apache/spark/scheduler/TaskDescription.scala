@@ -61,6 +61,8 @@ private[spark] class TaskDescription(
     val resources: immutable.Map[String, ResourceInformation],
     val serializedTask: ByteBuffer) {
 
+  assert(cpus > 0, "CPUs per task should be > 0")
+
   override def toString: String = s"TaskDescription($name)"
 }
 
