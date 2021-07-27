@@ -1369,6 +1369,7 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     assert(exc.getMessage.contains("Columns aliases are not allowed in DELETE."))
+    assert(exc.getErrorClass == "COLUMNS_ALIASES_NOT_ALLOWED_IN_OPERATION")
   }
 
   test("update table: basic") {
@@ -1409,6 +1410,7 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     assert(exc.getMessage.contains("Columns aliases are not allowed in UPDATE."))
+    assert(exc.getErrorClass == "COLUMNS_ALIASES_NOT_ALLOWED_IN_OPERATION")
   }
 
   test("merge into table: basic") {
@@ -1545,6 +1547,7 @@ class DDLParserSuite extends AnalysisTest {
         }
 
         assert(exc.getMessage.contains("Columns aliases are not allowed in MERGE."))
+        assert(exc.getErrorClass == "COLUMNS_ALIASES_NOT_ALLOWED_IN_OPERATION")
     }
   }
 
@@ -1595,6 +1598,7 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     assert(exc.getMessage.contains("only the last MATCHED clause can omit the condition"))
+    assert(exc.getErrorClass == "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION")
   }
 
   test("merge into table: only the last not matched clause can omit the condition") {
@@ -1629,6 +1633,7 @@ class DDLParserSuite extends AnalysisTest {
     }
 
     assert(exc.getMessage.contains("There must be at least one WHEN clause in a MERGE statement"))
+    assert(exc.getErrorClass == "MERGE_STATEMENT_WITHOUT_WHEN_CLAUSE")
   }
 
   test("show views") {

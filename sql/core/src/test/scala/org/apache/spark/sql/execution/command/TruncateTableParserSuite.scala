@@ -47,9 +47,10 @@ class TruncateTableParserSuite extends AnalysisTest with SharedSparkSession {
   }
 
   test("empty values in non-optional partition specs") {
-    val errMsg = intercept[ParseException] {
+    val e = intercept[ParseException] {
       parsePlan("TRUNCATE TABLE dbx.tab1 PARTITION (a='1', b)")
-    }.getMessage
-    assert(errMsg.contains("Found an empty partition key 'b'"))
+    }
+    assert(e.getMessage.contains("Found an empty partition key 'b'"))
+    assert(e.getErrorClass == "EMPTY_PARTITION_KEY")
   }
 }

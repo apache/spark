@@ -51,7 +51,8 @@ class ShowPartitionsParserSuite extends AnalysisTest with SharedSparkSession {
     val e = intercept[ParseException] {
       new SparkSqlParser().parsePlan(
         "SHOW PARTITIONS dbx.tab1 PARTITION (a='1', b)")
-    }.getMessage
-    assert(e.contains("Found an empty partition key 'b'"))
+    }
+    assert(e.getMessage.contains("Found an empty partition key 'b'"))
+    assert(e.getErrorClass == "EMPTY_PARTITION_KEY")
   }
 }

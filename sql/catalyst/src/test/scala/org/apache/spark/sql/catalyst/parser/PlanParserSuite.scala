@@ -42,6 +42,12 @@ class PlanParserSuite extends AnalysisTest {
   private def intercept(sqlCommand: String, messages: String*): Unit =
     interceptParseException(parsePlan)(sqlCommand, messages: _*)
 
+  private def interceptWithErrorClass(sqlCommand: String, messages: String*)(
+    errorClass: String): Unit = {
+    val e = interceptParseException(parsePlan)(sqlCommand, messages: _*)
+    assert(e.getErrorClass == errorClass)
+  }
+
   private def cte(plan: LogicalPlan, namedPlans: (String, (LogicalPlan, Seq[String]))*): With = {
     val ctes = namedPlans.map {
       case (name, (cte, columnAliases)) =>
@@ -280,10 +286,14 @@ class PlanParserSuite extends AnalysisTest {
     }
 
     val msg = "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported"
-    intercept(s"$baseSql order by a sort by a", msg)
-    intercept(s"$baseSql cluster by a distribute by a", msg)
-    intercept(s"$baseSql order by a cluster by a", msg)
-    intercept(s"$baseSql order by a distribute by a", msg)
+    interceptWithErrorClass(s"$baseSql order by a sort by a", msg)(
+      "COMBINATION_QUERY_RESULT_CLAUSES_UNSUPPORTED")
+    interceptWithErrorClass(s"$baseSql cluster by a distribute by a", msg)(
+      "COMBINATION_QUERY_RESULT_CLAUSES_UNSUPPORTED")
+    interceptWithErrorClass(s"$baseSql order by a cluster by a", msg)(
+      "COMBINATION_QUERY_RESULT_CLAUSES_UNSUPPORTED")
+    interceptWithErrorClass(s"$baseSql order by a distribute by a", msg)(
+      "COMBINATION_QUERY_RESULT_CLAUSES_UNSUPPORTED")
   }
 
   test("insert into") {
@@ -439,7 +449,7 @@ class PlanParserSuite extends AnalysisTest {
       "select * from t lateral view posexplode(x) posexpl as x, y",
       expected)
 
-    intercept(
+    interceptWithErrorClass(
       """select *
         |from t
         |lateral view explode(x) expl
@@ -447,7 +457,8 @@ class PlanParserSuite extends AnalysisTest {
         |  sum(x)
         |  FOR y IN ('a', 'b')
         |)""".stripMargin,
-      "LATERAL cannot be used together with PIVOT in FROM clause")
+      "LATERAL cannot be used together with PIVOT in FROM clause")(
+      "LATERAL_WITH_PIVOT_IN_FROM_CLAUSE_NOT_ALLOWED")
   }
 
   test("joins") {
@@ -1183,7 +1194,7 @@ class PlanParserSuite extends AnalysisTest {
           List.empty, List.empty, None, None, false)))
 
     // verify with ROW FORMAT SERDE
-    intercept(
+    interceptWithErrorClass(
       """
         |SELECT TRANSFORM(a, b, c)
         |  ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
@@ -1199,6 +1210,6 @@ class PlanParserSuite extends AnalysisTest {
         |    "escapeChar" = "\\")
         |FROM testData
       """.stripMargin,
-      "TRANSFORM with serde is only supported in hive mode")
+      "TRANSFORM with serde is only supported in hive mode")("TRANSFORM_WITH_SERDE_UNSUPPORTED")
   }
 }

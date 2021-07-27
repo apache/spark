@@ -35,7 +35,7 @@ class ErrorParserSuite extends AnalysisTest {
     interceptParseException(CatalystSqlParser.parsePlan)(sqlCommand, messages: _*)
 
   def intercept(sql: String, line: Int, startPosition: Int, stopPosition: Int,
-                messages: String*): Unit = {
+                messages: String*): ParseException = {
     val e = intercept[ParseException](CatalystSqlParser.parsePlan(sql))
 
     // Check position.
@@ -51,6 +51,18 @@ class ErrorParserSuite extends AnalysisTest {
     messages.foreach { message =>
       assert(error.contains(message))
     }
+    e
+  }
+
+  def interceptWithErrorClass(sqlCommand: String, messages: String*)(errorClass: String): Unit = {
+    val e = interceptParseException(CatalystSqlParser.parsePlan)(sqlCommand, messages: _*)
+    assert(e.getErrorClass == errorClass)
+  }
+
+  def interceptWithErrorClass(sql: String, line: Int, startPosition: Int, stopPosition: Int,
+      messages: String*)(errorClass: String): Unit = {
+    val e = intercept(sql, line, startPosition, stopPosition, messages: _*)
+    assert(e.getErrorClass == errorClass)
   }
 
   test("no viable input") {
@@ -71,9 +83,9 @@ class ErrorParserSuite extends AnalysisTest {
   }
 
   test("semantic errors") {
-    intercept("select *\nfrom r\norder by q\ncluster by q", 3, 0, 11,
+    interceptWithErrorClass("select *\nfrom r\norder by q\ncluster by q", 3, 0, 11,
       "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported",
-      "^^^")
+      "^^^")("COMBINATION_QUERY_RESULT_CLAUSES_UNSUPPORTED")
   }
 
   test("SPARK-21136: misleading error message due to problematic antlr grammar") {
@@ -211,11 +223,16 @@ class ErrorParserSuite extends AnalysisTest {
 
   test("SPARK-35789: lateral join with non-subquery relations") {
     val msg = "LATERAL can only be used with subquery"
-    intercept("SELECT * FROM t1, LATERAL t2", msg)
-    intercept("SELECT * FROM t1 JOIN LATERAL t2", msg)
-    intercept("SELECT * FROM t1, LATERAL (t2 JOIN t3)", msg)
-    intercept("SELECT * FROM t1, LATERAL (LATERAL t2)", msg)
-    intercept("SELECT * FROM t1, LATERAL VALUES (0, 1)", msg)
-    intercept("SELECT * FROM t1, LATERAL RANGE(0, 1)", msg)
+    interceptWithErrorClass("SELECT * FROM t1, LATERAL t2", msg)("INVALID_LATERAL_JOIN_RELATION")
+    interceptWithErrorClass("SELECT * FROM t1 JOIN LATERAL t2", msg)(
+      "INVALID_LATERAL_JOIN_RELATION")
+    interceptWithErrorClass("SELECT * FROM t1, LATERAL (t2 JOIN t3)", msg)(
+      "INVALID_LATERAL_JOIN_RELATION")
+    interceptWithErrorClass("SELECT * FROM t1, LATERAL (LATERAL t2)", msg)(
+      "INVALID_LATERAL_JOIN_RELATION")
+    interceptWithErrorClass("SELECT * FROM t1, LATERAL VALUES (0, 1)", msg)(
+      "INVALID_LATERAL_JOIN_RELATION")
+    interceptWithErrorClass("SELECT * FROM t1, LATERAL RANGE(0, 1)", msg)(
+      "INVALID_LATERAL_JOIN_RELATION")
   }
 }

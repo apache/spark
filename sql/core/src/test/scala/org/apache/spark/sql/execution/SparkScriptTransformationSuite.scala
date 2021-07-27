@@ -55,8 +55,9 @@ class SparkScriptTransformationSuite extends BaseScriptTransformationSuite with 
             |ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe'
             |FROM v
           """.stripMargin)
-      }.getMessage
-      assert(e.contains("TRANSFORM with serde is only supported in hive mode"))
+      }
+      assert(e.getMessage.contains("TRANSFORM with serde is only supported in hive mode"))
+      assert(e.getErrorClass == "TRANSFORM_WITH_SERDE_UNSUPPORTED")
     }
   }
 }
