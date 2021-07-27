@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import java.util.EnumSet
 import javax.servlet.DispatcherType
-import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+import javax.servlet.http.{HttpServlet, HttpServletRequest}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
@@ -51,15 +51,6 @@ private[spark] abstract class WebUI(
   extends Logging {
 
   protected val tabs = ArrayBuffer[WebUITab]()
-  protected val initHandler: ServletContextHandler = {
-    val servlet = new HttpServlet() {
-      override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
-        res.setContentType("text/html;charset=utf-8")
-        res.getWriter.write("Spark is starting up. Please wait a while until it's ready.")
-      }
-    }
-    createServletHandler("/", servlet, basePath)
-  }
   protected val handlers = ArrayBuffer[ServletContextHandler]()
   protected val pageToHandlers = new HashMap[WebUIPage, ArrayBuffer[ServletContextHandler]]
   protected var serverInfo: Option[ServerInfo] = None
@@ -145,16 +136,6 @@ private[spark] abstract class WebUI(
     attachHandler(JettyUtils.createStaticHandler(resourceBase, path))
   }
 
-  /**
-   * Attach all existed handler to ServerInfo.
-   */
-  def attachAllHandler(): Unit = {
-    serverInfo.foreach { server =>
-      server.removeHandler(initHandler)
-      handlers.foreach(server.addHandler(_, securityManager))
-    }
-  }
-
   /** A hook to initialize components of the UI */
   def initialize(): Unit
 
@@ -164,7 +145,7 @@ private[spark] abstract class WebUI(
     try {
       val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
       val server = startJettyServer(host, port, sslOptions, conf, name, poolSize)
-      server.addHandler(initHandler, securityManager)
+      handlers.foreach(server.addHandler(_, securityManager))
       serverInfo = Some(server)
       logInfo(s"Bound $className to $host, and started at $webUrl")
     } catch {

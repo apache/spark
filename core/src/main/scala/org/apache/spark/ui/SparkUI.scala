@@ -19,6 +19,7 @@ package org.apache.spark.ui
 
 import java.util.Date
 
+import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI._
@@ -30,6 +31,7 @@ import org.apache.spark.ui.env.EnvironmentTab
 import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.ui.jobs.{JobsTab, StagesTab}
 import org.apache.spark.ui.storage.StorageTab
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 /**
  * Top level user interface for a Spark application.
@@ -54,6 +56,25 @@ private[spark] class SparkUI private (
 
   private var streamingJobProgressListener: Option[SparkListener] = None
 
+  protected val initHandler: ServletContextHandler = {
+    val servlet = new HttpServlet() {
+      override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+        res.setContentType("text/html;charset=utf-8")
+        res.getWriter.write("Spark is starting up. Please wait a while until it's ready.")
+      }
+    }
+    createServletHandler("/", servlet, basePath)
+  }
+
+  /**
+   * Attach all existed handler to ServerInfo.
+   */
+  def attachAllHandler(): Unit = {
+    serverInfo.foreach { server =>
+      server.removeHandler(initHandler)
+      handlers.foreach(server.addHandler(_, securityManager))
+    }
+  }
   /** Initialize all components of the server. */
   def initialize(): Unit = {
     val jobsTab = new JobsTab(this, store)
@@ -94,6 +115,21 @@ private[spark] class SparkUI private (
 
   def setAppId(id: String): Unit = {
     appId = id
+  }
+
+  override def bind(): Unit = {
+    assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
+    try {
+      val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
+      val server = startJettyServer(host, port, sslOptions, conf, name, poolSize)
+      server.addHandler(initHandler, securityManager)
+      serverInfo = Some(server)
+      logInfo(s"Bound $className to $host, and started at $webUrl")
+    } catch {
+      case e: Exception =>
+        logError(s"Failed to bind $className", e)
+        System.exit(1)
+    }
   }
 
   /** Stop the server behind this web interface. Only valid after bind(). */
