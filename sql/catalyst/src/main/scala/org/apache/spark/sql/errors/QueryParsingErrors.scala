@@ -30,90 +30,86 @@ import org.apache.spark.sql.catalyst.trees.Origin
 object QueryParsingErrors {
 
   def invalidInsertIntoError(ctx: InsertIntoContext): Throwable = {
-    new ParseException("Invalid InsertIntoContext", ctx)
+    new ParseException("INVALID_INSERT_INTO_CONTEXT", Array.empty, ctx)
   }
 
   def insertOverwriteDirectoryUnsupportedError(ctx: InsertIntoContext): Throwable = {
-    new ParseException("INSERT OVERWRITE DIRECTORY is not supported", ctx)
+    new ParseException("INSERT_OVERWRITE_DIRECTORY_UNSUPPORTED", Array.empty, ctx)
   }
 
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
-    new ParseException(s"Columns aliases are not allowed in $op.", ctx.identifierList())
+    new ParseException("COLUMNS_ALIASES_NOT_ALLOWED_IN_OPERATION", Array(op), ctx.identifierList())
   }
 
   def emptySourceForMergeError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException("Empty source for merge: you should specify a source" +
-      " table/subquery in merge.", ctx.source)
+    new ParseException("EMPTY_SOURCE_FOR_MERGE", Array.empty, ctx.source)
   }
 
   def unrecognizedMatchedActionError(ctx: MatchedClauseContext): Throwable = {
-    new ParseException(s"Unrecognized matched action: ${ctx.matchedAction().getText}",
+    new ParseException("UNRECOGNIZED_MATCHED_ACTION", Array(ctx.matchedAction().getText),
       ctx.matchedAction())
   }
 
   def insertedValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException("The number of inserted values cannot match the fields.",
+    new ParseException("INSERTED_VALUE_NUMBER_NOT_MATCH_FIELD_NUMBER", Array.empty,
       ctx.notMatchedAction())
   }
 
   def unrecognizedNotMatchedActionError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException(s"Unrecognized not matched action: ${ctx.notMatchedAction().getText}",
+    new ParseException("UNRECOGNIZED_NOT_MATCHED_ACTION", Array(ctx.notMatchedAction().getText),
       ctx.notMatchedAction())
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException("There must be at least one WHEN clause in a MERGE statement", ctx)
+    new ParseException("MERGE_STATEMENT_WITHOUT_WHEN_CLAUSE", Array.empty, ctx)
   }
 
   def nonLastMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException("When there are more than one MATCHED clauses in a MERGE " +
-      "statement, only the last MATCHED clause can omit the condition.", ctx)
+    new ParseException("NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION", Array.empty, ctx)
   }
 
   def nonLastNotMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException("When there are more than one NOT MATCHED clauses in a MERGE " +
-      "statement, only the last NOT MATCHED clause can omit the condition.", ctx)
+    new ParseException("NON_LAST_NOT_MATCHED_CLAUSE_OMIT_CONDITION", Array.empty, ctx)
   }
 
   def emptyPartitionKeyError(key: String, ctx: PartitionSpecContext): Throwable = {
-    new ParseException(s"Found an empty partition key '$key'.", ctx)
+    new ParseException("EMPTY_PARTITION_KEY", Array(key), ctx)
   }
 
   def combinationQueryResultClausesUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException(
-      "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported", ctx)
+    new ParseException("COMBINATION_QUERY_RESULT_CLAUSES_UNSUPPORTED", Array.empty, ctx)
   }
 
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException("DISTRIBUTE BY is not supported", ctx)
+    new ParseException("DISTRIBUTE_BY_UNSUPPORTED", Array.empty, ctx)
   }
 
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("TRANSFORM does not support DISTINCT/ALL in inputs", ctx)
+    new ParseException("TRANSFORM_NOT_SUPPORT_QUANTIFIER", Array.empty, ctx)
   }
 
   def transformWithSerdeUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("TRANSFORM with serde is only supported in hive mode", ctx)
+    new ParseException("TRANSFORM_WITH_SERDE_UNSUPPORTED", Array.empty, ctx)
   }
 
   def lateralWithPivotInFromClauseNotAllowedError(ctx: FromClauseContext): Throwable = {
-    new ParseException("LATERAL cannot be used together with PIVOT in FROM clause", ctx)
+    new ParseException("LATERAL_WITH_PIVOT_IN_FROM_CLAUSE_NOT_ALLOWED", Array.empty, ctx)
   }
 
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL join with NATURAL join is not supported", ctx)
+    new ParseException("LATERAL_JOIN_WITH_NATURAL_JOIN_UNSUPPORTED", Array.empty, ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL join with USING join is not supported", ctx)
+    new ParseException("LATERAL_JOIN_WITH_USING_JOIN_UNSUPPORTED", Array.empty, ctx)
   }
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
-    new ParseException(s"Unsupported LATERAL join type $joinType", ctx)
+    new ParseException("UNSUPPORTED_LATERAL_JOIN_TYPE", Array(joinType), ctx)
   }
 
   def invalidLateralJoinRelationError(ctx: RelationPrimaryContext): Throwable = {
-    new ParseException(s"LATERAL can only be used with subquery", ctx)
+    new ParseException("INVALID_LATERAL_JOIN_RELATION", Array.empty, ctx)
   }
 
   def repetitiveWindowDefinitionError(name: String, ctx: WindowClauseContext): Throwable = {
