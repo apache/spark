@@ -391,6 +391,7 @@ public class ExternalShuffleBlockResolver {
       long checksumByReader,
       String algorithm) {
     ExecutorShuffleInfo executor = executors.get(new AppExecId(appId, execId));
+    // This should be in sync with IndexShuffleBlockResolver.getChecksumFile
     String fileName = "shuffle_" + shuffleId + "_" + mapId + "_0.checksum." + algorithm;
     File checksumFile = ExecutorDiskUtils.getFile(
       executor.localDirs,
