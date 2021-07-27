@@ -141,13 +141,13 @@ public class ExternalBlockHandlerSuite {
 
       switch (expectedCaused) {
         case DISK_ISSUE:
-          out.writeLong(-checksumByWriter);
+          out.writeLong(- checksumByWriter);
           checksumByReader = checksumByWriter;
           break;
 
         case NETWORK_ISSUE:
           out.writeLong(checksumByWriter);
-          checksumByReader = -1 * checksumByWriter;
+          checksumByReader = - checksumByWriter;
           break;
 
         case UNKNOWN_ISSUE:

@@ -1012,7 +1012,7 @@ final class ShuffleBlockFetcherIterator(
 
   /**
    * Get the suspect corruption cause for the corrupted block. It should be only invoked
-   * when checksum is enabled.
+   * when checksum is enabled and corruption was detected at least once.
    *
    * This will firstly consume the rest of stream of the corrupted block to calculate the
    * checksum of the block. Then, it will raise a synchronized RPC call along with the
