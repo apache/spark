@@ -328,8 +328,9 @@ class FractionalOps(NumericOps):
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
-        if index_ops.hasnans:
-            if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+
+        if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            if index_ops.hasnans:
                 raise ValueError(
                     "Cannot convert %s with missing values to integer" % self.pretty_name
                 )
@@ -405,12 +406,14 @@ class IntegralExtensionOps(IntegralOps):
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
-        if index_ops.hasnans:
-            if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+
+        if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            if index_ops.hasnans:
                 raise ValueError(
                     "Cannot convert %s with missing values to integer" % self.pretty_name
                 )
-            elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+        elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            if index_ops.hasnans:
                 raise ValueError("Cannot convert %s with missing values to bool" % self.pretty_name)
         return _non_fractional_astype(index_ops, dtype, spark_type)
 
