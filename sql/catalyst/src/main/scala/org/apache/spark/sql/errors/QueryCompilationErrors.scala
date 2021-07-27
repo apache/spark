@@ -1393,10 +1393,6 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("multi-part identifier cannot be empty.")
   }
 
-  def cannotCreateTablesWithNullTypeError(): Throwable = {
-    new AnalysisException(s"Cannot create tables with ${NullType.simpleString} type.")
-  }
-
   def functionUnsupportedInV2CatalogError(): Throwable = {
     new AnalysisException("function is only supported in v1 catalog")
   }
