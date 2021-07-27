@@ -91,7 +91,7 @@ class DataFrameTests(ReusedSQLTestCase):
         with self.assertRaisesRegex(TypeError, type_error_msg):
             self.spark.createDataFrame(
                 [(u'Alice', 50), (u'Alice', 60)], schema
-            ).dropDuplicates("name").count()
+            ).dropDuplicates("name")
 
     def test_dropna(self):
         schema = StructType([
