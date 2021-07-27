@@ -58,10 +58,14 @@ object DataSourceUtils {
     Serialization.read[Seq[String]](str)
   }
 
+  /**
+   * Verify if the field name is supported in datasource. This verification should be done
+   * in a drover side.
+   */
   def checkFieldNames(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
       if (!format.supportFieldName(field.name)) {
-        throw QueryCompilationErrors.invalid(format.toString, field)
+        throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(field.name)
       }
       field.dataType match {
         case s: StructType => checkFieldNames(format, s)

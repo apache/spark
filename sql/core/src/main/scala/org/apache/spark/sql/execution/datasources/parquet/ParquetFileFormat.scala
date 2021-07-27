@@ -388,7 +388,7 @@ class ParquetFileFormat
   }
 
   override def supportFieldName(name: String): Boolean = {
-    ParquetSchemaConverter.checkFieldName(name)
+    name.matches(".*[ ,;{}()\n\t=].*")
   }
 }
 

@@ -52,9 +52,9 @@ private[sql] class AvroFileFormat extends FileFormat
   override def hashCode(): Int = super.hashCode()
 
   override def inferSchema(
-      spark: SparkSession,
-      options: Map[String, String],
-      files: Seq[FileStatus]): Option[StructType] = {
+    spark: SparkSession,
+    options: Map[String, String],
+    files: Seq[FileStatus]): Option[StructType] = {
     AvroUtils.inferSchema(spark, options, files)
   }
 
@@ -63,26 +63,26 @@ private[sql] class AvroFileFormat extends FileFormat
   override def toString(): String = "Avro"
 
   override def isSplitable(
-      sparkSession: SparkSession,
-      options: Map[String, String],
-      path: Path): Boolean = true
+    sparkSession: SparkSession,
+    options: Map[String, String],
+    path: Path): Boolean = true
 
   override def prepareWrite(
-      spark: SparkSession,
-      job: Job,
-      options: Map[String, String],
-      dataSchema: StructType): OutputWriterFactory = {
+    spark: SparkSession,
+    job: Job,
+    options: Map[String, String],
+    dataSchema: StructType): OutputWriterFactory = {
     AvroUtils.prepareWrite(spark.sessionState.conf, job, options, dataSchema)
   }
 
   override def buildReader(
-      spark: SparkSession,
-      dataSchema: StructType,
-      partitionSchema: StructType,
-      requiredSchema: StructType,
-      filters: Seq[Filter],
-      options: Map[String, String],
-      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    spark: SparkSession,
+    dataSchema: StructType,
+    partitionSchema: StructType,
+    requiredSchema: StructType,
+    filters: Seq[Filter],
+    options: Map[String, String],
+    hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
 
     val broadcastedConf =
       spark.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -145,6 +145,7 @@ private[sql] class AvroFileFormat extends FileFormat
           override val stopPosition = file.start + file.length
 
           override def hasNext: Boolean = hasNextRow
+
           override def next(): InternalRow = nextRow
         }
       } else {
@@ -156,25 +157,15 @@ private[sql] class AvroFileFormat extends FileFormat
   override def supportDataType(dataType: DataType): Boolean = AvroUtils.supportsDataType(dataType)
 
   override def supportFieldName(name: String): Boolean = {
-    val length = name.length
-    if (length == 0) {
-      throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
+    if (name.length == 0) {
+      false
     } else {
-      val first = name.charAt(0)
-      if (!Character.isLetter(first) && first != '_') {
-        throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
-      } else {
-        var i = 1
-        while (i < length) {
-          val c = name.charAt(i)
-          if (!Character.isLetterOrDigit(c) && c != '_') {
-            throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
-          }
-          i += 1
-        }
+      name.zipWithIndex.forall {
+        case (c, 0) if !Character.isLetter(c) && c != '_' => false
+        case (c, _) if !Character.isLetterOrDigit(c) && c != '_' => false
+        case _ => true
       }
     }
-    true
   }
 }
 

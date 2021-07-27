@@ -267,8 +267,7 @@ class OrcFileFormat
       TypeDescription.fromString(s"struct<`$name`:int>")
       true
     } catch {
-      case _: IllegalArgumentException =>
-        throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
+      case _: IllegalArgumentException => false
     }
   }
 }
