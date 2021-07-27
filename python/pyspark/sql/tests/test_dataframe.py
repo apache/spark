@@ -88,7 +88,13 @@ class DataFrameTests(ReusedSQLTestCase):
 
         type_error_msg = "Parameter 'subset' must be a list of columns"
         with self.assertRaisesRegex(TypeError, type_error_msg):
+<<<<<<< HEAD
             df.dropDuplicates("name")
+=======
+            self.spark.createDataFrame(
+                [(u'Alice', 50), (u'Alice', 60)], schema
+            ).dropDuplicates("name")
+>>>>>>> b35b26c0e7cfdb15bddacfe75d8df3005a004cf5
 
     def test_dropna(self):
         schema = StructType([
