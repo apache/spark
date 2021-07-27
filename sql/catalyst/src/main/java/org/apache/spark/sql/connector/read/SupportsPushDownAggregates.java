@@ -27,12 +27,10 @@ import org.apache.spark.sql.connector.expressions.Aggregation;
  * "SELECT min(value) AS m FROM t GROUP BY key", after pushing down the aggregate
  * to the data source, the data source can still output data with duplicated keys, which is OK
  * as Spark will do GROUP BY key again. The final query plan can be something like this:
- * {{{
+ * <pre>
  *   Aggregate [key#1], [min(min(value)#2) AS m#3]
  *     +- RelationV2[key#1, min(value)#2]
- * }}}
- *
- * <p>
+ * </pre>
  * Similarly, if there is no grouping expression, the data source can still output more than one
  * rows.
  *

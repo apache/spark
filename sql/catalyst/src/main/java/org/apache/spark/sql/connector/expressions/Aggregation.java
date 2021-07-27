@@ -28,8 +28,8 @@ import java.io.Serializable;
  */
 @Evolving
 public final class Aggregation implements Serializable {
-  private AggregateFunc[] aggregateExpressions;
-  private FieldReference[] groupByColumns;
+  private final AggregateFunc[] aggregateExpressions;
+  private final FieldReference[] groupByColumns;
 
   public Aggregation(AggregateFunc[] aggregateExpressions, FieldReference[] groupByColumns) {
     this.aggregateExpressions = aggregateExpressions;
