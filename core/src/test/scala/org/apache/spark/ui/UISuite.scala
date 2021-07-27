@@ -424,6 +424,23 @@ class UISuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-36237: Attach and start handler after application started in UI ") {
+    val conf = new SparkConf()
+      .setMaster("local")
+      .setAppName("test")
+      .set(UI.UI_ENABLED, false)
+    val sc = new SparkContext(conf)
+    assert(sc.ui.isEmpty)
+    val sparkUI = SparkUI.create(Some(sc), sc.statusStore, sc.conf, sc.env.securityManager,
+      sc.appName, "", sc.startTime)
+    sparkUI.bind()
+    assert(TestUtils.httpResponseMessage(new URL(sparkUI.webUrl + "/jobs"))
+      === "Spark is starting up. Please wait a while until it's ready.")
+    sparkUI.attachAllHandler()
+    assert(TestUtils.httpResponseMessage(new URL(sparkUI.webUrl + "/jobs")).contains(sc.appName))
+    sc.stop()
+  }
+
   /**
    * Create a new context handler for the given path, with a single servlet that responds to
    * requests in `$path/root`.
