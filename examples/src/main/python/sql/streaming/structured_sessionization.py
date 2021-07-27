@@ -70,11 +70,12 @@ if __name__ == "__main__":
 
     # Group the data by window and word and compute the count of each group
     windowedCounts = events \
-        .groupBy(session_window(events.eventTime, "10 seconds").alias('session'), events.sessionId) \
+        .groupBy(session_window(events.eventTime, "10 seconds").alias('session'),
+                 events.sessionId) \
         .agg(count("*").alias("numEvents")) \
         .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
-                "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
-                "numEvents")
+                    "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",
+                    "numEvents")
 
     # Start running the query that prints the session updates to the console
     query = windowedCounts\
