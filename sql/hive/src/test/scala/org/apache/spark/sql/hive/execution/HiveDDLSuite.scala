@@ -3035,9 +3035,9 @@ class HiveDDLSuite
         val e = intercept[AnalysisException] {
           spark.sql(
             """
-              | SELECT
-              | NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
-              | FROM v
+              |SELECT
+              |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
+              |FROM v
               |""".stripMargin).write.mode(SaveMode.Overwrite).parquet(path.toString)
         }.getMessage
         assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains" +
