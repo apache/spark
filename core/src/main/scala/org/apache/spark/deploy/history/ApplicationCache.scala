@@ -67,8 +67,7 @@ private[history] class ApplicationCache(
      *              always be `SIZE` because `appCache` configured with
      *              `maximumSize` eviction strategy
      */
-    override def onRemoval(key: CacheKey, value: CacheEntry,
-        cause: RemovalCause): Unit = {
+    override def onRemoval(key: CacheKey, value: CacheEntry, cause: RemovalCause): Unit = {
       metrics.evictionCount.inc()
       logDebug(s"Evicting entry $key")
       operations.detachSparkUI(key.appId, key.attemptId, value.loadedUI.ui)

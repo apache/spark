@@ -28,8 +28,6 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.apache.spark.benchmark.{Benchmark, BenchmarkBase}
 import org.apache.spark.util.ThreadUtils
 
-
-
 /**
  * Benchmark for Guava Cache vs Caffeine.
  * To run this benchmark:
@@ -39,7 +37,7 @@ import org.apache.spark.util.ThreadUtils
  *   2. build/sbt "core/test:runMain <this class>"
  *   3. generate result:
  *      SPARK_GENERATE_BENCHMARK_FILES=1 build/sbt "core/test:runMain <this class>"
- *      Results will be written to "benchmarks/KryoBenchmark-results.txt".
+ *      Results will be written to "benchmarks/LocalCacheBenchmark-results.txt".
  * }}}
  */
 object LocalCacheBenchmark extends BenchmarkBase {

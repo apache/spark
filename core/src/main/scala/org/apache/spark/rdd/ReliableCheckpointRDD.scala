@@ -85,16 +85,11 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
 
   // Cache of preferred locations of checkpointed files.
   @transient private[spark] lazy val cachedPreferredLocations = {
-    val builder = Caffeine.newBuilder()
+    Caffeine.newBuilder()
       .expireAfterWrite(
         SparkEnv.get.conf.get(CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME).get,
         TimeUnit.MINUTES)
-    val loader = new CacheLoader[Partition, Seq[String]]() {
-      override def load(split: Partition): Seq[String] = {
-        getPartitionBlockLocations(split)
-      }
-    }
-    builder.build[Partition, Seq[String]](loader)
+      .build[Partition, Seq[String]](getPartitionBlockLocations)
   }
 
   // Returns the block locations of given partition on file system.

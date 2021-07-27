@@ -166,16 +166,12 @@ class SessionCatalog(
     if (cacheTTL > 0) {
       builder = builder.expireAfterWrite(cacheTTL, TimeUnit.SECONDS)
     }
-    // Wrapping as CaffeinatedGuava to be compatible with
-    // the get(key, valueLoader) API of Guava cache
     builder.build()
   }
 
   /** This method provides a way to get a cached plan. */
   def getCachedPlan(t: QualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
-    tableRelationCache.get(t, new JFunction[QualifiedTableName, LogicalPlan] {
-      override def apply(t: QualifiedTableName): LogicalPlan = c.call()
-    })
+    tableRelationCache.get(t, (_: QualifiedTableName) => c.call())
   }
 
   /** This method provides a way to get a cached plan if the key exists. */
