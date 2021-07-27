@@ -418,7 +418,7 @@ private[spark] class TaskSetManager(
    * @param execId the executor Id of the offered resource
    * @param host  the host Id of the offered resource
    * @param maxLocality the maximum locality we want to schedule the tasks at
-   * @param taskCpus the number of cpus for the task
+   * @param taskCpus the number of CPUs for the task
    * @param taskResourceAssignments the resource assignments for the task
    *
    * @return Triple containing:

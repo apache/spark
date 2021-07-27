@@ -180,7 +180,7 @@ abstract class TaskContext extends Serializable {
   /**
    * CPUs allocated to the task.
    */
-  @Since("3.1.3")
+  @Since("3.3.0")
   def cpus(): Int
 
   /**
