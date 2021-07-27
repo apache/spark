@@ -54,6 +54,8 @@ Spark SQL and DataFrames support the following data types:
     - MONTH, months within years `[0..11]`,
     - YEAR, years in the range `[0..178956970]`.
 
+    Individual interval fields are non-negative, but an interval itself can have a sign, and be negative.
+
     `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0(MONTH) and 1(YEAR). Supported year-month interval types are:
       - `YearMonthIntervalType(YEAR, YEAR)` or `YearMonthIntervalType(YEAR)`. For instance, a value of the type is `INTERVAL '2021' YEAR`.
       - `YearMonthIntervalType(YEAR, MONTH)`. For instance, a value of the type is `INTERVAL '2021-07' YEAR TO MONTH`.
@@ -63,6 +65,8 @@ Spark SQL and DataFrames support the following data types:
     - MINUTE, minutes within hours [0..59],
     - HOUR, hours within days [0..23],
     - DAY, days in the range [0..106751991].
+
+    Individual interval fields are non-negative, but an interval itself can have a sign, and be negative.
 
     `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND). Supported day-time interval types are:
       - `DayTimeIntervalType(DAY, DAY)` or `DayTimeIntervalType(DAY)`. For instance, `INTERVAL '100' DAY`.
