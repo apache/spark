@@ -112,10 +112,10 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     timestampInputData.foreach { t =>
       val record = new GenericData.Record(schema)
       record.put("timestamp_millis", t._1)
-      record.put("local_timestamp_millis", t._3)
       // For microsecond precision, we multiple the value by 1000 to match the expected answer as
       // timestamp with millisecond precision.
       record.put("timestamp_micros", t._2 * 1000)
+      record.put("local_timestamp_millis", t._3)
       record.put("local_timestamp_micros", t._4 * 1000)
       record.put("long", t._5)
       dataFileWriter.append(record)
@@ -182,7 +182,10 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
 
       withTempPath { path =>
         df.write.format("avro").save(path.toString)
-        checkAnswer(spark.read.format("avro").load(path.toString), expected)
+        val df2 = spark.read.format("avro").load(path.toString)
+        assert(df2.schema ==
+          StructType(StructField("local_timestamp_micros", TimestampNTZType, true) :: Nil))
+        checkAnswer(df2, expected)
       }
     }
   }
