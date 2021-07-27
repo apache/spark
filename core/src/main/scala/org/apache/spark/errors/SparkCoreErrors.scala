@@ -27,7 +27,7 @@ import org.apache.spark.storage.{BlockId, RDDBlockId}
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
  */
-private[spark] object SparkCoreErrors {
+object SparkCoreErrors {
   def rddBlockNotFoundError(blockId: BlockId, id: Int): Throwable = {
     new Exception(s"Could not compute split, block $blockId of RDD $id not found")
   }
