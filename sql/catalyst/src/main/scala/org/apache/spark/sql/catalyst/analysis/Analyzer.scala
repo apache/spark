@@ -3578,7 +3578,7 @@ class Analyzer(override val catalogManager: CatalogManager)
           case u: UnresolvedFieldName => resolveFieldNames(table, u.name, u)
         }
 
-      case a @ AlterTableAddColumns(r: ResolvedTable, cols) if hasUnresolvedColumns(cols) =>
+      case a @ AlterTableAddColumns(r: ResolvedTable, cols) if !a.resolved =>
         // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
         // normalized parent name of fields to field names that belong to the parent.
         // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
@@ -3611,7 +3611,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         val schema = r.table.schema
         val resolvedCols = cols.map { col =>
           col.path match {
-            case Some(parent) =>
+            case Some(parent: UnresolvedFieldName) =>
               // Adding a nested field, need to resolve the parent column and position.
               val resolvedParent = resolveFieldNames(r, parent.name, parent)
               val parentSchema = resolvedParent.field.dataType match {
@@ -3627,7 +3627,9 @@ class Analyzer(override val catalogManager: CatalogManager)
               col.copy(position = resolvedPosition)
           }
         }
-        a.copy(columnsToAdd = resolvedCols)
+        val resolved = a.copy(columnsToAdd = resolvedCols)
+        resolved.copyTagsFrom(a)
+        resolved
 
       case a @ AlterTableAlterColumn(
           table: ResolvedTable, ResolvedFieldName(path, field), dataType, _, _, position) =>
@@ -3668,10 +3670,6 @@ class Analyzer(override val catalogManager: CatalogManager)
 
     private def hasUnresolvedFieldName(a: AlterTableColumnCommand): Boolean = {
       a.expressions.exists(_.find(_.isInstanceOf[UnresolvedFieldName]).isDefined)
-    }
-
-    private def hasUnresolvedColumns(cols: Seq[QualifiedColType]): Boolean = {
-      cols.exists(col => col.path.exists(!_.resolved) || col.position.exists(!_.resolved))
     }
   }
 

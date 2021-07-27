@@ -235,6 +235,8 @@ case class QualifiedColType(
     comment: Option[String],
     position: Option[FieldPosition]) {
   def name: Seq[String] = path.map(_.name).getOrElse(Nil) :+ colName
+
+  def resolved: Boolean = path.forall(_.resolved) && position.forall(_.resolved)
 }
 
 /**

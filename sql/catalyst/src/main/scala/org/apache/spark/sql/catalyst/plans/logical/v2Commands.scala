@@ -1084,6 +1084,8 @@ case class AlterTableAddColumns(
     TypeUtils.failWithIntervalType(c.dataType)
   }
 
+  override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)
+
   override def changes: Seq[TableChange] = {
     columnsToAdd.map { col =>
       require(col.path.forall(_.resolved),
@@ -1114,6 +1116,8 @@ case class AlterTableReplaceColumns(
     failNullType(c.dataType)
     TypeUtils.failWithIntervalType(c.dataType)
   }
+
+  override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)
 
   override def changes: Seq[TableChange] = {
     // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
