@@ -311,6 +311,55 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
             lambda: psidx.rename_categories("x"),
         )
 
+    def test_set_categories(self):
+        pidx = pd.CategoricalIndex(["a", "b", "c", "d"])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(
+            pidx.set_categories(["a", "c", "b", "o"]),
+            psidx.set_categories(["a", "c", "b", "o"]),
+        )
+        self.assert_eq(
+            pidx.set_categories(["a", "c", "b"]),
+            psidx.set_categories(["a", "c", "b"]),
+        )
+        self.assert_eq(
+            pidx.set_categories(["a", "c", "b", "d", "e"]),
+            psidx.set_categories(["a", "c", "b", "d", "e"]),
+        )
+
+        self.assert_eq(
+            pidx.set_categories([0, 1, 3, 2], rename=True),
+            psidx.set_categories([0, 1, 3, 2], rename=True),
+        )
+        self.assert_eq(
+            pidx.set_categories([0, 1, 3], rename=True),
+            psidx.set_categories([0, 1, 3], rename=True),
+        )
+        self.assert_eq(
+            pidx.set_categories([0, 1, 3, 2, 4], rename=True),
+            psidx.set_categories([0, 1, 3, 2, 4], rename=True),
+        )
+
+        self.assert_eq(
+            pidx.set_categories(["a", "c", "b", "o"], ordered=True),
+            psidx.set_categories(["a", "c", "b", "o"], ordered=True),
+        )
+        self.assert_eq(
+            pidx.set_categories(["a", "c", "b"], ordered=True),
+            psidx.set_categories(["a", "c", "b"], ordered=True),
+        )
+        self.assert_eq(
+            pidx.set_categories(["a", "c", "b", "d", "e"], ordered=True),
+            psidx.set_categories(["a", "c", "b", "d", "e"], ordered=True),
+        )
+
+        self.assertRaisesRegex(
+            ValueError,
+            "cannot use inplace with CategoricalIndex",
+            lambda: psidx.set_categories(["a", "c", "b", "o"], inplace=True),
+        )
+
 
 if __name__ == "__main__":
     import unittest
