@@ -21,7 +21,6 @@ import java.net.URI
 import java.util.Locale
 import java.util.concurrent.Callable
 import java.util.concurrent.TimeUnit
-import java.util.function.{Function => JFunction}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable

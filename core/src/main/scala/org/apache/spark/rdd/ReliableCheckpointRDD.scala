@@ -23,7 +23,7 @@ import java.util.concurrent.TimeUnit
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine}
+import com.github.benmanes.caffeine.cache.Caffeine
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
