@@ -163,11 +163,13 @@ public class ExternalBlockHandlerSuite {
     }
     out.close();
 
-    when(blockResolver.getBlockData(appId, execId, shuffleId, mapId, reduceId)).thenReturn(blockMarkers[0]);
+    when(blockResolver.getBlockData(appId, execId, shuffleId, mapId, reduceId))
+      .thenReturn(blockMarkers[0]);
     Cause actualCause = ShuffleChecksumHelper.diagnoseCorruption(algorithm, checksumFile, reduceId,
       blockResolver.getBlockData(appId, execId, shuffleId, mapId, reduceId), checksumByReader);
     when(blockResolver
-      .diagnoseShuffleBlockCorruption(appId, execId, shuffleId, mapId, reduceId, checksumByReader, algorithm))
+      .diagnoseShuffleBlockCorruption(
+        appId, execId, shuffleId, mapId, reduceId, checksumByReader, algorithm))
       .thenReturn(actualCause);
 
     when(client.getClientId()).thenReturn(appId);

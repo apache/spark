@@ -77,7 +77,9 @@ import org.apache.spark.util.Utils;
  * <p>
  * There have been proposals to completely remove this code path; see SPARK-6026 for details.
  */
-final class BypassMergeSortShuffleWriter<K, V> extends ShuffleWriter<K, V> implements ShuffleChecksumSupport {
+final class BypassMergeSortShuffleWriter<K, V>
+  extends ShuffleWriter<K, V>
+  implements ShuffleChecksumSupport {
 
   private static final Logger logger = LoggerFactory.getLogger(BypassMergeSortShuffleWriter.class);
 

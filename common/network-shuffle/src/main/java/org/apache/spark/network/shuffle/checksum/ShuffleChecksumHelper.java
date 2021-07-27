@@ -109,7 +109,8 @@ public class ShuffleChecksumHelper {
    * we suspect the corruption is caused by the NETWORK_ISSUE. Otherwise, the cause remains
    * CHECKSUM_VERIFY_PASS. In case of the any other failures, the cause remains UNKNOWN_ISSUE.
    *
-   * @param algorithm The checksum algorithm that is used for calculating checksum value of partitionData
+   * @param algorithm The checksum algorithm that is used for calculating checksum value
+   *                  of partitionData
    * @param checksumFile The checksum file that written by the shuffle writer
    * @param reduceId The reduceId of the shuffle block
    * @param partitionData The partition data of the shuffle block
