@@ -36,9 +36,8 @@ import org.apache.spark.util.Utils
 object MiniReadWriteTest {
 
   private var localFilePath: File = new File(".")
-  private var execFilePath: String = ""
 
-  private val NPARAMS = 2
+  private val NPARAMS = 1
 
   private def readFile(filename: String): List[String] = {
     Utils.tryWithResource(fromFile(filename))(_.getLines().toList)
@@ -46,9 +45,8 @@ object MiniReadWriteTest {
 
   private def printUsage(): Unit = {
     val usage = """Mini Read-Write Test
-    |Usage: localFile execFile
-    |localFile - (string) local file on driver to use in test
-    |execFile - (string) local file on execs to use in test""".stripMargin
+    |Usage: localFile
+    |localFile - (string) local file to use in test""".stripMargin
 
     println(usage)
   }
@@ -73,9 +71,6 @@ object MiniReadWriteTest {
       printUsage()
       System.exit(1)
     }
-
-    i += 1
-    execFilePath = args(i)
   }
 
   def runLocalWordCount(fileContents: List[String]): Int = {
@@ -102,7 +97,7 @@ object MiniReadWriteTest {
       .getOrCreate()
 
     println("Reading file from DFS and running Word Count")
-    val readFileRDD = spark.sparkContext.textFile("file:///" + execFilePath.toString())
+    val readFileRDD = spark.sparkContext.textFile("file:///" + localFilePath.toString())
 
     val dWordCount = readFileRDD
       .flatMap(_.split(" "))
