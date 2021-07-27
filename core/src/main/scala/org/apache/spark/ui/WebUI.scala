@@ -55,7 +55,7 @@ private[spark] abstract class WebUI(
     val servlet = new HttpServlet() {
       override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
         res.setContentType("text/html;charset=utf-8")
-        res.getWriter.write("Spark application is starting, please wait for start up.")
+        res.getWriter.write("Spark is starting up. Please wait a while until it's ready.")
       }
     }
     createServletHandler("/", servlet, basePath)
