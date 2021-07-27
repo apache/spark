@@ -28,6 +28,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
@@ -85,12 +87,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   // indeterminate stage retries.
   @VisibleForTesting
   public static final Map<Integer, AppShufflePartitionInfo> STALE_SHUFFLE_PARTITIONS =
-    new ConcurrentHashMap<>();
+    Collections.unmodifiableMap(new HashMap<>(1));
 
   // Marker for finalized shuffle partitions, used to identify late blocks getting merged.
   @VisibleForTesting
   public static final Map<Integer, AppShufflePartitionInfo> FINALIZED_SHUFFLE_PARTITIONS =
-    new ConcurrentHashMap<>();
+    Collections.unmodifiableMap(new HashMap<>(1));
 
   @VisibleForTesting
   public static final AppShufflePartitionInfo STALE_APP_SHUFFLE_PARTITION_INFO =
