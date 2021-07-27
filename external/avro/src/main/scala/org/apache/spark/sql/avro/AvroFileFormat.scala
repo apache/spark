@@ -155,7 +155,7 @@ private[sql] class AvroFileFormat extends FileFormat
 
   override def supportDataType(dataType: DataType): Boolean = AvroUtils.supportsDataType(dataType)
 
-  override def supportFieldName(name: String): Unit = {
+  override def supportFieldName(name: String): Boolean = {
     val length = name.length
     if (length == 0) {
       throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(name)
@@ -174,6 +174,7 @@ private[sql] class AvroFileFormat extends FileFormat
         }
       }
     }
+    true
   }
 }
 
