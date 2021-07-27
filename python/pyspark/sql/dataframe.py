@@ -18,6 +18,7 @@
 import sys
 import random
 import warnings
+from collections.abc import Iterable
 from functools import reduce
 from html import escape as html_escape
 
@@ -1980,7 +1981,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |Alice|  5|    80|
         +-----+---+------+
         """
-        if subset is not None and not isinstance(subset, (list, tuple)):
+        if subset is not None and not isinstance(subset, Iterable):
+            raise TypeError("Parameter 'subset' must be a list of columns")
+        if subset is not None and isinstance(subset, str):
             raise TypeError("Parameter 'subset' must be a list of columns")
 
         if subset is None:
