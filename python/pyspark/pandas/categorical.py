@@ -20,6 +20,8 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype, is_dict_like, is_list_like
 
 from pyspark.pandas.internal import InternalField
+from pyspark.pandas.spark import functions as SF
+from pyspark.sql import functions as F
 from pyspark.sql.types import StructField
 
 if TYPE_CHECKING:
@@ -680,12 +682,150 @@ class CategoricalAccessor(object):
 
     def set_categories(
         self,
-        new_categories: pd.Index,
-        ordered: bool = None,
+        new_categories: Union[pd.Index, List],
+        ordered: Optional[bool] = None,
         rename: bool = False,
         inplace: bool = False,
-    ) -> "ps.Series":
-        raise NotImplementedError()
+    ) -> Optional["ps.Series"]:
+        """
+        Set the categories to the specified new_categories.
+
+        `new_categories` can include new categories (which will result in
+        unused categories) or remove old categories (which results in values
+        set to NaN). If `rename==True`, the categories will simple be renamed
+        (less or more items than in old categories will result in values set to
+        NaN or in unused categories respectively).
+
+        This method can be used to perform more than one action of adding,
+        removing, and reordering simultaneously and is therefore faster than
+        performing the individual steps via the more specialised methods.
+
+        On the other hand this methods does not do checks (e.g., whether the
+        old categories are included in the new categories on a reorder), which
+        can result in surprising changes, for example when using special string
+        dtypes, which does not considers a S1 string equal to a single char
+        python string.
+
+        Parameters
+        ----------
+        new_categories : Index-like
+           The categories in new order.
+        ordered : bool, default False
+           Whether or not the categorical is treated as a ordered categorical.
+           If not given, do not change the ordered information.
+        rename : bool, default False
+           Whether or not the new_categories should be considered as a rename
+           of the old categories or as reordered categories.
+        inplace : bool, default False
+           Whether or not to reorder the categories in-place or return a copy
+           of this categorical with reordered categories.
+
+        Returns
+        -------
+        Series with reordered categories or None if inplace.
+
+        Raises
+        ------
+        ValueError
+            If new_categories does not validate as categories
+
+        See Also
+        --------
+        rename_categories : Rename categories.
+        reorder_categories : Reorder categories.
+        add_categories : Add new categories.
+        remove_categories : Remove the specified categories.
+        remove_unused_categories : Remove categories which are not used.
+
+        Examples
+        --------
+        >>> s = ps.Series(list("abbccc"), dtype="category")
+        >>> s  # doctest: +SKIP
+        0    a
+        1    b
+        2    b
+        3    c
+        4    c
+        5    c
+        dtype: category
+        Categories (3, object): ['a', 'b', 'c']
+
+        >>> s.cat.set_categories(['b', 'c'])  # doctest: +SKIP
+        0    NaN
+        1      b
+        2      b
+        3      c
+        4      c
+        5      c
+        dtype: category
+        Categories (2, object): ['b', 'c']
+
+        >>> s.cat.set_categories([1, 2, 3], rename=True)  # doctest: +SKIP
+        0    1
+        1    2
+        2    2
+        3    3
+        4    3
+        5    3
+        dtype: category
+        Categories (3, int64): [1, 2, 3]
+
+        >>> s.cat.set_categories([1, 2, 3], rename=True, ordered=True)  # doctest: +SKIP
+        0    1
+        1    2
+        2    2
+        3    3
+        4    3
+        5    3
+        dtype: category
+        Categories (3, int64): [1 < 2 < 3]
+        """
+        from pyspark.pandas.frame import DataFrame
+
+        if not is_list_like(new_categories):
+            raise TypeError(
+                "Parameter 'new_categories' must be list-like, was '{}'".format(new_categories)
+            )
+
+        if ordered is None:
+            ordered = self.ordered
+
+        new_dtype = CategoricalDtype(new_categories, ordered=ordered)
+        scol = self._data.spark.column
+
+        if rename:
+            new_scol = (
+                F.when(scol >= len(new_categories), SF.lit(-1).cast(self._data.spark.data_type))
+                .otherwise(scol)
+                .alias(self._data._internal.data_spark_column_names[0])
+            )
+
+            internal = self._data._psdf._internal.with_new_spark_column(
+                self._data._column_label,
+                new_scol,
+                field=self._data._internal.data_fields[0].copy(dtype=new_dtype),
+            )
+
+            if inplace:
+                self._data._psdf._update_internal_frame(internal)
+                return None
+            else:
+                psser = DataFrame(internal)._psser_for(self._data._column_label)
+                return psser._with_new_scol(
+                    psser.spark.column, field=psser._internal.data_fields[0]
+                )
+        else:
+            psser = self._data.astype(new_dtype)
+            if inplace:
+                internal = self._data._psdf._internal.with_new_spark_column(
+                    self._data._column_label,
+                    psser.spark.column,
+                    field=psser._internal.data_fields[0],
+                )
+                self._data._psdf._update_internal_frame(internal)
+                return None
+            else:
+                return psser
 
 
 def _test() -> None:

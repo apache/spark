@@ -123,7 +123,6 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
 class MissingPandasLikeCategoricalIndex(MissingPandasLikeIndex):
 
     # Functions
-    set_categories = _unsupported_function("set_categories", cls="CategoricalIndex")
     map = _unsupported_function("map", cls="CategoricalIndex")
 
 

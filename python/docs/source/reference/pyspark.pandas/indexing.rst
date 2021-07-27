@@ -181,6 +181,7 @@ Categorical components
    CategoricalIndex.as_ordered
    CategoricalIndex.as_unordered
    CategoricalIndex.rename_categories
+   CategoricalIndex.set_categories
 
 .. _api.multiindex:
 
