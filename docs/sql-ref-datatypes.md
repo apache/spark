@@ -64,7 +64,7 @@ Spark SQL and DataFrames support the following data types:
     - HOUR, hours within days [0..23],
     - DAY, days in the range [0..106751991].
 
-    `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND). Supported year-month interval types are:
+    `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND). Supported day-time interval types are:
       - `DayTimeIntervalType(DAY, DAY)` or `DayTimeIntervalType(DAY)`. For instance, `INTERVAL '100' DAY`.
       - `DayTimeIntervalType(DAY, HOUR)`. `INTERVAL '100 10' DAY TO HOUR` is a value of the type.
       - `DayTimeIntervalType(DAY, MINUTE)`. For example, `INTERVAL '100 10:30' DAY TO MINUTE`.
