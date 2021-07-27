@@ -109,9 +109,6 @@ private[sql] class RocksDBStateStoreProvider
       def nativeOpsLatencyMillis(typ: String): Long = {
         rocksDBMetrics.nativeOpsMetrics.get(typ).map(_ * 1000).getOrElse(0)
       }
-      def avgNativeOpsLatencyNanos(typ: String): Long = {
-        (rocksDBMetrics.nativeOpsHistograms.get(typ).map(_.avg * 1000).getOrElse(0.0)).toLong
-      }
       def sumNativeOpsLatencyMillis(typ: String): Long = {
         rocksDBMetrics.nativeOpsHistograms.get(typ).map(_.sum / 1000).getOrElse(0)
       }
@@ -124,8 +121,8 @@ private[sql] class RocksDBStateStoreProvider
 
       val stateStoreCustomMetrics = Map[StateStoreCustomMetric, Long](
         CUSTOM_METRIC_SST_FILE_SIZE -> rocksDBMetrics.totalSSTFilesBytes,
-        CUSTOM_METRIC_GET_TIME -> avgNativeOpsLatencyNanos("get"),
-        CUSTOM_METRIC_PUT_TIME -> avgNativeOpsLatencyNanos("put"),
+        CUSTOM_METRIC_GET_TIME -> sumNativeOpsLatencyMillis("get"),
+        CUSTOM_METRIC_PUT_TIME -> sumNativeOpsLatencyMillis("put"),
         CUSTOM_METRIC_GET_COUNT -> nativeOpsCount("get"),
         CUSTOM_METRIC_PUT_COUNT -> nativeOpsCount("put"),
         CUSTOM_METRIC_WRITEBATCH_TIME -> commitLatencyMs("writeBatch"),
@@ -237,12 +234,12 @@ object RocksDBStateStoreProvider {
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
   val STATE_ENCODING_VERSION: Byte = 0
 
-  // Native operation latencies report as latency per 1000 calls
-  // as SQLMetrics support ms latency whereas RocksDB reports it in microseconds.
-  val CUSTOM_METRIC_GET_TIME = StateStoreCustomTimingNsMetric(
-    "rocksdbGetLatency", "RocksDB: avg get latency")
-  val CUSTOM_METRIC_PUT_TIME = StateStoreCustomTimingNsMetric(
-    "rocksdbPutLatency", "RocksDB: avg put latency")
+  // Native operation latencies report as latency in microseconds
+  // as SQLMetrics support millis. Convert the value to millis
+  val CUSTOM_METRIC_GET_TIME = StateStoreCustomTimingMetric(
+    "rocksdbGetLatency", "RocksDB: total get call latency")
+  val CUSTOM_METRIC_PUT_TIME = StateStoreCustomTimingMetric(
+    "rocksdbPutLatency", "RocksDB: total put call latency")
 
   val CUSTOM_METRIC_GET_COUNT = StateStoreCustomSumMetric(
     "rocksdbGetCount", "RocksDB: number of get calls")
