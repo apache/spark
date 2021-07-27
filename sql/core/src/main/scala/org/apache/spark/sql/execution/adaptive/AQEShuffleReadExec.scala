@@ -195,15 +195,11 @@ case class AQEShuffleReadExec private(
           Map.empty
         }
       } ++ {
-        if (isLocalRead) {
-          Map.empty
+        if (hasCoalescedPartition) {
+          Map("numCoalescedPartitions" ->
+            SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
         } else {
-          if (hasCoalescedPartition) {
-            Map("numCoalescedPartitions" ->
-              SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
-          } else {
-            Map.empty
-          }
+          Map.empty
         }
       }
     } else {
