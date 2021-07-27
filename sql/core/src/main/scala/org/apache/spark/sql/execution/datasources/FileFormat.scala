@@ -167,8 +167,6 @@ trait FileFormat {
 
   /**
    * Check whether target schema field name is valid.
-   *
-   * @throws AnalysisException If field name is invalid
    */
   def supportFieldName(name: String): Boolean = true
 }

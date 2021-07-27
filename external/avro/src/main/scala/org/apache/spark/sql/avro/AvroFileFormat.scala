@@ -67,11 +67,11 @@ private[sql] class AvroFileFormat extends FileFormat
     path: Path): Boolean = true
 
   override def prepareWrite(
-    spark: SparkSession,
-    job: Job,
-    options: Map[String, String],
-    dataSchema: StructType): OutputWriterFactory = {
-    AvroUtils.prepareWrite(spark.sessionState.conf, job, options, dataSchema)
+      spark: SparkSession,
+      job: Job,
+      options: Map[String, String],
+      dataSchema: StructType): OutputWriterFactory = {
+      AvroUtils.prepareWrite(spark.sessionState.conf, job, options, dataSchema)
   }
 
   override def buildReader(

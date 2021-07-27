@@ -60,7 +60,7 @@ object DataSourceUtils {
 
   /**
    * Verify if the field name is supported in datasource. This verification should be done
-   * in a drover side.
+   * in a driver side.
    */
   def checkFieldNames(format: FileFormat, schema: StructType): Unit = {
     schema.foreach { field =>
