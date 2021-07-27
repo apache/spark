@@ -15,6 +15,7 @@
 # limitations under the License.
 #
 from typing import Any, Callable, List, Optional, Union, TYPE_CHECKING, cast
+import warnings
 
 import pandas as pd
 from pandas.api.types import CategoricalDtype, is_dict_like, is_list_like
@@ -184,6 +185,8 @@ class CategoricalAccessor(object):
            Whether or not to add the categories inplace or return a copy of
            this categorical with added categories.
 
+           .. deprecated:: 3.2.0
+
         Returns
         -------
         Series or None
@@ -194,6 +197,14 @@ class CategoricalAccessor(object):
         ValueError
             If the new categories include old categories or do not validate as
             categories
+
+        See Also
+        --------
+        rename_categories : Rename categories.
+        reorder_categories : Reorder categories.
+        remove_categories : Remove the specified categories.
+        remove_unused_categories : Remove categories which are not used.
+        set_categories : Set the categories to the specified ones.
 
         Examples
         --------
@@ -219,6 +230,13 @@ class CategoricalAccessor(object):
         Categories (4, object): ['a', 'b', 'c', 'x']
         """
         from pyspark.pandas.frame import DataFrame
+
+        if inplace:
+            warnings.warn(
+                "The `inplace` parameter in add_categories is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
 
         if is_list_like(new_categories):
             categories = list(new_categories)  # type: List
@@ -367,6 +385,8 @@ class CategoricalAccessor(object):
            Whether or not to remove the categories inplace or return a copy of
            this categorical with removed categories.
 
+           .. deprecated:: 3.2.0
+
         Returns
         -------
         Series or None
@@ -376,6 +396,14 @@ class CategoricalAccessor(object):
         ------
         ValueError
             If the removals are not contained in the categories
+
+        See Also
+        --------
+        rename_categories : Rename categories.
+        reorder_categories : Reorder categories.
+        add_categories : Add new categories.
+        remove_unused_categories : Remove categories which are not used.
+        set_categories : Set the categories to the specified ones.
 
         Examples
         --------
@@ -400,6 +428,13 @@ class CategoricalAccessor(object):
         dtype: category
         Categories (2, object): ['a', 'c']
         """
+        if inplace:
+            warnings.warn(
+                "The `inplace` parameter in remove_categories is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
+
         if is_list_like(removals):
             categories = [cat for cat in removals if cat is not None]  # type: List
         elif removals is None:
@@ -451,10 +486,20 @@ class CategoricalAccessor(object):
            Whether or not to drop unused categories inplace or return a copy of
            this categorical with unused categories dropped.
 
+           .. deprecated:: 3.2.0
+
         Returns
         -------
         cat : Series or None
             Categorical with unused categories dropped or None if ``inplace=True``.
+
+        See Also
+        --------
+        rename_categories : Rename categories.
+        reorder_categories : Reorder categories.
+        add_categories : Add new categories.
+        remove_categories : Remove the specified categories.
+        set_categories : Set the categories to the specified ones.
 
         Examples
         --------
@@ -479,6 +524,13 @@ class CategoricalAccessor(object):
         dtype: category
         Categories (3, object): ['a', 'b', 'c']
         """
+        if inplace:
+            warnings.warn(
+                "The `inplace` parameter in remove_unused_categories is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
+
         categories = set(self._data.drop_duplicates().to_pandas())
         removals = [cat for cat in self.categories if cat not in categories]
         return self.remove_categories(removals=removals, inplace=inplace)
@@ -509,6 +561,8 @@ class CategoricalAccessor(object):
         inplace : bool, default False
             Whether or not to rename the categories inplace or return a copy of
             this categorical with renamed categories.
+
+            .. deprecated:: 3.2.0
 
         Returns
         -------
@@ -559,6 +613,13 @@ class CategoricalAccessor(object):
         Categories (2, object): ['A', 'B']
         """
         from pyspark.pandas.frame import DataFrame
+
+        if inplace:
+            warnings.warn(
+                "The `inplace` parameter in rename_categories is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
 
         if is_dict_like(new_categories):
             categories = [cast(dict, new_categories).get(item, item) for item in self.categories]
@@ -611,6 +672,8 @@ class CategoricalAccessor(object):
            Whether or not to reorder the categories inplace or return a copy of
            this categorical with reordered categories.
 
+           .. deprecated:: 3.2.0
+
         Returns
         -------
         cat : Series or None
@@ -621,6 +684,14 @@ class CategoricalAccessor(object):
         ValueError
             If the new categories do not contain all old category items or any
             new ones
+
+        See Also
+        --------
+        rename_categories : Rename categories.
+        add_categories : Add new categories.
+        remove_categories : Remove the specified categories.
+        remove_unused_categories : Remove categories which are not used.
+        set_categories : Set the categories to the specified ones.
 
         Examples
         --------
@@ -645,6 +716,13 @@ class CategoricalAccessor(object):
         dtype: category
         Categories (3, object): ['c' < 'b' < 'a']
         """
+        if inplace:
+            warnings.warn(
+                "The `inplace` parameter in reorder_categories is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
+
         if not is_list_like(new_categories):
             raise TypeError(
                 "Parameter 'new_categories' must be list-like, was '{}'".format(new_categories)
@@ -720,6 +798,8 @@ class CategoricalAccessor(object):
            Whether or not to reorder the categories in-place or return a copy
            of this categorical with reordered categories.
 
+           .. deprecated:: 3.2.0
+
         Returns
         -------
         Series with reordered categories or None if inplace.
@@ -781,6 +861,13 @@ class CategoricalAccessor(object):
         Categories (3, int64): [1 < 2 < 3]
         """
         from pyspark.pandas.frame import DataFrame
+
+        if inplace:
+            warnings.warn(
+                "The `inplace` parameter in set_categories is deprecated "
+                "and will be removed in a future version.",
+                FutureWarning,
+            )
 
         if not is_list_like(new_categories):
             raise TypeError(
