@@ -18,8 +18,10 @@
 package org.apache.spark.ui
 
 import java.util.Date
-
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
+
+import org.eclipse.jetty.servlet.ServletContextHandler
+
 import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.UI._
@@ -31,7 +33,7 @@ import org.apache.spark.ui.env.EnvironmentTab
 import org.apache.spark.ui.exec.ExecutorsTab
 import org.apache.spark.ui.jobs.{JobsTab, StagesTab}
 import org.apache.spark.ui.storage.StorageTab
-import org.eclipse.jetty.servlet.ServletContextHandler
+
 
 /**
  * Top level user interface for a Spark application.
