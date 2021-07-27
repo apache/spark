@@ -51,10 +51,10 @@ private[sql] class AvroFileFormat extends FileFormat
   override def hashCode(): Int = super.hashCode()
 
   override def inferSchema(
-    spark: SparkSession,
-    options: Map[String, String],
-    files: Seq[FileStatus]): Option[StructType] = {
-    AvroUtils.inferSchema(spark, options, files)
+      spark: SparkSession,
+      options: Map[String, String],
+      files: Seq[FileStatus]): Option[StructType] = {
+      AvroUtils.inferSchema(spark, options, files)
   }
 
   override def shortName(): String = "avro"
@@ -62,26 +62,26 @@ private[sql] class AvroFileFormat extends FileFormat
   override def toString(): String = "Avro"
 
   override def isSplitable(
-    sparkSession: SparkSession,
-    options: Map[String, String],
-    path: Path): Boolean = true
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      path: Path): Boolean = true
 
   override def prepareWrite(
       spark: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-      AvroUtils.prepareWrite(spark.sessionState.conf, job, options, dataSchema)
+    AvroUtils.prepareWrite(spark.sessionState.conf, job, options, dataSchema)
   }
 
   override def buildReader(
-    spark: SparkSession,
-    dataSchema: StructType,
-    partitionSchema: StructType,
-    requiredSchema: StructType,
-    filters: Seq[Filter],
-    options: Map[String, String],
-    hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+      spark: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
 
     val broadcastedConf =
       spark.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
