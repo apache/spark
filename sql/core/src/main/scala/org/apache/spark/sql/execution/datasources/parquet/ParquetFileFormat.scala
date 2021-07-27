@@ -388,7 +388,7 @@ class ParquetFileFormat
   }
 
   override def supportFieldName(name: String): Boolean = {
-    name.matches(".*[ ,;{}()\n\t=].*")
+    !name.matches(".*[ ,;{}()\n\t=].*")
   }
 }
 
