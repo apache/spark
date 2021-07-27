@@ -1496,6 +1496,50 @@ class AdaptiveQueryExecSuite
       }.isDefined
     }
 
+    def checkBHJ(
+        df: Dataset[Row],
+        optimizeOutRepartition: Boolean,
+        probeSideLocalRead: Boolean): Unit = {
+      df.collect()
+      val plan = df.queryExecution.executedPlan
+      // There should be only one shuffle that can't do local read, which is either the top shuffle
+      // from repartition, or BHJ probe side shuffle.
+      checkNumLocalShuffleReads(plan, 1)
+      assert(hasRepartitionShuffle(plan) == !optimizeOutRepartition)
+      val bhj = findTopLevelBroadcastHashJoin(plan)
+      assert(bhj.length == 1)
+
+      // Build side should do local read.
+      val buildSide = find(bhj.head.left)(_.isInstanceOf[AQEShuffleReadExec])
+      assert(buildSide.isDefined)
+      assert(buildSide.get.asInstanceOf[AQEShuffleReadExec].isLocalRead)
+
+      val probeSide = find(bhj.head.right)(_.isInstanceOf[AQEShuffleReadExec])
+      assert(probeSide.isDefined)
+      if (probeSideLocalRead) {
+        assert(probeSide.get.asInstanceOf[AQEShuffleReadExec].isLocalRead)
+      } else {
+        assert(probeSide.get.asInstanceOf[AQEShuffleReadExec].hasCoalescedPartition)
+      }
+    }
+
+    def checkSMJ(
+        df: Dataset[Row],
+        optimizeOutRepartition: Boolean,
+        optimizeSkewJoin: Boolean): Unit = {
+      df.collect()
+      val plan = df.queryExecution.executedPlan
+      assert(hasRepartitionShuffle(plan) == !optimizeOutRepartition)
+      val smj = findTopLevelSortMergeJoin(plan)
+      assert(smj.length == 1)
+      assert(smj.head.isSkewJoin == optimizeSkewJoin)
+      val aqeReads = collect(smj.head) {
+        case c: AQEShuffleReadExec => c
+      }
+      assert(aqeReads.length == 2)
+      if (!optimizeSkewJoin) assert(aqeReads.forall(_.hasCoalescedPartition))
+    }
+
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
       val df = sql(
@@ -1509,44 +1553,19 @@ class AdaptiveQueryExecSuite
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
         // Repartition with no partition num specified.
-        val dfRepartition = df.repartition('b)
-        dfRepartition.collect()
-        val plan = dfRepartition.queryExecution.executedPlan
-        // The top shuffle from repartition is optimized out.
-        assert(!hasRepartitionShuffle(plan))
-        val bhj = findTopLevelBroadcastHashJoin(plan)
-        assert(bhj.length == 1)
-        checkNumLocalShuffleReads(plan, 1)
-        // Probe side is coalesced.
-        val aqeRead = bhj.head.right.find(_.isInstanceOf[AQEShuffleReadExec])
-        assert(aqeRead.isDefined)
-        assert(aqeRead.get.asInstanceOf[AQEShuffleReadExec].hasCoalescedPartition)
+        checkBHJ(df.repartition('b),
+          // The top shuffle from repartition is optimized out.
+          optimizeOutRepartition = true, probeSideLocalRead = false)
 
-        // Repartition with partition default num specified.
-        val dfRepartitionWithNum = df.repartition(5, 'b)
-        dfRepartitionWithNum.collect()
-        val planWithNum = dfRepartitionWithNum.queryExecution.executedPlan
-        // The top shuffle from repartition is not optimized out.
-        assert(hasRepartitionShuffle(planWithNum))
-        val bhjWithNum = findTopLevelBroadcastHashJoin(planWithNum)
-        assert(bhjWithNum.length == 1)
-        checkNumLocalShuffleReads(planWithNum, 1)
-        // Probe side is coalesced.
-        assert(bhjWithNum.head.right.find(_.isInstanceOf[AQEShuffleReadExec]).nonEmpty)
+        // Repartition with partition num specified.
+        checkBHJ(df.repartition(5, 'b),
+          // The top shuffle from repartition is not optimized out
+          optimizeOutRepartition = false, probeSideLocalRead = true)
 
-        // Repartition with partition non-default num specified.
-        val dfRepartitionWithNum2 = df.repartition(3, 'b)
-        dfRepartitionWithNum2.collect()
-        val planWithNum2 = dfRepartitionWithNum2.queryExecution.executedPlan
-        // The top shuffle from repartition is not optimized out, and this is the only shuffle that
-        // does not have local shuffle read.
-        assert(hasRepartitionShuffle(planWithNum2))
-        val bhjWithNum2 = findTopLevelBroadcastHashJoin(planWithNum2)
-        assert(bhjWithNum2.length == 1)
-        checkNumLocalShuffleReads(planWithNum2, 1)
-        val aqeRead2 = bhjWithNum2.head.right.find(_.isInstanceOf[AQEShuffleReadExec])
-        assert(aqeRead2.isDefined)
-        assert(aqeRead2.get.asInstanceOf[AQEShuffleReadExec].isLocalRead)
+        // Repartition by col and project away the partition cols
+        checkBHJ(df.repartition('b).select('key),
+          // The top shuffle from repartition is not optimized out
+          optimizeOutRepartition = false, probeSideLocalRead = true)
       }
 
       // Force skew join
@@ -1556,46 +1575,19 @@ class AdaptiveQueryExecSuite
         SQLConf.SKEW_JOIN_SKEWED_PARTITION_FACTOR.key -> "0",
         SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "10") {
         // Repartition with no partition num specified.
-        val dfRepartition = df.repartition('b)
-        dfRepartition.collect()
-        val plan = dfRepartition.queryExecution.executedPlan
-        // The top shuffle from repartition is optimized out.
-        assert(!hasRepartitionShuffle(plan))
-        val smj = findTopLevelSortMergeJoin(plan)
-        assert(smj.length == 1)
-        // No skew join due to the repartition.
-        assert(!smj.head.isSkewJoin)
-        // Both sides are coalesced.
-        val aqeReads = collect(smj.head) {
-          case c: AQEShuffleReadExec if c.hasCoalescedPartition => c
-        }
-        assert(aqeReads.length == 2)
+        checkSMJ(df.repartition('b),
+          // The top shuffle from repartition is optimized out.
+          optimizeOutRepartition = true, optimizeSkewJoin = false)
 
-        // Repartition with default partition num specified.
-        val dfRepartitionWithNum = df.repartition(5, 'b)
-        dfRepartitionWithNum.collect()
-        val planWithNum = dfRepartitionWithNum.queryExecution.executedPlan
-        // The top shuffle from repartition is not optimized out.
-        assert(hasRepartitionShuffle(planWithNum))
-        val smjWithNum = findTopLevelSortMergeJoin(planWithNum)
-        assert(smjWithNum.length == 1)
-        // Skew join can apply as the repartition is not optimized out.
-        assert(smjWithNum.head.isSkewJoin)
-        val aqeReadsWithNum = collect(smjWithNum.head) {
-          case c: AQEShuffleReadExec => c
-        }
-        assert(aqeReadsWithNum.nonEmpty)
+        // Repartition with partition num specified.
+        checkSMJ(df.repartition(5, 'b),
+          // The top shuffle from repartition is not optimized out.
+          optimizeOutRepartition = false, optimizeSkewJoin = true)
 
-        // Repartition with default non-partition num specified.
-        val dfRepartitionWithNum2 = df.repartition(3, 'b)
-        dfRepartitionWithNum2.collect()
-        val planWithNum2 = dfRepartitionWithNum2.queryExecution.executedPlan
-        // The top shuffle from repartition is not optimized out.
-        assert(hasRepartitionShuffle(planWithNum2))
-        val smjWithNum2 = findTopLevelSortMergeJoin(planWithNum2)
-        assert(smjWithNum2.length == 1)
-        // Skew join can apply as the repartition is not optimized out.
-        assert(smjWithNum2.head.isSkewJoin)
+        // Repartition by col and project away the partition cols
+        checkSMJ(df.repartition('b).select('key),
+          // The top shuffle from repartition is not optimized out.
+          optimizeOutRepartition = false, optimizeSkewJoin = true)
       }
     }
   }

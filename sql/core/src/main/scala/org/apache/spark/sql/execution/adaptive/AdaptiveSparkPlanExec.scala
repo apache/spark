@@ -32,6 +32,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, ReturnAnswer}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.catalyst.rules.{PlanChangeLogger, Rule}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -83,12 +84,28 @@ case class AdaptiveSparkPlanExec(
   // The logical plan optimizer for re-optimizing the current logical plan.
   @transient private val optimizer = new AQEOptimizer(conf)
 
+  // `EnsureRequirements` may remove user-specified repartition and assume the query plan won't
+  // change its output partitioning. This assumption is not true in AQE. Here we check the
+  // `inputPlan` which has not been processed by `EnsureRequirements` yet, to find out the
+  // effective user-specified repartition. Later on, the AQE framework will make sure the final
+  // output partitioning is not changed w.r.t the effective user-specified repartition.
+  @transient private val requiredDistribution: Option[Distribution] = if (isSubquery) {
+    // Subquery output does not need a specific output partitioning.
+    Some(UnspecifiedDistribution)
+  } else {
+    AQEUtils.getRequiredDistribution(inputPlan)
+  }
+
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
   private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
     RemoveRedundantProjects,
-    EnsureRequirements,
+    // For cases like `df.repartition(a, b).select(c)`, there is no distribution requirement for
+    // the final plan, but we do need to respect the user-specified repartition. Here we ask
+    // `EnsureRequirements` to not optimize out the user-specified repartition-by-col to work
+    // around this case.
+    EnsureRequirements(optimizeOutRepartitionByCol = requiredDistribution.isDefined),
     RemoveRedundantSorts,
     DisableUnnecessaryBucketedScan
   ) ++ context.session.sessionState.queryStagePrepRules
@@ -114,29 +131,17 @@ case class AdaptiveSparkPlanExec(
     CollapseCodegenStages()
   ) ++ context.session.sessionState.postStageCreationRules
 
-  // The partitioning of the query output depends on the shuffle(s) in the final stage. If the
-  // original plan contains a repartition operator, we need to preserve the specified partitioning,
-  // whether or not the repartition-introduced shuffle is optimized out because of an underlying
-  // shuffle of the same partitioning. Thus, we need to exclude some `AQEShuffleReadRule`s
-  // from the final stage, depending on the presence and properties of repartition operators.
-  private def finalStageOptimizerRules: Seq[Rule[SparkPlan]] = {
-    val origins = inputPlan.collect {
-      case s: ShuffleExchangeLike => s.shuffleOrigin
-    }
-    val allRules = queryStageOptimizerRules ++ postStageCreationRules
-    allRules.filter {
-      case c: AQEShuffleReadRule =>
-        origins.forall(c.supportedShuffleOrigins.contains)
-      case _ => true
-    }
-  }
-
-  private def optimizeQueryStage(plan: SparkPlan, rules: Seq[Rule[SparkPlan]]): SparkPlan = {
-    val optimized = rules.foldLeft(plan) { case (latestPlan, rule) =>
+  private def optimizeQueryStage(plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
+    val optimized = queryStageOptimizerRules.foldLeft(plan) { case (latestPlan, rule) =>
       val applied = rule.apply(latestPlan)
       val result = rule match {
-        case c: AQEShuffleReadRule if c.mayAddExtraShuffles =>
-          if (ValidateRequirements.validate(applied)) {
+        case _: AQEShuffleReadRule if !applied.fastEquals(latestPlan) =>
+          val distribution = if (isFinalStage) {
+            requiredDistribution.getOrElse(UnspecifiedDistribution)
+          } else {
+            UnspecifiedDistribution
+          }
+          if (ValidateRequirements.validate(applied, distribution)) {
             applied
           } else {
             logDebug(s"Rule ${rule.ruleName} is not applied due to additional shuffles " +
@@ -303,7 +308,10 @@ case class AdaptiveSparkPlanExec(
       }
 
       // Run the final plan when there's no more unfinished stages.
-      currentPhysicalPlan = optimizeQueryStage(result.newPlan, finalStageOptimizerRules)
+      currentPhysicalPlan = applyPhysicalRules(
+        optimizeQueryStage(result.newPlan, isFinalStage = true),
+        postStageCreationRules,
+        Some((planChangeLogger, "AQE Post Stage Creation")))
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
       currentPhysicalPlan
@@ -520,7 +528,7 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def newQueryStage(e: Exchange): QueryStageExec = {
-    val optimizedPlan = optimizeQueryStage(e.child, queryStageOptimizerRules)
+    val optimizedPlan = optimizeQueryStage(e.child, isFinalStage = false)
     val queryStage = e match {
       case s: ShuffleExchangeLike =>
         val newShuffle = applyPhysicalRules(
