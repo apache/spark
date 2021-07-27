@@ -2159,7 +2159,7 @@ abstract class AvroSuite
     }
   }
 
-  test("SPARK-33865: Hive DDL with avro should check col name") {
+  test("SPARK-33865: CREATE TABLE DDL with avro should check col name") {
     withTable("test_ddl") {
       withView("v") {
         spark.range(1).createTempView("v")

@@ -164,9 +164,9 @@ trait FileFormat {
    */
   def supportDataType(dataType: DataType): Boolean = true
 
-
   /**
-   * Check whether target schema field name is valid.
+   * Returns whether this format supports the given filed name in read/write path.
+   * By default all field name is supported.
    */
   def supportFieldName(name: String): Boolean = true
 }
