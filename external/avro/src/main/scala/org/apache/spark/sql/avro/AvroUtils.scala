@@ -260,7 +260,7 @@ private[sql] object AvroUtils extends Logging {
           (!ignoreNullable || !sqlField.nullable)) {
           if (positionalFieldMatch) {
             throw new IncompatibleSchemaException("Cannot find field at position " +
-              s"$sqlPos of ${toFieldStr(avroPath)} from Avro schema")
+              s"$sqlPos of ${toFieldStr(avroPath)} from Avro schema (using positional matching)")
           } else {
             throw new IncompatibleSchemaException(
               s"Cannot find ${toFieldStr(catalystPath :+ sqlField.name)} in Avro schema")
@@ -276,8 +276,8 @@ private[sql] object AvroUtils extends Logging {
       (avroFieldArray.toSet -- matchedFields.map(_.avroField)).foreach { extraField =>
         if (positionalFieldMatch) {
           throw new IncompatibleSchemaException(s"Found field '${extraField.name()}' at position " +
-            s"${extraField.pos()} of ${toFieldStr(avroPath)} from Avro schema but there " +
-            s"is no match in the SQL schema at ${toFieldStr(catalystPath)}")
+            s"${extraField.pos()} of ${toFieldStr(avroPath)} from Avro schema but there is no " +
+            s"match in the SQL schema at ${toFieldStr(catalystPath)} (using positional matching)")
         } else {
           throw new IncompatibleSchemaException(
             s"Found ${toFieldStr(avroPath :+ extraField.name())} in Avro schema but there is no " +

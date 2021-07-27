@@ -89,7 +89,7 @@ class AvroSerdeSuite extends SparkFunSuite {
       "Cannot find field 'foo.bar' in Avro schema",
       nonnullCatalyst)
     assertFailedConversionMessage(avro, Deserializer, BY_POSITION,
-      "Cannot find field at position 1 of field 'foo' from Avro schema",
+      "Cannot find field at position 1 of field 'foo' from Avro schema (using positional matching)",
       extraNonnullCatalyst)
 
     // serialize fails whether or not 'bar' is nullable
@@ -97,7 +97,7 @@ class AvroSerdeSuite extends SparkFunSuite {
     assertFailedConversionMessage(avro, Serializer, BY_NAME, byNameMsg)
     assertFailedConversionMessage(avro, Serializer, BY_NAME, byNameMsg, nonnullCatalyst)
     assertFailedConversionMessage(avro, Serializer, BY_POSITION,
-      "Cannot find field at position 1 of field 'foo' from Avro schema",
+      "Cannot find field at position 1 of field 'foo' from Avro schema (using positional matching)",
       extraNonnullCatalyst)
   }
 
@@ -128,7 +128,7 @@ class AvroSerdeSuite extends SparkFunSuite {
       "Found field 'bar' in Avro schema but there is no match in the SQL schema")
     assertFailedConversionMessage(tooManyFields, Serializer, BY_POSITION,
       "Found field 'bar' at position 1 of top-level record from Avro schema but there is no " +
-        "match in the SQL schema at top-level record")
+        "match in the SQL schema at top-level record (using positional matching)")
 
     val tooManyFieldsNested =
       createNestedAvroSchemaWithFields("foo", _.optionalInt("bar").optionalInt("baz"))
@@ -136,13 +136,14 @@ class AvroSerdeSuite extends SparkFunSuite {
       "Found field 'foo.baz' in Avro schema but there is no match in the SQL schema")
     assertFailedConversionMessage(tooManyFieldsNested, Serializer, BY_POSITION,
       s"Found field 'baz' at position 1 of field 'foo' from Avro schema but there is no match " +
-        s"in the SQL schema at field 'foo'")
+        s"in the SQL schema at field 'foo' (using positional matching)")
 
     val tooFewFields = createAvroSchemaWithTopLevelFields(f => f)
     assertFailedConversionMessage(tooFewFields, Serializer, BY_NAME,
       "Cannot find field 'foo' in Avro schema")
     assertFailedConversionMessage(tooFewFields, Serializer, BY_POSITION,
-      "Cannot find field at position 0 of top-level record from Avro schema")
+      "Cannot find field at position 0 of top-level record from Avro schema " +
+        "(using positional matching)")
   }
 
   /**
