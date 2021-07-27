@@ -136,8 +136,8 @@ private[sql] class RocksDBStateStoreProvider
         CUSTOM_METRIC_FILES_REUSED -> rocksDBMetrics.filesReused,
         CUSTOM_METRIC_BLOCK_CACHE_MISS -> nativeOpsMetrics("readBlockCacheMissCount"),
         CUSTOM_METRIC_BLOCK_CACHE_HITS -> nativeOpsMetrics("readBlockCacheHitCount"),
-        CUSTOM_METRIC_BYTES_READ -> nativeOpsMetrics("totalBytesReadByGet"),
-        CUSTOM_METRIC_BYTES_WRITTEN -> nativeOpsMetrics("totalBytesWrittenByPut"),
+        CUSTOM_METRIC_BYTES_READ -> nativeOpsMetrics("totalBytesRead"),
+        CUSTOM_METRIC_BYTES_WRITTEN -> nativeOpsMetrics("totalBytesWritten"),
         CUSTOM_METRIC_ITERATOR_BYTES_READ -> nativeOpsMetrics("totalBytesReadThroughIterator"),
         CUSTOM_METRIC_STALL_TIME -> nativeOpsLatencyMillis("writerStallDuration"),
         CUSTOM_METRIC_TOTAL_COMPACT_TIME -> sumNativeOpsLatencyMillis("compaction"),
@@ -275,10 +275,10 @@ object RocksDBStateStoreProvider {
     "rocksdbReadBlockCacheHitCount",
     "RocksDB: read - count of cache hits in RocksDB block cache avoiding disk read")
   val CUSTOM_METRIC_BYTES_READ = StateStoreCustomSizeMetric(
-    "rocksdbTotalBytesReadByGet",
+    "rocksdbTotalBytesRead",
     "RocksDB: read - total of uncompressed bytes read (from memtables/cache/sst) from DB::Get()")
   val CUSTOM_METRIC_BYTES_WRITTEN = StateStoreCustomSizeMetric(
-    "rocksdbTotalBytesWrittenByPut",
+    "rocksdbTotalBytesWritten",
     "RocksDB: write - total of uncompressed bytes written by " +
       "DB::{Put(), Delete(), Merge(), Write()}")
   val CUSTOM_METRIC_ITERATOR_BYTES_READ = StateStoreCustomSizeMetric(

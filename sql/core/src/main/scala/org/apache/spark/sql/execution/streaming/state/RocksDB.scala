@@ -349,9 +349,9 @@ class RocksDB(
       /** Number of cache hits that read data from RocksDB block cache avoiding local disk read */
       "readBlockCacheHitCount" -> BLOCK_CACHE_HIT,
       /** Number of uncompressed bytes read (from memtables/cache/sst) from DB::Get() */
-      "totalBytesReadByGet" -> BYTES_READ,
+      "totalBytesRead" -> BYTES_READ,
       /** Number of uncompressed bytes issued by DB::{Put(), Delete(), Merge(), Write()} */
-      "totalBytesWrittenByPut" -> BYTES_WRITTEN,
+      "totalBytesWritten" -> BYTES_WRITTEN,
       /** The number of uncompressed bytes read from an iterator. */
       "totalBytesReadThroughIterator" -> ITER_BYTES_READ,
       /** Duration of writer requiring to wait for compaction or flush to finish. */

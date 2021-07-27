@@ -91,7 +91,7 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
               "rocksdbCommitWriteBatchLatency", "rocksdbFilesCopied", "rocksdbSstFileSize",
               "rocksdbCommitCheckpointLatency", "rocksdbZipFileBytesUncompressed",
               "rocksdbCommitFlushLatency", "rocksdbCommitFileSyncLatencyMs", "rocksdbGetCount",
-              "rocksdbPutCount", "rocksdbTotalBytesReadByGet", "rocksdbTotalBytesWrittenByPut",
+              "rocksdbPutCount", "rocksdbTotalBytesRead", "rocksdbTotalBytesWritten",
               "rocksdbReadBlockCacheHitCount", "rocksdbReadBlockCacheMissCount",
               "rocksdbTotalBytesReadByCompaction", "rocksdbTotalBytesWrittenByCompaction",
               "rocksdbTotalCompactionLatencyMs", "rocksdbWriterStallLatencyMs",
