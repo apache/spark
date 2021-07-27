@@ -38,7 +38,5 @@ public final class Aggregation implements Serializable {
 
   public AggregateFunc[] aggregateExpressions() { return aggregateExpressions; }
 
-  public FieldReference[] groupByColumns() {
-    return groupByColumns;
-  }
+  public FieldReference[] groupByColumns() { return groupByColumns; }
 }
