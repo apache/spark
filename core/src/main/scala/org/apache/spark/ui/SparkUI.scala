@@ -120,11 +120,9 @@ private[spark] class SparkUI private (
   override def bind(): Unit = {
     assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
     try {
-      val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
-      val server = startJettyServer(host, SparkUI.getUIPort(conf), sslOptions, conf, "SparkUI", 200)
+      val server = initServer()
       server.addHandler(initHandler, securityManager)
       serverInfo = Some(server)
-      logInfo(s"Bound $className to $host, and started at $webUrl")
     } catch {
       case e: Exception =>
         logError(s"Failed to bind $className", e)
