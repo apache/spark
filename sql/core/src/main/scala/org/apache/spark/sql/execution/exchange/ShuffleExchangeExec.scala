@@ -99,13 +99,13 @@ case object REPARTITION_BY_NUM extends ShuffleOrigin
 
 // Indicates that the shuffle operator was added by the user-specified rebalance operator.
 // Spark will try to rebalance partitions that make per-partition size not too small and not
-// too big. Local shuffle reader will be used if possible to reduce network traffic.
+// too big. Local shuffle read will be used if possible to reduce network traffic.
 case object REBALANCE_PARTITIONS_BY_NONE extends ShuffleOrigin
 
 // Indicates that the shuffle operator was added by the user-specified rebalance operator with
 // columns. Spark will try to rebalance partitions that make per-partition size not too small and
 // not too big.
-// Different from `REBALANCE_PARTITIONS_BY_NONE`, local shuffle reader cannot be used for it as
+// Different from `REBALANCE_PARTITIONS_BY_NONE`, local shuffle read cannot be used for it as
 // the output needs to be partitioned by the given columns.
 case object REBALANCE_PARTITIONS_BY_COL extends ShuffleOrigin
 

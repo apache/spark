@@ -48,12 +48,12 @@ public class OneForOneBlockPusherSuite {
     blocks.put("shufflePush_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[1])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
-    BlockFetchingListener listener = pushBlocks(
+    BlockPushingListener listener = pushBlocks(
       blocks,
       blockIds,
       Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0, 0)));
 
-    verify(listener).onBlockFetchSuccess(eq("shufflePush_0_0_0"), any());
+    verify(listener).onBlockPushSuccess(eq("shufflePush_0_0_0"), any());
   }
 
   @Test
@@ -64,16 +64,16 @@ public class OneForOneBlockPusherSuite {
     blocks.put("shufflePush_0_2_0", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
-    BlockFetchingListener listener = pushBlocks(
+    BlockPushingListener listener = pushBlocks(
       blocks,
       blockIds,
       Arrays.asList(new PushBlockStream("app-id",0,  0, 0, 0, 0),
         new PushBlockStream("app-id", 0, 0, 1, 0, 1),
         new PushBlockStream("app-id", 0, 0, 2, 0, 2)));
 
-    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_0_0"), any());
-    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_1_0"), any());
-    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_2_0"), any());
+    verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_0"), any());
+    verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_1_0"), any());
+    verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_2_0"), any());
   }
 
   @Test
@@ -84,16 +84,16 @@ public class OneForOneBlockPusherSuite {
     blocks.put("shufflePush_0_2_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
-    BlockFetchingListener listener = pushBlocks(
+    BlockPushingListener listener = pushBlocks(
       blocks,
       blockIds,
       Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0, 0),
         new PushBlockStream("app-id", 0, 0, 1, 0, 1),
         new PushBlockStream("app-id", 0, 0, 2, 0, 2)));
 
-    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_0_0"), any());
-    verify(listener, times(1)).onBlockFetchFailure(eq("shufflePush_0_1_0"), any());
-    verify(listener, times(1)).onBlockFetchFailure(eq("shufflePush_0_2_0"), any());
+    verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_0"), any());
+    verify(listener, times(1)).onBlockPushFailure(eq("shufflePush_0_1_0"), any());
+    verify(listener, times(1)).onBlockPushFailure(eq("shufflePush_0_2_0"), any());
   }
 
   @Test
@@ -104,18 +104,18 @@ public class OneForOneBlockPusherSuite {
     blocks.put("shufflePush_0_2_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[0])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
-    BlockFetchingListener listener = pushBlocks(
+    BlockPushingListener listener = pushBlocks(
       blocks,
       blockIds,
       Arrays.asList(new PushBlockStream("app-id", 0, 0, 0, 0, 0),
         new PushBlockStream("app-id", 0, 0, 1, 0, 1),
         new PushBlockStream("app-id", 0, 0, 2, 0, 2)));
 
-    verify(listener, times(1)).onBlockFetchSuccess(eq("shufflePush_0_0_0"), any());
-    verify(listener, times(0)).onBlockFetchSuccess(not(eq("shufflePush_0_0_0")), any());
-    verify(listener, times(0)).onBlockFetchFailure(eq("shufflePush_0_0_0"), any());
-    verify(listener, times(1)).onBlockFetchFailure(eq("shufflePush_0_1_0"), any());
-    verify(listener, times(2)).onBlockFetchFailure(eq("shufflePush_0_2_0"), any());
+    verify(listener, times(1)).onBlockPushSuccess(eq("shufflePush_0_0_0"), any());
+    verify(listener, times(0)).onBlockPushSuccess(not(eq("shufflePush_0_0_0")), any());
+    verify(listener, times(0)).onBlockPushFailure(eq("shufflePush_0_0_0"), any());
+    verify(listener, times(1)).onBlockPushFailure(eq("shufflePush_0_1_0"), any());
+    verify(listener, times(2)).onBlockPushFailure(eq("shufflePush_0_2_0"), any());
   }
 
   /**
@@ -123,12 +123,12 @@ public class OneForOneBlockPusherSuite {
    * If a block is an empty byte, a server side retriable exception will be thrown.
    * If a block is null, a non-retriable exception will be thrown.
    */
-  private static BlockFetchingListener pushBlocks(
+  private static BlockPushingListener pushBlocks(
       LinkedHashMap<String, ManagedBuffer> blocks,
       String[] blockIds,
       Iterable<BlockTransferMessage> expectMessages) {
     TransportClient client = mock(TransportClient.class);
-    BlockFetchingListener listener = mock(BlockFetchingListener.class);
+    BlockPushingListener listener = mock(BlockPushingListener.class);
     OneForOneBlockPusher pusher =
       new OneForOneBlockPusher(client, "app-id", 0, blockIds, listener, blocks);
 

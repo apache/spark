@@ -804,7 +804,8 @@ def main():
     # backwards compatibility checks
     if build_tool == "sbt":
         # Note: compatibility tests only supported in sbt for now
-        detect_binary_inop_with_mima(extra_profiles)
+        if not os.environ.get("SKIP_MIMA"):
+            detect_binary_inop_with_mima(extra_profiles)
         # Since we did not build assembly/package before running dev/mima, we need to
         # do it here because the tests still rely on it; see SPARK-13294 for details.
         build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)

@@ -79,7 +79,11 @@ class NumericOps(DataTypeOps):
             raise TypeError("Exponentiation can not be applied to given types.")
 
         def pow_func(left: Column, right: Any) -> Column:
-            return F.when(left == 1, left).otherwise(Column.__pow__(left, right))
+            return (
+                F.when(left == 1, left)
+                .when(SF.lit(right) == 0, 1)
+                .otherwise(Column.__pow__(left, right))
+            )
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return column_op(pow_func)(left, right)

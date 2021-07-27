@@ -668,6 +668,69 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
             lambda: psser.cat.rename_categories("x"),
         )
 
+    def test_set_categories(self):
+        pdf, psdf = self.df_pair
+
+        pser = pdf.b
+        psser = psdf.b
+
+        self.assert_eq(
+            pser.cat.set_categories(["a", "c", "b", "o"]),
+            psser.cat.set_categories(["a", "c", "b", "o"]),
+        )
+        self.assert_eq(
+            pser.cat.set_categories(["a", "c", "b"]),
+            psser.cat.set_categories(["a", "c", "b"]),
+        )
+        self.assert_eq(
+            pser.cat.set_categories(["a", "c", "b", "d", "e"]),
+            psser.cat.set_categories(["a", "c", "b", "d", "e"]),
+        )
+
+        self.assert_eq(
+            pser.cat.set_categories([0, 1, 3, 2], rename=True),
+            psser.cat.set_categories([0, 1, 3, 2], rename=True),
+        )
+        self.assert_eq(
+            pser.cat.set_categories([0, 1, 3], rename=True),
+            psser.cat.set_categories([0, 1, 3], rename=True),
+        )
+        self.assert_eq(
+            pser.cat.set_categories([0, 1, 3, 2, 4], rename=True),
+            psser.cat.set_categories([0, 1, 3, 2, 4], rename=True),
+        )
+
+        self.assert_eq(
+            pser.cat.set_categories(["a", "c", "b", "o"], ordered=True),
+            psser.cat.set_categories(["a", "c", "b", "o"], ordered=True),
+        )
+        self.assert_eq(
+            pser.cat.set_categories(["a", "c", "b"], ordered=True),
+            psser.cat.set_categories(["a", "c", "b"], ordered=True),
+        )
+        self.assert_eq(
+            pser.cat.set_categories(["a", "c", "b", "d", "e"], ordered=True),
+            psser.cat.set_categories(["a", "c", "b", "d", "e"], ordered=True),
+        )
+
+        self.assert_eq(
+            pser.cat.set_categories(["a", "c", "b", "o"], inplace=True, rename=True),
+            psser.cat.set_categories(["a", "c", "b", "o"], inplace=True, rename=True),
+        )
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        pser.cat.set_categories([2, 3, 1, 0], inplace=True, rename=False),
+        psser.cat.set_categories([2, 3, 1, 0], inplace=True, rename=False),
+        self.assert_eq(pser, psser)
+        self.assert_eq(pdf, psdf)
+
+        self.assertRaisesRegex(
+            TypeError,
+            "Parameter 'new_categories' must be list-like, was",
+            lambda: psser.cat.set_categories(None),
+        )
+
 
 if __name__ == "__main__":
     import unittest

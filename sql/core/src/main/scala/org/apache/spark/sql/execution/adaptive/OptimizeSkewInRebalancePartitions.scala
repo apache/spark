@@ -37,7 +37,7 @@ import org.apache.spark.sql.internal.SQLConf
  * Note that, this rule is only applied with the SparkPlan whose top-level node is
  * ShuffleQueryStageExec.
  */
-object OptimizeSkewInRebalancePartitions extends CustomShuffleReaderRule {
+object OptimizeSkewInRebalancePartitions extends AQEShuffleReadRule {
   override def supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(REBALANCE_PARTITIONS_BY_NONE, REBALANCE_PARTITIONS_BY_COL)
 
@@ -82,7 +82,7 @@ object OptimizeSkewInRebalancePartitions extends CustomShuffleReaderRule {
     if (newPartitionsSpec.length == mapStats.get.bytesByPartitionId.length) {
       shuffle
     } else {
-      CustomShuffleReaderExec(shuffle, newPartitionsSpec)
+      AQEShuffleReadExec(shuffle, newPartitionsSpec)
     }
   }
 

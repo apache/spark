@@ -33,12 +33,14 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoDir, InsertIntoStatement, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.catalog.TableCapability._
+import org.apache.spark.sql.connector.expressions.{AggregateFunc, Count, CountStar, FieldReference, Max, Min, Sum}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{InSubqueryExec, RowDataSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.command._
@@ -332,6 +334,7 @@ object DataSourceStrategy
         l.output.toStructType,
         Set.empty,
         Set.empty,
+        None,
         toCatalystRDD(l, baseRelation.buildScan()),
         baseRelation,
         None) :: Nil
@@ -405,6 +408,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
+        None,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -427,6 +431,7 @@ object DataSourceStrategy
         requestedColumns.toStructType,
         pushedFilters.toSet,
         handledFilters,
+        None,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
         relation.relation,
         relation.catalogTable.map(_.identifier))
@@ -690,6 +695,32 @@ object DataSourceStrategy
     val handledFilters = pushedFilters.toSet -- unhandledFilters
 
     (nonconvertiblePredicates ++ unhandledPredicates, pushedFilters, handledFilters)
+  }
+
+  protected[sql] def translateAggregate(aggregates: AggregateExpression): Option[AggregateFunc] = {
+    if (aggregates.filter.isEmpty) {
+      aggregates.aggregateFunction match {
+        case aggregate.Min(PushableColumnWithoutNestedColumn(name)) =>
+          Some(new Min(FieldReference(name).asInstanceOf[FieldReference]))
+        case aggregate.Max(PushableColumnWithoutNestedColumn(name)) =>
+          Some(new Max(FieldReference(name).asInstanceOf[FieldReference]))
+        case count: aggregate.Count if count.children.length == 1 =>
+          count.children.head match {
+            // SELECT COUNT(*) FROM table is translated to SELECT 1 FROM table
+            case Literal(_, _) => Some(new CountStar())
+            case PushableColumnWithoutNestedColumn(name) =>
+              Some(new Count(FieldReference(name).asInstanceOf[FieldReference],
+                aggregates.isDistinct))
+            case _ => None
+          }
+        case sum @ aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
+          Some(new Sum(FieldReference(name).asInstanceOf[FieldReference],
+            sum.dataType, aggregates.isDistinct))
+        case _ => None
+      }
+    } else {
+      None
+    }
   }
 
   /**

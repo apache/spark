@@ -24,7 +24,7 @@ import org.apache.spark.internal.config.IO_ENCRYPTION_ENABLED
 import org.apache.spark.internal.config.UI.UI_ENABLED
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.adaptive._
-import org.apache.spark.sql.execution.adaptive.CustomShuffleReaderExec
+import org.apache.spark.sql.execution.adaptive.AQEShuffleReadExec
 import org.apache.spark.sql.execution.exchange.ReusedExchangeExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -110,18 +110,18 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         // by the ExchangeCoordinator.
         val finalPlan = agg.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-        val shuffleReaders = finalPlan.collect {
-          case r @ CoalescedShuffleReader() => r
+        val shuffleReads = finalPlan.collect {
+          case r @ CoalescedShuffleRead() => r
         }
 
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
-            assert(shuffleReaders.isEmpty)
+            assert(shuffleReads.isEmpty)
 
           case None =>
-            assert(shuffleReaders.length === 1)
-            shuffleReaders.foreach { reader =>
-              assert(reader.outputPartitioning.numPartitions === 3)
+            assert(shuffleReads.length === 1)
+            shuffleReads.foreach { read =>
+              assert(read.outputPartitioning.numPartitions === 3)
             }
         }
       }
@@ -156,18 +156,18 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         // by the ExchangeCoordinator.
         val finalPlan = join.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-        val shuffleReaders = finalPlan.collect {
-          case r @ CoalescedShuffleReader() => r
+        val shuffleReads = finalPlan.collect {
+          case r @ CoalescedShuffleRead() => r
         }
 
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
-            assert(shuffleReaders.isEmpty)
+            assert(shuffleReads.isEmpty)
 
           case None =>
-            assert(shuffleReaders.length === 2)
-            shuffleReaders.foreach { reader =>
-              assert(reader.outputPartitioning.numPartitions === 2)
+            assert(shuffleReads.length === 2)
+            shuffleReads.foreach { read =>
+              assert(read.outputPartitioning.numPartitions === 2)
             }
         }
       }
@@ -207,18 +207,18 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         // by the ExchangeCoordinator.
         val finalPlan = join.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-        val shuffleReaders = finalPlan.collect {
-          case r @ CoalescedShuffleReader() => r
+        val shuffleReads = finalPlan.collect {
+          case r @ CoalescedShuffleRead() => r
         }
 
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
-            assert(shuffleReaders.isEmpty)
+            assert(shuffleReads.isEmpty)
 
           case None =>
-            assert(shuffleReaders.length === 2)
-            shuffleReaders.foreach { reader =>
-              assert(reader.outputPartitioning.numPartitions === 2)
+            assert(shuffleReads.length === 2)
+            shuffleReads.foreach { read =>
+              assert(read.outputPartitioning.numPartitions === 2)
             }
         }
       }
@@ -258,18 +258,18 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         // by the ExchangeCoordinator.
         val finalPlan = join.queryExecution.executedPlan
           .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-        val shuffleReaders = finalPlan.collect {
-          case r @ CoalescedShuffleReader() => r
+        val shuffleReads = finalPlan.collect {
+          case r @ CoalescedShuffleRead() => r
         }
 
         minNumPostShufflePartitions match {
           case Some(numPartitions) =>
-            assert(shuffleReaders.isEmpty)
+            assert(shuffleReads.isEmpty)
 
           case None =>
-            assert(shuffleReaders.length === 2)
-            shuffleReaders.foreach { reader =>
-              assert(reader.outputPartitioning.numPartitions === 3)
+            assert(shuffleReads.length === 2)
+            shuffleReads.foreach { read =>
+              assert(read.outputPartitioning.numPartitions === 3)
             }
         }
       }
@@ -300,10 +300,10 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
           // Then, let's make sure we do not reduce number of post shuffle partitions.
           val finalPlan = join.queryExecution.executedPlan
             .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
-          val shuffleReaders = finalPlan.collect {
-            case r @ CoalescedShuffleReader() => r
+          val shuffleReads = finalPlan.collect {
+            case r @ CoalescedShuffleRead() => r
           }
-          assert(shuffleReaders.length === 0)
+          assert(shuffleReads.length === 0)
         } finally {
           spark.sql("drop table t")
         }
@@ -331,7 +331,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
       }.length == 2)
       assert(
         finalPlan.collect {
-          case r @ CoalescedShuffleReader() => r
+          case r @ CoalescedShuffleRead() => r
         }.length == 3)
 
 
@@ -357,14 +357,14 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
 
       assert(
         finalPlan2.collect {
-          case r @ CoalescedShuffleReader() => r
+          case r @ CoalescedShuffleRead() => r
         }.length == 2, "finalPlan2")
 
       level1Stages.foreach(qs =>
         assert(qs.plan.collect {
-          case r @ CoalescedShuffleReader() => r
+          case r @ CoalescedShuffleRead() => r
         }.length == 1,
-          "Wrong CoalescedShuffleReader below " + qs.simpleString(3)))
+          "Wrong CoalescedShuffleRead below " + qs.simpleString(3)))
 
       val leafStages = level1Stages.flatMap { stage =>
         // All of the child stages of result stage have only one child stage.
@@ -395,7 +395,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       assert(
         finalPlan.collect {
-          case r @ CoalescedShuffleReader() => r
+          case r @ CoalescedShuffleRead() => r
         }.isEmpty)
     }
     withSparkSession(test, 200, None)
@@ -416,7 +416,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
       // the shuffle partition numbers.
       assert(
         finalPlan.collect {
-          case r @ CoalescedShuffleReader() => r
+          case r @ CoalescedShuffleRead() => r
         }.isEmpty)
     }
     withSparkSession(test, 100, None)
@@ -432,7 +432,7 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
         .asInstanceOf[AdaptiveSparkPlanExec].executedPlan
       assert(
         finalPlan.collect {
-          case r @ CoalescedShuffleReader() => r
+          case r @ CoalescedShuffleRead() => r
         }.isDefinedAt(0))
     }
     Seq(true, false).foreach { enableIOEncryption =>
@@ -442,8 +442,8 @@ class CoalesceShufflePartitionsSuite extends SparkFunSuite with BeforeAndAfterAl
   }
 }
 
-object CoalescedShuffleReader {
-  def unapply(reader: CustomShuffleReaderExec): Boolean = {
-    !reader.isLocalReader && !reader.hasSkewedPartition && reader.hasCoalescedPartition
+object CoalescedShuffleRead {
+  def unapply(read: AQEShuffleReadExec): Boolean = {
+    !read.isLocalRead && !read.hasSkewedPartition && read.hasCoalescedPartition
   }
 }

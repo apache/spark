@@ -15,21 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.adaptive
+package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.ShuffleOrigin
+import org.apache.spark.annotation.Evolving;
 
 /**
- * Adaptive Query Execution rule that may create [[CustomShuffleReaderExec]] on top of query stages.
+ * An aggregate function that returns the number of the specific row in a group.
+ *
+ * @since 3.2.0
  */
-trait CustomShuffleReaderRule extends Rule[SparkPlan] {
+@Evolving
+public final class Count implements AggregateFunc {
+    private FieldReference column;
+    private boolean isDistinct;
 
-  /**
-   * Returns the list of [[ShuffleOrigin]]s supported by this rule.
-   */
-  def supportedShuffleOrigins: Seq[ShuffleOrigin]
+    public Count(FieldReference column, boolean isDistinct) {
+        this.column = column;
+        this.isDistinct = isDistinct;
+    }
 
-  def mayAddExtraShuffles: Boolean = false
+    public FieldReference column() {
+        return column;
+    }
+    public boolean isDinstinct() {
+        return isDistinct;
+    }
+
+    @Override
+    public String toString() { return "Count(" + column.describe() + "," + isDistinct + ")"; }
+
+    @Override
+    public String describe() { return this.toString(); }
 }
