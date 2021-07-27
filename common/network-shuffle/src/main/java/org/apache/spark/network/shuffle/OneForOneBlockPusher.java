@@ -47,7 +47,7 @@ public class OneForOneBlockPusher {
   private final String appId;
   private final int appAttemptId;
   private final String[] blockIds;
-  private final BlockFetchingListener listener;
+  private final BlockPushingListener listener;
   private final Map<String, ManagedBuffer> buffers;
 
   public OneForOneBlockPusher(
@@ -55,7 +55,7 @@ public class OneForOneBlockPusher {
       String appId,
       int appAttemptId,
       String[] blockIds,
-      BlockFetchingListener listener,
+      BlockPushingListener listener,
       Map<String, ManagedBuffer> buffers) {
     this.client = client;
     this.appId = appId;
@@ -78,21 +78,34 @@ public class OneForOneBlockPusher {
     @Override
     public void onSuccess(ByteBuffer response) {
       // On receipt of a successful block push
-      listener.onBlockFetchSuccess(blockId, new NioManagedBuffer(ByteBuffer.allocate(0)));
+      listener.onBlockPushSuccess(blockId, new NioManagedBuffer(ByteBuffer.allocate(0)));
     }
 
     @Override
     public void onFailure(Throwable e) {
-      // Since block push is best effort, i.e., if we encountered a block push failure that's not
-      // retriable or exceeding the max retires, we should not fail all remaining block pushes.
-      // The best effort nature makes block push tolerable of a partial completion. Thus, we only
-      // fail the block that's actually failed. Not that, on the RetryingBlockFetcher side, once
-      // retry is initiated, it would still invalidate the previous active retry listener, and
-      // retry all outstanding blocks. We are preventing forwarding unnecessary block push failures
-      // to the parent listener of the retry listener. The only exceptions would be if the block
-      // push failure is due to block arriving on the server side after merge finalization, or the
-      // client fails to establish connection to the server side. In both cases, we would fail all
-      // remaining blocks.
+      // Since block push is best effort, i.e., if we encounter a block push failure that's still
+      // retriable according to ErrorHandler (not a connection exception and the block is not too
+      // late), we should not fail all remaining block pushes even though
+      // RetryingBlockTransferor might consider this failure not retriable (exceeding max retry
+      // count etc). The best effort nature makes block push tolerable of a partial completion.
+      // Thus, we only fail the block that's actually failed in this case. Note that, on the
+      // RetryingBlockTransferor side, if retry is initiated, it would still invalidate the
+      // previous active retry listener, and retry pushing all outstanding blocks. However, since
+      // the blocks to be pushed are preloaded into memory and the first attempt of pushing these
+      // blocks might have already succeeded, retry pushing all the outstanding blocks should be
+      // very cheap (on the client side, the block data is in memory; on the server side, the block
+      // will be recognized as a duplicate which triggers noop handling). Here, by failing only the
+      // one block that's actually failed, we are essentially preventing forwarding unnecessary
+      // block push failures to the parent listener of the retry listener.
+      //
+      // Take the following as an example. For the common exception during block push handling,
+      // i.e. block collision, it is considered as retriable by ErrorHandler but not retriable
+      // by RetryingBlockTransferor. When we encounter a failure of this type, we only fail the
+      // one block encountering this issue not the remaining blocks in the same batch. On the
+      // RetryingBlockTransferor side, since this exception is considered as not retriable, it
+      // would immediately invoke parent listener's onBlockTransferFailure. However, the remaining
+      // blocks in the same batch would remain current and active and they won't be impacted by
+      // this exception.
       if (PUSH_ERROR_HANDLER.shouldRetryError(e)) {
         String[] targetBlockId = Arrays.copyOfRange(blockIds, index, index + 1);
         failRemainingBlocks(targetBlockId, e);
@@ -106,7 +119,7 @@ public class OneForOneBlockPusher {
   private void failRemainingBlocks(String[] failedBlockIds, Throwable e) {
     for (String blockId : failedBlockIds) {
       try {
-        listener.onBlockFetchFailure(blockId, e);
+        listener.onBlockPushFailure(blockId, e);
       } catch (Exception e2) {
         logger.error("Error in block push failure callback", e2);
       }

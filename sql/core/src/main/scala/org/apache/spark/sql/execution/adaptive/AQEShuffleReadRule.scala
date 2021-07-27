@@ -22,9 +22,9 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.exchange.ShuffleOrigin
 
 /**
- * Adaptive Query Execution rule that may create [[CustomShuffleReaderExec]] on top of query stages.
+ * Adaptive Query Execution rule that may create [[AQEShuffleReadExec]] on top of query stages.
  */
-trait CustomShuffleReaderRule extends Rule[SparkPlan] {
+trait AQEShuffleReadRule extends Rule[SparkPlan] {
 
   /**
    * Returns the list of [[ShuffleOrigin]]s supported by this rule.
