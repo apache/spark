@@ -206,6 +206,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
+      SKIP_MIMA: true
       METASPACE_SIZE: 128m
     steps:
     - name: Checkout Spark repository
