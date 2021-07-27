@@ -1166,8 +1166,6 @@ case class AlterTableAlterColumn(
     nullable: Option[Boolean],
     comment: Option[String],
     position: Option[FieldPosition]) extends AlterTableCommand {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Util._
-  dataType.foreach(failNullType)
 
   override def operation: String = "update"
 
