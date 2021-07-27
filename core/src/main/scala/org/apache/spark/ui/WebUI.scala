@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import java.util.EnumSet
 import javax.servlet.DispatcherType
-import javax.servlet.http.{HttpServlet, HttpServletRequest}
+import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
@@ -51,6 +51,14 @@ private[spark] abstract class WebUI(
   extends Logging {
 
   protected val tabs = ArrayBuffer[WebUITab]()
+  protected val initHandler: ServletContextHandler = {
+    val servlet = new HttpServlet() {
+      override def doGet(req: HttpServletRequest, res: HttpServletResponse): Unit = {
+        res.getWriter.write("Spark application is starting, please wait for start up.")
+      }
+    }
+    createServletHandler("/", servlet, basePath)
+  }
   protected val handlers = ArrayBuffer[ServletContextHandler]()
   protected val pageToHandlers = new HashMap[WebUIPage, ArrayBuffer[ServletContextHandler]]
   protected var serverInfo: Option[ServerInfo] = None
@@ -141,6 +149,7 @@ private[spark] abstract class WebUI(
    */
   def attachAllHandler(): Unit = {
     serverInfo.foreach { server =>
+      server.removeHandler(initHandler)
       handlers.foreach(server.addHandler(_, securityManager))
     }
   }
@@ -154,6 +163,7 @@ private[spark] abstract class WebUI(
     try {
       val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
       val server = startJettyServer(host, port, sslOptions, conf, name, poolSize)
+      server.addHandler(initHandler, securityManager)
       serverInfo = Some(server)
       logInfo(s"Bound $className to $host, and started at $webUrl")
     } catch {
