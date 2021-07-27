@@ -33,6 +33,7 @@ import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
 import org.apache.spark.{Partition, SparkArithmeticException, SparkException, SparkUpgradeException}
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -67,73 +68,94 @@ import org.apache.spark.util.CircularBuffer
 object QueryExecutionErrors {
 
   def columnChangeUnsupportedError(): Throwable = {
-    new UnsupportedOperationException("Please add an implementation for a column change here")
+    new UnsupportedOperationException(
+      SparkThrowableHelper.getMessage("UNSUPPORTED_CHANGE_COLUMN",
+        Array.empty))
   }
 
   def logicalHintOperatorNotRemovedDuringAnalysisError(): Throwable = {
     new IllegalStateException(
-      "Internal error: logical hint operator should have been removed during analysis")
+      SparkThrowableHelper.getMessage("LOGICAL_HINT_OPERATOR_NOT_REMOVE_DURING_ANALYSIS",
+        Array.empty))
   }
 
   def cannotEvaluateExpressionError(expression: Expression): Throwable = {
-    new UnsupportedOperationException(s"Cannot evaluate expression: $expression")
+    new UnsupportedOperationException(
+      SparkThrowableHelper.getMessage("CAN_NOT_EVALUATE_EXPRESSION",
+        Array("", expression.toString)))
   }
 
   def cannotGenerateCodeForExpressionError(expression: Expression): Throwable = {
-    new UnsupportedOperationException(s"Cannot generate code for expression: $expression")
+    new UnsupportedOperationException(
+      SparkThrowableHelper.getMessage("CAN_NOT_GENERATE_CODE_FOR_EXPRESSION",
+        Array(expression.toString)))
   }
 
   def cannotTerminateGeneratorError(generator: UnresolvedGenerator): Throwable = {
-    new UnsupportedOperationException(s"Cannot terminate expression: $generator")
+    new UnsupportedOperationException(
+      SparkThrowableHelper.getMessage("CAN_NOT_TERMINATE_GENERATOR",
+        Array(generator.toString)))
   }
 
   def castingCauseOverflowError(t: Any, targetType: String): ArithmeticException = {
-    new ArithmeticException(s"Casting $t to $targetType causes overflow")
+    new ArithmeticException(
+      SparkThrowableHelper.getMessage("CAST_CAUSE_OVERFLOW",
+        Array(t.toString, targetType)))
   }
 
   def cannotChangeDecimalPrecisionError(
       value: Decimal, decimalPrecision: Int, decimalScale: Int): ArithmeticException = {
-    new ArithmeticException(s"${value.toDebugString} cannot be represented as " +
-      s"Decimal($decimalPrecision, $decimalScale).")
+    new ArithmeticException(
+      SparkThrowableHelper.getMessage("CAN_NOT_CHANGE_DECIMAL_PRECISION",
+        Array(value.toString, decimalPrecision.toString, decimalScale.toString)))
   }
 
   def invalidInputSyntaxForNumericError(s: UTF8String): NumberFormatException = {
-    new NumberFormatException(s"invalid input syntax for type numeric: $s")
+    new NumberFormatException(
+      SparkThrowableHelper.getMessage("INVALID_INPUT_SYNTAX_FOR_NUMERIC",
+        Array(s.toString)))
   }
 
   def cannotCastFromNullTypeError(to: DataType): Throwable = {
-    new SparkException(s"should not directly cast from NullType to $to.")
+    new SparkException("CAN_NOT_CAST_DATATYPE", Array(NullType.typeName, to.typeName), null)
   }
 
   def cannotCastError(from: DataType, to: DataType): Throwable = {
-    new SparkException(s"Cannot cast $from to $to.")
+    new SparkException("CAN_NOT_CAST_DATATYPE", Array(from.typeName, to.typeName), null)
   }
 
   def cannotParseDecimalError(): Throwable = {
-    new IllegalArgumentException("Cannot parse any decimal")
+    new IllegalArgumentException(
+      SparkThrowableHelper.getMessage("CAN_NOT_PARSE_DECIMAL",
+        Array.empty))
   }
 
   def simpleStringWithNodeIdUnsupportedError(nodeName: String): Throwable = {
-    new UnsupportedOperationException(s"$nodeName does not implement simpleStringWithNodeId")
+    new UnsupportedOperationException(
+      SparkThrowableHelper.getMessage("UNSUPPORTED_SIMPLESTRING_WITH_NODEID",
+        Array(nodeName)))
   }
 
   def evaluateUnevaluableAggregateUnsupportedError(
       methodName: String, unEvaluable: UnevaluableAggregate): Throwable = {
-    new UnsupportedOperationException(s"Cannot evaluate $methodName: $unEvaluable")
+    new UnsupportedOperationException(
+      SparkThrowableHelper.getMessage("CAN_NOT_EVALUATE_EXPRESSION",
+        Array(methodName, unEvaluable.toString)))
   }
 
   def dataTypeUnsupportedError(dt: DataType): Throwable = {
-    new SparkException(s"Unsupported data type $dt")
+    new SparkException("UNSUPPORTED_DATATYPE", Array(dt.typeName, ""), null)
   }
 
   def dataTypeUnsupportedError(dataType: String, failure: String): Throwable = {
-    new IllegalArgumentException(s"Unsupported dataType: $dataType, $failure")
+    new IllegalArgumentException(
+      SparkThrowableHelper.getMessage("UNSUPPORTED_DATATYPE",
+        Array(dataType, failure)))
   }
 
   def failedExecuteUserDefinedFunctionError(funcCls: String, inputTypes: String,
       outputType: String, e: Throwable): Throwable = {
-    new SparkException(
-      s"Failed to execute user defined function ($funcCls: ($inputTypes) => $outputType)", e)
+    new SparkException("FAILED_EXECUTE_UDF", Array(funcCls, inputTypes, outputType), e)
   }
 
   def divideByZeroError(): ArithmeticException = {
@@ -141,15 +163,21 @@ object QueryExecutionErrors {
   }
 
   def invalidArrayIndexError(index: Int, numElements: Int): ArrayIndexOutOfBoundsException = {
-    new ArrayIndexOutOfBoundsException(s"Invalid index: $index, numElements: $numElements")
+    new ArrayIndexOutOfBoundsException(
+      SparkThrowableHelper.getMessage("INVALID_ARRAY_INDEX",
+        Array(index.toString, numElements.toString)))
   }
 
   def mapKeyNotExistError(key: Any): NoSuchElementException = {
-    new NoSuchElementException(s"Key $key does not exist.")
+    new NoSuchElementException(
+      SparkThrowableHelper.getMessage("MAP_KEY_NOT_EXIST",
+        Array(key.toString)))
   }
 
   def rowFromCSVParserNotExpectedError(): Throwable = {
-    new IllegalArgumentException("Expected one row from CSV parser.")
+    new IllegalArgumentException(
+      SparkThrowableHelper.getMessage("ROW_FROM_CSV_PARSER_NOT_EXPECTED",
+        Array.empty))
   }
 
   def inputTypeUnsupportedError(dataType: DataType): Throwable = {

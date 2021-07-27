@@ -66,5 +66,67 @@
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
+  },
+  "UNSUPPORTED_CHANGE_COLUMN" : {
+    "message" : [ "Please add an implementation for a column change here" ],
+    "sqlState" : "46110"
+  },
+  "LOGICAL_HINT_OPERATOR_NOT_REMOVE_DURING_ANALYSIS" : {
+    "message" : [ "Internal error: logical hint operator should have been removed during analysis" ],
+    "sqlState" : "42000"
+  },
+  "CAN_NOT_EVALUATE_EXPRESSION" : {
+    "message" : [ "Cannot evaluate expression: %s: %s" ],
+    "sqlState" : "42000"
+  },
+  "CAN_NOT_GENERATE_CODE_FOR_EXPRESSION" : {
+    "message" : [ "Cannot generate code for expression: %s" ],
+    "sqlState" : "42000"
+  },
+  "CAN_NOT_TERMINATE_GENERATOR" : {
+    "message" : [ "Cannot terminate expression: %s" ],
+    "sqlState" : "42000"
+  },
+  "CAST_CAUSE_OVERFLOW" : {
+    "message" : [ "Casting %s to %s causes overflow" ],
+    "sqlState" : "22018"
+  },
+  "CAN_NOT_CHANGE_DECIMAL_PRECISION" : {
+    "message" : [ "%s cannot be represented as Decimal(%s, %s)." ],
+    "sqlState" : "HY104"
+  },
+  "INVALID_INPUT_SYNTAX_FOR_NUMERIC" : {
+    "message" : [ "invalid input syntax for type numeric: %s" ],
+    "sqlState" : "42000"
+  },
+  "CAN_NOT_CAST_DATATYPE" : {
+    "message" : [ "Cannot cast %s to %s." ],
+    "sqlState" : "22018"
+  },
+  "CAN_NOT_PARSE_DECIMAL" : {
+    "message" : [ "Cannot parse any decimal" ],
+    "sqlState" : "42000"
+  },
+  "UNSUPPORTED_SIMPLESTRING_WITH_NODEID" : {
+    "message" : [ "%s does not implement simpleStringWithNodeId" ],
+    "sqlState" : "46110"
+  },
+  "UNSUPPORTED_DATATYPE" : {
+    "message" : [ "Unsupported data type %s %s" ],
+    "sqlState" : "46110"
+  },
+  "FAILED_EXECUTE_UDF" : {
+    "message" : [ "Failed to execute user defined function (%s: (%s) => %s)" ],
+    "sqlState" : "42000"
+  },
+  "INVALID_ARRAY_INDEX" : {
+    "message" : [ "Invalid index: %s, numElements: %s" ]
+  },
+  "MAP_KEY_NOT_EXIST" : {
+    "message" : [ "Key %s does not exist." ]
+  },
+  "ROW_FROM_CSV_PARSER_NOT_EXPECTED" : {
+    "message" : [ "Expected one row from CSV parser." ],
+    "sqlState" : "42000"
   }
 }
