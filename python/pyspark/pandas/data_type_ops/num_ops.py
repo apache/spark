@@ -333,8 +333,6 @@ class FractionalOps(NumericOps):
                 raise ValueError(
                     "Cannot convert %s with missing values to integer" % self.pretty_name
                 )
-            elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
-                raise ValueError("Cannot convert %s with missing values to bool" % self.pretty_name)
 
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)

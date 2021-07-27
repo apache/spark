@@ -345,12 +345,8 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             "Cannot convert fractions with missing values to integer",
             lambda: self.float_withnan_psser.astype(np.int32),
         )
-        self.assertRaisesRegex(
-            ValueError,
-            "Cannot convert fractions with missing values to bool",
-            lambda: self.float_withnan_psser.astype(bool),
-        )
         self.assert_eq(self.float_withnan_psser.astype(str), self.float_withnan_psser.astype(str))
+        self.assert_eq(self.float_withnan_psser.astype(bool), self.float_withnan_psser.astype(bool))
         self.assert_eq(
             self.float_withnan_psser.astype("category"), self.float_withnan_psser.astype("category")
         )
