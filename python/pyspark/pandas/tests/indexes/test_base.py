@@ -1766,6 +1766,11 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.hasnans, psser.hasnans)
 
+        # empty
+        pidx = pd.Index([])
+        psidx = ps.from_pandas(pidx)
+        self.assert_eq(pidx.hasnans, psidx.hasnans)
+
         # Not supported for MultiIndex
         psmidx = ps.Index([("a", 1), ("b", 2)])
         self.assertRaises(NotImplementedError, lambda: psmidx.hasnans())
