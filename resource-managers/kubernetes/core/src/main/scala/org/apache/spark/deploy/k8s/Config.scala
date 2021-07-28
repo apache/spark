@@ -256,7 +256,7 @@ private[spark] object Config extends Logging {
   private val podConfValidator = (s"^$dns1123LabelFmt(\\.$dns1123LabelFmt)*$$").r.pattern
 
   // The possible longest executor name would be "$prefix-exec-${Int.MaxValue}"
-  private def isValidExecutorPodNamePrefix(prefix: String): Boolean = {
+  def isValidExecutorPodNamePrefix(prefix: String): Boolean = {
     // 6 is length of '-exec-'
     val reservedLen = Int.MaxValue.toString.length + 6
     val validLength = prefix.length + reservedLen <= KUBERNETES_DNSNAME_MAX_LENGTH

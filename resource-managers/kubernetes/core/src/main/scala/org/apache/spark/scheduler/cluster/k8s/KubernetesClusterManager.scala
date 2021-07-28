@@ -70,8 +70,16 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     // If/when feature steps are executed in client mode, they should instead take care of this,
     // and this code should be removed.
     if (!sc.conf.contains(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)) {
-      sc.conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX,
-        KubernetesConf.getResourceNamePrefix(sc.conf.get("spark.app.name")))
+      val podNamePrefix = KubernetesConf.getResourceNamePrefix(sc.conf.get("spark.app.name"))
+      if (org.apache.spark.deploy.k8s.Config.isValidExecutorPodNamePrefix(podNamePrefix)) {
+        sc.conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, podNamePrefix)
+      } else {
+        val shortPrefix = "spark-" + KubernetesUtils.uniqueID()
+        logWarning(s"Use $shortPrefix as the executor pod's name prefix due to " +
+          s"spark.app.name is too long. Please set '${KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key}' " +
+          s"if you need a custom executor pod's name prefix.")
+        sc.conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, shortPrefix)
+      }
     }
 
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(
