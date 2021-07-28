@@ -378,8 +378,8 @@ class RocksDBSuite extends SparkFunSuite {
       }
 
       // most of the time get reads from WriteBatch which is not counted in this metric
-      assert(metrics.nativeOpsMetrics("totalBytesReadByGet") >= 0)
-      assert(metrics.nativeOpsMetrics("totalBytesWrittenByPut") >= putCount * 1)
+      assert(metrics.nativeOpsMetrics("totalBytesRead") >= 0)
+      assert(metrics.nativeOpsMetrics("totalBytesWritten") >= putCount * 1)
 
       assert(metrics.nativeOpsHistograms("compaction") != null)
       assert(metrics.nativeOpsMetrics("readBlockCacheMissCount") >= 0)
