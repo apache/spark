@@ -238,6 +238,15 @@ logging into the data sources.
   </tr>
 
   <tr>
+    <td><code>pushDownAggregate</code></td>
+    <td><code>false</code></td>
+    <td>
+     The option to enable or disable aggregate push-down into the JDBC data source. The default value is false, in which case Spark will not push down aggregates to the JDBC data source. Otherwise, if sets to true, aggregates will be pushed down to the JDBC data source. Aggregate push-down is usually turned off when the aggregate is performed faster by Spark than by the JDBC data source. Please note that aggregates can be pushed down if and only if all the aggregate functions and the related filters can be pushed down. Spark assumes that the data source can't fully complete the aggregate and does a final aggregate over the data source output.
+    </td>
+    <td>read</td>
+  </tr>
+
+  <tr>
     <td><code>keytab</code></td>
     <td>(none)</td>
     <td>

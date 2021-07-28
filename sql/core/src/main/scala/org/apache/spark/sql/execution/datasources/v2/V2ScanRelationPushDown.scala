@@ -33,7 +33,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    applyColumnPruning(pushdownAggregate(pushDownFilters(createScanBuilder(plan))))
+    applyColumnPruning(pushDownAggregates(pushDownFilters(createScanBuilder(plan))))
   }
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
@@ -68,7 +68,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       filterCondition.map(Filter(_, sHolder)).getOrElse(sHolder)
   }
 
-  def pushdownAggregate(plan: LogicalPlan): LogicalPlan = plan.transform {
+  def pushDownAggregates(plan: LogicalPlan): LogicalPlan = plan.transform {
     // update the scan builder with agg pushdown and return a new plan with agg pushed
     case aggNode @ Aggregate(groupingExpressions, resultExpressions, child) =>
       child match {
