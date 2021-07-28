@@ -17,7 +17,6 @@
 from pyspark.sql import column
 from pyspark.sql.column import Column
 from pyspark.sql.dataframe import DataFrame
-from pyspark.sql.types import Row
 
 __all__ = ["Observation"]
 
@@ -122,12 +121,6 @@ class Observation:
         jmap = self._jo.getAsJavaMap()
         # return a pure Python dict, not a py4j JavaMap
         return {k: v for k, v in jmap.items()}
-
-    def _to_row(self, jrow):
-        field_names = jrow.schema().fieldNames()
-        values_scala_map = jrow.getValuesMap(self._jvm.PythonUtils.toSeq(list(field_names)))
-        values_java_map = self._jvm.scala.collection.JavaConversions.mapAsJavaMap(values_scala_map)
-        return Row(**values_java_map)
 
 
 def _test():
