@@ -48,12 +48,6 @@ case class ShuffledHashJoinExec(
   override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
     "buildDataSize" -> SQLMetrics.createSizeMetric(sparkContext, "data size of build side"),
-    "buildBitSet" -> SQLMetrics.createSizeMetric(
-      sparkContext, "bit set data size of full outer join build side with unique key"),
-    "buildHashSet" -> SQLMetrics.createSizeMetric(
-      sparkContext, "hash set data size of full outer join build side with non-unique key"),
-    "buildMaxKeys" -> SQLMetrics.createSizeMetric(
-      sparkContext, "max allowed keys for build side hash table"),
     "buildTime" -> SQLMetrics.createTimingMetric(sparkContext, "time to build hash map"))
 
   override def output: Seq[Attribute] = super[ShuffledJoin].output
@@ -155,8 +149,7 @@ case class ShuffledHashJoinExec(
       streamNullJoinRowWithBuild: => InternalRow => JoinedRow,
       buildNullRow: GenericInternalRow): Iterator[InternalRow] = {
     val matchedKeys = new BitSet(hashedRelation.maxNumKeysIndex)
-    longMetric("buildBitSet") += matchedKeys.capacity / 8
-    longMetric("buildMaxKeys") += hashedRelation.maxNumKeysIndex
+    longMetric("buildDataSize") += matchedKeys.capacity / 8
 
     // Process stream side with looking up hash relation
     val streamResultIter = streamIter.map { srow =>
@@ -228,9 +221,8 @@ case class ShuffledHashJoinExec(
       // [[OpenHashSet._bitset]] and [[OpenHashSet._data]].
       val bitSetEstimatedSize = matchedRows.getBitSet.capacity / 8
       val dataEstimatedSize = matchedRows.capacity * 8
-      longMetric("buildHashSet") += bitSetEstimatedSize + dataEstimatedSize
+      longMetric("buildDataSize") += bitSetEstimatedSize + dataEstimatedSize
     })
-    longMetric("buildMaxKeys") += hashedRelation.maxNumKeysIndex
 
     def markRowMatched(keyIndex: Int, valueIndex: Int): Unit = {
       val rowIndex: Long = (keyIndex.toLong << 32) | valueIndex
