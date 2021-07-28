@@ -241,8 +241,10 @@ class ExternalAppendOnlyMap[K, V, C](
       }
       if (objectsWritten > 0) {
         flush()
+        writer.close()
+      } else {
+        writer.revertPartialWritesAndClose()
       }
-      writer.close()
       success = true
     } finally {
       if (!success) {
