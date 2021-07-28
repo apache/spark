@@ -272,6 +272,9 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(
             pdf["this_array"] == pdf["this_array"], psdf["this_array"] == psdf["this_array"]
         )
+        self.assert_eq(
+            pdf["this_struct"] == pdf["this_struct"], psdf["this_struct"] == psdf["this_struct"]
+        )
 
     def test_ne(self):
         pdf, psdf = self.complex_pdf, self.complex_pdf
@@ -283,6 +286,9 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         )
         self.assert_eq(
             pdf["this_array"] != pdf["this_array"], psdf["this_array"] != psdf["this_array"]
+        )
+        self.assert_eq(
+            pdf["this_struct"] != pdf["this_struct"], psdf["this_struct"] != psdf["this_struct"]
         )
 
     def test_lt(self):
@@ -296,6 +302,9 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(
             pdf["this_array"] < pdf["this_array"], psdf["this_array"] < psdf["this_array"]
         )
+        self.assert_eq(
+            pdf["this_struct"] < pdf["this_struct"], psdf["this_struct"] < psdf["this_struct"]
+        )
 
     def test_le(self):
         pdf, psdf = self.complex_pdf, self.complex_pdf
@@ -307,6 +316,9 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         )
         self.assert_eq(
             pdf["this_array"] <= pdf["this_array"], psdf["this_array"] <= psdf["this_array"]
+        )
+        self.assert_eq(
+            pdf["this_struct"] <= pdf["this_struct"], psdf["this_struct"] <= psdf["this_struct"]
         )
 
     def test_gt(self):
@@ -320,6 +332,9 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(
             pdf["this_array"] > pdf["this_array"], psdf["this_array"] > psdf["this_array"]
         )
+        self.assert_eq(
+            pdf["this_struct"] > pdf["this_struct"], psdf["this_struct"] > psdf["this_struct"]
+        )
 
     def test_ge(self):
         pdf, psdf = self.complex_pdf, self.complex_pdf
@@ -331,6 +346,9 @@ class ComplexOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         )
         self.assert_eq(
             pdf["this_array"] >= pdf["this_array"], psdf["this_array"] >= psdf["this_array"]
+        )
+        self.assert_eq(
+            pdf["this_struct"] >= pdf["this_struct"], psdf["this_struct"] >= psdf["this_struct"]
         )
 
 
