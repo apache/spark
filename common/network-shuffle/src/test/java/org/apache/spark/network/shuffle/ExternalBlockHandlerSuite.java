@@ -140,14 +140,16 @@ public class ExternalBlockHandlerSuite {
       long checksumByWriter = checkedIn.getChecksum().getValue();
 
       switch (expectedCaused) {
+        // when checksumByWriter != checksumRecalculated
         case DISK_ISSUE:
-          out.writeLong(- checksumByWriter);
+          out.writeLong(checksumByWriter - 1);
           checksumByReader = checksumByWriter;
           break;
 
+        // when checksumByWriter == checksumRecalculated and checksumByReader != checksumByWriter
         case NETWORK_ISSUE:
           out.writeLong(checksumByWriter);
-          checksumByReader = - checksumByWriter;
+          checksumByReader = checksumByWriter - 1;
           break;
 
         case UNKNOWN_ISSUE:
