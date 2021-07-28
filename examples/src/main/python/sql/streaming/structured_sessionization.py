@@ -39,7 +39,7 @@ from pyspark.sql.functions import count, session_window
 
 if __name__ == "__main__":
     if len(sys.argv) != 3 and len(sys.argv) != 2:
-        msg = "Usage: structured_network_wordcount_windowed.py <hostname> <port> "
+        msg = "Usage: structured_sessionization.py <hostname> <port> "
         print(msg, file=sys.stderr)
         sys.exit(-1)
 
