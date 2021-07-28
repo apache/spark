@@ -3,7 +3,7 @@
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
   },
-  "COLUMNS_ALIASES_NOT_ALLOWED_IN_OPERATION" : {
+  "COLUMN_ALIASES_NOT_ALLOWED_IN_OPERATION" : {
     "message" : [ "Columns aliases are not allowed in %s." ],
     "sqlState" : "10000"
   },
@@ -53,10 +53,6 @@
     "message" : [ "The number of inserted values cannot match the fields." ],
     "sqlState" : "10000"
   },
-  "INSERT_OVERWRITE_DIRECTORY_UNSUPPORTED" : {
-    "message" : [ "INSERT OVERWRITE DIRECTORY is not supported" ],
-    "sqlState" : "10000"
-  },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
     "sqlState" : "42000"
@@ -67,14 +63,6 @@
   },
   "INVALID_LATERAL_JOIN_RELATION" : {
     "message" : [ "LATERAL can only be used with subquery" ],
-    "sqlState" : "10000"
-  },
-  "LATERAL_JOIN_WITH_NATURAL_JOIN_UNSUPPORTED" : {
-    "message" : [ "LATERAL join with NATURAL join is not supported" ],
-    "sqlState" : "10000"
-  },
-  "LATERAL_JOIN_WITH_USING_JOIN_UNSUPPORTED" : {
-    "message" : [ "LATERAL join with USING join is not supported" ],
     "sqlState" : "10000"
   },
   "LATERAL_WITH_PIVOT_IN_FROM_CLAUSE_NOT_ALLOWED" : {
@@ -93,12 +81,8 @@
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
   },
-  "NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION" : {
-    "message" : [ "When there are more than one MATCHED clauses in a MERGE statement, only the last MATCHED clause can omit the condition." ],
-    "sqlState" : "10000"
-  },
-  "NON_LAST_NOT_MATCHED_CLAUSE_OMIT_CONDITION" : {
-    "message" : [ "When there are more than one NOT MATCHED clauses in a MERGE statement, only the last NOT MATCHED clause can omit the condition." ],
+  "NON_LAST_CLAUSE_OMIT_CONDITION" : {
+    "message" : [ "When there are more than one %s clauses in a MERGE statement, only the last %s clause can omit the condition." ],
     "sqlState" : "10000"
   },
   "NON_LITERAL_PIVOT_VALUES" : {
@@ -108,6 +92,10 @@
   "NON_PARTITION_COLUMN" : {
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
+  },
+  "OPERATION_UNSUPPORTED" : {
+    "message" : [ "%s is not supported" ],
+    "sqlState" : "10000"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
@@ -128,12 +116,8 @@
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
   },
-  "UNRECOGNIZED_MATCHED_ACTION" : {
-    "message" : [ "Unrecognized matched action: %s" ],
-    "sqlState" : "10000"
-  },
-  "UNRECOGNIZED_NOT_MATCHED_ACTION" : {
-    "message" : [ "Unrecognized not matched action: %s" ],
+  "UNRECOGNIZED_ACTION" : {
+    "message" : [ "Unrecognized %s action: %s" ],
     "sqlState" : "10000"
   },
   "UNSUPPORTED_LATERAL_JOIN_TYPE" : {

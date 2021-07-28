@@ -34,11 +34,11 @@ object QueryParsingErrors {
   }
 
   def insertOverwriteDirectoryUnsupportedError(ctx: InsertIntoContext): Throwable = {
-    new ParseException("INSERT_OVERWRITE_DIRECTORY_UNSUPPORTED", Array.empty, ctx)
+    new ParseException("OPERATION_UNSUPPORTED", Array("INSERT OVERWRITE DIRECTORY"), ctx)
   }
 
   def columnAliasInOperationNotAllowedError(op: String, ctx: TableAliasContext): Throwable = {
-    new ParseException("COLUMNS_ALIASES_NOT_ALLOWED_IN_OPERATION", Array(op), ctx.identifierList())
+    new ParseException("COLUMN_ALIASES_NOT_ALLOWED_IN_OPERATION", Array(op), ctx.identifierList())
   }
 
   def emptySourceForMergeError(ctx: MergeIntoTableContext): Throwable = {
@@ -46,8 +46,8 @@ object QueryParsingErrors {
   }
 
   def unrecognizedMatchedActionError(ctx: MatchedClauseContext): Throwable = {
-    new ParseException("UNRECOGNIZED_MATCHED_ACTION", Array(ctx.matchedAction().getText),
-      ctx.matchedAction())
+    new ParseException("UNRECOGNIZED_ACTION",
+      Array("matched", ctx.matchedAction().getText), ctx.matchedAction())
   }
 
   def insertedValueNumberNotMatchFieldNumberError(ctx: NotMatchedClauseContext): Throwable = {
@@ -56,8 +56,8 @@ object QueryParsingErrors {
   }
 
   def unrecognizedNotMatchedActionError(ctx: NotMatchedClauseContext): Throwable = {
-    new ParseException("UNRECOGNIZED_NOT_MATCHED_ACTION", Array(ctx.notMatchedAction().getText),
-      ctx.notMatchedAction())
+    new ParseException("UNRECOGNIZED_ACTION",
+      Array("not matched", ctx.notMatchedAction().getText), ctx.notMatchedAction())
   }
 
   def mergeStatementWithoutWhenClauseError(ctx: MergeIntoTableContext): Throwable = {
@@ -65,11 +65,11 @@ object QueryParsingErrors {
   }
 
   def nonLastMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException("NON_LAST_MATCHED_CLAUSE_OMIT_CONDITION", Array.empty, ctx)
+    new ParseException("NON_LAST_CLAUSE_OMIT_CONDITION", Array("MATCHED"), ctx)
   }
 
   def nonLastNotMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException("NON_LAST_NOT_MATCHED_CLAUSE_OMIT_CONDITION", Array.empty, ctx)
+    new ParseException("NON_LAST_CLAUSE_OMIT_CONDITION", Array("NOT MATCHED"), ctx)
   }
 
   def emptyPartitionKeyError(key: String, ctx: PartitionSpecContext): Throwable = {
@@ -97,11 +97,11 @@ object QueryParsingErrors {
   }
 
   def lateralJoinWithNaturalJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL_JOIN_WITH_NATURAL_JOIN_UNSUPPORTED", Array.empty, ctx)
+    new ParseException("OPERATION_UNSUPPORTED", Array("LATERAL join with NATURAL join"), ctx)
   }
 
   def lateralJoinWithUsingJoinUnsupportedError(ctx: ParserRuleContext): Throwable = {
-    new ParseException("LATERAL_JOIN_WITH_USING_JOIN_UNSUPPORTED", Array.empty, ctx)
+    new ParseException("OPERATION_UNSUPPORTED", Array("LATERAL join with USING join"), ctx)
   }
 
   def unsupportedLateralJoinTypeError(ctx: ParserRuleContext, joinType: String): Throwable = {
