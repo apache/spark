@@ -1120,6 +1120,25 @@ public class RemoteBlockPushResolverSuite {
   }
 
   @Test
+  public void testFinalizeOfDeterminateShuffle() throws IOException {
+    PushBlock[] pushBlocks = new PushBlock[] {
+      new PushBlock(0, 0, 0, 0, ByteBuffer.wrap(new byte[4])),
+      new PushBlock(0,  0, 1, 0, ByteBuffer.wrap(new byte[5]))
+    };
+    pushBlockHelper(TEST_APP, NO_ATTEMPT_ID, pushBlocks);
+    MergeStatuses statuses = pushResolver.finalizeShuffleMerge(
+      new FinalizeShuffleMerge(TEST_APP, NO_ATTEMPT_ID, 0, 0));
+
+    RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo =
+      pushResolver.validateAndGetAppShuffleInfo(TEST_APP);
+    assertTrue("Metadata of determinate shuffle should be removed after finalize shuffle"
+      + " merge", appShuffleInfo.getPartitions().get(0) == null);
+    validateMergeStatuses(statuses, new int[] {0}, new long[] {9});
+    MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
+    validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{4, 5}, new int[][]{{0}, {1}});
+  }
+
+  @Test
   public void testBlockFetchWithOlderShuffleMergeId() throws IOException {
     StreamCallbackWithID stream1 =
       pushResolver.receiveBlockDataAsStream(

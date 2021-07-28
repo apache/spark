@@ -139,8 +139,7 @@ public class OneForOneBlockFetcher {
       String[] blockIds) {
     String[] firstBlock = splitBlockId(blockIds[0]);
     int shuffleId = Integer.parseInt(firstBlock[1]);
-    boolean batchFetchEnabled = (firstBlock.length == 5 &&
-      firstBlock[0].equals(SHUFFLE_BLOCK_SPLIT));
+    boolean batchFetchEnabled = firstBlock.length == 5;
     Map<Long, BlocksInfo> mapIdToBlocksInfo = new LinkedHashMap<>();
     for (String blockId : blockIds) {
       String[] blockIdParts = splitBlockId(blockId);
