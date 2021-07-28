@@ -145,7 +145,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       AppShuffleInfo appShuffleInfo,
       int shuffleId,
       int shuffleMergeId,
-      int reduceId) throws RuntimeException {
+      int reduceId) throws StaleBlockPushException {
     ConcurrentMap<Integer, AppShuffleMergePartitionsInfo> partitions = appShuffleInfo.partitions;
     AppShuffleMergePartitionsInfo shufflePartitionsWithMergeId =
       partitions.compute(shuffleId, (id, appShuffleMergePartitionsInfo) -> {
@@ -167,8 +167,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           // current incoming one
           int latestShuffleMergeId = appShuffleMergePartitionsInfo.shuffleMergeId;
           if (latestShuffleMergeId > shuffleMergeId) {
-            throw new RuntimeException(String.format("Rejecting shuffle blocks push request for"
-              + " shuffle %s with shuffleMergeId %s for application %s_%s as a higher"
+            throw new StaleBlockPushException(String.format("Rejecting shuffle blocks push request"
+              + " for shuffle %s with shuffleMergeId %s for application %s_%s as a higher"
                 + " shuffleMergeId %s request is already seen", shuffleId, shuffleMergeId,
                 appShuffleInfo.appId, appShuffleInfo.attemptId, latestShuffleMergeId));
           } else if (latestShuffleMergeId == shuffleMergeId) {
@@ -389,7 +389,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     try {
       partitionInfoBeforeCheck = getOrCreateAppShufflePartitionInfo(appShuffleInfo, msg.shuffleId,
         msg.shuffleMergeId, msg.reduceId);
-    } catch(RuntimeException re) {
+    } catch(StaleBlockPushException sbp) {
       // Set partitionInfoBeforeCheck to null so that stale block push gets handled.
       partitionInfoBeforeCheck = null;
     }
