@@ -29,6 +29,7 @@ import org.apache.xbean.asm9.Opcodes._
 import org.apache.xbean.asm9.tree.{ClassNode, MethodNode}
 
 import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 
 /**
@@ -413,7 +414,7 @@ private[spark] object ClosureCleaner extends Logging {
         SparkEnv.get.closureSerializer.newInstance().serialize(func)
       }
     } catch {
-      case ex: Exception => throw new SparkException("Task not serializable", ex)
+      case ex: Exception => throw SparkCoreErrors.taskNotSerializableError(ex)
     }
   }
 
@@ -761,7 +762,7 @@ private class ReturnStatementFinder(targetMethodName: Option[String] = None)
       new MethodVisitor(ASM9) {
         override def visitTypeInsn(op: Int, tp: String): Unit = {
           if (op == NEW && tp.contains("scala/runtime/NonLocalReturnControl") && isTargetMethod) {
-            throw new ReturnStatementInClosureException
+            throw SparkCoreErrors.returnStatementInClosureError()
           }
         }
       }

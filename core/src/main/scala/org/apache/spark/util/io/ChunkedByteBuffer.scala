@@ -26,6 +26,7 @@ import com.google.common.primitives.UnsignedBytes
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark.SparkEnv
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.config
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.util.{ByteArrayWritableChannel, LimitedInputStream}
@@ -98,8 +99,7 @@ private[spark] class ChunkedByteBuffer(var chunks: Array[ByteBuffer]) {
    */
   def toArray: Array[Byte] = {
     if (size >= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH) {
-      throw new UnsupportedOperationException(
-        s"cannot call toArray because buffer size ($size bytes) exceeds maximum array size")
+      throw SparkCoreErrors.bufferSizeExceedsMaximumArraySizeError(size)
     }
     val byteChannel = new ByteArrayWritableChannel(size.toInt)
     writeFully(byteChannel)

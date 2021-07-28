@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection
 
+import org.apache.spark.errors.SparkCoreErrors
+
 private object ErrorMessage {
   final val msg: String = "mutable operation is not supported"
 }
@@ -33,26 +35,26 @@ class ImmutableBitSet(val numBits: Int, val bitsToSet: Int*) extends BitSet(numB
   }
 
   override def clear(): Unit = {
-    throw new UnsupportedOperationException(ErrorMessage.msg)
+    throw SparkCoreErrors.unsupportedOperationError(ErrorMessage.msg)
   }
 
   override def clearUntil(bitIndex: Int): Unit = {
-    throw new UnsupportedOperationException(ErrorMessage.msg)
+    throw SparkCoreErrors.unsupportedOperationError(ErrorMessage.msg)
   }
 
   override def set(index: Int): Unit = {
-    throw new UnsupportedOperationException(ErrorMessage.msg)
+    throw SparkCoreErrors.unsupportedOperationError(ErrorMessage.msg)
   }
 
   override def setUntil(bitIndex: Int): Unit = {
-    throw new UnsupportedOperationException(ErrorMessage.msg)
+    throw SparkCoreErrors.unsupportedOperationError(ErrorMessage.msg)
   }
 
   override def unset(index: Int): Unit = {
-    throw new UnsupportedOperationException(ErrorMessage.msg)
+    throw SparkCoreErrors.unsupportedOperationError(ErrorMessage.msg)
   }
 
   override def union(other: BitSet): Unit = {
-    throw new UnsupportedOperationException(ErrorMessage.msg)
+    throw SparkCoreErrors.unsupportedOperationError(ErrorMessage.msg)
   }
 }

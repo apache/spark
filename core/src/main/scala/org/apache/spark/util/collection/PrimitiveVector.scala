@@ -19,6 +19,8 @@ package org.apache.spark.util.collection
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.errors.SparkCoreErrors
+
 /**
  * An append-only, non-threadsafe, array-backed vector that is optimized for primitive types.
  */
@@ -55,7 +57,7 @@ class PrimitiveVector[@specialized(Long, Int, Double) V: ClassTag](initialSize: 
     override def hasNext: Boolean = index < _numElements
     override def next(): V = {
       if (!hasNext) {
-        throw new NoSuchElementException
+        throw SparkCoreErrors.noSuchElementError()
       }
       val value = _array(index)
       index += 1

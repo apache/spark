@@ -22,6 +22,7 @@ import java.util.Comparator
 import com.google.common.hash.Hashing
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.errors.SparkCoreErrors
 
 /**
  * :: DeveloperApi ::
@@ -187,7 +188,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64)
       override def next(): (K, V) = {
         val value = nextValue()
         if (value == null) {
-          throw new NoSuchElementException("End of iterator")
+          throw SparkCoreErrors.endOfIteratorError()
         }
         pos += 1
         value

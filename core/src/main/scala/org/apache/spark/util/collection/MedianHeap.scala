@@ -19,6 +19,8 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.PriorityQueue
 
+import org.apache.spark.errors.SparkCoreErrors
+
 /**
  * MedianHeap is designed to be used to quickly track the median of a group of numbers
  * that may contain duplicates. Inserting a new number has O(log n) time complexity and
@@ -80,7 +82,7 @@ private[spark] class MedianHeap(implicit val ord: Ordering[Double]) {
 
   def median: Double = {
     if (isEmpty) {
-      throw new NoSuchElementException("MedianHeap is empty.")
+      throw SparkCoreErrors.medianHeapIsEmptyError()
     }
     if (largerHalf.size == smallerHalf.size) {
       (largerHalf.head + smallerHalf.head) / 2.0
