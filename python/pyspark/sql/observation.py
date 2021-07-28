@@ -38,9 +38,8 @@ class Observation:
     function.
 
     An Observation instance collects the metrics while the first action is executed. Subsequent
-    actions do not modify the metrics returned by `Observation.getAsDict`. Retrieval of the metric
-    via `Observation.getAsDict` blocks until the first action has finished and metrics become
-    available.
+    actions do not modify the metrics returned by `Observation.get`. Retrieval of the metric via
+    `Observation.get` blocks until the first action has finished and metrics become available.
 
     .. versionadded:: 3.3.0
 
@@ -57,8 +56,8 @@ class Observation:
     >>> observed_df = df.observe(observation, count(lit(1)).alias("count"), max(col("age")))
     >>> observed_df.count()
     2
-    >>> observation.getAsDict
-    {count=2, max(age)=5}
+    >>> observation.get
+    {'count': 2, "max(age)": 5}
     """
     def __init__(self, name=None):
         """Constructs a named or unnamed Observation instance.
@@ -105,23 +104,7 @@ class Observation:
         return DataFrame(observed_df, df.sql_ctx)
 
     @property
-    def getAsRow(self):
-        """Get the observed metrics.
-
-        Waits until the observed dataset finishes its first action. Only the result of the
-        first action is available. Subsequent actions do not modify the result.
-
-        Returns
-        -------
-        :class:`Row`
-            the observed metrics
-        """
-        assert self._jo is not None, 'call DataFrame.observe'
-        jrow = self._jo.getAsRow()
-        return self._to_row(jrow)
-
-    @property
-    def getAsDict(self):
+    def get(self):
         """Get the observed metrics.
 
         Waits until the observed dataset finishes its first action. Only the result of the

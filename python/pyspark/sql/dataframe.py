@@ -1834,7 +1834,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
     def observe(self, observation, *exprs):
         """Observe (named) metrics through an :class:`Observation` instance.
 
-        A user can retrieve the metrics by accessing `Observation.getAsDict`.
+        A user can retrieve the metrics by accessing `Observation.get`.
 
         .. versionadded:: 3.3.0
 
@@ -1862,8 +1862,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> observed_df = df.observe(observation, count(lit(1)).alias("count"), max(col("age")))
         >>> observed_df.count()
         2
-        >>> observation.getAsDict
-        Row(count=2, max(age)=5)
+        >>> observation.get
+        {'count': 2, 'max(age)': 5}
         """
         from pyspark.sql import Observation
         assert isinstance(observation, Observation), "observation should be Observation"

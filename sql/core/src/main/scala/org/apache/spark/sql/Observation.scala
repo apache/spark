@@ -33,12 +33,12 @@ import org.apache.spark.sql.util.QueryExecutionListener
  *   val observation = Observation("my metrics")
  *   val observed_ds = ds.observe(observation, count(lit(1)).as("rows"), max($"id").as("maxid"))
  *   observed_ds.write.parquet("ds.parquet")
- *   val metrics = observation.getAsMap
+ *   val metrics = observation.get
  * }}}
  *
  * This collects the metrics while the first action is executed on the observed dataset. Subsequent
- * actions do not modify the metrics returned by [[getAsMap]]. Retrieval of the metric
- * via [[getAsMap]] blocks until the first action has finished and metrics become available.
+ * actions do not modify the metrics returned by [[get]]. Retrieval of the metric via [[get]]
+ * blocks until the first action has finished and metrics become available.
  *
  * This class does not support streaming datasets.
  *
@@ -58,7 +58,7 @@ class Observation(name: String) {
 
   @volatile private var sparkSession: Option[SparkSession] = None
 
-  @volatile private var row: Option[Row] = None
+  @volatile private var metrics: Option[Map[String, Any]] = None
 
   /**
    * Attach this observation to the given [[Dataset]] to observe aggregation expressions.
@@ -82,36 +82,24 @@ class Observation(name: String) {
    * Get the observed metrics. This waits for the observed dataset to finish its first action.
    * Only the result of the first action is available. Subsequent actions do not modify the result.
    *
-   * @return the observed metrics as a [[Row]]
-   * @throws InterruptedException interrupted while waiting
-   */
-  @throws[InterruptedException]
-  def getAsRow: Row = {
-    synchronized {
-      // we need to loop as wait might return without us calling notify
-      // https://en.wikipedia.org/w/index.php?title=Spurious_wakeup&oldid=992601610
-      while (this.row.isEmpty) {
-        wait()
-      }
-    }
-
-    this.row.get
-  }
-
-  /**
-   * Get the observed metrics. This waits for the observed dataset to finish its first action.
-   * Only the result of the first action is available. Subsequent actions do not modify the result.
-   *
    * @return the observed metrics as a `Map[String, Any]`
    * @throws InterruptedException interrupted while waiting
    */
   @throws[InterruptedException]
-  def getAsMap: Map[String, Any] = {
-    val row = getAsRow
-    row.getValuesMap[Any](row.schema.fieldNames)
+  def get: Map[String, Any] = {
+    synchronized {
+      // we need to loop as wait might return without us calling notify
+      // https://en.wikipedia.org/w/index.php?title=Spurious_wakeup&oldid=992601610
+      while (this.metrics.isEmpty) {
+        wait()
+      }
+    }
+
+    this.metrics.get
   }
 
   /**
+   * (Java-specific)
    * Get the observed metrics. This waits for the observed dataset to finish its first action.
    * Only the result of the first action is available. Subsequent actions do not modify the result.
    *
@@ -121,7 +109,7 @@ class Observation(name: String) {
   @throws[InterruptedException]
   def getAsJavaMap: java.util.Map[String, Object] = {
     JavaConverters.mapAsJavaMap(
-      getAsMap.map { case (key, value) => (key, value.asInstanceOf[Object])}
+      get.map { case (key, value) => (key, value.asInstanceOf[Object])}
     )
   }
 
@@ -145,9 +133,10 @@ class Observation(name: String) {
 
   private[spark] def onFinish(qe: QueryExecution): Unit = {
     synchronized {
-      if (this.row.isEmpty) {
-        this.row = qe.observedMetrics.get(name)
-        if (this.row.isDefined) {
+      if (this.metrics.isEmpty) {
+        val row = qe.observedMetrics.get(name)
+        this.metrics = row.map(r => r.getValuesMap[Any](r.schema.fieldNames))
+        if (metrics.isDefined) {
           notifyAll()
           unregister()
         }

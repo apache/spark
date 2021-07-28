@@ -720,13 +720,10 @@ class DatasetSuite extends QueryTest
       )
 
     def checkMetrics(namedMetric: Observation, unnamedMetric: Observation): Unit = {
-      assert(namedMetric.getAsRow === Row(0L, 99L, 4950L, 50L))
-      assert(namedMetric.getAsMap === Map(
+      assert(namedMetric.get === Map(
         "min_val" -> 0L, "max_val" -> 99L, "sum_val" -> 4950L, "num_even" -> 50L)
       )
-
-      assert(unnamedMetric.getAsRow === Row(49))
-      assert(unnamedMetric.getAsMap === Map("avg_val" -> 49))
+      assert(unnamedMetric.get === Map("avg_val" -> 49))
     }
 
     observed_df.collect()

@@ -1970,7 +1970,7 @@ class Dataset[T] private[sql](
    *   val observation = Observation("my_metrics")
    *   val observed_ds = ds.observe(observation, count(lit(1)).as("rows"), max($"id").as("maxid"))
    *   observed_ds.write.parquet("ds.parquet")
-   *   val metrics = observation.getAsMap
+   *   val metrics = observation.get
    * }}}
    *
    * @throws IllegalArgumentException If this is a streaming Dataset (this.isStreaming == true)
