@@ -18,6 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.{Future, ScheduledExecutorService, TimeUnit}
 
+import io.fabric8.kubernetes.api.model.ListOptionsBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
 
@@ -55,14 +56,17 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
   private class PollRunnable(applicationId: String) extends Runnable {
     override def run(): Unit = Utils.tryLogNonFatalError {
       logDebug(s"Resynchronizing full executor pod state from Kubernetes.")
-      snapshotsStore.replaceSnapshot(kubernetesClient
+      val pods = kubernetesClient
         .pods()
         .withLabel(SPARK_APP_ID_LABEL, applicationId)
         .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
         .withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
-        .list()
-        .getItems
-        .asScala.toSeq)
+      val list = if (conf.get(KUBERNETES_EXECUTOR_API_POLLING_WITH_RESOURCE_VERSION)) {
+        pods.list(new ListOptionsBuilder().withResourceVersion("0").build())
+      } else {
+        pods.list()
+      }
+      snapshotsStore.replaceSnapshot(list.getItems.asScala.toSeq)
     }
   }
 
