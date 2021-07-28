@@ -92,8 +92,8 @@ object PushDownUtils extends PredicateHelper {
 
     scanBuilder match {
       case r: SupportsPushDownAggregates =>
-        val translatedAggregates = aggregates.map(DataSourceStrategy.translateAggregate).flatten
-        val translatedGroupBys = groupBy.map(columnAsString).flatten
+        val translatedAggregates = aggregates.flatMap(DataSourceStrategy.translateAggregate)
+        val translatedGroupBys = groupBy.flatMap(columnAsString)
 
         if (translatedAggregates.length != aggregates.length ||
           translatedGroupBys.length != groupBy.length) {
@@ -101,11 +101,7 @@ object PushDownUtils extends PredicateHelper {
         }
 
         val agg = new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray)
-        if (r.pushAggregation(agg)) {
-          Some(agg)
-        } else {
-          None
-        }
+        Some(agg).filter(r.pushAggregation)
       case _ => None
     }
   }

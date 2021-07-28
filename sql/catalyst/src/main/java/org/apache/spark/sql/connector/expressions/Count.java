@@ -26,24 +26,20 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public final class Count implements AggregateFunc {
-    private FieldReference column;
-    private boolean isDistinct;
+  private final FieldReference column;
+  private final boolean isDistinct;
 
-    public Count(FieldReference column, boolean isDistinct) {
-        this.column = column;
-        this.isDistinct = isDistinct;
-    }
+  public Count(FieldReference column, boolean isDistinct) {
+    this.column = column;
+    this.isDistinct = isDistinct;
+  }
 
-    public FieldReference column() {
-        return column;
-    }
-    public boolean isDinstinct() {
-        return isDistinct;
-    }
+  public FieldReference column() { return column; }
+  public boolean isDistinct() { return isDistinct; }
 
-    @Override
-    public String toString() { return "Count(" + column.describe() + "," + isDistinct + ")"; }
+  @Override
+  public String toString() { return "Count(" + column.describe() + "," + isDistinct + ")"; }
 
-    @Override
-    public String describe() { return this.toString(); }
+  @Override
+  public String describe() { return this.toString(); }
 }

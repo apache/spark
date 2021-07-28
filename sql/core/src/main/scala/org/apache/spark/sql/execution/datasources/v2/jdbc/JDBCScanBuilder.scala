@@ -85,14 +85,14 @@ case class JDBCScanBuilder(
         val structField = getStructFieldForCol(min.column)
         outputSchema = outputSchema.add(structField.copy("min(" + structField.name + ")"))
       case count: Count =>
-        val distinct = if (count.isDinstinct) "DISTINCT " else ""
+        val distinct = if (count.isDistinct) "DISTINCT " else ""
         val structField = getStructFieldForCol(count.column)
         outputSchema =
           outputSchema.add(StructField(s"count($distinct" + structField.name + ")", LongType))
       case _: CountStar =>
         outputSchema = outputSchema.add(StructField("count(*)", LongType))
       case sum: Sum =>
-        val distinct = if (sum.isDinstinct) "DISTINCT " else ""
+        val distinct = if (sum.isDistinct) "DISTINCT " else ""
         val structField = getStructFieldForCol(sum.column)
         outputSchema =
           outputSchema.add(StructField(s"sum($distinct" + structField.name + ")", sum.dataType))

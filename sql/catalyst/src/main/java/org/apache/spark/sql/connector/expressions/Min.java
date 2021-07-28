@@ -26,21 +26,15 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public final class Min implements AggregateFunc {
-    private FieldReference column;
+  private final FieldReference column;
 
-    public Min(FieldReference column) {
-        this.column = column;
-    }
+  public Min(FieldReference column) { this.column = column; }
 
-    public FieldReference column() {
-        return column;
-    }
+  public FieldReference column() { return column; }
 
-    @Override
-    public String toString() {
-        return "Min(" + column.describe() + ")";
-    }
+  @Override
+  public String toString() { return "Min(" + column.describe() + ")"; }
 
-    @Override
-    public String describe() { return this.toString(); }
+  @Override
+  public String describe() { return this.toString(); }
 }
