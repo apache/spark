@@ -27,6 +27,7 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
+import com.google.common.io.ByteStreams
 import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.log4j.Level
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -221,6 +222,69 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       blockSize: Long,
       blockMapIndex: Int): Seq[(BlockId, Long, Int)] = {
     blockIds.map(blockId => (blockId, blockSize, blockMapIndex)).toSeq
+  }
+
+  test("SPARK-36206: diagnose the block when it's corrupted twice") {
+    // Make sure remote blocks would return
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer()
+    )
+    answerFetchBlocks { invocation =>
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      listener.onBlockFetchSuccess(ShuffleBlockId(0, 0, 0).toString, mockCorruptBuffer())
+    }
+
+    val logAppender = new LogAppender("diagnose corruption")
+    withLogAppender(logAppender) {
+      val iterator = createShuffleBlockIteratorWithDefaults(
+        Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
+        streamWrapperLimitSize = Some(100)
+      )
+      intercept[FetchFailedException](iterator.next())
+      // The block will be fetched twice due to retry
+      verify(transfer, times(2))
+        .fetchBlocks(any(), any(), any(), any(), any(), any())
+      // only diagnose once
+      assert(logAppender.loggingEvents.count(
+        _.getRenderedMessage.contains("Start corruption diagnosis")) === 1)
+    }
+  }
+
+  test("SPARK-36206: diagnose the block when it's corrupted " +
+    "inside BufferReleasingInputStream") {
+    // Make sure remote blocks would return
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer()
+    )
+    answerFetchBlocks { invocation =>
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      listener.onBlockFetchSuccess(
+        ShuffleBlockId(0, 0, 0).toString,
+        mockCorruptBuffer(100, 50))
+    }
+
+    val logAppender = new LogAppender("diagnose corruption")
+    withLogAppender(logAppender) {
+      val iterator = createShuffleBlockIteratorWithDefaults(
+        Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
+        streamWrapperLimitSize = Some(100),
+        maxBytesInFlight = 100
+      )
+      intercept[FetchFailedException] {
+        val inputStream = iterator.next()._2
+        // Consume the data to trigger the corruption
+        ByteStreams.readFully(inputStream, new Array[Byte](100))
+      }
+      // The block will be fetched only once because corruption can't be detected in
+      // maxBytesInFlight/3 of the data size
+      verify(transfer, times(1))
+        .fetchBlocks(any(), any(), any(), any(), any(), any())
+      // only diagnose once
+      assert(logAppender.loggingEvents.exists(
+        _.getRenderedMessage.contains("Start corruption diagnosis")))
+    }
   }
 
   test("successful 3 local + 4 host local + 2 remote reads") {
