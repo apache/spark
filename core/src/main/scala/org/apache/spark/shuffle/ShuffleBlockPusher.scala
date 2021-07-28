@@ -339,7 +339,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
    * @param partitionId map index of the current mapper
    * @param shuffleId shuffleId of current shuffle
    * @param shuffleMergeId shuffleMergeId is used to uniquely identify merging process
-   *                       of an indeterminate stage attempt.
+   *                       of shuffle by an indeterminate stage attempt.
    * @param dataFile shuffle data file
    * @param partitionLengths array of sizes of blocks in the shuffle data file
    * @param mergerLocs target locations to push blocks to

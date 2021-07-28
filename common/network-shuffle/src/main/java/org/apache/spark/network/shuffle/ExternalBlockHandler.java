@@ -373,7 +373,6 @@ public class ExternalBlockHandler extends RpcHandler
       String[] blockId0Parts = blockIds[0].split("_");
       if (blockId0Parts.length == 4 && blockId0Parts[0].equals(SHUFFLE_BLOCK_ID)) {
         final int shuffleId = Integer.parseInt(blockId0Parts[1]);
-        // For regular shuffle blocks, blockIdParts[2] is mapId and blockIdParts[3] is reduceId
         final int[] mapIdAndReduceIds = shuffleMapIdAndReduceIds(blockIds, shuffleId);
         size = mapIdAndReduceIds.length;
         blockDataForIndexFn = index -> blockManager.getBlockData(appId, execId, shuffleId,
@@ -381,7 +380,6 @@ public class ExternalBlockHandler extends RpcHandler
       } else if (blockId0Parts.length == 5 && blockId0Parts[0].equals(SHUFFLE_CHUNK_ID)) {
         final int shuffleId = Integer.parseInt(blockId0Parts[1]);
         final int shuffleMergeId = Integer.parseInt(blockId0Parts[2]);
-        // For shuffle chunks, blockIdParts[3] is reduceId and blockIdParts[4] is chunkId
         final int[] reduceIdAndChunkIds = shuffleReduceIdAndChunkIds(blockIds, shuffleId,
           shuffleMergeId);
         size = reduceIdAndChunkIds.length;
@@ -410,6 +408,14 @@ public class ExternalBlockHandler extends RpcHandler
       return rddAndSplitIds;
     }
 
+    /**
+     * @param blockIds Regular shuffle blockIds starts with SHUFFLE_BLOCK_ID to be parsed
+     * @param shuffleId shuffle blocks shuffleId
+     * @return mapId and reduceIds of the shuffle blocks in the same order as that of the blockIds
+     *
+     * Regular shuffle blocks format should be blockIdParts[1] = shuffleId,
+     * blockIdParts[2] = mapId, blockIdParts[3] = reduceId
+     */
     private int[] shuffleMapIdAndReduceIds(String[] blockIds, int shuffleId) {
       final int[] mapIdAndReduceIds = new int[2 * blockIds.length];
       for (int i = 0; i < blockIds.length; i++) {
@@ -429,6 +435,17 @@ public class ExternalBlockHandler extends RpcHandler
       return mapIdAndReduceIds;
     }
 
+    /**
+     * @param blockIds Shuffle merged chunks starts with SHUFFLE_CHUNK_ID to be parsed
+     * @param shuffleId shuffle blocks shuffleId
+     * @param shuffleMergeId shuffleMergeId is used to uniquely identify merging process
+     *                       of shuffle by an indeterminate stage attempt.
+     * @return reduceId and chunkIds of the shuffle chunks in the same order as that of the
+     *         blockIds
+     *
+     * Shuffle merged chunks format should be blockIdParts[1] = shuffleId,
+     * blockIdParts[2] = shuffleMergeId, blockIdParts[3] = reduceId, blockIdParts[4] = chunkId
+     */
     private int[] shuffleReduceIdAndChunkIds(
         String[] blockIds,
         int shuffleId,

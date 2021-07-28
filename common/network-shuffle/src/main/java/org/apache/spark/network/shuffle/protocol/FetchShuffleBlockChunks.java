@@ -37,8 +37,8 @@ public class FetchShuffleBlockChunks extends AbstractFetchShuffleBlocks {
   public final int[] reduceIds;
   // The i-th int[] in chunkIds contains all the chunks for the i-th reduceId in reduceIds.
   public final int[][] chunkIds;
-  // shuffleMergeId is used to uniquely identify merging process of an indeterminate stage
-  // attempt.
+  // shuffleMergeId is used to uniquely identify merging process of shuffle by
+  // an indeterminate stage attempt.
   public final int shuffleMergeId;
 
   public FetchShuffleBlockChunks(

@@ -123,8 +123,8 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   private[this] var _shuffleMergedFinalized: Boolean = false
 
   /**
-   * shuffleMergeId is used to uniquely identify merging process of an indeterminate stage
-   * attempt.
+   * shuffleMergeId is used to uniquely identify merging process of shuffle
+   * by an indeterminate stage attempt.
    */
   private[this] var _shuffleMergeId: Int = 0
 

@@ -79,6 +79,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   public static final String MERGE_DIR_KEY = "mergeDir";
   public static final String ATTEMPT_ID_KEY = "attemptId";
   private static final int UNDEFINED_ATTEMPT_ID = -1;
+  // Shuffles of determinate stages will have shuffleMergeId set to 0
+  private static final int DETERMINATE_SHUFFLE_MERGE_ID = 0;
 
   // ConcurrentHashMap doesn't allow null for keys or values which is why this is required.
   // Marker to identify finalized indeterminate shuffle partitions in the case of indeterminate
@@ -499,9 +501,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     AtomicReference<Map<Integer, AppShufflePartitionInfo>> shuffleMergePartitionsRef =
       new AtomicReference<>(null);
     // Metadata of the determinate stage shuffle can be safely removed as part of finalizing
-    // shuffle merge. Currently once the shuffle is finalized for a determinate stages retry
+    // shuffle merge. Currently once the shuffle is finalized for a determinate stages, retry
     // stages of the same shuffle will have shuffle push disabled.
-    if (msg.shuffleMergeId == 0) {
+    if (msg.shuffleMergeId == DETERMINATE_SHUFFLE_MERGE_ID) {
       shuffleMergePartitionsRef.set(
         appShuffleInfo.partitions.remove(msg.shuffleId).shuffleMergePartitions);
     } else {
@@ -947,6 +949,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
   }
 
+  /**
+   * Wrapper class to hold merged Shuffle related information for a specific shuffleMergeId
+   * required for the shuffles of indeterminate stages.
+   */
   public static class AppShuffleMergePartitionsInfo {
     private final int shuffleMergeId;
     private final Map<Integer, AppShufflePartitionInfo> shuffleMergePartitions;
