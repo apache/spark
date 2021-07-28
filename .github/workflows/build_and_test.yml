@@ -573,6 +573,7 @@ jobs:
       run: |
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Phadoop-2.7 compile test:compile
 
+  # Any TPC-DS related updates on this job need to be applied to generate-tpc-ds-dataset job of benchmark.yml as well
   tpcds-1g:
     needs: configure-jobs
     if: needs.configure-jobs.outputs.type == 'regular'

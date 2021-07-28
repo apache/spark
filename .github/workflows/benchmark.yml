@@ -43,7 +43,8 @@ jobs:
         echo "::set-output name=split::["`seq -s, 1 $SPARK_BENCHMARK_NUM_SPLITS`"]"
         echo "::set-output name=num-split::['"$SPARK_BENCHMARK_NUM_SPLITS"']"
 
-  generate-TCP-DS-dataset:
+  # Any TPC-DS related updates on this job need to be applied to tpcds-1g job of build_and_test.yml as well
+  generate-tpc-ds-dataset:
     name: "Generate an input dataset for TPCDSQueryBenchmark"
     if: github.event.inputs.run-tcp-ds-query-benchmark == 'true'
     runs-on: ubuntu-20.04
@@ -101,7 +102,7 @@ jobs:
   benchmark:
     name: "Run benchmarks: ${{ matrix.class }} (JDK ${{ github.event.inputs.jdk }}, ${{ matrix.split }} out of ${{ github.event.inputs.num-splits }} splits)"
     if: always()
-    needs: [matrix-gen, generate-TCP-DS-dataset]
+    needs: [matrix-gen, generate-tpc-ds-dataset]
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
     strategy:
