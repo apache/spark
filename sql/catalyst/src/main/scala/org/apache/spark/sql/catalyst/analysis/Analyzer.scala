@@ -2553,8 +2553,10 @@ class Analyzer(override val catalogManager: CatalogManager)
               // a table `t` has two columns `c1` and `c2`, for query `SELECT ... FROM t
               // GROUP BY c1 HAVING c2 = 0`, even though we can resolve column `c2` here, we
               // should undo it later and fail with "Column c2 not found".
-              agg.child.resolve(u.nameParts, resolver).map(TempResolvedColumn(_, u.nameParts))
-                .getOrElse(u)
+              agg.child.resolve(u.nameParts, resolver).map({
+                case a: Alias => TempResolvedColumn(a.child, u.nameParts)
+                case o => TempResolvedColumn(o, u.nameParts)
+              }).getOrElse(u)
             } catch {
               case _: AnalysisException => u
             }
