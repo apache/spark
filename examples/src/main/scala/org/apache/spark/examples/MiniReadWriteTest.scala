@@ -19,6 +19,7 @@
 package org.apache.spark.examples
 
 import java.io.File
+import java.io.PrintWriter
 
 import scala.io.Source._
 
@@ -26,16 +27,17 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
 
 /**
- * Simple test for reading from a consistent FS
+ * Simple test for reading and writing to a distributed
+ * file system.  This example does the following:
  *
  *   1. Reads local file
- *   2. Computes word count on driver
- *   3. Computes word count on executors
- *   3. Compares the word count results
+ *   2. Computes word count on local file
+ *   3. Writes local file to a local dir on each executor
+ *   4. Reads the file back from each exec
+ *   5. Computes word count on the file using Spark
+ *   6. Compares the word count results
  */
 object MiniReadWriteTest {
-
-  private var localFilePath: File = new File(".")
 
   private val NPARAMS = 1
 
@@ -45,13 +47,13 @@ object MiniReadWriteTest {
 
   private def printUsage(): Unit = {
     val usage = """Mini Read-Write Test
-    |Usage: localFile
-    |localFile - (string) local file to use in test""".stripMargin
+    |Usage: localFile dfsDir
+    |localFile - (string) location of local file to distribute to executors.""".stripMargin
 
     println(usage)
   }
 
-  private def parseArgs(args: Array[String]): Unit = {
+  private def parseArgs(args: Array[String]): File = {
     if (args.length != NPARAMS) {
       printUsage()
       System.exit(1)
@@ -59,7 +61,7 @@ object MiniReadWriteTest {
 
     var i = 0
 
-    localFilePath = new File(args(i))
+    val localFilePath = new File(args(i))
     if (!localFilePath.exists) {
       System.err.println(s"Given path (${args(i)}) does not exist")
       printUsage()
@@ -71,6 +73,7 @@ object MiniReadWriteTest {
       printUsage()
       System.exit(1)
     }
+    localFilePath
   }
 
   def runLocalWordCount(fileContents: List[String]): Int = {
@@ -84,10 +87,11 @@ object MiniReadWriteTest {
   }
 
   def main(args: Array[String]): Unit = {
-    parseArgs(args)
+    val localFilePath = parseArgs(args)
 
-    println("Performing local word count")
+    println(s"Performing local word count from ${localFilePath}")
     val fileContents = readFile(localFilePath.toString())
+    println(s"File contents are ${fileContents}")
     val localWordCount = runLocalWordCount(fileContents)
 
     println("Creating SparkSession")
@@ -96,8 +100,22 @@ object MiniReadWriteTest {
       .appName("Mini Read Write Test")
       .getOrCreate()
 
-    println("Reading file from DFS and running Word Count")
-    val readFileRDD = spark.sparkContext.textFile("file:///" + localFilePath.toString())
+    println("Writing local file to executors")
+
+    // uses the fact default parallelism is greater than num execs
+    val misc = spark.sparkContext.parallelize(1.to(10))
+    misc.foreachPartition {
+      x =>
+        new PrintWriter(localFilePath) {
+          try {
+            write(fileContents.mkString("\n"))
+          } finally {
+            close()
+          }}
+    }
+
+    println("Reading file from execs and running Word Count")
+    val readFileRDD = spark.sparkContext.textFile(localFilePath.toString())
 
     val dWordCount = readFileRDD
       .flatMap(_.split(" "))
