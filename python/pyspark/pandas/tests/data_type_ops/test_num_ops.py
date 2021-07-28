@@ -335,6 +335,21 @@ class NumOpsTest(PandasOnSparkTestCase, TestCasesUtils):
             self.assert_eq(pser.astype("category"), psser.astype("category"))
             cat_type = CategoricalDtype(categories=[2, 1, 3])
             self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
+        self.assertRaisesRegex(
+            ValueError,
+            "Cannot convert fractions with missing values to integer",
+            lambda: self.float_withnan_psser.astype(int),
+        )
+        self.assertRaisesRegex(
+            ValueError,
+            "Cannot convert fractions with missing values to integer",
+            lambda: self.float_withnan_psser.astype(np.int32),
+        )
+        self.assert_eq(self.float_withnan_psser.astype(str), self.float_withnan_psser.astype(str))
+        self.assert_eq(self.float_withnan_psser.astype(bool), self.float_withnan_psser.astype(bool))
+        self.assert_eq(
+            self.float_withnan_psser.astype("category"), self.float_withnan_psser.astype("category")
+        )
 
     def test_neg(self):
         pdf, psdf = self.pdf, self.psdf
@@ -439,6 +454,24 @@ class IntegralExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
                         self.check_extension(pser.astype(dtype), psser.astype(dtype))
                 else:
                     self.check_extension(pser.astype(dtype), psser.astype(dtype))
+        for pser, psser in self.intergral_extension_pser_psser_pairs:
+            self.assert_eq(pser.astype(float), psser.astype(float))
+            self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
+            self.assertRaisesRegex(
+                ValueError,
+                "Cannot convert integrals with missing values to bool",
+                lambda: psser.astype(bool),
+            )
+            self.assertRaisesRegex(
+                ValueError,
+                "Cannot convert integrals with missing values to integer",
+                lambda: psser.astype(int),
+            )
+            self.assertRaisesRegex(
+                ValueError,
+                "Cannot convert integrals with missing values to integer",
+                lambda: psser.astype(np.int32),
+            )
 
     def test_neg(self):
         for pser, psser in self.intergral_extension_pser_psser_pairs:
@@ -522,6 +555,24 @@ class FractionalExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         for pser, psser in self.fractional_extension_pser_psser_pairs:
             for dtype in self.extension_dtypes:
                 self.check_extension(pser.astype(dtype), psser.astype(dtype))
+        for pser, psser in self.fractional_extension_pser_psser_pairs:
+            self.assert_eq(pser.astype(float), psser.astype(float))
+            self.assert_eq(pser.astype(np.float32), psser.astype(np.float32))
+            self.assertRaisesRegex(
+                ValueError,
+                "Cannot convert fractions with missing values to bool",
+                lambda: psser.astype(bool),
+            )
+            self.assertRaisesRegex(
+                ValueError,
+                "Cannot convert fractions with missing values to integer",
+                lambda: psser.astype(int),
+            )
+            self.assertRaisesRegex(
+                ValueError,
+                "Cannot convert fractions with missing values to integer",
+                lambda: psser.astype(np.int32),
+            )
 
     def test_neg(self):
         # pandas raises "TypeError: bad operand type for unary -: 'FloatingArray'"
