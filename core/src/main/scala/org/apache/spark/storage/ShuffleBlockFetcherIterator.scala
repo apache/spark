@@ -1043,15 +1043,15 @@ final class ShuffleBlockFetcherIterator(
     var cause: Cause = null
     try {
       while (checkedIn.read(buffer) != -1) {}
+      val checksum = checkedIn.getChecksum.getValue
+      cause = shuffleClient.diagnoseCorruption(address.host, address.port, address.executorId,
+        shuffleBlock.shuffleId, shuffleBlock.mapId, shuffleBlock.reduceId, checksum,
+        checksumAlgorithm)
     } catch {
-      case e: IOException =>
-        logWarning("IOException throws while consuming the rest stream of the corrupted block", e)
+      case e: Exception =>
+        logWarning("Unable to diagnose the corruption cause of the corrupted block", e)
         cause = Cause.UNKNOWN_ISSUE
     }
-    val checksum = checkedIn.getChecksum.getValue
-    cause = shuffleClient.diagnoseCorruption(address.host, address.port, address.executorId,
-      shuffleBlock.shuffleId, shuffleBlock.mapId, shuffleBlock.reduceId, checksum,
-      checksumAlgorithm)
     val duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNs)
     val diagnosisResponse = cause match {
       case Cause.UNSUPPORTED_CHECKSUM_ALGORITHM =>
