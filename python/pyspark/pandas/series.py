@@ -3598,8 +3598,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 Window.unboundedPreceding, Window.unboundedFollowing
             )
             scol = stat_func(F.row_number().over(window1)).over(window2)
-        psser = self._with_new_scol(scol)
-        return psser.astype(np.float64)
+        return self._with_new_scol(scol.cast(DoubleType()))
 
     def filter(
         self,
