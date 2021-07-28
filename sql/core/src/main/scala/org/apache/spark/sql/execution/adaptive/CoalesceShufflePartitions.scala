@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
@@ -28,18 +27,14 @@ import org.apache.spark.sql.internal.SQLConf
  * A rule to coalesce the shuffle partitions based on the map output statistics, which can
  * avoid many small reduce tasks that hurt performance.
  */
-// TODO: this rule should extends `AQEShuffleReadRule`. We can't do this now because the coalesced
-//       shuffle reader can't report the output partitioning correctly. The AQE framework may
-//       mistakenly think this rule adds extra shuffles and skip it.
-case class CoalesceShufflePartitions(session: SparkSession) extends Rule[SparkPlan] {
+case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleReadRule {
 
-  val supportedShuffleOrigins: Seq[ShuffleOrigin] =
+  override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REBALANCE_PARTITIONS_BY_NONE,
       REBALANCE_PARTITIONS_BY_COL)
 
-  def isSupported(shuffle: ShuffleExchangeLike): Boolean = {
-    shuffle.outputPartitioning != SinglePartition &&
-      supportedShuffleOrigins.contains(shuffle.shuffleOrigin)
+  override def isSupported(shuffle: ShuffleExchangeLike): Boolean = {
+    shuffle.outputPartitioning != SinglePartition && super.isSupported(shuffle)
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {

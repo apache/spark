@@ -137,6 +137,9 @@ case class AdaptiveSparkPlanExec(
       val result = rule match {
         case _: AQEShuffleReadRule if !applied.fastEquals(latestPlan) =>
           val distribution = if (isFinalStage) {
+            // If `requiredDistribution` is None, it means `EnsureRequirements` will not optimize
+            // out the user-specified repartition, thus we don't have a distribution requirement
+            // for the final plan.
             requiredDistribution.getOrElse(UnspecifiedDistribution)
           } else {
             UnspecifiedDistribution
@@ -144,8 +147,8 @@ case class AdaptiveSparkPlanExec(
           if (ValidateRequirements.validate(applied, distribution)) {
             applied
           } else {
-            logDebug(s"Rule ${rule.ruleName} is not applied due to additional shuffles " +
-              "will be introduced.")
+            logDebug(s"Rule ${rule.ruleName} is not applied as it breaks the " +
+              "distribution requirement of the query plan.")
             latestPlan
           }
         case _ => applied
