@@ -120,9 +120,11 @@ private[spark] class StatefulsetPodsAllocator(
       val resources = resolvedExecutorSpec.executorKubernetesResources
       // We'll let PVCs be handled by the statefulset. Note user is responsible for
       // cleaning up PVCs. Future work: integrate with KEP1847 once stabilized.
-      val dynamicVolumeClaims = resources.filter(_.getKind == "PersistentVolumeClaim").map(_.asInstanceOf[PersistentVolumeClaim])
+      val dynamicVolumeClaims = resources.filter(_.getKind == "PersistentVolumeClaim")
+        .map(_.asInstanceOf[PersistentVolumeClaim])
       // Remove the dynamic volumes from our pod
-      val dynamicVolumeClaimNames: Set[String] = dynamicVolumeClaims.map(_.getMetadata().getName()).toSet
+      val dynamicVolumeClaimNames: Set[String] = dynamicVolumeClaims.map(_.getMetadata().getName())
+        .toSet
       val podVolumes = podWithAttachedContainer.getVolumes().asScala
       val staticVolumes = podVolumes.filter { v =>
         val pvc = v.getPersistentVolumeClaim()
@@ -152,7 +154,6 @@ private[spark] class StatefulsetPodsAllocator(
           .endMetadata()
           .build()
       }
-      logError(s"HEYGIRLHEY: Were trying to make with \ndynamicvolumeclaims ${dynamicVolumeClaims}\n dynamicvolumeclaimnames ${dynamicVolumeClaimNames}\n podVolumes ${podVolumes}\n staticVolume ${staticVolumes}\n newNamedvolumes ${newNamedVolumes}")
 
       // Create a pod template spec from the pod.
       val podTemplateSpec = new PodTemplateSpec(meta, podWithAttachedContainer)
