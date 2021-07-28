@@ -17,71 +17,84 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.ExpressionSet
+import org.apache.spark.sql.catalyst.expressions.{Alias, ExpressionSet}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 
 /**
  * A visitor pattern for traversing a [[LogicalPlan]] tree and propagate the distinct attributes.
  */
-object DistinctAttributesVisitor extends LogicalPlanVisitor[ExpressionSet] {
-  override def default(p: LogicalPlan): ExpressionSet = {
-    ExpressionSet()
+object DistinctAttributesVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] {
+  override def default(p: LogicalPlan): Set[ExpressionSet] = {
+    Set.empty[ExpressionSet]
   }
 
-  override def visitAggregate(p: Aggregate): ExpressionSet = {
-    if (p.groupOnly) ExpressionSet(p.output) else default(p)
+  override def visitAggregate(p: Aggregate): Set[ExpressionSet] = {
+    val groupingExps = p.groupingExpressions.toSet
+    p.aggregateExpressions.toSet.subsets().filter { s =>
+      s.size >= groupingExps.size && s.map {
+        case a: Alias => a.child
+        case o => o
+      }.equals(groupingExps)
+    }.map(s => ExpressionSet(s.map(_.toAttribute))).toSet
   }
 
-  override def visitDistinct(p: Distinct): ExpressionSet = ExpressionSet(p.output)
+  override def visitDistinct(p: Distinct): Set[ExpressionSet] = Set(ExpressionSet(p.output))
 
-  override def visitExcept(p: Except): ExpressionSet =
-    if (!p.isAll) ExpressionSet(p.output) else default(p)
+  override def visitExcept(p: Except): Set[ExpressionSet] =
+    if (!p.isAll) Set(ExpressionSet(p.output)) else default(p)
 
-  override def visitExpand(p: Expand): ExpressionSet = default(p)
+  override def visitExpand(p: Expand): Set[ExpressionSet] = default(p)
 
-  override def visitFilter(p: Filter): ExpressionSet = p.child.distinctAttributes
+  override def visitFilter(p: Filter): Set[ExpressionSet] = p.child.distinctAttributes
 
-  override def visitGenerate(p: Generate): ExpressionSet = default(p)
+  override def visitGenerate(p: Generate): Set[ExpressionSet] = default(p)
 
-  override def visitGlobalLimit(p: GlobalLimit): ExpressionSet = default(p)
+  override def visitGlobalLimit(p: GlobalLimit): Set[ExpressionSet] = default(p)
 
-  override def visitIntersect(p: Intersect): ExpressionSet = {
-    if (!p.isAll) ExpressionSet(p.output) else default(p)
+  override def visitIntersect(p: Intersect): Set[ExpressionSet] = {
+    if (!p.isAll) Set(ExpressionSet(p.output)) else default(p)
   }
 
-  override def visitJoin(p: Join): ExpressionSet = {
+  override def visitJoin(p: Join): Set[ExpressionSet] = {
     p.joinType match {
       case LeftSemi | LeftAnti => p.left.distinctAttributes
       case _ => default(p)
     }
   }
 
-  override def visitLocalLimit(p: LocalLimit): ExpressionSet = default(p)
+  override def visitLocalLimit(p: LocalLimit): Set[ExpressionSet] = default(p)
 
-  override def visitPivot(p: Pivot): ExpressionSet = default(p)
+  override def visitPivot(p: Pivot): Set[ExpressionSet] = default(p)
 
-  override def visitProject(p: Project): ExpressionSet = {
-    if (p.output.forall(p.child.distinctAttributes.contains)) {
-      ExpressionSet(p.output)
+  override def visitProject(p: Project): Set[ExpressionSet] = {
+    if (p.child.distinctAttributes.nonEmpty) {
+      val childDistinctAttributes = p.child.distinctAttributes
+      p.projectList.toSet.subsets().filter { s =>
+        val exps = s.map {
+          case a: Alias => a.child
+          case o => o
+        }
+        childDistinctAttributes.exists(_.equals(ExpressionSet(exps)))
+      }.map(s => ExpressionSet(s.map(_.toAttribute))).toSet
     } else {
       default(p)
     }
   }
 
-  override def visitRepartition(p: Repartition): ExpressionSet = p.child.distinctAttributes
+  override def visitRepartition(p: Repartition): Set[ExpressionSet] = p.child.distinctAttributes
 
-  override def visitRepartitionByExpr(p: RepartitionByExpression): ExpressionSet =
+  override def visitRepartitionByExpr(p: RepartitionByExpression): Set[ExpressionSet] =
     p.child.distinctAttributes
 
-  override def visitSample(p: Sample): ExpressionSet = default(p)
+  override def visitSample(p: Sample): Set[ExpressionSet] = default(p)
 
-  override def visitScriptTransform(p: ScriptTransformation): ExpressionSet = default(p)
+  override def visitScriptTransform(p: ScriptTransformation): Set[ExpressionSet] = default(p)
 
-  override def visitUnion(p: Union): ExpressionSet = default(p)
+  override def visitUnion(p: Union): Set[ExpressionSet] = default(p)
 
-  override def visitWindow(p: Window): ExpressionSet = default(p)
+  override def visitWindow(p: Window): Set[ExpressionSet] = default(p)
 
-  override def visitTail(p: Tail): ExpressionSet = default(p)
+  override def visitTail(p: Tail): Set[ExpressionSet] = default(p)
 
-  override def visitSort(sort: Sort): ExpressionSet = sort.child.distinctAttributes
+  override def visitSort(sort: Sort): Set[ExpressionSet] = sort.child.distinctAttributes
 }

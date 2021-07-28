@@ -138,7 +138,6 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.GenerateOptimization" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveNoopOperators" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAggregates" ::
-      "org.apache.spark.sql.catalyst.optimizer.RemoveRedundantAggregatesInLeftSemiAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.RemoveRepetitionFromGroupExpressions" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderAssociativeOperator" ::
       "org.apache.spark.sql.catalyst.optimizer.ReorderJoin" ::
