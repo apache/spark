@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.ExpressionSet
  * }}}
  */
 trait LogicalPlanDistinctAttributes { self: LogicalPlan =>
-  def distinctAttributes: ExpressionSet = {
+  def distinctAttributes: Set[ExpressionSet] = {
     DistinctAttributesVisitor.visit(self)
   }
 }

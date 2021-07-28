@@ -184,6 +184,20 @@ class RemoveRedundantAggregatesSuite extends PlanTest {
     }
   }
 
+  test("SPARK-36194: Remove aggregation from left semi/anti join with alias") {
+    Seq(LeftSemi, LeftAnti).foreach { joinType =>
+      val originalQuery = x.groupBy('a, 'b)('a, 'b.as("d"))
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "d".attr === "y.b".attr))
+        .groupBy("x.a".attr, "d".attr)("x.a".attr, "d".attr)
+      val correctAnswer = x.groupBy('a, 'b)('a, 'b.as("d"))
+        .join(y, joinType, Some("x.a".attr === "y.a".attr && "d".attr === "y.b".attr))
+        .select("x.a".attr, "d".attr)
+
+      val optimized = Optimize.execute(originalQuery.analyze)
+      comparePlans(optimized, correctAnswer.analyze)
+    }
+  }
+
   test("SPARK-36194: Remove aggregation from left semi/anti join if it is the sub aggregateExprs") {
     Seq(LeftSemi, LeftAnti).foreach { joinType =>
       val originalQuery = x.groupBy('a, 'b)('a, 'b)

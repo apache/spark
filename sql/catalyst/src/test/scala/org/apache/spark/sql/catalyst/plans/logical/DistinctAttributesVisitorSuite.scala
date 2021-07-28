@@ -22,7 +22,7 @@ import scala.reflect.runtime.universe.TypeTag
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression, ExpressionSet}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, ExpressionSet}
 import org.apache.spark.sql.catalyst.plans.{Cross, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
 import org.apache.spark.sql.types.IntegerType
 
@@ -31,64 +31,92 @@ class DistinctAttributesVisitorSuite extends PlanTest {
   private val a = AttributeReference("a", IntegerType)()
   private val b = AttributeReference("b", IntegerType)()
   private val c = AttributeReference("c", IntegerType)()
+  private val d = a.as("d")
+  private val e = b.as("e")
   private val testRelation = LocalRelation(a, b, c)
   private val x = testRelation.as("x")
   private val y = testRelation.as("y")
 
 
-  private def checkDistinctAttributes(plan: LogicalPlan, distinctKeys: Seq[Expression]) = {
-    assert(plan.analyze.distinctAttributes === ExpressionSet(distinctKeys))
+  private def checkDistinctAttributes(plan: LogicalPlan, distinctKeys: Set[ExpressionSet]) = {
+    assert(plan.analyze.distinctAttributes === distinctKeys)
   }
 
   implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
 
   test("Check distinct attributes visitor") {
     // Aggregate
-    checkDistinctAttributes(testRelation.groupBy('a)('a), Seq(a))
-    checkDistinctAttributes(testRelation.groupBy('a, 'b)('a, 'b), Seq(a, b))
-    checkDistinctAttributes(testRelation.groupBy('a, 'b, 1)('a, 'b), Seq(a, b))
-    checkDistinctAttributes(testRelation.groupBy('a, 'b)('a, 'b, 1), Seq.empty)
-    checkDistinctAttributes(testRelation.groupBy('a, 'b, 1)('a, 'b, 1), Seq.empty)
-    checkDistinctAttributes(testRelation.groupBy('a, 'b)('a), Seq(a))
+    checkDistinctAttributes(testRelation.groupBy('a, 'b)('a, 'b, 1), Set(ExpressionSet(Seq(a, b))))
+    checkDistinctAttributes(testRelation.groupBy('a)('a), Set(ExpressionSet(Seq(a))))
+    checkDistinctAttributes(testRelation.groupBy('a, 'b)('a, 'b), Set(ExpressionSet(Seq(a, b))))
+    checkDistinctAttributes(testRelation.groupBy('a, 'b, 1)('a, 'b), Set(ExpressionSet(Seq(a, b))))
+    checkDistinctAttributes(testRelation.groupBy('a, 'b)('a, 'b, 1), Set(ExpressionSet(Seq(a, b))))
+    checkDistinctAttributes(testRelation.groupBy('a, 'b, 1)('a, 'b, 1),
+      Set(ExpressionSet(Seq(a, b))))
+    checkDistinctAttributes(testRelation.groupBy('a, 'b)('a), Set.empty)
+    checkDistinctAttributes(testRelation.groupBy('a)('a, max('b)), Set(ExpressionSet(Seq(a))))
+    checkDistinctAttributes(testRelation.groupBy('a, 'b)('a, 'b, d, e),
+      Set(ExpressionSet(Seq(a, b)),
+        ExpressionSet(Seq(a, e.toAttribute)),
+        ExpressionSet(Seq(b, d.toAttribute)),
+        ExpressionSet(Seq(d.toAttribute, e.toAttribute)),
+        ExpressionSet(Seq(a, b, d.toAttribute)),
+        ExpressionSet(Seq(a, b, e.toAttribute)),
+        ExpressionSet(Seq(a, d.toAttribute, e.toAttribute)),
+        ExpressionSet(Seq(b, d.toAttribute, e.toAttribute)),
+        ExpressionSet(Seq(a, b, d.toAttribute, e.toAttribute))))
 
     // Distinct
-    checkDistinctAttributes(Distinct(testRelation), Seq(a, b, c))
-    checkDistinctAttributes(Distinct(testRelation.select('a, 'c)), Seq(a, c))
+    checkDistinctAttributes(Distinct(testRelation), Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(Distinct(testRelation.select('a, 'c)), Set(ExpressionSet(Seq(a, c))))
 
     // Except
-    checkDistinctAttributes(Except(x, y, false), Seq(a, b, c))
-    checkDistinctAttributes(Except(x, y, true), Seq.empty)
+    checkDistinctAttributes(Except(x, y, false), Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(Except(x, y, true), Set.empty)
 
     // Intersect
-    checkDistinctAttributes(Intersect(x, y, false), Seq(a, b, c))
-    checkDistinctAttributes(Intersect(x, y, true), Seq.empty)
+    checkDistinctAttributes(Intersect(x, y, false), Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(Intersect(x, y, true), Set.empty)
 
     // Repartition
-    checkDistinctAttributes(x.repartition(8), Seq.empty)
-    checkDistinctAttributes(Distinct(x).repartition(8), Seq(a, b, c))
-    checkDistinctAttributes(RepartitionByExpression(Seq(a), Distinct(x), None), Seq(a, b, c))
+    checkDistinctAttributes(x.repartition(8), Set.empty)
+    checkDistinctAttributes(Distinct(x).repartition(8), Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(RepartitionByExpression(Seq(a), Distinct(x), None),
+      Set(ExpressionSet(Seq(a, b, c))))
 
     // Sort
-    checkDistinctAttributes(x.sortBy('a.asc), Seq.empty)
-    checkDistinctAttributes(Distinct(x).sortBy('a.asc), Seq(a, b, c))
+    checkDistinctAttributes(x.sortBy('a.asc), Set.empty)
+    checkDistinctAttributes(Distinct(x).sortBy('a.asc), Set(ExpressionSet(Seq(a, b, c))))
 
     // Filter
-    checkDistinctAttributes(Filter('a > 1, x), Seq.empty)
-    checkDistinctAttributes(Filter('a > 1, Distinct(x)), Seq(a, b, c))
+    checkDistinctAttributes(Filter('a > 1, x), Set.empty)
+    checkDistinctAttributes(Filter('a > 1, Distinct(x)), Set(ExpressionSet(Seq(a, b, c))))
 
     // Project
-    checkDistinctAttributes(x.select('a, 'b), Seq.empty)
-    checkDistinctAttributes(Distinct(x).select('a), Seq(a))
+    checkDistinctAttributes(x.select('a, 'b), Set.empty)
+    checkDistinctAttributes(Distinct(x).select('a), Set.empty)
+    checkDistinctAttributes(Distinct(x).select('a, 'b, d, e), Set.empty)
+    checkDistinctAttributes(Distinct(x).select('a, 'b, 'c, 1), Set(ExpressionSet(Seq(a, b, c))))
+    checkDistinctAttributes(Distinct(x).select('a, 'b, c, d),
+      Set(ExpressionSet(Seq(a, b, c)),
+        ExpressionSet(Seq(b, c, d.toAttribute)),
+        ExpressionSet(Seq(a, b, c, d.toAttribute))))
+    checkDistinctAttributes(testRelation.groupBy('a, 'b)('a, 'b, d).select('a, 'b, e),
+      Set(ExpressionSet(Seq(a, b)),
+        ExpressionSet(Seq(a, e.toAttribute)),
+        ExpressionSet(Seq(a, b, e.toAttribute))))
 
     // Join
-    checkDistinctAttributes(x.join(y, LeftSemi, Some("x.a".attr === "y.a".attr)), Seq.empty)
+    checkDistinctAttributes(x.join(y, LeftSemi, Some("x.a".attr === "y.a".attr)), Set.empty)
     checkDistinctAttributes(
-      Distinct(x).join(y, LeftSemi, Some("x.a".attr === "y.a".attr)), Seq(a, b, c))
+      Distinct(x).join(y, LeftSemi, Some("x.a".attr === "y.a".attr)),
+      Set(ExpressionSet(Seq(a, b, c))))
     checkDistinctAttributes(
-      Distinct(x).join(y, LeftAnti, Some("x.a".attr === "y.a".attr)), Seq(a, b, c))
+      Distinct(x).join(y, LeftAnti, Some("x.a".attr === "y.a".attr)),
+      Set(ExpressionSet(Seq(a, b, c))))
     Seq(LeftOuter, Cross, Inner, RightOuter).foreach { joinType =>
       checkDistinctAttributes(
-        Distinct(x).join(y, joinType, Some("x.a".attr === "y.a".attr)), Seq.empty)
+        Distinct(x).join(y, joinType, Some("x.a".attr === "y.a".attr)), Set.empty)
     }
   }
 

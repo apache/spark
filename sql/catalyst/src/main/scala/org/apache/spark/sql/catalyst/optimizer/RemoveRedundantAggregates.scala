@@ -49,7 +49,7 @@ object RemoveRedundantAggregates extends Rule[LogicalPlan] with AliasHelper {
       }
 
      case agg @ Aggregate(groupingExps, _, j: Join) if agg.groupOnly &&
-       ExpressionSet(groupingExps).equals(j.distinctAttributes) =>
+       j.distinctAttributes.exists(_.equals(ExpressionSet(groupingExps))) =>
       Project(agg.output, j)
   }
 
