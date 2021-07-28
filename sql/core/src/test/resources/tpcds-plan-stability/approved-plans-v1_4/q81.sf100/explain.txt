@@ -209,112 +209,112 @@ Right keys [1]: [ctr_customer_sk#35]
 Join condition: None
 
 (34) Project [codegen id : 20]
-Output [18]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_state#36, ctr_total_return#37, cast(ctr_total_return#37 as decimal(24,7)) AS CAST(ctr1.ctr_total_return AS DECIMAL(24,7))#39]
+Output [17]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_state#36, ctr_total_return#37]
 Input [19]: [c_customer_sk#1, c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_customer_sk#35, ctr_state#36, ctr_total_return#37]
 
 (35) Scan parquet default.catalog_returns
-Output [4]: [cr_returning_customer_sk#40, cr_returning_addr_sk#41, cr_return_amt_inc_tax#42, cr_returned_date_sk#43]
+Output [4]: [cr_returning_customer_sk#39, cr_returning_addr_sk#40, cr_return_amt_inc_tax#41, cr_returned_date_sk#42]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(cr_returned_date_sk#43), dynamicpruningexpression(cr_returned_date_sk#43 IN dynamicpruning#25)]
+PartitionFilters: [isnotnull(cr_returned_date_sk#42), dynamicpruningexpression(cr_returned_date_sk#42 IN dynamicpruning#25)]
 PushedFilters: [IsNotNull(cr_returning_addr_sk)]
 ReadSchema: struct<cr_returning_customer_sk:int,cr_returning_addr_sk:int,cr_return_amt_inc_tax:decimal(7,2)>
 
 (36) ColumnarToRow [codegen id : 13]
-Input [4]: [cr_returning_customer_sk#40, cr_returning_addr_sk#41, cr_return_amt_inc_tax#42, cr_returned_date_sk#43]
+Input [4]: [cr_returning_customer_sk#39, cr_returning_addr_sk#40, cr_return_amt_inc_tax#41, cr_returned_date_sk#42]
 
 (37) Filter [codegen id : 13]
-Input [4]: [cr_returning_customer_sk#40, cr_returning_addr_sk#41, cr_return_amt_inc_tax#42, cr_returned_date_sk#43]
-Condition : isnotnull(cr_returning_addr_sk#41)
+Input [4]: [cr_returning_customer_sk#39, cr_returning_addr_sk#40, cr_return_amt_inc_tax#41, cr_returned_date_sk#42]
+Condition : isnotnull(cr_returning_addr_sk#40)
 
 (38) ReusedExchange [Reuses operator id: 62]
-Output [1]: [d_date_sk#44]
+Output [1]: [d_date_sk#43]
 
 (39) BroadcastHashJoin [codegen id : 13]
-Left keys [1]: [cr_returned_date_sk#43]
-Right keys [1]: [d_date_sk#44]
+Left keys [1]: [cr_returned_date_sk#42]
+Right keys [1]: [d_date_sk#43]
 Join condition: None
 
 (40) Project [codegen id : 13]
-Output [3]: [cr_returning_customer_sk#40, cr_returning_addr_sk#41, cr_return_amt_inc_tax#42]
-Input [5]: [cr_returning_customer_sk#40, cr_returning_addr_sk#41, cr_return_amt_inc_tax#42, cr_returned_date_sk#43, d_date_sk#44]
+Output [3]: [cr_returning_customer_sk#39, cr_returning_addr_sk#40, cr_return_amt_inc_tax#41]
+Input [5]: [cr_returning_customer_sk#39, cr_returning_addr_sk#40, cr_return_amt_inc_tax#41, cr_returned_date_sk#42, d_date_sk#43]
 
 (41) Exchange
-Input [3]: [cr_returning_customer_sk#40, cr_returning_addr_sk#41, cr_return_amt_inc_tax#42]
-Arguments: hashpartitioning(cr_returning_addr_sk#41, 5), ENSURE_REQUIREMENTS, [id=#45]
+Input [3]: [cr_returning_customer_sk#39, cr_returning_addr_sk#40, cr_return_amt_inc_tax#41]
+Arguments: hashpartitioning(cr_returning_addr_sk#40, 5), ENSURE_REQUIREMENTS, [id=#44]
 
 (42) Sort [codegen id : 14]
-Input [3]: [cr_returning_customer_sk#40, cr_returning_addr_sk#41, cr_return_amt_inc_tax#42]
-Arguments: [cr_returning_addr_sk#41 ASC NULLS FIRST], false, 0
+Input [3]: [cr_returning_customer_sk#39, cr_returning_addr_sk#40, cr_return_amt_inc_tax#41]
+Arguments: [cr_returning_addr_sk#40 ASC NULLS FIRST], false, 0
 
 (43) ReusedExchange [Reuses operator id: 23]
-Output [2]: [ca_address_sk#46, ca_state#47]
+Output [2]: [ca_address_sk#45, ca_state#46]
 
 (44) Sort [codegen id : 16]
-Input [2]: [ca_address_sk#46, ca_state#47]
-Arguments: [ca_address_sk#46 ASC NULLS FIRST], false, 0
+Input [2]: [ca_address_sk#45, ca_state#46]
+Arguments: [ca_address_sk#45 ASC NULLS FIRST], false, 0
 
 (45) SortMergeJoin [codegen id : 17]
-Left keys [1]: [cr_returning_addr_sk#41]
-Right keys [1]: [ca_address_sk#46]
+Left keys [1]: [cr_returning_addr_sk#40]
+Right keys [1]: [ca_address_sk#45]
 Join condition: None
 
 (46) Project [codegen id : 17]
-Output [3]: [cr_returning_customer_sk#40, cr_return_amt_inc_tax#42, ca_state#47]
-Input [5]: [cr_returning_customer_sk#40, cr_returning_addr_sk#41, cr_return_amt_inc_tax#42, ca_address_sk#46, ca_state#47]
+Output [3]: [cr_returning_customer_sk#39, cr_return_amt_inc_tax#41, ca_state#46]
+Input [5]: [cr_returning_customer_sk#39, cr_returning_addr_sk#40, cr_return_amt_inc_tax#41, ca_address_sk#45, ca_state#46]
 
 (47) HashAggregate [codegen id : 17]
-Input [3]: [cr_returning_customer_sk#40, cr_return_amt_inc_tax#42, ca_state#47]
-Keys [2]: [cr_returning_customer_sk#40, ca_state#47]
-Functions [1]: [partial_sum(UnscaledValue(cr_return_amt_inc_tax#42))]
-Aggregate Attributes [1]: [sum#48]
-Results [3]: [cr_returning_customer_sk#40, ca_state#47, sum#49]
+Input [3]: [cr_returning_customer_sk#39, cr_return_amt_inc_tax#41, ca_state#46]
+Keys [2]: [cr_returning_customer_sk#39, ca_state#46]
+Functions [1]: [partial_sum(UnscaledValue(cr_return_amt_inc_tax#41))]
+Aggregate Attributes [1]: [sum#47]
+Results [3]: [cr_returning_customer_sk#39, ca_state#46, sum#48]
 
 (48) Exchange
-Input [3]: [cr_returning_customer_sk#40, ca_state#47, sum#49]
-Arguments: hashpartitioning(cr_returning_customer_sk#40, ca_state#47, 5), ENSURE_REQUIREMENTS, [id=#50]
+Input [3]: [cr_returning_customer_sk#39, ca_state#46, sum#48]
+Arguments: hashpartitioning(cr_returning_customer_sk#39, ca_state#46, 5), ENSURE_REQUIREMENTS, [id=#49]
 
 (49) HashAggregate [codegen id : 18]
-Input [3]: [cr_returning_customer_sk#40, ca_state#47, sum#49]
-Keys [2]: [cr_returning_customer_sk#40, ca_state#47]
-Functions [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#42))]
-Aggregate Attributes [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#42))#51]
-Results [2]: [ca_state#47 AS ctr_state#36, MakeDecimal(sum(UnscaledValue(cr_return_amt_inc_tax#42))#51,17,2) AS ctr_total_return#37]
+Input [3]: [cr_returning_customer_sk#39, ca_state#46, sum#48]
+Keys [2]: [cr_returning_customer_sk#39, ca_state#46]
+Functions [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#41))]
+Aggregate Attributes [1]: [sum(UnscaledValue(cr_return_amt_inc_tax#41))#50]
+Results [2]: [ca_state#46 AS ctr_state#36, MakeDecimal(sum(UnscaledValue(cr_return_amt_inc_tax#41))#50,17,2) AS ctr_total_return#37]
 
 (50) HashAggregate [codegen id : 18]
 Input [2]: [ctr_state#36, ctr_total_return#37]
 Keys [1]: [ctr_state#36]
 Functions [1]: [partial_avg(ctr_total_return#37)]
-Aggregate Attributes [2]: [sum#52, count#53]
-Results [3]: [ctr_state#36, sum#54, count#55]
+Aggregate Attributes [2]: [sum#51, count#52]
+Results [3]: [ctr_state#36, sum#53, count#54]
 
 (51) Exchange
-Input [3]: [ctr_state#36, sum#54, count#55]
-Arguments: hashpartitioning(ctr_state#36, 5), ENSURE_REQUIREMENTS, [id=#56]
+Input [3]: [ctr_state#36, sum#53, count#54]
+Arguments: hashpartitioning(ctr_state#36, 5), ENSURE_REQUIREMENTS, [id=#55]
 
 (52) HashAggregate [codegen id : 19]
-Input [3]: [ctr_state#36, sum#54, count#55]
+Input [3]: [ctr_state#36, sum#53, count#54]
 Keys [1]: [ctr_state#36]
 Functions [1]: [avg(ctr_total_return#37)]
-Aggregate Attributes [1]: [avg(ctr_total_return#37)#57]
-Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#37)#57) * 1.200000), DecimalType(24,7), true) AS (avg(ctr_total_return) * 1.2)#58, ctr_state#36 AS ctr_state#36#59]
+Aggregate Attributes [1]: [avg(ctr_total_return#37)#56]
+Results [2]: [CheckOverflow((promote_precision(avg(ctr_total_return#37)#56) * 1.200000), DecimalType(24,7), true) AS (avg(ctr_total_return) * 1.2)#57, ctr_state#36 AS ctr_state#36#58]
 
 (53) Filter [codegen id : 19]
-Input [2]: [(avg(ctr_total_return) * 1.2)#58, ctr_state#36#59]
-Condition : isnotnull((avg(ctr_total_return) * 1.2)#58)
+Input [2]: [(avg(ctr_total_return) * 1.2)#57, ctr_state#36#58]
+Condition : isnotnull((avg(ctr_total_return) * 1.2)#57)
 
 (54) BroadcastExchange
-Input [2]: [(avg(ctr_total_return) * 1.2)#58, ctr_state#36#59]
-Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [id=#60]
+Input [2]: [(avg(ctr_total_return) * 1.2)#57, ctr_state#36#58]
+Arguments: HashedRelationBroadcastMode(List(input[1, string, true]),false), [id=#59]
 
 (55) BroadcastHashJoin [codegen id : 20]
 Left keys [1]: [ctr_state#36]
-Right keys [1]: [ctr_state#36#59]
-Join condition: (CAST(ctr1.ctr_total_return AS DECIMAL(24,7))#39 > (avg(ctr_total_return) * 1.2)#58)
+Right keys [1]: [ctr_state#36#58]
+Join condition: (cast(ctr_total_return#37 as decimal(24,7)) > (avg(ctr_total_return) * 1.2)#57)
 
 (56) Project [codegen id : 20]
 Output [16]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_total_return#37]
-Input [20]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_state#36, ctr_total_return#37, CAST(ctr1.ctr_total_return AS DECIMAL(24,7))#39, (avg(ctr_total_return) * 1.2)#58, ctr_state#36#59]
+Input [19]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_state#36, ctr_total_return#37, (avg(ctr_total_return) * 1.2)#57, ctr_state#36#58]
 
 (57) TakeOrderedAndProject
 Input [16]: [c_customer_id#2, c_salutation#4, c_first_name#5, c_last_name#6, ca_street_number#8, ca_street_name#9, ca_street_type#10, ca_suite_number#11, ca_city#12, ca_county#13, ca_state#14, ca_zip#15, ca_country#16, ca_gmt_offset#17, ca_location_type#18, ctr_total_return#37]
@@ -331,27 +331,27 @@ BroadcastExchange (62)
 
 
 (58) Scan parquet default.date_dim
-Output [2]: [d_date_sk#26, d_year#61]
+Output [2]: [d_date_sk#26, d_year#60]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), EqualTo(d_year,2000), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int>
 
 (59) ColumnarToRow [codegen id : 1]
-Input [2]: [d_date_sk#26, d_year#61]
+Input [2]: [d_date_sk#26, d_year#60]
 
 (60) Filter [codegen id : 1]
-Input [2]: [d_date_sk#26, d_year#61]
-Condition : ((isnotnull(d_year#61) AND (d_year#61 = 2000)) AND isnotnull(d_date_sk#26))
+Input [2]: [d_date_sk#26, d_year#60]
+Condition : ((isnotnull(d_year#60) AND (d_year#60 = 2000)) AND isnotnull(d_date_sk#26))
 
 (61) Project [codegen id : 1]
 Output [1]: [d_date_sk#26]
-Input [2]: [d_date_sk#26, d_year#61]
+Input [2]: [d_date_sk#26, d_year#60]
 
 (62) BroadcastExchange
 Input [1]: [d_date_sk#26]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#62]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#61]
 
-Subquery:2 Hosting operator id = 35 Hosting Expression = cr_returned_date_sk#43 IN dynamicpruning#25
+Subquery:2 Hosting operator id = 35 Hosting Expression = cr_returned_date_sk#42 IN dynamicpruning#25
 
 

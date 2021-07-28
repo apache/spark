@@ -101,7 +101,7 @@ WholeStageCodegen (14)
                     WholeStageCodegen (12)
                       HashAggregate [c_last_name,c_first_name,s_store_name,ca_state,s_state,i_color,i_current_price,i_manager_id,i_units,i_size,ss_net_paid] [sum,sum]
                         Project [ss_net_paid,s_store_name,s_state,i_current_price,i_size,i_color,i_units,i_manager_id,c_first_name,c_last_name,ca_state]
-                          BroadcastHashJoin [ss_store_sk,c_birth_country,s_store_sk,upper(spark_catalog.default.customer_address.ca_country)]
+                          BroadcastHashJoin [ss_store_sk,c_birth_country,s_store_sk,ca_country]
                             Project [ss_store_sk,ss_net_paid,i_current_price,i_size,i_color,i_units,i_manager_id,c_first_name,c_last_name,c_birth_country]
                               SortMergeJoin [ss_ticket_number,ss_item_sk,sr_ticket_number,sr_item_sk]
                                 InputAdapter

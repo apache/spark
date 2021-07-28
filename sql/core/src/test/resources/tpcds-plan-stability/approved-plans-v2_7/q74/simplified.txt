@@ -1,8 +1,8 @@
 TakeOrderedAndProject [customer_first_name,customer_id,customer_last_name]
   WholeStageCodegen (16)
     Project [customer_id,customer_first_name,customer_last_name]
-      BroadcastHashJoin [customer_id,customer_id,year_total,year_total,CASE WHEN (t_s_firstyear.year_total > 0.00BD) THEN (t_s_secyear.year_total / t_s_firstyear.year_total) ELSE CAST(NULL AS DECIMAL(37,20)) END]
-        Project [customer_id,customer_id,customer_first_name,customer_last_name,year_total,year_total,year_total]
+      BroadcastHashJoin [customer_id,customer_id,year_total,year_total,year_total,year_total]
+        Project [customer_id,year_total,customer_id,customer_first_name,customer_last_name,year_total,year_total]
           BroadcastHashJoin [customer_id,customer_id]
             BroadcastHashJoin [customer_id,customer_id]
               Filter [year_total]

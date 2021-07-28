@@ -4,7 +4,7 @@ WholeStageCodegen (43)
       Exchange [ca_county] #1
         WholeStageCodegen (42)
           Project [ca_county,d_year,web_sales,web_sales,store_sales,store_sales,web_sales,store_sales]
-            BroadcastHashJoin [ca_county,ca_county,CASE WHEN (ws1.web_sales > 0.00BD) THEN (ws2.web_sales / ws1.web_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END,CASE WHEN (ss1.store_sales > 0.00BD) THEN (ss2.store_sales / ss1.store_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END,CASE WHEN (ws2.web_sales > 0.00BD) THEN (ws3.web_sales / ws2.web_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END,CASE WHEN (ss2.store_sales > 0.00BD) THEN (ss3.store_sales / ss2.store_sales) ELSE CAST(NULL AS DECIMAL(37,20)) END]
+            BroadcastHashJoin [ca_county,ca_county,web_sales,web_sales,store_sales,store_sales,web_sales,store_sales]
               Project [store_sales,store_sales,ca_county,d_year,store_sales]
                 BroadcastHashJoin [ca_county,ca_county]
                   Project [ca_county,store_sales,store_sales]

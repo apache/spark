@@ -182,21 +182,21 @@ Right keys [1]: [d_week_seq#69]
 Join condition: None
 
 (32) Project [codegen id : 11]
-Output [8]: [sun_sales#35 AS sun_sales2#72, mon_sales#36 AS mon_sales2#73, tue_sales#37 AS tue_sales2#74, wed_sales#38 AS wed_sales2#75, thu_sales#39 AS thu_sales2#76, fri_sales#40 AS fri_sales2#77, sat_sales#41 AS sat_sales2#78, (d_week_seq#53 - 53) AS (z.d_week_seq2 - 53)#79]
+Output [8]: [d_week_seq#53 AS d_week_seq2#72, sun_sales#35 AS sun_sales2#73, mon_sales#36 AS mon_sales2#74, tue_sales#37 AS tue_sales2#75, wed_sales#38 AS wed_sales2#76, thu_sales#39 AS thu_sales2#77, fri_sales#40 AS fri_sales2#78, sat_sales#41 AS sat_sales2#79]
 Input [9]: [d_week_seq#53, sun_sales#35, mon_sales#36, tue_sales#37, wed_sales#38, thu_sales#39, fri_sales#40, sat_sales#41, d_week_seq#69]
 
 (33) BroadcastExchange
-Input [8]: [sun_sales2#72, mon_sales2#73, tue_sales2#74, wed_sales2#75, thu_sales2#76, fri_sales2#77, sat_sales2#78, (z.d_week_seq2 - 53)#79]
-Arguments: HashedRelationBroadcastMode(List(cast(input[7, int, true] as bigint)),false), [id=#80]
+Input [8]: [d_week_seq2#72, sun_sales2#73, mon_sales2#74, tue_sales2#75, wed_sales2#76, thu_sales2#77, fri_sales2#78, sat_sales2#79]
+Arguments: HashedRelationBroadcastMode(List(cast((input[0, int, true] - 53) as bigint)),false), [id=#80]
 
 (34) BroadcastHashJoin [codegen id : 12]
 Left keys [1]: [d_week_seq1#45]
-Right keys [1]: [(z.d_week_seq2 - 53)#79]
+Right keys [1]: [(d_week_seq2#72 - 53)]
 Join condition: None
 
 (35) Project [codegen id : 12]
-Output [8]: [d_week_seq1#45, round(CheckOverflow((promote_precision(sun_sales1#46) / promote_precision(sun_sales2#72)), DecimalType(37,20), true), 2) AS round((sun_sales1 / sun_sales2), 2)#81, round(CheckOverflow((promote_precision(mon_sales1#47) / promote_precision(mon_sales2#73)), DecimalType(37,20), true), 2) AS round((mon_sales1 / mon_sales2), 2)#82, round(CheckOverflow((promote_precision(tue_sales1#48) / promote_precision(tue_sales2#74)), DecimalType(37,20), true), 2) AS round((tue_sales1 / tue_sales2), 2)#83, round(CheckOverflow((promote_precision(wed_sales1#49) / promote_precision(wed_sales2#75)), DecimalType(37,20), true), 2) AS round((wed_sales1 / wed_sales2), 2)#84, round(CheckOverflow((promote_precision(thu_sales1#50) / promote_precision(thu_sales2#76)), DecimalType(37,20), true), 2) AS round((thu_sales1 / thu_sales2), 2)#85, round(CheckOverflow((promote_precision(fri_sales1#51) / promote_precision(fri_sales2#77)), DecimalType(37,20), true), 2) AS round((fri_sales1 / fri_sales2), 2)#86, round(CheckOverflow((promote_precision(sat_sales1#52) / promote_precision(sat_sales2#78)), DecimalType(37,20), true), 2) AS round((sat_sales1 / sat_sales2), 2)#87]
-Input [16]: [d_week_seq1#45, sun_sales1#46, mon_sales1#47, tue_sales1#48, wed_sales1#49, thu_sales1#50, fri_sales1#51, sat_sales1#52, sun_sales2#72, mon_sales2#73, tue_sales2#74, wed_sales2#75, thu_sales2#76, fri_sales2#77, sat_sales2#78, (z.d_week_seq2 - 53)#79]
+Output [8]: [d_week_seq1#45, round(CheckOverflow((promote_precision(sun_sales1#46) / promote_precision(sun_sales2#73)), DecimalType(37,20), true), 2) AS round((sun_sales1 / sun_sales2), 2)#81, round(CheckOverflow((promote_precision(mon_sales1#47) / promote_precision(mon_sales2#74)), DecimalType(37,20), true), 2) AS round((mon_sales1 / mon_sales2), 2)#82, round(CheckOverflow((promote_precision(tue_sales1#48) / promote_precision(tue_sales2#75)), DecimalType(37,20), true), 2) AS round((tue_sales1 / tue_sales2), 2)#83, round(CheckOverflow((promote_precision(wed_sales1#49) / promote_precision(wed_sales2#76)), DecimalType(37,20), true), 2) AS round((wed_sales1 / wed_sales2), 2)#84, round(CheckOverflow((promote_precision(thu_sales1#50) / promote_precision(thu_sales2#77)), DecimalType(37,20), true), 2) AS round((thu_sales1 / thu_sales2), 2)#85, round(CheckOverflow((promote_precision(fri_sales1#51) / promote_precision(fri_sales2#78)), DecimalType(37,20), true), 2) AS round((fri_sales1 / fri_sales2), 2)#86, round(CheckOverflow((promote_precision(sat_sales1#52) / promote_precision(sat_sales2#79)), DecimalType(37,20), true), 2) AS round((sat_sales1 / sat_sales2), 2)#87]
+Input [16]: [d_week_seq1#45, sun_sales1#46, mon_sales1#47, tue_sales1#48, wed_sales1#49, thu_sales1#50, fri_sales1#51, sat_sales1#52, d_week_seq2#72, sun_sales2#73, mon_sales2#74, tue_sales2#75, wed_sales2#76, thu_sales2#77, fri_sales2#78, sat_sales2#79]
 
 (36) Exchange
 Input [8]: [d_week_seq1#45, round((sun_sales1 / sun_sales2), 2)#81, round((mon_sales1 / mon_sales2), 2)#82, round((tue_sales1 / tue_sales2), 2)#83, round((wed_sales1 / wed_sales2), 2)#84, round((thu_sales1 / thu_sales2), 2)#85, round((fri_sales1 / fri_sales2), 2)#86, round((sat_sales1 / sat_sales2), 2)#87]

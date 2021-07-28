@@ -270,21 +270,21 @@ Right keys [1]: [d_week_seq#83]
 Join condition: None
 
 (47) Project [codegen id : 9]
-Output [8]: [s_store_id#80 AS s_store_id2#85, sun_sales#30 AS sun_sales2#86, mon_sales#31 AS mon_sales2#87, wed_sales#33 AS wed_sales2#88, thu_sales#34 AS thu_sales2#89, fri_sales#35 AS fri_sales2#90, sat_sales#36 AS sat_sales2#91, (d_week_seq#58 - 52) AS (x.d_week_seq2 - 52)#92]
+Output [8]: [d_week_seq#58 AS d_week_seq2#85, s_store_id#80 AS s_store_id2#86, sun_sales#30 AS sun_sales2#87, mon_sales#31 AS mon_sales2#88, wed_sales#33 AS wed_sales2#89, thu_sales#34 AS thu_sales2#90, fri_sales#35 AS fri_sales2#91, sat_sales#36 AS sat_sales2#92]
 Input [9]: [d_week_seq#58, sun_sales#30, mon_sales#31, wed_sales#33, thu_sales#34, fri_sales#35, sat_sales#36, s_store_id#80, d_week_seq#83]
 
 (48) BroadcastExchange
-Input [8]: [s_store_id2#85, sun_sales2#86, mon_sales2#87, wed_sales2#88, thu_sales2#89, fri_sales2#90, sat_sales2#91, (x.d_week_seq2 - 52)#92]
-Arguments: HashedRelationBroadcastMode(List(input[0, string, true], input[7, int, true]),false), [id=#93]
+Input [8]: [d_week_seq2#85, s_store_id2#86, sun_sales2#87, mon_sales2#88, wed_sales2#89, thu_sales2#90, fri_sales2#91, sat_sales2#92]
+Arguments: HashedRelationBroadcastMode(List(input[1, string, true], (input[0, int, true] - 52)),false), [id=#93]
 
 (49) BroadcastHashJoin [codegen id : 10]
 Left keys [2]: [s_store_id1#46, d_week_seq1#45]
-Right keys [2]: [s_store_id2#85, (x.d_week_seq2 - 52)#92]
+Right keys [2]: [s_store_id2#86, (d_week_seq2#85 - 52)]
 Join condition: None
 
 (50) Project [codegen id : 10]
-Output [10]: [s_store_name1#44, s_store_id1#46, d_week_seq1#45, CheckOverflow((promote_precision(sun_sales1#47) / promote_precision(sun_sales2#86)), DecimalType(37,20), true) AS (sun_sales1 / sun_sales2)#94, CheckOverflow((promote_precision(mon_sales1#48) / promote_precision(mon_sales2#87)), DecimalType(37,20), true) AS (mon_sales1 / mon_sales2)#95, CheckOverflow((promote_precision(tue_sales1#49) / promote_precision(tue_sales1#49)), DecimalType(37,20), true) AS (tue_sales1 / tue_sales1)#96, CheckOverflow((promote_precision(wed_sales1#50) / promote_precision(wed_sales2#88)), DecimalType(37,20), true) AS (wed_sales1 / wed_sales2)#97, CheckOverflow((promote_precision(thu_sales1#51) / promote_precision(thu_sales2#89)), DecimalType(37,20), true) AS (thu_sales1 / thu_sales2)#98, CheckOverflow((promote_precision(fri_sales1#52) / promote_precision(fri_sales2#90)), DecimalType(37,20), true) AS (fri_sales1 / fri_sales2)#99, CheckOverflow((promote_precision(sat_sales1#53) / promote_precision(sat_sales2#91)), DecimalType(37,20), true) AS (sat_sales1 / sat_sales2)#100]
-Input [18]: [s_store_name1#44, d_week_seq1#45, s_store_id1#46, sun_sales1#47, mon_sales1#48, tue_sales1#49, wed_sales1#50, thu_sales1#51, fri_sales1#52, sat_sales1#53, s_store_id2#85, sun_sales2#86, mon_sales2#87, wed_sales2#88, thu_sales2#89, fri_sales2#90, sat_sales2#91, (x.d_week_seq2 - 52)#92]
+Output [10]: [s_store_name1#44, s_store_id1#46, d_week_seq1#45, CheckOverflow((promote_precision(sun_sales1#47) / promote_precision(sun_sales2#87)), DecimalType(37,20), true) AS (sun_sales1 / sun_sales2)#94, CheckOverflow((promote_precision(mon_sales1#48) / promote_precision(mon_sales2#88)), DecimalType(37,20), true) AS (mon_sales1 / mon_sales2)#95, CheckOverflow((promote_precision(tue_sales1#49) / promote_precision(tue_sales1#49)), DecimalType(37,20), true) AS (tue_sales1 / tue_sales1)#96, CheckOverflow((promote_precision(wed_sales1#50) / promote_precision(wed_sales2#89)), DecimalType(37,20), true) AS (wed_sales1 / wed_sales2)#97, CheckOverflow((promote_precision(thu_sales1#51) / promote_precision(thu_sales2#90)), DecimalType(37,20), true) AS (thu_sales1 / thu_sales2)#98, CheckOverflow((promote_precision(fri_sales1#52) / promote_precision(fri_sales2#91)), DecimalType(37,20), true) AS (fri_sales1 / fri_sales2)#99, CheckOverflow((promote_precision(sat_sales1#53) / promote_precision(sat_sales2#92)), DecimalType(37,20), true) AS (sat_sales1 / sat_sales2)#100]
+Input [18]: [s_store_name1#44, d_week_seq1#45, s_store_id1#46, sun_sales1#47, mon_sales1#48, tue_sales1#49, wed_sales1#50, thu_sales1#51, fri_sales1#52, sat_sales1#53, d_week_seq2#85, s_store_id2#86, sun_sales2#87, mon_sales2#88, wed_sales2#89, thu_sales2#90, fri_sales2#91, sat_sales2#92]
 
 (51) TakeOrderedAndProject
 Input [10]: [s_store_name1#44, s_store_id1#46, d_week_seq1#45, (sun_sales1 / sun_sales2)#94, (mon_sales1 / mon_sales2)#95, (tue_sales1 / tue_sales1)#96, (wed_sales1 / wed_sales2)#97, (thu_sales1 / thu_sales2)#98, (fri_sales1 / fri_sales2)#99, (sat_sales1 / sat_sales2)#100]

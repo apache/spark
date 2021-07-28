@@ -25,10 +25,12 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.JOIN
 /**
  * Push down join condition evaluation to reduce eval expressions in join condition.
  */
-object PushDownJoinConditionEvaluation extends Rule[LogicalPlan] with PredicateHelper {
+object PushDownJoinConditionEvaluation extends Rule[LogicalPlan]
+  with JoinSelectionHelper with PredicateHelper {
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(JOIN), ruleId) {
-    case j @ Join(left, right, _, Some(condition), _) =>
+    case j @ Join(left, right, _, Some(condition), _) if !canPlanAsBroadcastHashJoin(j, conf) =>
       val expressions = splitConjunctivePredicates(condition).flatMap(_.children).flatMap {
         case e: Expression if e.children.nonEmpty => Seq(e)
         case _ => Nil
@@ -40,18 +42,22 @@ object PushDownJoinConditionEvaluation extends Rule[LogicalPlan] with PredicateH
       val leftAlias = leftKeys.map(e => Alias(e, e.sql)())
       val rightAlias = rightKeys.map(e => Alias(e, e.sql)())
 
-      val newLeft = if (leftAlias.nonEmpty) Project(left.output ++ leftAlias, left) else left
-      val newRight = if (rightAlias.nonEmpty) Project(right.output ++ rightAlias, right) else right
-
-      val map = leftKeys.zip(leftAlias).toMap ++ rightKeys.zip(rightAlias).toMap
-      val newCondition = if (leftAlias.nonEmpty || rightAlias.nonEmpty) {
-        condition.transformDown {
-          case e: Expression if e.references.nonEmpty && map.contains(e) => map(e).toAttribute
+      if (leftAlias.nonEmpty || rightAlias.nonEmpty) {
+        val pushedPairs = leftKeys.zip(leftAlias).toMap ++ rightKeys.zip(rightAlias).toMap
+        val newLeft = Project(left.output ++ leftAlias, left)
+        val newRight = Project(right.output ++ rightAlias, right)
+        val newCondition = if (leftAlias.nonEmpty || rightAlias.nonEmpty) {
+          condition.transformDown {
+            case e: Expression if e.references.nonEmpty && pushedPairs.contains(e) =>
+              pushedPairs(e).toAttribute
+          }
+        } else {
+          condition
         }
+        Project(j.output, j.copy(left = newLeft, right = newRight, condition = Some(newCondition)))
       } else {
-        condition
+        j
       }
 
-      j.copy(left = newLeft, right = newRight, condition = Some(newCondition))
   }
 }

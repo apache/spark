@@ -8,7 +8,7 @@ TakeOrderedAndProject [ca_zip,sum(cs_sales_price)]
               Project [cs_sales_price,ca_zip]
                 BroadcastHashJoin [cs_sold_date_sk,d_date_sk]
                   Project [cs_sales_price,cs_sold_date_sk,ca_zip]
-                    BroadcastHashJoin [c_current_addr_sk,ca_address_sk,((substr(spark_catalog.default.customer_address.ca_zip, 1, 5) IN ('85669', '86197', '88274', '83405', '86475', '85392', '85460', '80348', '81792')) OR (spark_catalog.default.customer_address.ca_state IN ('CA', 'WA', 'GA'))),(spark_catalog.default.catalog_sales.cs_sales_price > 500.00BD)]
+                    BroadcastHashJoin [c_current_addr_sk,ca_address_sk,ca_zip,ca_state,cs_sales_price]
                       Project [cs_sales_price,cs_sold_date_sk,c_current_addr_sk]
                         BroadcastHashJoin [cs_bill_customer_sk,c_customer_sk]
                           Filter [cs_bill_customer_sk]
@@ -33,10 +33,9 @@ TakeOrderedAndProject [ca_zip,sum(cs_sales_price)]
                       InputAdapter
                         BroadcastExchange #4
                           WholeStageCodegen (2)
-                            Project [ca_address_sk,ca_zip,ca_state]
-                              Filter [ca_address_sk]
-                                ColumnarToRow
-                                  InputAdapter
-                                    Scan parquet default.customer_address [ca_address_sk,ca_state,ca_zip]
+                            Filter [ca_address_sk]
+                              ColumnarToRow
+                                InputAdapter
+                                  Scan parquet default.customer_address [ca_address_sk,ca_state,ca_zip]
                   InputAdapter
                     ReusedExchange [d_date_sk] #2

@@ -50,12 +50,11 @@ TakeOrderedAndProject [s_store_name,sum(ss_net_profit)]
                                     WholeStageCodegen (11)
                                       HashAggregate [ca_zip]
                                         Project [ca_zip]
-                                          BroadcastHashJoin [substr(spark_catalog.default.customer_address.ca_zip, 1, 5),ca_zip]
-                                            Project [ca_zip]
-                                              Filter [ca_zip]
-                                                ColumnarToRow
-                                                  InputAdapter
-                                                    Scan parquet default.customer_address [ca_zip]
+                                          BroadcastHashJoin [ca_zip,ca_zip]
+                                            Filter [ca_zip]
+                                              ColumnarToRow
+                                                InputAdapter
+                                                  Scan parquet default.customer_address [ca_zip]
                                             InputAdapter
                                               BroadcastExchange #7
                                                 WholeStageCodegen (10)
