@@ -30,6 +30,7 @@ import org.apache.hadoop.conf.Configuration
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 import org.rocksdb.{RocksDB => NativeRocksDB, _}
+import org.rocksdb.TickerType._
 
 import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
@@ -114,6 +115,9 @@ class RocksDB(
         numKeysOnLoadedVersion = metadata.numKeys
         loadedVersion = version
         fileManagerMetrics = fileManager.latestLoadCheckpointMetrics
+      }
+      if (conf.resetStatsOnLoad) {
+        nativeStats.reset
       }
       writeBatch.clear()
       logInfo(s"Loaded $version")
@@ -241,8 +245,8 @@ class RocksDB(
         logInfo("Compacting")
         timeTakenMs { db.compactRange() }
       } else 0
-      logInfo("Pausing background work")
 
+      logInfo("Pausing background work")
       val pauseTimeMs = timeTakenMs {
         db.pauseBackgroundWork() // To avoid files being changed while committing
       }
@@ -331,9 +335,34 @@ class RocksDB(
     val totalSSTFilesBytes = getDBProperty("rocksdb.total-sst-files-size")
     val readerMemUsage = getDBProperty("rocksdb.estimate-table-readers-mem")
     val memTableMemUsage = getDBProperty("rocksdb.size-all-mem-tables")
-    val nativeOps = Seq("get" -> DB_GET, "put" -> DB_WRITE).toMap
-    val nativeOpsLatencyMicros = nativeOps.mapValues { typ =>
+    val nativeOpsHistograms = Seq(
+      "get" -> DB_GET,
+      "put" -> DB_WRITE,
+      "compaction" -> COMPACTION_TIME
+    ).toMap
+    val nativeOpsLatencyMicros = nativeOpsHistograms.mapValues { typ =>
       RocksDBNativeHistogram(nativeStats.getHistogramData(typ))
+    }
+    val nativeOpsMetricTickers = Seq(
+      /** Number of cache misses that required reading from local disk */
+      "readBlockCacheMissCount" -> BLOCK_CACHE_MISS,
+      /** Number of cache hits that read data from RocksDB block cache avoiding local disk read */
+      "readBlockCacheHitCount" -> BLOCK_CACHE_HIT,
+      /** Number of uncompressed bytes read (from memtables/cache/sst) from DB::Get() */
+      "totalBytesRead" -> BYTES_READ,
+      /** Number of uncompressed bytes issued by DB::{Put(), Delete(), Merge(), Write()} */
+      "totalBytesWritten" -> BYTES_WRITTEN,
+      /** The number of uncompressed bytes read from an iterator. */
+      "totalBytesReadThroughIterator" -> ITER_BYTES_READ,
+      /** Duration of writer requiring to wait for compaction or flush to finish. */
+      "writerStallDuration" -> STALL_MICROS,
+      /** Number of bytes read during compaction */
+      "totalBytesReadByCompaction" -> COMPACT_READ_BYTES,
+      /** Number of bytes written during compaction */
+      "totalBytesWrittenByCompaction" -> COMPACT_WRITE_BYTES
+    ).toMap
+    val nativeOpsMetrics = nativeOpsMetricTickers.mapValues { typ =>
+      nativeStats.getTickerCount(typ)
     }
 
     RocksDBMetrics(
@@ -346,7 +375,8 @@ class RocksDB(
       bytesCopied = fileManagerMetrics.bytesCopied,
       filesCopied = fileManagerMetrics.filesCopied,
       filesReused = fileManagerMetrics.filesReused,
-      zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed)
+      zipFileBytesUncompressed = fileManagerMetrics.zipFileBytesUncompressed,
+      nativeOpsMetrics = nativeOpsMetrics.toMap)
   }
 
   private def acquire(): Unit = acquireLock.synchronized {
@@ -466,7 +496,8 @@ case class RocksDBConf(
     pauseBackgroundWorkForCommit: Boolean,
     blockSizeKB: Long,
     blockCacheSizeMB: Long,
-    lockAcquireTimeoutMs: Long)
+    lockAcquireTimeoutMs: Long,
+    resetStatsOnLoad : Boolean)
 
 object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
@@ -482,6 +513,7 @@ object RocksDBConf {
   private val BLOCK_SIZE_KB_CONF = ConfEntry("blockSizeKB", "4")
   private val BLOCK_CACHE_SIZE_MB_CONF = ConfEntry("blockCacheSizeMB", "8")
   private val LOCK_ACQUIRE_TIMEOUT_MS_CONF = ConfEntry("lockAcquireTimeoutMs", "60000")
+  private val RESET_STATS_ON_LOAD = ConfEntry("resetStatsOnLoad", "true")
 
   def apply(storeConf: StateStoreConf): RocksDBConf = {
     val confs = CaseInsensitiveMap[String](storeConf.confs)
@@ -505,7 +537,8 @@ object RocksDBConf {
       getBooleanConf(PAUSE_BG_WORK_FOR_COMMIT_CONF),
       getPositiveLongConf(BLOCK_SIZE_KB_CONF),
       getPositiveLongConf(BLOCK_CACHE_SIZE_MB_CONF),
-      getPositiveLongConf(LOCK_ACQUIRE_TIMEOUT_MS_CONF))
+      getPositiveLongConf(LOCK_ACQUIRE_TIMEOUT_MS_CONF),
+      getBooleanConf(RESET_STATS_ON_LOAD))
   }
 
   def apply(): RocksDBConf = apply(new StateStoreConf())
@@ -517,12 +550,13 @@ case class RocksDBMetrics(
     numUncommittedKeys: Long,
     memUsageBytes: Long,
     totalSSTFilesBytes: Long,
-    nativeOpsLatencyMicros: Map[String, RocksDBNativeHistogram],
+    nativeOpsHistograms: Map[String, RocksDBNativeHistogram],
     lastCommitLatencyMs: Map[String, Long],
     filesCopied: Long,
     bytesCopied: Long,
     filesReused: Long,
-    zipFileBytesUncompressed: Option[Long]) {
+    zipFileBytesUncompressed: Option[Long],
+    nativeOpsMetrics: Map[String, Long]) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
 
@@ -532,18 +566,20 @@ object RocksDBMetrics {
 
 /** Class to wrap RocksDB's native histogram */
 case class RocksDBNativeHistogram(
-    avg: Double, stddev: Double, median: Double, p95: Double, p99: Double) {
+    sum: Long, avg: Double, stddev: Double, median: Double, p95: Double, p99: Double, count: Long) {
   def json: String = Serialization.write(this)(RocksDBMetrics.format)
 }
 
 object RocksDBNativeHistogram {
   def apply(nativeHist: HistogramData): RocksDBNativeHistogram = {
     RocksDBNativeHistogram(
+      nativeHist.getSum,
       nativeHist.getAverage,
       nativeHist.getStandardDeviation,
       nativeHist.getMedian,
       nativeHist.getPercentile95,
-      nativeHist.getPercentile99)
+      nativeHist.getPercentile99,
+      nativeHist.getCount)
   }
 }
 
