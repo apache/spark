@@ -53,10 +53,19 @@ object NumberConverter {
     val bound = java.lang.Long.divideUnsigned(-1 - radix, radix)
     var i = fromPos
     while (i < value.length && value(i) >= 0) {
+      // if v < 0, which mean its bit presentation is start with 1, so v * radix will cause
+      // overflow since radix is greater than 2
+      if (v < 0) {
+        return -1
+      }
       // check if v greater than bound
-      if (v >= bound || v < 0) {
-        // Check for overflow
-        if (java.lang.Long.divideUnsigned(-1 - value(i), radix) < v || v < 0) {
+      // if v is greater than bound, v * radix + radix will cause overflow.
+      if (v >= bound) {
+        // However our target is checking whether v * radix + value(i) can cause overflow or not.
+        // Because radix >= 2,so (-1 - value(i)) / radix will be positive (its bit presentation
+        // will start with 0) and we can easily checking for overflow by checking
+        // (-1 - value(i)) / radix < v or not
+        if (java.lang.Long.divideUnsigned(-1 - value(i), radix) < v) {
           return -1
         }
       }
