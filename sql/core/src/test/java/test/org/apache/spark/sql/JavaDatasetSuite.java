@@ -392,7 +392,7 @@ public class JavaDatasetSuite implements Serializable {
 
   @Test
   public void testObservation() {
-    // SPARK-34806: tests the Java API of Observation and Dataset.observe(Observation, Column, Column*)
+    // SPARK-34806: tests the Observation Java API and Dataset.observe(Observation, Column, Column*)
     Observation namedObservation = new Observation("named");
     Observation unnamedObservation = new Observation();
 

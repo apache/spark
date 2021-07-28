@@ -14,7 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql import column, Column, DataFrame, Row
+from pyspark.sql import column
+from pyspark.sql.column import Column
+from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.types import Row
 
 __all__ = ["Observation"]
 
@@ -57,7 +60,7 @@ class Observation:
     >>> observed_df.count()
     2
     >>> observation.get
-    {'count': 2, "max(age)": 5}
+    {'count': 2, 'max(age)': 5}
     """
     def __init__(self, name=None):
         """Constructs a named or unnamed Observation instance.
