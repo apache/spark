@@ -59,6 +59,22 @@ object DataSourceUtils {
   }
 
   /**
+   * Verify if the field name is supported in datasource. This verification should be done
+   * in a driver side.
+   */
+  def checkFieldNames(format: FileFormat, schema: StructType): Unit = {
+    schema.foreach { field =>
+      if (!format.supportFieldName(field.name)) {
+        throw QueryCompilationErrors.columnNameContainsInvalidCharactersError(field.name)
+      }
+      field.dataType match {
+        case s: StructType => checkFieldNames(format, s)
+        case _ =>
+      }
+    }
+  }
+
+  /**
    * Verify if the schema is supported in datasource. This verification should be done
    * in a driver side.
    */

@@ -27,31 +27,25 @@ import org.apache.spark.sql.types.DataType;
  */
 @Evolving
 public final class Sum implements AggregateFunc {
-    private FieldReference column;
-    private DataType dataType;
-    private boolean isDistinct;
+  private final FieldReference column;
+  private final DataType dataType;
+  private final boolean isDistinct;
 
-    public Sum(FieldReference column, DataType dataType, boolean isDistinct) {
-        this.column = column;
-        this.dataType = dataType;
-        this.isDistinct = isDistinct;
-    }
+  public Sum(FieldReference column, DataType dataType, boolean isDistinct) {
+    this.column = column;
+    this.dataType = dataType;
+    this.isDistinct = isDistinct;
+  }
 
-    public FieldReference column() {
-        return column;
-    }
-    public DataType dataType() {
-        return dataType;
-    }
-    public boolean isDinstinct() {
-        return isDistinct;
-    }
+  public FieldReference column() { return column; }
+  public DataType dataType() { return dataType; }
+  public boolean isDistinct() { return isDistinct; }
 
-    @Override
-    public String toString() {
-        return "Sum(" + column.describe() + "," + dataType + "," + isDistinct + ")";
-    }
+  @Override
+  public String toString() {
+    return "Sum(" + column.describe() + "," + dataType + "," + isDistinct + ")";
+  }
 
-    @Override
-    public String describe() { return this.toString(); }
+  @Override
+  public String describe() { return this.toString(); }
 }
