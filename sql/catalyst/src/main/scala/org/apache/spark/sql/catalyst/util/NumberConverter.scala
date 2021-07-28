@@ -49,11 +49,12 @@ object NumberConverter {
    */
   private def encode(radix: Int, fromPos: Int, value: Array[Byte]): Long = {
     var v: Long = 0L
-    // bound will always positive since radix >= 2
+    // bound will always be positive since radix >= 2
+    // Note that: -1 is equivalent to 11111111...1111 which is the largest unsigned long value
     val bound = java.lang.Long.divideUnsigned(-1 - radix, radix)
     var i = fromPos
     while (i < value.length && value(i) >= 0) {
-      // if v < 0, which mean its bit presentation is start with 1, so v * radix will cause
+      // if v < 0, which mean its bit presentation starts with 1, so v * radix will cause
       // overflow since radix is greater than 2
       if (v < 0) {
         return -1
@@ -101,7 +102,7 @@ object NumberConverter {
     while (i < value.length) {
       value(i) = Character.digit(value(i), radix).asInstanceOf[Byte]
       // if invalid characters are found, it no need to convert the suffix starting there
-      if (value(i) < 0) {
+      if (value(i) == -1) {
         return
       }
       i += 1
@@ -130,11 +131,7 @@ object NumberConverter {
     val temp = new Array[Byte](Math.max(n.length, 64))
     var v: Long = -1
 
-    var i = 1
-    while (i <= n.length - first) {
-      temp(temp.length - i) = n(n.length - i)
-      i += 1
-    }
+    System.arraycopy(n, first, temp, temp.length - n.length + first, n.length - first)
     char2byte(fromBase, temp.length - n.length + first, temp)
 
     // Do the conversion by going through a 64 bit integer
