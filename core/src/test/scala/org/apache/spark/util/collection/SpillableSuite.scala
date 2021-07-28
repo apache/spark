@@ -32,12 +32,14 @@ import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.config
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
 import org.apache.spark.serializer.{KryoSerializer, SerializerInstance, SerializerManager}
-import org.apache.spark.storage.{BlockId, BlockManager, DiskBlockManager, DiskBlockObjectWriter, TempShuffleBlockId}
+import org.apache.spark.storage.{BlockId, BlockManager, DiskBlockManager, DiskBlockObjectWriter, TempLocalBlockId, TempShuffleBlockId}
 import org.apache.spark.util.{Utils => UUtils}
 
-class ExternalSorterSpillSuite extends SparkFunSuite with BeforeAndAfterEach {
+class SpillableSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   private val spillFilesCreated = ArrayBuffer.empty[File]
+  private val localFilesCreated = ArrayBuffer.empty[File]
+  private val metricsCreated = ArrayBuffer.empty[ShuffleWriteMetrics]
 
   private var tempDir: File = _
   private var conf: SparkConf = _
@@ -50,6 +52,8 @@ class ExternalSorterSpillSuite extends SparkFunSuite with BeforeAndAfterEach {
   override protected def beforeEach(): Unit = {
     tempDir = UUtils.createTempDir(null, "test")
     spillFilesCreated.clear()
+    localFilesCreated.clear()
+    metricsCreated.clear()
 
     val env: SparkEnv = mock(classOf[SparkEnv])
     SparkEnv.set(env)
@@ -79,6 +83,14 @@ class ExternalSorterSpillSuite extends SparkFunSuite with BeforeAndAfterEach {
         val blockId = TempShuffleBlockId(UUID.randomUUID)
         val file = File.createTempFile("spillFile", ".spill", tempDir)
         spillFilesCreated += file
+        (blockId, file)
+      })
+
+    when(diskBlockManager.createTempLocalBlock())
+      .thenAnswer((_: InvocationOnMock) => {
+        val blockId = TempLocalBlockId(UUID.randomUUID)
+        val file = File.createTempFile("localFile", ".local", tempDir)
+        localFilesCreated += file
         (blockId, file)
       })
   }
@@ -135,13 +147,119 @@ class ExternalSorterSpillSuite extends SparkFunSuite with BeforeAndAfterEach {
     // will remain before SPARK-36242
     assert(!spillFilesCreated(0).exists())
   }
+
+  test("spill method in ExternalSorter") {
+
+    mockDiskBlockObjectWriter()
+
+    // Test data size corresponds to three different scenarios:
+    // 1. spillBatchSize -> `objectsWritten == 0`
+    // 2. spillBatchSize + 1 -> `objectsWritten > 0`
+    // 3. 0 -> Not enter `inMemoryIterator.hasNext` loop and `objectsWritten == 0`
+    val dataSizes = {
+      val spillBatchSize = conf.get(config.SHUFFLE_SPILL_BATCH_SIZE)
+      Seq(spillBatchSize, spillBatchSize + 1, 0)
+    }
+
+    dataSizes.foreach { dataSize =>
+      val dataBuffer = new PartitionedPairBuffer[Int, Int]
+      (0 until dataSize.toInt).foreach(i => dataBuffer.insert(0, 0, i))
+      val externalSorter = new TestExternalSorter[Int, Int, Int](taskContext)
+      externalSorter.spill(dataBuffer)
+    }
+
+    // Verify recordsWritten same as data size
+    assert(metricsCreated.length == dataSizes.length)
+    metricsCreated.zip(dataSizes).foreach {
+      case (metrics, dataSize) => assert(metrics.recordsWritten == dataSize)
+    }
+
+    // Verify bytesWritten same as file size
+    assert(metricsCreated.length == spillFilesCreated.length)
+    spillFilesCreated.foreach(file => assert(file.exists()))
+    metricsCreated.zip(spillFilesCreated).foreach {
+      case (metrics, file) => assert(metrics.bytesWritten == file.length())
+    }
+  }
+
+  test("spill method in ExternalAppendOnlyMap") {
+
+    mockDiskBlockObjectWriter()
+
+    // Test data size corresponds to three different scenarios:
+    // 1. spillBatchSize -> `objectsWritten == 0`
+    // 2. spillBatchSize + 1 -> `objectsWritten > 0`
+    // 3. 0 -> Not enter `inMemoryIterator.hasNext` loop and `objectsWritten == 0`
+    val dataSizes = {
+      val spillBatchSize = conf.get(config.SHUFFLE_SPILL_BATCH_SIZE)
+      Seq(spillBatchSize, spillBatchSize + 1, 0)
+    }
+
+    dataSizes.foreach { dataSize =>
+      val externalAppendOnlyMap =
+        new TestExternalAppendOnlyMap[Int, Int, Int](_ => 1, _ + _, _ + _, context = taskContext)
+      (0 until dataSize.toInt).foreach(i => externalAppendOnlyMap.currentMap.update(i, i))
+      externalAppendOnlyMap.spill(new SizeTrackingAppendOnlyMap)
+    }
+
+    // Verify recordsWritten same as data size
+    assert(metricsCreated.length == dataSizes.length)
+    metricsCreated.zip(dataSizes).foreach {
+      case (metrics, dataSize) => assert(metrics.recordsWritten == dataSize)
+    }
+
+    // Verify bytesWritten same as file size
+    assert(metricsCreated.length == localFilesCreated.length)
+    localFilesCreated.foreach(file => assert(file.exists()))
+    metricsCreated.zip(localFilesCreated).foreach {
+      case (metrics, file) => assert(metrics.bytesWritten == file.length())
+    }
+  }
+
+  private def mockDiskBlockObjectWriter(): Unit = {
+    when(blockManager.getDiskWriter(
+      any(classOf[BlockId]),
+      any(classOf[File]),
+      any(classOf[SerializerInstance]),
+      anyInt(),
+      any(classOf[ShuffleWriteMetrics])
+    )).thenAnswer((invocation: InvocationOnMock) => {
+      val args = invocation.getArguments
+      val shuffleWriteMetrics = args(4).asInstanceOf[ShuffleWriteMetrics]
+      metricsCreated += shuffleWriteMetrics
+      new DiskBlockObjectWriter(
+        args(1).asInstanceOf[File],
+        blockManager.serializerManager,
+        args(2).asInstanceOf[SerializerInstance],
+        args(3).asInstanceOf[Int],
+        false,
+        shuffleWriteMetrics,
+        args(0).asInstanceOf[BlockId]
+      )
+    })
+  }
 }
 
 /**
- * `TestExternalSorter` used to expand the access scope of the spill method.
+ * `TestExternalSorter` used to expand the access scope of the spill method
+ * in `ExternalSorter`.
  */
 private[this] class TestExternalSorter[K, V, C](context: TaskContext)
   extends ExternalSorter[K, V, C](context) {
   override def spill(collection: WritablePartitionedPairCollection[K, C]): Unit =
     super.spill(collection)
+}
+
+/**
+ * `TestExternalAppendOnlyMap` used to expand the access scope of the spill method
+ * in `ExternalAppendOnlyMap`.
+ */
+private[this] class TestExternalAppendOnlyMap[K, V, C](
+    createCombiner: V => C,
+    mergeValue: (C, V) => C,
+    mergeCombiners: (C, C) => C,
+    context: TaskContext)
+  extends ExternalAppendOnlyMap[K, V, C](
+    createCombiner, mergeValue, mergeCombiners, context = context) {
+  override def spill(collection: SizeTracker): Unit = super.spill(collection)
 }
