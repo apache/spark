@@ -17,21 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.Locale
-
-import scala.util.control.NonFatal
-
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TIME_WINDOW, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 case class TimeWindow(
     timeColumn: Expression,
@@ -115,28 +109,12 @@ object TimeWindow {
    *         precision.
    */
   def getIntervalInMicroSeconds(interval: String): Long = {
-    val ymIntervalErrMsg = s"Intervals greater than a month is not supported ($interval)."
-    val cal = try {
-      if (interval.toLowerCase(Locale.ROOT).trim.startsWith("interval")) {
-        CatalystSqlParser.parseExpression(interval) match {
-          case Literal(_: Int, _: YearMonthIntervalType) =>
-            throw new IllegalArgumentException(ymIntervalErrMsg)
-          case Literal(micros: Long, _: DayTimeIntervalType) =>
-            new CalendarInterval(0, 0, micros)
-        }
-      } else {
-        val parsed = IntervalUtils.stringToInterval(UTF8String.fromString(interval))
-        if (parsed.months != 0) {
-          throw new IllegalArgumentException(ymIntervalErrMsg)
-        } else {
-          parsed
-        }
-      }
-    } catch {
-      case NonFatal(e) =>
-        throw QueryCompilationErrors.cannotParseTimeDelayError(interval, e)
+    val cal = IntervalUtils.fromIntervalString(interval)
+    if (cal.months != 0) {
+      throw new IllegalArgumentException(
+        s"Intervals greater than a month is not supported ($interval).")
     }
-    cal.days * MICROS_PER_DAY + cal.microseconds
+    Math.addExact(Math.multiplyExact(cal.days, MICROS_PER_DAY), cal.microseconds)
   }
 
   /**
