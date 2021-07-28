@@ -117,4 +117,20 @@ public interface ErrorHandler {
         errorStackTrace.contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX));
     }
   }
+
+  class BlockFetchErrorHandler implements ErrorHandler {
+    public static final String STALE_SHUFFLE_BLOCK_FETCH =
+      "stale shuffle block fetch request as shuffle blocks of a higher shuffleMergeId for the"
+        + " shuffle is available";
+
+    @Override
+    public boolean shouldRetryError(Throwable t) {
+      return !Throwables.getStackTraceAsString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
+    }
+
+    @Override
+    public boolean shouldLogError(Throwable t) {
+      return !Throwables.getStackTraceAsString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
+    }
+  }
 }

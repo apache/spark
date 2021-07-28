@@ -37,6 +37,10 @@ public class ErrorHandlerSuite {
     assertTrue(pushHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
       ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))));
     assertTrue(pushHandler.shouldRetryError(new Throwable()));
+
+    ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();
+    assertFalse(fetchHandler.shouldRetryError(new RuntimeException(
+      ErrorHandler.BlockFetchErrorHandler.STALE_SHUFFLE_BLOCK_FETCH)));
   }
 
   @Test
@@ -47,5 +51,9 @@ public class ErrorHandlerSuite {
     assertFalse(pushHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
       ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))));
     assertTrue(pushHandler.shouldLogError(new Throwable()));
+
+    ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();
+    assertFalse(fetchHandler.shouldLogError(new RuntimeException(
+      ErrorHandler.BlockFetchErrorHandler.STALE_SHUFFLE_BLOCK_FETCH)));
   }
 }
