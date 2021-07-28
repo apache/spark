@@ -462,6 +462,8 @@ private[joins] object UnsafeHashedRelation {
       (sizeEstimate * 1.5 + 1).toInt,
       pageSizeBytes)
 
+    throw new SparkException(s"chengsu pageSizeBytes: $pageSizeBytes!")
+
     // Create a mapping of buildKeys -> rows
     val keyGenerator = UnsafeProjection.create(key)
     var numFields = 0
