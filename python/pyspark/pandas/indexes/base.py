@@ -1270,7 +1270,7 @@ class Index(IndexOpsMixin):
         >>> df.index.copy(name='snake')
         Index(['cobra', 'viper', 'sidewinder'], dtype='object', name='snake')
         """
-        result = self._psdf.copy().index
+        result = self._psdf[[]].index
         if name:
             result.name = name
         return result
