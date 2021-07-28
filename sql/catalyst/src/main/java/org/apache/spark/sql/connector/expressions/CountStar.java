@@ -27,14 +27,12 @@ import org.apache.spark.annotation.Evolving;
 @Evolving
 public final class CountStar implements AggregateFunc {
 
-    public CountStar() {
-    }
+  public CountStar() {
+  }
 
-    @Override
-    public String toString() {
-        return "CountStar()";
-    }
+  @Override
+  public String toString() { return "CountStar()"; }
 
-    @Override
-    public String describe() { return this.toString(); }
+  @Override
+  public String describe() { return this.toString(); }
 }

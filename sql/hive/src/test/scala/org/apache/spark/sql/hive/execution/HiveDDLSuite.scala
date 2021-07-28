@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
 import org.apache.spark.sql.execution.command.{DDLSuite, DDLUtils}
@@ -2394,114 +2393,47 @@ class HiveDDLSuite
     }
   }
 
-  test("SPARK-20680: do not support for null column datatype") {
-    withTable("t") {
-      withView("tabNullType") {
-        hiveClient.runSqlHive("CREATE TABLE t (t1 int)")
-        hiveClient.runSqlHive("INSERT INTO t VALUES (3)")
-        hiveClient.runSqlHive("CREATE VIEW tabNullType AS SELECT NULL AS col FROM t")
-        checkAnswer(spark.table("tabNullType"), Row(null))
-        // No exception shows
-        val desc = spark.sql("DESC tabNullType").collect().toSeq
-        assert(desc.contains(Row("col", NullType.simpleString, null)))
-      }
-    }
-
-    // Forbid CTAS with null type
+  test("SPARK-36241: support creating tables with null datatype") {
+    // CTAS with null type
     withTable("t1", "t2", "t3") {
       assertAnalysisError(
-        "CREATE TABLE t1 USING PARQUET AS SELECT null as null_col",
-        "Cannot create tables with null type")
+        "CREATE TABLE t1 USING PARQUET AS SELECT NULL AS null_col",
+        "Parquet data source does not support null data type")
 
       assertAnalysisError(
-        "CREATE TABLE t2 AS SELECT null as null_col",
-        "Cannot create tables with null type")
+        "CREATE TABLE t2 STORED AS PARQUET AS SELECT null as null_col",
+        "Unknown field type: void")
 
-      assertAnalysisError(
-        "CREATE TABLE t3 STORED AS PARQUET AS SELECT null as null_col",
-        "Cannot create tables with null type")
+      sql("CREATE TABLE t3 AS SELECT NULL AS null_col")
+      checkAnswer(sql("SELECT * FROM t3"), Row(null))
     }
 
-    // Forbid Replace table AS SELECT with null type
-    withTable("t") {
-      val v2Source = classOf[FakeV2Provider].getName
-      assertAnalysisError(
-        s"CREATE OR REPLACE TABLE t USING $v2Source AS SELECT null as null_col",
-        "Cannot create tables with null type")
-    }
-
-    // Forbid creating table with VOID type in Spark
+    // Create table with null type
     withTable("t1", "t2", "t3", "t4") {
       assertAnalysisError(
         "CREATE TABLE t1 (v VOID) USING PARQUET",
-        "Cannot create tables with null type")
+        "Parquet data source does not support null data type")
+
       assertAnalysisError(
-        "CREATE TABLE t2 (v VOID) USING hive",
-        "Cannot create tables with null type")
-      assertAnalysisError(
-        "CREATE TABLE t3 (v VOID)",
-        "Cannot create tables with null type")
-      assertAnalysisError(
-        "CREATE TABLE t4 (v VOID) STORED AS PARQUET",
-        "Cannot create tables with null type")
+        "CREATE TABLE t2 (v VOID) STORED AS PARQUET",
+        "Unknown field type: void")
+
+      sql("CREATE TABLE t3 (v VOID) USING hive")
+      checkAnswer(sql("SELECT * FROM t3"), Seq.empty)
+
+      sql("CREATE TABLE t4 (v VOID)")
+      checkAnswer(sql("SELECT * FROM t4"), Seq.empty)
     }
 
-    // Forbid Replace table with VOID type
+    // Create table with null type using spark.catalog.createTable
     withTable("t") {
-      val v2Source = classOf[FakeV2Provider].getName
-      assertAnalysisError(
-        s"CREATE OR REPLACE TABLE t (v VOID) USING $v2Source",
-        "Cannot create tables with null type")
-    }
-
-    // Make sure spark.catalog.createTable with null type will fail
-    val schema1 = new StructType().add("c", NullType)
-    assertHiveTableNullType(schema1)
-    assertDSTableNullType(schema1)
-
-    val schema2 = new StructType()
-      .add("c", StructType(Seq(StructField.apply("c1", NullType))))
-    assertHiveTableNullType(schema2)
-    assertDSTableNullType(schema2)
-
-    val schema3 = new StructType().add("c", ArrayType(NullType))
-    assertHiveTableNullType(schema3)
-    assertDSTableNullType(schema3)
-
-    val schema4 = new StructType()
-      .add("c", MapType(StringType, NullType))
-    assertHiveTableNullType(schema4)
-    assertDSTableNullType(schema4)
-
-    val schema5 = new StructType()
-      .add("c", MapType(NullType, StringType))
-    assertHiveTableNullType(schema5)
-    assertDSTableNullType(schema5)
-  }
-
-  private def assertHiveTableNullType(schema: StructType): Unit = {
-    withTable("t") {
-      val e = intercept[AnalysisException] {
-        spark.catalog.createTable(
-          tableName = "t",
-          source = "hive",
-          schema = schema,
-          options = Map("fileFormat" -> "parquet"))
-      }.getMessage
-      assert(e.contains("Cannot create tables with null type"))
-    }
-  }
-
-  private def assertDSTableNullType(schema: StructType): Unit = {
-    withTable("t") {
-      val e = intercept[AnalysisException] {
-        spark.catalog.createTable(
-          tableName = "t",
-          source = "json",
-          schema = schema,
-          options = Map.empty[String, String])
-      }.getMessage
-      assert(e.contains("Cannot create tables with null type"))
+      val schema = new StructType().add("c", NullType)
+      spark.catalog.createTable(
+        tableName = "t",
+        source = "json",
+        schema = schema,
+        options = Map.empty[String, String])
+      checkAnswer(sql("SELECT * FROM t"), Seq.empty)
     }
   }
 
@@ -3021,6 +2953,24 @@ class HiveDDLSuite
                |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
                |FROM v
                """.stripMargin)
+        }.getMessage
+        assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains" +
+          " invalid character(s). Please use alias to rename it."))
+      }
+    }
+  }
+
+  test("SPARK-36312: ParquetWriteSupport should check inner field") {
+    withView("v") {
+      spark.range(1).createTempView("v")
+      withTempPath { path =>
+        val e = intercept[AnalysisException] {
+          spark.sql(
+            """
+              |SELECT
+              |NAMED_STRUCT('ID', ID, 'IF(ID=1,ID,0)', IF(ID=1,ID,0), 'B', ABS(ID)) AS col1
+              |FROM v
+              |""".stripMargin).write.mode(SaveMode.Overwrite).parquet(path.toString)
         }.getMessage
         assert(e.contains("Column name \"IF(ID=1,ID,0)\" contains" +
           " invalid character(s). Please use alias to rename it."))

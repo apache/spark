@@ -25,6 +25,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.PlanTestBase
 import org.apache.spark.sql.catalyst.util._
@@ -852,5 +853,21 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper with 
       case (input, expected) =>
         checkEvaluation(JsonObjectKeys(Literal(input)), expected)
     }
+  }
+
+  test("SPARK-35320: from_json should fail with a key type different of StringType") {
+    Seq(
+      (MapType(IntegerType, StringType), """{"1": "test"}"""),
+      (StructType(Seq(StructField("test", MapType(IntegerType, StringType)))),
+        """"test": {"1": "test"}"""),
+      (ArrayType(MapType(IntegerType, StringType)), """[{"1": "test"}]"""),
+      (MapType(StringType, MapType(IntegerType, StringType)), """{"key": {"1" : "test"}}""")
+    ).foreach{
+      case(schema, jsonData) =>
+        assert(JsonToStructs(schema, Map.empty, Literal(jsonData)).checkInputDataTypes() match {
+          case TypeCheckFailure(_) => true
+          case _ => false
+        })
+      }
   }
 }

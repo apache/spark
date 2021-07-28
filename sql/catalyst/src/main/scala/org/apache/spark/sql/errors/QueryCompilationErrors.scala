@@ -1393,10 +1393,6 @@ private[spark] object QueryCompilationErrors {
     new AnalysisException("multi-part identifier cannot be empty.")
   }
 
-  def cannotCreateTablesWithNullTypeError(): Throwable = {
-    new AnalysisException(s"Cannot create tables with ${NullType.simpleString} type.")
-  }
-
   def functionUnsupportedInV2CatalogError(): Throwable = {
     new AnalysisException("function is only supported in v1 catalog")
   }
@@ -2356,12 +2352,12 @@ private[spark] object QueryCompilationErrors {
   }
 
   def missingFieldError(
-      fieldName: Seq[String], table: ResolvedTable, context: Expression): Throwable = {
+      fieldName: Seq[String], table: ResolvedTable, context: Origin): Throwable = {
     throw new AnalysisException(
       s"Missing field ${fieldName.quoted} in table ${table.name} with schema:\n" +
         table.schema.treeString,
-      context.origin.line,
-      context.origin.startPosition)
+      context.line,
+      context.startPosition)
   }
 
   def invalidFieldName(fieldName: Seq[String], path: Seq[String], context: Origin): Throwable = {

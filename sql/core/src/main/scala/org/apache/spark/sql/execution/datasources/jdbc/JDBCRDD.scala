@@ -148,12 +148,12 @@ object JDBCRDD extends Logging {
         s"MAX(${quote(max.column.fieldNames.head)})"
       case count: Count =>
         assert(count.column.fieldNames.length == 1)
-        val distinct = if (count.isDinstinct) "DISTINCT" else ""
+        val distinct = if (count.isDistinct) "DISTINCT" else ""
         val column = quote(count.column.fieldNames.head)
         s"COUNT($distinct $column)"
       case sum: Sum =>
         assert(sum.column.fieldNames.length == 1)
-        val distinct = if (sum.isDinstinct) "DISTINCT" else ""
+        val distinct = if (sum.isDistinct) "DISTINCT" else ""
         val column = quote(sum.column.fieldNames.head)
         s"SUM($distinct $column)"
       case _: CountStar =>
@@ -172,8 +172,8 @@ object JDBCRDD extends Logging {
    * @param parts - An array of JDBCPartitions specifying partition ids and
    *    per-partition WHERE clauses.
    * @param options - JDBC options that contains url, table and other information.
-   * @param requiredSchema - The schema of the columns to SELECT.
-   * @param aggregation - The pushed down aggregation
+   * @param outputSchema - The schema of the columns to SELECT.
+   * @param groupByColumns - The pushed down group by columns.
    *
    * @return An RDD representing "SELECT requiredColumns FROM fqTable".
    */

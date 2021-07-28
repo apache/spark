@@ -301,7 +301,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
-        parameters
+        Parameters
         ----------
         extended : bool, optional
             default ``False``. If ``False``, prints only the physical plan.
@@ -1829,6 +1829,45 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         [Row(min(age)=2)]
         """
         return self.groupBy().agg(*exprs)
+
+    @since(3.3)
+    def observe(self, observation, *exprs):
+        """Observe (named) metrics through an :class:`Observation` instance.
+
+        A user can retrieve the metrics by accessing `Observation.get`.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        observation : :class:`Observation`
+            an :class:`Observation` instance to obtain the metric.
+        exprs : list of :class:`Column`
+            column expressions (:class:`Column`).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            the observed :class:`DataFrame`.
+
+        Notes
+        -----
+        This method does not support streaming datasets.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import col, count, lit, max
+        >>> from pyspark.sql import Observation
+        >>> observation = Observation("my metrics")
+        >>> observed_df = df.observe(observation, count(lit(1)).alias("count"), max(col("age")))
+        >>> observed_df.count()
+        2
+        >>> observation.get
+        Row(count=2, max(age)=5)
+        """
+        from pyspark.sql import Observation
+        assert isinstance(observation, Observation), "observation should be Observation"
+        return observation._on(self, *exprs)
 
     @since(2.0)
     def union(self, other):
