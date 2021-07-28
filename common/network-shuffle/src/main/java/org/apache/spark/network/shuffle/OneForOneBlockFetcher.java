@@ -150,7 +150,7 @@ public class OneForOneBlockFetcher {
 
       long mapId = Long.parseLong(blockIdParts[2]);
       BlocksInfo blocksInfoByMapId = mapIdToBlocksInfo.computeIfAbsent(mapId,
-          id -> new BlocksInfo());
+        id -> new BlocksInfo());
       blocksInfoByMapId.blockIds.add(blockId);
       blocksInfoByMapId.ids.add(Integer.parseInt(blockIdParts[3]));
 

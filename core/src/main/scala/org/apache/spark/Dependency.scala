@@ -157,7 +157,6 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
   }
 
   def newShuffleMergeState(): Unit = {
-    _shuffleMergeEnabled = canShuffleMergeBeEnabled()
     _shuffleMergedFinalized = false
     mergerLocs = Nil
     _shuffleMergeId += 1

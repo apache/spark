@@ -264,7 +264,8 @@ public class OneForOneBlockFetcherSuite {
     LinkedHashMap<String, ManagedBuffer> blocks = Maps.newLinkedHashMap();
     blocks.put("shuffleChunk_0_0_0_0", new NioManagedBuffer(ByteBuffer.wrap(new byte[12])));
     blocks.put("shuffleChunk_0_0_0_1", null);
-    blocks.put("shuffleChunk_0_0_0_2", new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
+    blocks.put("shuffleChunk_0_0_0_2",
+      new NettyManagedBuffer(Unpooled.wrappedBuffer(new byte[23])));
     String[] blockIds = blocks.keySet().toArray(new String[blocks.size()]);
 
     BlockFetchingListener listener = fetchBlocks(blocks, blockIds,
