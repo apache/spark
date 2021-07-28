@@ -68,7 +68,7 @@ private[spark] class SparkUI private (
   }
 
   /**
-   * Attach all existed handler to ServerInfo.
+   * Attach all existing handlers to ServerInfo.
    */
   def attachAllHandler(): Unit = {
     serverInfo.foreach { server =>
@@ -119,8 +119,8 @@ private[spark] class SparkUI private (
   }
 
   /**
-   * When start SparUI, Spark start Jetty Server first to bind address then after
-   * Spark application fully started, call [attachAllHandlers] to start all handler.
+   * To start SparUI, Spark starts Jetty Server first to bind address.
+   * After the Spark application is fully started, call [attachAllHandlers] to start all handlers.
    */
   override def bind(): Unit = {
     assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
