@@ -125,6 +125,8 @@ You can access them by doing
 |**BooleanType**|Boolean|BooleanType|
 |**TimestampType**|java.sql.Timestamp|TimestampType|
 |**DateType**|java.sql.Date|DateType|
+|**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
+|**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
 |**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
 |**MapType**|scala.collection.Map|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:** The default value of *valueContainsNull* is true.|
 |**StructType**|org.apache.spark.sql.Row|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
@@ -153,6 +155,8 @@ please use factory methods provided in
 |**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
 |**TimestampType**|java.sql.Timestamp|DataTypes.TimestampType|
 |**DateType**|java.sql.Date|DataTypes.DateType|
+|**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
+|**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
 |**ArrayType**|java.util.List|DataTypes.createArrayType(*elementType*)<br/>**Note:** The value of *containsNull* will be true.<br/>DataTypes.createArrayType(*elementType*, *containsNull*).|
 |**MapType**|java.util.Map|DataTypes.createMapType(*keyType*, *valueType*)<br/>**Note:** The value of *valueContainsNull* will be true.<br/>DataTypes.createMapType(*keyType*, *valueType*, *valueContainsNull*)|
 |**StructType**|org.apache.spark.sql.Row|DataTypes.createStructType(*fields*)<br/>**Note:** *fields* is a List or an array of StructFields.Also, two fields with the same name are not allowed.|
@@ -230,7 +234,8 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 |**StringType**|STRING|
 |**BinaryType**|BINARY|
 |**DecimalType**|DECIMAL, DEC, NUMERIC|
-|**CalendarIntervalType**|INTERVAL|
+|**YearMonthIntervalType**|INTERVAL YEAR, INTERVAL YEAR TO MONTH, INTERVAL MONTH|
+|**DayTimeIntervalType**|INTERVAL DAY, INTERVAL DAY TO HOUR, INTERVAL DAY TO MINUTE, INTERVAL DAY TO SECOND, INTERVAL HOUR, INTERVAL HOUR TO MINUTE, INTERVAL HOUR TO SECOND, INTERVAL MINUTE, INTERVAL MINUTE TO SECOND, INTERVAL SECOND|
 |**ArrayType**|ARRAY\<element_type>|
 |**StructType**|STRUCT<field1_name: field1_type, field2_name: field2_type, ...><br/> **Note:** ':' is optional.|
 |**MapType**|MAP<key_type, value_type>|
