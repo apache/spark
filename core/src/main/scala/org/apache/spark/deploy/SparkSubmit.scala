@@ -305,34 +305,37 @@ private[spark] class SparkSubmit extends Logging {
     val isKubernetesClient = clusterManager == KUBERNETES && deployMode == CLIENT
     val isKubernetesClusterModeDriver = isKubernetesClient &&
       sparkConf.getBoolean("spark.kubernetes.submitInDriver", false)
+    val isProxyUser = args.proxyUser != null
 
     if (!isMesosCluster && !isStandAloneCluster) {
-      // Resolve maven dependencies if there are any and add classpath to jars. Add them to py-files
-      // too for packages that include Python code
-      val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(
-        packagesTransitive = true, args.packagesExclusions, args.packages,
-        args.repositories, args.ivyRepoPath, args.ivySettingsPath)
+      if (!(isKubernetesCluster && isProxyUser)) {
+        // Resolve maven dependencies if there are any and add classpath to jars. Add them to
+        // py-files too for packages that include Python code
+        val resolvedMavenCoordinates = DependencyUtils.resolveMavenDependencies(
+          packagesTransitive = true, args.packagesExclusions, args.packages,
+          args.repositories, args.ivyRepoPath, args.ivySettingsPath)
 
-      if (resolvedMavenCoordinates.nonEmpty) {
-        // In K8s client mode, when in the driver, add resolved jars early as we might need
-        // them at the submit time for artifact downloading.
-        // For example we might use the dependencies for downloading
-        // files from a Hadoop Compatible fs e.g. S3. In this case the user might pass:
-        // --packages com.amazonaws:aws-java-sdk:1.7.4:org.apache.hadoop:hadoop-aws:2.7.6
-        if (isKubernetesClusterModeDriver) {
-          val loader = getSubmitClassLoader(sparkConf)
-          for (jar <- resolvedMavenCoordinates) {
-            addJarToClasspath(jar, loader)
-          }
-        } else if (isKubernetesCluster) {
-          // We need this in K8s cluster mode so that we can upload local deps
-          // via the k8s application, like in cluster mode driver
-          childClasspath ++= resolvedMavenCoordinates
-        } else {
-          args.jars = mergeFileLists(args.jars, mergeFileLists(resolvedMavenCoordinates: _*))
-          if (args.isPython || isInternal(args.primaryResource)) {
-            args.pyFiles = mergeFileLists(args.pyFiles,
-              mergeFileLists(resolvedMavenCoordinates: _*))
+        if (resolvedMavenCoordinates.nonEmpty) {
+          // In K8s client mode, when in the driver, add resolved jars early as we might need
+          // them at the submit time for artifact downloading.
+          // For example we might use the dependencies for downloading
+          // files from a Hadoop Compatible fs e.g. S3. In this case the user might pass:
+          // --packages com.amazonaws:aws-java-sdk:1.7.4:org.apache.hadoop:hadoop-aws:2.7.6
+          if (isKubernetesClusterModeDriver) {
+            val loader = getSubmitClassLoader(sparkConf)
+            for (jar <- resolvedMavenCoordinates) {
+              addJarToClasspath(jar, loader)
+            }
+          } else if (isKubernetesCluster) {
+            // We need this in K8s cluster mode so that we can upload local deps
+            // via the k8s application, like in cluster mode driver
+            childClasspath ++= resolvedMavenCoordinates
+          } else {
+            args.jars = mergeFileLists(args.jars, mergeFileLists(resolvedMavenCoordinates: _*))
+            if (args.isPython || isInternal(args.primaryResource)) {
+              args.pyFiles = mergeFileLists(args.pyFiles,
+                mergeFileLists(resolvedMavenCoordinates: _*))
+            }
           }
         }
       }
@@ -691,7 +694,7 @@ private[spark] class SparkSubmit extends Logging {
     // This assumes both primaryResource and user jars are local jars, or already downloaded
     // to local by configuring "spark.yarn.dist.forceDownloadSchemes", otherwise it will not be
     // added to the classpath of YARN client.
-    if (isYarnCluster) {
+    if (isYarnCluster && !isProxyUser) {
       if (isUserJar(args.primaryResource)) {
         childClasspath += args.primaryResource
       }
@@ -934,6 +937,8 @@ private[spark] class SparkSubmit extends Logging {
       logInfo(s"Classpath elements:\n${childClasspath.mkString("\n")}")
       logInfo("\n")
     }
+    assert(!(args.deployMode == "cluster" && args.proxyUser != null && childClasspath.nonEmpty),
+      "Classpath of spark-submit should not change in cluster mode if proxy user is specified")
     val loader = getSubmitClassLoader(sparkConf)
     for (jar <- childClasspath) {
       addJarToClasspath(jar, loader)
