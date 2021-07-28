@@ -24,11 +24,12 @@ import java.util.zip.CheckedInputStream;
 import java.util.zip.Checksum;
 
 import com.google.common.io.ByteStreams;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.spark.annotation.Private;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.corruption.Cause;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * A set of utility functions for the shuffle checksum.
