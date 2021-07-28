@@ -30,13 +30,16 @@ class RewritePredicateSubqueryEndToEndSuite extends QueryTest with SharedSparkSe
     val df = sql(
       """
         |SELECT *
-        |FROM  t1
+        |FROM   t1
         |WHERE  a IN (SELECT x
-        |  FROM  (SELECT x AS x,
-        |           Rank() OVER (partition BY x ORDER BY Sum(y) DESC) AS ranking
-        |    FROM   t2
-        |    GROUP  BY x) tmp1
-        |  WHERE  ranking <= 5)
+        |             FROM   (SELECT x                         AS x,
+        |                            Rank()
+        |                              OVER (
+        |                                PARTITION BY x
+        |                                ORDER BY Sum(y) DESC) AS ranking
+        |                     FROM   t2
+        |                     GROUP  BY x) tmp1
+        |             WHERE  ranking <= 5)
         |""".stripMargin)
 
     df.collect()
