@@ -24,8 +24,9 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
 import org.apache.spark.annotation.{Evolving, Since}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Python.PYSPARK_EXECUTOR_MEMORY
@@ -101,7 +102,7 @@ class ResourceProfile(
    */
   private[spark] def getSchedulerTaskResourceAmount(resource: String): Int = {
     val taskAmount = taskResources.getOrElse(resource,
-      throw new SparkException(s"Resource $resource doesn't exist in profile id: $id"))
+      throw SparkCoreErrors.resourceNotExistInProfileIdError(resource, id))
    if (taskAmount.amount < 1) 1 else taskAmount.amount.toInt
   }
 
@@ -110,7 +111,7 @@ class ResourceProfile(
       calculateTasksAndLimitingResource(sparkConf)
     }
     _executorResourceSlotsPerAddr.get.getOrElse(resource,
-      throw new SparkException(s"Resource $resource doesn't exist in profile id: $id"))
+      throw SparkCoreErrors.resourceNotExistInProfileIdError(resource, id))
   }
 
   // Maximum tasks you could put on an executor with this profile based on the limiting resource.
@@ -185,8 +186,7 @@ class ResourceProfile(
       numPartsPerResourceMap(rName) = 1
       if (taskReq > 0.0) {
         if (taskReq > execReq.amount) {
-          throw new SparkException(s"The executor resource: $rName, amount: ${execReq.amount} " +
-            s"needs to be >= the task resource request amount of $taskReq")
+          throw SparkCoreErrors.conditionOfExecutorResourceError(rName, execReq.amount, taskReq)
         }
         val (numPerTask, parts) = ResourceUtils.calculateAmountAndPartsForFraction(taskReq)
         numPartsPerResourceMap(rName) = parts
@@ -202,8 +202,7 @@ class ResourceProfile(
       }
     }
     if (taskResourcesToCheck.nonEmpty) {
-      throw new SparkException("No executor resource configs were not specified for the " +
-        s"following task configs: ${taskResourcesToCheck.keys.mkString(",")}")
+      throw SparkCoreErrors.noExecutorResourceConfigError(taskResourcesToCheck.keys.mkString(","))
     }
     val limiting =
       if (taskLimit == -1) "cpu" else s"$limitingResource at $taskLimit tasks per executor"

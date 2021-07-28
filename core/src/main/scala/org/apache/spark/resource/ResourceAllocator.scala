@@ -19,7 +19,7 @@ package org.apache.spark.resource
 
 import scala.collection.mutable
 
-import org.apache.spark.SparkException
+import org.apache.spark.errors.SparkCoreErrors
 
 /**
  * Trait used to help executor/worker allocate resources.
@@ -77,15 +77,13 @@ private[spark] trait ResourceAllocator {
   def acquire(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
       if (!addressAvailabilityMap.contains(address)) {
-        throw new SparkException(s"Try to acquire an address that doesn't exist. $resourceName " +
-          s"address $address doesn't exist.")
+        throw SparkCoreErrors.acquireAnAddressNotExistError(resourceName, address)
       }
       val isAvailable = addressAvailabilityMap(address)
       if (isAvailable > 0) {
         addressAvailabilityMap(address) = addressAvailabilityMap(address) - 1
       } else {
-        throw new SparkException("Try to acquire an address that is not available. " +
-          s"$resourceName address $address is not available.")
+        throw SparkCoreErrors.acquireAnAddressNotAvailableError(resourceName, address)
       }
     }
   }
@@ -98,15 +96,13 @@ private[spark] trait ResourceAllocator {
   def release(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
       if (!addressAvailabilityMap.contains(address)) {
-        throw new SparkException(s"Try to release an address that doesn't exist. $resourceName " +
-          s"address $address doesn't exist.")
+        throw SparkCoreErrors.releaseAnAddressNotExistError(resourceName, address)
       }
       val isAvailable = addressAvailabilityMap(address)
       if (isAvailable < slotsPerAddress) {
         addressAvailabilityMap(address) = addressAvailabilityMap(address) + 1
       } else {
-        throw new SparkException(s"Try to release an address that is not assigned. $resourceName " +
-          s"address $address is not assigned.")
+        throw SparkCoreErrors.releaseAnAddressNotAssignedError(resourceName, address)
       }
     }
   }

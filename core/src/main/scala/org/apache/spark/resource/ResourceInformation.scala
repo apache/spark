@@ -22,8 +22,8 @@ import scala.util.control.NonFatal
 import org.json4s.{DefaultFormats, Extraction, JValue}
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.SparkException
 import org.apache.spark.annotation.Evolving
+import org.apache.spark.errors.SparkCoreErrors
 
 /**
  * Class to hold information about a type of Resource. A resource could be a GPU, FPGA, etc.
@@ -72,8 +72,7 @@ private[spark] object ResourceInformation {
       parse(json).extract[ResourceInformationJson].toResourceInformation
     } catch {
       case NonFatal(e) =>
-        throw new SparkException(s"Error parsing JSON into ResourceInformation:\n$json\n" +
-          s"Here is a correct example: $exampleJson.", e)
+        throw SparkCoreErrors.ParsingJsonToResourceInformationError(json, exampleJson, e)
     }
   }
 
@@ -83,7 +82,7 @@ private[spark] object ResourceInformation {
       json.extract[ResourceInformationJson].toResourceInformation
     } catch {
       case NonFatal(e) =>
-        throw new SparkException(s"Error parsing JSON into ResourceInformation:\n$json\n", e)
+        throw SparkCoreErrors.ParsingJsonToResourceInformationError(json, e)
     }
   }
 }

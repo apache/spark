@@ -25,12 +25,13 @@ import scala.util.control.NonFatal
 import org.json4s.DefaultFormats
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SparkConf, SparkException}
+import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.resource.ResourceDiscoveryPlugin
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{EXECUTOR_CORES, RESOURCES_DISCOVERY_PLUGIN, SPARK_TASK_PREFIX}
-import org.apache.spark.internal.config.Tests.{RESOURCES_WARNING_TESTING}
+import org.apache.spark.internal.config.Tests.RESOURCES_WARNING_TESTING
 import org.apache.spark.util.Utils
 
 /**
@@ -140,7 +141,7 @@ private[spark] object ResourceUtils extends Logging {
   def parseResourceRequest(sparkConf: SparkConf, resourceId: ResourceID): ResourceRequest = {
     val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
     val amount = settings.getOrElse(AMOUNT,
-      throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
+      throw SparkCoreErrors.specifyConfigOfResourceError(resourceId.resourceName)
     ).toInt
     val discoveryScript = Optional.ofNullable(settings.get(DISCOVERY_SCRIPT).orNull)
     val vendor = Optional.ofNullable(settings.get(VENDOR).orNull)
@@ -151,8 +152,8 @@ private[spark] object ResourceUtils extends Logging {
     sparkConf.getAllWithPrefix(s"$componentName.$RESOURCE_PREFIX.").map { case (key, _) =>
       val index = key.indexOf('.')
       if (index < 0) {
-        throw new SparkException(s"You must specify an amount config for resource: $key " +
-          s"config: $componentName.$RESOURCE_PREFIX.$key")
+        throw SparkCoreErrors.specifyAnAmountConfigForResourceError(key, componentName,
+          RESOURCE_PREFIX)
       }
       key.substring(0, index)
     }.distinct.map(name => new ResourceID(componentName, name))
@@ -178,8 +179,7 @@ private[spark] object ResourceUtils extends Logging {
     val parts = if (doubleAmount <= 0.5) {
       Math.floor(1.0 / doubleAmount).toInt
     } else if (doubleAmount % 1 != 0) {
-      throw new SparkException(
-        s"The resource amount ${doubleAmount} must be either <= 0.5, or a whole number.")
+      throw SparkCoreErrors.conditionOfResourceAmountError(doubleAmount)
     } else {
       1
     }
@@ -193,7 +193,7 @@ private[spark] object ResourceUtils extends Logging {
     listResourceIds(sparkConf, SPARK_TASK_PREFIX).map { resourceId =>
       val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
       val amountDouble = settings.getOrElse(AMOUNT,
-        throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
+        throw SparkCoreErrors.specifyAmountForResourceError(resourceId.resourceName)
       ).toDouble
       treqs.resource(resourceId.resourceName, amountDouble)
     }
@@ -205,7 +205,7 @@ private[spark] object ResourceUtils extends Logging {
     val rnamesAndAmounts = resourceIds.map { resourceId =>
       val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
       val amountDouble = settings.getOrElse(AMOUNT,
-        throw new SparkException(s"You must specify an amount for ${resourceId.resourceName}")
+        throw SparkCoreErrors.specifyAmountForResourceError(resourceId.resourceName)
       ).toDouble
       (resourceId.resourceName, amountDouble)
     }
@@ -213,8 +213,7 @@ private[spark] object ResourceUtils extends Logging {
       val (amount, parts) = if (componentName.equalsIgnoreCase(SPARK_TASK_PREFIX)) {
         calculateAmountAndPartsForFraction(amountDouble)
       } else if (amountDouble % 1 != 0) {
-        throw new SparkException(
-          s"Only tasks support fractional resources, please check your $componentName settings")
+        throw SparkCoreErrors.tasksSupportFractionalResourceError(componentName)
       } else {
         (amountDouble.toInt, 1)
       }
@@ -237,7 +236,7 @@ private[spark] object ResourceUtils extends Logging {
       extract(json)
     } catch {
       case NonFatal(e) =>
-        throw new SparkException(s"Error parsing resources file $resourcesFile", e)
+        throw SparkCoreErrors.ParsingResourceFileError(resourcesFile, e)
     }
   }
 
@@ -393,15 +392,14 @@ private[spark] object ResourceUtils extends Logging {
         return riOption.get()
       }
     }
-    throw new SparkException(s"None of the discovery plugins returned ResourceInformation for " +
-      s"${resourceRequest.id.resourceName}")
+    throw SparkCoreErrors.nonOfTheDiscoveryPluginsReturnedResourceInfoError(
+      resourceRequest.id.resourceName)
   }
 
   def validateTaskCpusLargeEnough(sparkConf: SparkConf, execCores: Int, taskCpus: Int): Boolean = {
     // Number of cores per executor must meet at least one task requirement.
     if (execCores < taskCpus) {
-      throw new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
-        s"the number of cpus per task = $taskCpus.")
+      throw SparkCoreErrors.conditionOfTheNumberOfCoresPerExecutorError(execCores, taskCpus)
     }
     true
   }
@@ -451,7 +449,8 @@ private[spark] object ResourceUtils extends Logging {
           s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
           "your configuration."
         if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
-          throw new SparkException(message)
+          throw SparkCoreErrors.adjustConfigurationError(cores, taskCpus, resourceNumSlots,
+            limitingResource, maxTaskPerExec)
         } else {
           logWarning(message)
         }
@@ -474,7 +473,8 @@ private[spark] object ResourceUtils extends Logging {
           s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
           "your configuration."
         if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
-          throw new SparkException(message)
+          throw SparkCoreErrors.adjustConfigurationError(treq.resourceName, execAmount, taskReqStr,
+            resourceNumSlots, limitingResource, maxTaskPerExec)
         } else {
           logWarning(message)
         }
