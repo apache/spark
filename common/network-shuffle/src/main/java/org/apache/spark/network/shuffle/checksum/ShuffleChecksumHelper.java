@@ -30,7 +30,6 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.spark.annotation.Private;
 import org.apache.spark.network.buffer.ManagedBuffer;
-import org.apache.spark.network.corruption.Cause;
 
 /**
  * A set of utility functions for the shuffle checksum.

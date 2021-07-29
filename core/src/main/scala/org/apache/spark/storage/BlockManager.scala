@@ -47,10 +47,9 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.network._
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
-import org.apache.spark.network.corruption.Cause
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle._
-import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
+import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv

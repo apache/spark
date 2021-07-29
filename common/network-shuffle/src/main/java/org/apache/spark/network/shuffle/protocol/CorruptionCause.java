@@ -20,7 +20,8 @@ package org.apache.spark.network.shuffle.protocol;
 import io.netty.buffer.ByteBuf;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
-import org.apache.spark.network.corruption.Cause;
+
+import org.apache.spark.network.shuffle.checksum.Cause;
 
 /** Response to the {@link DiagnoseCorruption} */
 public class CorruptionCause extends BlockTransferMessage {

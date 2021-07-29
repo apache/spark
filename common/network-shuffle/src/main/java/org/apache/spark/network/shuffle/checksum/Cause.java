@@ -15,12 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.network.corruption;
+package org.apache.spark.network.shuffle.checksum;
 
 /**
  * The cause of shuffle data corruption.
- *
- * @since 3.2.0
  */
 public enum Cause {
   DISK_ISSUE, NETWORK_ISSUE, UNKNOWN_ISSUE, CHECKSUM_VERIFY_PASS, UNSUPPORTED_CHECKSUM_ALGORITHM
