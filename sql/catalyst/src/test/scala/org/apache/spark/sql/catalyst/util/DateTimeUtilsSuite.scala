@@ -147,6 +147,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     assert(toDate("1999 08 01").isEmpty)
     assert(toDate("1999-08 01").isEmpty)
     assert(toDate("1999 08").isEmpty)
+    assert(toDate("1999-08-").isEmpty)
     assert(toDate("").isEmpty)
     assert(toDate("   ").isEmpty)
   }
@@ -182,7 +183,7 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("1969-12-31 16:00:00", Option(date(1969, 12, 31, 16, zid = zid)))
       checkStringToTimestamp("0001", Option(date(1, 1, 1, 0, zid = zid)))
       checkStringToTimestamp("2015-03", Option(date(2015, 3, 1, zid = zid)))
-      Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ", "2015-03-18T").foreach { s =>
+      Seq("2015-03-18", "2015-03-18 ", " 2015-03-18", " 2015-03-18 ").foreach { s =>
         checkStringToTimestamp(s, Option(date(2015, 3, 18, zid = zid)))
       }
 
@@ -289,6 +290,11 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
       checkStringToTimestamp("", None)
       checkStringToTimestamp("    ", None)
       checkStringToTimestamp("+", None)
+      checkStringToTimestamp("T", None)
+      checkStringToTimestamp("2015-03-18T", None)
+      checkStringToTimestamp("12::", None)
+      checkStringToTimestamp("2015-03-18T12:03:17-8:", None)
+      checkStringToTimestamp("2015-03-18T12:03:17-8:30:", None)
 
       // Truncating the fractional seconds
       expected = Option(date(2015, 3, 18, 12, 3, 17, 123456, zid = UTC))
