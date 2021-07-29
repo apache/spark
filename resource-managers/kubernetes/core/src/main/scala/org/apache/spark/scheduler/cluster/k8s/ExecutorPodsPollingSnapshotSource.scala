@@ -18,6 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.{Future, ScheduledExecutorService, TimeUnit}
 
+import com.google.common.primitives.UnsignedLong
 import io.fabric8.kubernetes.api.model.ListOptionsBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
@@ -54,6 +55,8 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
   }
 
   private class PollRunnable(applicationId: String) extends Runnable {
+    private var resourceVersion: UnsignedLong = _
+
     override def run(): Unit = Utils.tryLogNonFatalError {
       logDebug(s"Resynchronizing full executor pod state from Kubernetes.")
       val pods = kubernetesClient
@@ -61,12 +64,18 @@ private[spark] class ExecutorPodsPollingSnapshotSource(
         .withLabel(SPARK_APP_ID_LABEL, applicationId)
         .withLabel(SPARK_ROLE_LABEL, SPARK_POD_EXECUTOR_ROLE)
         .withoutLabel(SPARK_EXECUTOR_INACTIVE_LABEL, "true")
-      val list = if (conf.get(KUBERNETES_EXECUTOR_API_POLLING_WITH_RESOURCE_VERSION)) {
-        pods.list(new ListOptionsBuilder().withResourceVersion("0").build())
+      if (conf.get(KUBERNETES_EXECUTOR_API_POLLING_WITH_RESOURCE_VERSION)) {
+        val list = pods.list(new ListOptionsBuilder().withResourceVersion("0").build())
+        val newResourceVersion = UnsignedLong.valueOf(list.getMetadata.getResourceVersion())
+        // Replace only when we receive a monotonically increased resourceVersion
+        // because some K8s API servers may return old(smaller) cached versions in case of HA setup.
+        if (resourceVersion == null || newResourceVersion.compareTo(resourceVersion) > 0) {
+          resourceVersion = newResourceVersion
+          snapshotsStore.replaceSnapshot(list.getItems.asScala.toSeq)
+        }
       } else {
-        pods.list()
+        snapshotsStore.replaceSnapshot(pods.list().getItems.asScala.toSeq)
       }
-      snapshotsStore.replaceSnapshot(list.getItems.asScala.toSeq)
     }
   }
 
