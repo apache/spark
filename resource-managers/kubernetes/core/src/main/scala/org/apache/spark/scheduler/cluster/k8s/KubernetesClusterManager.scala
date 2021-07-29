@@ -71,7 +71,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     // and this code should be removed.
     if (!sc.conf.contains(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)) {
       val podNamePrefix = KubernetesConf.getResourceNamePrefix(sc.conf.get("spark.app.name"))
-      if (org.apache.spark.deploy.k8s.Config.isValidExecutorPodNamePrefix(podNamePrefix)) {
+      if (KubernetesUtils.isValidExecutorPodNamePrefix(podNamePrefix)) {
         sc.conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, podNamePrefix)
       } else {
         val shortPrefix = "spark-" + KubernetesUtils.uniqueID()

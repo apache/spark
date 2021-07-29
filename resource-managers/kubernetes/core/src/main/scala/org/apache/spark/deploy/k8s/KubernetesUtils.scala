@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since, Unstable}
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.deploy.k8s.Config.KUBERNETES_FILE_UPLOAD_PATH
+import org.apache.spark.deploy.k8s.Config.{KUBERNETES_DNSNAME_MAX_LENGTH, KUBERNETES_FILE_UPLOAD_PATH}
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.resource.ResourceUtils
@@ -380,5 +380,18 @@ object KubernetesUtils extends Logging {
         originalMetadata.setOwnerReferences(Collections.singletonList(reference))
       }
     }
+  }
+
+  // the definition of a label in DNS (RFC 1123).
+  private val dns1123LabelFmt = "[a-z0-9]([-a-z0-9]*[a-z0-9])?"
+  private val podConfValidator = (s"^$dns1123LabelFmt(\\.$dns1123LabelFmt)*$$").r.pattern
+
+  // The possible longest executor name would be "$prefix-exec-${Int.MaxValue}"
+  @Since("3.3.0")
+  def isValidExecutorPodNamePrefix(prefix: String): Boolean = {
+    // 6 is length of '-exec-'
+    val reservedLen = Int.MaxValue.toString.length + 6
+    val validLength = prefix.length + reservedLen <= KUBERNETES_DNSNAME_MAX_LENGTH
+    validLength && podConfValidator.matcher(prefix).matches()
   }
 }
