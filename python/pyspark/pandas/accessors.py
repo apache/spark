@@ -190,9 +190,9 @@ class PandasOnSparkFrameMethods(object):
                         StructField(name_like_string(column), LongType(), nullable=False)
                     )
                 ],
-            ),
-            column_label_names=internal.column_label_names,
-        ).resolved_copy
+                column_label_names=internal.column_label_names,
+            ).resolved_copy
+        )
 
     def apply_batch(
         self, func: Callable[..., pd.DataFrame], args: Tuple = (), **kwds: Any
