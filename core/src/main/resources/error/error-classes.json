@@ -3,6 +3,9 @@
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
   },
+  "CONCURRENT_QUERY_ERROR" : {
+    "message" : [ "Another instance of this query was just started by a concurrent session." ]
+  },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
     "sqlState" : "22012"
@@ -10,6 +13,13 @@
   "DUPLICATE_KEY" : {
     "message" : [ "Found duplicate keys '%s'" ],
     "sqlState" : "23000"
+  },
+  "FAILED_RENAME_PATH" : {
+    "message" : [ "Failed to rename %s to %s as destination already exists" ],
+    "sqlState" : "22023"
+  },
+  "FAILED_SET_ORIGINAL_PERMISSION_BACK" : {
+    "message" : [ "Failed to set original permission %s back to the created path: %s. Exception: %s" ]
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
@@ -29,15 +39,30 @@
     "message" : [ "Invalid pivot column '%s'. Pivot columns must be comparable." ],
     "sqlState" : "42000"
   },
+  "INCOMPATIBLE_DATASOURCE_REGISTER" : {
+    "message" : [ "Detected an incompatible DataSourceRegister. Please remove the incompatible library from classpath or upgrade it. Error: %s" ]
+  },
+  "INDEX_OUT_OF_BOUNDS" : {
+    "message" : [ "Index %s must be between 0 and the length of the ArrayData." ],
+    "sqlState" : "22023"
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
     "sqlState" : "42000"
+  },
+  "INVALID_FRACTION_OF_SECOND" : {
+    "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]." ],
+    "sqlState" : "22023"
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
+    "sqlState" : "42000"
+  },
+  "MISSING_METHOD" : {
+    "message" : [ "A method named \"%s\" is not declared in any enclosing class nor any supertype" ],
     "sqlState" : "42000"
   },
   "MISSING_STATIC_PARTITION_COLUMN" : {
@@ -56,12 +81,28 @@
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
     "sqlState" : "42000"
   },
+  "RENAME_SRC_PATH_NOT_FOUND" : {
+    "message" : [ "Failed to rename as %s was not found" ],
+    "sqlState" : "22023"
+  },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
+  },
+  "UNRECOGNIZED_SQL_TYPE" : {
+    "message" : [ "Unrecognized SQL type %s" ],
+    "sqlState" : "42000"
+  },
+  "UNSUPPORTED_LITERAL_TYPE" : {
+    "message" : [ "Unsupported literal type %s %s" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_TRANSACTION_BY_JDBC_SERVER" : {
+    "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
+    "sqlState" : "0A000"
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
