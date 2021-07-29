@@ -87,8 +87,8 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
     if (other instanceof MergedBlockMetaRequest) {
       MergedBlockMetaRequest o = (MergedBlockMetaRequest) other;
       return requestId == o.requestId && shuffleId == o.shuffleId &&
-        shuffleMergeId == o.shuffleMergeId && reduceId == o.reduceId
-          && Objects.equal(appId, o.appId);
+        shuffleMergeId == o.shuffleMergeId && reduceId == o.reduceId &&
+        Objects.equal(appId, o.appId);
     }
     return false;
   }

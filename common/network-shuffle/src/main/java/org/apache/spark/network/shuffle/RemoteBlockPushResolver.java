@@ -504,8 +504,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     // shuffle merge. Currently once the shuffle is finalized for a determinate stages, retry
     // stages of the same shuffle will have shuffle push disabled.
     if (msg.shuffleMergeId == DETERMINATE_SHUFFLE_MERGE_ID) {
-      shuffleMergePartitionsRef.set(
-        appShuffleInfo.partitions.remove(msg.shuffleId).shuffleMergePartitions);
+      AppShuffleMergePartitionsInfo appShuffleMergePartitionsInfo =
+        appShuffleInfo.partitions.remove(msg.shuffleId);
+      if (appShuffleMergePartitionsInfo != null) {
+        shuffleMergePartitionsRef.set(appShuffleMergePartitionsInfo.shuffleMergePartitions);
+      }
     } else {
       appShuffleInfo.partitions.compute(msg.shuffleId, (id, value) -> {
         if (null == value || INDETERMINATE_SHUFFLE_FINALIZED == value.shuffleMergePartitions) {
@@ -1357,6 +1360,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     @VisibleForTesting
     long getPos() {
       return pos;
+    }
+  }
+
+  public static class StaleBlockPushException extends RuntimeException {
+    public StaleBlockPushException(String message) {
+      super(message);
     }
   }
 }
