@@ -35,24 +35,23 @@ import org.apache.spark.serializer.{KryoSerializer, SerializerInstance, Serializ
 import org.apache.spark.storage.{BlockId, BlockManager, DiskBlockManager, DiskBlockObjectWriter, TempLocalBlockId, TempShuffleBlockId}
 import org.apache.spark.util.{Utils => UUtils}
 
-class SpillableSuite extends SparkFunSuite with BeforeAndAfterEach {
+abstract class SpillableSuite extends SparkFunSuite with BeforeAndAfterEach {
 
-  private val spillFilesCreated = ArrayBuffer.empty[File]
-  private val localFilesCreated = ArrayBuffer.empty[File]
-  private val metricsCreated = ArrayBuffer.empty[ShuffleWriteMetrics]
+  protected val filesCreated: ArrayBuffer[File] = ArrayBuffer.empty[File]
+  protected val metricsCreated: ArrayBuffer[ShuffleWriteMetrics] =
+    ArrayBuffer.empty[ShuffleWriteMetrics]
 
-  private var tempDir: File = _
-  private var conf: SparkConf = _
-  private var taskMemoryManager: TaskMemoryManager = _
+  protected var tempDir: File = _
+  protected var conf: SparkConf = _
+  protected var taskMemoryManager: TaskMemoryManager = _
 
-  private var blockManager: BlockManager = _
-  private var diskBlockManager: DiskBlockManager = _
-  private var taskContext: TaskContext = _
+  protected var blockManager: BlockManager = _
+  protected var diskBlockManager: DiskBlockManager = _
+  protected var taskContext: TaskContext = _
 
   override protected def beforeEach(): Unit = {
     tempDir = UUtils.createTempDir(null, "test")
-    spillFilesCreated.clear()
-    localFilesCreated.clear()
+    filesCreated.clear()
     metricsCreated.clear()
 
     val env: SparkEnv = mock(classOf[SparkEnv])
@@ -77,22 +76,6 @@ class SpillableSuite extends SparkFunSuite with BeforeAndAfterEach {
     val memoryManager = new TestMemoryManager(conf)
     taskMemoryManager = new TaskMemoryManager(memoryManager, 0)
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager)
-
-    when(diskBlockManager.createTempShuffleBlock())
-      .thenAnswer((_: InvocationOnMock) => {
-        val blockId = TempShuffleBlockId(UUID.randomUUID)
-        val file = File.createTempFile("spillFile", ".spill", tempDir)
-        spillFilesCreated += file
-        (blockId, file)
-      })
-
-    when(diskBlockManager.createTempLocalBlock())
-      .thenAnswer((_: InvocationOnMock) => {
-        val blockId = TempLocalBlockId(UUID.randomUUID)
-        val file = File.createTempFile("localFile", ".local", tempDir)
-        localFilesCreated += file
-        (blockId, file)
-      })
   }
 
   override protected def afterEach(): Unit = {
@@ -103,6 +86,47 @@ class SpillableSuite extends SparkFunSuite with BeforeAndAfterEach {
     if (leakedMemory != 0) {
       fail("Test leaked " + leakedMemory + " bytes of managed memory")
     }
+  }
+
+  /**
+   * Use to mock a `DiskBlockObjectWriter` and record the created `ShuffleWriteMetrics`.
+   */
+  protected def mockDiskBlockObjectWriter(): Unit = {
+    when(blockManager.getDiskWriter(
+      any(classOf[BlockId]),
+      any(classOf[File]),
+      any(classOf[SerializerInstance]),
+      anyInt(),
+      any(classOf[ShuffleWriteMetrics])
+    )).thenAnswer((invocation: InvocationOnMock) => {
+      val args = invocation.getArguments
+      val shuffleWriteMetrics = args(4).asInstanceOf[ShuffleWriteMetrics]
+      metricsCreated += shuffleWriteMetrics
+      new DiskBlockObjectWriter(
+        args(1).asInstanceOf[File],
+        blockManager.serializerManager,
+        args(2).asInstanceOf[SerializerInstance],
+        args(3).asInstanceOf[Int],
+        false,
+        shuffleWriteMetrics,
+        args(0).asInstanceOf[BlockId]
+      )
+    })
+  }
+}
+
+class ExternalSorterSpillSuite extends SpillableSuite {
+
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+    // ExternalSorter.spill need mock diskBlockManager.createTempShuffleBlock
+    when(diskBlockManager.createTempShuffleBlock())
+      .thenAnswer((_: InvocationOnMock) => {
+        val blockId = TempShuffleBlockId(UUID.randomUUID)
+        val file = File.createTempFile("spillFile", ".spill", tempDir)
+        filesCreated += file
+        (blockId, file)
+      })
   }
 
   test("SPARK-36242 Spill File should not exists if writer close fails") {
@@ -145,10 +169,10 @@ class SpillableSuite extends SparkFunSuite with BeforeAndAfterEach {
     ioe.getMessage.equals(errorMessage)
     // The `TempShuffleBlock` create by diskBlockManager
     // will remain before SPARK-36242
-    assert(!spillFilesCreated(0).exists())
+    assert(!filesCreated(0).exists())
   }
 
-  test("spill method in ExternalSorter") {
+  test("ExternalSorter.spill method ") {
 
     mockDiskBlockObjectWriter()
 
@@ -175,14 +199,29 @@ class SpillableSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     // Verify bytesWritten same as file size
-    assert(metricsCreated.length == spillFilesCreated.length)
-    spillFilesCreated.foreach(file => assert(file.exists()))
-    metricsCreated.zip(spillFilesCreated).foreach {
+    assert(metricsCreated.length == filesCreated.length)
+    filesCreated.foreach(file => assert(file.exists()))
+    metricsCreated.zip(filesCreated).foreach {
       case (metrics, file) => assert(metrics.bytesWritten == file.length())
     }
   }
+}
 
-  test("spill method in ExternalAppendOnlyMap") {
+class ExternalAppendOnlyMapSpillSuite extends SpillableSuite {
+
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+    // ExternalAppendOnlyMap.spill need mock diskBlockManager.createTempLocalBlock
+    when(diskBlockManager.createTempLocalBlock())
+      .thenAnswer((_: InvocationOnMock) => {
+        val blockId = TempLocalBlockId(UUID.randomUUID)
+        val file = File.createTempFile("localFile", ".local", tempDir)
+        filesCreated += file
+        (blockId, file)
+      })
+  }
+
+  test("ExternalAppendOnlyMap.spill ExternalAppendOnlyMap") {
 
     mockDiskBlockObjectWriter()
 
@@ -209,34 +248,11 @@ class SpillableSuite extends SparkFunSuite with BeforeAndAfterEach {
     }
 
     // Verify bytesWritten same as file size
-    assert(metricsCreated.length == localFilesCreated.length)
-    localFilesCreated.foreach(file => assert(file.exists()))
-    metricsCreated.zip(localFilesCreated).foreach {
+    assert(metricsCreated.length == filesCreated.length)
+    filesCreated.foreach(file => assert(file.exists()))
+    metricsCreated.zip(filesCreated).foreach {
       case (metrics, file) => assert(metrics.bytesWritten == file.length())
     }
-  }
-
-  private def mockDiskBlockObjectWriter(): Unit = {
-    when(blockManager.getDiskWriter(
-      any(classOf[BlockId]),
-      any(classOf[File]),
-      any(classOf[SerializerInstance]),
-      anyInt(),
-      any(classOf[ShuffleWriteMetrics])
-    )).thenAnswer((invocation: InvocationOnMock) => {
-      val args = invocation.getArguments
-      val shuffleWriteMetrics = args(4).asInstanceOf[ShuffleWriteMetrics]
-      metricsCreated += shuffleWriteMetrics
-      new DiskBlockObjectWriter(
-        args(1).asInstanceOf[File],
-        blockManager.serializerManager,
-        args(2).asInstanceOf[SerializerInstance],
-        args(3).asInstanceOf[Int],
-        false,
-        shuffleWriteMetrics,
-        args(0).asInstanceOf[BlockId]
-      )
-    })
   }
 }
 
