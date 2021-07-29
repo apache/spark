@@ -242,8 +242,9 @@ jobs:
         key: pyspark-coursier-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
         restore-keys: |
           pyspark-coursier-
-    - name: List Python packages (Python 3.9)
+    - name: Install Python packages (Python 3.9)
       run: |
+        python3.9 -m pip install 'mlflow>=1.0' sklearn
         python3.9 -m pip list
     - name: Install Conda for pip packaging test
       run: |
