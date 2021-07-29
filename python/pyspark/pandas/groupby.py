@@ -2546,7 +2546,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 # Special handle floating point types because Spark's count treats nan as a valid
                 # value, whereas pandas count doesn't include nan.
 
-                # TODO: Make this work with DataTypeOps.
+                # TODO(SPARK-36350): Make this work with DataTypeOps.
                 if isinstance(spark_type, (FloatType, DoubleType)):
                     stat_exprs.append(sfun(F.nanvl(scol, SF.lit(None))).alias(name))
                     data_columns.append(name)
