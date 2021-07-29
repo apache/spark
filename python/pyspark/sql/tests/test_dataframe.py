@@ -560,10 +560,13 @@ class DataFrameTests(ReusedSQLTestCase):
                              .add("dt", DateType()).add("ts", TimestampType())\
                              .add("ts_ntz", TimestampNTZType())
         data = [
-            (1, "foo", True, 3.0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1), datetime(1969, 1, 1, 1, 1, 1)),
+            (1, "foo", True, 3.0, date(1969, 1, 1), datetime(1969, 1, 1, 1, 1, 1),
+             datetime(1969, 1, 1, 1, 1, 1)),
             (2, "foo", True, 5.0, None, None, None),
-            (3, "bar", False, -1.0, date(2012, 3, 3), datetime(2012, 3, 3, 3, 3, 3), datetime(2012, 3, 3, 3, 3, 3)),
-            (4, "bar", False, 6.0, date(2100, 4, 4), datetime(2100, 4, 4, 4, 4, 4), datetime(2100, 4, 4, 4, 4, 4)),
+            (3, "bar", False, -1.0, date(2012, 3, 3), datetime(2012, 3, 3, 3, 3, 3),
+             datetime(2012, 3, 3, 3, 3, 3)),
+            (4, "bar", False, 6.0, date(2100, 4, 4), datetime(2100, 4, 4, 4, 4, 4),
+             datetime(2100, 4, 4, 4, 4, 4)),
         ]
         df = self.spark.createDataFrame(data, schema)
         return df.toPandas()
