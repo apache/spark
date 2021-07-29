@@ -114,12 +114,12 @@ class Observation:
 
         Returns
         -------
-        :class:`Dict`
+        dict
             the observed metrics
         """
         assert self._jo is not None, 'call DataFrame.observe'
-        jmap = self._jo.getAsJavaMap()
-        # return a pure Python dict, not a py4j JavaMap
+        jmap = self._jo.getAsJava()
+        # return a pure Python dict, not jmap which is a py4j JavaMap
         return {k: v for k, v in jmap.items()}
 
 

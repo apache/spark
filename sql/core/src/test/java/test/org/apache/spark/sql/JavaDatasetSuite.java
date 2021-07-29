@@ -415,8 +415,8 @@ public class JavaDatasetSuite implements Serializable {
     Map<String, Object> unnamedMetrics = null;
 
     try {
-      namedMetrics = namedObservation.getAsJavaMap();
-      unnamedMetrics = unnamedObservation.getAsJavaMap();
+      namedMetrics = namedObservation.getAsJava();
+      unnamedMetrics = unnamedObservation.getAsJava();
     } catch (InterruptedException e) {
       Assert.fail();
     }
@@ -435,8 +435,8 @@ public class JavaDatasetSuite implements Serializable {
 
     // we can get the result multiple times
     try {
-      namedMetrics = namedObservation.getAsJavaMap();
-      unnamedMetrics = unnamedObservation.getAsJavaMap();
+      namedMetrics = namedObservation.getAsJava();
+      unnamedMetrics = unnamedObservation.getAsJava();
     } catch (InterruptedException e) {
       Assert.fail();
     }

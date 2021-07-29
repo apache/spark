@@ -79,8 +79,9 @@ class Observation(name: String) {
   }
 
   /**
-   * Get the observed metrics. This waits for the observed dataset to finish its first action.
-   * Only the result of the first action is available. Subsequent actions do not modify the result.
+   * (Scala-specific) Get the observed metrics. This waits for the observed dataset to finish
+   * its first action. Only the result of the first action is available. Subsequent actions do not
+   * modify the result.
    *
    * @return the observed metrics as a `Map[String, Any]`
    * @throws InterruptedException interrupted while waiting
@@ -99,15 +100,15 @@ class Observation(name: String) {
   }
 
   /**
-   * (Java-specific)
-   * Get the observed metrics. This waits for the observed dataset to finish its first action.
-   * Only the result of the first action is available. Subsequent actions do not modify the result.
+   * (Java-specific) Get the observed metrics. This waits for the observed dataset to finish
+   * its first action. Only the result of the first action is available. Subsequent actions do not
+   * modify the result.
    *
    * @return the observed metrics as a `java.util.Map[String, Object]`
    * @throws InterruptedException interrupted while waiting
    */
   @throws[InterruptedException]
-  def getAsJavaMap: java.util.Map[String, Object] = {
+  def getAsJava: java.util.Map[String, Object] = {
     JavaConverters.mapAsJavaMap(
       get.map { case (key, value) => (key, value.asInstanceOf[Object])}
     )
