@@ -1915,12 +1915,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         scol = self.spark.column
 
-        if isinstance(self.spark.data_type, (FloatType, DoubleType)):
-            cond = scol.isNull() | F.isnan(scol)
-        else:
-            if not self.spark.nullable:
-                return self._psdf.copy()._psser_for(self._column_label)
-            cond = scol.isNull()
+        if not self.spark.nullable and not isinstance(
+            self.spark.data_type, (FloatType, DoubleType)
+        ):
+            return self._psdf.copy()._psser_for(self._column_label)
+
+        cond = self.isnull().spark.column
 
         if value is not None:
             if not isinstance(value, (float, int, str, bool)):
