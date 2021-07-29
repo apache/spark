@@ -2916,6 +2916,28 @@ class DataSourceV2SQLSuite
     }
   }
 
+  test("SPARK-36086: CollapseProject project replace alias should use origin column name") {
+    withTempView("v1") {
+      withTable(s"${catalogAndNamespace}t1", s"${catalogAndNamespace}t2") {
+        sql(
+          s"""
+             |CREATE TABLE ${catalogAndNamespace}t1
+             |USING PARQUET
+             |AS
+             |SELECT id, id as lower_id FROM RANGE(5)""".stripMargin)
+        sql(s"CREATE VIEW v1 as SELECT * FROM ${catalogAndNamespace}t1")
+        sql(
+          s"""
+             |CREATE TABLE ${catalogAndNamespace}t2
+             |USING $v2Format PARTITIONED BY (LOWER_ID)
+             |SELECT LOWER_ID, ID FROM v1""".stripMargin)
+        val columns = spark.table(s"${catalogAndNamespace}t2").columns
+        assert(columns.size == 2)
+        assert(columns.containsSlice(Array("LOWER_ID", "ID")))
+      }
+    }
+  }
+
   private def testNotSupportedV2Command(sqlCommand: String, sqlParams: String): Unit = {
     val e = intercept[AnalysisException] {
       sql(s"$sqlCommand $sqlParams")
