@@ -802,9 +802,10 @@ final class ShuffleBlockFetcherIterator(
             if (checksumEnabled) {
               val checksum = ShuffleChecksumHelper.getChecksumByAlgorithm(checksumAlgorithm)
               checkedIn = new CheckedInputStream(bufIn, checksum)
-              bufIn = checkedIn
+              checkedIn
+            } else {
+              bufIn
             }
-            bufIn
           } catch {
             // The exception could only be throwed by local shuffle block
             case e: IOException =>
