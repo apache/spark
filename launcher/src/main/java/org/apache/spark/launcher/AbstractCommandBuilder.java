@@ -269,7 +269,7 @@ abstract class AbstractCommandBuilder {
       effectiveConfig = new HashMap<>(conf);
       Properties p = loadPropertiesFile();
       p.stringPropertyNames().forEach(key ->
-        effectiveConfig.putIfAbsent(key, p.getProperty(key)));
+        effectiveConfig.computeIfAbsent(key, p::getProperty));
     }
     return effectiveConfig;
   }
