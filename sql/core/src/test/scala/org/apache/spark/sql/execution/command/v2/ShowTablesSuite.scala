@@ -89,4 +89,16 @@ class ShowTablesSuite extends command.ShowTablesSuiteBase with CommandSuiteBase 
       assert(errMsg.contains("SHOW TABLE EXTENDED is not supported for v2 tables"))
     }
   }
+
+  test("SPARK-36086: CollapseProject project replace alias should use origin column name") {
+    withTempView("v1") {
+      withTable(s"$catalog.t1", s"$catalog.t2") {
+        sql(s"CREATE TABLE $catalog.t1 USING PARQUET as SELECT id, id as lower_id FROM RANGE(5)")
+        sql(s"CREATE VIEW v1 as SELECT * FROM $catalog.t1")
+        sql(s"CREATE TABLE $catalog.t2 $defaultUsing " +
+          s"PARTITIONED BY (LOWER_ID) SELECT LOWER_ID, ID FROM v1")
+        sql(s"desc extended $catalog.t2").show(false)
+      }
+    }
+  }
 }
