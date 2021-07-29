@@ -103,6 +103,7 @@ from pyspark.pandas.utils import (
     validate_axis,
     validate_bool_kwarg,
     validate_how,
+    validate_mode,
     verify_temp_column_name,
 )
 from pyspark.pandas.generic import Frame
