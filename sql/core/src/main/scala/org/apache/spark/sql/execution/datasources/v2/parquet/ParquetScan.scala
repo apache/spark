@@ -66,7 +66,6 @@ case class ParquetScan(
       SQLConf.CASE_SENSITIVE.key,
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
-    ParquetSchemaConverter.checkFieldNames(readDataSchema)
     ParquetWriteSupport.setSchema(readDataSchema, hadoopConf)
 
     // Sets flags for `ParquetToSparkSchemaConverter`

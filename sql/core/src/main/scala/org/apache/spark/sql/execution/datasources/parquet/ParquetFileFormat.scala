@@ -218,7 +218,6 @@ class ParquetFileFormat
       SQLConf.CASE_SENSITIVE.key,
       sparkSession.sessionState.conf.caseSensitiveAnalysis)
 
-    ParquetSchemaConverter.checkFieldNames(requiredSchema)
     ParquetWriteSupport.setSchema(requiredSchema, hadoopConf)
 
     // Sets flags for `ParquetToSparkSchemaConverter`
