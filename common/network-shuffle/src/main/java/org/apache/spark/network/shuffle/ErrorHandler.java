@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.FileNotFoundException;
 import java.net.ConnectException;
 
 import com.google.common.base.Throwables;
@@ -24,9 +25,9 @@ import com.google.common.base.Throwables;
 import org.apache.spark.annotation.Evolving;
 
 /**
- * Plugs into {@link RetryingBlockFetcher} to further control when an exception should be retried
+ * Plugs into {@link RetryingBlockTransferor} to further control when an exception should be retried
  * and logged.
- * Note: {@link RetryingBlockFetcher} will delegate the exception to this handler only when
+ * Note: {@link RetryingBlockTransferor} will delegate the exception to this handler only when
  * - remaining retries < max retries
  * - exception is an IOException
  *
@@ -82,8 +83,12 @@ public interface ErrorHandler {
 
     @Override
     public boolean shouldRetryError(Throwable t) {
-      // If it is a connection time out or a connection closed exception, no need to retry.
-      if (t.getCause() != null && t.getCause() instanceof ConnectException) {
+      // If it is a connection time-out or a connection closed exception, no need to retry.
+      // If it is a FileNotFoundException originating from the client while pushing the shuffle
+      // blocks to the server, even then there is no need to retry. We will still log this exception
+      // once which helps with debugging.
+      if (t.getCause() != null && (t.getCause() instanceof ConnectException ||
+          t.getCause() instanceof FileNotFoundException)) {
         return false;
       }
       // If the block is too late, there is no need to retry it

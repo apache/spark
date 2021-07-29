@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 from functools import partial
-from typing import Any, List, Optional, Union, cast, no_type_check
+from typing import Any, Callable, List, Optional, Union, cast, no_type_check
 
 import pandas as pd
 from pandas.api.types import is_hashable, CategoricalDtype
@@ -221,6 +221,8 @@ class CategoricalIndex(Index):
            Whether or not to add the categories inplace or return a copy of
            this categorical with added categories.
 
+           .. deprecated:: 3.2.0
+
         Returns
         -------
         CategoricalIndex or None
@@ -231,6 +233,14 @@ class CategoricalIndex(Index):
         ValueError
             If the new categories include old categories or do not validate as
             categories
+
+        See Also
+        --------
+        rename_categories : Rename categories.
+        reorder_categories : Reorder categories.
+        remove_categories : Remove the specified categories.
+        remove_unused_categories : Remove categories which are not used.
+        set_categories : Set the categories to the specified ones.
 
         Examples
         --------
@@ -329,6 +339,8 @@ class CategoricalIndex(Index):
            Whether or not to remove the categories inplace or return a copy of
            this categorical with removed categories.
 
+           .. deprecated:: 3.2.0
+
         Returns
         -------
         CategoricalIndex or None
@@ -338,6 +350,14 @@ class CategoricalIndex(Index):
         ------
         ValueError
             If the removals are not contained in the categories
+
+        See Also
+        --------
+        rename_categories : Rename categories.
+        reorder_categories : Reorder categories.
+        add_categories : Add new categories.
+        remove_unused_categories : Remove categories which are not used.
+        set_categories : Set the categories to the specified ones.
 
         Examples
         --------
@@ -354,6 +374,264 @@ class CategoricalIndex(Index):
             raise ValueError("cannot use inplace with CategoricalIndex")
 
         return CategoricalIndex(self.to_series().cat.remove_categories(removals)).rename(self.name)
+
+    def remove_unused_categories(self, inplace: bool = False) -> Optional["CategoricalIndex"]:
+        """
+        Remove categories which are not used.
+
+        Parameters
+        ----------
+        inplace : bool, default False
+           Whether or not to drop unused categories inplace or return a copy of
+           this categorical with unused categories dropped.
+
+           .. deprecated:: 3.2.0
+
+        Returns
+        -------
+        cat : CategoricalIndex or None
+            Categorical with unused categories dropped or None if ``inplace=True``.
+
+        See Also
+        --------
+        rename_categories : Rename categories.
+        reorder_categories : Reorder categories.
+        add_categories : Add new categories.
+        remove_categories : Remove the specified categories.
+        set_categories : Set the categories to the specified ones.
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(list("abbccc"), categories=['a', 'b', 'c', 'd'])
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c', 'd'], ordered=False, dtype='category')
+
+        >>> idx.remove_unused_categories()  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+        """
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(self.to_series().cat.remove_unused_categories()).rename(self.name)
+
+    def rename_categories(
+        self, new_categories: Union[list, dict, Callable], inplace: bool = False
+    ) -> Optional["CategoricalIndex"]:
+        """
+        Rename categories.
+
+        Parameters
+        ----------
+        new_categories : list-like, dict-like or callable
+
+            New categories which will replace old categories.
+
+            * list-like: all items must be unique and the number of items in
+              the new categories must match the existing number of categories.
+
+            * dict-like: specifies a mapping from
+              old categories to new. Categories not contained in the mapping
+              are passed through and extra categories in the mapping are
+              ignored.
+
+            * callable : a callable that is called on all items in the old
+              categories and whose return values comprise the new categories.
+
+        inplace : bool, default False
+            Whether or not to rename the categories inplace or return a copy of
+            this categorical with renamed categories.
+
+            .. deprecated:: 3.2.0
+
+        Returns
+        -------
+        cat : CategoricalIndex or None
+            Categorical with removed categories or None if ``inplace=True``.
+
+        Raises
+        ------
+        ValueError
+            If new categories are list-like and do not have the same number of
+            items than the current categories or do not validate as categories
+
+        See Also
+        --------
+        reorder_categories : Reorder categories.
+        add_categories : Add new categories.
+        remove_categories : Remove the specified categories.
+        remove_unused_categories : Remove categories which are not used.
+        set_categories : Set the categories to the specified ones.
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(["a", "a", "b"])
+        >>> idx.rename_categories([0, 1])
+        CategoricalIndex([0, 0, 1], categories=[0, 1], ordered=False, dtype='category')
+
+        For dict-like ``new_categories``, extra keys are ignored and
+        categories not in the dictionary are passed through
+
+        >>> idx.rename_categories({'a': 'A', 'c': 'C'})
+        CategoricalIndex(['A', 'A', 'b'], categories=['A', 'b'], ordered=False, dtype='category')
+
+        You may also provide a callable to create the new categories
+
+        >>> idx.rename_categories(lambda x: x.upper())
+        CategoricalIndex(['A', 'A', 'B'], categories=['A', 'B'], ordered=False, dtype='category')
+        """
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(self.to_series().cat.rename_categories(new_categories)).rename(
+            self.name
+        )
+
+    def reorder_categories(
+        self,
+        new_categories: Union[pd.Index, Any, List],
+        ordered: Optional[bool] = None,
+        inplace: bool = False,
+    ) -> Optional["CategoricalIndex"]:
+        """
+        Reorder categories as specified in new_categories.
+
+        `new_categories` need to include all old categories and no new category
+        items.
+
+        Parameters
+        ----------
+        new_categories : Index-like
+           The categories in new order.
+        ordered : bool, optional
+           Whether or not the categorical is treated as a ordered categorical.
+           If not given, do not change the ordered information.
+        inplace : bool, default False
+           Whether or not to reorder the categories inplace or return a copy of
+           this categorical with reordered categories.
+
+           .. deprecated:: 3.2.0
+
+        Returns
+        -------
+        cat : CategoricalIndex or None
+            Categorical with removed categories or None if ``inplace=True``.
+
+        Raises
+        ------
+        ValueError
+            If the new categories do not contain all old category items or any
+            new ones
+
+        See Also
+        --------
+        rename_categories : Rename categories.
+        add_categories : Add new categories.
+        remove_categories : Remove the specified categories.
+        remove_unused_categories : Remove categories which are not used.
+        set_categories : Set the categories to the specified ones.
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(list("abbccc"))
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+
+        >>> idx.reorder_categories(['c', 'b', 'a'])  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['c', 'b', 'a'], ordered=False, dtype='category')
+        """
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(
+            self.to_series().cat.reorder_categories(new_categories=new_categories, ordered=ordered)
+        ).rename(self.name)
+
+    def set_categories(
+        self,
+        new_categories: Union[pd.Index, List],
+        ordered: Optional[bool] = None,
+        rename: bool = False,
+        inplace: bool = False,
+    ) -> Optional["CategoricalIndex"]:
+        """
+        Set the categories to the specified new_categories.
+
+        `new_categories` can include new categories (which will result in
+        unused categories) or remove old categories (which results in values
+        set to NaN). If `rename==True`, the categories will simple be renamed
+        (less or more items than in old categories will result in values set to
+        NaN or in unused categories respectively).
+
+        This method can be used to perform more than one action of adding,
+        removing, and reordering simultaneously and is therefore faster than
+        performing the individual steps via the more specialised methods.
+
+        On the other hand this methods does not do checks (e.g., whether the
+        old categories are included in the new categories on a reorder), which
+        can result in surprising changes, for example when using special string
+        dtypes, which does not considers a S1 string equal to a single char
+        python string.
+
+        Parameters
+        ----------
+        new_categories : Index-like
+           The categories in new order.
+        ordered : bool, default False
+           Whether or not the categorical is treated as a ordered categorical.
+           If not given, do not change the ordered information.
+        rename : bool, default False
+           Whether or not the new_categories should be considered as a rename
+           of the old categories or as reordered categories.
+        inplace : bool, default False
+           Whether or not to reorder the categories in-place or return a copy
+           of this categorical with reordered categories.
+
+           .. deprecated:: 3.2.0
+
+        Returns
+        -------
+        CategoricalIndex with reordered categories or None if inplace.
+
+        Raises
+        ------
+        ValueError
+            If new_categories does not validate as categories
+
+        See Also
+        --------
+        rename_categories : Rename categories.
+        reorder_categories : Reorder categories.
+        add_categories : Add new categories.
+        remove_categories : Remove the specified categories.
+        remove_unused_categories : Remove categories which are not used.
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(list("abbccc"))
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'b', 'c', 'c', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+
+        >>> idx.set_categories(['b', 'c'])  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex([nan, 'b', 'b', 'c', 'c', 'c'],
+                         categories=['b', 'c'], ordered=False, dtype='category')
+
+        >>> idx.set_categories([1, 2, 3], rename=True)
+        CategoricalIndex([1, 2, 2, 3, 3, 3], categories=[1, 2, 3], ordered=False, dtype='category')
+
+        >>> idx.set_categories([1, 2, 3], rename=True, ordered=True)
+        CategoricalIndex([1, 2, 2, 3, 3, 3], categories=[1, 2, 3], ordered=True, dtype='category')
+        """
+        if inplace:
+            raise ValueError("cannot use inplace with CategoricalIndex")
+
+        return CategoricalIndex(
+            self.to_series().cat.set_categories(new_categories, ordered=ordered, rename=rename)
+        ).rename(self.name)
 
     def __getattr__(self, item: str) -> Any:
         if hasattr(MissingPandasLikeCategoricalIndex, item):

@@ -20,7 +20,7 @@ from typing import Any, Union
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import CategoricalDtype
+from pandas.api.types import is_bool_dtype, is_integer_dtype, CategoricalDtype
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin, numpy_column_op
@@ -39,8 +39,22 @@ from pyspark.sql import functions as F
 from pyspark.sql.column import Column
 from pyspark.sql.types import (
     BooleanType,
+    DataType,
     StringType,
 )
+
+
+def _non_fractional_astype(
+    index_ops: IndexOpsLike, dtype: Dtype, spark_type: DataType
+) -> IndexOpsLike:
+    if isinstance(dtype, CategoricalDtype):
+        return _as_categorical_type(index_ops, dtype, spark_type)
+    elif isinstance(spark_type, BooleanType):
+        return _as_bool_type(index_ops, dtype)
+    elif isinstance(spark_type, StringType):
+        return _as_string_type(index_ops, dtype, null_str=str(np.nan))
+    else:
+        return _as_other_type(index_ops, dtype, spark_type)
 
 
 class NumericOps(DataTypeOps):
@@ -79,7 +93,11 @@ class NumericOps(DataTypeOps):
             raise TypeError("Exponentiation can not be applied to given types.")
 
         def pow_func(left: Column, right: Any) -> Column:
-            return F.when(left == 1, left).otherwise(Column.__pow__(left, right))
+            return (
+                F.when(left == 1, left)
+                .when(SF.lit(right) == 0, 1)
+                .otherwise(Column.__pow__(left, right))
+            )
 
         right = transform_boolean_operand_to_numeric(right, spark_type=left.spark.data_type)
         return column_op(pow_func)(left, right)
@@ -220,15 +238,7 @@ class IntegralOps(NumericOps):
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
-
-        if isinstance(dtype, CategoricalDtype):
-            return _as_categorical_type(index_ops, dtype, spark_type)
-        elif isinstance(spark_type, BooleanType):
-            return _as_bool_type(index_ops, dtype)
-        elif isinstance(spark_type, StringType):
-            return _as_string_type(index_ops, dtype, null_str=str(np.nan))
-        else:
-            return _as_other_type(index_ops, dtype, spark_type)
+        return _non_fractional_astype(index_ops, dtype, spark_type)
 
 
 class FractionalOps(NumericOps):
@@ -319,6 +329,12 @@ class FractionalOps(NumericOps):
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
+        if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            if index_ops.hasnans:
+                raise ValueError(
+                    "Cannot convert %s with missing values to integer" % self.pretty_name
+                )
+
         if isinstance(dtype, CategoricalDtype):
             return _as_categorical_type(index_ops, dtype, spark_type)
         elif isinstance(spark_type, BooleanType):
@@ -370,16 +386,9 @@ class DecimalOps(FractionalOps):
         )
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
+        # TODO(SPARK-36230): check index_ops.hasnans after fixing SPARK-36230
         dtype, spark_type = pandas_on_spark_type(dtype)
-
-        if isinstance(dtype, CategoricalDtype):
-            return _as_categorical_type(index_ops, dtype, spark_type)
-        elif isinstance(spark_type, BooleanType):
-            return _as_bool_type(index_ops, dtype)
-        elif isinstance(spark_type, StringType):
-            return _as_string_type(index_ops, dtype, null_str=str(np.nan))
-        else:
-            return _as_other_type(index_ops, dtype, spark_type)
+        return _non_fractional_astype(index_ops, dtype, spark_type)
 
 
 class IntegralExtensionOps(IntegralOps):
@@ -395,6 +404,19 @@ class IntegralExtensionOps(IntegralOps):
         """Restore column when to_pandas."""
         return col.astype(self.dtype)
 
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
+        dtype, spark_type = pandas_on_spark_type(dtype)
+
+        if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            if index_ops.hasnans:
+                raise ValueError(
+                    "Cannot convert %s with missing values to integer" % self.pretty_name
+                )
+        elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            if index_ops.hasnans:
+                raise ValueError("Cannot convert %s with missing values to bool" % self.pretty_name)
+        return _non_fractional_astype(index_ops, dtype, spark_type)
+
 
 class FractionalExtensionOps(FractionalOps):
     """
@@ -408,3 +430,34 @@ class FractionalExtensionOps(FractionalOps):
     def restore(self, col: pd.Series) -> pd.Series:
         """Restore column when to_pandas."""
         return col.astype(self.dtype)
+
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
+        dtype, spark_type = pandas_on_spark_type(dtype)
+
+        if is_integer_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            if index_ops.hasnans:
+                raise ValueError(
+                    "Cannot convert %s with missing values to integer" % self.pretty_name
+                )
+        elif is_bool_dtype(dtype) and not isinstance(dtype, extension_dtypes):
+            if index_ops.hasnans:
+                raise ValueError("Cannot convert %s with missing values to bool" % self.pretty_name)
+
+        if isinstance(dtype, CategoricalDtype):
+            return _as_categorical_type(index_ops, dtype, spark_type)
+        elif isinstance(spark_type, BooleanType):
+            if isinstance(dtype, extension_dtypes):
+                scol = index_ops.spark.column.cast(spark_type)
+            else:
+                scol = F.when(
+                    index_ops.spark.column.isNull() | F.isnan(index_ops.spark.column),
+                    SF.lit(True),
+                ).otherwise(index_ops.spark.column.cast(spark_type))
+            return index_ops._with_new_scol(
+                scol.alias(index_ops._internal.data_spark_column_names[0]),
+                field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
+            )
+        elif isinstance(spark_type, StringType):
+            return _as_string_type(index_ops, dtype, null_str=str(np.nan))
+        else:
+            return _as_other_type(index_ops, dtype, spark_type)

@@ -270,7 +270,12 @@ def exec_sbt(sbt_args=()):
     """Will call SBT in the current directory with the list of mvn_args passed
     in and returns the subprocess for any further processing"""
 
-    sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")] + sbt_args
+    sbt_cmd = [os.path.join(SPARK_HOME, "build", "sbt")]
+
+    if "GITHUB_ACTIONS" in os.environ:
+        sbt_cmd = sbt_cmd + ['-mem', '2300']
+
+    sbt_cmd = sbt_cmd + sbt_args
 
     sbt_output_filter = re.compile(b"^.*[info].*Resolving" + b"|" +
                                    b"^.*[warn].*Merging" + b"|" +
@@ -799,7 +804,8 @@ def main():
     # backwards compatibility checks
     if build_tool == "sbt":
         # Note: compatibility tests only supported in sbt for now
-        detect_binary_inop_with_mima(extra_profiles)
+        if not os.environ.get("SKIP_MIMA"):
+            detect_binary_inop_with_mima(extra_profiles)
         # Since we did not build assembly/package before running dev/mima, we need to
         # do it here because the tests still rely on it; see SPARK-13294 for details.
         build_spark_assembly_sbt(extra_profiles, should_run_java_style_checks)

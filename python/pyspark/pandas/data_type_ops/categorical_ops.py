@@ -60,16 +60,7 @@ class CategoricalOps(DataTypeOps):
         if isinstance(dtype, CategoricalDtype) and cast(CategoricalDtype, dtype).categories is None:
             return index_ops.copy()
 
-        categories = cast(CategoricalDtype, index_ops.dtype).categories
-        if len(categories) == 0:
-            scol = SF.lit(None)
-        else:
-            kvs = chain(
-                *[(SF.lit(code), SF.lit(category)) for code, category in enumerate(categories)]
-            )
-            map_scol = F.create_map(*kvs)
-            scol = map_scol.getItem(index_ops.spark.column)
-        return index_ops._with_new_scol(scol).astype(dtype)
+        return _to_cat(index_ops).astype(dtype)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         return _compare(left, right, Column.__eq__, is_equality_comparison=True)
@@ -118,7 +109,10 @@ def _compare(
         # Check if categoricals have the same dtype, same categories, and same ordered
         if hash(left.dtype) != hash(right.dtype):
             raise TypeError("Categoricals can only be compared if 'categories' are the same.")
-        return column_op(f)(left, right)
+        if cast(CategoricalDtype, left.dtype).ordered:
+            return column_op(f)(left, right)
+        else:
+            return column_op(f)(_to_cat(left), _to_cat(right))
     elif not is_list_like(right):
         categories = cast(CategoricalDtype, left.dtype).categories
         if right not in categories:
@@ -127,3 +121,14 @@ def _compare(
         return column_op(f)(left, right_code)
     else:
         raise TypeError("Cannot compare a Categorical with the given type.")
+
+
+def _to_cat(index_ops: IndexOpsLike) -> IndexOpsLike:
+    categories = cast(CategoricalDtype, index_ops.dtype).categories
+    if len(categories) == 0:
+        scol = SF.lit(None)
+    else:
+        kvs = chain(*[(SF.lit(code), SF.lit(category)) for code, category in enumerate(categories)])
+        map_scol = F.create_map(*kvs)
+        scol = map_scol[index_ops.spark.column]
+    return index_ops._with_new_scol(scol)

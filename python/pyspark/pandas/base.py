@@ -522,13 +522,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ps.Series([1, 2, 3]).rename("a").to_frame().set_index("a").index.hasnans
         False
         """
-        sdf = self._internal.spark_frame
-        scol = self.spark.column
-
-        if isinstance(self.spark.data_type, (DoubleType, FloatType)):
-            return sdf.select(F.max(scol.isNull() | F.isnan(scol))).collect()[0][0]
-        else:
-            return sdf.select(F.max(scol.isNull())).collect()[0][0]
+        return self.isnull().any()
 
     @property
     def is_monotonic(self) -> bool:
@@ -1580,7 +1574,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                     )
                 )
                 map_scol = F.create_map(*kvs)
-                scol = map_scol.getItem(self.spark.column)
+                scol = map_scol[self.spark.column]
             codes, uniques = self._with_new_scol(
                 scol.alias(self._internal.data_spark_column_names[0])
             ).factorize(na_sentinel=na_sentinel)
@@ -1636,7 +1630,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
             map_scol = F.create_map(*kvs)
 
             null_scol = F.when(cond, SF.lit(na_sentinel_code))
-            new_scol = null_scol.otherwise(map_scol.getItem(scol))
+            new_scol = null_scol.otherwise(map_scol[scol])
 
         codes = self._with_new_scol(new_scol.alias(self._internal.data_spark_column_names[0]))
 

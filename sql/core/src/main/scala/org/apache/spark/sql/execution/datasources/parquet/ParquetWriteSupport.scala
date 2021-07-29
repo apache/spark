@@ -482,7 +482,7 @@ object ParquetWriteSupport {
   val SPARK_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.attributes"
 
   def setSchema(schema: StructType, configuration: Configuration): Unit = {
-    schema.map(_.name).foreach(ParquetSchemaConverter.checkFieldName)
+    ParquetSchemaConverter.checkFieldNames(schema)
     configuration.set(SPARK_ROW_SCHEMA, schema.json)
     configuration.setIfUnset(
       ParquetOutputFormat.WRITER_VERSION,

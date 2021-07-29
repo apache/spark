@@ -122,6 +122,35 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         self.assertRaises(ValueError, lambda: psidx.remove_categories(4))
         self.assertRaises(ValueError, lambda: psidx.remove_categories([4, None]))
 
+    def test_remove_unused_categories(self):
+        pidx = pd.CategoricalIndex([1, 4, 5, 3], categories=[4, 3, 2, 1])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(pidx.remove_unused_categories(), psidx.remove_unused_categories())
+
+        self.assertRaises(ValueError, lambda: psidx.remove_unused_categories(inplace=True))
+
+    def test_reorder_categories(self):
+        pidx = pd.CategoricalIndex([1, 2, 3])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(pidx.reorder_categories([1, 2, 3]), psidx.reorder_categories([1, 2, 3]))
+        self.assert_eq(
+            pidx.reorder_categories([1, 2, 3], ordered=True),
+            psidx.reorder_categories([1, 2, 3], ordered=True),
+        )
+        self.assert_eq(pidx.reorder_categories([3, 2, 1]), psidx.reorder_categories([3, 2, 1]))
+        self.assert_eq(
+            pidx.reorder_categories([3, 2, 1], ordered=True),
+            psidx.reorder_categories([3, 2, 1], ordered=True),
+        )
+
+        self.assertRaises(ValueError, lambda: pidx.reorder_categories([1, 2, 3], inplace=True))
+        self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2]))
+        self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 4]))
+        self.assertRaises(ValueError, lambda: psidx.reorder_categories([1, 2, 2]))
+        self.assertRaises(TypeError, lambda: psidx.reorder_categories(1))
+
     def test_as_ordered_unordered(self):
         pidx = pd.CategoricalIndex(["x", "y", "z"], categories=["z", "y", "x"])
         psidx = ps.from_pandas(pidx)
@@ -256,6 +285,80 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
         psidx = ps.from_pandas(pidx)
 
         self.assert_eq(psidx.insert(1, "w"), pidx.insert(1, "w"))
+
+    def test_rename_categories(self):
+        pidx = pd.CategoricalIndex(["a", "b", "c", "d"])
+        psidx = ps.from_pandas(pidx)
+        self.assert_eq(pidx.rename_categories([0, 1, 3, 2]), psidx.rename_categories([0, 1, 3, 2]))
+        self.assert_eq(
+            pidx.rename_categories({"a": "A", "c": "C"}),
+            psidx.rename_categories({"a": "A", "c": "C"}),
+        )
+        self.assert_eq(
+            pidx.rename_categories(lambda x: x.upper()),
+            psidx.rename_categories(lambda x: x.upper()),
+        )
+        self.assertRaises(
+            TypeError,
+            lambda: psidx.rename_categories(None),
+        )
+        self.assertRaises(
+            TypeError,
+            lambda: psidx.rename_categories(1),
+        )
+        self.assertRaises(
+            TypeError,
+            lambda: psidx.rename_categories("x"),
+        )
+
+    def test_set_categories(self):
+        pidx = pd.CategoricalIndex(["a", "b", "c", "d"])
+        psidx = ps.from_pandas(pidx)
+
+        self.assert_eq(
+            pidx.set_categories(["a", "c", "b", "o"]),
+            psidx.set_categories(["a", "c", "b", "o"]),
+        )
+        self.assert_eq(
+            pidx.set_categories(["a", "c", "b"]),
+            psidx.set_categories(["a", "c", "b"]),
+        )
+        self.assert_eq(
+            pidx.set_categories(["a", "c", "b", "d", "e"]),
+            psidx.set_categories(["a", "c", "b", "d", "e"]),
+        )
+
+        self.assert_eq(
+            pidx.set_categories([0, 1, 3, 2], rename=True),
+            psidx.set_categories([0, 1, 3, 2], rename=True),
+        )
+        self.assert_eq(
+            pidx.set_categories([0, 1, 3], rename=True),
+            psidx.set_categories([0, 1, 3], rename=True),
+        )
+        self.assert_eq(
+            pidx.set_categories([0, 1, 3, 2, 4], rename=True),
+            psidx.set_categories([0, 1, 3, 2, 4], rename=True),
+        )
+
+        self.assert_eq(
+            pidx.set_categories(["a", "c", "b", "o"], ordered=True),
+            psidx.set_categories(["a", "c", "b", "o"], ordered=True),
+        )
+        self.assert_eq(
+            pidx.set_categories(["a", "c", "b"], ordered=True),
+            psidx.set_categories(["a", "c", "b"], ordered=True),
+        )
+        self.assert_eq(
+            pidx.set_categories(["a", "c", "b", "d", "e"], ordered=True),
+            psidx.set_categories(["a", "c", "b", "d", "e"], ordered=True),
+        )
+
+        self.assertRaisesRegex(
+            ValueError,
+            "cannot use inplace with CategoricalIndex",
+            lambda: psidx.set_categories(["a", "c", "b", "o"], inplace=True),
+        )
 
 
 if __name__ == "__main__":
