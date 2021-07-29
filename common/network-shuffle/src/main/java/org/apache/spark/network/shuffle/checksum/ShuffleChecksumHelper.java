@@ -18,6 +18,7 @@
 package org.apache.spark.network.shuffle.checksum;
 
 import java.io.*;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.Adler32;
 import java.util.zip.CRC32;
 import java.util.zip.CheckedInputStream;
@@ -126,14 +127,14 @@ public class ShuffleChecksumHelper {
       long checksumByReader) {
     Cause cause;
     try {
-      long diagnoseStart = System.currentTimeMillis();
+      long diagnoseStartNs = System.nanoTime();
       // Try to get the checksum instance before reading the checksum file so that
       // `UnsupportedOperationException` can be thrown first before `FileNotFoundException`
       // when the checksum algorithm isn't supported.
       Checksum checksumAlgo = getChecksumByAlgorithm(algorithm);
       long checksumByWriter = readChecksumByReduceId(checksumFile, reduceId);
       long checksumByReCalculation = calculateChecksumForPartition(partitionData, checksumAlgo);
-      long duration = System.currentTimeMillis() - diagnoseStart;
+      long duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - diagnoseStartNs);
       logger.info("Shuffle corruption diagnosis took {} ms, checksum file {}",
         duration, checksumFile.getAbsolutePath());
       if (checksumByWriter != checksumByReCalculation) {
