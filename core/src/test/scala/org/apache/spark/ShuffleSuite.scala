@@ -450,12 +450,11 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
   }
 
   test("SPARK-36206: shuffle checksum detect disk corruption") {
-    conf
+    val newConf = conf.clone
       .set(config.SHUFFLE_CHECKSUM_ENABLED, true)
       .set(TEST_NO_STAGE_RETRY, false)
       .set("spark.stage.maxConsecutiveAttempts", "1")
-      .set(config.SHUFFLE_SERVICE_ENABLED, false)
-    sc = new SparkContext("local-cluster[2, 1, 2048]", "test", conf)
+    sc = new SparkContext("local-cluster[2, 1, 2048]", "test", newConf)
     val rdd = sc.parallelize(1 to 10, 2).map((_, 1)).reduceByKey(_ + _)
     // materialize the shuffle map outputs
     rdd.count()
