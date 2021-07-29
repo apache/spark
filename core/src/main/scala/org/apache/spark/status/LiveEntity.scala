@@ -25,6 +25,7 @@ import scala.collection.immutable.{HashSet, TreeSet}
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.JobExecutionStatus
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.{ExecutorMetrics, TaskMetrics}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceInformation, ResourceProfile, TaskResourceRequest}
 import org.apache.spark.scheduler.{AccumulableInfo, StageInfo, TaskInfo}
@@ -846,7 +847,7 @@ private class RDDPartitionSeq extends Seq[v1.RDDPartitionInfo] {
       curr += 1
       e = e.next
     }
-    if (e != null) e.value else throw new IndexOutOfBoundsException(idx.toString)
+    if (e != null) e.value else throw SparkCoreErrors.indexOutOfBound(idx)
   }
 
   override def iterator: Iterator[v1.RDDPartitionInfo] = {
