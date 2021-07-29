@@ -184,9 +184,9 @@ private[sql] class AvroSerializer(
         // (the `null` case), output the timestamp value without time zone
         // as with millisecond precision.
         case null | _: LocalTimestampMillis => (getter, ordinal) =>
-          DateTimeUtils.microsToMillis(timestampRebaseFunc(getter.getLong(ordinal)))
+          DateTimeUtils.microsToMillis(getter.getLong(ordinal))
         case _: LocalTimestampMicros => (getter, ordinal) =>
-          timestampRebaseFunc(getter.getLong(ordinal))
+          getter.getLong(ordinal)
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"SQL type ${TimestampNTZType.sql} cannot be converted to Avro logical type $other")
       }
