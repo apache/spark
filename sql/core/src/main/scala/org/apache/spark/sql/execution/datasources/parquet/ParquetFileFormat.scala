@@ -386,6 +386,10 @@ class ParquetFileFormat
 
     case _ => false
   }
+
+  override def supportFieldName(name: String): Boolean = {
+    !name.matches(".*[ ,;{}()\n\t=].*")
+  }
 }
 
 object ParquetFileFormat extends Logging {

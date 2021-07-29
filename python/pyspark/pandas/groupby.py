@@ -2943,7 +2943,7 @@ class SeriesGroupBy(GroupBy[Series]):
             internal = psser._internal.resolved_copy
             return first_series(DataFrame(internal))
         else:
-            return psser
+            return psser.copy()
 
     def _cleanup_and_return(self, pdf: pd.DataFrame) -> Series:
         return first_series(pdf).rename().rename(self._psser.name)

@@ -1895,7 +1895,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             self._psdf._update_internal_frame(psser._psdf._internal, requires_same_anchor=False)
             return None
         else:
-            return psser._with_new_scol(psser.spark.column, field=psser._internal.data_fields[0])
+            return psser.copy()
 
     def _fillna(
         self,
@@ -1919,7 +1919,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             cond = scol.isNull() | F.isnan(scol)
         else:
             if not self.spark.nullable:
-                return self.copy()
+                return self._psdf.copy()._psser_for(self._column_label)
             cond = scol.isNull()
 
         if value is not None:
@@ -3598,8 +3598,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 Window.unboundedPreceding, Window.unboundedFollowing
             )
             scol = stat_func(F.row_number().over(window1)).over(window2)
-        psser = self._with_new_scol(scol)
-        return psser.astype(np.float64)
+        return self._with_new_scol(scol.cast(DoubleType()))
 
     def filter(
         self,
@@ -4109,7 +4108,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         b    2
         dtype: int64
         """
-        return self._psdf.copy(deep=deep)._psser_for(self._column_label)
+        return first_series(DataFrame(self._internal))
 
     def mode(self, dropna: bool = True) -> "Series":
         """
@@ -6185,7 +6184,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             internal = psser._internal.resolved_copy
             return first_series(DataFrame(internal))
         else:
-            return psser
+            return psser.copy()
 
     def _reduce_for_stat_function(
         self,

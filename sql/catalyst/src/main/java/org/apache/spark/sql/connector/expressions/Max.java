@@ -26,19 +26,15 @@ import org.apache.spark.annotation.Evolving;
  */
 @Evolving
 public final class Max implements AggregateFunc {
-    private FieldReference column;
+  private final FieldReference column;
 
-    public Max(FieldReference column) {
-        this.column = column;
-    }
+  public Max(FieldReference column) { this.column = column; }
 
-    public FieldReference column() { return column; }
+  public FieldReference column() { return column; }
 
-    @Override
-    public String toString() {
-        return "Max(" + column.describe() + ")";
-    }
+  @Override
+  public String toString() { return "Max(" + column.describe() + ")"; }
 
-    @Override
-    public String describe() { return this.toString(); }
+  @Override
+  public String describe() { return this.toString(); }
 }
