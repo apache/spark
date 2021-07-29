@@ -21,6 +21,7 @@ import java.io.File
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.time.LocalDateTime
 import java.util.{Locale, Set}
 
 import com.google.common.io.Files
@@ -2630,6 +2631,21 @@ abstract class SQLQuerySuiteBase extends QueryTest with SQLTestUtils with TestHi
         hiveClient.runSqlHive("alter table t1 partition(pid=2) SET FILEFORMAT textfile")
         checkAnswer(sql("select pid, id from t1 order by pid"), Seq(Row(1, 2), Row(2, 2)))
       }
+    }
+  }
+
+  test("SPARK-36180: Store TIMESTAMP_NTZ into hive catalog as TIMESTAMP") {
+    withTable("t") {
+      val dt = "2018-11-17 13:33:33.0"
+      val ddl =
+        s"CREATE TABLE t as SELECT TIMESTAMP_LTZ '$dt' as c0, TIMESTAMP_NTZ '$dt' as c1"
+      sql(ddl)
+      val df = sql("SELECT c0, to_timestamp_ntz(c0), c1, to_timestamp_ntz(c1) FROM t")
+      checkAnswer(df, Row(
+        Timestamp.valueOf(dt),
+        LocalDateTime.of(2018, 11, 17, 13, 33, 33),
+        Timestamp.valueOf("2018-11-17 05:33:33.0"),
+        LocalDateTime.of(2018, 11, 17, 5, 33, 33)))
     }
   }
 }

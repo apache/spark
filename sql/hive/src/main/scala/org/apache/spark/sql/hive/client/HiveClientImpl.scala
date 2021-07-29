@@ -1000,8 +1000,22 @@ private[hive] object HiveClientImpl extends Logging {
     // When reading data in parquet, orc, or avro file format with string type for char,
     // the tailing spaces may lost if we are not going to pad it.
     val typeString = CharVarcharUtils.getRawTypeString(c.metadata)
-      .getOrElse(HiveVoidType.replaceVoidType(c.dataType).catalogString)
+      .getOrElse(toHiveCompatibleTypeStr(c.dataType).catalogString)
     new FieldSchema(c.name, typeString, c.getComment().orNull)
+  }
+
+  def toHiveCompatibleTypeStr(dt: DataType): DataType = dt match {
+    case ArrayType(et, nullable) =>
+      ArrayType(toHiveCompatibleTypeStr(et), nullable)
+    case MapType(kt, vt, nullable) =>
+      MapType(toHiveCompatibleTypeStr(kt), toHiveCompatibleTypeStr(vt), nullable)
+    case StructType(fields) =>
+      StructType(fields.map { field =>
+        field.copy(dataType = toHiveCompatibleTypeStr(field.dataType))
+      })
+    case _: NullType => HiveVoidType
+    case TimestampNTZType => TimestampType
+    case _ => dt
   }
 
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
@@ -1283,17 +1297,4 @@ private[hive] case object HiveVoidType extends DataType {
   override def defaultSize: Int = 1
   override def asNullable: DataType = HiveVoidType
   override def simpleString: String = "void"
-
-  def replaceVoidType(dt: DataType): DataType = dt match {
-    case ArrayType(et, nullable) =>
-      ArrayType(replaceVoidType(et), nullable)
-    case MapType(kt, vt, nullable) =>
-      MapType(replaceVoidType(kt), replaceVoidType(vt), nullable)
-    case StructType(fields) =>
-      StructType(fields.map { field =>
-        field.copy(dataType = replaceVoidType(field.dataType))
-      })
-    case _: NullType => HiveVoidType
-    case _ => dt
-  }
 }
