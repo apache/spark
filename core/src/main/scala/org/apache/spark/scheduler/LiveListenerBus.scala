@@ -209,7 +209,7 @@ private[spark] class LiveListenerBus(conf: SparkConf) {
     val deadline = System.currentTimeMillis + timeoutMillis
     queues.asScala.foreach { queue =>
       if (!queue.waitUntilEmpty(deadline)) {
-        throw SparkCoreErrors.emptyEventQueueTimeoutError(timeoutMillis)
+        throw SparkCoreErrors.nonEmptyEventQueueAfterTimeoutError(timeoutMillis)
       }
     }
   }

@@ -170,11 +170,11 @@ object SparkCoreErrors {
     new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
   }
 
-  def nonPartitionError(): Throwable = {
+  def cannotRunSubmitMapStageOnZeroPartitionRDDError(): Throwable = {
     new SparkException("Can't run submitMapStage on RDD with 0 partitions")
   }
 
-  def nonExistentAccumulatorError(id: Long): Throwable = {
+  def accessNonExistentAccumulatorError(id: Long): Throwable = {
     new SparkException(s"attempted to access non-existent accumulator $id")
   }
 
@@ -183,11 +183,11 @@ object SparkCoreErrors {
       "statuses for tasks in ShuffleMapStages.")
   }
 
-  def emptyEventQueueTimeoutError(timeoutMillis: Long): Throwable = {
+  def nonEmptyEventQueueAfterTimeoutError(timeoutMillis: Long): Throwable = {
     new TimeoutException(s"The event queue is not empty after $timeoutMillis ms.")
   }
 
-  def durationOperationUnsupportedOnUnfinishedTaskError(): Throwable = {
+  def durationCalledOnUnfinishedTaskError(): Throwable = {
     new UnsupportedOperationException("duration() called on unfinished task")
   }
 
@@ -206,10 +206,10 @@ object SparkCoreErrors {
   }
 
   def clusterSchedulerError(message: String): Throwable = {
-    new SparkException(message)
+    new SparkException(s"Exiting due to error from cluster scheduler: $message")
   }
 
-  def serializationTaskError(e: Throwable): Throwable = {
+  def failToSerializeTaskError(e: Throwable): Throwable = {
     new TaskNotSerializableException(e)
   }
 }

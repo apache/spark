@@ -518,7 +518,7 @@ private[spark] class TaskSetManager(
         val msg = s"Failed to serialize task $taskId, not attempting to retry it."
         logError(msg, e)
         abort(s"$msg Exception during serialization: $e")
-        throw SparkCoreErrors.serializationTaskError(e)
+        throw SparkCoreErrors.failToSerializeTaskError(e)
     }
     if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024 &&
       !emittedTaskSizeWarning) {

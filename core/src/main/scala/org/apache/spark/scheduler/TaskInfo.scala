@@ -116,7 +116,7 @@ class TaskInfo(
 
   def duration: Long = {
     if (!finished) {
-      throw SparkCoreErrors.durationOperationUnsupportedOnUnfinishedTaskError()
+      throw SparkCoreErrors.durationCalledOnUnfinishedTaskError()
     } else {
       finishTime - launchTime
     }
