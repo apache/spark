@@ -356,8 +356,7 @@ trait AlterTableTests extends SharedSparkSession {
         sql(s"ALTER TABLE $t ADD COLUMN point.z double")
       }
 
-      assert(exc.getMessage.contains("point"))
-      assert(exc.getMessage.contains("missing field"))
+      assert(exc.getMessage.contains("Missing field point"))
     }
   }
 

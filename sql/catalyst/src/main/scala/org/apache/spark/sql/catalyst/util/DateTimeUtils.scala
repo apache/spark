@@ -254,7 +254,9 @@ object DateTimeUtils {
       val maxDigitsYear = 6
       // For the nanosecond part, more than 6 digits is allowed, but will be truncated.
       segment == 6 || (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
-        (segment != 0 && segment != 6 && digits <= 2)
+        // For the zoneId segment(7), it's could be zero digits when it's a region-based zone ID
+        (segment == 7 && digits <= 2) ||
+        (segment != 0 && segment != 6 && segment != 7 && digits > 0 && digits <= 2)
     }
     if (s == null || s.trimAll().numBytes() == 0) {
       return (Array.empty, None, false)
@@ -527,7 +529,8 @@ object DateTimeUtils {
     def isValidDigits(segment: Int, digits: Int): Boolean = {
       // An integer is able to represent a date within [+-]5 million years.
       var maxDigitsYear = 7
-      (segment == 0 && digits >= 4 && digits <= maxDigitsYear) || (segment != 0 && digits <= 2)
+      (segment == 0 && digits >= 4 && digits <= maxDigitsYear) ||
+        (segment != 0 && digits > 0 && digits <= 2)
     }
     if (s == null || s.trimAll().numBytes() == 0) {
       return None

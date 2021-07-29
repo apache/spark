@@ -400,18 +400,16 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
       }
   }
 
-  // TODO (SPARK-36272): Reenable this after we figure out why the expected size doesn't
-  // match after we adjust building's memory settings.
-  ignore("SPARK-32629: ShuffledHashJoin(full outer) metrics") {
+  test("SPARK-32629: ShuffledHashJoin(full outer) metrics") {
     val uniqueLeftDf = Seq(("1", "1"), ("11", "11")).toDF("key", "value")
     val nonUniqueLeftDf = Seq(("1", "1"), ("1", "2"), ("11", "11")).toDF("key", "value")
     val rightDf = (1 to 10).map(i => (i.toString, i.toString)).toDF("key2", "value")
     Seq(
       // Test unique key on build side
-      (uniqueLeftDf, rightDf, 11, 134228048, 10, 134221824),
+      (uniqueLeftDf, rightDf, 11, 10),
       // Test non-unique key on build side
-      (nonUniqueLeftDf, rightDf, 12, 134228552, 11, 134221824)
-    ).foreach { case (leftDf, rightDf, fojRows, fojBuildSize, rojRows, rojBuildSize) =>
+      (nonUniqueLeftDf, rightDf, 12, 11)
+    ).foreach { case (leftDf, rightDf, fojRows, rojRows) =>
       val fojDf = leftDf.hint("shuffle_hash").join(
         rightDf, $"key" === $"key2", "full_outer")
       fojDf.collect()
@@ -419,8 +417,8 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         case s: ShuffledHashJoinExec => s
       }
       assert(fojPlan.isDefined, "The query plan should have shuffled hash join")
-      testMetricsInSparkPlanOperator(fojPlan.get,
-        Map("numOutputRows" -> fojRows, "buildDataSize" -> fojBuildSize))
+      testMetricsInSparkPlanOperator(fojPlan.get, Map("numOutputRows" -> fojRows))
+      val fojBuildSize = fojPlan.get.metrics("buildDataSize").value
 
       // Test right outer join as well to verify build data size to be different
       // from full outer join. This makes sure we take extra BitSet/OpenHashSet
@@ -432,8 +430,10 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
         case s: ShuffledHashJoinExec => s
       }
       assert(rojPlan.isDefined, "The query plan should have shuffled hash join")
-      testMetricsInSparkPlanOperator(rojPlan.get,
-        Map("numOutputRows" -> rojRows, "buildDataSize" -> rojBuildSize))
+      testMetricsInSparkPlanOperator(rojPlan.get, Map("numOutputRows" -> rojRows))
+      val rojBuildSize = rojPlan.get.metrics("buildDataSize").value
+      assert(fojBuildSize > rojBuildSize && rojBuildSize > 0,
+        "Build size of full outer join should be larger than the size of right outer join")
     }
   }
 

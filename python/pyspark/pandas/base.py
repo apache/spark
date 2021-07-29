@@ -522,13 +522,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ps.Series([1, 2, 3]).rename("a").to_frame().set_index("a").index.hasnans
         False
         """
-        sdf = self._internal.spark_frame
-        scol = self.spark.column
-
-        if isinstance(self.spark.data_type, (DoubleType, FloatType)):
-            return sdf.select(F.max(scol.isNull() | F.isnan(scol))).collect()[0][0]
-        else:
-            return sdf.select(F.max(scol.isNull())).collect()[0][0]
+        return self.isnull().any()
 
     @property
     def is_monotonic(self) -> bool:

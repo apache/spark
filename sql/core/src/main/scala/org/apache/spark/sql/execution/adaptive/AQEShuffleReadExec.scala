@@ -90,15 +90,19 @@ case class AQEShuffleReadExec private(
   }
 
   /**
+   * Returns true iff some partitions were actually combined
+   */
+  private def isCoalesced(spec: ShufflePartitionSpec) = spec match {
+    case CoalescedPartitionSpec(0, 0, _) => true
+    case s: CoalescedPartitionSpec => s.endReducerIndex - s.startReducerIndex > 1
+    case _ => false
+  }
+
+  /**
    * Returns true iff some non-empty partitions were combined
    */
   def hasCoalescedPartition: Boolean = {
-    partitionSpecs.exists {
-      // shuffle from empty RDD
-      case CoalescedPartitionSpec(0, 0, _) => true
-      case s: CoalescedPartitionSpec => s.endReducerIndex - s.startReducerIndex > 1
-      case _ => false
-    }
+    partitionSpecs.exists(isCoalesced)
   }
 
   def hasSkewedPartition: Boolean =
@@ -153,6 +157,13 @@ case class AQEShuffleReadExec private(
       driverAccumUpdates += (skewedSplits.id -> numSplits)
     }
 
+    if (hasCoalescedPartition) {
+      val numCoalescedPartitionsMetric = metrics("numCoalescedPartitions")
+      val x = partitionSpecs.count(isCoalesced)
+      numCoalescedPartitionsMetric.set(x)
+      driverAccumUpdates += numCoalescedPartitionsMetric.id -> x
+    }
+
     partitionDataSizes.foreach { dataSizes =>
       val partitionDataSizeMetrics = metrics("partitionDataSize")
       driverAccumUpdates ++= dataSizes.map(partitionDataSizeMetrics.id -> _)
@@ -180,6 +191,13 @@ case class AQEShuffleReadExec private(
             SQLMetrics.createMetric(sparkContext, "number of skewed partitions"),
             "numSkewedSplits" ->
               SQLMetrics.createMetric(sparkContext, "number of skewed partition splits"))
+        } else {
+          Map.empty
+        }
+      } ++ {
+        if (hasCoalescedPartition) {
+          Map("numCoalescedPartitions" ->
+            SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
         } else {
           Map.empty
         }

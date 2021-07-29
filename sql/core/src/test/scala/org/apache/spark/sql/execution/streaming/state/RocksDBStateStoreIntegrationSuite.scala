@@ -19,10 +19,14 @@ package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
 
+import scala.collection.JavaConverters
+
+import org.scalatest.time.{Minute, Span}
+
 import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.functions.count
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
-
 
 class RocksDBStateStoreIntegrationSuite extends StreamTest {
   import testImplicits._
@@ -45,6 +49,58 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
           new File(storeCheckpointFile).exists()
         }
       )
+    }
+  }
+
+  test("SPARK-36236: query progress contains only the expected RocksDB store custom metrics") {
+    // fails if any new custom metrics are added to remind the author of API changes
+    import testImplicits._
+
+    withTempDir { dir =>
+      withSQLConf(
+        (SQLConf.STREAMING_NO_DATA_PROGRESS_EVENT_INTERVAL.key -> "10"),
+        (SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName),
+        (SQLConf.CHECKPOINT_LOCATION.key -> dir.getCanonicalPath),
+        (SQLConf.SHUFFLE_PARTITIONS.key, "1")) {
+        val inputData = MemoryStream[Int]
+
+        val query = inputData.toDS().toDF("value")
+          .select('value)
+          .groupBy($"value")
+          .agg(count("*"))
+          .writeStream
+          .format("console")
+          .outputMode("complete")
+          .start()
+        try {
+          inputData.addData(1, 2)
+          inputData.addData(2, 3)
+          query.processAllAvailable()
+
+          val progress = query.lastProgress
+          assert(progress.stateOperators.length > 0)
+          // Should emit new progresses every 10 ms, but we could be facing a slow Jenkins
+          eventually(timeout(Span(1, Minute))) {
+            val nextProgress = query.lastProgress
+            assert(nextProgress != null, "progress is not yet available")
+            assert(nextProgress.stateOperators.length > 0, "state operators are missing in metrics")
+            val stateOperatorMetrics = nextProgress.stateOperators(0)
+            assert(JavaConverters.asScalaSet(stateOperatorMetrics.customMetrics.keySet) === Set(
+              "rocksdbGetLatency", "rocksdbCommitCompactLatency", "rocksdbBytesCopied",
+              "rocksdbPutLatency", "rocksdbCommitPauseLatency", "rocksdbFilesReused",
+              "rocksdbCommitWriteBatchLatency", "rocksdbFilesCopied", "rocksdbSstFileSize",
+              "rocksdbCommitCheckpointLatency", "rocksdbZipFileBytesUncompressed",
+              "rocksdbCommitFlushLatency", "rocksdbCommitFileSyncLatencyMs", "rocksdbGetCount",
+              "rocksdbPutCount", "rocksdbTotalBytesRead", "rocksdbTotalBytesWritten",
+              "rocksdbReadBlockCacheHitCount", "rocksdbReadBlockCacheMissCount",
+              "rocksdbTotalBytesReadByCompaction", "rocksdbTotalBytesWrittenByCompaction",
+              "rocksdbTotalCompactionLatencyMs", "rocksdbWriterStallLatencyMs",
+              "rocksdbTotalBytesReadThroughIterator"))
+          }
+        } finally {
+          query.stop()
+        }
+      }
     }
   }
 }

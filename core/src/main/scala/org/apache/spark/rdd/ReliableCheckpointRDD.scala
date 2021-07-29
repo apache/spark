@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.FileNotFoundException
 import java.util.concurrent.TimeUnit
 
 import scala.reflect.ClassTag
@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.{BUFFER_SIZE, CACHE_CHECKPOINT_PREFERRED_LOCS_EXPIRE_TIME, CHECKPOINT_COMPRESS}
 import org.apache.spark.io.CompressionCodec
@@ -77,7 +78,7 @@ private[spark] class ReliableCheckpointRDD[T: ClassTag](
     // Fail fast if input files are invalid
     inputFiles.zipWithIndex.foreach { case (path, i) =>
       if (path.getName != ReliableCheckpointRDD.checkpointFileName(i)) {
-        throw new SparkException(s"Invalid checkpoint file: $path")
+        throw SparkCoreErrors.invalidCheckpointFileError(path)
       }
     }
     Array.tabulate(inputFiles.length)(i => new CheckpointRDDPartition(i))
@@ -155,7 +156,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     val checkpointDirPath = new Path(checkpointDir)
     val fs = checkpointDirPath.getFileSystem(sc.hadoopConfiguration)
     if (!fs.mkdirs(checkpointDirPath)) {
-      throw new SparkException(s"Failed to create checkpoint path $checkpointDirPath")
+      throw SparkCoreErrors.failToCreateCheckpointPathError(checkpointDirPath)
     }
 
     // Save to file, and reload it as an RDD
@@ -176,11 +177,8 @@ private[spark] object ReliableCheckpointRDD extends Logging {
     val newRDD = new ReliableCheckpointRDD[T](
       sc, checkpointDirPath.toString, originalRDD.partitioner)
     if (newRDD.partitions.length != originalRDD.partitions.length) {
-      throw new SparkException(
-        "Checkpoint RDD has a different number of partitions from original RDD. Original " +
-          s"RDD [ID: ${originalRDD.id}, num of partitions: ${originalRDD.partitions.length}]; " +
-          s"Checkpoint RDD [ID: ${newRDD.id}, num of partitions: " +
-          s"${newRDD.partitions.length}].")
+      throw SparkCoreErrors.checkpointRDDHasDifferentNumberOfPartitionsFromOriginalRDDError(
+        originalRDD.id, originalRDD.partitions.length, newRDD.id, newRDD.partitions.length)
     }
     newRDD
   }
@@ -231,8 +229,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
       if (!fs.exists(finalOutputPath)) {
         logInfo(s"Deleting tempOutputPath $tempOutputPath")
         fs.delete(tempOutputPath, false)
-        throw new IOException("Checkpoint failed: failed to save output of task: " +
-          s"${ctx.attemptNumber()} and final output path does not exist: $finalOutputPath")
+        throw SparkCoreErrors.checkpointFailedToSaveError(ctx.attemptNumber(), finalOutputPath)
       } else {
         // Some other copy of this task must've finished before us and renamed it
         logInfo(s"Final output path $finalOutputPath already exists; not overwriting it")
