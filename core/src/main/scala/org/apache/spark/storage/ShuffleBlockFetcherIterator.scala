@@ -1304,11 +1304,11 @@ private class BufferReleasingInputStream(
       case e: IOException if detectCorruption =>
         val diagnosisResponse = checkedInOpt.map { checkedIn =>
           iterator.diagnoseCorruption(checkedIn, address, blockId)
-        }.orNull
+        }
         IOUtils.closeQuietly(this)
         // We'd never retry the block whatever the cause is since the block has been
         // partially consumed by downstream RDDs.
-        iterator.throwFetchFailedException(blockId, mapIndex, address, e, Some(diagnosisResponse))
+        iterator.throwFetchFailedException(blockId, mapIndex, address, e, diagnosisResponse)
     }
   }
 }
