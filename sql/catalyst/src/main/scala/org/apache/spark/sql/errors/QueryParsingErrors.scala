@@ -65,11 +65,11 @@ object QueryParsingErrors {
   }
 
   def nonLastMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException("NON_LAST_CLAUSE_OMIT_CONDITION", Array("MATCHED"), ctx)
+    new ParseException("NON_LAST_CLAUSE_OMIT_CONDITION", Array("MATCHED", "MATCHED"), ctx)
   }
 
   def nonLastNotMatchedClauseOmitConditionError(ctx: MergeIntoTableContext): Throwable = {
-    new ParseException("NON_LAST_CLAUSE_OMIT_CONDITION", Array("NOT MATCHED"), ctx)
+    new ParseException("NON_LAST_CLAUSE_OMIT_CONDITION", Array("NOT MATCHED", "NOT MATCHED"), ctx)
   }
 
   def emptyPartitionKeyError(key: String, ctx: PartitionSpecContext): Throwable = {
