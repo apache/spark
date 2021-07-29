@@ -22,7 +22,7 @@ from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
-from pandas.api.types import CategoricalDtype, is_list_like
+from pandas.api.types import CategoricalDtype
 
 from pyspark.sql import functions as F, Column
 from pyspark.sql.types import (
@@ -190,7 +190,7 @@ def _as_other_type(
 
 def _sanitize_list_like(operand: Any) -> None:
     """Raise TypeError if operand is list-like."""
-    if is_list_like(operand):
+    if isinstance(operand, (list, tuple, dict, set)):
         raise TypeError("The operation can not be applied to %s." % type(operand).__name__)
 
 
