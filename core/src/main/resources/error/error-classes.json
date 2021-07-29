@@ -5,15 +5,7 @@
   },
   "COLUMN_ALIASES_NOT_ALLOWED_IN_OPERATION" : {
     "message" : [ "Columns aliases are not allowed in %s." ],
-    "sqlState" : "10000"
-  },
-  "COMBINATION_QUERY_RESULT_CLAUSES_UNSUPPORTED" : {
-    "message" : [ "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported" ],
-    "sqlState" : "10000"
-  },
-  "DISTRIBUTE_BY_UNSUPPORTED" : {
-    "message" : [ "DISTRIBUTE BY is not supported" ],
-    "sqlState" : "10000"
+    "sqlState" : "42000"
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
@@ -25,11 +17,11 @@
   },
   "EMPTY_PARTITION_KEY" : {
     "message" : [ "Found an empty partition key '%s'." ],
-    "sqlState" : "10000"
+    "sqlState" : "42000"
   },
   "EMPTY_SOURCE_FOR_MERGE" : {
     "message" : [ "Empty source for merge: you should specify a source table/subquery in merge." ],
-    "sqlState" : "10000"
+    "sqlState" : "42000"
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
@@ -51,7 +43,7 @@
   },
   "INSERTED_VALUE_NUMBER_NOT_MATCH_FIELD_NUMBER" : {
     "message" : [ "The number of inserted values cannot match the fields." ],
-    "sqlState" : "10000"
+    "sqlState" : "42000"
   },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
@@ -59,19 +51,19 @@
   },
   "INVALID_INSERT_INTO_CONTEXT" : {
     "message" : [ "Invalid InsertIntoContext" ],
-    "sqlState" : "10000"
+    "sqlState" : "42000"
   },
   "INVALID_LATERAL_JOIN_RELATION" : {
     "message" : [ "LATERAL can only be used with subquery" ],
-    "sqlState" : "10000"
+    "sqlState" : "42000"
   },
   "LATERAL_WITH_PIVOT_IN_FROM_CLAUSE_NOT_ALLOWED" : {
     "message" : [ "LATERAL cannot be used together with PIVOT in FROM clause" ],
-    "sqlState" : "10000"
+    "sqlState" : "42000"
   },
   "MERGE_STATEMENT_WITHOUT_WHEN_CLAUSE" : {
     "message" : [ "There must be at least one WHEN clause in a MERGE statement" ],
-    "sqlState" : "10000"
+    "sqlState" : "42000"
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
@@ -83,7 +75,7 @@
   },
   "NON_LAST_CLAUSE_OMIT_CONDITION" : {
     "message" : [ "When there are more than one %s clauses in a MERGE statement, only the last %s clause can omit the condition." ],
-    "sqlState" : "10000"
+    "sqlState" : "42000"
   },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [ "Literal expressions required for pivot values, found '%s'" ],
@@ -95,7 +87,7 @@
   },
   "OPERATION_UNSUPPORTED" : {
     "message" : [ "%s is not supported" ],
-    "sqlState" : "10000"
+    "sqlState" : "0A000"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
@@ -107,22 +99,22 @@
   },
   "TRANSFORM_NOT_SUPPORT_QUANTIFIER" : {
     "message" : [ "TRANSFORM does not support DISTINCT/ALL in inputs" ],
-    "sqlState" : "10000"
+    "sqlState" : "42000"
   },
   "TRANSFORM_WITH_SERDE_UNSUPPORTED" : {
     "message" : [ "TRANSFORM with serde is only supported in hive mode" ],
-    "sqlState" : "10015"
+    "sqlState" : "42000"
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
   },
   "UNRECOGNIZED_ACTION" : {
     "message" : [ "Unrecognized %s action: %s" ],
-    "sqlState" : "10000"
+    "sqlState" : "42000"
   },
   "UNSUPPORTED_LATERAL_JOIN_TYPE" : {
     "message" : [ "Unsupported LATERAL join type %s" ],
-    "sqlState" : "10000"
+    "sqlState" : "42000"
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],

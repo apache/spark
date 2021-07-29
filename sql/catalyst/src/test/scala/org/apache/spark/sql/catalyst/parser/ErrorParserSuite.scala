@@ -85,7 +85,7 @@ class ErrorParserSuite extends AnalysisTest {
   test("semantic errors") {
     interceptWithErrorClass("select *\nfrom r\norder by q\ncluster by q", 3, 0, 11,
       "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported",
-      "^^^")("COMBINATION_QUERY_RESULT_CLAUSES_UNSUPPORTED")
+      "^^^")("OPERATION_UNSUPPORTED")
   }
 
   test("SPARK-21136: misleading error message due to problematic antlr grammar") {

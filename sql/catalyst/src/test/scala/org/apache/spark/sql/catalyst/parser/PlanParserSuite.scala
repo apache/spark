@@ -286,14 +286,10 @@ class PlanParserSuite extends AnalysisTest {
     }
 
     val msg = "Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY is not supported"
-    interceptWithErrorClass(s"$baseSql order by a sort by a", msg)(
-      "COMBINATION_QUERY_RESULT_CLAUSES_UNSUPPORTED")
-    interceptWithErrorClass(s"$baseSql cluster by a distribute by a", msg)(
-      "COMBINATION_QUERY_RESULT_CLAUSES_UNSUPPORTED")
-    interceptWithErrorClass(s"$baseSql order by a cluster by a", msg)(
-      "COMBINATION_QUERY_RESULT_CLAUSES_UNSUPPORTED")
-    interceptWithErrorClass(s"$baseSql order by a distribute by a", msg)(
-      "COMBINATION_QUERY_RESULT_CLAUSES_UNSUPPORTED")
+    interceptWithErrorClass(s"$baseSql order by a sort by a", msg)("OPERATION_UNSUPPORTED")
+    interceptWithErrorClass(s"$baseSql cluster by a distribute by a", msg)("OPERATION_UNSUPPORTED")
+    interceptWithErrorClass(s"$baseSql order by a cluster by a", msg)("OPERATION_UNSUPPORTED")
+    interceptWithErrorClass(s"$baseSql order by a distribute by a", msg)("OPERATION_UNSUPPORTED")
   }
 
   test("insert into") {

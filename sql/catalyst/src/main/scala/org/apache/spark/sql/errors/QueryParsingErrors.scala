@@ -77,11 +77,12 @@ object QueryParsingErrors {
   }
 
   def combinationQueryResultClausesUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException("COMBINATION_QUERY_RESULT_CLAUSES_UNSUPPORTED", Array.empty, ctx)
+    new ParseException("OPERATION_UNSUPPORTED",
+      Array("Combination of ORDER BY/SORT BY/DISTRIBUTE BY/CLUSTER BY"), ctx)
   }
 
   def distributeByUnsupportedError(ctx: QueryOrganizationContext): Throwable = {
-    new ParseException("DISTRIBUTE_BY_UNSUPPORTED", Array.empty, ctx)
+    new ParseException("OPERATION_UNSUPPORTED", Array("DISTRIBUTE BY"), ctx)
   }
 
   def transformNotSupportQuantifierError(ctx: ParserRuleContext): Throwable = {
