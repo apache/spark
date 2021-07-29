@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.Conversions.DecimalConversion
-import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
+import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
@@ -145,6 +145,21 @@ private[sql] class AvroDeserializer(
           updater.setLong(ordinal, timestampRebaseFunc(micros))
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"Avro logical type $other cannot be converted to SQL type ${TimestampType.sql}.")
+      }
+
+      case (LONG, TimestampNTZType) => avroType.getLogicalType match {
+        // For backward compatibility, if the Avro type is Long and it is not logical type
+        // (the `null` case), the value is processed as timestamp without time zone type
+        // with millisecond precision.
+        case null | _: LocalTimestampMillis => (updater, ordinal, value) =>
+          val millis = value.asInstanceOf[Long]
+          val micros = DateTimeUtils.millisToMicros(millis)
+          updater.setLong(ordinal, micros)
+        case _: LocalTimestampMicros => (updater, ordinal, value) =>
+          val micros = value.asInstanceOf[Long]
+          updater.setLong(ordinal, micros)
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"Avro logical type $other cannot be converted to SQL type ${TimestampNTZType.sql}.")
       }
 
       // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.
