@@ -654,7 +654,6 @@ class InternalFrame(object):
                     data_fields = [
                         field.copy(
                             name=name_like_string(struct_field.name),
-                            nullable=field.nullable,
                         )
                         for field, struct_field in zip(data_fields, data_struct_fields)
                     ]
