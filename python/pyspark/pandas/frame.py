@@ -4808,7 +4808,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self,
         path: Optional[str] = None,
         format: Optional[str] = None,
-        mode: str = "write",
+        mode: str = "overwrite",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
         **options: "OptionalPrimitiveType"
