@@ -3180,6 +3180,7 @@ class Frame(object, metaclass=ABCMeta):
     def _count_expr(spark_column: Column, spark_type: DataType) -> Column:
         # Special handle floating point types because Spark's count treats nan as a valid value,
         # whereas pandas count doesn't include nan.
+        # TODO(SPARK-36350): Make this work with DataTypeOps.
         if isinstance(spark_type, (FloatType, DoubleType)):
             return F.count(F.nanvl(spark_column, SF.lit(None)))
         else:
