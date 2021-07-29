@@ -56,15 +56,8 @@ class DistinctAttributesVisitorSuite extends PlanTest {
     checkDistinctAttributes(testRelation.groupBy('a, 'b)('a), Set.empty)
     checkDistinctAttributes(testRelation.groupBy('a)('a, max('b)), Set(ExpressionSet(Seq(a))))
     checkDistinctAttributes(testRelation.groupBy('a, 'b)('a, 'b, d, e),
-      Set(ExpressionSet(Seq(a, b)),
-        ExpressionSet(Seq(a, e.toAttribute)),
-        ExpressionSet(Seq(b, d.toAttribute)),
-        ExpressionSet(Seq(d.toAttribute, e.toAttribute)),
-        ExpressionSet(Seq(a, b, d.toAttribute)),
-        ExpressionSet(Seq(a, b, e.toAttribute)),
-        ExpressionSet(Seq(a, d.toAttribute, e.toAttribute)),
-        ExpressionSet(Seq(b, d.toAttribute, e.toAttribute)),
-        ExpressionSet(Seq(a, b, d.toAttribute, e.toAttribute))))
+      Set(ExpressionSet(Seq(a, b)), ExpressionSet(Seq(a, e.toAttribute)),
+        ExpressionSet(Seq(b, d.toAttribute)), ExpressionSet(Seq(d.toAttribute, e.toAttribute))))
 
     // Distinct
     checkDistinctAttributes(Distinct(testRelation), Set(ExpressionSet(Seq(a, b, c))))
@@ -98,13 +91,9 @@ class DistinctAttributesVisitorSuite extends PlanTest {
     checkDistinctAttributes(Distinct(x).select('a, 'b, d, e), Set.empty)
     checkDistinctAttributes(Distinct(x).select('a, 'b, 'c, 1), Set(ExpressionSet(Seq(a, b, c))))
     checkDistinctAttributes(Distinct(x).select('a, 'b, c, d),
-      Set(ExpressionSet(Seq(a, b, c)),
-        ExpressionSet(Seq(b, c, d.toAttribute)),
-        ExpressionSet(Seq(a, b, c, d.toAttribute))))
+      Set(ExpressionSet(Seq(a, b, c)), ExpressionSet(Seq(b, c, d.toAttribute))))
     checkDistinctAttributes(testRelation.groupBy('a, 'b)('a, 'b, d).select('a, 'b, e),
-      Set(ExpressionSet(Seq(a, b)),
-        ExpressionSet(Seq(a, e.toAttribute)),
-        ExpressionSet(Seq(a, b, e.toAttribute))))
+      Set(ExpressionSet(Seq(a, b)), ExpressionSet(Seq(a, e.toAttribute))))
 
     // Join
     checkDistinctAttributes(x.join(y, LeftSemi, Some("x.a".attr === "y.a".attr)), Set.empty)

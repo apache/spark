@@ -30,8 +30,8 @@ object DistinctAttributesVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] 
 
   override def visitAggregate(p: Aggregate): Set[ExpressionSet] = {
     val groupingExps = p.groupingExpressions.toSet
-    p.aggregateExpressions.toSet.subsets().filter { s =>
-      s.size >= groupingExps.size && s.map {
+    p.aggregateExpressions.toSet.subsets(groupingExps.size).filter { s =>
+      s.map {
         case a: Alias => a.child
         case o => o
       }.equals(groupingExps)
@@ -69,7 +69,7 @@ object DistinctAttributesVisitor extends LogicalPlanVisitor[Set[ExpressionSet]] 
   override def visitProject(p: Project): Set[ExpressionSet] = {
     if (p.child.distinctAttributes.nonEmpty) {
       val childDistinctAttributes = p.child.distinctAttributes
-      p.projectList.toSet.subsets().filter { s =>
+      p.projectList.toSet.subsets(childDistinctAttributes.map(_.size).min).filter { s =>
         val exps = s.map {
           case a: Alias => a.child
           case o => o
