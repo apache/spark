@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.regex.Pattern;
 
 import static org.apache.spark.launcher.CommandBuilderUtils.*;
@@ -267,11 +268,8 @@ abstract class AbstractCommandBuilder {
     if (effectiveConfig == null) {
       effectiveConfig = new HashMap<>(conf);
       Properties p = loadPropertiesFile();
-      for (String key : p.stringPropertyNames()) {
-        if (!effectiveConfig.containsKey(key)) {
-          effectiveConfig.put(key, p.getProperty(key));
-        }
-      }
+      p.stringPropertyNames().forEach(key ->
+        effectiveConfig.putIfAbsent(key, p.getProperty(key)));
     }
     return effectiveConfig;
   }
