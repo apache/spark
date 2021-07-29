@@ -844,13 +844,13 @@ class InternalFrame(object):
 
         It adds the default index column '__index_level_0__'.
 
-        >>> spark_frame = InternalFrame.attach_default_index(spark_frame)[0]
+        >>> spark_frame = InternalFrame.attach_default_index(spark_frame)
         >>> spark_frame
         DataFrame[__index_level_0__: bigint, id: bigint]
 
         It throws an exception if the given column name already exists.
 
-        >>> InternalFrame.attach_default_index(spark_frame)[0]
+        >>> InternalFrame.attach_default_index(spark_frame)
         ... # doctest: +ELLIPSIS
         Traceback (most recent call last):
           ...
