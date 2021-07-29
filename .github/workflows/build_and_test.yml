@@ -244,7 +244,7 @@ jobs:
           pyspark-coursier-
     - name: List Python packages (Python 3.9)
       run: |
-        # TODO(SPARK-36345): We can remove the pip install here, by creating the image that already has both package installed.
+        # TODO(SPARK-36345): Install mlflow>=1.0 and sklearn in Python 3.9 of the base image
         python3.9 -m pip install 'mlflow>=1.0' sklearn
         python3.9 -m pip list
     - name: Install Conda for pip packaging test
