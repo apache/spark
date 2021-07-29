@@ -129,11 +129,13 @@ case class AQEShuffleReadExec private(
       partitionSpecs.exists(_.isInstanceOf[CoalescedMapperPartitionSpec])
 
   def isCoalescedRead: Boolean = {
-    // We need to make sure there is no repeated partition spec, which is the repeated side of the
-    // skew join shuffle reader and is not a coalesced reader.
-    partitionSpecs.forall(_.isInstanceOf[CoalescedPartitionSpec]) && partitionSpecs.collect {
-      case CoalescedPartitionSpec(start, end, _) => start -> end
-    }.distinct.length == partitionSpecs.length
+    partitionSpecs.sliding(2).forall {
+      // A single partition spec which is `CoalescedPartitionSpec` also means coalesced read.
+      case Seq(_: CoalescedPartitionSpec) => true
+      case Seq(l: CoalescedPartitionSpec, r: CoalescedPartitionSpec) =>
+        l.endReducerIndex <= r.startReducerIndex
+      case _ => false
+    }
   }
 
   private def shuffleStage = child match {

@@ -1499,7 +1499,8 @@ class AdaptiveQueryExecSuite
     def checkBHJ(
         df: Dataset[Row],
         optimizeOutRepartition: Boolean,
-        probeSideLocalRead: Boolean): Unit = {
+        probeSideLocalRead: Boolean,
+        probeSideCoalescedRead: Boolean): Unit = {
       df.collect()
       val plan = df.queryExecution.executedPlan
       // There should be only one shuffle that can't do local read, which is either the top shuffle
@@ -1515,18 +1516,23 @@ class AdaptiveQueryExecSuite
       assert(buildSide.get.asInstanceOf[AQEShuffleReadExec].isLocalRead)
 
       val probeSide = find(bhj.head.right)(_.isInstanceOf[AQEShuffleReadExec])
-      assert(probeSide.isDefined)
-      if (probeSideLocalRead) {
-        assert(probeSide.get.asInstanceOf[AQEShuffleReadExec].isLocalRead)
+      if (probeSideLocalRead || probeSideCoalescedRead) {
+        assert(probeSide.isDefined)
+        if (probeSideLocalRead) {
+          assert(probeSide.get.asInstanceOf[AQEShuffleReadExec].isLocalRead)
+        } else {
+          assert(probeSide.get.asInstanceOf[AQEShuffleReadExec].hasCoalescedPartition)
+        }
       } else {
-        assert(probeSide.get.asInstanceOf[AQEShuffleReadExec].hasCoalescedPartition)
+        assert(probeSide.isEmpty)
       }
     }
 
     def checkSMJ(
         df: Dataset[Row],
         optimizeOutRepartition: Boolean,
-        optimizeSkewJoin: Boolean): Unit = {
+        optimizeSkewJoin: Boolean,
+        coalescedRead: Boolean): Unit = {
       df.collect()
       val plan = df.queryExecution.executedPlan
       assert(hasRepartitionShuffle(plan) == !optimizeOutRepartition)
@@ -1536,8 +1542,12 @@ class AdaptiveQueryExecSuite
       val aqeReads = collect(smj.head) {
         case c: AQEShuffleReadExec => c
       }
-      assert(aqeReads.length == 2)
-      if (!optimizeSkewJoin) assert(aqeReads.forall(_.hasCoalescedPartition))
+      if (coalescedRead || optimizeSkewJoin) {
+        assert(aqeReads.length == 2)
+        if (coalescedRead) assert(aqeReads.forall(_.hasCoalescedPartition))
+      } else {
+        assert(aqeReads.isEmpty)
+      }
     }
 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
@@ -1555,17 +1565,23 @@ class AdaptiveQueryExecSuite
         // Repartition with no partition num specified.
         checkBHJ(df.repartition('b),
           // The top shuffle from repartition is optimized out.
-          optimizeOutRepartition = true, probeSideLocalRead = false)
+          optimizeOutRepartition = true, probeSideLocalRead = false, probeSideCoalescedRead = true)
 
-        // Repartition with partition num specified.
+        // Repartition with default partition num (5 in test env) specified.
         checkBHJ(df.repartition(5, 'b),
+          // The top shuffle from repartition is optimized out
+          // The final plan must have 5 partitions, no optimization can be made to the probe side.
+          optimizeOutRepartition = true, probeSideLocalRead = false, probeSideCoalescedRead = false)
+
+        // Repartition with non-default partition num specified.
+        checkBHJ(df.repartition(4, 'b),
           // The top shuffle from repartition is not optimized out
-          optimizeOutRepartition = false, probeSideLocalRead = true)
+          optimizeOutRepartition = false, probeSideLocalRead = true, probeSideCoalescedRead = true)
 
         // Repartition by col and project away the partition cols
         checkBHJ(df.repartition('b).select('key),
           // The top shuffle from repartition is not optimized out
-          optimizeOutRepartition = false, probeSideLocalRead = true)
+          optimizeOutRepartition = false, probeSideLocalRead = true, probeSideCoalescedRead = true)
       }
 
       // Force skew join
@@ -1577,17 +1593,23 @@ class AdaptiveQueryExecSuite
         // Repartition with no partition num specified.
         checkSMJ(df.repartition('b),
           // The top shuffle from repartition is optimized out.
-          optimizeOutRepartition = true, optimizeSkewJoin = false)
+          optimizeOutRepartition = true, optimizeSkewJoin = false, coalescedRead = true)
 
-        // Repartition with partition num specified.
+        // Repartition with default partition num (5 in test env) specified.
         checkSMJ(df.repartition(5, 'b),
+          // The top shuffle from repartition is optimized out.
+          // The final plan must have 5 partitions, can't do coalesced read.
+          optimizeOutRepartition = true, optimizeSkewJoin = false, coalescedRead = false)
+
+        // Repartition with non-default partition num specified.
+        checkSMJ(df.repartition(4, 'b),
           // The top shuffle from repartition is not optimized out.
-          optimizeOutRepartition = false, optimizeSkewJoin = true)
+          optimizeOutRepartition = false, optimizeSkewJoin = true, coalescedRead = false)
 
         // Repartition by col and project away the partition cols
         checkSMJ(df.repartition('b).select('key),
           // The top shuffle from repartition is not optimized out.
-          optimizeOutRepartition = false, optimizeSkewJoin = true)
+          optimizeOutRepartition = false, optimizeSkewJoin = true, coalescedRead = false)
       }
     }
   }

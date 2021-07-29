@@ -17,29 +17,27 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClusteredDistribution, HashPartitioning, OrderedDistribution, RangePartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.plans.physical.{Distribution, HashClusteredDistribution, HashPartitioning, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{CollectMetricsExec, FilterExec, ProjectExec, SortExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 
 object AQEUtils {
 
   // Analyze the given plan and calculate the required distribution of this plan w.r.t. the
   // user-specified repartition.
   def getRequiredDistribution(p: SparkPlan): Option[Distribution] = p match {
-    // user-specified repartition is only effective when it's the root node, or under
+    // User-specified repartition is only effective when it's the root node, or under
     // Project/Filter/LocalSort/CollectMetrics.
-    case s: ShuffleExchangeExec if s.shuffleOrigin == REPARTITION_BY_COL =>
-      s.outputPartitioning match {
-        case h: HashPartitioning => Some(HashClusteredDistribution(h.expressions))
-        // Note: Ideally we need a special version of `OrderedDistribution` that requires an
-        // exact match of the `RangePartitioning`, otherwise `RangePartitioning(a, b)` can
-        // satisfy `OrderedDistribution(a, b, c)`. But we are fine in AQE as AQE rules can only
-        // change `RangePartitioning` to a totally different partitioning, so
-        // `OrderedDistribution` can do the job and avoid changing the final output partitioning.
-        case r: RangePartitioning => Some(OrderedDistribution(r.ordering))
-        case other => throw new IllegalStateException(
-          "Unexpected partitioning for REPARTITION_BY_COL: " + other)
+    // Note: we only care about `HashPartitioning` as `EnsureRequirements` can only optimize out
+    // user-specified repartition with `HashPartitioning`.
+    case ShuffleExchangeExec(h: HashPartitioning, _, shuffleOrigin)
+        if shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM =>
+      val numPartitions = if (shuffleOrigin == REPARTITION_BY_NUM) {
+        Some(h.numPartitions)
+      } else {
+        None
       }
+      Some(HashClusteredDistribution(h.expressions, numPartitions))
     case f: FilterExec => getRequiredDistribution(f.child)
     case s: SortExec if !s.global => getRequiredDistribution(s.child)
     case c: CollectMetricsExec => getRequiredDistribution(c.child)
