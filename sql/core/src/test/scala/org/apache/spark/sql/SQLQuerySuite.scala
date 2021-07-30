@@ -4202,6 +4202,18 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-36352") {
+    withTable("t") {
+      sql("CREATE TABLE t1(a INT, b INT) USING PARQUET")
+      sql(
+        """
+          |INSERT INTO t1 VALUES
+          |(1, 2),
+          |(2, 3)""".stripMargin)
+      sql("SELECT C FROM (SELECT a + b AS c FROM t1)").explain(true)
+    }
+  }
 }
 
 case class Foo(bar: Option[String])
