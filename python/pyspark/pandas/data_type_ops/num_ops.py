@@ -326,6 +326,14 @@ class FractionalOps(NumericOps):
             ),
         )
 
+    def nan_to_null(self, index_ops: IndexOpsLike) -> IndexOpsLike:
+        # Special handle floating point types because Spark's count treats nan as a valid value,
+        # whereas pandas count doesn't include nan.
+        return index_ops._with_new_scol(
+            F.nanvl(index_ops.spark.column, SF.lit(None)),
+            field=index_ops._internal.data_fields[0].copy(nullable=True),
+        )
+
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
@@ -384,6 +392,9 @@ class DecimalOps(FractionalOps):
                 dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
             ),
         )
+
+    def nan_to_null(self, index_ops: IndexOpsLike) -> IndexOpsLike:
+        return index_ops.copy()
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         # TODO(SPARK-36230): check index_ops.hasnans after fixing SPARK-36230
