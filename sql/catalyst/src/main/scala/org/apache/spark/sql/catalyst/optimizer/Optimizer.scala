@@ -51,7 +51,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       result.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
       LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(result) &&
       input.output.zip(result.output).forall { case (in, out) =>
-        in.exprId == out.exprId && in.name == out.name
+        in.name == out.name
       })
   }
 
