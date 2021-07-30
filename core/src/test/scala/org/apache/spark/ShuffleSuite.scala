@@ -17,8 +17,7 @@
 
 package org.apache.spark
 
-import java.io.{File, FileOutputStream}
-import java.nio.ByteBuffer
+import java.io.{File, RandomAccessFile}
 import java.util.{Locale, Properties}
 import java.util.concurrent.{Callable, CyclicBarrier, Executors, ExecutorService }
 
@@ -468,11 +467,11 @@ abstract class ShuffleSuite extends SparkFunSuite with Matchers with LocalRootDi
       }
 
       if (dataFile.exists()) {
-        val f = new FileOutputStream(dataFile, true)
-        val ch = f.getChannel
+        val f = new RandomAccessFile(dataFile, "rw")
         // corrupt the shuffle data files by writing some arbitrary bytes
-        ch.write(ByteBuffer.wrap(Array[Byte](12)), 0)
-        ch.close()
+        f.seek(0)
+        f.write(Array[Byte](12))
+        f.close()
       }
       BarrierTaskContext.get().barrier()
       iter
