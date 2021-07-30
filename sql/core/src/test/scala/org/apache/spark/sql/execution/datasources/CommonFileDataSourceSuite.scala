@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources
 
 import org.scalatest.funsuite.AnyFunSuite
 
-import org.apache.spark.sql.{Dataset, Encoders, FakeFileSystemRequiringDSOption, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Dataset, Encoders, FakeFileSystemRequiringDSOption, SparkSession}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 
 /**
@@ -56,6 +56,17 @@ trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
             readback.write.mode("overwrite").format("noop").save()
           }
         }
+      }
+    }
+  }
+
+  test(s"SPARK-36349: disallow saving of ANSI intervals to $dataSourceFormat") {
+    Seq("INTERVAL '1' DAY", "INTERVAL '1' YEAR").foreach { i =>
+      withTempPath { dir =>
+        val errMsg = intercept[AnalysisException] {
+          spark.sql(s"SELECT $i").write.format(dataSourceFormat).save(dir.getAbsolutePath)
+        }.getMessage
+        assert(errMsg.contains("Cannot save interval data type into external storage"))
       }
     }
   }
