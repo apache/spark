@@ -31,8 +31,6 @@ class ArrowEvalPythonExecSuite extends SparkFunSuite {
       DoubleType, FloatType, ShortType, IntegerType, LongType,
       DataTypes.DateType, DataTypes.TimestampType,
       DataTypes.CalendarIntervalType,
-      DataTypes.DayTimeIntervalType,
-      DataTypes.YearMonthIntervalType,
       DataTypes.createDecimalType()
     ).foreach { tpe =>
       assert(plainSchema(tpe) === tpe)
