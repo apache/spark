@@ -752,10 +752,10 @@ object NullPropagation extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT)
+    t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT, COALESCE)
       || t.containsAllPatterns(WINDOW_EXPRESSION, CAST, LITERAL), ruleId) {
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
-      t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT)
+      t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT, COALESCE)
         || t.containsAllPatterns(WINDOW_EXPRESSION, CAST, LITERAL), ruleId) {
       case e @ WindowExpression(Cast(Literal(0L, _), _, _, _), _) =>
         Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
@@ -780,6 +780,8 @@ object NullPropagation extends Rule[LogicalPlan] {
           Literal.create(null, e.dataType)
         } else if (newChildren.length == 1) {
           newChildren.head
+        } else if (!newChildren.head.nullable) {
+          newChildren.head // Returns the first expression if it is non nullable.
         } else {
           Coalesce(newChildren)
         }

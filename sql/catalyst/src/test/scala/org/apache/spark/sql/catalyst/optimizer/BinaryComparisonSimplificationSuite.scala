@@ -173,4 +173,12 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
       }
     }
   }
+
+  test("SPARK-36359: Coalesce returns the first expression if it is non nullable") {
+    val plan = nonNullableRelation
+      .select(Coalesce(Seq('a, 'a + 10)).as("out")).analyze
+    val actual = Optimize.execute(plan)
+    val correctAnswer = nonNullableRelation.select('a.as("out")).analyze
+    comparePlans(actual, correctAnswer)
+  }
 }
