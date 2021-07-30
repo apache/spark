@@ -49,6 +49,8 @@ object OrcUtils extends Logging {
     "LZ4" -> ".lz4",
     "LZO" -> ".lzo")
 
+  val TIMESTAMP_WITH_LOCAL_TIME_ZONE = "timestamp with local time zone"
+
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
@@ -85,10 +87,13 @@ object OrcUtils extends Logging {
   }
 
   private def toCatalystSchema(schema: TypeDescription): StructType = {
+    // The timestampNTZ type in Spark named "timestamp_ntz", but Orc is not.
+    val schemaStr =
+      schema.toString.replace(TIMESTAMP_WITH_LOCAL_TIME_ZONE, TimestampNTZType.typeName)
     // The Spark query engine has not completely supported CHAR/VARCHAR type yet, and here we
     // replace the orc CHAR/VARCHAR with STRING type.
     CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-      CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType])
+      CatalystSqlParser.parseDataType(schemaStr).asInstanceOf[StructType])
   }
 
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
@@ -230,6 +235,7 @@ object OrcUtils extends Logging {
       s"array<${orcTypeDescriptionString(a.elementType)}>"
     case m: MapType =>
       s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
+    case TimestampNTZType => TIMESTAMP_WITH_LOCAL_TIME_ZONE
     case _ => dt.catalogString
   }
 

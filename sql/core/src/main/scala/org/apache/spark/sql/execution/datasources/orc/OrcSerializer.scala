@@ -148,6 +148,10 @@ class OrcSerializer(dataSchema: StructType) {
       result.setNanos(ts.getNanos)
       result
 
+    case TimestampNTZType => (getter, ordinal) =>
+      val result = new OrcTimestamp(getter.getLong(ordinal))
+      result
+
     case DecimalType.Fixed(precision, scale) =>
       OrcShimUtils.getHiveDecimalWritable(precision, scale)
 

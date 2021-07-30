@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
+import java.time.LocalDateTime
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -49,6 +50,8 @@ case class AllDataTypesWithNonPrimitiveType(
     shortField: Short,
     byteField: Byte,
     booleanField: Boolean,
+    timestampField: Timestamp,
+    timestampNTZField: LocalDateTime,
     array: Seq[Int],
     arrayContainsNull: Seq[Option[Int]],
     map: Map[Int, Long],
@@ -66,7 +69,8 @@ abstract class OrcQueryTest extends OrcTest {
 
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
-      (s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0)
+      (s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0,
+        new Timestamp(i), LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000 + i))
     }
 
     withOrcFile(data) { file =>
@@ -87,6 +91,7 @@ abstract class OrcQueryTest extends OrcTest {
     val data: Seq[AllDataTypesWithNonPrimitiveType] = (0 to 255).map { i =>
       AllDataTypesWithNonPrimitiveType(
         s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0,
+        new Timestamp(i), LocalDateTime.of(2019, 3, 21, 0, 2, 3, 456000000 + i),
         0 until i,
         (0 until i).map(Option(_).filter(_ % 3 == 0)),
         (0 until i).map(i => i -> i.toLong).toMap,
@@ -172,13 +177,15 @@ abstract class OrcQueryTest extends OrcTest {
       Option.empty[Long],
       Option.empty[Float],
       Option.empty[Double],
-      Option.empty[Boolean]
+      Option.empty[Boolean],
+      Option.empty[Timestamp],
+      Option.empty[LocalDateTime]
     ) :: Nil
 
     withOrcFile(data) { file =>
       checkAnswer(
         spark.read.orc(file),
-        Row(Seq.fill(5)(null): _*))
+        Row(Seq.fill(7)(null): _*))
     }
   }
 
