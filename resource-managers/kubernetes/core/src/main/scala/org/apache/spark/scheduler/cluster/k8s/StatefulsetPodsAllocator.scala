@@ -110,7 +110,11 @@ private[spark] class StatefulsetPodsAllocator(
       val resolvedExecutorSpec = executorBuilder.buildFromFeatures(executorConf, secMgr,
         kubernetesClient, rpIdToResourceProfile(resourceProfileId))
       val executorPod = resolvedExecutorSpec.pod
-      val podWithAttachedContainer: PodSpec = new PodSpecBuilder(executorPod.pod.getSpec())
+      val podSpecBuilder = executorPod.getSpec() match {
+        case null => new PodSpecBuilder()
+        case s => new PodSpecBuilder(s)
+      }
+      val podWithAttachedContainer: PodSpec = podSpecBuilder
         .addToContainers(executorPod.container)
         .build()
 
