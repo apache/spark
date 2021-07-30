@@ -122,6 +122,9 @@ public class AuthEngineSuite {
     try (AuthEngine engine = new AuthEngine("appId", "secret", conf)) {
       engine.challenge();
       fail("Should have failed to create challenge message.");
+
+      // Call close explicitly to make sure it's idempotent.
+      engine.close();
     }
   }
 
