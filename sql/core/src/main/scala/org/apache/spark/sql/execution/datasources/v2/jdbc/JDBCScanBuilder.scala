@@ -84,18 +84,10 @@ case class JDBCScanBuilder(
       "GROUP BY " + groupByCols.mkString(",")
     }
 
-    val aggQuery = s"SELECT ${selectList.mkString(",")} FROM " +
-      s"${jdbcOptions.tableOrQuery} $groupByClause"
-    val jdbcOptionsWithAggQuery = new JDBCOptions(
-      jdbcOptions.parameters
-        - JDBCOptions.JDBC_TABLE_NAME
-        - JDBCOptions.JDBC_PARTITION_COLUMN
-        - JDBCOptions.JDBC_NUM_PARTITIONS
-        - JDBCOptions.JDBC_LOWER_BOUND
-        - JDBCOptions.JDBC_UPPER_BOUND +
-        (JDBCOptions.JDBC_QUERY_STRING -> aggQuery))
+    val aggQuery = s"SELECT ${selectList.mkString(",")} FROM ${jdbcOptions.tableOrQuery} " +
+      s"WHERE 1=0 $groupByClause"
     try {
-      finalSchema = JDBCRDD.resolveTable(jdbcOptionsWithAggQuery)
+      finalSchema = JDBCRDD.getQueryOutputSchema(aggQuery, jdbcOptions, dialect)
       pushedAggregateList = selectList
       pushedGroupByCols = Some(groupByCols)
       true

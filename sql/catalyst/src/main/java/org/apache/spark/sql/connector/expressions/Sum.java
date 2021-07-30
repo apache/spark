@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.types.DataType;
 
 /**
  * An aggregate function that returns the summation of all the values in a group.

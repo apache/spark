@@ -84,7 +84,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 expr.collect {
                   // Do not push down duplicated aggregate expressions. For example,
                   // `SELECT max(a) + 1, max(a) + 2 FROM ...`, we should only push down one
-                  // `sum(a)` to the data source.
+                  // `max(a)` to the data source.
                   case agg: AggregateExpression
                       if !aggExprToOutputOrdinal.contains(agg.canonicalized) =>
                     aggExprToOutputOrdinal(agg.canonicalized) = ordinal
