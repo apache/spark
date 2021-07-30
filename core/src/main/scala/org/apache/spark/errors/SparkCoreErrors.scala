@@ -23,8 +23,8 @@ import java.util.concurrent.RejectedExecutionException
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
-import org.apache.spark.util.ReturnStatementInClosureException
 import org.apache.spark.storage.{BlockId, RDDBlockId}
+import org.apache.spark.util.ReturnStatementInClosureException
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
