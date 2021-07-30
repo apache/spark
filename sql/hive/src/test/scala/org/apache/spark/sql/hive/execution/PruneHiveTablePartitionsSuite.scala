@@ -17,14 +17,19 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.metrics.source.HiveCatalogMetrics
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.datasources.PrunePartitionSuiteBase
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.LongType
 
-class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
+class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase with TestHiveSingleton {
 
   override def format(): String = "hive"
 
@@ -129,6 +134,25 @@ class PruneHiveTablePartitionsSuite extends PrunePartitionSuiteBase {
             maxLen = Some(LongType.defaultSize))))
       }
     }
+  }
+
+  test("SPARK-36128: spark.sql.hive.metastorePartitionPruning should work for file data sources") {
+    Seq(true, false).foreach { enablePruning =>
+      withTable("tbl") {
+        withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> enablePruning.toString) {
+          spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
+          HiveCatalogMetrics.reset()
+          QueryTest.checkAnswer(sql("SELECT id FROM tbl WHERE p = 1"),
+            Seq(1, 4, 7).map(Row.apply(_)), checkToRDD = false) // avoid analyzing the query twice
+          val expectedCount = if (enablePruning) 1 else 3
+          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == expectedCount)
+        }
+      }
+    }
+  }
+
+  protected def collectPartitionFiltersFn(): PartialFunction[SparkPlan, Seq[Expression]] = {
+    case scan: HiveTableScanExec => scan.partitionPruningPred
   }
 
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {
