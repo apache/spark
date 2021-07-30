@@ -400,7 +400,7 @@ public class UTF8StringSuite {
   public void split() {
     UTF8String[] negativeAndZeroLimitCase =
       new UTF8String[]{fromString("ab"), fromString("def"), fromString("ghi"), fromString("")};
-      assertArrayEquals(negativeAndZeroLimitCase, fromString("ab,def,ghi,").split(fromString(","), 0));
+    assertArrayEquals(negativeAndZeroLimitCase, fromString("ab,def,ghi,").split(fromString(","), 0));
     assertArrayEquals(negativeAndZeroLimitCase, fromString("ab,def,ghi,").split(fromString(","), -1));
     assertArrayEquals(
       new UTF8String[]{fromString("ab"), fromString("def,ghi,")},
