@@ -2981,6 +2981,12 @@ class DataFrameSuite extends QueryTest
       checkAnswer(sql("SELECT sum(c1 * c3) + sum(c2 * c3) FROM tbl"), Row(2.00000000000) :: Nil)
     }
   }
+
+  test("SPARK-36338: DataFrame.withSequenceColumn should append unique sequence IDs") {
+    val ids = spark.range(10).repartition(5)
+      .withSequenceColumn("default_index").collect().map(_.getLong(0))
+    assert(ids.toSet === Range(0, 10).toSet)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

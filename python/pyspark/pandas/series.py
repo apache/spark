@@ -5533,7 +5533,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_index = notnull._internal.spark_frame.select(notnull._internal.index_spark_columns)
 
         tmp_join_key = verify_temp_column_name(sdf_for_index, "__tmp_join_key__")
-        sdf_for_index, _ = InternalFrame.attach_distributed_sequence_column(
+        sdf_for_index = InternalFrame.attach_distributed_sequence_column(
             sdf_for_index, tmp_join_key
         )
         # sdf_for_index:
@@ -5550,7 +5550,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_data = notnull._internal.spark_frame.select(
             notnull.spark.column.alias("values"), NATURAL_ORDER_COLUMN_NAME
         )
-        sdf_for_data, _ = InternalFrame.attach_distributed_sequence_column(
+        sdf_for_data = InternalFrame.attach_distributed_sequence_column(
             sdf_for_data, SPARK_DEFAULT_SERIES_NAME
         )
         # sdf_for_data:
@@ -5569,9 +5569,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ).drop("values", NATURAL_ORDER_COLUMN_NAME)
 
         tmp_join_key = verify_temp_column_name(sdf_for_data, "__tmp_join_key__")
-        sdf_for_data, _ = InternalFrame.attach_distributed_sequence_column(
-            sdf_for_data, tmp_join_key
-        )
+        sdf_for_data = InternalFrame.attach_distributed_sequence_column(sdf_for_data, tmp_join_key)
         # sdf_for_index:                         sdf_for_data:
         # +----------------+-----------------+   +----------------+---+
         # |__tmp_join_key__|__index_level_0__|   |__tmp_join_key__|  0|
@@ -5639,7 +5637,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return -1
         # We should remember the natural sequence started from 0
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf, _ = InternalFrame.attach_distributed_sequence_column(
+        sdf = InternalFrame.attach_distributed_sequence_column(
             sdf.drop(NATURAL_ORDER_COLUMN_NAME), seq_col_name
         )
         # If the maximum is achieved in multiple locations, the first row position is returned.
@@ -5686,7 +5684,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return -1
         # We should remember the natural sequence started from 0
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf, _ = InternalFrame.attach_distributed_sequence_column(
+        sdf = InternalFrame.attach_distributed_sequence_column(
             sdf.drop(NATURAL_ORDER_COLUMN_NAME), seq_col_name
         )
         # If the minimum is achieved in multiple locations, the first row position is returned.
