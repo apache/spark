@@ -91,7 +91,7 @@ object PushDownUtils extends PredicateHelper {
     }
 
     scanBuilder match {
-      case r: SupportsPushDownAggregates =>
+      case r: SupportsPushDownAggregates if aggregates.nonEmpty =>
         val translatedAggregates = aggregates.flatMap(DataSourceStrategy.translateAggregate)
         val translatedGroupBys = groupBy.flatMap(columnAsString)
 

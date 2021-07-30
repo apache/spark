@@ -25,7 +25,7 @@ import org.apache.spark.{InterruptibleIterator, Partition, SparkContext, TaskCon
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.connector.expressions.{AggregateFunc, Count, CountStar, FieldReference, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.{AggregateFunc, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -54,9 +54,14 @@ object JDBCRDD extends Logging {
     val url = options.url
     val table = options.tableOrQuery
     val dialect = JdbcDialects.get(url)
+    getQueryOutputSchema(dialect.getSchemaQuery(table), options, dialect)
+  }
+
+  def getQueryOutputSchema(
+      query: String, options: JDBCOptions, dialect: JdbcDialect): StructType = {
     val conn: Connection = JdbcUtils.createConnectionFactory(options)()
     try {
-      val statement = conn.prepareStatement(dialect.getSchemaQuery(table))
+      val statement = conn.prepareStatement(query)
       try {
         statement.setQueryTimeout(options.queryTimeout)
         val rs = statement.executeQuery()
@@ -136,30 +141,30 @@ object JDBCRDD extends Logging {
 
   def compileAggregates(
       aggregates: Seq[AggregateFunc],
-      dialect: JdbcDialect): Seq[String] = {
+      dialect: JdbcDialect): Option[Seq[String]] = {
     def quote(colName: String): String = dialect.quoteIdentifier(colName)
 
-    aggregates.map {
+    Some(aggregates.map {
       case min: Min =>
-        assert(min.column.fieldNames.length == 1)
+        if (min.column.fieldNames.length != 1) return None
         s"MIN(${quote(min.column.fieldNames.head)})"
       case max: Max =>
-        assert(max.column.fieldNames.length == 1)
+        if (max.column.fieldNames.length != 1) return None
         s"MAX(${quote(max.column.fieldNames.head)})"
       case count: Count =>
-        assert(count.column.fieldNames.length == 1)
-        val distinct = if (count.isDistinct) "DISTINCT" else ""
+        if (count.column.fieldNames.length != 1) return None
+        val distinct = if (count.isDistinct) "DISTINCT " else ""
         val column = quote(count.column.fieldNames.head)
-        s"COUNT($distinct $column)"
+        s"COUNT($distinct$column)"
       case sum: Sum =>
-        assert(sum.column.fieldNames.length == 1)
-        val distinct = if (sum.isDistinct) "DISTINCT" else ""
+        if (sum.column.fieldNames.length != 1) return None
+        val distinct = if (sum.isDistinct) "DISTINCT " else ""
         val column = quote(sum.column.fieldNames.head)
-        s"SUM($distinct $column)"
+        s"SUM($distinct$column)"
       case _: CountStar =>
-        s"COUNT(1)"
-      case _ => ""
-    }
+        s"COUNT(*)"
+      case _ => return None
+    })
   }
 
   /**
@@ -185,7 +190,7 @@ object JDBCRDD extends Logging {
       parts: Array[Partition],
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
-      groupByColumns: Option[Array[FieldReference]] = None): RDD[InternalRow] = {
+      groupByColumns: Option[Array[String]] = None): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -221,7 +226,7 @@ private[jdbc] class JDBCRDD(
     partitions: Array[Partition],
     url: String,
     options: JDBCOptions,
-    groupByColumns: Option[Array[FieldReference]])
+    groupByColumns: Option[Array[String]])
   extends RDD[InternalRow](sc, Nil) {
 
   /**
@@ -266,10 +271,8 @@ private[jdbc] class JDBCRDD(
    */
   private def getGroupByClause: String = {
     if (groupByColumns.nonEmpty && groupByColumns.get.nonEmpty) {
-      assert(groupByColumns.get.forall(_.fieldNames.length == 1))
-      val dialect = JdbcDialects.get(url)
-      val quotedColumns = groupByColumns.get.map(c => dialect.quoteIdentifier(c.fieldNames.head))
-      s"GROUP BY ${quotedColumns.mkString(", ")}"
+      // The GROUP BY columns should already be quoted by the caller side.
+      s"GROUP BY ${groupByColumns.get.mkString(", ")}"
     } else {
       ""
     }
