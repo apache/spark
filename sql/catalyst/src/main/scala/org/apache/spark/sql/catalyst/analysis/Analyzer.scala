@@ -174,8 +174,8 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
-  override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
-    !Utils.isTesting || LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(plan)
+  override protected def isPlanIntegral(input: LogicalPlan, result: LogicalPlan): Boolean = {
+    !Utils.isTesting || LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(result)
   }
 
   override def isView(nameParts: Seq[String]): Boolean = v1SessionCatalog.isView(nameParts)

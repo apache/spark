@@ -64,9 +64,12 @@ class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
     }
   }
 
-  override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
-    !Utils.isTesting || (plan.resolved &&
-      plan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
-      LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(plan))
+  override protected def isPlanIntegral(input: LogicalPlan, result: LogicalPlan): Boolean = {
+    !Utils.isTesting || (result.resolved &&
+      result.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
+      LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(result) &&
+      input.output.zip(result.output).forall { case (in, out) =>
+        in.exprId == out.exprId && in.name == out.name
+      })
   }
 }
