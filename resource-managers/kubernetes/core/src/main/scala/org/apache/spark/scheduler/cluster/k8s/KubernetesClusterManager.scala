@@ -74,7 +74,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       if (KubernetesUtils.isValidExecutorPodNamePrefix(podNamePrefix)) {
         sc.conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, podNamePrefix)
       } else {
-        val shortPrefix = "spark-" + KubernetesUtils.uniqueID()
+        val shortPrefix = podNamePrefix.substring(
+          Math.max(0, podNamePrefix.length - KUBERNETES_POD_NAME_PREFIX_MAX_LENGTH))
         logWarning(s"Use $shortPrefix as the executor pod's name prefix due to " +
           s"spark.app.name is too long. Please set '${KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key}' " +
           s"if you need a custom executor pod's name prefix.")
