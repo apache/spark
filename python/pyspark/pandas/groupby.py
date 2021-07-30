@@ -2540,7 +2540,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         internal = InternalFrame(
             spark_frame=sdf,
             index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
-            index_names=[groupkey._column_label for groupkey in self._groupkeys],
+            index_names=[psser._column_label for psser in self._groupkeys],
             index_fields=[
                 psser._internal.data_fields[0].copy(name=name)
                 for psser, name in zip(self._groupkeys, groupkey_names)
