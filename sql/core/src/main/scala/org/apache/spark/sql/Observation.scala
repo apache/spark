@@ -87,7 +87,7 @@ class Observation(name: String) {
    * @throws InterruptedException interrupted while waiting
    */
   @throws[InterruptedException]
-  def get: Map[String, Any] = {
+  def get: Map[String, _] = {
     synchronized {
       // we need to loop as wait might return without us calling notify
       // https://en.wikipedia.org/w/index.php?title=Spurious_wakeup&oldid=992601610
@@ -108,7 +108,7 @@ class Observation(name: String) {
    * @throws InterruptedException interrupted while waiting
    */
   @throws[InterruptedException]
-  def getAsJava: java.util.Map[String, Object] = {
+  def getAsJava: java.util.Map[String, AnyRef] = {
     JavaConverters.mapAsJavaMap(
       get.map { case (key, value) => (key, value.asInstanceOf[Object])}
     )
