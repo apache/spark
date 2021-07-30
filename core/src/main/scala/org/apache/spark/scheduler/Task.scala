@@ -86,6 +86,9 @@ private[spark] abstract class Task[T](
       cpus: Int,
       resources: Map[String, ResourceInformation],
       plugins: Option[PluginContainer]): T = {
+
+    require(cpus > 0, "CPUs per task should be > 0")
+
     SparkEnv.get.blockManager.registerTask(taskAttemptId)
     // TODO SPARK-24874 Allow create BarrierTaskContext based on partitions, instead of whether
     // the stage is barrier.
