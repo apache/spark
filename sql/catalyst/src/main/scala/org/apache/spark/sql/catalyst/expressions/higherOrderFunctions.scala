@@ -86,7 +86,8 @@ case class NamedLambdaVariable(
   override def newInstance(): NamedExpression =
     copy(exprId = NamedExpression.newExprId, value = new AtomicReference())
 
-  override def withName(newName: String): NamedExpression = copy(name = newName)
+  override def withName(newName: String): NamedExpression =
+    NamedLambdaVariable(newName, dataType, nullable, exprId, value)
 
   override def toAttribute: Attribute = {
     AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)
