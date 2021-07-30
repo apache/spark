@@ -45,8 +45,8 @@ case class OrcScanBuilder(
   override protected val supportsNestedSchemaPruning: Boolean = true
 
   override def build(): Scan = {
-    OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema,
-      readDataSchema(), readPartitionSchema(), options, pushedFilters())
+    OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
+      readPartitionSchema(), options, pushedFilters(), partitionFilters, dataFilters)
   }
 
   private var _pushedFilters: Array[Filter] = Array.empty

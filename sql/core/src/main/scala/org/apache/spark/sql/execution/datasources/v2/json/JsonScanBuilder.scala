@@ -40,7 +40,9 @@ class JsonScanBuilder (
       readDataSchema(),
       readPartitionSchema(),
       options,
-      pushedFilters())
+      pushedFilters(),
+      partitionFilters,
+      dataFilters)
   }
 
   private var _pushedFilters: Array[Filter] = Array.empty

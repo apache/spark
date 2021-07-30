@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, ExpressionSet, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
@@ -57,7 +57,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // `postScanFilters` and `pushedFilters` can overlap, e.g. the parquet row group filter.
       val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
         sHolder.builder, normalizedFiltersWithoutSubquery)
-      val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
+      var postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
+      val partitionFilters = PushDownUtils
+        .pushPartitionFilters(sHolder.builder, sHolder.relation, normalizedFiltersWithoutSubquery)
+      postScanFilters =
+        (ExpressionSet(postScanFilters) -- partitionFilters.filter(_.references.nonEmpty)).toSeq
 
       logInfo(
         s"""

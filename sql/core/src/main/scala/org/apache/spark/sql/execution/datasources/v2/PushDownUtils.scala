@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, NamedExpression, PredicateHelper, SchemaPruning}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.{Aggregation, FieldReference}
@@ -75,6 +75,34 @@ object PushDownUtils extends PredicateHelper {
   }
 
   /**
+   * Pushes down partition filters and data filters to the data source reader
+   *
+   * @return pushed partition filters.
+   */
+  def pushPartitionFilters(
+      scanBuilder: ScanBuilder,
+      relation: DataSourceV2Relation,
+      normalizedFilters: Seq[Expression]): Seq[Expression] = {
+    scanBuilder match {
+      case fileBuilder: FileScanBuilder =>
+        val partitionColumns = relation.resolve(
+          fileBuilder.readPartitionSchema(),
+          fileBuilder.getSparkSession.sessionState.analyzer.resolver)
+        val partitionSet = AttributeSet(partitionColumns)
+        val (partitionKeyFilters, dataFilters) = normalizedFilters.partition(f =>
+          f.references.subsetOf(partitionSet)
+        )
+        val extraPartitionFilter =
+          dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
+        val partitionFilter = partitionKeyFilters ++ extraPartitionFilter
+        fileBuilder.setFilters(ExpressionSet(partitionFilter).toSeq, dataFilters)
+        partitionFilter
+
+      case _ => Seq.empty[Expression]
+    }
+  }
+
+  /**
    * Pushes down aggregates to the data source reader
    *
    * @return pushed aggregation.
@@ -117,7 +145,11 @@ object PushDownUtils extends PredicateHelper {
       relation: DataSourceV2Relation,
       projects: Seq[NamedExpression],
       filters: Seq[Expression]): (Scan, Seq[AttributeReference]) = {
-    val exprs = projects ++ filters
+    val filePartitionFilter = scanBuilder match {
+      case fileScanBuilder: FileScanBuilder => fileScanBuilder.getPartitionFilters
+      case _ => Seq.empty[Expression]
+    }
+    val exprs = projects ++ filters ++ filePartitionFilter
     val requiredColumns = AttributeSet(exprs.flatMap(_.references))
     val neededOutput = relation.output.filter(requiredColumns.contains)
 

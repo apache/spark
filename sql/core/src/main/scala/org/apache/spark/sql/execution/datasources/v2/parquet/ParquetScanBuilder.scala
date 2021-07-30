@@ -82,6 +82,6 @@ case class ParquetScanBuilder(
 
   override def build(): Scan = {
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
-      readPartitionSchema(), pushedParquetFilters, options)
+      readPartitionSchema(), pushedParquetFilters, options, partitionFilters, dataFilters)
   }
 }

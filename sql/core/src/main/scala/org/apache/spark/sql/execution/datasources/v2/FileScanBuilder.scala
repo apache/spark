@@ -17,6 +17,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.{PartitioningAwareFileIndex, PartitioningUtils}
 import org.apache.spark.sql.types.StructType
@@ -29,6 +30,8 @@ abstract class FileScanBuilder(
   private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
   protected val supportsNestedSchemaPruning = false
   protected var requiredSchema = StructType(dataSchema.fields ++ partitionSchema.fields)
+  protected var partitionFilters = Seq.empty[Expression]
+  protected var dataFilters = Seq.empty[Expression]
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // [SPARK-30107] While `requiredSchema` might have pruned nested columns,
@@ -48,7 +51,7 @@ abstract class FileScanBuilder(
     StructType(fields)
   }
 
-  protected def readPartitionSchema(): StructType = {
+  def readPartitionSchema(): StructType = {
     val requiredNameSet = createRequiredNameSet()
     val fields = partitionSchema.fields.filter { field =>
       val colName = PartitioningUtils.getColName(field, isCaseSensitive)
@@ -56,6 +59,15 @@ abstract class FileScanBuilder(
     }
     StructType(fields)
   }
+
+  def setFilters(pFilters: Seq[Expression], dFilters: Seq[Expression]): Unit = {
+    partitionFilters = pFilters
+    dataFilters = dFilters
+  }
+
+  def getPartitionFilters(): Seq[Expression] = partitionFilters
+
+  def getSparkSession: SparkSession = sparkSession
 
   private def createRequiredNameSet(): Set[String] =
     requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
