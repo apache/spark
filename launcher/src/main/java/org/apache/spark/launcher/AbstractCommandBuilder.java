@@ -120,9 +120,7 @@ abstract class AbstractCommandBuilder {
 
   void addOptionString(List<String> cmd, String options) {
     if (!isEmpty(options)) {
-      for (String opt : parseOptionString(options)) {
-        cmd.add(opt);
-      }
+      cmd.addAll(parseOptionString(options));
     }
   }
 

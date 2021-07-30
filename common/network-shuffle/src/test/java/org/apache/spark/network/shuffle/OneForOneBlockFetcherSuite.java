@@ -216,8 +216,7 @@ public class OneForOneBlockFetcherSuite {
               new long[]{0, 2, 10}, new int[][]{{0}, {1}, {2}}, false),
       conf);
 
-    for (int chunkIndex = 0; chunkIndex < blockIds.length; chunkIndex++) {
-      String blockId = blockIds[chunkIndex];
+    for (String blockId : blockIds) {
       verify(listener).onBlockFetchSuccess(blockId, blocks.get(blockId));
     }
   }
@@ -237,8 +236,7 @@ public class OneForOneBlockFetcherSuite {
               new long[]{0, 2, 10}, new int[][]{{1, 2}, {2, 3}, {3, 4}}, true),
       conf);
 
-    for (int chunkIndex = 0; chunkIndex < blockIds.length; chunkIndex++) {
-      String blockId = blockIds[chunkIndex];
+    for (String blockId : blockIds) {
       verify(listener).onBlockFetchSuccess(blockId, blocks.get(blockId));
     }
   }

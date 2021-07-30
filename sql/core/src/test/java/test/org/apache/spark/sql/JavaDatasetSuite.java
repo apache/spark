@@ -1548,7 +1548,7 @@ public class JavaDatasetSuite implements Serializable {
     A("www.elgoog.com"),
     B("www.google.com");
 
-    private String url;
+    private final String url;
 
     MyEnum(String url) {
       this.url = url;
@@ -1556,10 +1556,6 @@ public class JavaDatasetSuite implements Serializable {
 
     public String getUrl() {
       return url;
-    }
-
-    public void setUrl(String url) {
-      this.url = url;
     }
   }
 
@@ -1653,7 +1649,7 @@ public class JavaDatasetSuite implements Serializable {
     }
   }
 
-  public class CircularReference3Bean implements Serializable {
+  public static class CircularReference3Bean implements Serializable {
     private CircularReference3Bean[] child;
 
     public CircularReference3Bean[] getChild() {
