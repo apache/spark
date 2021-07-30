@@ -366,5 +366,8 @@ class DataTypeOps(object, metaclass=ABCMeta):
             ),
         )
 
+    def nan_to_null(self, index_ops: IndexOpsLike) -> IndexOpsLike:
+        return index_ops.copy()
+
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         raise TypeError("astype can not be applied to %s." % self.pretty_name)
