@@ -18,7 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.TimeUnit
 
-import io.fabric8.kubernetes.api.model.PodListBuilder
+import io.fabric8.kubernetes.api.model.{ListOptionsBuilder, PodListBuilder}
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{Mock, MockitoAnnotations}
@@ -87,5 +87,21 @@ class ExecutorPodsPollingSnapshotSourceSuite extends SparkFunSuite with BeforeAn
         .build())
     pollingExecutor.tick(pollingInterval, TimeUnit.MILLISECONDS)
     verify(eventQueue).replaceSnapshot(Seq(exec1, exec2))
+  }
+
+  test("SPARK-36334: Support pod listing with resource version") {
+    Seq(true, false).foreach { value =>
+      val source = new ExecutorPodsPollingSnapshotSource(
+        sparkConf.set(KUBERNETES_EXECUTOR_API_POLLING_WITH_RESOURCE_VERSION, value),
+        kubernetesClient,
+        eventQueue,
+        pollingExecutor)
+      pollingExecutor.tick(pollingInterval, TimeUnit.MILLISECONDS)
+      if (value) {
+        verify(activeExecutorPods).list(new ListOptionsBuilder().withResourceVersion("0").build())
+      } else {
+        verify(activeExecutorPods).list()
+      }
+    }
   }
 }
