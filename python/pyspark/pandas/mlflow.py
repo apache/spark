@@ -229,10 +229,4 @@ def _test() -> None:
 
 
 if __name__ == "__main__":
-    try:
-        import mlflow  # noqa: F401
-        import sklearn  # noqa: F401
-
-        _test()
-    except ImportError:
-        pass
+    _test()
