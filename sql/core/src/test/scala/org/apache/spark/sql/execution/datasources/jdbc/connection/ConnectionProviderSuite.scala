@@ -17,13 +17,21 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc.connection
 
+import java.sql.{Connection, Driver}
 import javax.security.auth.login.Configuration
+
+import org.scalatestplus.mockito.MockitoSugar
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.StaticSQLConf
+import org.apache.spark.sql.jdbc.JdbcConnectionProvider
 import org.apache.spark.sql.test.SharedSparkSession
 
-class ConnectionProviderSuite extends ConnectionProviderSuiteBase with SharedSparkSession {
+class ConnectionProviderSuite
+  extends ConnectionProviderSuiteBase
+  with SharedSparkSession
+  with MockitoSugar {
+
   test("All built-in providers must be loaded") {
     IntentionallyFaultyConnectionProvider.constructed = false
     val providers = ConnectionProvider.loadProviders()
@@ -36,6 +44,84 @@ class ConnectionProviderSuite extends ConnectionProviderSuiteBase with SharedSpa
     assert(IntentionallyFaultyConnectionProvider.constructed)
     assert(!providers.exists(_.isInstanceOf[IntentionallyFaultyConnectionProvider]))
     assert(providers.size === 6)
+  }
+
+  test("Throw an error selecting from an empty list of providers on create") {
+    val providerBase = new ConnectionProviderBase() {
+      override val providers = Seq.empty
+    }
+
+    val err1 = intercept[IllegalArgumentException] {
+      providerBase.create(mock[Driver], Map.empty, None)
+    }
+    assert(err1.getMessage.contains("Empty list of JDBC connection providers"))
+
+    val err2 = intercept[IllegalArgumentException] {
+      providerBase.create(mock[Driver], Map.empty, Some("test"))
+    }
+    assert(err2.getMessage.contains("Empty list of JDBC connection providers"))
+  }
+
+  test("Throw an error when more than one provider is available on create") {
+    val provider1 = new JdbcConnectionProvider() {
+      override val name: String = "test1"
+      override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
+      override def getConnection(driver: Driver, options: Map[String, String]): Connection =
+        throw new RuntimeException()
+    }
+    val provider2 = new JdbcConnectionProvider() {
+      override val name: String = "test2"
+      override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
+      override def getConnection(driver: Driver, options: Map[String, String]): Connection =
+        throw new RuntimeException()
+    }
+
+    val providerBase = new ConnectionProviderBase() {
+      override val providers = Seq(provider1, provider2)
+    }
+
+    val err = intercept[IllegalArgumentException] {
+      providerBase.create(mock[Driver], Map.empty, None)
+    }
+    assert(err.getMessage.contains("more than one connection provider was found"))
+  }
+
+  test("Handle user specified JDBC connection provider") {
+    val provider1 = new JdbcConnectionProvider() {
+      override val name: String = "test1"
+      override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
+      override def getConnection(driver: Driver, options: Map[String, String]): Connection =
+        throw new RuntimeException()
+    }
+    val provider2 = new JdbcConnectionProvider() {
+      override val name: String = "test2"
+      override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
+      override def getConnection(driver: Driver, options: Map[String, String]): Connection =
+        mock[Connection]
+    }
+
+    val providerBase = new ConnectionProviderBase() {
+      override val providers = Seq(provider1, provider2)
+    }
+    // We don't expect any exceptions or null here
+    assert(providerBase.create(mock[Driver], Map.empty, Some("test2")).isInstanceOf[Connection])
+  }
+
+  test("Throw an error when user specified provider that does not exist") {
+    val provider = new JdbcConnectionProvider() {
+      override val name: String = "provider"
+      override def canHandle(driver: Driver, options: Map[String, String]): Boolean = true
+      override def getConnection(driver: Driver, options: Map[String, String]): Connection =
+        throw new RuntimeException()
+    }
+
+    val providerBase = new ConnectionProviderBase() {
+      override val providers = Seq(provider)
+    }
+    val err = intercept[IllegalArgumentException] {
+      providerBase.create(mock[Driver], Map.empty, Some("test"))
+    }
+    assert(err.getMessage.contains("Could not find a JDBC connection provider with name 'test'"))
   }
 
   test("Multiple security configs must be reachable") {

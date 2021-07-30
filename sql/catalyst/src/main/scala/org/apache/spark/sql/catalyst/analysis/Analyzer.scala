@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.{toPrettySQL, CharVarcharUtils}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnChange, ColumnPosition, DeleteColumn}
+import org.apache.spark.sql.connector.catalog.TableChange.{After, ColumnPosition}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction => V2AggregateFunction, BoundFunction, ScalarFunction}
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction.MAGIC_METHOD_NAME
 import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform, Transform}
@@ -269,7 +269,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRelations ::
       ResolveTables ::
       ResolvePartitionSpec ::
-      ResolveAlterTableCommands ::
+      ResolveAlterTableColumnCommands ::
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveReferences ::
@@ -296,6 +296,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
+      SessionWindowing ::
       ResolveInlineTables ::
       ResolveHigherOrderFunctions(catalogManager) ::
       ResolveLambdaVariables ::
@@ -311,7 +312,6 @@ class Analyzer(override val catalogManager: CatalogManager)
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
       postHocResolutionRules: _*),
-    Batch("Normalize Alter Table", Once, ResolveAlterTableChanges),
     Batch("Remove Unresolved Hints", Once,
       new ResolveHints.RemoveAllHints),
     Batch("Nondeterministic", Once,
@@ -1080,11 +1080,6 @@ class Analyzer(override val catalogManager: CatalogManager)
             }.getOrElse(write)
           case _ => write
         }
-
-      case alter @ AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName)
-          .map(rel => alter.copy(table = rel))
-          .getOrElse(alter)
 
       case u: UnresolvedV2Relation =>
         CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
@@ -2552,8 +2547,10 @@ class Analyzer(override val catalogManager: CatalogManager)
               // a table `t` has two columns `c1` and `c2`, for query `SELECT ... FROM t
               // GROUP BY c1 HAVING c2 = 0`, even though we can resolve column `c2` here, we
               // should undo it later and fail with "Column c2 not found".
-              agg.child.resolve(u.nameParts, resolver).map(TempResolvedColumn(_, u.nameParts))
-                .getOrElse(u)
+              agg.child.resolve(u.nameParts, resolver).map({
+                case a: Alias => TempResolvedColumn(a.child, u.nameParts)
+                case o => TempResolvedColumn(o, u.nameParts)
+              }).getOrElse(u)
             } catch {
               case _: AnalysisException => u
             }
@@ -3299,6 +3296,41 @@ class Analyzer(override val catalogManager: CatalogManager)
         } else {
           v2Write
         }
+
+      case u: UpdateTable if !u.skipSchemaResolution && u.resolved =>
+        resolveAssignments(u)
+
+      case m: MergeIntoTable if !m.skipSchemaResolution && m.resolved =>
+        resolveAssignments(m)
+    }
+
+    private def resolveAssignments(p: LogicalPlan): LogicalPlan = {
+      p.transformExpressions {
+        case assignment: Assignment =>
+          val nullHandled = if (!assignment.key.nullable && assignment.value.nullable) {
+            AssertNotNull(assignment.value)
+          } else {
+            assignment.value
+          }
+          val casted = if (assignment.key.dataType != nullHandled.dataType) {
+            AnsiCast(nullHandled, assignment.key.dataType)
+          } else {
+            nullHandled
+          }
+          val rawKeyType = assignment.key.transform {
+            case a: AttributeReference =>
+              CharVarcharUtils.getRawType(a.metadata).map(a.withDataType).getOrElse(a)
+          }.dataType
+          val finalValue = if (CharVarcharUtils.hasCharVarchar(rawKeyType)) {
+            CharVarcharUtils.stringLengthCheck(casted, rawKeyType)
+          } else {
+            casted
+          }
+          val cleanedKey = assignment.key.transform {
+            case a: AttributeReference => CharVarcharUtils.cleanAttrMetadata(a)
+          }
+          Assignment(cleanedKey, finalValue)
+      }
     }
   }
 
@@ -3573,15 +3605,68 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   /**
    * Rule to mostly resolve, normalize and rewrite column names based on case sensitivity
-   * for alter table commands.
+   * for alter table column commands.
    */
-  object ResolveAlterTableCommands extends Rule[LogicalPlan] {
+  object ResolveAlterTableColumnCommands extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case a: AlterTableCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
+      case a: AlterTableColumnCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
         val table = a.table.asInstanceOf[ResolvedTable]
         a.transformExpressions {
           case u: UnresolvedFieldName => resolveFieldNames(table, u.name, u)
         }
+
+      case a @ AlterTableAddColumns(r: ResolvedTable, cols) if !a.resolved =>
+        // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
+        // normalized parent name of fields to field names that belong to the parent.
+        // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
+        // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
+        val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
+        def resolvePosition(
+            col: QualifiedColType,
+            parentSchema: StructType,
+            resolvedParentName: Seq[String]): Option[FieldPosition] = {
+          val fieldsAdded = colsToAdd.getOrElse(resolvedParentName, Nil)
+          val resolvedPosition = col.position.map {
+            case u: UnresolvedFieldPosition => u.position match {
+              case after: After =>
+                val allFields = parentSchema.fieldNames ++ fieldsAdded
+                allFields.find(n => conf.resolver(n, after.column())) match {
+                  case Some(colName) =>
+                    ResolvedFieldPosition(ColumnPosition.after(colName))
+                  case None =>
+                    val name = if (resolvedParentName.isEmpty) "root" else resolvedParentName.quoted
+                    throw QueryCompilationErrors.referenceColNotFoundForAlterTableChangesError(
+                      after, name)
+                }
+              case _ => ResolvedFieldPosition(u.position)
+            }
+            case resolved => resolved
+          }
+          colsToAdd(resolvedParentName) = fieldsAdded :+ col.colName
+          resolvedPosition
+        }
+        val schema = r.table.schema
+        val resolvedCols = cols.map { col =>
+          col.path match {
+            case Some(parent: UnresolvedFieldName) =>
+              // Adding a nested field, need to resolve the parent column and position.
+              val resolvedParent = resolveFieldNames(r, parent.name, parent)
+              val parentSchema = resolvedParent.field.dataType match {
+                case s: StructType => s
+                case _ => throw QueryCompilationErrors.invalidFieldName(
+                  col.name, parent.name, parent.origin)
+              }
+              val resolvedPosition = resolvePosition(col, parentSchema, resolvedParent.name)
+              col.copy(path = Some(resolvedParent), position = resolvedPosition)
+            case _ =>
+              // Adding to the root. Just need to resolve position.
+              val resolvedPosition = resolvePosition(col, schema, Nil)
+              col.copy(position = resolvedPosition)
+          }
+        }
+        val resolved = a.copy(columnsToAdd = resolvedCols)
+        resolved.copyTagsFrom(a)
+        resolved
 
       case a @ AlterTableAlterColumn(
           table: ResolvedTable, ResolvedFieldName(path, field), dataType, _, _, position) =>
@@ -3617,105 +3702,11 @@ class Analyzer(override val catalogManager: CatalogManager)
         fieldName, includeCollections = true, conf.resolver, context.origin
       ).map {
         case (path, field) => ResolvedFieldName(path, field)
-      }.getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context))
+      }.getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context.origin))
     }
 
-    private def hasUnresolvedFieldName(a: AlterTableCommand): Boolean = {
+    private def hasUnresolvedFieldName(a: AlterTableColumnCommand): Boolean = {
       a.expressions.exists(_.find(_.isInstanceOf[UnresolvedFieldName]).isDefined)
-    }
-  }
-
-  /** Rule to mostly resolve, normalize and rewrite column names based on case sensitivity. */
-  object ResolveAlterTableChanges extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case a @ AlterTable(_, _, t: NamedRelation, changes) if t.resolved =>
-        // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
-        // normalized parent name of fields to field names that belong to the parent.
-        // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
-        // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
-        val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
-        val schema = t.schema
-        val normalizedChanges = changes.flatMap {
-          case add: AddColumn =>
-            def addColumn(
-                parentSchema: StructType,
-                parentName: String,
-                normalizedParentName: Seq[String]): TableChange = {
-              val fieldsAdded = colsToAdd.getOrElse(normalizedParentName, Nil)
-              val pos = findColumnPosition(add.position(), parentName, parentSchema, fieldsAdded)
-              val field = add.fieldNames().last
-              colsToAdd(normalizedParentName) = fieldsAdded :+ field
-              TableChange.addColumn(
-                (normalizedParentName :+ field).toArray,
-                add.dataType(),
-                add.isNullable,
-                add.comment,
-                pos)
-            }
-            val parent = add.fieldNames().init
-            if (parent.nonEmpty) {
-              // Adding a nested field, need to normalize the parent column and position
-              val target = schema.findNestedField(parent, includeCollections = true, conf.resolver)
-              if (target.isEmpty) {
-                // Leave unresolved. Throws error in CheckAnalysis
-                Some(add)
-              } else {
-                val (normalizedName, sf) = target.get
-                sf.dataType match {
-                  case struct: StructType =>
-                    Some(addColumn(struct, parent.quoted, normalizedName :+ sf.name))
-                  case other =>
-                    Some(add)
-                }
-              }
-            } else {
-              // Adding to the root. Just need to normalize position
-              Some(addColumn(schema, "root", Nil))
-            }
-
-          case delete: DeleteColumn =>
-            resolveFieldNames(schema, delete.fieldNames(), TableChange.deleteColumn)
-              .orElse(Some(delete))
-
-          case column: ColumnChange =>
-            // This is informational for future developers
-            throw QueryExecutionErrors.columnChangeUnsupportedError
-          case other => Some(other)
-        }
-
-        a.copy(changes = normalizedChanges)
-    }
-
-    /**
-     * Returns the table change if the field can be resolved, returns None if the column is not
-     * found. An error will be thrown in CheckAnalysis for columns that can't be resolved.
-     */
-    private def resolveFieldNames(
-        schema: StructType,
-        fieldNames: Array[String],
-        copy: Array[String] => TableChange): Option[TableChange] = {
-      val fieldOpt = schema.findNestedField(
-        fieldNames, includeCollections = true, conf.resolver)
-      fieldOpt.map { case (path, field) => copy((path :+ field.name).toArray) }
-    }
-
-    private def findColumnPosition(
-        position: ColumnPosition,
-        parentName: String,
-        struct: StructType,
-        fieldsAdded: Seq[String]): ColumnPosition = {
-      position match {
-        case null => null
-        case after: After =>
-          (struct.fieldNames ++ fieldsAdded).find(n => conf.resolver(n, after.column())) match {
-            case Some(colName) =>
-              ColumnPosition.after(colName)
-            case None =>
-              throw QueryCompilationErrors.referenceColNotFoundForAlterTableChangesError(after,
-                parentName)
-          }
-        case other => other
-      }
     }
   }
 
@@ -3856,9 +3847,13 @@ object TimeWindowing extends Rule[LogicalPlan] {
       val windowExpressions =
         p.expressions.flatMap(_.collect { case t: TimeWindow => t }).toSet
 
-      val numWindowExpr = windowExpressions.size
+      val numWindowExpr = p.expressions.flatMap(_.collect {
+        case s: SessionWindow => s
+        case t: TimeWindow => t
+      }).toSet.size
+
       // Only support a single window expression for now
-      if (numWindowExpr == 1 &&
+      if (numWindowExpr == 1 && windowExpressions.nonEmpty &&
           windowExpressions.head.timeColumn.resolved &&
           windowExpressions.head.checkInputDataTypes().isSuccess) {
 
@@ -3869,9 +3864,9 @@ object TimeWindowing extends Rule[LogicalPlan] {
           case _ => Metadata.empty
         }
 
-        def getWindow(i: Int, overlappingWindows: Int): Expression = {
+        def getWindow(i: Int, overlappingWindows: Int, dataType: DataType): Expression = {
           val division = (PreciseTimestampConversion(
-            window.timeColumn, TimestampType, LongType) - window.startTime) / window.slideDuration
+            window.timeColumn, dataType, LongType) - window.startTime) / window.slideDuration
           val ceil = Ceil(division)
           // if the division is equal to the ceiling, our record is the start of a window
           val windowId = CaseWhen(Seq((ceil === division, ceil + 1)), Some(ceil))
@@ -3881,9 +3876,9 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
           CreateNamedStruct(
             Literal(WINDOW_START) ::
-              PreciseTimestampConversion(windowStart, LongType, TimestampType) ::
+              PreciseTimestampConversion(windowStart, LongType, dataType) ::
               Literal(WINDOW_END) ::
-              PreciseTimestampConversion(windowEnd, LongType, TimestampType) ::
+              PreciseTimestampConversion(windowEnd, LongType, dataType) ::
               Nil)
         }
 
@@ -3891,7 +3886,7 @@ object TimeWindowing extends Rule[LogicalPlan] {
           WINDOW_COL_NAME, window.dataType, metadata = metadata)()
 
         if (window.windowDuration == window.slideDuration) {
-          val windowStruct = Alias(getWindow(0, 1), WINDOW_COL_NAME)(
+          val windowStruct = Alias(getWindow(0, 1, window.timeColumn.dataType), WINDOW_COL_NAME)(
             exprId = windowAttr.exprId, explicitMetadata = Some(metadata))
 
           val replacedPlan = p transformExpressions {
@@ -3908,7 +3903,8 @@ object TimeWindowing extends Rule[LogicalPlan] {
           val overlappingWindows =
             math.ceil(window.windowDuration * 1.0 / window.slideDuration).toInt
           val windows =
-            Seq.tabulate(overlappingWindows)(i => getWindow(i, overlappingWindows))
+            Seq.tabulate(overlappingWindows)(i =>
+              getWindow(i, overlappingWindows, window.timeColumn.dataType))
 
           val projections = windows.map(_ +: child.output)
 
@@ -3925,6 +3921,83 @@ object TimeWindowing extends Rule[LogicalPlan] {
 
           renamedPlan.withNewChildren(substitutedPlan :: Nil)
         }
+      } else if (numWindowExpr > 1) {
+        throw QueryCompilationErrors.multiTimeWindowExpressionsNotSupportedError(p)
+      } else {
+        p // Return unchanged. Analyzer will throw exception later
+      }
+  }
+}
+
+/** Maps a time column to a session window. */
+object SessionWindowing extends Rule[LogicalPlan] {
+  import org.apache.spark.sql.catalyst.dsl.expressions._
+
+  private final val SESSION_COL_NAME = "session_window"
+  private final val SESSION_START = "start"
+  private final val SESSION_END = "end"
+
+  /**
+   * Generates the logical plan for generating session window on a timestamp column.
+   * Each session window is initially defined as [timestamp, timestamp + gap).
+   *
+   * This also adds a marker to the session column so that downstream can easily find the column
+   * on session window.
+   */
+  def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+    case p: LogicalPlan if p.children.size == 1 =>
+      val child = p.children.head
+      val sessionExpressions =
+        p.expressions.flatMap(_.collect { case s: SessionWindow => s }).toSet
+
+      val numWindowExpr = p.expressions.flatMap(_.collect {
+        case s: SessionWindow => s
+        case t: TimeWindow => t
+      }).toSet.size
+
+      // Only support a single session expression for now
+      if (numWindowExpr == 1 && sessionExpressions.nonEmpty &&
+          sessionExpressions.head.timeColumn.resolved &&
+          sessionExpressions.head.checkInputDataTypes().isSuccess) {
+
+        val session = sessionExpressions.head
+
+        val metadata = session.timeColumn match {
+          case a: Attribute => a.metadata
+          case _ => Metadata.empty
+        }
+
+        val newMetadata = new MetadataBuilder()
+          .withMetadata(metadata)
+          .putBoolean(SessionWindow.marker, true)
+          .build()
+
+        val sessionAttr = AttributeReference(
+          SESSION_COL_NAME, session.dataType, metadata = newMetadata)()
+
+        val sessionStart = PreciseTimestampConversion(session.timeColumn, TimestampType, LongType)
+        val sessionEnd = sessionStart + session.gapDuration
+
+        val literalSessionStruct = CreateNamedStruct(
+          Literal(SESSION_START) ::
+            PreciseTimestampConversion(sessionStart, LongType, TimestampType) ::
+            Literal(SESSION_END) ::
+            PreciseTimestampConversion(sessionEnd, LongType, TimestampType) ::
+            Nil)
+
+        val sessionStruct = Alias(literalSessionStruct, SESSION_COL_NAME)(
+          exprId = sessionAttr.exprId, explicitMetadata = Some(newMetadata))
+
+        val replacedPlan = p transformExpressions {
+          case s: SessionWindow => sessionAttr
+        }
+
+        // As same as tumbling window, we add a filter to filter out nulls.
+        val filterExpr = IsNotNull(session.timeColumn)
+
+        replacedPlan.withNewChildren(
+          Project(sessionStruct +: child.output,
+            Filter(filterExpr, child)) :: Nil)
       } else if (numWindowExpr > 1) {
         throw QueryCompilationErrors.multiTimeWindowExpressionsNotSupportedError(p)
       } else {
@@ -4133,14 +4206,6 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
     } else {
       None
     }
-  }
-
-  private def padOuterRefAttrCmp(outerAttr: Attribute, attr: Attribute): Seq[Expression] = {
-    val Seq(r, newAttr) = CharVarcharUtils.addPaddingInStringComparison(Seq(outerAttr, attr))
-    val newOuterRef = r.transform {
-      case ar: Attribute if ar.semanticEquals(outerAttr) => OuterReference(ar)
-    }
-    Seq(newOuterRef, newAttr)
   }
 
   private def addPadding(expr: Expression, charLength: Int, targetLength: Int): Expression = {

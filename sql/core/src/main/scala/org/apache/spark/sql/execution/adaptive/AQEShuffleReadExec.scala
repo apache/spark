@@ -34,12 +34,15 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  *
  * @param child           It is usually `ShuffleQueryStageExec`, but can be the shuffle exchange
  *                        node during canonicalization.
- * @param partitionSpecs  The partition specs that defines the arrangement.
+ * @param partitionSpecs  The partition specs that defines the arrangement, requires at least one
+ *                        partition.
  */
-case class CustomShuffleReaderExec private(
+case class AQEShuffleReadExec private(
     child: SparkPlan,
     partitionSpecs: Seq[ShufflePartitionSpec]) extends UnaryExecNode {
-  // If this reader is to read shuffle files locally, then all partition specs should be
+  assert(partitionSpecs.nonEmpty, s"${getClass.getSimpleName} requires at least one partition")
+
+  // If this is to read shuffle files locally, then all partition specs should be
   // `PartialMapperPartitionSpec`.
   if (partitionSpecs.exists(_.isInstanceOf[PartialMapperPartitionSpec])) {
     assert(partitionSpecs.forall(_.isInstanceOf[PartialMapperPartitionSpec]))
@@ -49,11 +52,10 @@ case class CustomShuffleReaderExec private(
 
   override def output: Seq[Attribute] = child.output
   override lazy val outputPartitioning: Partitioning = {
-    // If it is a local shuffle reader with one mapper per task, then the output partitioning is
+    // If it is a local shuffle read with one mapper per task, then the output partitioning is
     // the same as the plan before shuffle.
     // TODO this check is based on assumptions of callers' behavior but is sufficient for now.
-    if (partitionSpecs.nonEmpty &&
-        partitionSpecs.forall(_.isInstanceOf[PartialMapperPartitionSpec]) &&
+    if (partitionSpecs.forall(_.isInstanceOf[PartialMapperPartitionSpec]) &&
         partitionSpecs.map(_.asInstanceOf[PartialMapperPartitionSpec].mapIndex).toSet.size ==
           partitionSpecs.length) {
       child match {
@@ -73,7 +75,7 @@ case class CustomShuffleReaderExec private(
   }
 
   override def stringArgs: Iterator[Any] = {
-    val desc = if (isLocalReader) {
+    val desc = if (isLocalRead) {
       "local"
     } else if (hasCoalescedPartition && hasSkewedPartition) {
       "coalesced and skewed"
@@ -88,22 +90,27 @@ case class CustomShuffleReaderExec private(
   }
 
   /**
+   * Returns true iff some partitions were actually combined
+   */
+  private def isCoalesced(spec: ShufflePartitionSpec) = spec match {
+    case CoalescedPartitionSpec(0, 0, _) => true
+    case s: CoalescedPartitionSpec => s.endReducerIndex - s.startReducerIndex > 1
+    case _ => false
+  }
+
+  /**
    * Returns true iff some non-empty partitions were combined
    */
   def hasCoalescedPartition: Boolean = {
-    partitionSpecs.exists {
-      // shuffle from empty RDD
-      case CoalescedPartitionSpec(0, 0, _) => true
-      case s: CoalescedPartitionSpec => s.endReducerIndex - s.startReducerIndex > 1
-      case _ => false
-    }
+    partitionSpecs.exists(isCoalesced)
   }
 
   def hasSkewedPartition: Boolean =
     partitionSpecs.exists(_.isInstanceOf[PartialReducerPartitionSpec])
 
-  def isLocalReader: Boolean =
-    partitionSpecs.exists(_.isInstanceOf[PartialMapperPartitionSpec])
+  def isLocalRead: Boolean =
+    partitionSpecs.exists(_.isInstanceOf[PartialMapperPartitionSpec]) ||
+      partitionSpecs.exists(_.isInstanceOf[CoalescedMapperPartitionSpec])
 
   private def shuffleStage = child match {
     case stage: ShuffleQueryStageExec => Some(stage)
@@ -111,7 +118,7 @@ case class CustomShuffleReaderExec private(
   }
 
   @transient private lazy val partitionDataSizes: Option[Seq[Long]] = {
-    if (partitionSpecs.nonEmpty && !isLocalReader && shuffleStage.get.mapStats.isDefined) {
+    if (!isLocalRead && shuffleStage.get.mapStats.isDefined) {
       Some(partitionSpecs.map {
         case p: CoalescedPartitionSpec =>
           assert(p.dataSize.isDefined)
@@ -150,6 +157,13 @@ case class CustomShuffleReaderExec private(
       driverAccumUpdates += (skewedSplits.id -> numSplits)
     }
 
+    if (hasCoalescedPartition) {
+      val numCoalescedPartitionsMetric = metrics("numCoalescedPartitions")
+      val x = partitionSpecs.count(isCoalesced)
+      numCoalescedPartitionsMetric.set(x)
+      driverAccumUpdates += numCoalescedPartitionsMetric.id -> x
+    }
+
     partitionDataSizes.foreach { dataSizes =>
       val partitionDataSizeMetrics = metrics("partitionDataSize")
       driverAccumUpdates ++= dataSizes.map(partitionDataSizeMetrics.id -> _)
@@ -163,8 +177,8 @@ case class CustomShuffleReaderExec private(
   @transient override lazy val metrics: Map[String, SQLMetric] = {
     if (shuffleStage.isDefined) {
       Map("numPartitions" -> SQLMetrics.createMetric(sparkContext, "number of partitions")) ++ {
-        if (isLocalReader) {
-          // We split the mapper partition evenly when creating local shuffle reader, so no
+        if (isLocalRead) {
+          // We split the mapper partition evenly when creating local shuffle read, so no
           // data size info is available.
           Map.empty
         } else {
@@ -177,6 +191,13 @@ case class CustomShuffleReaderExec private(
             SQLMetrics.createMetric(sparkContext, "number of skewed partitions"),
             "numSkewedSplits" ->
               SQLMetrics.createMetric(sparkContext, "number of skewed partition splits"))
+        } else {
+          Map.empty
+        }
+      } ++ {
+        if (hasCoalescedPartition) {
+          Map("numCoalescedPartitions" ->
+            SQLMetrics.createMetric(sparkContext, "number of coalesced partitions"))
         } else {
           Map.empty
         }
@@ -205,6 +226,6 @@ case class CustomShuffleReaderExec private(
     shuffleRDD.asInstanceOf[RDD[ColumnarBatch]]
   }
 
-  override protected def withNewChildInternal(newChild: SparkPlan): CustomShuffleReaderExec =
+  override protected def withNewChildInternal(newChild: SparkPlan): AQEShuffleReadExec =
     copy(child = newChild)
 }

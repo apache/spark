@@ -20,58 +20,45 @@ package org.apache.spark.sql.execution.adaptive
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_NONE, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
- * A rule to optimize the shuffle reader to local reader iff no additional shuffles
+ * A rule to optimize the shuffle read to local read iff no additional shuffles
  * will be introduced:
- * 1. if the input plan is a shuffle, add local reader directly as we can never introduce
+ * 1. if the input plan is a shuffle, add local read directly as we can never introduce
  * extra shuffles in this case.
- * 2. otherwise, add local reader to the probe side of broadcast hash join and
+ * 2. otherwise, add local read to the probe side of broadcast hash join and
  * then run `EnsureRequirements` to check whether additional shuffle introduced.
- * If introduced, we will revert all the local readers.
+ * If introduced, we will revert all the local reads.
  */
-object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
+object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_NONE)
 
-  private val ensureRequirements = EnsureRequirements
+  override def mayAddExtraShuffles: Boolean = true
 
-  // The build side is a broadcast query stage which should have been optimized using local reader
+  // The build side is a broadcast query stage which should have been optimized using local read
   // already. So we only need to deal with probe side here.
-  private def createProbeSideLocalReader(plan: SparkPlan): SparkPlan = {
-    val optimizedPlan = plan.transformDown {
+  private def createProbeSideLocalRead(plan: SparkPlan): SparkPlan = {
+    plan.transformDown {
       case join @ BroadcastJoinWithShuffleLeft(shuffleStage, BuildRight) =>
-        val localReader = createLocalReader(shuffleStage)
-        join.asInstanceOf[BroadcastHashJoinExec].copy(left = localReader)
+        val localRead = createLocalRead(shuffleStage)
+        join.asInstanceOf[BroadcastHashJoinExec].copy(left = localRead)
       case join @ BroadcastJoinWithShuffleRight(shuffleStage, BuildLeft) =>
-        val localReader = createLocalReader(shuffleStage)
-        join.asInstanceOf[BroadcastHashJoinExec].copy(right = localReader)
-    }
-
-    val numShuffles = ensureRequirements.apply(optimizedPlan).collect {
-      case e: ShuffleExchangeExec => e
-    }.length
-
-    // Check whether additional shuffle introduced. If introduced, revert the local reader.
-    if (numShuffles > 0) {
-      logDebug("OptimizeLocalShuffleReader rule is not applied due" +
-        " to additional shuffles will be introduced.")
-      plan
-    } else {
-      optimizedPlan
+        val localRead = createLocalRead(shuffleStage)
+        join.asInstanceOf[BroadcastHashJoinExec].copy(right = localRead)
     }
   }
 
-  private def createLocalReader(plan: SparkPlan): CustomShuffleReaderExec = {
+  private def createLocalRead(plan: SparkPlan): AQEShuffleReadExec = {
     plan match {
-      case c @ CustomShuffleReaderExec(s: ShuffleQueryStageExec, _) =>
-        CustomShuffleReaderExec(s, getPartitionSpecs(s, Some(c.partitionSpecs.length)))
+      case c @ AQEShuffleReadExec(s: ShuffleQueryStageExec, _) =>
+        AQEShuffleReadExec(s, getPartitionSpecs(s, Some(c.partitionSpecs.length)))
       case s: ShuffleQueryStageExec =>
-        CustomShuffleReaderExec(s, getPartitionSpecs(s, None))
+        AQEShuffleReadExec(s, getPartitionSpecs(s, None))
     }
   }
 
@@ -81,16 +68,26 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
       shuffleStage: ShuffleQueryStageExec,
       advisoryParallelism: Option[Int]): Seq[ShufflePartitionSpec] = {
     val numMappers = shuffleStage.shuffle.numMappers
+    // ShuffleQueryStageExec.mapStats.isDefined promise numMappers > 0
+    assert(numMappers > 0)
     val numReducers = shuffleStage.shuffle.numPartitions
     val expectedParallelism = advisoryParallelism.getOrElse(numReducers)
-    val splitPoints = if (numMappers == 0) {
-      Seq.empty
+    val splitPoints = if (expectedParallelism >= numMappers) {
+      equallyDivide(numReducers, expectedParallelism / numMappers)
     } else {
-      equallyDivide(numReducers, math.max(1, expectedParallelism / numMappers))
+      equallyDivide(numMappers, expectedParallelism)
     }
-    (0 until numMappers).flatMap { mapIndex =>
-      (splitPoints :+ numReducers).sliding(2).map {
-        case Seq(start, end) => PartialMapperPartitionSpec(mapIndex, start, end)
+    if (expectedParallelism >= numMappers) {
+      (0 until numMappers).flatMap { mapIndex =>
+        (splitPoints :+ numReducers).sliding(2).map {
+          case Seq(start, end) => PartialMapperPartitionSpec(mapIndex, start, end)
+        }
+      }
+    } else {
+      (0 until 1).flatMap { _ =>
+        (splitPoints :+ numMappers).sliding(2).map {
+          case Seq(start, end) => CoalescedMapperPartitionSpec(start, end, numReducers)
+        }
       }
     }
   }
@@ -114,16 +111,16 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
     }
 
     plan match {
-      case s: SparkPlan if canUseLocalShuffleReader(s) =>
-        createLocalReader(s)
+      case s: SparkPlan if canUseLocalShuffleRead(s) =>
+        createLocalRead(s)
       case s: SparkPlan =>
-        createProbeSideLocalReader(s)
+        createProbeSideLocalRead(s)
     }
   }
 
   object BroadcastJoinWithShuffleLeft {
     def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
-      case join: BroadcastHashJoinExec if canUseLocalShuffleReader(join.left) =>
+      case join: BroadcastHashJoinExec if canUseLocalShuffleRead(join.left) =>
         Some((join.left, join.buildSide))
       case _ => None
     }
@@ -131,22 +128,22 @@ object OptimizeLocalShuffleReader extends CustomShuffleReaderRule {
 
   object BroadcastJoinWithShuffleRight {
     def unapply(plan: SparkPlan): Option[(SparkPlan, BuildSide)] = plan match {
-      case join: BroadcastHashJoinExec if canUseLocalShuffleReader(join.right) =>
+      case join: BroadcastHashJoinExec if canUseLocalShuffleRead(join.right) =>
         Some((join.right, join.buildSide))
       case _ => None
     }
   }
 
-  def canUseLocalShuffleReader(plan: SparkPlan): Boolean = plan match {
+  def canUseLocalShuffleRead(plan: SparkPlan): Boolean = plan match {
     case s: ShuffleQueryStageExec =>
-      s.mapStats.isDefined && supportLocalReader(s.shuffle)
-    case CustomShuffleReaderExec(s: ShuffleQueryStageExec, partitionSpecs) =>
-      s.mapStats.isDefined && partitionSpecs.nonEmpty && supportLocalReader(s.shuffle) &&
+      s.mapStats.isDefined && supportLocalRead(s.shuffle)
+    case AQEShuffleReadExec(s: ShuffleQueryStageExec, _) =>
+      s.mapStats.isDefined && supportLocalRead(s.shuffle) &&
         s.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS
     case _ => false
   }
 
-  private def supportLocalReader(s: ShuffleExchangeLike): Boolean = {
+  private def supportLocalRead(s: ShuffleExchangeLike): Boolean = {
     s.outputPartitioning != SinglePartition && supportedShuffleOrigins.contains(s.shuffleOrigin)
   }
 }

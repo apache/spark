@@ -73,7 +73,7 @@ class SparkSession(SparkConversionMixin):
 
     A SparkSession can be used create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
-    To create a SparkSession, use the following builder pattern:
+    To create a :class:`SparkSession`, use the following builder pattern:
 
     .. autoattribute:: builder
        :annotation:
@@ -280,8 +280,8 @@ class SparkSession(SparkConversionMixin):
     @since(2.0)
     def newSession(self):
         """
-        Returns a new SparkSession as new session, that has separate SQLConf,
-        registered temporary views and UDFs, but shared SparkContext and
+        Returns a new :class:`SparkSession` as new session, that has separate SQLConf,
+        registered temporary views and UDFs, but shared :class:`SparkContext` and
         table cache.
         """
         return self.__class__(self._sc, self._jsparkSession.newSession())
@@ -289,7 +289,7 @@ class SparkSession(SparkConversionMixin):
     @classmethod
     def getActiveSession(cls):
         """
-        Returns the active SparkSession for the current thread, returned by the builder
+        Returns the active :class:`SparkSession` for the current thread, returned by the builder
 
         .. versionadded:: 3.0.0
 
@@ -533,9 +533,9 @@ class SparkSession(SparkConversionMixin):
     @staticmethod
     def _create_shell_session():
         """
-        Initialize a SparkSession for a pyspark shell session. This is called from shell.py
-        to make error handling simpler without needing to declare local variables in that
-        script, which would expose those to users.
+        Initialize a :class:`SparkSession` for a pyspark shell session. This is called from
+        shell.py to make error handling simpler without needing to declare local variables in
+        that script, which would expose those to users.
         """
         import py4j
         from pyspark.conf import SparkConf

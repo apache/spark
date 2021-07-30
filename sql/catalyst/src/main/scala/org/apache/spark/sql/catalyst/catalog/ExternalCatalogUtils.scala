@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, BoundReference, Expression, Predicate}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.internal.SQLConf
 
 object ExternalCatalogUtils {
   // This duplicates default value of Hive `ConfVars.DEFAULTPARTITIONNAME`, since catalyst doesn't
@@ -130,6 +131,19 @@ object ExternalCatalogUtils {
   def getPartitionPathString(col: String, value: String): String = {
     val partitionString = getPartitionValueString(value)
     escapePathName(col) + "=" + partitionString
+  }
+
+  def listPartitionsByFilter(
+      conf: SQLConf,
+      catalog: SessionCatalog,
+      table: CatalogTable,
+      partitionFilters: Seq[Expression]): Seq[CatalogTablePartition] = {
+    if (conf.metastorePartitionPruning) {
+      catalog.listPartitionsByFilter(table.identifier, partitionFilters)
+    } else {
+      ExternalCatalogUtils.prunePartitionsByFilter(table, catalog.listPartitions(table.identifier),
+        partitionFilters, conf.sessionLocalTimeZone)
+    }
   }
 
   def prunePartitionsByFilter(

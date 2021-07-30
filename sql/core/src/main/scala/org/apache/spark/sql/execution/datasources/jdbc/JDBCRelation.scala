@@ -288,6 +288,23 @@ private[sql] case class JDBCRelation(
       jdbcOptions).asInstanceOf[RDD[Row]]
   }
 
+  def buildScan(
+      requiredColumns: Array[String],
+      finalSchema: StructType,
+      filters: Array[Filter],
+      groupByColumns: Option[Array[String]]): RDD[Row] = {
+    // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
+    JDBCRDD.scanTable(
+      sparkSession.sparkContext,
+      schema,
+      requiredColumns,
+      filters,
+      parts,
+      jdbcOptions,
+      Some(finalSchema),
+      groupByColumns).asInstanceOf[RDD[Row]]
+  }
+
   override def insert(data: DataFrame, overwrite: Boolean): Unit = {
     data.write
       .mode(if (overwrite) SaveMode.Overwrite else SaveMode.Append)

@@ -1895,7 +1895,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             self._psdf._update_internal_frame(psser._psdf._internal, requires_same_anchor=False)
             return None
         else:
-            return psser._with_new_scol(psser.spark.column, field=psser._internal.data_fields[0])
+            return psser.copy()
 
     def _fillna(
         self,
@@ -1915,12 +1915,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         scol = self.spark.column
 
-        if isinstance(self.spark.data_type, (FloatType, DoubleType)):
-            cond = scol.isNull() | F.isnan(scol)
-        else:
-            if not self.spark.nullable:
-                return self.copy()
-            cond = scol.isNull()
+        if not self.spark.nullable and not isinstance(
+            self.spark.data_type, (FloatType, DoubleType)
+        ):
+            return self._psdf.copy()._psser_for(self._column_label)
+
+        cond = self.isnull().spark.column
 
         if value is not None:
             if not isinstance(value, (float, int, str, bool)):
@@ -3598,8 +3598,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 Window.unboundedPreceding, Window.unboundedFollowing
             )
             scol = stat_func(F.row_number().over(window1)).over(window2)
-        psser = self._with_new_scol(scol)
-        return psser.astype(np.float64)
+        return self._with_new_scol(scol.cast(DoubleType()))
 
     def filter(
         self,
@@ -4109,7 +4108,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         b    2
         dtype: int64
         """
-        return self._psdf.copy(deep=deep)._psser_for(self._column_label)
+        return first_series(DataFrame(self._internal))
 
     def mode(self, dropna: bool = True) -> "Series":
         """
@@ -5534,7 +5533,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_index = notnull._internal.spark_frame.select(notnull._internal.index_spark_columns)
 
         tmp_join_key = verify_temp_column_name(sdf_for_index, "__tmp_join_key__")
-        sdf_for_index, _ = InternalFrame.attach_distributed_sequence_column(
+        sdf_for_index = InternalFrame.attach_distributed_sequence_column(
             sdf_for_index, tmp_join_key
         )
         # sdf_for_index:
@@ -5551,7 +5550,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_data = notnull._internal.spark_frame.select(
             notnull.spark.column.alias("values"), NATURAL_ORDER_COLUMN_NAME
         )
-        sdf_for_data, _ = InternalFrame.attach_distributed_sequence_column(
+        sdf_for_data = InternalFrame.attach_distributed_sequence_column(
             sdf_for_data, SPARK_DEFAULT_SERIES_NAME
         )
         # sdf_for_data:
@@ -5570,9 +5569,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ).drop("values", NATURAL_ORDER_COLUMN_NAME)
 
         tmp_join_key = verify_temp_column_name(sdf_for_data, "__tmp_join_key__")
-        sdf_for_data, _ = InternalFrame.attach_distributed_sequence_column(
-            sdf_for_data, tmp_join_key
-        )
+        sdf_for_data = InternalFrame.attach_distributed_sequence_column(sdf_for_data, tmp_join_key)
         # sdf_for_index:                         sdf_for_data:
         # +----------------+-----------------+   +----------------+---+
         # |__tmp_join_key__|__index_level_0__|   |__tmp_join_key__|  0|
@@ -5640,7 +5637,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return -1
         # We should remember the natural sequence started from 0
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf, _ = InternalFrame.attach_distributed_sequence_column(
+        sdf = InternalFrame.attach_distributed_sequence_column(
             sdf.drop(NATURAL_ORDER_COLUMN_NAME), seq_col_name
         )
         # If the maximum is achieved in multiple locations, the first row position is returned.
@@ -5687,7 +5684,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return -1
         # We should remember the natural sequence started from 0
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf, _ = InternalFrame.attach_distributed_sequence_column(
+        sdf = InternalFrame.attach_distributed_sequence_column(
             sdf.drop(NATURAL_ORDER_COLUMN_NAME), seq_col_name
         )
         # If the minimum is achieved in multiple locations, the first row position is returned.
@@ -6185,7 +6182,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             internal = psser._internal.resolved_copy
             return first_series(DataFrame(internal))
         else:
-            return psser
+            return psser.copy()
 
     def _reduce_for_stat_function(
         self,

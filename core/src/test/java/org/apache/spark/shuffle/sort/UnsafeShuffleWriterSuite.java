@@ -22,11 +22,11 @@ import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.util.*;
 
+import org.apache.spark.*;
+import org.apache.spark.shuffle.ShuffleChecksumTestHelper;
+import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper;
 import org.mockito.stubbing.Answer;
-import scala.Option;
-import scala.Product2;
-import scala.Tuple2;
-import scala.Tuple2$;
+import scala.*;
 import scala.collection.Iterator;
 
 import com.google.common.collect.HashMultiset;
@@ -36,10 +36,6 @@ import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-import org.apache.spark.HashPartitioner;
-import org.apache.spark.ShuffleDependency;
-import org.apache.spark.SparkConf;
-import org.apache.spark.TaskContext;
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.io.CompressionCodec$;
@@ -65,7 +61,7 @@ import static org.junit.Assert.*;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
 import static org.mockito.Mockito.*;
 
-public class UnsafeShuffleWriterSuite {
+public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
 
   static final int DEFAULT_INITIAL_SORT_BUFFER_SIZE = 4096;
   static final int NUM_PARTITIONS = 4;
@@ -138,7 +134,7 @@ public class UnsafeShuffleWriterSuite {
 
     Answer<?> renameTempAnswer = invocationOnMock -> {
       partitionSizesInMergedFile = (long[]) invocationOnMock.getArguments()[2];
-      File tmp = (File) invocationOnMock.getArguments()[3];
+      File tmp = (File) invocationOnMock.getArguments()[4];
       if (!mergedOutputFile.delete()) {
         throw new RuntimeException("Failed to delete old merged output file.");
       }
@@ -152,11 +148,13 @@ public class UnsafeShuffleWriterSuite {
 
     doAnswer(renameTempAnswer)
         .when(shuffleBlockResolver)
-        .writeIndexFileAndCommit(anyInt(), anyLong(), any(long[].class), any(File.class));
+        .writeMetadataFileAndCommit(
+          anyInt(), anyLong(), any(long[].class), any(long[].class), any(File.class));
 
     doAnswer(renameTempAnswer)
         .when(shuffleBlockResolver)
-        .writeIndexFileAndCommit(anyInt(), anyLong(), any(long[].class), eq(null));
+        .writeMetadataFileAndCommit(
+          anyInt(), anyLong(), any(long[].class), any(long[].class), eq(null));
 
     when(diskBlockManager.createTempShuffleBlock()).thenAnswer(invocationOnMock -> {
       TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());
@@ -171,7 +169,14 @@ public class UnsafeShuffleWriterSuite {
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager);
   }
 
-  private UnsafeShuffleWriter<Object, Object> createWriter(boolean transferToEnabled) {
+  private UnsafeShuffleWriter<Object, Object> createWriter(boolean transferToEnabled)
+    throws SparkException {
+    return createWriter(transferToEnabled, shuffleBlockResolver);
+  }
+
+  private UnsafeShuffleWriter<Object, Object> createWriter(
+    boolean transferToEnabled,
+    IndexShuffleBlockResolver blockResolver) throws SparkException {
     conf.set("spark.file.transferTo", String.valueOf(transferToEnabled));
     return new UnsafeShuffleWriter<>(
       blockManager,
@@ -181,7 +186,7 @@ public class UnsafeShuffleWriterSuite {
       taskContext,
       conf,
       taskContext.taskMetrics().shuffleWriteMetrics(),
-      new LocalDiskShuffleExecutorComponents(conf, blockManager, shuffleBlockResolver));
+      new LocalDiskShuffleExecutorComponents(conf, blockManager, blockResolver));
   }
 
   private void assertSpillFilesWereCleanedUp() {
@@ -219,12 +224,12 @@ public class UnsafeShuffleWriterSuite {
   }
 
   @Test(expected=IllegalStateException.class)
-  public void mustCallWriteBeforeSuccessfulStop() throws IOException {
+  public void mustCallWriteBeforeSuccessfulStop() throws IOException, SparkException {
     createWriter(false).stop(true);
   }
 
   @Test
-  public void doNotNeedToCallWriteBeforeUnsuccessfulStop() throws IOException {
+  public void doNotNeedToCallWriteBeforeUnsuccessfulStop() throws IOException, SparkException {
     createWriter(false).stop(false);
   }
 
@@ -291,6 +296,69 @@ public class UnsafeShuffleWriterSuite {
     assertEquals(mergedOutputFile.length(), shuffleWriteMetrics.bytesWritten());
   }
 
+  @Test
+  public void writeChecksumFileWithoutSpill() throws Exception {
+    IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
+    ShuffleChecksumBlockId checksumBlockId =
+      new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
+    File checksumFile = new File(tempDir,
+      ShuffleChecksumHelper.getChecksumFileName(checksumBlockId, conf));
+    File dataFile = new File(tempDir, "data");
+    File indexFile = new File(tempDir, "index");
+    when(diskBlockManager.getFile(checksumFile.getName()))
+      .thenReturn(checksumFile);
+    when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
+      .thenReturn(dataFile);
+    when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0)))
+      .thenReturn(indexFile);
+
+    // In this example, each partition should have exactly one record:
+    final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
+    for (int i = 0; i < NUM_PARTITIONS; i ++) {
+      dataToWrite.add(new Tuple2<>(i, i));
+    }
+    final UnsafeShuffleWriter<Object, Object> writer1 = createWriter(true, blockResolver);
+    writer1.write(dataToWrite.iterator());
+    writer1.stop(true);
+    assertTrue(checksumFile.exists());
+    assertEquals(checksumFile.length(), 8 * NUM_PARTITIONS);
+    compareChecksums(NUM_PARTITIONS, checksumFile, dataFile, indexFile);
+  }
+
+  @Test
+  public void writeChecksumFileWithSpill() throws Exception {
+    IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
+    ShuffleChecksumBlockId checksumBlockId =
+      new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
+    File checksumFile =
+      new File(tempDir, ShuffleChecksumHelper.getChecksumFileName(checksumBlockId, conf));
+    File dataFile = new File(tempDir, "data");
+    File indexFile = new File(tempDir, "index");
+    when(diskBlockManager.getFile(eq(checksumFile.getName()))).thenReturn(checksumFile);
+    when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
+      .thenReturn(dataFile);
+    when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0)))
+      .thenReturn(indexFile);
+
+    final UnsafeShuffleWriter<Object, Object> writer1 = createWriter(true, blockResolver);
+    writer1.insertRecordIntoSorter(new Tuple2<>(0, 0));
+    writer1.forceSorterToSpill();
+    writer1.insertRecordIntoSorter(new Tuple2<>(1, 0));
+    writer1.insertRecordIntoSorter(new Tuple2<>(2, 0));
+    writer1.forceSorterToSpill();
+    writer1.insertRecordIntoSorter(new Tuple2<>(0, 1));
+    writer1.insertRecordIntoSorter(new Tuple2<>(3, 0));
+    writer1.forceSorterToSpill();
+    writer1.insertRecordIntoSorter(new Tuple2<>(1, 1));
+    writer1.forceSorterToSpill();
+    writer1.insertRecordIntoSorter(new Tuple2<>(0, 2));
+    writer1.forceSorterToSpill();
+    writer1.closeAndWriteOutput();
+    assertTrue(checksumFile.exists());
+    assertEquals(checksumFile.length(), 8 * NUM_PARTITIONS);
+    compareChecksums(NUM_PARTITIONS, checksumFile, dataFile, indexFile);
+  }
+
   private void testMergingSpills(
       final boolean transferToEnabled,
       String compressionCodecName,
@@ -317,7 +385,7 @@ public class UnsafeShuffleWriterSuite {
 
   private void testMergingSpills(
       boolean transferToEnabled,
-      boolean encrypted) throws IOException {
+      boolean encrypted) throws IOException, SparkException {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(transferToEnabled);
     final ArrayList<Product2<Object, Object>> dataToWrite = new ArrayList<>();
     for (int i : new int[] { 1, 2, 3, 4, 4, 2 }) {
@@ -515,7 +583,7 @@ public class UnsafeShuffleWriterSuite {
   }
 
   @Test
-  public void spillFilesAreDeletedWhenStoppingAfterError() throws IOException {
+  public void spillFilesAreDeletedWhenStoppingAfterError() throws IOException, SparkException {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(false);
     writer.insertRecordIntoSorter(new Tuple2<>(1, 1));
     writer.insertRecordIntoSorter(new Tuple2<>(2, 2));

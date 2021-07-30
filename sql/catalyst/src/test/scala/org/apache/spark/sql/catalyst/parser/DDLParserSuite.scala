@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions.{EqualTo, Hex, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition.{after, first}
 import org.apache.spark.sql.connector.expressions.{ApplyTransform, BucketTransform, DaysTransform, FieldReference, HoursTransform, IdentityTransform, LiteralValue, MonthsTransform, Transform, YearsTransform}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
@@ -787,88 +788,125 @@ class DDLParserSuite extends AnalysisTest {
   test("alter table: add column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, None, None)
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None)
       )))
   }
 
   test("alter table: add multiple columns") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int, y string"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, None, None),
-        QualifiedColType(Seq("y"), StringType, true, None, None)
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None),
+          QualifiedColType(None, "y", StringType, true, None, None)
       )))
   }
 
   test("alter table: add column with COLUMNS") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS x int"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, None, None)
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None)
       )))
   }
 
   test("alter table: add column with COLUMNS (...)") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int)"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, None, None)
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
+        Seq(QualifiedColType(None, "x", IntegerType, true, None, None)
       )))
   }
 
   test("alter table: add column with COLUMNS (...) and COMMENT") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMNS (x int COMMENT 'doc')"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, Some("doc"), None)
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMNS", None),
+        Seq(QualifiedColType(None, "x", IntegerType, true, Some("doc"), None)
       )))
   }
 
   test("alter table: add non-nullable column") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int NOT NULL"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, false, None, None)
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(QualifiedColType(None, "x", IntegerType, false, None, None)
       )))
   }
 
   test("alter table: add column with COMMENT") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int COMMENT 'doc'"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, Some("doc"), None)
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(QualifiedColType(None, "x", IntegerType, true, Some("doc"), None)
       )))
   }
 
   test("alter table: add column with position") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int FIRST"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, None, Some(first()))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(QualifiedColType(
+          None,
+          "x",
+          IntegerType,
+          true,
+          None,
+          Some(UnresolvedFieldPosition(first())))
       )))
 
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x int AFTER y"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x"), IntegerType, true, None, Some(after("y")))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(QualifiedColType(
+          None,
+          "x",
+          IntegerType,
+          true,
+          None,
+          Some(UnresolvedFieldPosition(after("y"))))
       )))
   }
 
   test("alter table: add column with nested column name") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x.y.z int COMMENT 'doc'"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x", "y", "z"), IntegerType, true, Some("doc"), None)
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(QualifiedColType(
+          Some(UnresolvedFieldName(Seq("x", "y"))), "z", IntegerType, true, Some("doc"), None)
       )))
   }
 
   test("alter table: add multiple columns with nested column name") {
     comparePlans(
       parsePlan("ALTER TABLE table_name ADD COLUMN x.y.z int COMMENT 'doc', a.b string FIRST"),
-      AlterTableAddColumnsStatement(Seq("table_name"), Seq(
-        QualifiedColType(Seq("x", "y", "z"), IntegerType, true, Some("doc"), None),
-        QualifiedColType(Seq("a", "b"), StringType, true, None, Some(first()))
+      AlterTableAddColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... ADD COLUMN", None),
+        Seq(
+          QualifiedColType(
+            Some(UnresolvedFieldName(Seq("x", "y"))),
+            "z",
+            IntegerType,
+            true,
+            Some("doc"),
+            None),
+          QualifiedColType(
+            Some(UnresolvedFieldName(Seq("a"))),
+            "b",
+            StringType,
+            true,
+            None,
+            Some(UnresolvedFieldPosition(first())))
       )))
   }
 
@@ -1061,32 +1099,32 @@ class DDLParserSuite extends AnalysisTest {
 
     comparePlans(
       parsePlan(sql1),
-      AlterTableReplaceColumnsStatement(
-        Seq("table_name"),
-        Seq(QualifiedColType(Seq("x"), StringType, true, None, None))))
+      AlterTableReplaceColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
+        Seq(QualifiedColType(None, "x", StringType, true, None, None))))
 
     comparePlans(
       parsePlan(sql2),
-      AlterTableReplaceColumnsStatement(
-        Seq("table_name"),
-        Seq(QualifiedColType(Seq("x"), StringType, true, Some("x1"), None))))
+      AlterTableReplaceColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
+        Seq(QualifiedColType(None, "x", StringType, true, Some("x1"), None))))
 
     comparePlans(
       parsePlan(sql3),
-      AlterTableReplaceColumnsStatement(
-        Seq("table_name"),
+      AlterTableReplaceColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(
-          QualifiedColType(Seq("x"), StringType, true, Some("x1"), None),
-          QualifiedColType(Seq("y"), IntegerType, true, None, None)
+          QualifiedColType(None, "x", StringType, true, Some("x1"), None),
+          QualifiedColType(None, "y", IntegerType, true, None, None)
         )))
 
     comparePlans(
       parsePlan(sql4),
-      AlterTableReplaceColumnsStatement(
-        Seq("table_name"),
+      AlterTableReplaceColumns(
+        UnresolvedTable(Seq("table_name"), "ALTER TABLE ... REPLACE COLUMNS", None),
         Seq(
-          QualifiedColType(Seq("x"), StringType, true, Some("x1"), None),
-          QualifiedColType(Seq("y"), IntegerType, true, Some("y1"), None)
+          QualifiedColType(None, "x", StringType, true, Some("x1"), None),
+          QualifiedColType(None, "y", IntegerType, true, Some("y1"), None)
         )))
 
     intercept("ALTER TABLE table_name PARTITION (a='1') REPLACE COLUMNS (x string)",
@@ -1097,6 +1135,9 @@ class DDLParserSuite extends AnalysisTest {
 
     intercept("ALTER TABLE table_name REPLACE COLUMNS (x string FIRST)",
       "Column position is not supported in Hive-style REPLACE COLUMNS")
+
+    intercept("ALTER TABLE table_name REPLACE COLUMNS (a.b.c string)",
+      "Replacing with a nested column is not supported in Hive-style REPLACE COLUMNS")
   }
 
   test("alter view: rename view") {
@@ -2515,12 +2556,20 @@ class DDLParserSuite extends AnalysisTest {
     val dateTypeSql = "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES('a')"
     val interval = new CalendarInterval(7, 1, 1000).toString
     val intervalTypeSql = s"INSERT INTO t PARTITION(part = interval'$interval') VALUES('a')"
+    val ymIntervalTypeSql = "INSERT INTO t PARTITION(part = interval'1 year 2 month') VALUES('a')"
+    val dtIntervalTypeSql = "INSERT INTO t PARTITION(part = interval'1 day 2 hour " +
+      "3 minute 4.123456 second 5 millisecond 6 microsecond') VALUES('a')"
     val timestamp = "2019-01-02 11:11:11"
     val timestampTypeSql = s"INSERT INTO t PARTITION(part = timestamp'$timestamp') VALUES('a')"
     val binaryTypeSql = s"INSERT INTO t PARTITION(part = X'$binaryHexStr') VALUES('a')"
 
     comparePlans(parsePlan(dateTypeSql), insertPartitionPlan("2019-01-02"))
-    comparePlans(parsePlan(intervalTypeSql), insertPartitionPlan(interval))
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      comparePlans(parsePlan(intervalTypeSql), insertPartitionPlan(interval))
+    }
+    comparePlans(parsePlan(ymIntervalTypeSql), insertPartitionPlan("INTERVAL '1-2' YEAR TO MONTH"))
+    comparePlans(parsePlan(dtIntervalTypeSql),
+      insertPartitionPlan("INTERVAL '1 02:03:04.128462' DAY TO SECOND"))
     comparePlans(parsePlan(timestampTypeSql), insertPartitionPlan(timestamp))
     comparePlans(parsePlan(binaryTypeSql), insertPartitionPlan(binaryStr))
   }

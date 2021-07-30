@@ -2165,7 +2165,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
               ex.setStackTrace(e.getStackTrace)
               throw ex
           }
-          Literal(interval, CalendarIntervalType)
+          if (!conf.legacyIntervalEnabled) {
+            val units = value
+              .split("\\s")
+              .map(_.toLowerCase(Locale.ROOT).stripSuffix("s"))
+              .filter(s => s != "interval" && s.matches("[a-z]+"))
+            constructMultiUnitsIntervalLiteral(ctx, interval, units)
+          } else {
+            Literal(interval, CalendarIntervalType)
+          }
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
           Literal(DatatypeConverter.parseHexBinary(padding + value))
@@ -2373,6 +2381,44 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
   }
 
   /**
+   * Construct an [[Literal]] from [[CalendarInterval]] and
+   * units represented as a [[Seq]] of [[String]].
+   */
+  private def constructMultiUnitsIntervalLiteral(
+      ctx: ParserRuleContext,
+      calendarInterval: CalendarInterval,
+      units: Seq[String]): Literal = {
+    val yearMonthFields = Set.empty[Byte]
+    val dayTimeFields = Set.empty[Byte]
+    for (unit <- units) {
+      if (YearMonthIntervalType.stringToField.contains(unit)) {
+        yearMonthFields += YearMonthIntervalType.stringToField(unit)
+      } else if (DayTimeIntervalType.stringToField.contains(unit)) {
+        dayTimeFields += DayTimeIntervalType.stringToField(unit)
+      } else if (unit == "week") {
+        dayTimeFields += DayTimeIntervalType.DAY
+      } else {
+        assert(unit == "millisecond" || unit == "microsecond")
+        dayTimeFields += DayTimeIntervalType.SECOND
+      }
+    }
+    if (yearMonthFields.nonEmpty) {
+      if (dayTimeFields.nonEmpty) {
+        val literalStr = source(ctx)
+        throw QueryParsingErrors.mixedIntervalUnitsError(literalStr, ctx)
+      }
+      Literal(
+        calendarInterval.months,
+        YearMonthIntervalType(yearMonthFields.min, yearMonthFields.max)
+      )
+    } else {
+      Literal(
+        IntervalUtils.getDuration(calendarInterval, TimeUnit.MICROSECONDS),
+        DayTimeIntervalType(dayTimeFields.min, dayTimeFields.max))
+    }
+  }
+
+  /**
    * Create a [[CalendarInterval]] or ANSI interval literal expression.
    * Two syntaxes are supported:
    * - multiple unit value pairs, for instance: interval 2 months 2 days.
@@ -2402,33 +2448,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     } else if (ctx.errorCapturingMultiUnitsInterval != null && !conf.legacyIntervalEnabled) {
       val units =
         ctx.errorCapturingMultiUnitsInterval.body.unit.asScala.map(
-          _.getText.toLowerCase(Locale.ROOT).stripSuffix("s"))
-      val yearMonthFields = Set.empty[Byte]
-      val dayTimeFields = Set.empty[Byte]
-      for (unit <- units) {
-        if (YearMonthIntervalType.stringToField.contains(unit)) {
-          yearMonthFields += YearMonthIntervalType.stringToField(unit)
-        } else if (DayTimeIntervalType.stringToField.contains(unit)) {
-          dayTimeFields += DayTimeIntervalType.stringToField(unit)
-        } else if (unit == "week") {
-          dayTimeFields += DayTimeIntervalType.DAY
-        } else {
-          assert(unit == "millisecond" || unit == "microsecond")
-          dayTimeFields += DayTimeIntervalType.SECOND
-        }
-      }
-      if (yearMonthFields.nonEmpty) {
-        if (dayTimeFields.nonEmpty) {
-          val literalStr = source(ctx)
-          throw QueryParsingErrors.mixedIntervalUnitsError(literalStr, ctx)
-        }
-        Literal(
-          calendarInterval.months, YearMonthIntervalType(yearMonthFields.min, yearMonthFields.max))
-      } else {
-        Literal(
-          IntervalUtils.getDuration(calendarInterval, TimeUnit.MICROSECONDS),
-          DayTimeIntervalType(dayTimeFields.min, dayTimeFields.max))
-      }
+          _.getText.toLowerCase(Locale.ROOT).stripSuffix("s")).toSeq
+      constructMultiUnitsIntervalLiteral(ctx, calendarInterval, units)
     } else {
       Literal(calendarInterval, CalendarIntervalType)
     }
@@ -3568,16 +3589,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    */
   override def visitQualifiedColTypeWithPosition(
       ctx: QualifiedColTypeWithPositionContext): QualifiedColType = withOrigin(ctx) {
+    val name = typedVisit[Seq[String]](ctx.name)
     QualifiedColType(
-      name = typedVisit[Seq[String]](ctx.name),
+      path = if (name.length > 1) Some(UnresolvedFieldName(name.init)) else None,
+      colName = name.last,
       dataType = typedVisit[DataType](ctx.dataType),
       nullable = ctx.NULL == null,
       comment = Option(ctx.commentSpec()).map(visitCommentSpec),
-      position = Option(ctx.colPosition).map(typedVisit[ColumnPosition]))
+      position = Option(ctx.colPosition).map( pos =>
+        UnresolvedFieldPosition(typedVisit[ColumnPosition](pos))))
   }
 
   /**
-   * Parse a [[AlterTableAddColumnsStatement]] command.
+   * Parse a [[AlterTableAddColumns]] command.
    *
    * For example:
    * {{{
@@ -3586,8 +3610,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
    * }}}
    */
   override def visitAddTableColumns(ctx: AddTableColumnsContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableAddColumnsStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    val colToken = if (ctx.COLUMN() != null) "COLUMN" else "COLUMNS"
+    AlterTableAddColumns(
+      createUnresolvedTable(ctx.multipartIdentifier, s"ALTER TABLE ... ADD $colToken"),
       ctx.columns.qualifiedColTypeWithPosition.asScala.map(typedVisit[QualifiedColType]).toSeq
     )
   }
@@ -3705,8 +3730,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
     if (ctx.partitionSpec != null) {
       operationNotAllowed("ALTER TABLE table PARTITION partition_spec REPLACE COLUMNS", ctx)
     }
-    AlterTableReplaceColumnsStatement(
-      visitMultipartIdentifier(ctx.multipartIdentifier),
+    AlterTableReplaceColumns(
+      createUnresolvedTable(ctx.multipartIdentifier, "ALTER TABLE ... REPLACE COLUMNS"),
       ctx.columns.qualifiedColTypeWithPosition.asScala.map { colType =>
         if (colType.NULL != null) {
           throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
@@ -3716,7 +3741,12 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
             "Column position", "REPLACE COLUMNS", ctx)
         }
-        typedVisit[QualifiedColType](colType)
+        val col = typedVisit[QualifiedColType](colType)
+        if (col.path.isDefined) {
+          throw QueryParsingErrors.operationInHiveStyleCommandUnsupportedError(
+            "Replacing with a nested column", "REPLACE COLUMNS", ctx)
+        }
+        col
       }.toSeq
     )
   }

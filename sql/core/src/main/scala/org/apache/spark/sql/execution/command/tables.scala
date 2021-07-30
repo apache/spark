@@ -236,7 +236,7 @@ case class AlterTableAddColumnsCommand(
       (colsToAdd ++ catalogTable.schema).map(_.name),
       "in the table definition of " + table.identifier,
       conf.caseSensitiveAnalysis)
-    DDLUtils.checkDataColNames(catalogTable, colsToAdd.map(_.name))
+    DDLUtils.checkDataColNames(catalogTable, StructType(colsToAdd))
 
     val existingSchema = CharVarcharUtils.getRawSchema(catalogTable.dataSchema)
     catalog.alterTableDataSchema(table, StructType(existingSchema ++ colsToAdd))
@@ -658,7 +658,12 @@ case class DescribeTableCommand(
       throw QueryCompilationErrors.descPartitionNotAllowedOnView(table.identifier)
     }
     DDLUtils.verifyPartitionProviderIsHive(spark, metadata, "DESC PARTITION")
-    val partition = catalog.getPartition(table, partitionSpec)
+    val normalizedPartSpec = PartitioningUtils.normalizePartitionSpec(
+      partitionSpec,
+      metadata.partitionSchema,
+      table.quotedString,
+      spark.sessionState.conf.resolver)
+    val partition = catalog.getPartition(table, normalizedPartSpec)
     if (isExtended) describeFormattedDetailedPartitionInfo(table, metadata, partition, result)
   }
 

@@ -87,7 +87,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case PhysicalOperation(project, filters,
-        relation @ DataSourceV2ScanRelation(_, V1ScanWrapper(scan, translated, pushed), output)) =>
+        DataSourceV2ScanRelation(_, V1ScanWrapper(scan, pushed, aggregate), output)) =>
       val v1Relation = scan.toV1TableScan[BaseRelation with TableScan](session.sqlContext)
       if (v1Relation.schema != scan.readSchema()) {
         throw QueryExecutionErrors.fallbackV1RelationReportsInconsistentSchemaError(
@@ -98,8 +98,9 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val dsScan = RowDataSourceScanExec(
         output,
         output.toStructType,
-        translated.toSet,
+        Set.empty,
         pushed.toSet,
+        aggregate,
         unsafeRowRDD,
         v1Relation,
         tableIdentifier = None)
@@ -140,12 +141,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // Add a Project here to make sure we produce unsafe rows.
       withProjectAndFilter(p, f, scanExec, !scanExec.supportsColumnar) :: Nil
 
-    case WriteToDataSourceV2(relationOpt, writer, query) =>
+    case WriteToDataSourceV2(relationOpt, writer, query, customMetrics) =>
       val invalidateCacheFunc: () => Unit = () => relationOpt match {
         case Some(r) => session.sharedState.cacheManager.uncacheQuery(session, r, cascade = true)
         case None => ()
       }
-      WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query)) :: Nil
+      WriteToDataSourceV2Exec(writer, invalidateCacheFunc, planLater(query), customMetrics) :: Nil
 
     case CreateV2Table(catalog, ident, schema, parts, props, ifNotExists) =>
       val propsWithOwner = CatalogV2Util.withDefaultOwnership(props)
@@ -260,8 +261,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
           throw QueryCompilationErrors.deleteOnlySupportedWithV2TablesError()
       }
 
-    case WriteToContinuousDataSource(writer, query) =>
-      WriteToContinuousDataSourceExec(writer, planLater(query)) :: Nil
+    case WriteToContinuousDataSource(writer, query, customMetrics) =>
+      WriteToContinuousDataSourceExec(writer, planLater(query), customMetrics) :: Nil
 
     case DescribeNamespace(ResolvedNamespace(catalog, ns), extended, output) =>
       DescribeNamespaceExec(output, catalog.asNamespaceCatalog, ns, extended) :: Nil
@@ -286,9 +287,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
 
     case _: NoopCommand =>
       LocalTableScanExec(Nil, Nil) :: Nil
-
-    case AlterTable(catalog, ident, _, changes) =>
-      AlterTableExec(catalog, ident, changes) :: Nil
 
     case RenameTable(r @ ResolvedTable(catalog, oldIdent, _, _), newIdent, isView) =>
       if (isView) {
@@ -444,7 +442,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       val changes = keys.map(key => TableChange.removeProperty(key))
       AlterTableExec(table.catalog, table.identifier, changes) :: Nil
 
-    case a: AlterTableCommand if a.table.resolved =>
+    case a: AlterTableColumnCommand if a.table.resolved =>
       val table = a.table.asInstanceOf[ResolvedTable]
       AlterTableExec(table.catalog, table.identifier, a.changes) :: Nil
 
