@@ -54,7 +54,6 @@ from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
-    DataType,
     DecimalType,
     DoubleType,
     FloatType,
@@ -3453,7 +3452,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if q_float < 0.0 or q_float > 1.0:
                 raise ValueError("percentiles should all be in the interval [0, 1].")
 
-            def quantile(spark_column: Column, spark_type: DataType) -> Column:
+            def quantile(psser: Series) -> Column:
+                spark_type = psser.spark.data_type
+                spark_column = psser.spark.column
                 if isinstance(spark_type, (BooleanType, NumericType)):
                     return F.percentile_approx(spark_column.cast(DoubleType()), q_float, accuracy)
                 else:
@@ -6186,7 +6187,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
     def _reduce_for_stat_function(
         self,
-        sfun: Union[Callable[[Column], Column], Callable[[Column, DataType], Column]],
+        sfun: Callable[["Series"], Column],
         name: str_type,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
@@ -6202,26 +6203,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         axis : used only for sanity check because series only support index axis.
         numeric_only : not used by this implementation, but passed down by stats functions
         """
-        from inspect import signature
-
         axis = validate_axis(axis)
         if axis == 1:
             raise ValueError("Series does not support columns axis.")
-        num_args = len(signature(sfun).parameters)
-        spark_column = self.spark.column
-        spark_type = self.spark.data_type
 
-        if num_args == 1:
-            # Only pass in the column if sfun accepts only one arg
-            scol = cast(Callable[[Column], Column], sfun)(spark_column)
-        else:  # must be 2
-            assert num_args == 2
-            # Pass in both the column and its data type if sfun accepts two args
-            scol = cast(Callable[[Column, DataType], Column], sfun)(spark_column, spark_type)
+        scol = sfun(self)
 
         min_count = kwargs.get("min_count", 0)
         if min_count > 0:
-            scol = F.when(Frame._count_expr(spark_column, spark_type) >= min_count, scol)
+            scol = F.when(Frame._count_expr(self) >= min_count, scol)
 
         result = unpack_scalar(self._internal.spark_frame.select(scol))
         return result if result is not None else np.nan
