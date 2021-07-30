@@ -413,8 +413,7 @@ public class ExternalBlockHandler extends RpcHandler
      * @param shuffleId shuffle blocks shuffleId
      * @return mapId and reduceIds of the shuffle blocks in the same order as that of the blockIds
      *
-     * Regular shuffle blocks format should be blockIdParts[1] = shuffleId,
-     * blockIdParts[2] = mapId, blockIdParts[3] = reduceId
+     * Regular shuffle blocks format should be shuffle_$shuffleId_$mapId_$reduceId
      */
     private int[] shuffleMapIdAndReduceIds(String[] blockIds, int shuffleId) {
       final int[] mapIdAndReduceIds = new int[2 * blockIds.length];
@@ -443,8 +442,8 @@ public class ExternalBlockHandler extends RpcHandler
      * @return reduceId and chunkIds of the shuffle chunks in the same order as that of the
      *         blockIds
      *
-     * Shuffle merged chunks format should be blockIdParts[1] = shuffleId,
-     * blockIdParts[2] = shuffleMergeId, blockIdParts[3] = reduceId, blockIdParts[4] = chunkId
+     * Shuffle merged chunks format should be
+     * shuffleChunk_$shuffleId_$shuffleMergeId_$reduceId_$chunkId
      */
     private int[] shuffleReduceIdAndChunkIds(
         String[] blockIds,

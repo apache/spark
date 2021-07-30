@@ -947,7 +947,7 @@ public class RemoteBlockPushResolverSuite {
     RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo =
       pushResolver.validateAndGetAppShuffleInfo(testApp);
     RemoteBlockPushResolver.AppShuffleMergePartitionsInfo partitions
-      = appShuffleInfo.getPartitions().get(0);
+      = appShuffleInfo.getShuffles().get(0);
     for (RemoteBlockPushResolver.AppShufflePartitionInfo partitionInfo :
         partitions.getShuffleMergePartitions().values()) {
       assertTrue(partitionInfo.getDataChannel().isOpen());
@@ -1033,16 +1033,16 @@ public class RemoteBlockPushResolverSuite {
     String testApp = "testOngoingMergeOfBlockFromPreviousAttemptIsAborted";
     Path[] attempt1LocalDirs = createLocalDirs(1);
     registerExecutor(testApp,
-        prepareLocalDirs(attempt1LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_1),
-        MERGE_DIRECTORY_META_1);
+      prepareLocalDirs(attempt1LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_1),
+      MERGE_DIRECTORY_META_1);
     ByteBuffer[] blocks = new ByteBuffer[]{
-        ByteBuffer.wrap(new byte[4]),
-        ByteBuffer.wrap(new byte[5]),
-        ByteBuffer.wrap(new byte[6]),
-        ByteBuffer.wrap(new byte[7])
+      ByteBuffer.wrap(new byte[4]),
+      ByteBuffer.wrap(new byte[5]),
+      ByteBuffer.wrap(new byte[6]),
+      ByteBuffer.wrap(new byte[7])
     };
     StreamCallbackWithID stream1 = pushResolver.receiveBlockDataAsStream(
-        new PushBlockStream(testApp, 1, 0, 0, 0, 0, 0));
+      new PushBlockStream(testApp, 1, 0, 0, 0, 0, 0));
     // The onData callback should be called 4 times here before the onComplete callback. But a
     // register executor message arrives in shuffle service after the 2nd onData callback. The 3rd
     // onData callback should all throw ClosedChannelException as their channels are closed.
@@ -1050,8 +1050,8 @@ public class RemoteBlockPushResolverSuite {
     stream1.onData(stream1.getID(), blocks[1]);
     Path[] attempt2LocalDirs = createLocalDirs(2);
     registerExecutor(testApp,
-        prepareLocalDirs(attempt2LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_2),
-        MERGE_DIRECTORY_META_2);
+      prepareLocalDirs(attempt2LocalDirs, MERGE_DIRECTORY + "_" + ATTEMPT_ID_2),
+      MERGE_DIRECTORY_META_2);
     closed.acquire();
     // Should throw ClosedChannelException here.
     stream1.onData(stream1.getID(), blocks[3]);
@@ -1132,7 +1132,7 @@ public class RemoteBlockPushResolverSuite {
     RemoteBlockPushResolver.AppShuffleInfo appShuffleInfo =
       pushResolver.validateAndGetAppShuffleInfo(TEST_APP);
     assertTrue("Metadata of determinate shuffle should be removed after finalize shuffle"
-      + " merge", appShuffleInfo.getPartitions().get(0) == null);
+      + " merge", appShuffleInfo.getShuffles().get(0) == null);
     validateMergeStatuses(statuses, new int[] {0}, new long[] {9});
     MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
     validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{4, 5}, new int[][]{{0}, {1}});

@@ -98,8 +98,8 @@ public class MergedBlockMetaRequest extends AbstractMessage implements RequestMe
     return new ToStringBuilder(this, ToStringStyle.SHORT_PREFIX_STYLE)
       .append("requestId", requestId)
       .append("appId", appId)
-      .append("shuffleMergeId", shuffleMergeId)
       .append("shuffleId", shuffleId)
+      .append("shuffleMergeId", shuffleMergeId)
       .append("reduceId", reduceId)
       .toString();
   }
