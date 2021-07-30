@@ -50,9 +50,7 @@ jobs:
     # Run scheduled jobs for Apache Spark only
     # Run regular jobs for commit in both Apache Spark and fored repository
     if: >-
-      (github.repository == 'apache/spark' &&
-        (needs.configure-jobs.outputs.type == 'scheduled' ||
-          needs.configure-jobs.outputs.type == 'regular'))
+      (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled')
       || needs.configure-jobs.outputs.type == 'regular'
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
@@ -196,9 +194,7 @@ jobs:
     # Run PySpark coverage scheduled jobs for Apache Spark only
     # Run regular jobs for commit in both Apache Spark and fored repository
     if: >-
-      (github.repository == 'apache/spark' &&
-        (needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled' ||
-          needs.configure-jobs.outputs.type == 'regular'))
+      (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled')
       || needs.configure-jobs.outputs.type == 'regular'
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
