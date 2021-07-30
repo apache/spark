@@ -175,7 +175,7 @@ _options = [
     Option(
         key="compute.default_index_type",
         doc=("This sets the default index type: sequence, distributed and distributed-sequence."),
-        default="sequence",
+        default="distributed-sequence",
         types=str,
         check_func=(
             lambda v: v in ("sequence", "distributed", "distributed-sequence"),
