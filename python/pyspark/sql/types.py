@@ -1095,7 +1095,7 @@ def _has_nulltype(dt):
 
 def _has_udt(dt):
     """ Return whether there is a UserDefinedType in `dt` or not """
-    if dt is None and (not isinstance(dt, DataType)):
+    if (dt is None) or (not isinstance(dt, DataType)):
         # This is the most hitted cases
         return False
 

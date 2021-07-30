@@ -33,7 +33,8 @@ from pyspark.sql.types import ByteType, ShortType, IntegerType, FloatType, DateT
     DecimalType, BinaryType, BooleanType, NullType
 from pyspark.sql.types import (  # type: ignore
     _array_signed_int_typecode_ctype_mappings, _array_type_mappings,
-    _array_unsigned_int_typecode_ctype_mappings, _infer_type, _make_type_verifier, _merge_type
+    _array_unsigned_int_typecode_ctype_mappings, _infer_type, _make_type_verifier, _merge_type, \
+    _has_udt
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase, ExamplePointUDT, PythonOnlyUDT, \
     ExamplePoint, PythonOnlyPoint, MyObject
@@ -799,6 +800,24 @@ class DataTypeTests(unittest.TestCase):
     def test_invalid_create_row(self):
         row_class = Row("c1", "c2")
         self.assertRaises(ValueError, lambda: row_class(1, 2, 3))
+
+    def test_has_udt(self):
+        data_types_without_udt = (
+            StringType(), NullType(), BinaryType(), BooleanType(), DateType(), TimestampType(),
+            ByteType(), IntegerType(), ShortType(), LongType(), FloatType(), DoubleType(),
+            DecimalType(), ArrayType(DoubleType()), MapType(StringType(), LongType()),
+            StructType([StructField('f1', StringType(), True)])
+        )
+        self.assertFalse(any(map(_has_udt, data_types_without_udt)))
+
+        data_types_with_udt = (
+            MapType(StringType(), ExamplePointUDT()),
+            MapType(ExamplePointUDT(), StringType()),
+            ExamplePointUDT(),
+            ArrayType(ExamplePointUDT()),
+            StructType([StructField('f1', ExamplePointUDT(), True)])
+        )
+        self.assertTrue(all(map(_has_udt, data_types_with_udt)))
 
 
 class DataTypeVerificationTests(unittest.TestCase):
