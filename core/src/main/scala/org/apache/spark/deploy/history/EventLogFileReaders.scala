@@ -213,7 +213,6 @@ private[history] class RollingEventLogFilesFileReader(
 
   private lazy val files: Seq[FileStatus] = {
     val ret = fs.listStatus(rootPath).toSeq
-    require(ret.exists(isEventLogFile), "Log directory must contain at least one event log file!")
     require(ret.exists(isAppStatusFile), "Log directory must contain an appstatus file!")
     ret
   }
