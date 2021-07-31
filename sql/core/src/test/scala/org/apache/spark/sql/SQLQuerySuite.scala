@@ -4202,6 +4202,12 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
+
+  test("SPARK-36371: Support raw string literal") {
+    checkAnswer(sql("""SELECT r'a\tb\nc'"""), Row("""a\tb\nc"""))
+    checkAnswer(sql("""SELECT r"a\tb\nc""""), Row("""a\tb\nc"""))
+    checkAnswer(sql("""SELECT from_json(r'{"a": "\\"}', 'a string')"""), Row(Row("\\")))
+  }
 }
 
 case class Foo(bar: Option[String])
