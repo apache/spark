@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, Sort}
 import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression, FileSourceScanExec, InputAdapter, ReusedSubqueryExec, ScalarSubquery, SubqueryExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecution}
 import org.apache.spark.sql.execution.datasources.FileScanRDD
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -1875,5 +1876,30 @@ class SubquerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       assert(reusedSubqueryIds.forall(subqueryIds.contains(_)),
         "ReusedSubqueryExec should reuse an existing subquery")
     }
+  }
+
+  test("SPARK-36280: Remove redundant aliases after RewritePredicateSubquery") {
+    sql("CREATE TABLE t1 USING parquet AS SELECT id AS a, id AS b, id AS c FROM range(10)")
+    sql("CREATE TABLE t2 USING parquet AS SELECT id AS x, id AS y FROM range(8)")
+    val df = sql(
+      """
+        |SELECT *
+        |FROM   t1
+        |WHERE  a IN (SELECT x
+        |             FROM   (SELECT x                         AS x,
+        |                            Rank()
+        |                              OVER (
+        |                                PARTITION BY x
+        |                                ORDER BY Sum(y) DESC) AS ranking
+        |                     FROM   t2
+        |                     GROUP  BY x) tmp1
+        |             WHERE  ranking <= 5)
+        |""".stripMargin)
+
+    df.collect()
+    val exchanges = collect(df.queryExecution.executedPlan) {
+      case s: ShuffleExchangeExec => s
+    }
+    assert(exchanges.size === 1)
   }
 }
