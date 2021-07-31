@@ -224,3 +224,30 @@ class SparkSQLFeatureNotSupportedException(errorClass: String, messageParameters
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
+
+/**
+ * Null Pointer Exception thrown from Spark with an error class
+ * */
+class SparkNullPointerException(errorClass: String, messageParameters: Array[String])
+  extends NullPointerException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+class SparkArrayIndexOutOfBoundsException(errorClass: String, messageParameters: Array[String])
+  extends ArrayIndexOutOfBoundsException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+class SparkUnsupportedOperationException(errorClass: String, messageParameters: Array[String])
+  extends UnsupportedOperationException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters)) with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}

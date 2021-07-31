@@ -104,5 +104,54 @@
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
+  },
+  "EXPRESSION_DECODING" : {
+    "message" : [ "Error while decoding: %s" ],
+  },
+  "EXPRESSION_ENCODING" : {
+    "message" : [ "Error while encoding: %s" ]
+  },
+  "CLASS_HAS_UNEXPECTED_SERIALIZER" : {
+    "message" : [ "Class $s has unexpected serializer: %s" ],
+    "sqlState" : "2200W"
+  },
+  "CANNOT_GET_OUTER_POINTER_FOR_INNERCLASS" : {
+    "message" : [ "Failed to get outer pointer for %s" ]
+  },
+  "USER_DEFINED_TYPE_NOT_ANNOTATED_AND_REGISTERED" : {
+    "message" : [ "%s is not annotated with SQLUserDefinedType nor registered with UDTRegistration." ]
+  },
+  "INVALID_INPUT_SYNTAX" : {
+    "message" : [ "invalid input syntax for type %s: %s" ],
+    "sqlState" : "42000"
+  },
+  "UNSUPPORTED_OPERAND_TYPE_FOR_SIZE" : {
+    "message" : [ "The size function doesn't support the operand type $s" ],
+    "sqlState" : "0700B"
+  },
+  "UNEXPECTED_VALUE_IN_FUNCTION" : {
+    "message" : [ "Unexpected value for %s in function %s: %s." ],
+    "sqlState" : "0700B"
+  },
+  "SQL_ARRAY_INDEX_NOT_START_AT_ONE" : {
+    "message" : [ "SQL array indices start at 1" ],
+    "sqlState" : "0700B"
+  },
+  "FAILED_OPERATE_ARRAY_EXCEEDING_LIMIT" : {
+    "message" : [ "Unsuccessful try to %s with %s elements due to due to exceeding the array size limit %s." ],
+    "sqlState" : "2202E"
+  },
+  "INITIAL_TYPE_NOT_TARGET_DATA_TYPE" : {
+    "message" : [ "Initial type %s must be %s" ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_CONVERT_COLUMN_TO_JSON" : {
+    "message" : [ "Unable to convert column %s of type %s to JSON." ]
+  },
+  "MALFORMED_JSON_RECORDS_IN_SCHEMA_INFERENCE" : {
+    "message" : [ "Malformed records are detected in schema inference. Parse Mode: %s. Reasons: %s" ]
+  },
+  "MALFORMED_JSON" : {
+    "message" : [ "Malformed JSON" ]
   }
 }
