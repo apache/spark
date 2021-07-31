@@ -48,10 +48,7 @@ class SparkOptimizer(
       PushDownPredicates) :+
     Batch("Cleanup filters that cannot be pushed down", Once,
       CleanupDynamicPruningFilters,
-      PruneFilters) :+
-    Batch("Push down join condition evaluation", Once,
-      PushDownJoinConditionEvaluation,
-      CollapseProject)) ++
+      PruneFilters)) ++
     postHocOptimizationBatches :+
     Batch("Extract Python UDFs", Once,
       ExtractPythonUDFFromJoinCondition,
