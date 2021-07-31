@@ -3179,11 +3179,33 @@ class ConnectionModelView(AirflowModelView):
     def process_form(self, form, is_created):
         """Process form data."""
         conn_type = form.data['conn_type']
+        conn_id = form.data["conn_id"]
         extra = {
             key: form.data[key]
             for key in self.extra_fields
             if key in form.data and key.startswith(f"extra__{conn_type}__")
         }
+
+        # If parameters are added to the classic `Extra` field, include these values along with
+        # custom-field extras.
+        extra_conn_params = form.data.get("extra")
+
+        if extra_conn_params:
+            try:
+                extra.update(json.loads(extra_conn_params))
+            except (JSONDecodeError, TypeError):
+                flash(
+                    Markup(
+                        "<p>The <em>Extra</em> connection field contained an invalid value for Conn ID: "
+                        f"<q>{conn_id}</q>.</p>"
+                        "<p>If connection parameters need to be added to <em>Extra</em>, "
+                        "please make sure they are in the form of a single, valid JSON object.</p><br>"
+                        "The following <em>Extra</em> parameters were <b>not</b> added to the connection:<br>"
+                        f"{extra_conn_params}",
+                    ),
+                    category="error",
+                )
+
         if extra.keys():
             form.extra.data = json.dumps(extra)
 
