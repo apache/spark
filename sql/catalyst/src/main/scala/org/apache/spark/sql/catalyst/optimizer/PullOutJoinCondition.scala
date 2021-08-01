@@ -44,7 +44,8 @@ object PullOutJoinCondition extends Rule[LogicalPlan]
   with JoinSelectionHelper with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(_.containsPattern(JOIN)) {
-    case j @ Join(left, right, _, Some(condition), _) if j.resolved =>
+    case j @ Join(left, right, _, Some(condition), _)
+        if j.resolved && !j.isStreaming && !canPlanAsBroadcastHashJoin(j, conf) =>
       val complexExpressions = splitConjunctivePredicates(condition).flatMap(_.children).flatMap {
         case e: Expression if !e.foldable && e.children.nonEmpty => Seq(e)
         case _ => Nil
@@ -67,7 +68,7 @@ object PullOutJoinCondition extends Rule[LogicalPlan]
         }
         val newLeft = Project(left.output ++ leftComplexExpressionMap.values, left)
         val newRight = Project(right.output ++ rightComplexExpressionMap.values, right)
-        j.copy(left = newLeft, right = newRight, condition = Some(newCondition))
+        Project(j.output, j.copy(left = newLeft, right = newRight, condition = Some(newCondition)))
       } else {
         j
       }
