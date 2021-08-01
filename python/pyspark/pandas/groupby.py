@@ -1573,13 +1573,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         index = self._psdf._internal.index_spark_column_names[0]
 
         stat_exprs = []
-        for psser, c in zip(self._agg_columns, self._agg_columns_scols):
+        for psser, scol in zip(self._agg_columns, self._agg_columns_scols):
             name = psser._internal.data_spark_column_names[0]
 
             if skipna:
-                order_column = Column(c._jc.desc_nulls_last())
+                order_column = scol.desc_nulls_last()
             else:
-                order_column = Column(c._jc.desc_nulls_first())
+                order_column = scol.desc_nulls_first()
+
             window = Window.partitionBy(*groupkey_names).orderBy(
                 order_column, NATURAL_ORDER_COLUMN_NAME
             )
@@ -1655,13 +1656,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         index = self._psdf._internal.index_spark_column_names[0]
 
         stat_exprs = []
-        for psser, c in zip(self._agg_columns, self._agg_columns_scols):
+        for psser, scol in zip(self._agg_columns, self._agg_columns_scols):
             name = psser._internal.data_spark_column_names[0]
 
             if skipna:
-                order_column = Column(c._jc.asc_nulls_last())
+                order_column = scol.asc_nulls_last()
             else:
-                order_column = Column(c._jc.asc_nulls_first())
+                order_column = scol.asc_nulls_first()
+
             window = Window.partitionBy(*groupkey_names).orderBy(
                 order_column, NATURAL_ORDER_COLUMN_NAME
             )
