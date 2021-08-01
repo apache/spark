@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
@@ -109,7 +108,8 @@ public class StreamSuite {
 
   @Test
   public void testZeroLengthStream() throws Throwable {
-    try (TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
+    try (TransportClient client =
+        clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
       StreamTask task = new StreamTask(client, "emptyBuffer", TimeUnit.SECONDS.toMillis(5));
       task.run();
       task.check();
@@ -118,7 +118,8 @@ public class StreamSuite {
 
   @Test
   public void testSingleStream() throws Throwable {
-    try (TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
+    try (TransportClient client =
+        clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
       StreamTask task = new StreamTask(client, "largeBuffer", TimeUnit.SECONDS.toMillis(5));
       task.run();
       task.check();
@@ -127,7 +128,8 @@ public class StreamSuite {
 
   @Test
   public void testMultipleStreams() throws Throwable {
-    try (TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
+    try (TransportClient client =
+        clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
       for (int i = 0; i < 20; i++) {
         StreamTask task = new StreamTask(client, STREAMS[i % STREAMS.length],
           TimeUnit.SECONDS.toMillis(5));
@@ -141,7 +143,8 @@ public class StreamSuite {
   public void testConcurrentStreams() throws Throwable {
     ExecutorService executor = Executors.newFixedThreadPool(20);
 
-    try (TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
+    try (TransportClient client =
+        clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
       List<StreamTask> tasks = new ArrayList<>();
       for (int i = 0; i < 20; i++) {
         StreamTask task = new StreamTask(client, STREAMS[i % STREAMS.length],

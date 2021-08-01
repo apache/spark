@@ -19,7 +19,6 @@ package org.apache.spark.network.crypto;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
-import java.util.Arrays;
 import java.util.Map;
 import java.security.InvalidKeyException;
 import java.util.Random;
