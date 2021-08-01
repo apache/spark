@@ -136,7 +136,8 @@ class StringOps(DataTypeOps):
                 field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
             )
         elif isinstance(spark_type, StringType):
-            return _as_string_type(index_ops, dtype)
+            null_str = str(pd.NA) if isinstance(self, StringExtensionOps) else str(None)
+            return _as_string_type(index_ops, dtype, null_str=null_str)
         else:
             return _as_other_type(index_ops, dtype, spark_type)
 
