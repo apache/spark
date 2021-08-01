@@ -305,7 +305,8 @@ public class RpcIntegrationSuite {
   @Test
   public void sendOneWayMessage() throws Exception {
     final String message = "no reply";
-    try (TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
+    try (TransportClient client =
+        clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
       client.send(JavaUtils.stringToBytes(message));
       assertEquals(0, client.getHandler().numOutstandingRequests());
 

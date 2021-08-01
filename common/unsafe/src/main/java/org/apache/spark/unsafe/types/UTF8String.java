@@ -906,7 +906,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       // the partial string of the padding
       UTF8String remain = pad.substring(0, spaces - padChars * count);
 
-      int resultSize = Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
+      int resultSize =
+        Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
       byte[] data = new byte[resultSize];
       copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET, this.numBytes);
       int offset = this.numBytes;
@@ -939,7 +940,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       // the partial string of the padding
       UTF8String remain = pad.substring(0, spaces - padChars * count);
 
-      int resultSize = Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
+      int resultSize =
+        Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
       byte[] data = new byte[resultSize];
 
       int offset = 0;
