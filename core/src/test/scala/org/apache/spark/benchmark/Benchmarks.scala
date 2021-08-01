@@ -80,6 +80,8 @@ object Benchmarks {
       "SPARK_BENCHMARK_NUM_SPLITS").map(_.toLowerCase(Locale.ROOT).trim.toInt).getOrElse(1)
     val currentSplit = sys.env.get(
       "SPARK_BENCHMARK_CUR_SPLIT").map(_.toLowerCase(Locale.ROOT).trim.toInt - 1).getOrElse(0)
+    val TPCDSDataLoc = sys.env.get(
+      "TPC_DS_DATA_LOC").map(_.toLowerCase(Locale.ROOT).trim).getOrElse("")
     var numBenchmark = 0
 
     var isBenchmarkFound = false
@@ -99,7 +101,7 @@ object Benchmarks {
           (
             !info.getName.endsWith("TPCDSQueryBenchmark") ||
             // Is TPCDS Datset provided?
-            (info.getName.endsWith("TPCDSQueryBenchmark") && args.contains("--data-location"))
+            (info.getName.endsWith("TPCDSQueryBenchmark") && TPCDSDataLoc.nonEmpty)
           ) &&
           matcher.matches(Paths.get(info.getName)) &&
           Try(runBenchmark).isSuccess && // Does this has a main method?

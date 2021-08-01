@@ -29,19 +29,13 @@ jobs:
     name: Generate matrix for job splits
     runs-on: ubuntu-20.04
     outputs:
-      class: ${{ steps.set-matrix.outputs.class }}
-      split: ${{ steps.set-matrix.outputs.split }}
-      num-split: ${{ steps.set-matrix.outputs.num-split }}
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
     env:
-      SPARK_BENCHMARK_CLASS: ${{ github.event.inputs.class }}
       SPARK_BENCHMARK_NUM_SPLITS: ${{ github.event.inputs.num-splits }}
     steps:
     - name: Generate matrix
       id: set-matrix
-      run: |
-        echo "::set-output name=class::['"$SPARK_BENCHMARK_CLASS"']"
-        echo "::set-output name=split::["`seq -s, 1 $SPARK_BENCHMARK_NUM_SPLITS`"]"
-        echo "::set-output name=num-split::['"$SPARK_BENCHMARK_NUM_SPLITS"']"
+      run: echo "::set-output name=matrix::["`seq -s, 1 $SPARK_BENCHMARK_NUM_SPLITS`"]"
 
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g job of build_and_test.yml as well
   generate-tpc-ds-dataset:
@@ -51,6 +45,7 @@ jobs:
     env:
       SPARK_GENERATE_BENCHMARK_FILES: 1
       SPARK_LOCAL_IP: localhost
+      TPC_DS_DATA_LOC: "--data-location tpcds-sf-1"
     steps:
       - name: Checkout Spark repository
         uses: actions/checkout@v2
@@ -108,20 +103,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        class: ${{ fromJSON(needs.matrix-gen.outputs.class) }}
-        split: ${{ fromJSON(needs.matrix-gen.outputs.split) }}
-        num-split: ${{ fromJSON(needs.matrix-gen.outputs.num-split) }}
-        include:
-          - class: org.apache.spark.sql.execution.benchmark.TPCDSQueryBenchmark
-            num-split: 1
-            split: 1
-            benchmark-arg: "--data-location tpcds-sf-1"
+        split: ${{fromJSON(needs.matrix-gen.outputs.matrix)}}
     env:
       SPARK_BENCHMARK_FAILFAST: ${{ github.event.inputs.failfast }}
-      SPARK_BENCHMARK_NUM_SPLITS: ${{ matrix.num-split }}
-      SPARK_BENCHMARK_CLASS: ${{ matrix.class }}
-      SPARK_BENCHMARK_ARG: ${{ matrix.benchmark-arg }}
-      SPARK_BENCHMARK_CUR_SPLIT: ${{ matrix.split }}
+      SPARK_BENCHMARK_NUM_SPLITS: ${{ github.event.inputs.num-splits }}
       SPARK_GENERATE_BENCHMARK_FILES: 1
       SPARK_LOCAL_IP: localhost
       # To prevent spark.test.home not being set. See more detail in SPARK-36007.
@@ -161,12 +146,6 @@ jobs:
         path: ./tpcds-sf-1
         key: tpcds-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Run benchmarks
-      # TPCDSQueryBenchmark needs to be executed only if run-tcp-ds-query-benchmark is 'true'
-      if: |
-        matrix.class != 'org.apache.spark.sql.execution.benchmark.TPCDSQueryBenchmark' ||
-        (matrix.class == 'org.apache.spark.sql.execution.benchmark.TPCDSQueryBenchmark' &&
-        github.event.inputs.run-tcp-ds-query-benchmark == 'true' &&
-        matrix.benchmark-arg)
       run: |
         ./build/sbt -Pyarn -Pmesos -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pspark-ganglia-lgpl test:package
         # Make less noisy
@@ -177,7 +156,7 @@ jobs:
           --driver-memory 6g --class org.apache.spark.benchmark.Benchmarks \
           --jars "`find . -name '*-SNAPSHOT-tests.jar' -o -name '*avro*-SNAPSHOT.jar' | paste -sd ',' -`" \
           "`find . -name 'spark-core*-SNAPSHOT-tests.jar'`" \
-          $SPARK_BENCHMARK_CLASS \
+          "${{ github.event.inputs.class }}" \
           $SPARK_BENCHMARK_ARG
         # To keep the directory structure and file permissions, tar them
         # See also https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
