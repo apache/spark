@@ -768,7 +768,7 @@ def main():
         run_python_tests(
             modules_with_python_tests,
             opts.parallelism,
-            os.environ.get("PYSPARK_CODECOV", "false") == "true")
+            with_coverage=os.environ.get("PYSPARK_CODECOV", "false") == "true")
         run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()

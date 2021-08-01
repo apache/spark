@@ -48,7 +48,7 @@ jobs:
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
     needs: configure-jobs
     # Run scheduled jobs for Apache Spark only
-    # Run regular jobs for commit in both Apache Spark and fored repository
+    # Run regular jobs for commit in both Apache Spark and forked repository
     if: >-
       (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled')
       || needs.configure-jobs.outputs.type == 'regular'
@@ -275,7 +275,7 @@ jobs:
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
     - name: Upload coverage to Codecov
       if: needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled'
-      uses: codecov/codecov-action@v1
+      uses: codecov/codecov-action@v2
       with:
         files: ./python/coverage.xml
         flags: unittests
