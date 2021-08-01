@@ -142,7 +142,7 @@ class BlockManagerMaster(
    * @param host
    */
   def removeShufflePushMergerLocation(host: String): Unit = {
-    driverEndpoint.askSync[Seq[BlockManagerId]](RemoveShufflePushMergerLocation(host))
+    driverEndpoint.askSync[Unit](RemoveShufflePushMergerLocation(host))
   }
 
   def getExecutorEndpointRef(executorId: String): Option[RpcEndpointRef] = {
