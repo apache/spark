@@ -994,17 +994,12 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
             |WHERE t1id * 10 = t3.id3 * 10
           """.stripMargin).queryExecution.executedPlan
         val sortNodes = collect(planned) { case s: SortExec => s }
-        assert(sortNodes.size == 3)
+        assert(sortNodes.size == 4)
         val exchangeNodes = collect(planned) { case e: ShuffleExchangeExec => e }
-        assert(exchangeNodes.size == 3)
+        assert(exchangeNodes.size == 4)
 
         val projects = collect(planned) { case p: ProjectExec => p }
-        assert(projects.exists(_.outputPartitioning match {
-          case HashPartitioning(Seq(Multiply(ar1: AttributeReference, _, _)), _) =>
-            ar1.name == "t1id"
-          case _ =>
-            false
-        }))
+        assert(!projects.exists(_.outputPartitioning.isInstanceOf[HashPartitioning]))
       }
     }
   }
@@ -1103,13 +1098,13 @@ class PlannerSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
         // t12 is already sorted on `t1.id * 2`. and we need to sort it on `2 * t12.id`
         // for 2nd join. So sorting on t12 can be avoided
         val sortNodes = planned.collect { case s: SortExec => s }
-        assert(sortNodes.size == 3)
+        assert(sortNodes.size == 4)
         val outputOrdering = planned.outputOrdering
         assert(outputOrdering.size == 1)
         // Sort order should have 3 childrens, not 4. This is because t1.id*2 and 2*t1.id are same
-        assert(outputOrdering.head.children.size == 3)
+        assert(outputOrdering.head.children.size == 2)
         assert(outputOrdering.head.children.count(_.isInstanceOf[AttributeReference]) == 2)
-        assert(outputOrdering.head.children.count(_.isInstanceOf[Multiply]) == 1)
+        assert(outputOrdering.head.children.count(_.isInstanceOf[Multiply]) == 0)
       }
     }
   }
