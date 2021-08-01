@@ -2444,6 +2444,11 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         psser = ps.from_pandas(pser)
         self.assert_eq(pser.hasnans, psser.hasnans)
 
+        # empty
+        pser = pd.Series([])
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.hasnans, psser.hasnans)
+
     def test_last_valid_index(self):
         pser = pd.Series([250, 1.5, 320, 1, 0.3, None, None, None, None])
         psser = ps.from_pandas(pser)

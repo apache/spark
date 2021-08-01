@@ -1138,11 +1138,11 @@ public class RemoteBlockPushResolverSuite {
       String appId,
       int attemptId,
       PushBlock[] blocks) throws IOException {
-    for (int i = 0; i < blocks.length; i++) {
+    for (PushBlock block : blocks) {
       StreamCallbackWithID stream = pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(
-          appId, attemptId, blocks[i].shuffleId, blocks[i].mapIndex, blocks[i].reduceId, 0));
-      stream.onData(stream.getID(), blocks[i].buffer);
+          appId, attemptId, block.shuffleId, block.mapIndex, block.reduceId, 0));
+      stream.onData(stream.getID(), block.buffer);
       stream.onComplete(stream.getID());
     }
   }

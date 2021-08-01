@@ -15,27 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark.sql.execution.datasources
 
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
-import org.apache.spark.sql.execution.datasources.{CatalogFileIndex, HadoopFsRelation, LogicalRelation, PruneFileSourcePartitions}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.BroadcastHashJoinExec
 import org.apache.spark.sql.functions.broadcast
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
 
-class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase {
+class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with SharedSparkSession {
 
   override def format: String = "parquet"
 
@@ -45,35 +44,27 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase {
 
   test("PruneFileSourcePartitions should not change the output of LogicalRelation") {
     withTable("test") {
-      withTempDir { dir =>
-        sql(
-          s"""
-            |CREATE EXTERNAL TABLE test(i int)
-            |PARTITIONED BY (p int)
-            |STORED AS parquet
-            |LOCATION '${dir.toURI}'""".stripMargin)
+      spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("test")
+      val tableMeta = spark.sharedState.externalCatalog.getTable("default", "test")
+      val catalogFileIndex = new CatalogFileIndex(spark, tableMeta, 0)
 
-        val tableMeta = spark.sharedState.externalCatalog.getTable("default", "test")
-        val catalogFileIndex = new CatalogFileIndex(spark, tableMeta, 0)
+      val dataSchema = StructType(tableMeta.schema.filterNot { f =>
+        tableMeta.partitionColumnNames.contains(f.name)
+      })
+      val relation = HadoopFsRelation(
+        location = catalogFileIndex,
+        partitionSchema = tableMeta.partitionSchema,
+        dataSchema = dataSchema,
+        bucketSpec = None,
+        fileFormat = new ParquetFileFormat(),
+        options = Map.empty)(sparkSession = spark)
 
-        val dataSchema = StructType(tableMeta.schema.filterNot { f =>
-          tableMeta.partitionColumnNames.contains(f.name)
-        })
-        val relation = HadoopFsRelation(
-          location = catalogFileIndex,
-          partitionSchema = tableMeta.partitionSchema,
-          dataSchema = dataSchema,
-          bucketSpec = None,
-          fileFormat = new ParquetFileFormat(),
-          options = Map.empty)(sparkSession = spark)
+      val logicalRelation = LogicalRelation(relation, tableMeta)
+      val query = Project(Seq(Symbol("id"), Symbol("p")),
+        Filter(Symbol("p") === 1, logicalRelation)).analyze
 
-        val logicalRelation = LogicalRelation(relation, tableMeta)
-        val query = Project(Seq(Symbol("i"), Symbol("p")),
-          Filter(Symbol("p") === 1, logicalRelation)).analyze
-
-        val optimized = Optimize.execute(query)
-        assert(optimized.missingInput.isEmpty)
-      }
+      val optimized = Optimize.execute(query)
+      assert(optimized.missingInput.isEmpty)
     }
   }
 
@@ -116,7 +107,7 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase {
     // Force datasource v2 for parquet
     withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
       withTempPath { dir =>
-        spark.range(10).selectExpr("id", "id % 3 as p")
+        spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
             .write.partitionBy("p").parquet(dir.getCanonicalPath)
         withTempView("tmp") {
           spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
@@ -127,19 +118,8 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase {
     }
   }
 
-  test("SPARK-36128: spark.sql.hive.metastorePartitionPruning should work for file data sources") {
-    Seq(true, false).foreach { enablePruning =>
-      withTable("tbl") {
-        withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> enablePruning.toString) {
-          spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
-          HiveCatalogMetrics.reset()
-          QueryTest.checkAnswer(sql("SELECT id FROM tbl WHERE p = 1"),
-            Seq(1, 4, 7).map(Row.apply(_)), checkToRDD = false) // avoid analyzing the query twice
-          val expectedCount = if (enablePruning) 1 else 3
-          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == expectedCount)
-        }
-      }
-    }
+  protected def collectPartitionFiltersFn(): PartialFunction[SparkPlan, Seq[Expression]] = {
+    case scan: FileSourceScanExec => scan.partitionFilters
   }
 
   override def getScanExecPartitionSize(plan: SparkPlan): Long = {

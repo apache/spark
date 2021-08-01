@@ -261,7 +261,7 @@ class BooleanOps(DataTypeOps):
                 )
                 nullable = index_ops.spark.nullable
             else:
-                null_str = str(None)
+                null_str = str(pd.NA) if isinstance(self, BooleanExtensionOps) else str(None)
                 casted = F.when(index_ops.spark.column, "True").otherwise("False")
                 scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
                 nullable = False

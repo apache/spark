@@ -1544,18 +1544,27 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             {"a": [1, 2, 3, 4, 5, None, 7], "b": [7, 6, 5, 4, 3, 2, 1]}, index=np.random.rand(7)
         )
         psdf = ps.from_pandas(pdf)
+
         self.assert_eq(psdf.sort_values("b"), pdf.sort_values("b"))
-        self.assert_eq(psdf.sort_values(["b", "a"]), pdf.sort_values(["b", "a"]))
+
+        for ascending in [True, False]:
+            for na_position in ["first", "last"]:
+                self.assert_eq(
+                    psdf.sort_values("a", ascending=ascending, na_position=na_position),
+                    pdf.sort_values("a", ascending=ascending, na_position=na_position),
+                )
+
+        self.assert_eq(psdf.sort_values(["a", "b"]), pdf.sort_values(["a", "b"]))
         self.assert_eq(
-            psdf.sort_values(["b", "a"], ascending=[False, True]),
-            pdf.sort_values(["b", "a"], ascending=[False, True]),
+            psdf.sort_values(["a", "b"], ascending=[False, True]),
+            pdf.sort_values(["a", "b"], ascending=[False, True]),
         )
 
         self.assertRaises(ValueError, lambda: psdf.sort_values(["b", "a"], ascending=[False]))
 
         self.assert_eq(
-            psdf.sort_values(["b", "a"], na_position="first"),
-            pdf.sort_values(["b", "a"], na_position="first"),
+            psdf.sort_values(["a", "b"], na_position="first"),
+            pdf.sort_values(["a", "b"], na_position="first"),
         )
 
         self.assertRaises(ValueError, lambda: psdf.sort_values(["b", "a"], na_position="invalid"))
@@ -1610,6 +1619,11 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         self.assert_eq(psdf.sort_index(ascending=False), pdf.sort_index(ascending=False))
         # Assert sorting NA indices first
         self.assert_eq(psdf.sort_index(na_position="first"), pdf.sort_index(na_position="first"))
+        # Assert sorting descending and NA indices first
+        self.assert_eq(
+            psdf.sort_index(ascending=False, na_position="first"),
+            pdf.sort_index(ascending=False, na_position="first"),
+        )
 
         # Assert sorting inplace
         pserA = pdf.A
@@ -5146,23 +5160,26 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             sys.stdout = prev
 
     def test_explain_hint(self):
-        psdf1 = ps.DataFrame(
-            {"lkey": ["foo", "bar", "baz", "foo"], "value": [1, 2, 3, 5]}, columns=["lkey", "value"]
-        )
-        psdf2 = ps.DataFrame(
-            {"rkey": ["foo", "bar", "baz", "foo"], "value": [5, 6, 7, 8]}, columns=["rkey", "value"]
-        )
-        merged = psdf1.merge(psdf2.spark.hint("broadcast"), left_on="lkey", right_on="rkey")
-        prev = sys.stdout
-        try:
-            out = StringIO()
-            sys.stdout = out
-            merged.spark.explain()
-            actual = out.getvalue().strip()
+        with ps.option_context("compute.default_index_type", "sequence"):
+            psdf1 = ps.DataFrame(
+                {"lkey": ["foo", "bar", "baz", "foo"], "value": [1, 2, 3, 5]},
+                columns=["lkey", "value"],
+            )
+            psdf2 = ps.DataFrame(
+                {"rkey": ["foo", "bar", "baz", "foo"], "value": [5, 6, 7, 8]},
+                columns=["rkey", "value"],
+            )
+            merged = psdf1.merge(psdf2.spark.hint("broadcast"), left_on="lkey", right_on="rkey")
+            prev = sys.stdout
+            try:
+                out = StringIO()
+                sys.stdout = out
+                merged.spark.explain()
+                actual = out.getvalue().strip()
 
-            self.assertTrue("Broadcast" in actual, actual)
-        finally:
-            sys.stdout = prev
+                self.assertTrue("Broadcast" in actual, actual)
+            finally:
+                sys.stdout = prev
 
     def test_mad(self):
         pdf = pd.DataFrame(

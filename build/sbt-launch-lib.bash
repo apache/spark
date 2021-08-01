@@ -119,7 +119,7 @@ get_mem_opts () {
   local mem=${1:-$sbt_default_mem}
   local codecache=128
 
-  echo "-Xms$256m -Xmx${mem}m -XX:ReservedCodeCacheSize=${codecache}m"
+  echo "-Xms256m -Xmx${mem}m -XX:ReservedCodeCacheSize=${codecache}m"
 }
 
 require_arg () {

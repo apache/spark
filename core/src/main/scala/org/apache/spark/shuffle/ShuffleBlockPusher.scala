@@ -33,7 +33,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
-import org.apache.spark.network.shuffle.BlockFetchingListener
+import org.apache.spark.network.shuffle.BlockPushingListener
 import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.shuffle.ShuffleBlockPusher._
@@ -205,11 +205,11 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     val blockIds = request.blocks.map(_._1.toString)
     val remainingBlocks = new HashSet[String]() ++= blockIds
 
-    val blockPushListener = new BlockFetchingListener {
+    val blockPushListener = new BlockPushingListener {
       // Initiating a connection and pushing blocks to a remote shuffle service is always handled by
       // the block-push-threads. We should not initiate the connection creation in the
       // blockPushListener callbacks which are invoked by the netty eventloop because:
-      // 1. TrasportClient.createConnection(...) blocks for connection to be established and it's
+      // 1. TransportClient.createConnection(...) blocks for connection to be established and it's
       // recommended to avoid any blocking operations in the eventloop;
       // 2. The actual connection creation is a task that gets added to the task queue of another
       // eventloop which could have eventloops eventually blocking each other.
@@ -224,12 +224,12 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         })
       }
 
-      override def onBlockFetchSuccess(blockId: String, data: ManagedBuffer): Unit = {
+      override def onBlockPushSuccess(blockId: String, data: ManagedBuffer): Unit = {
         logTrace(s"Push for block $blockId to $address successful.")
         handleResult(PushResult(blockId, null))
       }
 
-      override def onBlockFetchFailure(blockId: String, exception: Throwable): Unit = {
+      override def onBlockPushFailure(blockId: String, exception: Throwable): Unit = {
         // check the message or it's cause to see it needs to be logged.
         if (!errorHandler.shouldLogError(exception)) {
           logTrace(s"Pushing block $blockId to $address failed.", exception)
@@ -332,7 +332,7 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
    * manner to make sure each target location receives shuffle blocks belonging to the same set
    * of partition ranges. 0-length blocks and blocks that are large enough will be skipped.
    *
-   * @param numPartitions sumber of shuffle partitions in the shuffle file
+   * @param numPartitions number of shuffle partitions in the shuffle file
    * @param partitionId map index of the current mapper
    * @param shuffleId shuffleId of current shuffle
    * @param dataFile shuffle data file
