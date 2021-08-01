@@ -179,7 +179,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           Some(UnresolvedFieldPosition(ColumnPosition.after("id")))),
         QualifiedColType(
           None,
-          "x",
+          "y",
           LongType,
           true,
           None,
