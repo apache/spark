@@ -10,6 +10,8 @@ on:
     - cron: '0 4 * * *'
     # branch-3.2
     - cron: '0 7 * * *'
+    # PySpark coverage for master branch
+    - cron: '0 10 * * *'
 
 jobs:
   configure-jobs:
@@ -31,6 +33,10 @@ jobs:
           echo '::set-output name=branch::branch-3.2'
           echo '::set-output name=type::scheduled'
           echo '::set-output name=envs::{"SCALA_PROFILE": "scala2.13"}'
+        elif [ "${{ github.event.schedule }}" = "0 10 * * *" ]; then
+          echo '::set-output name=branch::master'
+          echo '::set-output name=type::pyspark-coverage-scheduled'
+          echo '::set-output name=envs::{"PYSPARK_CODECOV": "true"}'
         else
           echo '::set-output name=branch::master' # Default branch to run on. CHANGE here when a branch is cut out.
           echo '::set-output name=type::regular'
@@ -41,8 +47,11 @@ jobs:
   build:
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }} ${{ matrix.comment }} (JDK ${{ matrix.java }}, ${{ matrix.hadoop }}, ${{ matrix.hive }})"
     needs: configure-jobs
-    # Do not run as scheduled jobs in forked repos
-    if: github.repository == 'apache/spark' || needs.configure-jobs.outputs.type == 'regular'
+    # Run scheduled jobs for Apache Spark only
+    # Run regular jobs for commit in both Apache Spark and forked repository
+    if: >-
+      (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'scheduled')
+      || needs.configure-jobs.outputs.type == 'regular'
     # Ubuntu 20.04 is the latest LTS. The next LTS is 22.04.
     runs-on: ubuntu-20.04
     strategy:
@@ -182,8 +191,12 @@ jobs:
 
   pyspark:
     needs: configure-jobs
-    if: needs.configure-jobs.outputs.type == 'regular'
-    name: "Build modules: ${{ matrix.modules }}"
+    # Run PySpark coverage scheduled jobs for Apache Spark only
+    # Run regular jobs for commit in both Apache Spark and fored repository
+    if: >-
+      (github.repository == 'apache/spark' && needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled')
+      || needs.configure-jobs.outputs.type == 'regular'
+    name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
       image: dongjoon/apache-spark-github-action-image:20210602
@@ -251,11 +264,22 @@ jobs:
         bash miniconda.sh -b -p $HOME/miniconda
     # Run the tests.
     - name: Run tests
+      env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
       run: |
         # TODO(SPARK-36345): Install mlflow>=1.0 and sklearn in Python 3.9 of the base image
         python3.9 -m pip install 'mlflow>=1.0' sklearn
+        # TODO(SPARK-36361): Install coverage in Python 3.9 and PyPy 3 in the base image
+        python3.9 -m pip install coverage
+        pypy3 -m pip install coverage
         export PATH=$PATH:$HOME/miniconda/bin
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
+    - name: Upload coverage to Codecov
+      if: needs.configure-jobs.outputs.type == 'pyspark-coverage-scheduled'
+      uses: codecov/codecov-action@v2
+      with:
+        files: ./python/coverage.xml
+        flags: unittests
+        name: PySpark
     - name: Upload test results to report
       if: always()
       uses: actions/upload-artifact@v2
