@@ -179,7 +179,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
           Some(UnresolvedFieldPosition(ColumnPosition.after("id")))),
         QualifiedColType(
           None,
-          "x",
+          "y",
           LongType,
           true,
           None,
@@ -227,6 +227,28 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     )
   }
 
+  test("SPARK-36372: Adding duplicate columns should not be allowed") {
+    alterTableTest(
+      AlterTableAddColumns(
+        table,
+        Seq(QualifiedColType(
+          Some(UnresolvedFieldName(Seq("point"))),
+          "z",
+          LongType,
+          true,
+          None,
+          None),
+        QualifiedColType(
+          Some(UnresolvedFieldName(Seq("point"))),
+          "Z",
+          LongType,
+          true,
+          None,
+          None))),
+      Seq("Found duplicate column(s) in the user specified columns: `point.z`"),
+      expectErrorOnCaseSensitive = false)
+  }
+
   test("AlterTable: drop column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
@@ -272,10 +294,14 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     }
   }
 
-  private def alterTableTest(alter: AlterTableColumnCommand, error: Seq[String]): Unit = {
+  private def alterTableTest(
+      alter: AlterTableColumnCommand,
+      error: Seq[String],
+      expectErrorOnCaseSensitive: Boolean = true): Unit = {
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
-        if (caseSensitive) {
+        val expectError = if (expectErrorOnCaseSensitive) caseSensitive else !caseSensitive
+        if (expectError) {
           assertAnalysisError(alter, error, caseSensitive)
         } else {
           assertAnalysisSuccess(alter, caseSensitive)
