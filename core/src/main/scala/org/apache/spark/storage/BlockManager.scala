@@ -750,7 +750,7 @@ private[spark] class BlockManager(
    * which will be memory efficient when performing certain operations.
    */
   def getLocalMergedBlockData(
-      blockId: ShuffleBlockId,
+      blockId: ShuffleMergedBlockId,
       dirs: Array[String]): Seq[ManagedBuffer] = {
     shuffleManager.shuffleBlockResolver.getMergedBlockData(blockId, Some(dirs))
   }
@@ -759,7 +759,7 @@ private[spark] class BlockManager(
    * Get the local merged shuffle block meta data for the given block ID.
    */
   def getLocalMergedBlockMeta(
-      blockId: ShuffleBlockId,
+      blockId: ShuffleMergedBlockId,
       dirs: Array[String]): MergedBlockMeta = {
     shuffleManager.shuffleBlockResolver.getMergedBlockMeta(blockId, Some(dirs))
   }
