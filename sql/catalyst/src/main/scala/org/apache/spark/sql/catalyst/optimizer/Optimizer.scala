@@ -521,7 +521,11 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAnyPattern(PROJECT, WINDOW), ruleId) {
     // Eliminate no-op Projects
-    case p @ Project(_, child) if child.sameOutput(p) => child
+    case p @ Project(output, child) if child.sameOutput(p) =>
+      child.transformExpressionsDown {
+        case named: NamedExpression =>
+          named.withName(output.find(_.semanticEquals(named.toAttribute)).getOrElse(named).name)
+      }
 
     // Eliminate no-op Window
     case w: Window if w.windowExpressions.isEmpty => w.child
