@@ -936,7 +936,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           deferredBufs = null;
           throw new RuntimeException(
             ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX + " "
-            + streamId + "to merged shuffle");
+            + streamId + " to merged shuffle");
         }
       }
       isWriting = false;

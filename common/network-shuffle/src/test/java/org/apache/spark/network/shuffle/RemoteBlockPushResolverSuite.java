@@ -319,8 +319,8 @@ public class RemoteBlockPushResolverSuite {
     try {
       stream1.onComplete(stream1.getID());
     } catch (RuntimeException re) {
-      assertEquals("Block shufflePush_0_0_1_0 received after merged shuffle is finalized or stale"
-        + " block push as shuffle blocks of a higher shuffleMergeId for the shuffle is being"
+      assertEquals("Block shufflePush_0_0_1_0 is received after merged shuffle is finalized or"
+        + " stale block push as shuffle blocks of a higher shuffleMergeId for the shuffle is being"
           + " pushed", re.getMessage());
       MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
       validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{9}, new int[][]{{0}});

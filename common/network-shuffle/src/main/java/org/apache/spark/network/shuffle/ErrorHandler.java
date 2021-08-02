@@ -61,7 +61,7 @@ public interface ErrorHandler {
      * not retry pushing the block nor log the exception on the client side.
      */
     public static final String TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX =
-      "received after merged shuffle is finalized or stale block push as shuffle blocks of a"
+      "is received after merged shuffle is finalized or stale block push as shuffle blocks of a"
         + " higher shuffleMergeId for the shuffle is being pushed";
 
     /**
