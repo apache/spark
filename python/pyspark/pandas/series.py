@@ -3164,7 +3164,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             # Falls back to schema inference if it fails to get signature.
             should_infer_schema = True
 
-        apply_each = wraps(func)(lambda s: s.apply(func, args=args, **kwds))
+        apply_each = lambda s: s.apply(func, args=args, **kwds)
 
         if should_infer_schema:
             return self.pandas_on_spark._transform_batch(apply_each, None)
