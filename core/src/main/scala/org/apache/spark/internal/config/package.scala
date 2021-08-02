@@ -1372,7 +1372,7 @@ package object config {
     ConfigBuilder("spark.shuffle.checksum.enabled")
       .doc("Whether to calculate the checksum of shuffle output. If enabled, Spark will try " +
         "its best to tell if shuffle data corruption is caused by network or disk or others.")
-      .version("3.3.0")
+      .version("3.2.0")
       .booleanConf
       .createWithDefault(true)
 
@@ -1380,7 +1380,7 @@ package object config {
     ConfigBuilder("spark.shuffle.checksum.algorithm")
       .doc("The algorithm used to calculate the checksum. Currently, it only supports" +
         " built-in algorithms of JDK.")
-      .version("3.3.0")
+      .version("3.2.0")
       .stringConf
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValue(Set("ADLER32", "CRC32").contains, "Shuffle checksum algorithm " +
