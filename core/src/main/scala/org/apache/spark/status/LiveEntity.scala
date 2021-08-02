@@ -862,7 +862,7 @@ private class RDDPartitionSeq extends Seq[v1.RDDPartitionInfo] {
           current = tmp.next
           tmp.value
         } else {
-          throw new NoSuchElementException()
+          throw SparkCoreErrors.noSuchElementException()
         }
       }
     }

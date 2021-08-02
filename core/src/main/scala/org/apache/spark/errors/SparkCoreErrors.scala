@@ -169,10 +169,6 @@ object SparkCoreErrors {
     new IndexOutOfBoundsException(idx.toString)
   }
 
-  def noSuchElement(): Throwable = {
-    new NoSuchElementException()
-  }
-
   def notAuthorizedUser(user: String): Throwable = {
     new ForbiddenException(s"""user "$user" is not authorized""")
   }
@@ -218,7 +214,7 @@ object SparkCoreErrors {
   }
 
   def notFoundAppId(appId: String): Throwable = {
-    new ServiceUnavailable(s"Event logs are not available for app: $appId.")
+    new NotFoundException("unknown app: " + appId)
   }
 
   def notFoundAppIddAndAttemptId(appId: String, attemptId: String): Throwable = {

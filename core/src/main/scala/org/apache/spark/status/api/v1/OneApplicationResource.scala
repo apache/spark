@@ -155,7 +155,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
         .build()
     } catch {
       case NonFatal(_) =>
-        throw SparkCoreErrors.notFoundAppId(appId)
+        throw SparkCoreErrors.serviceUnavailableError(appId)
     }
   }
 
