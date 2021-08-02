@@ -2954,7 +2954,8 @@ abstract class JsonSuite
     // Permissive modes should proceed parsing malformed records (null).
     // Here, since an array fails to parse in the middle, we will return one row.
     checkAnswer(
-      spark.read.json(Seq("""[{"a": "str"}, null, {"a": "str"}]""").toDS),
+      spark.read.option("mode", "permissive")
+        .json(Seq("""[{"a": "str"}, null, {"a": "str"}]""").toDS),
       Row(null) :: Nil)
   }
 }
