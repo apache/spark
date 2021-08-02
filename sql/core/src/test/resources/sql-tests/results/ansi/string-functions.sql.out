@@ -74,7 +74,7 @@ select left(null, -2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'substring(NULL, 1, -2)' due to data type mismatch: argument 1 requires (string or binary) type, however, 'NULL' is of null type.; line 1 pos 7
+cannot resolve 'substring(NULL, 1, -2)' due to data type mismatch: argument 1 requires (string or binary) type, however, 'NULL' is of void type.; line 1 pos 7
 
 
 -- !query
@@ -101,7 +101,7 @@ select right(null, -2)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'substring(NULL, (- -2), 2147483647)' due to data type mismatch: argument 1 requires (string or binary) type, however, 'NULL' is of null type.; line 1 pos 7
+cannot resolve 'substring(NULL, (- -2), 2147483647)' due to data type mismatch: argument 1 requires (string or binary) type, however, 'NULL' is of void type.; line 1 pos 7
 
 
 -- !query
