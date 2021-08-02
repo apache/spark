@@ -5,9 +5,9 @@ and message parameters rather than an arbitrary error message.
 
 ## Usage
 
-1. Check if an appropriate error class already exists in `error-class.json`.
+1. Check if an appropriate error class already exists in `error-classes.json`.
    If true, skip to step 3. Otherwise, continue to step 2.
-2. Add a new class to `error-class.json`; keep in mind the invariants below.
+2. Add a new class to `error-classes.json`; keep in mind the invariants below.
 3. Check if the exception type already extends `SparkThrowable`.
    If true, skip to step 5. Otherwise, continue to step 4.
 4. Mix `SparkThrowable` into the exception.
@@ -21,7 +21,7 @@ Throw with arbitrary error message:
 
 ### After
 
-`error-class.json`
+`error-classes.json`
 
     "PROBLEM_BECAUSE": {
       "message": ["Problem %s because %s"],

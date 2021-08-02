@@ -153,7 +153,7 @@ class EncoderResolutionSuite extends PlanTest {
     val fromRow = encoder.resolveAndBind(attrs).createDeserializer()
 
     // If no null values appear, it should work fine
-    fromRow(InternalRow(new GenericArrayData(Array(1, 2)))) 
+    fromRow(InternalRow(new GenericArrayData(Array(1, 2))))
 
     // If there is null value, it should throw runtime exception
     val e = intercept[RuntimeException] {
