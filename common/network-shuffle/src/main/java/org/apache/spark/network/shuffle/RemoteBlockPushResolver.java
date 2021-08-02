@@ -1154,7 +1154,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     @Override
     public String toString() {
-      return String.format("%s shuffleId %s shuffleMergeId %s reduceId %s",
+      return String.format("Application %s shuffleId %s shuffleMergeId %s reduceId %s",
         appId, shuffleId, shuffleMergeId, reduceId);
     }
 
