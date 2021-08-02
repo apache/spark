@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, CaseWhen, Expression, If,
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CASE_WHEN, IF}
 import org.apache.spark.sql.types.BooleanType
 
 /**
@@ -43,7 +44,8 @@ import org.apache.spark.sql.types.BooleanType
  */
 object SimplifyConditionalsInPredicate extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
+    _.containsAnyPattern(CASE_WHEN, IF), ruleId) {
     case f @ Filter(cond, _) => f.copy(condition = simplifyConditional(cond))
     case j @ Join(_, _, _, Some(cond), _) => j.copy(condition = Some(simplifyConditional(cond)))
     case d @ DeleteFromTable(_, Some(cond)) => d.copy(condition = Some(simplifyConditional(cond)))

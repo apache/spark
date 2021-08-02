@@ -3,103 +3,103 @@
 -- !query schema
 struct<i_category:string,i_brand:string,cc_name:string,d_year:int,d_moy:int,avg_monthly_sales:decimal(21,6),sum_sales:decimal(17,2),psum:decimal(17,2),nsum:decimal(17,2)>
 -- !query output
-Shoes                                             	importoedu pack #x                                	North Midwest	1999	3	7101.780000	2518.33	5264.86	3066.29
-Men                                               	edu packimporto #x                                	NY Metro	1999	4	7659.241667	3227.88	4759.01	4664.83
-Music                                             	amalgscholar #x                                   	Mid Atlantic	1999	1	6659.493333	2291.60	14178.45	4267.08
-Men                                               	edu packimporto #x                                	NY Metro	1999	7	7659.241667	3327.90	4566.86	11656.06
-Men                                               	importoimporto #x                                 	North Midwest	1999	5	7640.491667	3327.30	3534.12	5530.63
-Music                                             	edu packscholar #x                                	Mid Atlantic	1999	1	8223.719167	3965.88	14493.32	4943.68
-Women                                             	amalgamalg #x                                     	Mid Atlantic	1999	2	7116.328333	2872.43	4945.20	2974.14
-Music                                             	exportischolar #x                                 	NY Metro	1999	3	7047.803333	2832.46	4308.87	3265.21
-Children                                          	importoexporti #x                                 	NY Metro	1999	4	6809.595833	2648.85	5318.02	4111.73
-Children                                          	importoexporti #x                                 	Mid Atlantic	1999	5	6832.821667	2687.17	3971.76	4235.84
-Music                                             	edu packscholar #x                                	North Midwest	1999	1	8078.690000	3934.06	17002.72	4244.46
-Women                                             	amalgamalg #x                                     	Mid Atlantic	1999	3	7116.328333	2974.14	2872.43	4329.06
-Music                                             	edu packscholar #x                                	Mid Atlantic	1999	4	8223.719167	4091.54	5753.94	4797.32
-Men                                               	importoimporto #x                                 	NY Metro	1999	2	7530.997500	3406.53	5839.59	6125.77
-Men                                               	edu packimporto #x                                	North Midwest	1999	3	7852.627500	3737.23	4465.92	3831.92
-Shoes                                             	edu packedu pack #x                               	North Midwest	1999	5	6583.305000	2474.01	3684.23	4335.58
-Men                                               	importoimporto #x                                 	North Midwest	1999	4	7640.491667	3534.12	4291.30	3327.30
-Children                                          	amalgexporti #x                                   	NY Metro	1999	7	6518.750833	2430.77	3203.23	7867.12
-Music                                             	amalgscholar #x                                   	North Midwest	1999	5	6876.880833	2816.26	4637.07	3528.80
-Shoes                                             	importoedu pack #x                                	North Midwest	1999	4	7101.780000	3066.29	2518.33	5005.85
-Shoes                                             	edu packedu pack #x                               	NY Metro	1999	2	6421.792500	2394.57	3149.35	4472.43
-Music                                             	edu packscholar #x                                	NY Metro	1999	7	7966.579167	3944.74	5030.35	10791.61
-Men                                               	edu packimporto #x                                	North Midwest	1999	4	7852.627500	3831.92	3737.23	4353.90
-Shoes                                             	importoedu pack #x                                	Mid Atlantic	1999	3	6959.934167	2951.09	4142.26	3271.07
-Men                                               	amalgimporto #x                                   	NY Metro	1999	7	7082.129167	3075.18	5231.88	8953.66
-Shoes                                             	amalgedu pack #x                                  	NY Metro	1999	7	6904.689167	2902.26	4942.02	8793.71
-Men                                               	importoimporto #x                                 	Mid Atlantic	1999	1	7357.060833	3356.15	11222.19	3770.17
-Children                                          	exportiexporti #x                                 	NY Metro	1999	7	7698.340833	3714.25	4686.40	9752.38
-Children                                          	exportiexporti #x                                 	North Midwest	1999	3	7530.375000	3586.50	3960.74	3916.86
-Children                                          	amalgexporti #x                                   	NY Metro	1999	4	6518.750833	2587.68	4177.93	3342.60
-Music                                             	edu packscholar #x                                	North Midwest	1999	5	8078.690000	4148.83	5184.39	5483.81
-Children                                          	exportiexporti #x                                 	Mid Atlantic	1999	3	7245.285000	3350.65	3876.83	5869.66
-Children                                          	exportiexporti #x                                 	North Midwest	1999	1	7530.375000	3645.95	13367.51	3960.74
-Shoes                                             	exportiedu pack #x                                	Mid Atlantic	1999	2	6885.320833	3013.95	4139.82	4328.03
-Children                                          	importoexporti #x                                 	North Midwest	1999	7	6690.091667	2827.63	3965.68	7733.16
-Music                                             	edu packscholar #x                                	North Midwest	1999	2	8078.690000	4244.46	3934.06	4448.50
-Men                                               	edu packimporto #x                                	Mid Atlantic	1999	1	7912.537500	4082.68	14333.30	4383.51
-Children                                          	exportiexporti #x                                 	NY Metro	1999	3	7698.340833	3883.01	4723.97	4590.03
-Music                                             	exportischolar #x                                 	Mid Atlantic	1999	2	7243.994167	3430.04	3662.97	3617.09
-Music                                             	exportischolar #x                                 	NY Metro	1999	1	7047.803333	3237.56	15805.49	4308.87
-Music                                             	exportischolar #x                                 	NY Metro	1999	4	7047.803333	3265.21	2832.46	3885.17
-Music                                             	exportischolar #x                                 	North Midwest	1999	2	7593.929167	3821.24	4748.20	4271.45
-Men                                               	edu packimporto #x                                	Mid Atlantic	1999	4	7912.537500	4144.67	4954.05	5070.06
-Music                                             	amalgscholar #x                                   	NY Metro	1999	4	6926.060833	3165.20	4688.23	4286.05
-Shoes                                             	amalgedu pack #x                                  	Mid Atlantic	1999	3	6642.085833	2928.82	3648.57	3892.32
-Music                                             	edu packscholar #x                                	NY Metro	1999	3	7966.579167	4269.89	4384.51	4452.73
-Men                                               	amalgimporto #x                                   	NY Metro	1999	2	7082.129167	3392.25	4549.47	3653.84
-Shoes                                             	importoedu pack #x                                	Mid Atlantic	1999	4	6959.934167	3271.07	2951.09	4231.88
-Music                                             	amalgscholar #x                                   	North Midwest	1999	3	6876.880833	3190.36	3536.29	4637.07
-Women                                             	importoamalg #x                                   	Mid Atlantic	1999	1	6479.298333	2804.94	13543.31	3515.21
-Shoes                                             	amalgedu pack #x                                  	North Midwest	1999	6	6829.956667	3178.20	4120.60	5910.98
-Men                                               	amalgimporto #x                                   	NY Metro	1999	4	7082.129167	3450.11	3653.84	5965.16
-Women                                             	edu packamalg #x                                  	NY Metro	1999	4	6608.485833	2976.95	3489.35	3812.22
-Music                                             	edu packscholar #x                                	North Midwest	1999	3	8078.690000	4448.50	4244.46	5184.39
-Music                                             	amalgscholar #x                                   	Mid Atlantic	1999	7	6659.493333	3031.62	4214.81	9493.69
-Music                                             	exportischolar #x                                 	Mid Atlantic	1999	3	7243.994167	3617.09	3430.04	3871.67
-Men                                               	importoimporto #x                                 	NY Metro	1999	7	7530.997500	3913.80	4405.46	7859.96
-Children                                          	exportiexporti #x                                 	North Midwest	1999	4	7530.375000	3916.86	3586.50	4747.06
-Children                                          	importoexporti #x                                 	NY Metro	1999	2	6809.595833	3200.10	4421.85	5318.02
-Men                                               	importoimporto #x                                 	Mid Atlantic	1999	2	7357.060833	3770.17	3356.15	5114.32
-Children                                          	amalgexporti #x                                   	North Midwest	1999	2	6557.577500	2975.00	3418.40	5079.56
-Music                                             	edu packscholar #x                                	NY Metro	1999	2	7966.579167	4384.51	5279.09	4269.89
-Music                                             	exportischolar #x                                 	Mid Atlantic	1999	1	7243.994167	3662.97	14285.88	3430.04
-Children                                          	exportiexporti #x                                 	North Midwest	1999	2	7530.375000	3960.74	3645.95	3586.50
-Men                                               	amalgimporto #x                                   	Mid Atlantic	1999	1	6611.335833	3066.19	11053.20	3203.24
-Women                                             	edu packamalg #x                                  	Mid Atlantic	1999	4	6061.210833	2522.22	2674.89	3975.90
-Shoes                                             	exportiedu pack #x                                	North Midwest	1999	4	7045.164167	3509.17	5252.01	3987.99
-Men                                               	edu packimporto #x                                	North Midwest	1999	1	7852.627500	4318.23	16397.10	4465.92
-Men                                               	edu packimporto #x                                	Mid Atlantic	1999	2	7912.537500	4383.51	4082.68	4954.05
-Music                                             	edu packscholar #x                                	NY Metro	1999	4	7966.579167	4452.73	4269.89	5476.13
-Children                                          	importoexporti #x                                 	Mid Atlantic	1999	1	6832.821667	3330.21	13097.88	3496.46
-Men                                               	edu packimporto #x                                	North Midwest	1999	5	7852.627500	4353.90	3831.92	5689.03
-Women                                             	exportiamalg #x                                   	Mid Atlantic	1999	2	6013.088333	2536.08	3406.41	3718.65
-Music                                             	exportischolar #x                                 	North Midwest	1999	4	7593.929167	4121.47	4271.45	5234.85
-Music                                             	amalgscholar #x                                   	North Midwest	1999	1	6876.880833	3406.89	13714.11	3536.29
-Men                                               	importoimporto #x                                 	NY Metro	1999	4	7530.997500	4062.17	6125.77	4715.58
-Men                                               	exportiimporto #x                                 	North Midwest	1999	5	5797.382500	2330.52	2965.11	2842.02
-Children                                          	edu packexporti #x                                	Mid Atlantic	1999	3	6100.643333	2633.95	3676.43	3130.51
-Men                                               	amalgimporto #x                                   	North Midwest	1999	1	6713.820000	3268.58	13596.45	4098.03
-Women                                             	exportiamalg #x                                   	NY Metro	1999	4	6031.042500	2588.60	3554.29	3915.46
-Men                                               	amalgimporto #x                                   	NY Metro	1999	3	7082.129167	3653.84	3392.25	3450.11
-Music                                             	edu packscholar #x                                	Mid Atlantic	1999	5	8223.719167	4797.32	4091.54	5028.71
-Children                                          	exportiexporti #x                                 	North Midwest	1999	6	7530.375000	4104.53	4747.06	4586.73
-Women                                             	importoamalg #x                                   	NY Metro	1999	4	6352.682500	2928.62	3718.55	3387.14
-Men                                               	edu packimporto #x                                	NY Metro	1999	2	7659.241667	4246.37	4489.63	4759.01
-Shoes                                             	edu packedu pack #x                               	Mid Atlantic	1999	3	6578.785833	3166.49	4213.93	4376.74
-Shoes                                             	amalgedu pack #x                                  	North Midwest	1999	4	6829.956667	3417.69	3722.75	4120.60
-Women                                             	exportiamalg #x                                   	North Midwest	1999	3	6171.544167	2760.78	3853.84	3125.47
-Men                                               	amalgimporto #x                                   	Mid Atlantic	1999	2	6611.335833	3203.24	3066.19	4613.61
-Men                                               	edu packimporto #x                                	North Midwest	1999	2	7852.627500	4465.92	4318.23	3737.23
-Women                                             	edu packamalg #x                                  	Mid Atlantic	1999	3	6061.210833	2674.89	3376.95	2522.22
-Music                                             	exportischolar #x                                 	NY Metro	1999	6	7047.803333	3667.60	3885.17	5088.70
-Children                                          	importoexporti #x                                 	North Midwest	1999	3	6690.091667	3310.89	3486.35	5014.28
-Music                                             	exportischolar #x                                 	Mid Atlantic	1999	4	7243.994167	3871.67	3617.09	4628.08
-Men                                               	importoimporto #x                                 	North Midwest	1999	2	7640.491667	4270.44	4931.98	4291.30
-Children                                          	exportiexporti #x                                 	Mid Atlantic	1999	2	7245.285000	3876.83	4799.92	3350.65
-Shoes                                             	exportiedu pack #x                                	North Midwest	1999	7	7045.164167	3684.37	4372.20	8403.23
-Men                                               	importoimporto #x                                 	North Midwest	1999	3	7640.491667	4291.30	4270.44	3534.12
-Men                                               	amalgimporto #x                                   	Mid Atlantic	1999	4	6611.335833	3262.24	4613.61	4531.38
-Music                                             	amalgscholar #x                                   	North Midwest	1999	6	6876.880833	3528.80	2816.26	4750.85
+Music                                             	amalgscholar #x                                   	Mid Atlantic	1999	2	6662.669167	1961.57	4348.07	3386.25
+Shoes                                             	amalgedu pack #x                                  	North Midwest	1999	2	6493.071667	2044.05	4348.88	3443.20
+Shoes                                             	exportiedu pack #x                                	Mid Atlantic	1999	3	7416.141667	2980.15	4654.22	5157.83
+Children                                          	importoexporti #x                                 	North Midwest	1999	4	6577.143333	2152.15	3291.07	3659.32
+Shoes                                             	importoedu pack #x                                	NY Metro	1999	6	6926.960833	2523.33	4014.93	4254.99
+Men                                               	importoimporto #x                                 	North Midwest	1999	2	6707.315833	2449.22	4311.11	3583.31
+Men                                               	amalgimporto #x                                   	North Midwest	1999	4	7098.680833	2965.42	3526.45	4923.53
+Men                                               	exportiimporto #x                                 	NY Metro	1999	2	7146.240000	3013.99	6183.83	5091.17
+Children                                          	amalgexporti #x                                   	North Midwest	1999	4	6364.467500	2270.79	3330.83	3817.50
+Men                                               	edu packimporto #x                                	North Midwest	1999	4	7386.333333	3329.74	3488.01	4860.20
+Men                                               	edu packimporto #x                                	North Midwest	1999	2	7386.333333	3347.65	4007.40	3488.01
+Music                                             	edu packscholar #x                                	NY Metro	1999	7	6639.040000	2653.55	4219.52	10071.22
+Music                                             	amalgscholar #x                                   	North Midwest	1999	4	6719.304167	2739.33	3690.54	3872.98
+Men                                               	importoimporto #x                                 	NY Metro	1999	3	6610.034167	2645.24	3661.14	4282.01
+Music                                             	exportischolar #x                                 	NY Metro	1999	2	7043.051667	3115.83	4457.95	5258.95
+Men                                               	edu packimporto #x                                	North Midwest	1999	3	7386.333333	3488.01	3347.65	3329.74
+Shoes                                             	exportiedu pack #x                                	North Midwest	1999	3	7255.790000	3411.07	4194.64	3624.85
+Women                                             	exportiamalg #x                                   	Mid Atlantic	1999	2	5646.671667	1809.52	4198.70	2172.85
+Music                                             	importoscholar #x                                 	Mid Atlantic	1999	6	6279.081667	2456.98	4361.44	4256.24
+Children                                          	importoexporti #x                                 	Mid Atlantic	1999	7	6786.750000	2978.82	3942.59	7809.22
+Music                                             	exportischolar #x                                 	North Midwest	1999	2	7041.705833	3245.77	3608.31	4127.40
+Shoes                                             	importoedu pack #x                                	Mid Atlantic	1999	2	6864.320833	3104.48	3135.52	3606.28
+Shoes                                             	importoedu pack #x                                	Mid Atlantic	1999	1	6864.320833	3135.52	14580.30	3104.48
+Children                                          	edu packexporti #x                                	Mid Atlantic	1999	5	6511.800833	2785.92	3956.90	3906.63
+Women                                             	amalgamalg #x                                     	Mid Atlantic	1999	2	6480.683333	2769.69	3353.67	3876.51
+Men                                               	exportiimporto #x                                 	NY Metro	1999	5	7146.240000	3440.57	3561.11	3971.13
+Women                                             	importoamalg #x                                   	NY Metro	1999	3	6512.794167	2808.28	3789.51	4335.27
+Men                                               	amalgimporto #x                                   	NY Metro	1999	2	6720.550000	3018.90	4328.03	3810.74
+Shoes                                             	exportiedu pack #x                                	North Midwest	1999	7	7255.790000	3557.87	4937.98	9496.49
+Music                                             	exportischolar #x                                 	Mid Atlantic	1999	5	6791.260833	3096.02	3918.04	3801.90
+Men                                               	exportiimporto #x                                 	North Midwest	1999	1	7343.719167	3652.72	13689.13	3984.13
+Men                                               	importoimporto #x                                 	North Midwest	1999	5	6707.315833	3030.18	4977.33	4620.75
+Children                                          	exportiexporti #x                                 	NY Metro	1999	2	6386.880833	2717.07	4809.11	3355.48
+Men                                               	amalgimporto #x                                   	North Midwest	1999	2	7098.680833	3440.27	5293.69	3526.45
+Men                                               	importoimporto #x                                 	NY Metro	1999	5	6610.034167	2954.71	4282.01	3166.43
+Shoes                                             	exportiedu pack #x                                	North Midwest	1999	4	7255.790000	3624.85	3411.07	5169.09
+Men                                               	exportiimporto #x                                 	North Midwest	1999	5	7343.719167	3727.75	3729.62	4580.93
+Men                                               	exportiimporto #x                                 	North Midwest	1999	4	7343.719167	3729.62	4033.37	3727.75
+Music                                             	edu packscholar #x                                	North Midwest	1999	2	6489.175000	2875.98	4299.82	4028.97
+Men                                               	edu packimporto #x                                	NY Metro	1999	1	7202.242500	3614.07	15582.63	4234.79
+Music                                             	importoscholar #x                                 	North Midwest	1999	2	5816.271667	2229.79	2919.29	4298.41
+Men                                               	exportiimporto #x                                 	NY Metro	1999	4	7146.240000	3561.11	5091.17	3440.57
+Shoes                                             	exportiedu pack #x                                	NY Metro	1999	7	7073.462500	3493.41	4534.31	8701.59
+Music                                             	exportischolar #x                                 	Mid Atlantic	1999	3	6791.260833	3218.13	3847.87	3918.04
+Shoes                                             	edu packedu pack #x                               	NY Metro	1999	4	6203.331667	2631.02	4424.18	4186.85
+Men                                               	amalgimporto #x                                   	North Midwest	1999	3	7098.680833	3526.45	3440.27	2965.42
+Men                                               	edu packimporto #x                                	NY Metro	1999	3	7202.242500	3639.93	4234.79	4016.25
+Children                                          	amalgexporti #x                                   	North Midwest	1999	2	6364.467500	2825.09	4111.08	3330.83
+Shoes                                             	edu packedu pack #x                               	North Midwest	1999	2	6464.239167	2928.99	4233.86	3840.97
+Shoes                                             	amalgedu pack #x                                  	North Midwest	1999	4	6493.071667	2962.20	3443.20	4212.60
+Music                                             	importoscholar #x                                 	NY Metro	1999	4	5707.844167	2179.41	3789.16	4317.53
+Shoes                                             	exportiedu pack #x                                	Mid Atlantic	1999	1	7416.141667	3892.54	14170.68	4654.22
+Women                                             	importoamalg #x                                   	NY Metro	1999	5	6512.794167	2991.07	4335.27	4624.86
+Music                                             	exportischolar #x                                 	NY Metro	1999	4	7043.051667	3521.99	5258.95	4135.21
+Women                                             	edu packamalg #x                                  	Mid Atlantic	1999	2	6354.045833	2836.23	3719.67	3527.07
+Music                                             	amalgscholar #x                                   	NY Metro	1999	3	6123.475000	2617.39	3080.43	4919.93
+Shoes                                             	amalgedu pack #x                                  	Mid Atlantic	1999	7	6674.896667	3178.12	3342.98	8050.81
+Men                                               	amalgimporto #x                                   	Mid Atlantic	1999	5	6618.534167	3127.28	4291.66	4669.62
+Women                                             	amalgamalg #x                                     	North Midwest	1999	6	6874.250000	3387.53	4798.69	4329.48
+Women                                             	exportiamalg #x                                   	Mid Atlantic	1999	3	5646.671667	2172.85	1809.52	4461.31
+Children                                          	edu packexporti #x                                	NY Metro	1999	2	6112.954167	2641.54	3567.58	3196.45
+Children                                          	amalgexporti #x                                   	NY Metro	1999	5	6294.100833	2834.48	3317.60	3803.79
+Women                                             	edu packamalg #x                                  	NY Metro	1999	5	6027.880000	2575.81	2750.96	4459.01
+Music                                             	exportischolar #x                                 	North Midwest	1999	6	7041.705833	3589.97	4134.03	4892.26
+Music                                             	exportischolar #x                                 	North Midwest	1999	4	7041.705833	3593.86	4127.40	4134.03
+Men                                               	importoimporto #x                                 	NY Metro	1999	6	6610.034167	3166.43	2954.71	3673.39
+Music                                             	exportischolar #x                                 	North Midwest	1999	1	7041.705833	3608.31	15046.54	3245.77
+Music                                             	edu packscholar #x                                	Mid Atlantic	1999	2	6602.385000	3173.44	3434.91	3929.40
+Music                                             	amalgscholar #x                                   	NY Metro	1999	6	6123.475000	2699.75	4038.47	3330.87
+Children                                          	importoexporti #x                                 	Mid Atlantic	1999	4	6786.750000	3366.25	3847.60	4259.57
+Men                                               	edu packimporto #x                                	Mid Atlantic	1999	1	7230.493333	3811.64	14668.93	4497.31
+Shoes                                             	importoedu pack #x                                	Mid Atlantic	1999	5	6864.320833	3449.62	3869.15	3531.93
+Children                                          	edu packexporti #x                                	North Midwest	1999	2	6739.498333	3328.01	4986.50	3623.32
+Children                                          	importoexporti #x                                 	Mid Atlantic	1999	1	6786.750000	3376.55	12504.93	5018.22
+Children                                          	edu packexporti #x                                	NY Metro	1999	7	6112.954167	2711.04	3254.04	9465.10
+Shoes                                             	importoedu pack #x                                	North Midwest	1999	3	6588.741667	3187.25	4283.21	3212.76
+Men                                               	importoimporto #x                                 	Mid Atlantic	1999	3	6702.415000	3310.55	3981.06	4901.56
+Men                                               	edu packimporto #x                                	North Midwest	1999	1	7386.333333	4007.40	14005.45	3347.65
+Shoes                                             	importoedu pack #x                                	North Midwest	1999	4	6588.741667	3212.76	3187.25	3974.78
+Shoes                                             	edu packedu pack #x                               	NY Metro	1999	6	6203.331667	2835.78	4186.85	3192.53
+Men                                               	exportiimporto #x                                 	North Midwest	1999	2	7343.719167	3984.13	3652.72	4033.37
+Men                                               	amalgimporto #x                                   	NY Metro	1999	4	6720.550000	3364.32	3810.74	4333.58
+Children                                          	edu packexporti #x                                	North Midwest	1999	4	6739.498333	3389.03	3623.32	3605.25
+Shoes                                             	importoedu pack #x                                	Mid Atlantic	1999	6	6864.320833	3531.93	3449.62	4414.17
+Shoes                                             	amalgedu pack #x                                  	Mid Atlantic	1999	6	6674.896667	3342.98	4458.26	3178.12
+Children                                          	edu packexporti #x                                	Mid Atlantic	1999	2	6511.800833	3185.28	3581.75	3410.75
+Children                                          	amalgexporti #x                                   	Mid Atlantic	1999	4	6854.405833	3541.62	3854.33	3938.42
+Men                                               	exportiimporto #x                                 	North Midwest	1999	3	7343.719167	4033.37	3984.13	3729.62
+Men                                               	amalgimporto #x                                   	Mid Atlantic	1999	3	6618.534167	3313.62	4044.36	4291.66
+Shoes                                             	exportiedu pack #x                                	Mid Atlantic	1999	7	7416.141667	4121.24	4239.08	8658.42
+Women                                             	importoamalg #x                                   	Mid Atlantic	1999	6	6395.326667	3102.55	4234.22	3650.03
+Children                                          	importoexporti #x                                 	North Midwest	1999	3	6577.143333	3291.07	3773.61	2152.15
+Women                                             	edu packamalg #x                                  	NY Metro	1999	4	6027.880000	2750.96	3199.35	2575.81
+Music                                             	amalgscholar #x                                   	Mid Atlantic	1999	3	6662.669167	3386.25	1961.57	4799.18
+Men                                               	amalgimporto #x                                   	North Midwest	1999	6	7098.680833	3834.90	4923.53	4115.57
+Shoes                                             	importoedu pack #x                                	Mid Atlantic	1999	3	6864.320833	3606.28	3104.48	3869.15
+Music                                             	exportischolar #x                                 	NY Metro	1999	6	7043.051667	3793.48	4135.21	5006.69
+Shoes                                             	edu packedu pack #x                               	Mid Atlantic	1999	1	6711.753333	3473.10	15060.83	4085.86
+Men                                               	exportiimporto #x                                 	Mid Atlantic	1999	1	7419.459167	4188.88	16358.86	4366.77
+Women                                             	amalgamalg #x                                     	NY Metro	1999	2	6362.709167	3137.03	4180.91	3181.26

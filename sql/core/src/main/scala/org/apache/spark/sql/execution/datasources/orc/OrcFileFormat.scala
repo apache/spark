@@ -32,7 +32,6 @@ import org.apache.orc.mapred.OrcStruct
 import org.apache.orc.mapreduce._
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -43,21 +42,6 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 private[sql] object OrcFileFormat {
-  private def checkFieldName(name: String): Unit = {
-    try {
-      TypeDescription.fromString(s"struct<`$name`:int>")
-    } catch {
-      case _: IllegalArgumentException =>
-        throw new AnalysisException(
-          s"""Column name "$name" contains invalid character(s).
-             |Please use alias to rename it.
-           """.stripMargin.split("\n").mkString(" ").trim)
-    }
-  }
-
-  def checkFieldNames(names: Seq[String]): Unit = {
-    names.foreach(checkFieldName)
-  }
 
   def getQuotedSchemaString(dataType: DataType): String = dataType match {
     case _: AtomicType => dataType.catalogString
@@ -215,6 +199,8 @@ class OrcFileFormat
           "[BUG] requested column IDs do not match required schema")
         val taskConf = new Configuration(conf)
 
+        val includeColumns = requestedColIds.filter(_ != -1).sorted.mkString(",")
+        taskConf.set(OrcConf.INCLUDE_COLUMNS.getAttribute, includeColumns)
         val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
         val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
         val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
@@ -273,5 +259,14 @@ class OrcFileFormat
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
 
     case _ => false
+  }
+
+  override def supportFieldName(name: String): Boolean = {
+    try {
+      TypeDescription.fromString(s"struct<`$name`:int>")
+      true
+    } catch {
+      case _: IllegalArgumentException => false
+    }
   }
 }

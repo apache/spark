@@ -836,7 +836,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       Files.write(file.toPath, "test_file1".getBytes)
       val jarFile = new File(dir, "test file.jar")
       TestUtils.createJar(Seq(file), jarFile)
-      sql(s"ADD JAR ${jarFile.getAbsolutePath}")
+      sql(s"ADD JAR '${jarFile.getAbsolutePath}'")
       assert(sql("LIST JARS").
         filter(_.getString(0).contains(s"${jarFile.getName}".replace(" ", "%20"))).count() > 0)
     }
@@ -964,6 +964,104 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
     }
   }
 
+  test("SPARK-35105: ADD FILES command with multiple files") {
+    withTempDir { dir =>
+      val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
+      val file2 = File.createTempFile("someprefix2", "somesuffix 2", dir)
+      val file3 = File.createTempFile("someprefix3", "somesuffix 3", dir)
+      val file4 = File.createTempFile("someprefix4", "somesuffix4", dir)
+
+      Files.write(file1.toPath, "file1".getBytes)
+      Files.write(file2.toPath, "file2".getBytes)
+      Files.write(file3.toPath, "file3".getBytes)
+      Files.write(file4.toPath, "file3".getBytes)
+
+      sql(s"ADD FILE ${file1.getAbsolutePath} '${file2.getAbsoluteFile}'")
+      sql(s"""ADD FILES "${file3.getAbsolutePath}" ${file4.getAbsoluteFile}""")
+      val listFiles = sql(s"LIST FILES ${file1.getAbsolutePath} " +
+        s"'${file2.getAbsolutePath}' '${file3.getAbsolutePath}' ${file4.getAbsolutePath}")
+      assert(listFiles.count === 4)
+      assert(listFiles.filter(_.getString(0).contains(file1.getName)).count() === 1)
+      assert(listFiles.filter(
+        _.getString(0).contains(file2.getName.replace(" ", "%20"))).count() === 1)
+      assert(listFiles.filter(
+        _.getString(0).contains(file3.getName.replace(" ", "%20"))).count() === 1)
+      assert(listFiles.filter(_.getString(0).contains(file4.getName)).count() === 1)
+    }
+  }
+
+  test("SPARK-35105: ADD JARS command with multiple files") {
+    withTempDir { dir =>
+      val file1 = new File(dir, "test1.txt")
+      val file2 = new File(dir, "test2.txt")
+      val file3 = new File(dir, "test3.txt")
+      val file4 = new File(dir, "test4.txt")
+
+      Files.write(file1.toPath, "file1".getBytes)
+      Files.write(file2.toPath, "file2".getBytes)
+      Files.write(file3.toPath, "file3".getBytes)
+      Files.write(file4.toPath, "file4".getBytes)
+
+      val jarFile1 = File.createTempFile("someprefix1", "somesuffix 1", dir)
+      val jarFile2 = File.createTempFile("someprefix2", "somesuffix2", dir)
+      val jarFile3 = File.createTempFile("someprefix3", "somesuffix3", dir)
+      val jarFile4 = File.createTempFile("someprefix4", "somesuffix 4", dir)
+
+      TestUtils.createJar(Seq(file1), jarFile1)
+      TestUtils.createJar(Seq(file2), jarFile2)
+      TestUtils.createJar(Seq(file3), jarFile3)
+      TestUtils.createJar(Seq(file4), jarFile4)
+
+      sql(s"""ADD JAR "${jarFile1.getAbsolutePath}" ${jarFile2.getAbsoluteFile}""")
+      sql(s"ADD JARS ${jarFile3.getAbsolutePath} '${jarFile4.getAbsoluteFile}'")
+      val listFiles = sql(s"LIST JARS '${jarFile1.getAbsolutePath}' " +
+        s"${jarFile2.getAbsolutePath} ${jarFile3.getAbsolutePath} '${jarFile4.getAbsoluteFile}'")
+      assert(listFiles.count === 4)
+      assert(listFiles.filter(
+        _.getString(0).contains(jarFile1.getName.replace(" ", "%20"))).count() === 1)
+      assert(listFiles.filter(_.getString(0).contains(jarFile2.getName)).count() === 1)
+      assert(listFiles.filter(_.getString(0).contains(jarFile3.getName)).count() === 1)
+      assert(listFiles.filter(
+        _.getString(0).contains(jarFile4.getName.replace(" ", "%20"))).count() === 1)
+    }
+  }
+
+  test("SPARK-35105: ADD ARCHIVES command with multiple files") {
+    withTempDir { dir =>
+      val file1 = new File(dir, "test1.txt")
+      val file2 = new File(dir, "test2.txt")
+      val file3 = new File(dir, "test3.txt")
+      val file4 = new File(dir, "test4.txt")
+
+      Files.write(file1.toPath, "file1".getBytes)
+      Files.write(file2.toPath, "file2".getBytes)
+      Files.write(file3.toPath, "file3".getBytes)
+      Files.write(file4.toPath, "file4".getBytes)
+
+      val jarFile1 = File.createTempFile("someprefix1", "somesuffix1", dir)
+      val jarFile2 = File.createTempFile("someprefix2", "somesuffix 2", dir)
+      val jarFile3 = File.createTempFile("someprefix3", "somesuffix3", dir)
+      val jarFile4 = File.createTempFile("someprefix4", "somesuffix 4", dir)
+
+      TestUtils.createJar(Seq(file1), jarFile1)
+      TestUtils.createJar(Seq(file2), jarFile2)
+      TestUtils.createJar(Seq(file3), jarFile3)
+      TestUtils.createJar(Seq(file4), jarFile4)
+
+      sql(s"""ADD ARCHIVE ${jarFile1.getAbsolutePath} "${jarFile2.getAbsoluteFile}"""")
+      sql(s"ADD ARCHIVES ${jarFile3.getAbsolutePath} '${jarFile4.getAbsoluteFile}'")
+      val listFiles = sql(s"LIST ARCHIVES ${jarFile1.getAbsolutePath} " +
+        s"'${jarFile2.getAbsolutePath}' ${jarFile3.getAbsolutePath} '${jarFile4.getAbsolutePath}'")
+      assert(listFiles.count === 4)
+      assert(listFiles.filter(_.getString(0).contains(jarFile1.getName)).count() === 1)
+      assert(listFiles.filter(
+        _.getString(0).contains(jarFile2.getName.replace(" ", "%20"))).count() === 1)
+      assert(listFiles.filter(_.getString(0).contains(jarFile3.getName)).count() === 1)
+      assert(listFiles.filter(
+        _.getString(0).contains(jarFile4.getName.replace(" ", "%20"))).count() === 1)
+    }
+  }
+
   test("SPARK-34977: LIST FILES/JARS/ARCHIVES should handle multiple quoted path arguments") {
     withTempDir { dir =>
       val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
@@ -979,6 +1077,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"ADD FILE '${file3.getAbsolutePath}'")
       val listFiles = sql("LIST FILES " +
         s"""'${file1.getAbsolutePath}' ${file2.getAbsolutePath} "${file3.getAbsolutePath}"""")
+
       assert(listFiles.count === 3)
       assert(listFiles.filter(_.getString(0).contains(file1.getName)).count() === 1)
       assert(listFiles.filter(_.getString(0).contains(file2.getName)).count() === 1)
@@ -1004,6 +1103,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
       sql(s"ADD ARCHIVE '${jarFile3.getAbsolutePath}'")
       val listArchives = sql(s"LIST ARCHIVES '${jarFile1.getAbsolutePath}' " +
         s"""${jarFile2.getAbsolutePath} "${jarFile3.getAbsolutePath}"""")
+
       assert(listArchives.count === 3)
       assert(listArchives.filter(_.getString(0).contains(jarFile1.getName)).count() === 1)
       assert(listArchives.filter(_.getString(0).contains(jarFile2.getName)).count() === 1)
@@ -1026,7 +1126,7 @@ class HiveQuerySuite extends HiveComparisonTest with SQLTestUtils with BeforeAnd
 
       sql(s"ADD JAR ${jarFile4.getAbsolutePath}")
       sql(s"ADD JAR ${jarFile5.getAbsolutePath}")
-      sql(s"ADD JAR ${jarFile6.getAbsolutePath}")
+      sql(s"ADD JAR '${jarFile6.getAbsolutePath}'")
       val listJars = sql(s"LIST JARS '${jarFile4.getAbsolutePath}' " +
         s"""${jarFile5.getAbsolutePath} "${jarFile6.getAbsolutePath}"""")
       assert(listJars.count === 3)

@@ -37,6 +37,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.connector.catalog.{SupportsWrite, Table}
+import org.apache.spark.sql.connector.metric.CustomMetric
 import org.apache.spark.sql.connector.read.streaming.{Offset => OffsetV2, ReadLimit, SparkDataStream}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfoImpl, SupportsTruncate}
 import org.apache.spark.sql.connector.write.streaming.StreamingWrite
@@ -237,6 +238,10 @@ abstract class StreamExecution(
   protected def checkpointFile(name: String): String =
     new Path(new Path(resolvedCheckpointRoot), name).toString
 
+  /** All checkpoint file operations should be performed through `CheckpointFileManager`. */
+  private val fileManager = CheckpointFileManager.create(new Path(resolvedCheckpointRoot),
+      sparkSession.sessionState.newHadoopConf)
+
   /**
    * Starts the execution. This returns only after the thread has started and [[QueryStartedEvent]]
    * has been posted to all the listeners.
@@ -355,8 +360,7 @@ abstract class StreamExecution(
           val checkpointPath = new Path(resolvedCheckpointRoot)
           try {
             logInfo(s"Deleting checkpoint $checkpointPath.")
-            val fs = checkpointPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
-            fs.delete(checkpointPath, true)
+            fileManager.delete(checkpointPath)
           } catch {
             case NonFatal(e) =>
               // Deleting temp checkpoint folder is best effort, don't throw non fatal exceptions
@@ -578,7 +582,7 @@ abstract class StreamExecution(
   protected def createStreamingWrite(
       table: SupportsWrite,
       options: Map[String, String],
-      inputPlan: LogicalPlan): StreamingWrite = {
+      inputPlan: LogicalPlan): (StreamingWrite, Seq[CustomMetric]) = {
     val info = LogicalWriteInfoImpl(
       queryId = id.toString,
       inputPlan.schema,
@@ -599,7 +603,8 @@ abstract class StreamExecution(
           table.name + " does not support Update mode.")
         writeBuilder.asInstanceOf[SupportsStreamingUpdateAsAppend].build()
     }
-    write.toStreaming
+
+    (write.toStreaming, write.supportedCustomMetrics().toSeq)
   }
 
   protected def purge(threshold: Long): Unit = {

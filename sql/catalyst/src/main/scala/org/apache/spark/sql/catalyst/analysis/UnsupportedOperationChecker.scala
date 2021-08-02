@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestamp, GroupingSets, MonotonicallyIncreasingID, Now}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestampLike, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -232,6 +232,12 @@ object UnsupportedOperationChecker extends Logging {
           // Check compatibility with output modes and aggregations in query
           val aggsInQuery = collectStreamingAggregates(plan)
 
+          if (m.initialState.isStreaming) {
+            // initial state has to be a batch relation
+            throwError("Non-streaming DataFrame/Dataset is not supported as the" +
+              " initial state in [flatMap|map]GroupsWithState operation on a streaming" +
+              " DataFrame/Dataset")
+          }
           if (m.isMapGroupsWithState) {                       // check mapGroupsWithState
             // allowed only in update query output mode and without aggregation
             if (aggsInQuery.nonEmpty) {
@@ -357,8 +363,8 @@ object UnsupportedOperationChecker extends Logging {
         case Except(left, right, _) if right.isStreaming =>
           throwError("Except on a streaming DataFrame/Dataset on the right is not supported")
 
-        case Intersect(left, right, _) if left.isStreaming && right.isStreaming =>
-          throwError("Intersect between two streaming DataFrames/Datasets is not supported")
+        case Intersect(left, right, _) if left.isStreaming || right.isStreaming =>
+          throwError("Intersect of streaming DataFrames/Datasets is not supported")
 
         case GlobalLimit(_, _) | LocalLimit(_, _)
             if subPlan.children.forall(_.isStreaming) && outputMode == InternalOutputModes.Update =>
@@ -405,7 +411,7 @@ object UnsupportedOperationChecker extends Logging {
 
       subPlan.expressions.foreach { e =>
         if (e.collectLeaves().exists {
-          case (_: CurrentTimestamp | _: Now | _: CurrentDate) => true
+          case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp) => true
           case _ => false
         }) {
           throwError(s"Continuous processing does not support current time operations.")

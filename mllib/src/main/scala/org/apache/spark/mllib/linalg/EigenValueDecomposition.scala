@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.linalg
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
-import com.github.fommil.netlib.ARPACK
 import org.netlib.util.{doubleW, intW}
 
 /**
@@ -50,8 +49,6 @@ private[mllib] object EigenValueDecomposition {
       maxIterations: Int): (BDV[Double], BDM[Double]) = {
     // TODO: remove this function and use eigs in breeze when switching breeze version
     require(n > k, s"Number of required eigenvalues $k must be smaller than matrix dimension $n")
-
-    val arpack = ARPACK.getInstance()
 
     // tolerance used in stopping criterion
     val tolW = new doubleW(tol)
@@ -87,8 +84,8 @@ private[mllib] object EigenValueDecomposition {
     val ipntr = new Array[Int](11)
 
     // call ARPACK's reverse communication, first iteration with ido = 0
-    arpack.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv, v, n, iparam, ipntr, workd,
-      workl, workl.length, info)
+    ARPACK.nativeARPACK.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv,
+      v, n, iparam, ipntr, workd, workl, workl.length, info)
 
     val w = BDV(workd)
 
@@ -105,8 +102,8 @@ private[mllib] object EigenValueDecomposition {
       val y = w.slice(outputOffset, outputOffset + n)
       y := mul(x)
       // call ARPACK's reverse communication
-      arpack.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv, v, n, iparam, ipntr,
-        workd, workl, workl.length, info)
+      ARPACK.nativeARPACK.dsaupd(ido, bmat, n, which, nev.`val`, tolW, resid, ncv,
+        v, n, iparam, ipntr, workd, workl, workl.length, info)
     }
 
     if (info.`val` != 0) {
@@ -127,8 +124,8 @@ private[mllib] object EigenValueDecomposition {
     val z = java.util.Arrays.copyOfRange(v, 0, nev.`val` * n)
 
     // call ARPACK's post-processing for eigenvectors
-    arpack.dseupd(true, "A", select, d, z, n, 0.0, bmat, n, which, nev, tol, resid, ncv, v, n,
-      iparam, ipntr, workd, workl, workl.length, info)
+    ARPACK.nativeARPACK.dseupd(true, "A", select, d, z, n, 0.0, bmat, n, which, nev, tol, resid,
+      ncv, v, n, iparam, ipntr, workd, workl, workl.length, info)
 
     // number of computed eigenvalues, might be smaller than k
     val computed = iparam(4)

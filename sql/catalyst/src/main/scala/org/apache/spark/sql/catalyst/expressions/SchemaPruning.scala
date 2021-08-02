@@ -73,7 +73,8 @@ object SchemaPruning extends SQLConfHelper {
           val leftFieldType = resolvedLeftStruct.dataType
           val rightFieldType = rightStruct(fieldName).dataType
           val sortedLeftFieldType = sortLeftFieldsByRight(leftFieldType, rightFieldType)
-          StructField(fieldName, sortedLeftFieldType, nullable = resolvedLeftStruct.nullable)
+          StructField(fieldName, sortedLeftFieldType, nullable = resolvedLeftStruct.nullable,
+            metadata = resolvedLeftStruct.metadata)
         }
         StructType(sortedLeftFields)
       case _ => left
@@ -124,10 +125,11 @@ object SchemaPruning extends SQLConfHelper {
    * When expr is an [[Attribute]], construct a field around it and indicate that that
    * field was derived from an attribute.
    */
-  private def getRootFields(expr: Expression): Seq[RootField] = {
+  private[catalyst] def getRootFields(expr: Expression): Seq[RootField] = {
     expr match {
       case att: Attribute =>
-        RootField(StructField(att.name, att.dataType, att.nullable), derivedFromAtt = true) :: Nil
+        RootField(StructField(att.name, att.dataType, att.nullable, att.metadata),
+          derivedFromAtt = true) :: Nil
       case SelectedField(field) => RootField(field, derivedFromAtt = false) :: Nil
       // Root field accesses by `IsNotNull` and `IsNull` are special cases as the expressions
       // don't actually use any nested fields. These root field accesses might be excluded later

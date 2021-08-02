@@ -22,7 +22,6 @@ import java.lang.{Iterable => JavaIterable}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.google.common.collect.{Ordering => GuavaOrdering}
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
@@ -34,6 +33,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.Kryo.KRYO_SERIALIZER_MAX_BUFFER_SIZE
+import org.apache.spark.ml.linalg.BLAS
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
@@ -401,18 +401,18 @@ class Word2Vec extends Serializable with Logging {
                       val inner = bcVocab.value(word).point(d)
                       val l2 = inner * vectorSize
                       // Propagate hidden -> output
-                      var f = blas.sdot(vectorSize, syn0, l1, 1, syn1, l2, 1)
+                      var f = BLAS.nativeBLAS.sdot(vectorSize, syn0, l1, 1, syn1, l2, 1)
                       if (f > -MAX_EXP && f < MAX_EXP) {
                         val ind = ((f + MAX_EXP) * (EXP_TABLE_SIZE / MAX_EXP / 2.0)).toInt
                         f = expTable.value(ind)
                         val g = ((1 - bcVocab.value(word).code(d) - f) * alpha).toFloat
-                        blas.saxpy(vectorSize, g, syn1, l2, 1, neu1e, 0, 1)
-                        blas.saxpy(vectorSize, g, syn0, l1, 1, syn1, l2, 1)
+                        BLAS.nativeBLAS.saxpy(vectorSize, g, syn1, l2, 1, neu1e, 0, 1)
+                        BLAS.nativeBLAS.saxpy(vectorSize, g, syn0, l1, 1, syn1, l2, 1)
                         syn1Modify(inner) += 1
                       }
                       d += 1
                     }
-                    blas.saxpy(vectorSize, 1.0f, neu1e, 0, 1, syn0, l1, 1)
+                    BLAS.nativeBLAS.saxpy(vectorSize, 1.0f, neu1e, 0, 1, syn0, l1, 1)
                     syn0Modify(lastWord) += 1
                   }
                 }
@@ -448,10 +448,10 @@ class Word2Vec extends Serializable with Logging {
           (id, (vec, 1))
         }
       }.reduceByKey { (vc1, vc2) =>
-        blas.saxpy(vectorSize, 1.0f, vc2._1, 1, vc1._1, 1)
+        BLAS.nativeBLAS.saxpy(vectorSize, 1.0f, vc2._1, 1, vc1._1, 1)
         (vc1._1, vc1._2 + vc2._2)
       }.map { case (id, (vec, count)) =>
-        blas.sscal(vectorSize, 1.0f / count, vec, 1)
+        BLAS.nativeBLAS.sscal(vectorSize, 1.0f / count, vec, 1)
         (id, vec)
       }.collect()
       var i = 0
@@ -511,7 +511,7 @@ class Word2VecModel private[spark] (
   private lazy val wordVecInvNorms: Array[Float] = {
     val size = vectorSize
     Array.tabulate(numWords) { i =>
-      val norm = blas.snrm2(size, wordVectors, i * size, 1)
+      val norm = BLAS.nativeBLAS.snrm2(size, wordVectors, i * size, 1)
       if (norm != 0) 1 / norm else 0.0F
     }
   }
@@ -587,7 +587,7 @@ class Word2VecModel private[spark] (
     val localVectorSize = vectorSize
 
     val floatVec = vector.map(_.toFloat)
-    val vecNorm = blas.snrm2(localVectorSize, floatVec, 1)
+    val vecNorm = BLAS.nativeBLAS.snrm2(localVectorSize, floatVec, 1)
 
     val localWordList = wordList
     val localNumWords = numWords
@@ -597,11 +597,11 @@ class Word2VecModel private[spark] (
         .take(num)
         .toArray
     } else {
-      // Normalize input vector before blas.sgemv to avoid Inf value
-      blas.sscal(localVectorSize, 1 / vecNorm, floatVec, 0, 1)
+      // Normalize input vector before BLAS.nativeBLAS.sgemv to avoid Inf value
+      BLAS.nativeBLAS.sscal(localVectorSize, 1 / vecNorm, floatVec, 0, 1)
 
       val cosineVec = Array.ofDim[Float](localNumWords)
-      blas.sgemv("T", localVectorSize, localNumWords, 1.0F, wordVectors, localVectorSize,
+      BLAS.nativeBLAS.sgemv("T", localVectorSize, localNumWords, 1.0F, wordVectors, localVectorSize,
         floatVec, 1, 0.0F, cosineVec, 1)
 
       val localWordVecInvNorms = wordVecInvNorms

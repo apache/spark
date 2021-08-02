@@ -91,38 +91,36 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      StringLiteralCoercion :: Nil) :: Nil
+      StringLiteralCoercion ::
+      GetDateFieldOperations:: Nil) :: Nil
 
-  override def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
-    (t1, t2) match {
-      case (t1, t2) if t1 == t2 => Some(t1)
-      case (NullType, t1) => Some(t1)
-      case (t1, NullType) => Some(t1)
+  val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
+    case (t1, t2) if t1 == t2 => Some(t1)
+    case (NullType, t1) => Some(t1)
+    case (t1, NullType) => Some(t1)
 
-      case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
-        Some(t2)
-      case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
-        Some(t1)
+    case (t1: IntegralType, t2: DecimalType) if t2.isWiderThan(t1) =>
+      Some(t2)
+    case (t1: DecimalType, t2: IntegralType) if t1.isWiderThan(t2) =>
+      Some(t1)
 
-      case (t1: NumericType, t2: NumericType)
-          if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
-        val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
-        val widerType = numericPrecedence(index)
-        if (widerType == FloatType) {
-          // If the input type is an Integral type and a Float type, simply return Double type as
-          // the tightest common type to avoid potential precision loss on converting the Integral
-          // type as Float type.
-          Some(DoubleType)
-        } else {
-          Some(widerType)
-        }
+    case (t1: NumericType, t2: NumericType)
+        if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
+      val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
+      val widerType = numericPrecedence(index)
+      if (widerType == FloatType) {
+        // If the input type is an Integral type and a Float type, simply return Double type as
+        // the tightest common type to avoid potential precision loss on converting the Integral
+        // type as Float type.
+        Some(DoubleType)
+      } else {
+        Some(widerType)
+      }
 
-      case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
-        Some(TimestampType)
+    case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
+      Some(TimestampType)
 
-      case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
-    }
-
+    case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
 
   override def findWiderTypeForTwo(t1: DataType, t2: DataType): Option[DataType] = {
@@ -192,6 +190,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
         }
 
       case (DateType, TimestampType) => Some(TimestampType)
+      case (DateType, AnyTimestampType) => Some(AnyTimestampType.defaultConcreteType)
 
       // When we reach here, input type is not acceptable for any types in this type collection,
       // first try to find the all the expected types we can implicitly cast:
@@ -290,6 +289,21 @@ object AnsiTypeCoercion extends TypeCoercionBase {
           case other => other
         }
         p.makeCopy(Array(a, newList))
+    }
+  }
+
+  /**
+   * When getting a date field from a Timestamp column, cast the column as date type.
+   *
+   * This is Spark's hack to make the implementation simple. In the default type coercion rules,
+   * the implicit cast rule does the work. However, The ANSI implicit cast rule doesn't allow
+   * converting Timestamp type as Date type, so we need to have this additional rule
+   * to make sure the date field extraction from Timestamp columns works.
+   */
+  object GetDateFieldOperations extends TypeCoercionRule {
+    override def transform: PartialFunction[Expression, Expression] = {
+      case g: GetDateField if AnyTimestampType.unapply(g.child) =>
+        g.withNewChildren(Seq(Cast(g.child, DateType)))
     }
   }
 }

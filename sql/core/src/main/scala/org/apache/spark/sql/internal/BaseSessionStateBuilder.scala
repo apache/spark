@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
-import org.apache.spark.sql.execution.{ColumnarRule, QueryExecution, SparkOptimizer, SparkPlan, SparkPlanner, SparkSqlParser}
+import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlan, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.aggregate.ResolveEncodersInScalaAgg
 import org.apache.spark.sql.execution.analysis.DetectAmbiguousSelfJoin
 import org.apache.spark.sql.execution.command.CommandCheck
@@ -307,12 +307,16 @@ abstract class BaseSessionStateBuilder(
     extensions.buildQueryStagePrepRules(session)
   }
 
+  protected def postStageCreationRules: Seq[Rule[SparkPlan]] = {
+    extensions.buildPostStageCreationRules(session)
+  }
+
   /**
    * Create a query execution object.
    */
-  protected def createQueryExecution: LogicalPlan => QueryExecution = { plan =>
-    new QueryExecution(session, plan)
-  }
+  protected def createQueryExecution:
+    (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
+      (plan, mode) => new QueryExecution(session, plan, mode = mode)
 
   /**
    * Interface to start and stop streaming queries.
@@ -360,7 +364,8 @@ abstract class BaseSessionStateBuilder(
       createQueryExecution,
       createClone,
       columnarRules,
-      queryStagePrepRules)
+      queryStagePrepRules,
+      postStageCreationRules)
   }
 }
 

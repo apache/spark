@@ -77,15 +77,19 @@ from `hadoop.version`.
 
 Example:
 
-    ./build/mvn -Pyarn -Dhadoop.version=2.8.5 -DskipTests clean package
+    ./build/mvn -Pyarn -Dhadoop.version=3.3.0 -DskipTests clean package
+
+If you want to build with Hadoop 2.x, enable hadoop-2.7 profile:
+
+    ./build/mvn -Phadoop-2.7 -Pyarn -Dhadoop.version=2.8.5 -DskipTests clean package
 
 ## Building With Hive and JDBC Support
 
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `-Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 2.3.8.
+By default Spark will build with Hive 2.3.9.
 
-    # With Hive 2.3.8 support
+    # With Hive 2.3.9 support
     ./build/mvn -Pyarn -Phive -Phive-thriftserver -DskipTests clean package
 
 ## Packaging without Hadoop Dependencies for YARN

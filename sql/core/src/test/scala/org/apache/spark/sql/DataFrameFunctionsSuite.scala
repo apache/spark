@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.io.File
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
@@ -24,7 +25,8 @@ import scala.util.Random
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Expression, UnaryExpression}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArraysZip, AttributeReference, Expression, NamedExpression, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
@@ -550,6 +552,74 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     val exprs = (0 to 5).map(x => array($"id" + lit(x)))
     checkAnswer(df.select(arrays_zip(exprs: _*)),
       Row(Seq(Row(0, 1, 2, 3, 4, 5))))
+  }
+
+  test("SPARK-35876: arrays_zip should retain field names") {
+    withTempDir { dir =>
+      val df = spark.sparkContext.parallelize(
+        Seq((Seq(9001, 9002, 9003), Seq(4, 5, 6)))).toDF("val1", "val2")
+      val qualifiedDF = df.as("foo")
+
+      // Fields are UnresolvedAttribute
+      val zippedDF1 = qualifiedDF.select(arrays_zip($"foo.val1", $"foo.val2") as "zipped")
+      val maybeAlias1 = zippedDF1.queryExecution.logical.expressions.head
+      assert(maybeAlias1.isInstanceOf[Alias])
+      val maybeArraysZip1 = maybeAlias1.children.head
+      assert(maybeArraysZip1.isInstanceOf[ArraysZip])
+      assert(maybeArraysZip1.children.forall(_.isInstanceOf[UnresolvedAttribute]))
+      val file1 = new File(dir, "arrays_zip1")
+      zippedDF1.write.parquet(file1.getAbsolutePath)
+      val restoredDF1 = spark.read.parquet(file1.getAbsolutePath)
+      val fieldNames1 = restoredDF1.schema.head.dataType.asInstanceOf[ArrayType]
+        .elementType.asInstanceOf[StructType].fieldNames
+      assert(fieldNames1.toSeq === Seq("val1", "val2"))
+
+      // Fields are resolved NamedExpression
+      val zippedDF2 = df.select(arrays_zip(df("val1"), df("val2")) as "zipped")
+      val maybeAlias2 = zippedDF2.queryExecution.logical.expressions.head
+      assert(maybeAlias2.isInstanceOf[Alias])
+      val maybeArraysZip2 = maybeAlias2.children.head
+      assert(maybeArraysZip2.isInstanceOf[ArraysZip])
+      assert(maybeArraysZip2.children.forall(
+        e => e.isInstanceOf[AttributeReference] && e.resolved))
+      val file2 = new File(dir, "arrays_zip2")
+      zippedDF2.write.parquet(file2.getAbsolutePath)
+      val restoredDF2 = spark.read.parquet(file2.getAbsolutePath)
+      val fieldNames2 = restoredDF2.schema.head.dataType.asInstanceOf[ArrayType]
+        .elementType.asInstanceOf[StructType].fieldNames
+      assert(fieldNames2.toSeq === Seq("val1", "val2"))
+
+      // Fields are unresolved NamedExpression
+      val zippedDF3 = df.select(arrays_zip($"val1" as "val3", $"val2" as "val4") as "zipped")
+      val maybeAlias3 = zippedDF3.queryExecution.logical.expressions.head
+      assert(maybeAlias3.isInstanceOf[Alias])
+      val maybeArraysZip3 = maybeAlias3.children.head
+      assert(maybeArraysZip3.isInstanceOf[ArraysZip])
+      assert(maybeArraysZip3.children.forall(e => e.isInstanceOf[Alias] && !e.resolved))
+      val file3 = new File(dir, "arrays_zip3")
+      zippedDF3.write.parquet(file3.getAbsolutePath)
+      val restoredDF3 = spark.read.parquet(file3.getAbsolutePath)
+      val fieldNames3 = restoredDF3.schema.head.dataType.asInstanceOf[ArrayType]
+        .elementType.asInstanceOf[StructType].fieldNames
+      assert(fieldNames3.toSeq === Seq("val3", "val4"))
+
+      // Fields are neither UnresolvedAttribute nor NamedExpression
+      val zippedDF4 = df.select(arrays_zip(array_sort($"val1"), array_sort($"val2")) as "zipped")
+      val maybeAlias4 = zippedDF4.queryExecution.logical.expressions.head
+      assert(maybeAlias4.isInstanceOf[Alias])
+      val maybeArraysZip4 = maybeAlias4.children.head
+      assert(maybeArraysZip4.isInstanceOf[ArraysZip])
+      assert(maybeArraysZip4.children.forall {
+        case _: UnresolvedAttribute | _: NamedExpression => false
+        case _ => true
+      })
+      val file4 = new File(dir, "arrays_zip4")
+      zippedDF4.write.parquet(file4.getAbsolutePath)
+      val restoredDF4 = spark.read.parquet(file4.getAbsolutePath)
+      val fieldNames4 = restoredDF4.schema.head.dataType.asInstanceOf[ArrayType]
+        .elementType.asInstanceOf[StructType].fieldNames
+      assert(fieldNames4.toSeq === Seq("0", "1"))
+    }
   }
 
   def testSizeOfMap(sizeOfNull: Any): Unit = {
@@ -3628,6 +3698,29 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       df.select(map(map_entries($"m"), lit(1))),
       Row(Map(Seq(Row(1, "a")) -> 1)))
+  }
+
+  test("SPARK-34794: lambda variable name issues in nested functions") {
+    val df1 = Seq((Seq(1, 2), Seq("a", "b"))).toDF("numbers", "letters")
+
+    checkAnswer(df1.select(flatten(transform($"numbers", (number: Column) =>
+      transform($"letters", (letter: Column) =>
+        struct(number, letter))))),
+      Seq(Row(Seq(Row(1, "a"), Row(1, "b"), Row(2, "a"), Row(2, "b"))))
+    )
+    checkAnswer(df1.select(flatten(transform($"numbers", (number: Column, i: Column) =>
+      transform($"letters", (letter: Column, j: Column) =>
+        struct(number + j, concat(letter, i)))))),
+      Seq(Row(Seq(Row(1, "a0"), Row(2, "b0"), Row(2, "a1"), Row(3, "b1"))))
+    )
+
+    val df2 = Seq((Map("a" -> 1, "b" -> 2), Map("a" -> 2, "b" -> 3))).toDF("m1", "m2")
+
+    checkAnswer(df2.select(map_zip_with($"m1", $"m2", (k1: Column, ov1: Column, ov2: Column) =>
+      map_zip_with($"m1", $"m2", (k2: Column, iv1: Column, iv2: Column) =>
+        ov1 + iv1 + ov2 + iv2))),
+      Seq(Row(Map("a" -> Map("a" -> 6, "b" -> 8), "b" -> Map("a" -> 8, "b" -> 10))))
+    )
   }
 }
 

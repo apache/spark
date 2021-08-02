@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.connector.ExternalCommandRunner
-import org.apache.spark.sql.execution.{ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{CommandExecutionMode, ExplainMode, LeafExecNode, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.streaming.IncrementalExecution
 import org.apache.spark.sql.types._
@@ -72,7 +72,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
    */
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
+    cmd.run(session).map(converter(_).asInstanceOf[InternalRow])
   }
 
   override def innerChildren: Seq[QueryPlan[_]] = cmd :: Nil
@@ -92,7 +92,7 @@ case class ExecutedCommandExec(cmd: RunnableCommand) extends LeafExecNode {
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+    sparkContext.parallelize(sideEffectResult, 1)
   }
 }
 
@@ -110,7 +110,7 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
 
   protected[sql] lazy val sideEffectResult: Seq[InternalRow] = {
     val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-    val rows = cmd.run(sqlContext.sparkSession, child)
+    val rows = cmd.run(session, child)
 
     rows.map(converter(_).asInstanceOf[InternalRow])
   }
@@ -133,7 +133,7 @@ case class DataWritingCommandExec(cmd: DataWritingCommand, child: SparkPlan)
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
-    sqlContext.sparkContext.parallelize(sideEffectResult, 1)
+    sparkContext.parallelize(sideEffectResult, 1)
   }
 
   override protected def withNewChildInternal(newChild: SparkPlan): DataWritingCommandExec =
@@ -163,7 +163,8 @@ case class ExplainCommand(
 
   // Run through the optimizer to generate the physical plan.
   override def run(sparkSession: SparkSession): Seq[Row] = try {
-    val outputString = sparkSession.sessionState.executePlan(logicalPlan).explainString(mode)
+    val outputString = sparkSession.sessionState.executePlan(logicalPlan, CommandExecutionMode.SKIP)
+      .explainString(mode)
     Seq(Row(outputString))
   } catch { case NonFatal(cause) =>
     ("Error occurred during query planning: \n" + cause.getMessage).split("\n").map(Row(_))

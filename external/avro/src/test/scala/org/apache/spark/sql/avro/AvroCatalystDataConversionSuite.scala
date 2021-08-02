@@ -284,6 +284,7 @@ class AvroCatalystDataConversionSuite extends SparkFunSuite
     val deserializer = new AvroDeserializer(
       schema,
       dataType,
+      false,
       SQLConf.LegacyBehaviorPolicy.CORRECTED,
       filters)
     val deserialized = deserializer.deserialize(data)

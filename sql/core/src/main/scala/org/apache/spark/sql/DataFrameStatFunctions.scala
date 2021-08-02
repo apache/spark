@@ -537,7 +537,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def bloomFilter(colName: String, expectedNumItems: Long, fpp: Double): BloomFilter = {
-    buildBloomFilter(Column(colName), BloomFilter.create(expectedNumItems, fpp))
+    buildBloomFilter(Column(colName), expectedNumItems, -1L, fpp)
   }
 
   /**
@@ -549,7 +549,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, fpp: Double): BloomFilter = {
-    buildBloomFilter(col, BloomFilter.create(expectedNumItems, fpp))
+    buildBloomFilter(col, expectedNumItems, -1L, fpp)
   }
 
   /**
@@ -561,7 +561,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def bloomFilter(colName: String, expectedNumItems: Long, numBits: Long): BloomFilter = {
-    buildBloomFilter(Column(colName), BloomFilter.create(expectedNumItems, numBits))
+    buildBloomFilter(Column(colName), expectedNumItems, numBits, Double.NaN)
   }
 
   /**
@@ -573,10 +573,12 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   def bloomFilter(col: Column, expectedNumItems: Long, numBits: Long): BloomFilter = {
-    buildBloomFilter(col, BloomFilter.create(expectedNumItems, numBits))
+    buildBloomFilter(col, expectedNumItems, numBits, Double.NaN)
   }
 
-  private def buildBloomFilter(col: Column, zero: BloomFilter): BloomFilter = {
+  private def buildBloomFilter(col: Column, expectedNumItems: Long,
+                               numBits: Long,
+                               fpp: Double): BloomFilter = {
     val singleCol = df.select(col)
     val colType = singleCol.schema.head.dataType
 
@@ -598,12 +600,30 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
         )
     }
 
-    singleCol.queryExecution.toRdd.treeAggregate(zero)(
+    singleCol.queryExecution.toRdd.treeAggregate(null.asInstanceOf[BloomFilter])(
       (filter: BloomFilter, row: InternalRow) => {
-        updater(filter, row)
-        filter
+        val theFilter =
+          if (filter == null) {
+            if (fpp.isNaN) {
+              BloomFilter.create(expectedNumItems, numBits)
+            } else {
+              BloomFilter.create(expectedNumItems, fpp)
+            }
+          } else {
+            filter
+          }
+        updater(theFilter, row)
+        theFilter
       },
-      (filter1, filter2) => filter1.mergeInPlace(filter2)
+      (filter1, filter2) => {
+        if (filter1 == null) {
+          filter2
+        } else if (filter2 == null) {
+          filter1
+        } else {
+          filter1.mergeInPlace(filter2)
+        }
+      }
     )
   }
 }

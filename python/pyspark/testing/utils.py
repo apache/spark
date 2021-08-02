@@ -169,6 +169,6 @@ def search_jar(project_relative_path, sbt_jar_name_prefix, mvn_jar_name_prefix):
     if not jars:
         return None
     elif len(jars) > 1:
-        raise Exception("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
+        raise RuntimeError("Found multiple JARs: %s; please remove all but one" % (", ".join(jars)))
     else:
         return jars[0]

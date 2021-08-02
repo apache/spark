@@ -160,4 +160,18 @@ class PruneFiltersSuite extends PlanTest {
       comparePlans(optimized, correctAnswer)
     }
   }
+
+  test("SPARK-35273: CombineFilters support non-deterministic expressions") {
+    val x = testRelation.where(!'a.attr.in(1, 3, 5)).subquery('x)
+
+    comparePlans(
+      Optimize.execute(x.where('a.attr === 7 && Rand(10) > 0.1).analyze),
+      testRelation.where(!'a.attr.in(1, 3, 5) && 'a.attr === 7).where(Rand(10) > 0.1).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        x.where('a.attr === 7 && Rand(10) > 0.1 && 'b.attr === 1 && Rand(10) < 1.1).analyze),
+      testRelation.where(!'a.attr.in(1, 3, 5) && 'a.attr === 7 && 'b.attr === 1)
+        .where(Rand(10) > 0.1 && Rand(10) < 1.1).analyze)
+  }
 }

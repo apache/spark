@@ -759,7 +759,7 @@ class FileBasedDataSourceSuite extends QueryTest
           }.isEmpty)
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan) => f
+            case BatchScanExec(_, f: FileScan, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.nonEmpty)
@@ -799,7 +799,7 @@ class FileBasedDataSourceSuite extends QueryTest
           assert(filterCondition.isDefined)
 
           val fileScan = df.queryExecution.executedPlan collectFirst {
-            case BatchScanExec(_, f: FileScan) => f
+            case BatchScanExec(_, f: FileScan, _) => f
           }
           assert(fileScan.nonEmpty)
           assert(fileScan.get.partitionFilters.isEmpty)
@@ -955,6 +955,16 @@ class FileBasedDataSourceSuite extends QueryTest
           assert(!explain.contains("..."))
         }
       }
+    }
+  }
+
+  test("SPARK-35669: special char in CSV header with filter pushdown") {
+    withTempPath { path =>
+      val pathStr = path.getCanonicalPath
+      Seq("a / b,a`b", "v1,v2").toDF().coalesce(1).write.text(pathStr)
+      val df = spark.read.option("header", true).csv(pathStr)
+        .where($"a / b".isNotNull and $"`a``b`".isNotNull)
+      checkAnswer(df, Row("v1", "v2"))
     }
   }
 }

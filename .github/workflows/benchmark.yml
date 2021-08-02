@@ -48,6 +48,8 @@ jobs:
       SPARK_BENCHMARK_CUR_SPLIT: ${{ matrix.split }}
       SPARK_GENERATE_BENCHMARK_FILES: 1
       SPARK_LOCAL_IP: localhost
+      # To prevent spark.test.home not being set. See more detail in SPARK-36007.
+      SPARK_HOME: ${{ github.workspace }}
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -91,7 +93,7 @@ jobs:
         # To keep the directory structure and file permissions, tar them
         # See also https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
         echo "Preparing the benchmark results:"
-        tar -cvf benchmark-results-${{ github.event.inputs.jdk }}.tar `git diff --name-only`
+        tar -cvf benchmark-results-${{ github.event.inputs.jdk }}.tar `git diff --name-only` `git ls-files --others --exclude-standard`
     - name: Upload benchmark results
       uses: actions/upload-artifact@v2
       with:

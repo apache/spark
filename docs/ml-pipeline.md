@@ -240,7 +240,7 @@ This section gives code examples illustrating the functionality discussed above.
 For more info, please refer to the API documentation
 ([Scala](api/scala/org/apache/spark/ml/package.html),
 [Java](api/java/org/apache/spark/ml/package-summary.html),
-and [Python](api/python/pyspark.ml.html)).
+and [Python](api/python/reference/pyspark.ml.html)).
 
 ## Example: Estimator, Transformer, and Param
 

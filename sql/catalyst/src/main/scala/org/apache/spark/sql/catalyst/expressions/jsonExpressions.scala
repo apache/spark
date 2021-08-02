@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.json._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{JSON_TO_STRUCT, TreePattern}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -539,6 +540,8 @@ case class JsonToStructs(
 
   override def nullable: Boolean = true
 
+  final override def nodePatternsInternal(): Seq[TreePattern] = Seq(JSON_TO_STRUCT)
+
   // Used in `FunctionRegistry`
   def this(child: Expression, schema: Expression, options: Map[String, String]) =
     this(
@@ -558,7 +561,17 @@ case class JsonToStructs(
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
     case _: StructType | _: ArrayType | _: MapType =>
-      super.checkInputDataTypes()
+      val invalidMapType = nullableSchema.existsRecursively(dataType => dataType match {
+        case MapType(keyType, _, _) if keyType != StringType => true
+        case _ => false
+      })
+      if (invalidMapType) {
+        TypeCheckResult.TypeCheckFailure(
+          s"Input schema ${nullableSchema.catalogString} can only contain StringType " +
+            "as a key type for a MapType.")
+      } else {
+        super.checkInputDataTypes()
+      }
     case _ => TypeCheckResult.TypeCheckFailure(
       s"Input schema ${nullableSchema.catalogString} must be a struct, an array or a map.")
   }

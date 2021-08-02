@@ -26,7 +26,7 @@ license: |
 ### Syntax
 
 ```sql
-ADD ARCHIVE file_name
+ADD { ARCHIVE | ARCHIVES } file_name [ ... ]
 ```
 
 ### Parameters
@@ -42,6 +42,7 @@ ADD ARCHIVE /tmp/test.tar.gz;
 ADD ARCHIVE "/path/to/some.zip";
 ADD ARCHIVE '/some/other.tgz';
 ADD ARCHIVE "/path with space/abc.tar";
+ADD ARCHIVES "/path with space/def.tgz" '/path with space/ghi.zip';
 ```
 
 ### Related Statements

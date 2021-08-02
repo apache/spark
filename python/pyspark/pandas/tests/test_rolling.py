@@ -31,15 +31,15 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
             ps.range(10).rolling(window=1, min_periods=-1)
 
         with self.assertRaisesRegex(
-            TypeError, "kdf_or_kser must be a series or dataframe; however, got:.*int"
+            TypeError, "psdf_or_psser must be a series or dataframe; however, got:.*int"
         ):
             Rolling(1, 2)
 
     def _test_rolling_func(self, f):
         pser = pd.Series([1, 2, 3], index=np.random.rand(3), name="a")
-        kser = ps.from_pandas(pser)
-        self.assert_eq(getattr(kser.rolling(2), f)(), getattr(pser.rolling(2), f)())
-        self.assert_eq(getattr(kser.rolling(2), f)().sum(), getattr(pser.rolling(2), f)().sum())
+        psser = ps.from_pandas(pser)
+        self.assert_eq(getattr(psser.rolling(2), f)(), getattr(pser.rolling(2), f)())
+        self.assert_eq(getattr(psser.rolling(2), f)().sum(), getattr(pser.rolling(2), f)().sum())
 
         # Multiindex
         pser = pd.Series(
@@ -47,21 +47,21 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
             index=pd.MultiIndex.from_tuples([("a", "x"), ("a", "y"), ("b", "z")]),
             name="a",
         )
-        kser = ps.from_pandas(pser)
-        self.assert_eq(getattr(kser.rolling(2), f)(), getattr(pser.rolling(2), f)())
+        psser = ps.from_pandas(pser)
+        self.assert_eq(getattr(psser.rolling(2), f)(), getattr(pser.rolling(2), f)())
 
         pdf = pd.DataFrame(
             {"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]}, index=np.random.rand(4)
         )
-        kdf = ps.from_pandas(pdf)
-        self.assert_eq(getattr(kdf.rolling(2), f)(), getattr(pdf.rolling(2), f)())
-        self.assert_eq(getattr(kdf.rolling(2), f)().sum(), getattr(pdf.rolling(2), f)().sum())
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(getattr(psdf.rolling(2), f)(), getattr(pdf.rolling(2), f)())
+        self.assert_eq(getattr(psdf.rolling(2), f)().sum(), getattr(pdf.rolling(2), f)().sum())
 
         # Multiindex column
         columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
         pdf.columns = columns
-        kdf.columns = columns
-        self.assert_eq(getattr(kdf.rolling(2), f)(), getattr(pdf.rolling(2), f)())
+        psdf.columns = columns
+        self.assert_eq(getattr(psdf.rolling(2), f)(), getattr(pdf.rolling(2), f)())
 
     def test_rolling_min(self):
         self._test_rolling_func("min")
@@ -86,13 +86,13 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
 
     def _test_groupby_rolling_func(self, f):
         pser = pd.Series([1, 2, 3, 2], index=np.random.rand(4), name="a")
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
         self.assert_eq(
-            getattr(kser.groupby(kser).rolling(2), f)().sort_index(),
+            getattr(psser.groupby(psser).rolling(2), f)().sort_index(),
             getattr(pser.groupby(pser).rolling(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kser.groupby(kser).rolling(2), f)().sum(),
+            getattr(psser.groupby(psser).rolling(2), f)().sum(),
             getattr(pser.groupby(pser).rolling(2), f)().sum(),
         )
 
@@ -102,50 +102,50 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
             index=pd.MultiIndex.from_tuples([("a", "x"), ("a", "y"), ("b", "z"), ("c", "z")]),
             name="a",
         )
-        kser = ps.from_pandas(pser)
+        psser = ps.from_pandas(pser)
         self.assert_eq(
-            getattr(kser.groupby(kser).rolling(2), f)().sort_index(),
+            getattr(psser.groupby(psser).rolling(2), f)().sort_index(),
             getattr(pser.groupby(pser).rolling(2), f)().sort_index(),
         )
 
         pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]})
-        kdf = ps.from_pandas(pdf)
+        psdf = ps.from_pandas(pdf)
         self.assert_eq(
-            getattr(kdf.groupby(kdf.a).rolling(2), f)().sort_index(),
+            getattr(psdf.groupby(psdf.a).rolling(2), f)().sort_index(),
             getattr(pdf.groupby(pdf.a).rolling(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kdf.groupby(kdf.a).rolling(2), f)().sum(),
+            getattr(psdf.groupby(psdf.a).rolling(2), f)().sum(),
             getattr(pdf.groupby(pdf.a).rolling(2), f)().sum(),
         )
         self.assert_eq(
-            getattr(kdf.groupby(kdf.a + 1).rolling(2), f)().sort_index(),
+            getattr(psdf.groupby(psdf.a + 1).rolling(2), f)().sort_index(),
             getattr(pdf.groupby(pdf.a + 1).rolling(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kdf.b.groupby(kdf.a).rolling(2), f)().sort_index(),
+            getattr(psdf.b.groupby(psdf.a).rolling(2), f)().sort_index(),
             getattr(pdf.b.groupby(pdf.a).rolling(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kdf.groupby(kdf.a)["b"].rolling(2), f)().sort_index(),
+            getattr(psdf.groupby(psdf.a)["b"].rolling(2), f)().sort_index(),
             getattr(pdf.groupby(pdf.a)["b"].rolling(2), f)().sort_index(),
         )
         self.assert_eq(
-            getattr(kdf.groupby(kdf.a)[["b"]].rolling(2), f)().sort_index(),
+            getattr(psdf.groupby(psdf.a)[["b"]].rolling(2), f)().sort_index(),
             getattr(pdf.groupby(pdf.a)[["b"]].rolling(2), f)().sort_index(),
         )
 
         # Multiindex column
         columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
         pdf.columns = columns
-        kdf.columns = columns
+        psdf.columns = columns
         self.assert_eq(
-            getattr(kdf.groupby(("a", "x")).rolling(2), f)().sort_index(),
+            getattr(psdf.groupby(("a", "x")).rolling(2), f)().sort_index(),
             getattr(pdf.groupby(("a", "x")).rolling(2), f)().sort_index(),
         )
 
         self.assert_eq(
-            getattr(kdf.groupby([("a", "x"), ("a", "y")]).rolling(2), f)().sort_index(),
+            getattr(psdf.groupby([("a", "x"), ("a", "y")]).rolling(2), f)().sort_index(),
             getattr(pdf.groupby([("a", "x"), ("a", "y")]).rolling(2), f)().sort_index(),
         )
 
@@ -178,7 +178,8 @@ if __name__ == "__main__":
 
     try:
         import xmlrunner  # type: ignore[import]
-        testRunner = xmlrunner.XMLTestRunner(output='target/test-reports', verbosity=2)
+
+        testRunner = xmlrunner.XMLTestRunner(output="target/test-reports", verbosity=2)
     except ImportError:
         testRunner = None
     unittest.main(testRunner=testRunner, verbosity=2)

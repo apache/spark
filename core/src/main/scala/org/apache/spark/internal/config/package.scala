@@ -1193,6 +1193,15 @@ package object config {
       .intConf
       .createWithDefault(3)
 
+  private[spark] val SHUFFLE_MAX_ATTEMPTS_ON_NETTY_OOM =
+    ConfigBuilder("spark.shuffle.maxAttemptsOnNettyOOM")
+      .doc("The max attempts of a shuffle block would retry on Netty OOM issue before throwing " +
+        "the shuffle fetch failure.")
+      .version("3.2.0")
+      .internal()
+      .intConf
+      .createWithDefault(10)
+
   private[spark] val REDUCER_MAX_BLOCKS_IN_FLIGHT_PER_ADDRESS =
     ConfigBuilder("spark.reducer.maxBlocksInFlightPerAddress")
       .doc("This configuration limits the number of remote blocks being fetched per reduce task " +
@@ -1358,6 +1367,25 @@ package object config {
       .checkValue(v => v > 0 && v <= Int.MaxValue,
         s"The buffer size must be greater than 0 and less than or equal to ${Int.MaxValue}.")
       .createWithDefault(4096)
+
+  private[spark] val SHUFFLE_CHECKSUM_ENABLED =
+    ConfigBuilder("spark.shuffle.checksum.enabled")
+      .doc("Whether to calculate the checksum of shuffle output. If enabled, Spark will try " +
+        "its best to tell if shuffle data corruption is caused by network or disk or others.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(true)
+
+  private[spark] val SHUFFLE_CHECKSUM_ALGORITHM =
+    ConfigBuilder("spark.shuffle.checksum.algorithm")
+      .doc("The algorithm used to calculate the checksum. Currently, it only supports" +
+        " built-in algorithms of JDK.")
+      .version("3.3.0")
+      .stringConf
+      .transform(_.toUpperCase(Locale.ROOT))
+      .checkValue(Set("ADLER32", "CRC32").contains, "Shuffle checksum algorithm " +
+        "should be either Adler32 or CRC32.")
+      .createWithDefault("ADLER32")
 
   private[spark] val SHUFFLE_COMPRESS =
     ConfigBuilder("spark.shuffle.compress")
@@ -1952,7 +1980,7 @@ package object config {
       .createWithDefault(0.75)
 
   private[spark] val SPECULATION_MIN_THRESHOLD =
-    ConfigBuilder("spark.speculation.min.threshold")
+    ConfigBuilder("spark.speculation.minTaskRuntime")
       .doc("Minimum amount of time a task runs before being considered for speculation. " +
         "This can be used to avoid launching speculative copies of tasks that are very short.")
       .version("3.2.0")
@@ -2075,6 +2103,27 @@ package object config {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT =
+    ConfigBuilder("spark.shuffle.push.merge.results.timeout")
+      .doc("Specify the max amount of time DAGScheduler waits for the merge results from " +
+        "all remote shuffle services for a given shuffle. DAGScheduler will start to submit " +
+        "following stages if not all results are received within the timeout.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0L, "Timeout must be >= 0.")
+      .createWithDefaultString("10s")
+
+  private[spark] val PUSH_BASED_SHUFFLE_MERGE_FINALIZE_TIMEOUT =
+    ConfigBuilder("spark.shuffle.push.merge.finalize.timeout")
+      .doc("Specify the amount of time DAGScheduler waits after all mappers finish for " +
+        "a given shuffle map stage before it starts sending merge finalize requests to " +
+        "remote shuffle services. This allows the shuffle services some extra time to " +
+        "merge as many blocks as possible.")
+      .version("3.2.0")
+      .timeConf(TimeUnit.SECONDS)
+      .checkValue(_ >= 0L, "Timeout must be >= 0.")
+      .createWithDefaultString("10s")
+
   private[spark] val SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS =
     ConfigBuilder("spark.shuffle.push.maxRetainedMergerLocations")
       .doc("Maximum number of shuffle push merger locations cached for push based shuffle. " +
@@ -2108,7 +2157,7 @@ package object config {
         s"${SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO.key} set to 0.05, we would need " +
         "at least 50 mergers to enable push based shuffle for that stage.")
       .version("3.1.0")
-      .doubleConf
+      .intConf
       .createWithDefault(5)
 
   private[spark] val SHUFFLE_NUM_PUSH_THREADS =
@@ -2139,4 +2188,70 @@ package object config {
       // batch of block will be loaded in memory with memory mapping, which has higher overhead
       // with small MB sized chunk of data.
       .createWithDefaultString("3m")
+
+  private[spark] val JAR_IVY_REPO_PATH =
+    ConfigBuilder("spark.jars.ivy")
+      .doc("Path to specify the Ivy user directory, used for the local Ivy cache and " +
+        "package files from spark.jars.packages. " +
+        "This will override the Ivy property ivy.default.ivy.user.dir " +
+        "which defaults to ~/.ivy2.")
+      .version("1.3.0")
+      .stringConf
+      .createOptional
+
+  private[spark] val JAR_IVY_SETTING_PATH =
+    ConfigBuilder("spark.jars.ivySettings")
+      .doc("Path to an Ivy settings file to customize resolution of jars specified " +
+        "using spark.jars.packages instead of the built-in defaults, such as maven central. " +
+        "Additional repositories given by the command-line option --repositories " +
+        "or spark.jars.repositories will also be included. " +
+        "Useful for allowing Spark to resolve artifacts from behind a firewall " +
+        "e.g. via an in-house artifact server like Artifactory. " +
+        "Details on the settings file format can be found at Settings Files")
+      .version("2.2.0")
+      .stringConf
+      .createOptional
+
+  private[spark] val JAR_PACKAGES =
+    ConfigBuilder("spark.jars.packages")
+      .doc("Comma-separated list of Maven coordinates of jars to include " +
+        "on the driver and executor classpaths. The coordinates should be " +
+        "groupId:artifactId:version. If spark.jars.ivySettings is given artifacts " +
+        "will be resolved according to the configuration in the file, otherwise artifacts " +
+        "will be searched for in the local maven repo, then maven central and finally " +
+        "any additional remote repositories given by the command-line option --repositories. " +
+        "For more details, see Advanced Dependency Management.")
+      .version("1.5.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  private[spark] val JAR_PACKAGES_EXCLUSIONS =
+    ConfigBuilder("spark.jars.excludes")
+      .doc("Comma-separated list of groupId:artifactId, " +
+        "to exclude while resolving the dependencies provided in spark.jars.packages " +
+        "to avoid dependency conflicts.")
+      .version("1.5.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  private[spark] val JAR_REPOSITORIES =
+    ConfigBuilder("spark.jars.repositories")
+      .doc("Comma-separated list of additional remote repositories to search " +
+        "for the maven coordinates given with --packages or spark.jars.packages.")
+      .version("2.3.0")
+      .stringConf
+      .toSequence
+      .createWithDefault(Nil)
+
+  private[spark] val APP_ATTEMPT_ID =
+    ConfigBuilder("spark.app.attempt.id")
+      .internal()
+      .doc("The application attempt Id assigned from Hadoop YARN. " +
+        "When the application runs in cluster mode on YARN, there can be " +
+        "multiple attempts before failing the application")
+      .version("3.2.0")
+      .stringConf
+      .createOptional
 }

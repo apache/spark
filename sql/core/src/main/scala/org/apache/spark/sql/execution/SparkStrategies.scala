@@ -32,7 +32,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.execution.columnar.{InMemoryRelation, InMemoryTableScanExec}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.exchange.{REPARTITION, REPARTITION_WITH_NUM, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
@@ -224,13 +224,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         def createJoinWithoutHint() = {
           createBroadcastHashJoin(false)
-            .orElse {
-              if (!conf.preferSortMergeJoin) {
-                createShuffleHashJoin(false)
-              } else {
-                None
-              }
-            }
+            .orElse(createShuffleHashJoin(false))
             .orElse(createSortMergeJoin())
             .orElse(createCartesianProduct())
             .getOrElse {
@@ -343,7 +337,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           throw QueryCompilationErrors.groupAggPandasUDFUnsupportedByStreamingAggError()
         }
 
-        val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
+        val sessionWindowOption = namedGroupingExpressions.find { p =>
+          p.metadata.contains(SessionWindow.marker)
+        }
 
         // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
         // `groupingExpressions` is not extracted during logical phase.
@@ -354,12 +350,29 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
-        AggUtils.planStreamingAggregation(
-          normalizedGroupingExpressions,
-          aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
-          rewrittenResultExpressions,
-          stateVersion,
-          planLater(child))
+        sessionWindowOption match {
+          case Some(sessionWindow) =>
+            val stateVersion = conf.getConf(SQLConf.STREAMING_SESSION_WINDOW_STATE_FORMAT_VERSION)
+
+            AggUtils.planStreamingAggregationForSession(
+              normalizedGroupingExpressions,
+              sessionWindow,
+              aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+              rewrittenResultExpressions,
+              stateVersion,
+              conf.streamingSessionWindowMergeSessionInLocalPartition,
+              planLater(child))
+
+          case None =>
+            val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
+
+            AggUtils.planStreamingAggregation(
+              normalizedGroupingExpressions,
+              aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+              rewrittenResultExpressions,
+              stateVersion,
+              planLater(child))
+        }
 
       case _ => Nil
     }
@@ -580,11 +593,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case FlatMapGroupsWithState(
         func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, stateEnc, outputMode, _,
-        timeout, child) =>
+        timeout, hasInitialState, stateGroupAttr, sda, sDeser, initialState, child) =>
         val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
         val execPlan = FlatMapGroupsWithStateExec(
-          func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateEnc, stateVersion,
-          outputMode, timeout, batchTimestampMs = None, eventTimeWatermark = None, planLater(child))
+          func, keyDeser, valueDeser, sDeser, groupAttr, stateGroupAttr, dataAttr, sda, outputAttr,
+          None, stateEnc, stateVersion, outputMode, timeout, batchTimestampMs = None,
+          eventTimeWatermark = None, planLater(initialState), hasInitialState, planLater(child)
+        )
         execPlan :: Nil
       case _ =>
         Nil
@@ -688,9 +703,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.MapGroups(f, key, value, grouping, data, objAttr, child) =>
         execution.MapGroupsExec(f, key, value, grouping, data, objAttr, planLater(child)) :: Nil
       case logical.FlatMapGroupsWithState(
-          f, key, value, grouping, data, output, _, _, _, timeout, child) =>
-        execution.MapGroupsExec(
-          f, key, value, grouping, data, output, timeout, planLater(child)) :: Nil
+          f, keyDeserializer, valueDeserializer, grouping, data, output, stateEncoder, outputMode,
+          isFlatMapGroupsWithState, timeout, hasInitialState, initialStateGroupAttrs,
+          initialStateDataAttrs, initialStateDeserializer, initialState, child) =>
+        FlatMapGroupsWithStateExec.generateSparkPlanForBatchQueries(
+          f, keyDeserializer, valueDeserializer, initialStateDeserializer, grouping,
+          initialStateGroupAttrs, data, initialStateDataAttrs, output, timeout,
+          hasInitialState, planLater(initialState), planLater(child)
+        ) :: Nil
       case logical.CoGroup(f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr, left, right) =>
         execution.CoGroupExec(
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr,
@@ -698,7 +718,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case r @ logical.Repartition(numPartitions, shuffle, child) =>
         if (shuffle) {
-          ShuffleExchangeExec(r.partitioning, planLater(child), REPARTITION_WITH_NUM) :: Nil
+          ShuffleExchangeExec(r.partitioning, planLater(child), REPARTITION_BY_NUM) :: Nil
         } else {
           execution.CoalesceExec(numPartitions, planLater(child)) :: Nil
         }
@@ -716,6 +736,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.SampleExec(lb, ub, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data, _) =>
         LocalTableScanExec(output, data) :: Nil
+      case CommandResult(output, _, plan, data) => CommandResultExec(output, plan, data) :: Nil
       case logical.LocalLimit(IntegerLiteral(limit), child) =>
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
@@ -731,10 +752,19 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case r: logical.Range =>
         execution.RangeExec(r) :: Nil
       case r: logical.RepartitionByExpression =>
-        val shuffleOrigin = if (r.optNumPartitions.isEmpty) {
-          REPARTITION
+        val shuffleOrigin = if (r.partitionExpressions.isEmpty && r.optNumPartitions.isEmpty) {
+          REBALANCE_PARTITIONS_BY_NONE
+        } else if (r.optNumPartitions.isEmpty) {
+          REPARTITION_BY_COL
         } else {
-          REPARTITION_WITH_NUM
+          REPARTITION_BY_NUM
+        }
+        exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
+      case r: logical.RebalancePartitions =>
+        val shuffleOrigin = if (r.partitionExpressions.isEmpty) {
+          REBALANCE_PARTITIONS_BY_NONE
+        } else {
+          REBALANCE_PARTITIONS_BY_COL
         }
         exchange.ShuffleExchangeExec(r.partitioning, planLater(r.child), shuffleOrigin) :: Nil
       case ExternalRDD(outputObjAttr, rdd) => ExternalRDDScanExec(outputObjAttr, rdd) :: Nil

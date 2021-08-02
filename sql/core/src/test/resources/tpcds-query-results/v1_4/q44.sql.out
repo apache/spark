@@ -3,13 +3,13 @@
 -- !query schema
 struct<rnk:int,best_performing:string,worst_performing:string>
 -- !query output
-1	oughtantiprin st                                  	callyeingbarcallyought                            
-2	barcallyprioughtought                             	bareseationcallyought                             
-3	ableeingantiable                                  	barn stcallycally                                 
-4	n stesebarn st                                    	eingoughtn stn st                                 
-5	antioughtationbarought                            	callycallybarantiought                            
-6	callyeseationantiought                            	NULL
-7	priableeseableought                               	eseableablepriought                               
-8	ableoughtableeseought                             	ationoughtantianti                                
-9	esebarableeseought                                	callyn stantieseought                             
-10	eingoughtn station                                	barcallyableought
+1	oughtantiought                                    	eingbarantiationought                             
+2	barprin steing                                    	callyableationpri                                 
+3	ableoughtantipriought                             	ablebarcallypriought                              
+4	oughtcallyoughtation                              	callyn steseable                                  
+5	oughteseesecally                                  	ableoughtbarn st                                  
+6	eingationationanti                                	callyableoughtn st                                
+7	ablecallyought                                    	barbarcallyableought                              
+8	n steingprieseought                               	eseeingationeseought                              
+9	priprieinganti                                    	bareseprieseought                                 
+10	oughtcallybaroughtought                           	eingcallyantipri

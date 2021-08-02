@@ -56,7 +56,7 @@ equivalent to a table in a relational database or a data frame in R/Python, but 
 optimizations under the hood. DataFrames can be constructed from a wide array of [sources](sql-data-sources.html) such
 as: structured data files, tables in Hive, external databases, or existing RDDs.
 The DataFrame API is available in Scala,
-Java, [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame), and [R](api/R/index.html).
+Java, [Python](api/python/reference/api/pyspark.sql.DataFrame.html#pyspark.sql.DataFrame), and [R](api/R/index.html).
 In Scala and Java, a DataFrame is represented by a Dataset of `Row`s.
 In [the Scala API][scala-datasets], `DataFrame` is simply a type alias of `Dataset[Row]`.
 While, in [Java API][java-datasets], users need to use `Dataset<Row>` to represent a `DataFrame`.

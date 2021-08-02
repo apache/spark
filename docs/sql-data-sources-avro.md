@@ -224,7 +224,7 @@ Data source options of Avro can be set via:
  * the `options` parameter in function `from_avro`.
 
 <table class="table">
-  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th></tr>
+  <tr><th><b>Property Name</b></th><th><b>Default</b></th><th><b>Meaning</b></th><th><b>Scope</b></th><th><b>Since Version</b></th></tr>
   <tr>
     <td><code>avroSchema</code></td>
     <td>None</td>
@@ -244,24 +244,28 @@ Data source options of Avro can be set via:
       </ul>
     </td>
     <td> read, write and function <code>from_avro</code></td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td><code>recordName</code></td>
     <td>topLevelRecord</td>
     <td>Top level record name in write result, which is required in Avro spec.</td>
     <td>write</td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td><code>recordNamespace</code></td>
     <td>""</td>
     <td>Record namespace in write result.</td>
     <td>write</td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td><code>ignoreExtension</code></td>
     <td>true</td>
     <td>The option controls ignoring of files without <code>.avro</code> extensions in read.<br> If the option is enabled, all files (with and without <code>.avro</code> extension) are loaded.<br> The option has been deprecated, and it will be removed in the future releases. Please use the general data source option <a href="./sql-data-sources-generic-options.html#path-global-filter">pathGlobFilter</a> for filtering file names.</td>
     <td>read</td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td><code>compression</code></td>
@@ -269,6 +273,7 @@ Data source options of Avro can be set via:
     <td>The <code>compression</code> option allows to specify a compression codec used in write.<br>
   Currently supported codecs are <code>uncompressed</code>, <code>snappy</code>, <code>deflate</code>, <code>bzip2</code> and <code>xz</code>.<br> If the option is not set, the configuration <code>spark.sql.avro.compression.codec</code> config is taken into account.</td>
     <td>write</td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td><code>mode</code></td>
@@ -282,10 +287,11 @@ Data source options of Avro can be set via:
       </ul>
     </td>
     <td>function <code>from_avro</code></td>
+    <td>2.4.0</td>
   </tr>
   <tr>
     <td><code>datetimeRebaseMode</code></td>
-    <td>The SQL config <code>spark.sql.avro</code> <code>.datetimeRebaseModeInRead</code> which is <code>EXCEPTION</code> by default</td>
+    <td>(value of <code>spark.sql.avro.datetimeRebaseModeInRead</code> configuration)</td>
     <td>The <code>datetimeRebaseMode</code> option allows to specify the rebasing mode for the values of the <code>date</code>, <code>timestamp-micros</code>, <code>timestamp-millis</code> logical types from the Julian to Proleptic Gregorian calendar.<br>
       Currently supported modes are:
       <ul>
@@ -295,6 +301,14 @@ Data source options of Avro can be set via:
       </ul>
     </td>
     <td>read and function <code>from_avro</code></td>
+    <td>3.2.0</td>
+  </tr>
+  <tr>
+    <td><code>positionalFieldMatching</code></td>
+    <td>false</td>
+    <td>This can be used in tandem with the `avroSchema` option to adjust the behavior for matching the fields in the provided Avro schema with those in the SQL schema. By default, the matching will be performed using field names, ignoring their positions. If this option is set to "true", the matching will be based on the position of the fields.</td>
+    <td>read and write</td>
+    <td>3.2.0</td>
   </tr>
 </table>
 

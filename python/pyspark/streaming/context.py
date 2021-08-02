@@ -139,8 +139,9 @@ class StreamingContext(object):
                 cls._activeContext = None
             elif activeJvmContextOption.get().hashCode() != activePythonContextJavaId:
                 cls._activeContext = None
-                raise Exception("JVM's active JavaStreamingContext is not the JavaStreamingContext "
-                                "backing the action Python StreamingContext. This is unexpected.")
+                raise RuntimeError(
+                    "JVM's active JavaStreamingContext is not the JavaStreamingContext "
+                    "backing the action Python StreamingContext. This is unexpected.")
         return cls._activeContext
 
     @classmethod
@@ -162,8 +163,8 @@ class StreamingContext(object):
             Function to create a new JavaStreamingContext and setup DStreams
         """
 
-        if setupFunc is None:
-            raise Exception("setupFunc cannot be None")
+        if not callable(setupFunc):
+            raise TypeError("setupFunc should be callable.")
         activeContext = cls.getActive()
         if activeContext is not None:
             return activeContext

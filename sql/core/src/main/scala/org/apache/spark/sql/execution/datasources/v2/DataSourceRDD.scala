@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class DataSourceRDDPartition(val index: Int, val inputPartition: InputPartition)
@@ -66,7 +66,12 @@ class DataSourceRDD(
         new PartitionIterator[InternalRow](rowReader, customMetrics))
       (iter, rowReader)
     }
-    context.addTaskCompletionListener[Unit](_ => reader.close())
+    context.addTaskCompletionListener[Unit] { _ =>
+      // In case of early stopping before consuming the entire iterator,
+      // we need to do one more metric update at the end of the task.
+      CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
+      reader.close()
+    }
     // TODO: SPARK-25083 remove the type erasure hack in data source scan
     new InterruptibleIterator(context, iter.asInstanceOf[Iterator[InternalRow]])
   }
@@ -81,6 +86,8 @@ private class PartitionIterator[T](
     customMetrics: Map[String, SQLMetric]) extends Iterator[T] {
   private[this] var valuePrepared = false
 
+  private var numRow = 0L
+
   override def hasNext: Boolean = {
     if (!valuePrepared) {
       valuePrepared = reader.next()
@@ -92,12 +99,10 @@ private class PartitionIterator[T](
     if (!hasNext) {
       throw QueryExecutionErrors.endOfStreamError()
     }
-    reader.currentMetricsValues.foreach { metric =>
-      assert(customMetrics.contains(metric.name()),
-        s"Custom metrics ${customMetrics.keys.mkString(", ")} do not contain the metric " +
-          s"${metric.name()}")
-      customMetrics(metric.name()).set(metric.value())
+    if (numRow % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+      CustomMetrics.updateMetrics(reader.currentMetricsValues, customMetrics)
     }
+    numRow += 1
     valuePrepared = false
     reader.get()
   }

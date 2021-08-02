@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.logical.EventTimeWatermark
 import org.apache.spark.sql.catalyst.trees.TreePattern
-import org.apache.spark.sql.catalyst.trees.TreePattern.ATTRIBUTE_REFERENCE
+import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util.quoteIfNeeded
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
@@ -123,6 +123,7 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
   def withName(newName: String): Attribute
   def withMetadata(newMetadata: Metadata): Attribute
   def withExprId(newExprId: ExprId): Attribute
+  def withDataType(newType: DataType): Attribute
 
   override def toAttribute: Attribute = this
   def newInstance(): Attribute
@@ -157,6 +158,8 @@ case class Alias(child: Expression, name: String)(
     val explicitMetadata: Option[Metadata] = None,
     val nonInheritableMetadataKeys: Seq[String] = Seq.empty)
   extends UnaryExpression with NamedExpression {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ALIAS)
 
   // Alias(Generator, xx) need to be transformed into Generate(generator, ...)
   override lazy val resolved =
@@ -276,11 +279,6 @@ case class AttributeReference(
     case _ => false
   }
 
-  override def semanticEquals(other: Expression): Boolean = other match {
-    case ar: AttributeReference => sameRef(ar)
-    case _ => false
-  }
-
   override def semanticHash(): Int = {
     this.exprId.hashCode()
   }
@@ -342,6 +340,10 @@ case class AttributeReference(
     AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier)
   }
 
+  override def withDataType(newType: DataType): Attribute = {
+    AttributeReference(name, newType, nullable, metadata)(exprId, qualifier)
+  }
+
   override protected final def otherCopyArgs: Seq[AnyRef] = {
     exprId :: qualifier :: Nil
   }
@@ -398,6 +400,8 @@ case class PrettyAttribute(
   override def exprId: ExprId = throw new UnsupportedOperationException
   override def withExprId(newExprId: ExprId): Attribute =
     throw new UnsupportedOperationException
+  override def withDataType(newType: DataType): Attribute =
+    throw new UnsupportedOperationException
   override def nullable: Boolean = true
 }
 
@@ -417,6 +421,7 @@ case class OuterReference(e: NamedExpression)
   override def exprId: ExprId = e.exprId
   override def toAttribute: Attribute = e.toAttribute
   override def newInstance(): NamedExpression = OuterReference(e.newInstance())
+  final override val nodePatterns: Seq[TreePattern] = Seq(OUTER_REFERENCE)
 }
 
 object VirtualColumn {

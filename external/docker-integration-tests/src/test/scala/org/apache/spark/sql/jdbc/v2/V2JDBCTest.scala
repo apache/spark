@@ -20,12 +20,13 @@ package org.apache.spark.sql.jdbc.v2
 import org.apache.log4j.Level
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.jdbc.DockerIntegrationFunSuite
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-private[v2] trait V2JDBCTest extends SharedSparkSession {
+private[v2] trait V2JDBCTest extends SharedSparkSession with DockerIntegrationFunSuite {
   val catalogName: String
   // dialect specific update column type test
   def testUpdateColumnType(tbl: String): Unit
@@ -49,7 +50,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
     val msg = intercept[AnalysisException] {
       sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column DROP NOT NULL")
     }.getMessage
-    assert(msg.contains("Cannot update missing field bad_column"))
+    assert(msg.contains("Missing field bad_column"))
   }
 
   def testRenameColumn(tbl: String): Unit = {
@@ -102,7 +103,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $catalogName.alt_table DROP COLUMN bad_column")
       }.getMessage
-      assert(msg.contains("Cannot delete missing field bad_column in alt_table schema"))
+      assert(msg.contains(s"Missing field bad_column in table $catalogName.alt_table"))
     }
     // Drop a column from a not existing table
     val msg = intercept[AnalysisException] {
@@ -118,7 +119,7 @@ private[v2] trait V2JDBCTest extends SharedSparkSession {
       val msg2 = intercept[AnalysisException] {
         sql(s"ALTER TABLE $catalogName.alt_table ALTER COLUMN bad_column TYPE DOUBLE")
       }.getMessage
-      assert(msg2.contains("Cannot update missing field bad_column"))
+      assert(msg2.contains("Missing field bad_column"))
     }
     // Update column type in not existing table
     val msg = intercept[AnalysisException] {

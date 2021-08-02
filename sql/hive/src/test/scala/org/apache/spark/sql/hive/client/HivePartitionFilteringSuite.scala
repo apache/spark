@@ -31,7 +31,6 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils.DEFAULT_PARTITION_NAME
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DateType, IntegerType, LongType, StringType, StructType}
 import org.apache.spark.util.Utils
 
@@ -114,7 +113,7 @@ class HivePartitionFilteringSuite(version: String)
   test(s"getPartitionsByFilter returns all partitions when $tryDirectSqlKey=false") {
     val client = init(false)
     val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
-      Seq(attr("ds") === 20170101), SQLConf.get.sessionLocalTimeZone)
+      Seq(attr("ds") === 20170101))
 
     assert(filteredPartitions.size == testPartitionCount)
   }
@@ -604,7 +603,7 @@ class HivePartitionFilteringSuite(version: String)
     val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
       Seq(
         transform(filterExpr)
-      ), SQLConf.get.sessionLocalTimeZone)
+      ))
 
     val expectedPartitionCount = expectedPartitionCubes.map {
       case (expectedDs, expectedH, expectedChunks, expectedD, expectedDatestr) =>

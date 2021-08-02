@@ -3,4 +3,4 @@
 -- !query schema
 struct<sum(sales):decimal(28,2)>
 -- !query output
-17030.91
+NULL

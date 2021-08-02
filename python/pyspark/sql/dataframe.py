@@ -18,6 +18,7 @@
 import sys
 import random
 import warnings
+from collections.abc import Iterable
 from functools import reduce
 from html import escape as html_escape
 
@@ -116,7 +117,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
     def registerTempTable(self, name):
-        """Registers this DataFrame as a temporary table using the given name.
+        """Registers this :class:`DataFrame` as a temporary table using the given name.
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
@@ -276,9 +277,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if self._schema is None:
             try:
                 self._schema = _parse_datatype_json_string(self._jdf.schema().json())
-            except AttributeError as e:
-                raise Exception(
-                    "Unable to parse datatype from schema. %s" % e)
+            except Exception as e:
+                raise ValueError(
+                    "Unable to parse datatype from schema. %s" % e) from e
         return self._schema
 
     def printSchema(self):
@@ -301,7 +302,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         .. versionadded:: 1.3.0
 
-        parameters
+        Parameters
         ----------
         extended : bool, optional
             default ``False``. If ``False``, prints only the physical plan.
@@ -350,7 +351,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
 
         if extended is not None and mode is not None:
-            raise Exception("extended and mode should not be set together.")
+            raise ValueError("extended and mode should not be set together.")
 
         # For the no argument case: df.explain()
         is_no_argument = extended is None and mode is None
@@ -424,12 +425,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
     @property
     def isStreaming(self):
-        """Returns ``True`` if this :class:`Dataset` contains one or more sources that continuously
-        return data as it arrives. A :class:`Dataset` that reads data from a streaming source
-        must be executed as a :class:`StreamingQuery` using the :func:`start` method in
-        :class:`DataStreamWriter`.  Methods that return a single answer, (e.g., :func:`count` or
-        :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
-        source present.
+        """Returns ``True`` if this :class:`DataFrame` contains one or more sources that
+        continuously return data as it arrives. A :class:`DataFrame` that reads data from a
+        streaming source must be executed as a :class:`StreamingQuery` using the :func:`start`
+        method in :class:`DataStreamWriter`.  Methods that return a single answer, (e.g.,
+        :func:`count` or :func:`collect`) will throw an :class:`AnalysisException` when there
+        is a streaming source present.
 
         .. versionadded:: 2.0.0
 
@@ -448,7 +449,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ----------
         n : int, optional
             Number of rows to show.
-        truncate : bool, optional
+        truncate : bool or int, optional
             If set to ``True``, truncate strings longer than 20 chars by default.
             If set to a number greater than one, truncates long strings to length ``truncate``
             and align cells right.
@@ -482,10 +483,23 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
          age  | 5
          name | Bob
         """
+
+        if not isinstance(n, int) or isinstance(n, bool):
+            raise TypeError("Parameter 'n' (number of rows) must be an int")
+
+        if not isinstance(vertical, bool):
+            raise TypeError("Parameter 'vertical' must be a bool")
+
         if isinstance(truncate, bool) and truncate:
             print(self._jdf.showString(n, 20, vertical))
         else:
-            print(self._jdf.showString(n, int(truncate), vertical))
+            try:
+                int_truncate = int(truncate)
+            except ValueError:
+                raise TypeError(
+                    "Parameter 'truncate={}' should be either bool or int.".format(truncate))
+
+            print(self._jdf.showString(n, int_truncate, vertical))
 
     def __repr__(self):
         if not self._support_repr_html and self.sql_ctx._conf.isReplEagerEvalEnabled():
@@ -529,10 +543,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             return None
 
     def checkpoint(self, eager=True):
-        """Returns a checkpointed version of this Dataset. Checkpointing can be used to truncate the
-        logical plan of this :class:`DataFrame`, which is especially useful in iterative algorithms
-        where the plan may grow exponentially. It will be saved to files inside the checkpoint
-        directory set with :meth:`SparkContext.setCheckpointDir`.
+        """Returns a checkpointed version of this :class:`DataFrame`. Checkpointing can be used to
+        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
+        iterative algorithms where the plan may grow exponentially. It will be saved to files
+        inside the checkpoint directory set with :meth:`SparkContext.setCheckpointDir`.
 
         .. versionadded:: 2.1.0
 
@@ -549,8 +563,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         return DataFrame(jdf, self.sql_ctx)
 
     def localCheckpoint(self, eager=True):
-        """Returns a locally checkpointed version of this Dataset. Checkpointing can be used to
-        truncate the logical plan of this :class:`DataFrame`, which is especially useful in
+        """Returns a locally checkpointed version of this :class:`DataFrame`. Checkpointing can be
+        used to truncate the logical plan of this :class:`DataFrame`, which is especially useful in
         iterative algorithms where the plan may grow exponentially. Local checkpoints are
         stored in the executors using the caching subsystem and therefore they are not reliable.
 
@@ -905,10 +919,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+
         |age| name|
         +---+-----+
-        |  5|  Bob|
+        |  2|Alice|
         |  5|  Bob|
         |  2|Alice|
-        |  2|Alice|
+        |  5|  Bob|
         +---+-----+
         >>> data = data.repartition(7, "age")
         >>> data.show()
@@ -922,7 +936,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+-----+
         >>> data.rdd.getNumPartitions()
         7
-        >>> data = data.repartition("name", "age")
+        >>> data = data.repartition(3, "name", "age")
         >>> data.show()
         +---+-----+
         |age| name|
@@ -1134,12 +1148,12 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if isinstance(col, str):
             col = Column(col)
         elif not isinstance(col, Column):
-            raise ValueError("col must be a string or a column, but got %r" % type(col))
+            raise TypeError("col must be a string or a column, but got %r" % type(col))
         if not isinstance(fractions, dict):
-            raise ValueError("fractions must be a dict but got %r" % type(fractions))
+            raise TypeError("fractions must be a dict but got %r" % type(fractions))
         for k, v in fractions.items():
             if not isinstance(k, (float, int, str)):
-                raise ValueError("key must be float, int, or string, but got %r" % type(k))
+                raise TypeError("key must be float, int, or string, but got %r" % type(k))
             fractions[k] = float(v)
         col = col._jc
         seed = seed if seed is not None else random.randint(0, sys.maxsize)
@@ -1225,7 +1239,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +----+
         """
         if not isinstance(colName, str):
-            raise ValueError("colName should be provided as string")
+            raise TypeError("colName should be provided as string")
         jc = self._jdf.colRegex(colName)
         return Column(jc)
 
@@ -1817,6 +1831,45 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
         return self.groupBy().agg(*exprs)
 
+    @since(3.3)
+    def observe(self, observation, *exprs):
+        """Observe (named) metrics through an :class:`Observation` instance.
+
+        A user can retrieve the metrics by accessing `Observation.get`.
+
+        .. versionadded:: 3.3.0
+
+        Parameters
+        ----------
+        observation : :class:`Observation`
+            an :class:`Observation` instance to obtain the metric.
+        exprs : list of :class:`Column`
+            column expressions (:class:`Column`).
+
+        Returns
+        -------
+        :class:`DataFrame`
+            the observed :class:`DataFrame`.
+
+        Notes
+        -----
+        This method does not support streaming datasets.
+
+        Examples
+        --------
+        >>> from pyspark.sql.functions import col, count, lit, max
+        >>> from pyspark.sql import Observation
+        >>> observation = Observation("my metrics")
+        >>> observed_df = df.observe(observation, count(lit(1)).alias("count"), max(col("age")))
+        >>> observed_df.count()
+        2
+        >>> observation.get
+        {'count': 2, 'max(age)': 5}
+        """
+        from pyspark.sql import Observation
+        assert isinstance(observation, Observation), "observation should be Observation"
+        return observation._on(self, *exprs)
+
     @since(2.0)
     def union(self, other):
         """ Return a new :class:`DataFrame` containing union of rows in this and another
@@ -1967,6 +2020,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         |Alice|  5|    80|
         +-----+---+------+
         """
+        if subset is not None and (
+                not isinstance(subset, Iterable) or isinstance(subset, str)):
+            raise TypeError("Parameter 'subset' must be a list of columns")
+
         if subset is None:
             jdf = self._jdf.dropDuplicates()
         else:
@@ -2009,7 +2066,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         elif isinstance(subset, str):
             subset = [subset]
         elif not isinstance(subset, (list, tuple)):
-            raise ValueError("subset should be a list or tuple of column names")
+            raise TypeError("subset should be a list or tuple of column names")
 
         if thresh is None:
             thresh = len(subset) if how == 'any' else 1
@@ -2067,7 +2124,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         +---+------+-------+
         """
         if not isinstance(value, (float, int, str, bool, dict)):
-            raise ValueError("value should be a float, int, string, bool or dict")
+            raise TypeError("value should be a float, int, string, bool or dict")
 
         # Note that bool validates isinstance(int), but we don't want to
         # convert bools to floats
@@ -2083,7 +2140,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             if isinstance(subset, str):
                 subset = [subset]
             elif not isinstance(subset, (list, tuple)):
-                raise ValueError("subset should be a list or tuple of column names")
+                raise TypeError("subset should be a list or tuple of column names")
 
             return DataFrame(self._jdf.na().fill(value, self._jseq(subset)), self.sql_ctx)
 
@@ -2186,15 +2243,15 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         # Validate input types
         valid_types = (bool, float, int, str, list, tuple)
         if not isinstance(to_replace, valid_types + (dict, )):
-            raise ValueError(
+            raise TypeError(
                 "to_replace should be a bool, float, int, string, list, tuple, or dict. "
                 "Got {0}".format(type(to_replace)))
 
         if not isinstance(value, valid_types) and value is not None \
                 and not isinstance(to_replace, dict):
-            raise ValueError("If to_replace is not a dict, value should be "
-                             "a bool, float, int, string, list, tuple or None. "
-                             "Got {0}".format(type(value)))
+            raise TypeError("If to_replace is not a dict, value should be "
+                            "a bool, float, int, string, list, tuple or None. "
+                            "Got {0}".format(type(value)))
 
         if isinstance(to_replace, (list, tuple)) and isinstance(value, (list, tuple)):
             if len(to_replace) != len(value):
@@ -2202,8 +2259,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                                  "Got {0} and {1}".format(len(to_replace), len(value)))
 
         if not (subset is None or isinstance(subset, (list, tuple, str))):
-            raise ValueError("subset should be a list or tuple of column names, "
-                             "column name or None. Got {0}".format(type(subset)))
+            raise TypeError("subset should be a list or tuple of column names, "
+                            "column name or None. Got {0}".format(type(subset)))
 
         # Reshape input arguments if necessary
         if isinstance(to_replace, (float, int, str)):
@@ -2285,7 +2342,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         """
 
         if not isinstance(col, (str, list, tuple)):
-            raise ValueError("col should be a string, list or tuple, but got %r" % type(col))
+            raise TypeError("col should be a string, list or tuple, but got %r" % type(col))
 
         isStr = isinstance(col, str)
 
@@ -2296,11 +2353,11 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
 
         for c in col:
             if not isinstance(c, str):
-                raise ValueError("columns should be strings, but got %r" % type(c))
+                raise TypeError("columns should be strings, but got %r" % type(c))
         col = _to_list(self._sc, col)
 
         if not isinstance(probabilities, (list, tuple)):
-            raise ValueError("probabilities should be a list or tuple")
+            raise TypeError("probabilities should be a list or tuple")
         if isinstance(probabilities, tuple):
             probabilities = list(probabilities)
         for p in probabilities:
@@ -2308,8 +2365,10 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
                 raise ValueError("probabilities should be numerical (float, int) in [0,1].")
         probabilities = _to_list(self._sc, probabilities)
 
-        if not isinstance(relativeError, (float, int)) or relativeError < 0:
-            raise ValueError("relativeError should be numerical (float, int) >= 0.")
+        if not isinstance(relativeError, (float, int)):
+            raise TypeError("relativeError should be numerical (float, int)")
+        if relativeError < 0:
+            raise ValueError("relativeError should be >= 0.")
         relativeError = float(relativeError)
 
         jaq = self._jdf.stat().approxQuantile(col, probabilities, relativeError)
@@ -2334,9 +2393,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             The correlation method. Currently only supports "pearson"
         """
         if not isinstance(col1, str):
-            raise ValueError("col1 should be a string.")
+            raise TypeError("col1 should be a string.")
         if not isinstance(col2, str):
-            raise ValueError("col2 should be a string.")
+            raise TypeError("col2 should be a string.")
         if not method:
             method = "pearson"
         if not method == "pearson":
@@ -2359,9 +2418,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             The name of the second column
         """
         if not isinstance(col1, str):
-            raise ValueError("col1 should be a string.")
+            raise TypeError("col1 should be a string.")
         if not isinstance(col2, str):
-            raise ValueError("col2 should be a string.")
+            raise TypeError("col2 should be a string.")
         return self._jdf.stat().cov(col1, col2)
 
     def crosstab(self, col1, col2):
@@ -2386,9 +2445,9 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
             of the :class:`DataFrame`.
         """
         if not isinstance(col1, str):
-            raise ValueError("col1 should be a string.")
+            raise TypeError("col1 should be a string.")
         if not isinstance(col2, str):
-            raise ValueError("col2 should be a string.")
+            raise TypeError("col2 should be a string.")
         return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sql_ctx)
 
     def freqItems(self, cols, support=None):
@@ -2418,7 +2477,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         if isinstance(cols, tuple):
             cols = list(cols)
         if not isinstance(cols, list):
-            raise ValueError("cols must be a list or tuple of column names as strings.")
+            raise TypeError("cols must be a list or tuple of column names as strings.")
         if not support:
             support = 0.01
         return DataFrame(self._jdf.stat().freqItems(_to_seq(self._sc, cols), support), self.sql_ctx)
@@ -2453,7 +2512,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         [Row(age=2, name='Alice', age2=4), Row(age=5, name='Bob', age2=7)]
 
         """
-        assert isinstance(col, Column), "col should be Column"
+        if not isinstance(col, Column):
+            raise TypeError("col should be Column")
         return DataFrame(self._jdf.withColumn(colName, col._jc), self.sql_ctx)
 
     def withColumnRenamed(self, existing, new):
@@ -2597,8 +2657,8 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         True
         """
         if not isinstance(other, DataFrame):
-            raise ValueError("other parameter should be of DataFrame; however, got %s"
-                             % type(other))
+            raise TypeError("other parameter should be of DataFrame; however, got %s"
+                            % type(other))
         return self._jdf.sameSemantics(other._jdf)
 
     def semanticHash(self):
@@ -2678,6 +2738,69 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         ... ).partitionedBy("col").createOrReplace()
         """
         return DataFrameWriterV2(self, table)
+
+    def to_pandas_on_spark(self, index_col=None):
+        """
+        Converts the existing DataFrame into a pandas-on-Spark DataFrame.
+
+        If a pandas-on-Spark DataFrame is converted to a Spark DataFrame and then back
+        to pandas-on-Spark, it will lose the index information and the original index
+        will be turned into a normal column.
+
+        This is only available if Pandas is installed and available.
+
+        Parameters
+        ----------
+        index_col: str or list of str, optional, default: None
+            Index column of table in Spark.
+
+        See Also
+        --------
+        pyspark.pandas.frame.DataFrame.to_spark
+
+        Examples
+        --------
+        >>> df.show()  # doctest: +SKIP
+        +----+----+
+        |Col1|Col2|
+        +----+----+
+        |   a|   1|
+        |   b|   2|
+        |   c|   3|
+        +----+----+
+
+        >>> df.to_pandas_on_spark()  # doctest: +SKIP
+          Col1  Col2
+        0    a     1
+        1    b     2
+        2    c     3
+
+        We can specify the index columns.
+
+        >>> df.to_pandas_on_spark(index_col="Col1"): # doctest: +SKIP
+              Col2
+        Col1
+        a        1
+        b        2
+        c        3
+        """
+        from pyspark.pandas.namespace import _get_index_map
+        from pyspark.pandas.frame import DataFrame
+        from pyspark.pandas.internal import InternalFrame
+
+        index_spark_columns, index_names = _get_index_map(self, index_col)
+        internal = InternalFrame(
+            spark_frame=self, index_spark_columns=index_spark_columns, index_names=index_names
+        )
+        return DataFrame(internal)
+
+    # Keep to_koalas for backward compatibility for now.
+    def to_koalas(self, index_col=None):
+        warnings.warn(
+            "DataFrame.to_koalas is deprecated. Use DataFrame.to_pandas_on_spark instead.",
+            FutureWarning,
+        )
+        return self.to_pandas_on_spark(index_col)
 
 
 def _to_scala_map(sc, jm):

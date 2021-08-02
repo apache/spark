@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.{fileToString, stringToFile}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_SECOND
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.Utils
@@ -131,8 +132,7 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
     // We use a path based on Spark home for 2 reasons:
     //   1. Maven can't get correct resource directory when resources in other jars.
     //   2. We test subclasses in the hive-thriftserver module.
-    java.nio.file.Paths.get(sparkHome,
-      "sql", "core", "src", "test", "resources", "sql-tests").toFile
+    getWorkspaceFilePath("sql", "core", "src", "test", "resources", "sql-tests").toFile
   }
 
   protected val inputFilePath = new File(baseResourcePath, "inputs").getAbsolutePath
@@ -143,6 +143,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   protected override def sparkConf: SparkConf = super.sparkConf
     // Fewer shuffle partitions to speed up testing.
     .set(SQLConf.SHUFFLE_PARTITIONS, 4)
+    // use Java 8 time API to handle negative years properly
+    .set(SQLConf.DATETIME_JAVA8API_ENABLED, true)
 
   // SPARK-32106 Since we add SQL test 'transform.sql' will use `cat` command,
   // here we need to ignore it.
@@ -187,6 +189,11 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
    */
   protected trait AnsiTest
 
+  /**
+   * traits that indicate the default timestamp type is TimestampNTZType.
+   */
+  protected trait TimestampNTZTest
+
   protected trait UDFTest {
     val udf: TestUDF
   }
@@ -216,6 +223,10 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
   /** An ANSI-related test case. */
   protected case class AnsiTestCase(
       name: String, inputFile: String, resultFile: String) extends TestCase with AnsiTest
+
+  /** An date time test case with default timestamp as TimestampNTZType */
+  protected case class TimestampNTZTestCase(
+      name: String, inputFile: String, resultFile: String) extends TestCase with TimestampNTZTest
 
   protected def createScalaTestCase(testCase: TestCase): Unit = {
     if (ignoreList.exists(t =>
@@ -371,6 +382,9 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         localSparkSession.conf.set(SQLConf.LEGACY_INTERVAL_ENABLED.key, true)
       case _: AnsiTest =>
         localSparkSession.conf.set(SQLConf.ANSI_ENABLED.key, true)
+      case _: TimestampNTZTest =>
+        localSparkSession.conf.set(SQLConf.TIMESTAMP_TYPE.key,
+          TimestampTypes.TIMESTAMP_NTZ.toString)
       case _ =>
     }
 
@@ -482,6 +496,8 @@ class SQLQueryTestSuite extends QueryTest with SharedSparkSession with SQLHelper
         PgSQLTestCase(testCaseName, absPath, resultFile) :: Nil
       } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}ansi")) {
         AnsiTestCase(testCaseName, absPath, resultFile) :: Nil
+      } else if (file.getAbsolutePath.startsWith(s"$inputFilePath${File.separator}timestampNTZ")) {
+        TimestampNTZTestCase(testCaseName, absPath, resultFile) :: Nil
       } else {
         RegularTestCase(testCaseName, absPath, resultFile) :: Nil
       }

@@ -27,9 +27,9 @@ import org.apache.spark.util.Utils
 /**
  * Adds a jar to the current session so it can be used (for UDFs or serdes).
  */
-case class AddJarCommand(path: String) extends LeafRunnableCommand {
+case class AddJarsCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.resourceLoader.addJar(path)
+    paths.foreach(sparkSession.sessionState.resourceLoader.addJar(_))
     Seq.empty[Row]
   }
 }
@@ -37,10 +37,10 @@ case class AddJarCommand(path: String) extends LeafRunnableCommand {
 /**
  * Adds a file to the current session so it can be used.
  */
-case class AddFileCommand(path: String) extends LeafRunnableCommand {
+case class AddFilesCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val recursive = !sparkSession.sessionState.conf.addSingleFileInAddFile
-    sparkSession.sparkContext.addFile(path, recursive)
+    paths.foreach(sparkSession.sparkContext.addFile(_, recursive))
     Seq.empty[Row]
   }
 }
@@ -48,9 +48,9 @@ case class AddFileCommand(path: String) extends LeafRunnableCommand {
 /**
  * Adds an archive to the current session so it can be used.
  */
-case class AddArchiveCommand(path: String) extends LeafRunnableCommand {
+case class AddArchivesCommand(paths: Seq[String]) extends LeafRunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sparkContext.addArchive(path)
+    paths.foreach(sparkSession.sparkContext.addArchive(_))
     Seq.empty[Row]
   }
 }

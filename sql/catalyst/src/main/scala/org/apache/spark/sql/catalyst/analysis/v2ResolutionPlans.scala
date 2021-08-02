@@ -21,10 +21,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, LeafExpression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_FUNC}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
+import org.apache.spark.sql.types.{DataType, StructField}
 
 /**
  * Holds the name of a namespace that has yet to be looked up in a catalog. It will be resolved to
@@ -88,6 +90,30 @@ case class UnresolvedPartitionSpec(
   override lazy val resolved = false
 }
 
+sealed trait FieldName extends LeafExpression with Unevaluable {
+  def name: Seq[String]
+  override def dataType: DataType = throw new IllegalStateException(
+    "FieldName.dataType should not be called.")
+  override def nullable: Boolean = throw new IllegalStateException(
+    "FieldName.nullable should not be called.")
+}
+
+case class UnresolvedFieldName(name: Seq[String]) extends FieldName {
+  override lazy val resolved = false
+}
+
+sealed trait FieldPosition extends LeafExpression with Unevaluable {
+  def position: ColumnPosition
+  override def dataType: DataType = throw new IllegalStateException(
+    "FieldPosition.dataType should not be called.")
+  override def nullable: Boolean = throw new IllegalStateException(
+    "FieldPosition.nullable should not be called.")
+}
+
+case class UnresolvedFieldPosition(position: ColumnPosition) extends FieldPosition {
+  override lazy val resolved = false
+}
+
 /**
  * Holds the name of a function that has yet to be looked up in a catalog. It will be resolved to
  * [[ResolvedFunc]] during analysis.
@@ -95,6 +121,7 @@ case class UnresolvedPartitionSpec(
 case class UnresolvedFunc(multipartIdentifier: Seq[String]) extends LeafNode {
   override lazy val resolved: Boolean = false
   override def output: Seq[Attribute] = Nil
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_FUNC)
 }
 
 /**
@@ -135,6 +162,13 @@ case class ResolvedPartitionSpec(
     names: Seq[String],
     ident: InternalRow,
     location: Option[String] = None) extends PartitionSpec
+
+case class ResolvedFieldName(path: Seq[String], field: StructField) extends FieldName {
+  def name: Seq[String] = path :+ field.name
+}
+
+case class ResolvedFieldPosition(position: ColumnPosition) extends FieldPosition
+
 
 /**
  * A plan containing resolved (temp) views.

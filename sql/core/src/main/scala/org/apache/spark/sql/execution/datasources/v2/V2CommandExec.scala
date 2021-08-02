@@ -55,7 +55,7 @@ abstract class V2CommandExec extends SparkPlan {
   override def executeTail(limit: Int): Array[InternalRow] = result.takeRight(limit).toArray
 
   protected override def doExecute(): RDD[InternalRow] = {
-    sqlContext.sparkContext.parallelize(result, 1)
+    sparkContext.parallelize(result, 1)
   }
 
   override def producedAttributes: AttributeSet = outputSet

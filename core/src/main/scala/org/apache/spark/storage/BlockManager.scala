@@ -132,6 +132,11 @@ private[spark] class HostLocalDirManager(
       executorIdToLocalDirsCache.asMap().asScala.toMap
     }
 
+  private[spark] def getCachedHostLocalDirsFor(executorId: String): Option[Array[String]] =
+    executorIdToLocalDirsCache.synchronized {
+      Option(executorIdToLocalDirsCache.getIfPresent(executorId))
+    }
+
   private[spark] def getHostLocalDirs(
       host: String,
       port: Int,
@@ -250,7 +255,9 @@ private[spark] class BlockManager(
   // specified memory threshold. Files will be deleted automatically based on weak reference.
   // Exposed for test
   private[storage] val remoteBlockTempFileManager =
-    new BlockManager.RemoteBlockDownloadFileManager(this)
+    new BlockManager.RemoteBlockDownloadFileManager(
+      this,
+      securityManager.getIOEncryptionKey())
   private val maxRemoteBlockToMem = conf.get(config.MAX_REMOTE_BLOCK_SIZE_FETCH_TO_MEM)
 
   var hostLocalDirManager: Option[HostLocalDirManager] = None
@@ -301,7 +308,7 @@ private[spark] class BlockManager(
     private def saveDeserializedValuesToMemoryStore(inputStream: InputStream): Boolean = {
       try {
         val values = serializerManager.dataDeserializeStream(blockId, inputStream)(classTag)
-        memoryStore.putIteratorAsValues(blockId, values, classTag) match {
+        memoryStore.putIteratorAsValues(blockId, values, level.memoryMode, classTag) match {
           case Right(_) => true
           case Left(iter) =>
             // If putting deserialized values in memory failed, we will put the bytes directly
@@ -503,8 +510,9 @@ private[spark] class BlockManager(
     }
 
     hostLocalDirManager = {
-      if (conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
-          !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) {
+      if ((conf.get(config.SHUFFLE_HOST_LOCAL_DISK_READING_ENABLED) &&
+          !conf.get(config.SHUFFLE_USE_OLD_FETCH_PROTOCOL)) ||
+          Utils.isPushBasedShuffleEnabled(conf)) {
         Some(new HostLocalDirManager(
           futureExecutionContext,
           conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE),
@@ -529,10 +537,17 @@ private[spark] class BlockManager(
 
   private def registerWithExternalShuffleServer(): Unit = {
     logInfo("Registering executor with local external shuffle service.")
+    val shuffleManagerMeta =
+      if (Utils.isPushBasedShuffleEnabled(conf)) {
+        s"${shuffleManager.getClass.getName}:" +
+          s"${diskBlockManager.getMergeDirectoryAndAttemptIDJsonString()}}}"
+      } else {
+        shuffleManager.getClass.getName
+      }
     val shuffleConfig = new ExecutorShuffleInfo(
       diskBlockManager.localDirsString,
       diskBlockManager.subDirsPerLocalDir,
-      shuffleManager.getClass.getName)
+      shuffleManagerMeta)
 
     val MAX_ATTEMPTS = conf.get(config.SHUFFLE_REGISTRATION_MAX_ATTEMPTS)
     val SLEEP_TIME_SECS = 5
@@ -726,6 +741,27 @@ private[spark] class BlockManager(
         tmpFile.delete()
       }
     }
+  }
+
+  /**
+   * Get the local merged shuffle block data for the given block ID as multiple chunks.
+   * A merged shuffle file is divided into multiple chunks according to the index file.
+   * Instead of reading the entire file as a single block, we split it into smaller chunks
+   * which will be memory efficient when performing certain operations.
+   */
+  def getLocalMergedBlockData(
+      blockId: ShuffleMergedBlockId,
+      dirs: Array[String]): Seq[ManagedBuffer] = {
+    shuffleManager.shuffleBlockResolver.getMergedBlockData(blockId, Some(dirs))
+  }
+
+  /**
+   * Get the local merged shuffle block meta data for the given block ID.
+   */
+  def getLocalMergedBlockMeta(
+      blockId: ShuffleMergedBlockId,
+      dirs: Array[String]): MergedBlockMeta = {
+    shuffleManager.shuffleBlockResolver.getMergedBlockMeta(blockId, Some(dirs))
   }
 
   /**
@@ -1420,7 +1456,7 @@ private[spark] class BlockManager(
         // Put it in memory first, even if it also has useDisk set to true;
         // We will drop it to disk later if the memory store can't hold it.
         if (level.deserialized) {
-          memoryStore.putIteratorAsValues(blockId, iterator(), classTag) match {
+          memoryStore.putIteratorAsValues(blockId, iterator(), level.memoryMode, classTag) match {
             case Right(s) =>
               size = s
             case Left(iter) =>
@@ -1566,7 +1602,7 @@ private[spark] class BlockManager(
           // Note: if we had a means to discard the disk iterator, we would do that here.
           memoryStore.getValues(blockId).get
         } else {
-          memoryStore.putIteratorAsValues(blockId, diskIterator, classTag) match {
+          memoryStore.putIteratorAsValues(blockId, diskIterator, level.memoryMode, classTag) match {
             case Left(iter) =>
               // The memory store put() failed, so it returned the iterator back to us:
               iter
@@ -1971,22 +2007,23 @@ private[spark] object BlockManager {
     metricRegistry.registerAll(metricSet)
   }
 
-  class RemoteBlockDownloadFileManager(blockManager: BlockManager)
+  class RemoteBlockDownloadFileManager(
+       blockManager: BlockManager,
+       encryptionKey: Option[Array[Byte]])
       extends DownloadFileManager with Logging {
-    // lazy because SparkEnv is set after this
-    lazy val encryptionKey = SparkEnv.get.securityManager.getIOEncryptionKey()
 
     private class ReferenceWithCleanup(
         file: DownloadFile,
         referenceQueue: JReferenceQueue[DownloadFile]
         ) extends WeakReference[DownloadFile](file, referenceQueue) {
 
+      // we cannot use `file.delete()` here otherwise it won't be garbage-collected
       val filePath = file.path()
 
       def cleanUp(): Unit = {
         logDebug(s"Clean up file $filePath")
 
-        if (!file.delete()) {
+        if (!new File(filePath).delete()) {
           logDebug(s"Fail to delete file $filePath")
         }
       }
