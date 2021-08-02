@@ -38,8 +38,10 @@
 # - SPARK_EXECUTOR_MEMORY, Memory per Executor (e.g. 1000M, 2G) (Default: 1G)
 # - SPARK_DRIVER_MEMORY, Memory for Driver (e.g. 1000M, 2G) (Default: 1G)
 
-# Options read in YARN client/cluster mode
+# Options read in any cluster mode using HDFS (e.g. YARN)
 # - HADOOP_CONF_DIR, to point Spark towards Hadoop configuration files
+
+# Options read in YARN client/cluster mode
 # - YARN_CONF_DIR, to point Spark towards YARN configuration files when you use YARN
 
 # Options for the daemons used in the standalone deploy mode
