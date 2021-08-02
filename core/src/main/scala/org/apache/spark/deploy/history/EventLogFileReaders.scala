@@ -117,7 +117,8 @@ object EventLogFileReader {
   def apply(fs: FileSystem, status: FileStatus): Option[EventLogFileReader] = {
     if (isSingleEventLog(status)) {
       Some(new SingleFileEventLogFileReader(fs, status.getPath, Option(status)))
-    } else if (isRollingEventLogs(status)) {
+    } else if (isRollingEventLogs(status) &&
+        fs.listStatus(status.getPath).exists(RollingEventLogFilesWriter.isEventLogFile)) {
       Some(new RollingEventLogFilesFileReader(fs, status.getPath))
     } else {
       None
@@ -213,6 +214,7 @@ private[history] class RollingEventLogFilesFileReader(
 
   private lazy val files: Seq[FileStatus] = {
     val ret = fs.listStatus(rootPath).toSeq
+    require(ret.exists(isEventLogFile), "Log directory must contain at least one event log file!")
     require(ret.exists(isAppStatusFile), "Log directory must contain an appstatus file!")
     ret
   }
