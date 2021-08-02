@@ -617,7 +617,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
 
         val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
           .filter(_.startsWith("A join hint"))
-        assert(logs.length == 2)
+        assert(logs.nonEmpty)
         logs.forall(_.contains(
           s"it is not supported with build left for ${joinType.split("_").mkString(" ")} join."))
       }
@@ -637,7 +637,7 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
         }
         val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
           .filter(_.startsWith("A join hint"))
-        assert(logs.length == 2)
+        assert(logs.nonEmpty)
         logs.forall(_.contains(
           s"it is not supported with build right for ${joinType.split("_").mkString(" ")} join."))
       }
