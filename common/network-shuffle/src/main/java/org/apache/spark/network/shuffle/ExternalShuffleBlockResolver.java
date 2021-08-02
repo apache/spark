@@ -377,7 +377,7 @@ public class ExternalShuffleBlockResolver {
   }
 
   /**
-   * Diagnose the possible cause of the shuffle data corruption by verify the shuffle checksums
+   * Diagnose the possible cause of the shuffle data corruption by verifying the shuffle checksums
    */
   public Cause diagnoseShuffleBlockCorruption(
       String appId,

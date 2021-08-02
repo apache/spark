@@ -29,7 +29,7 @@ private[spark]
 trait BlockDataManager {
 
   /**
-   * Diagnose the possible cause of the shuffle data corruption by verify the shuffle checksums
+   * Diagnose the possible cause of the shuffle data corruption by verifying the shuffle checksums
    */
   def diagnoseShuffleBlockCorruption(
       blockId: BlockId,

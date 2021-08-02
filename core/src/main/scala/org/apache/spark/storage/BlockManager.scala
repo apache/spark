@@ -284,7 +284,7 @@ private[spark] class BlockManager(
   override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString
 
   /**
-   * Diagnose the possible cause of the shuffle data corruption by verify the shuffle checksums
+   * Diagnose the possible cause of the shuffle data corruption by verifying the shuffle checksums
    *
    * @param blockId The blockId of the corrupted shuffle block
    * @param checksumByReader The checksum value of the corrupted block
