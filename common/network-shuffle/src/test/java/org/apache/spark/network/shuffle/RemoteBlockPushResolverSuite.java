@@ -1234,6 +1234,26 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 3));
     MergedBlockMeta mergedBlockMeta = pushResolver.getMergedBlockMeta(testApp, 0, 3, 0);
     validateChunks(testApp, 0, 3, 0, mergedBlockMeta, new int[]{2}, new int[][]{{0}});
+
+    StreamCallbackWithID stream4 =
+      pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 4, 0, 0, 0));
+    closed.acquire();
+    // Do not finalize shuffleMergeId 4 can happen during stage cancellation.
+    stream4.onData(stream4.getID(), ByteBuffer.wrap(new byte[2]));
+    stream4.onComplete(stream4.getID());
+
+    // Check whether the data is cleaned up when higher shuffleMergeId finalize request comes
+    // but no blocks pushed for that shuffleMergeId
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 5));
+    closed.acquire();
+    try {
+      pushResolver.getMergedBlockMeta(testApp, 0, 4, 0);
+    } catch(RuntimeException re) {
+      assertEquals("MergedBlockMeta fetch for shuffle 0 with shuffleMergeId 4 reduceId 0"
+        + " is stale shuffle block fetch request as shuffle blocks of a higher shuffleMergeId for"
+        + " the shuffle is available", re.getMessage());
+    }
   }
 
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {
