@@ -45,7 +45,7 @@ private[spark] case class ErrorInfo(message: Seq[String], sqlState: Option[Strin
  * Companion object used by instances of [[SparkThrowable]] to access error class information and
  * construct error messages.
  */
-private[spark] object SparkThrowableHelper  {
+private[spark] object SparkThrowableHelper {
   val errorClassesUrl: URL =
     Utils.getSparkClassLoader.getResource("error/error-classes.json")
   val errorClassToInfoMap: SortedMap[String, ErrorInfo] = {
