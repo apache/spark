@@ -23,8 +23,6 @@ import os
 import re
 import sys
 import subprocess
-import glob
-import shutil
 
 from sparktestsupport import SPARK_HOME, USER_HOME, ERROR_CODES
 from sparktestsupport.shellutils import exit_from_command_with_retcode, run_cmd, rm_r, which
@@ -522,54 +520,6 @@ def run_python_tests(test_modules, parallelism, with_coverage=False):
             x for x in ["python3.9", "pypy3"] if which(x)))
     run_cmd(command)
 
-    if with_coverage:
-        post_python_tests_results()
-
-
-def post_python_tests_results():
-    if "SPARK_TEST_KEY" not in os.environ:
-        print("[error] 'SPARK_TEST_KEY' environment variable was not set. Unable to post "
-              "PySpark coverage results.")
-        sys.exit(1)
-    spark_test_key = os.environ.get("SPARK_TEST_KEY")
-    # The steps below upload HTMLs to 'github.com/spark-test/pyspark-coverage-site'.
-    # 1. Clone PySpark coverage site.
-    run_cmd([
-        "git",
-        "clone",
-        "https://spark-test:%s@github.com/spark-test/pyspark-coverage-site.git" % spark_test_key])
-    # 2. Remove existing HTMLs.
-    run_cmd(["rm", "-fr"] + glob.glob("pyspark-coverage-site/*"))
-    # 3. Copy generated coverage HTMLs.
-    for f in glob.glob("%s/python/test_coverage/htmlcov/*" % SPARK_HOME):
-        shutil.copy(f, "pyspark-coverage-site/")
-    os.chdir("pyspark-coverage-site")
-    try:
-        # 4. Check out to a temporary branch.
-        run_cmd(["git", "symbolic-ref", "HEAD", "refs/heads/latest_branch"])
-        # 5. Add all the files.
-        run_cmd(["git", "add", "-A"])
-        # 6. Commit current HTMLs.
-        run_cmd([
-            "git",
-            "-c",
-            "user.name='Apache Spark Test Account'",
-            "-c",
-            "user.email='sparktestacc@gmail.com'",
-            "commit",
-            "-am",
-            "Coverage report at latest commit in Apache Spark"])
-        # 7. Delete the old branch.
-        run_cmd(["git", "branch", "-D", "gh-pages"])
-        # 8. Rename the temporary branch to master.
-        run_cmd(["git", "branch", "-m", "gh-pages"])
-        # 9. Finally, force update to our repository.
-        run_cmd(["git", "push", "-f", "origin", "gh-pages"])
-    finally:
-        os.chdir("..")
-        # 10. Remove the cloned repository.
-        shutil.rmtree("pyspark-coverage-site")
-
 
 def run_python_packaging_tests():
     set_title_and_block("Running PySpark packaging tests", "BLOCK_PYSPARK_PIP_TESTS")
@@ -815,11 +765,10 @@ def main():
 
     modules_with_python_tests = [m for m in test_modules if m.python_test_goals]
     if modules_with_python_tests:
-        # We only run PySpark tests with coverage report in one specific job with
-        # Spark master with SBT in Jenkins.
-        is_sbt_master_job = "SPARK_MASTER_SBT_HADOOP_2_7" in os.environ
         run_python_tests(
-            modules_with_python_tests, opts.parallelism, with_coverage=is_sbt_master_job)
+            modules_with_python_tests,
+            opts.parallelism,
+            with_coverage=os.environ.get("PYSPARK_CODECOV", "false") == "true")
         run_python_packaging_tests()
     if any(m.should_run_r_tests for m in test_modules):
         run_sparkr_tests()

@@ -14,6 +14,9 @@ matplotlib<3.3.0
 # PySpark test dependencies
 xmlrunner
 
+# PySpark test dependencies (optional)
+coverage
+
 # Linter
 mypy
 flake8
