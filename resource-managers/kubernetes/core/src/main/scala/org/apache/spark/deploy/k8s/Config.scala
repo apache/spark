@@ -604,5 +604,6 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_DNSNAME_MAX_LENGTH = 63
   // The possible longest executor name would be "$prefix-exec-${Int.MaxValue}"
-  val KUBERNETES_POD_NAME_PREFIX_MAX_LENGTH = 63 - 6 - Int.MaxValue.toString.length
+  val KUBERNETES_POD_NAME_PREFIX_MAX_LENGTH = 
+    KUBERNETES_DNSNAME_MAX_LENGTH - 6 - Int.MaxValue.toString.length
 }
