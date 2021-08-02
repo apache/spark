@@ -1001,8 +1001,9 @@ object SQLConf {
   val HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION =
     buildConf("spark.sql.hive.metastorePartitionPruningFallbackOnException")
       .doc("Whether to fallback to get all partitions from Hive metastore and perform partition " +
-        "pruning on Spark client side, when encountering MetaException from the metastore. If " +
-        "this is set to false, Spark will fail the query.")
+        "pruning on Spark client side, when encountering MetaException from the metastore. Note " +
+        "that Spark query performance may degrade if this is enabled and there are many " +
+        "partitions to be listed. If this is disabled, Spark will fail the query instead.")
       .version("3.3.0")
       .booleanConf
       .createWithDefault(false)

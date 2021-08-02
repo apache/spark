@@ -882,8 +882,11 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
           // when filtering on a non-string partition column when the hive config key
           // hive.metastore.try.direct.sql is false. In some cases the remote metastore will throw
           // exceptions even if the config is true, due to various reasons including the
-          // underlying RDBMS, Hive bugs when generating the filter, etc. For this reason we
-          // always fallback to use `Hive.getAllPartitionsOf` here when the exception happens.
+          // underlying RDBMS, Hive bugs when generating the filter, etc.
+          //
+          // Because of the above we'll fallback to use `Hive.getAllPartitionsOf` when the exception
+          // occurs and the config`spark.sql.hive.metastorePartitionPruningFallbackOnException` is
+          // enabled.
           getPartitionsByFilterMethod.invoke(hive, table, filter)
             .asInstanceOf[JArrayList[Partition]]
         } catch {
@@ -893,11 +896,13 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
               "filter from Hive. Falling back to fetching all partition metadata, which will " +
               "degrade performance. Modifying your Hive metastore configuration to set " +
               s"${tryDirectSqlConfVar.varname} to true (if it is not true already) may resolve " +
-              "this problem. Otherwise, you can set " +
+              "this problem. Otherwise, to avoid degraded performance you can set " +
               s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} " +
               " to false and let the query fail instead.", ex)
             // HiveShim clients are expected to handle a superset of the requested partitions
             getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
+          case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
+            throw QueryExecutionErrors.getPartitionMetadataByFilterError(ex)
         }
       }
 
