@@ -24,8 +24,6 @@ import java.util.concurrent.ExecutorService
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 
-import com.google.common.base.Throwables
-
 import org.apache.spark.{ShuffleDependency, SparkConf, SparkEnv}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
