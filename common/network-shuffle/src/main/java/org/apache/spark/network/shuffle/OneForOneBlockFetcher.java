@@ -225,7 +225,7 @@ public class OneForOneBlockFetcher {
   }
 
   /** The reduceIds and blocks in a single mapId */
-  private class BlocksInfo {
+  private static class BlocksInfo {
 
     /**
      * For {@link FetchShuffleBlocks} message, the ids are reduceIds.

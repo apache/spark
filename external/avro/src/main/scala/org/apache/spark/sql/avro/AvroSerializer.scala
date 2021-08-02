@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.avro.Conversions.DecimalConversion
 import org.apache.avro.LogicalTypes
-import org.apache.avro.LogicalTypes.{TimestampMicros, TimestampMillis}
+import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
 import org.apache.avro.Schema
 import org.apache.avro.Schema.Type
 import org.apache.avro.Schema.Type._
@@ -178,6 +178,18 @@ private[sql] class AvroSerializer(
           case other => throw new IncompatibleSchemaException(errorPrefix +
             s"SQL type ${TimestampType.sql} cannot be converted to Avro logical type $other")
         }
+
+      case (TimestampNTZType, LONG) => avroType.getLogicalType match {
+        // For backward compatibility, if the Avro type is Long and it is not logical type
+        // (the `null` case), output the timestamp value without time zone
+        // as with millisecond precision.
+        case null | _: LocalTimestampMillis => (getter, ordinal) =>
+          DateTimeUtils.microsToMillis(getter.getLong(ordinal))
+        case _: LocalTimestampMicros => (getter, ordinal) =>
+          getter.getLong(ordinal)
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"SQL type ${TimestampNTZType.sql} cannot be converted to Avro logical type $other")
+      }
 
       case (ArrayType(et, containsNull), ARRAY) =>
         val elementConverter = newConverter(

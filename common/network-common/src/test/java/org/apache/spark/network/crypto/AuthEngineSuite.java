@@ -19,7 +19,6 @@ package org.apache.spark.network.crypto;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
-import java.util.Arrays;
 import java.util.Map;
 import java.security.InvalidKeyException;
 import java.util.Random;
@@ -52,10 +51,9 @@ public class AuthEngineSuite {
 
   @Test
   public void testAuthEngine() throws Exception {
-    AuthEngine client = new AuthEngine("appId", "secret", conf);
-    AuthEngine server = new AuthEngine("appId", "secret", conf);
 
-    try {
+    try (AuthEngine client = new AuthEngine("appId", "secret", conf);
+         AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       ClientChallenge clientChallenge = client.challenge();
       ServerResponse serverResponse = server.respond(clientChallenge);
       client.validate(serverResponse);
@@ -63,12 +61,9 @@ public class AuthEngineSuite {
       TransportCipher serverCipher = server.sessionCipher();
       TransportCipher clientCipher = client.sessionCipher();
 
-      assertTrue(Arrays.equals(serverCipher.getInputIv(), clientCipher.getOutputIv()));
-      assertTrue(Arrays.equals(serverCipher.getOutputIv(), clientCipher.getInputIv()));
+      assertArrayEquals(serverCipher.getInputIv(), clientCipher.getOutputIv());
+      assertArrayEquals(serverCipher.getOutputIv(), clientCipher.getInputIv());
       assertEquals(serverCipher.getKey(), clientCipher.getKey());
-    } finally {
-      client.close();
-      server.close();
     }
   }
 
@@ -134,9 +129,8 @@ public class AuthEngineSuite {
 
   @Test
   public void testEncryptedMessage() throws Exception {
-    AuthEngine client = new AuthEngine("appId", "secret", conf);
-    AuthEngine server = new AuthEngine("appId", "secret", conf);
-    try {
+    try (AuthEngine client = new AuthEngine("appId", "secret", conf);
+         AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       ClientChallenge clientChallenge = client.challenge();
       ServerResponse serverResponse = server.respond(clientChallenge);
       client.validate(serverResponse);
@@ -154,17 +148,13 @@ public class AuthEngineSuite {
         emsg.transferTo(channel, emsg.transferred());
       }
       assertEquals(data.length, channel.length());
-    } finally {
-      client.close();
-      server.close();
     }
   }
 
   @Test
   public void testEncryptedMessageWhenTransferringZeroBytes() throws Exception {
-    AuthEngine client = new AuthEngine("appId", "secret", conf);
-    AuthEngine server = new AuthEngine("appId", "secret", conf);
-    try {
+    try (AuthEngine client = new AuthEngine("appId", "secret", conf);
+         AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       ClientChallenge clientChallenge = client.challenge();
       ServerResponse serverResponse = server.respond(clientChallenge);
       client.validate(serverResponse);
@@ -200,9 +190,6 @@ public class AuthEngineSuite {
       assertEquals(testDataLength, emsg.transferTo(channel, emsg.transferred()));
       assertEquals(emsg.transferred(), emsg.count());
       assertEquals(4, channel.length());
-    } finally {
-      client.close();
-      server.close();
     }
   }
 }
