@@ -21,11 +21,13 @@ import java.io._
 import java.nio.ByteBuffer
 import java.util.UUID
 import java.util.concurrent.{CompletableFuture, Semaphore}
+import java.util.zip.CheckedInputStream
 
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
+import com.google.common.io.ByteStreams
 import io.netty.util.internal.OutOfDirectMemoryError
 import org.apache.log4j.Level
 import org.mockito.ArgumentMatchers.{any, eq => meq}
@@ -157,14 +159,19 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
     val wrappedInputStream = inputStream.asInstanceOf[BufferReleasingInputStream]
     verify(buffer, times(0)).release()
     val delegateAccess = PrivateMethod[InputStream](Symbol("delegate"))
-
-    verify(wrappedInputStream.invokePrivate(delegateAccess()), times(0)).close()
+    var in = wrappedInputStream.invokePrivate(delegateAccess())
+    if (in.isInstanceOf[CheckedInputStream]) {
+      val underlyingInputFiled = classOf[CheckedInputStream].getSuperclass.getDeclaredField("in")
+      underlyingInputFiled.setAccessible(true)
+      in = underlyingInputFiled.get(in.asInstanceOf[CheckedInputStream]).asInstanceOf[InputStream]
+    }
+    verify(in, times(0)).close()
     wrappedInputStream.close()
     verify(buffer, times(1)).release()
-    verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
+    verify(in, times(1)).close()
     wrappedInputStream.close() // close should be idempotent
     verify(buffer, times(1)).release()
-    verify(wrappedInputStream.invokePrivate(delegateAccess()), times(1)).close()
+    verify(in, times(1)).close()
   }
 
   // scalastyle:off argcount
@@ -180,6 +187,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       maxAttemptsOnNettyOOM: Int = 10,
       detectCorrupt: Boolean = true,
       detectCorruptUseExtraMemory: Boolean = true,
+      checksumEnabled: Boolean = true,
+      checksumAlgorithm: String = "ADLER32",
       shuffleMetrics: Option[ShuffleReadMetricsReporter] = None,
       doBatchFetch: Boolean = false): ShuffleBlockFetcherIterator = {
     val tContext = taskContext.getOrElse(TaskContext.empty())
@@ -197,6 +206,8 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       maxAttemptsOnNettyOOM,
       detectCorrupt,
       detectCorruptUseExtraMemory,
+      checksumEnabled,
+      checksumAlgorithm,
       shuffleMetrics.getOrElse(tContext.taskMetrics().createTempShuffleReadMetrics()),
       doBatchFetch)
   }
@@ -211,6 +222,69 @@ class ShuffleBlockFetcherIteratorSuite extends SparkFunSuite with PrivateMethodT
       blockSize: Long,
       blockMapIndex: Int): Seq[(BlockId, Long, Int)] = {
     blockIds.map(blockId => (blockId, blockSize, blockMapIndex)).toSeq
+  }
+
+  test("SPARK-36206: diagnose the block when it's corrupted twice") {
+    // Make sure remote blocks would return
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer()
+    )
+    answerFetchBlocks { invocation =>
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      listener.onBlockFetchSuccess(ShuffleBlockId(0, 0, 0).toString, mockCorruptBuffer())
+    }
+
+    val logAppender = new LogAppender("diagnose corruption")
+    withLogAppender(logAppender) {
+      val iterator = createShuffleBlockIteratorWithDefaults(
+        Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
+        streamWrapperLimitSize = Some(100)
+      )
+      intercept[FetchFailedException](iterator.next())
+      // The block will be fetched twice due to retry
+      verify(transfer, times(2))
+        .fetchBlocks(any(), any(), any(), any(), any(), any())
+      // only diagnose once
+      assert(logAppender.loggingEvents.count(
+        _.getRenderedMessage.contains("Start corruption diagnosis")) === 1)
+    }
+  }
+
+  test("SPARK-36206: diagnose the block when it's corrupted " +
+    "inside BufferReleasingInputStream") {
+    // Make sure remote blocks would return
+    val remoteBmId = BlockManagerId("test-client-1", "test-client-1", 2)
+    val blocks = Map[BlockId, ManagedBuffer](
+      ShuffleBlockId(0, 0, 0) -> createMockManagedBuffer()
+    )
+    answerFetchBlocks { invocation =>
+      val listener = invocation.getArgument[BlockFetchingListener](4)
+      listener.onBlockFetchSuccess(
+        ShuffleBlockId(0, 0, 0).toString,
+        mockCorruptBuffer(100, 50))
+    }
+
+    val logAppender = new LogAppender("diagnose corruption")
+    withLogAppender(logAppender) {
+      val iterator = createShuffleBlockIteratorWithDefaults(
+        Map(remoteBmId -> toBlockList(blocks.keys, 1L, 0)),
+        streamWrapperLimitSize = Some(100),
+        maxBytesInFlight = 100
+      )
+      intercept[FetchFailedException] {
+        val inputStream = iterator.next()._2
+        // Consume the data to trigger the corruption
+        ByteStreams.readFully(inputStream, new Array[Byte](100))
+      }
+      // The block will be fetched only once because corruption can't be detected in
+      // maxBytesInFlight/3 of the data size
+      verify(transfer, times(1))
+        .fetchBlocks(any(), any(), any(), any(), any(), any())
+      // only diagnose once
+      assert(logAppender.loggingEvents.exists(
+        _.getRenderedMessage.contains("Start corruption diagnosis")))
+    }
   }
 
   test("successful 3 local + 4 host local + 2 remote reads") {

@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.shuffle;
 
-import com.google.common.base.Preconditions;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -35,8 +34,9 @@ import com.codahale.metrics.MetricSet;
 import com.codahale.metrics.RatioGauge;
 import com.codahale.metrics.Timer;
 import com.codahale.metrics.Counter;
-import com.google.common.collect.Sets;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,6 +49,7 @@ import org.apache.spark.network.protocol.MergedBlockMetaRequest;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.StreamManager;
+import org.apache.spark.network.shuffle.checksum.Cause;
 import org.apache.spark.network.shuffle.protocol.*;
 import org.apache.spark.network.util.TimerWithCustomTimeUnit;
 import static org.apache.spark.network.util.NettyUtils.getRemoteAddress;
@@ -223,6 +224,14 @@ public class ExternalBlockHandler extends RpcHandler
       } finally {
         responseDelayContext.stop();
       }
+    } else if (msgObj instanceof DiagnoseCorruption) {
+      DiagnoseCorruption msg = (DiagnoseCorruption) msgObj;
+      checkAuth(client, msg.appId);
+      Cause cause = blockManager.diagnoseShuffleBlockCorruption(
+        msg.appId, msg.execId, msg.shuffleId, msg.mapId, msg.reduceId, msg.checksum, msg.algorithm);
+      // In any cases of the error, diagnoseShuffleBlockCorruption should return UNKNOWN_ISSUE,
+      // so it should always reply as success.
+      callback.onSuccess(new CorruptionCause(cause).toByteBuffer());
     } else {
       throw new UnsupportedOperationException("Unexpected message: " + msgObj);
     }

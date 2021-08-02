@@ -262,7 +262,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     val indexInMemory = Array[Long](0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
     val checksumsInMemory = Array[Long](0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
     resolver.writeMetadataFileAndCommit(0, 0, indexInMemory, checksumsInMemory, dataTmp)
-    val checksumFile = resolver.getChecksumFile(0, 0)
+    val checksumFile = resolver.getChecksumFile(0, 0, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
     assert(checksumFile.exists())
     val checksumFileName = checksumFile.toString
     val checksumAlgo = checksumFileName.substring(checksumFileName.lastIndexOf(".") + 1)
