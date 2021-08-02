@@ -25,12 +25,14 @@ import java.time.{DateTimeException, LocalDate}
 import java.time.temporal.ChronoField
 import java.util.ConcurrentModificationException
 import java.util.concurrent.TimeoutException
+
 import com.fasterxml.jackson.core.{JsonParser, JsonToken}
 import org.apache.hadoop.fs.{FileAlreadyExistsException, FileStatus, Path}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
-import org.apache.spark.{Partition, SparkArithmeticException, SparkArrayIndexOutOfBoundsException, SparkDateTimeException, SparkException, SparkNoSuchMethodException, SparkRuntimeException, SparkSQLFeatureNotSupportedException, SparkUnsupportedOperationException, SparkUpgradeException}
+
+import org.apache.spark._
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -44,7 +46,7 @@ import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.{BadRecordException, FailFastMode, sideBySide}
+import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, FailFastMode}
 import org.apache.spark.sql.connector.catalog.{CatalogNotFoundException, Identifier, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
@@ -1061,7 +1063,7 @@ object QueryExecutionErrors {
   }
 
   def cannotGetOuterPointerForInnerClassError(innerCls: Class[_]): Throwable = {
-    new SparkRuntimeException("CANNOT_GET_OUTER_POINTER_FOR_INNERCLASS", Array(innerCls.getName), )
+    new SparkRuntimeException("CANNOT_GET_OUTER_POINTER_FOR_INNERCLASS", Array(innerCls.getName))
   }
 
   def userDefinedTypeNotAnnotatedAndRegisteredError(udt: UserDefinedType[_]): Throwable = {
@@ -1070,7 +1072,7 @@ object QueryExecutionErrors {
   }
 
   def invalidInputSyntaxForBooleanError(s: UTF8String): UnsupportedOperationException = {
-    new SparkUnsupportedOperationException("INVALID_INPUT_SYNTAX", Array("boolean", s))
+    new SparkUnsupportedOperationException("INVALID_INPUT_SYNTAX", Array("boolean", s.toString))
   }
 
   def unsupportedOperandTypeForSizeFunctionError(dataType: DataType): Throwable = {
@@ -1093,31 +1095,28 @@ object QueryExecutionErrors {
   }
 
   def concatArraysWithElementsExceedLimitError(numberOfElements: Long): Throwable = {
-    new SparkRuntimeException(
-      s"""
-         |Unsuccessful try to concat arrays with $numberOfElements
-         |elements due to exceeding the array size limit
-         |${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.
-       """.stripMargin.replaceAll("\n", " "),
-      Array(numberOfElements)
+    new SparkRuntimeException("OPERATE_ARRAY_EXCEEDING_LIMIT",
+      Array("concat arrays", numberOfElements.toString,
+        ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString)
     )
   }
 
   def flattenArraysWithElementsExceedLimitError(numberOfElements: Long): Throwable = {
-    new SparkRuntimeException("FAILED_OPERATE_ARRAY_EXCEEDING_LIMIT",
-      Array("flatten an array", numberOfElements, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
+    new SparkRuntimeException("OPERATE_ARRAY_EXCEEDING_LIMIT",
+      Array("flatten an array", numberOfElements.toString,
+        ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString)
     )
   }
 
   def createArrayWithElementsExceedLimitError(count: Any): RuntimeException = {
-    new SparkRuntimeException("FAILED_OPERATE_ARRAY_EXCEEDING_LIMIT",
-      Array("create array", count, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
+    new SparkRuntimeException("OPERATE_ARRAY_EXCEEDING_LIMIT",
+      Array("create array", count.toString, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString)
     )
   }
 
   def unionArrayWithElementsExceedLimitError(length: Int): Throwable = {
-    new SparkRuntimeException("FAILED_OPERATE_ARRAY_EXCEEDING_LIMIT",
-      Array("union arrays", length, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH)
+    new SparkRuntimeException("OPERATE_ARRAY_EXCEEDING_LIMIT",
+      Array("union arrays", length.toString, ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH.toString)
     )
   }
 
@@ -1151,7 +1150,7 @@ object QueryExecutionErrors {
 
   def malformedRecordsDetectedInSchemaInferenceError(dataType: DataType): Throwable = {
     new SparkException("MALFORMED_JSON_RECORDS_IN_SCHEMA_INFERENCE",
-      Array(FailFastMode.name, s"Reasons: Failed to infer a common schema. " +
+      Array(FailFastMode.name, s"Failed to infer a common schema. " +
         s"Struct types are expected, but `${dataType.catalogString}` was found."),
       cause = null
     )

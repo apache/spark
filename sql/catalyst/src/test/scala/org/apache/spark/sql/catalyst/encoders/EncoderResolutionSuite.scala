@@ -153,13 +153,13 @@ class EncoderResolutionSuite extends PlanTest {
     val fromRow = encoder.resolveAndBind(attrs).createDeserializer()
 
     // If no null values appear, it should work fine
-    fromRow(InternalRow(new GenericArrayData(Array(1, 2))))
+    fromRow(InternalRow(new GenericArrayData(Array(1, 2)))) 
 
     // If there is null value, it should throw runtime exception
     val e = intercept[RuntimeException] {
       fromRow(InternalRow(new GenericArrayData(Array(1, null))))
     }
-    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getCause.getMessage.contains("Null value appeared in non-nullable field"))
   }
 
   test("the real number of fields doesn't match encoder schema: tuple encoder") {

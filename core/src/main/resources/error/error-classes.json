@@ -3,6 +3,16 @@
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
   },
+  "CANNOT_CONVERT_COLUMN_TO_JSON" : {
+    "message" : [ "Unable to convert column %s of type %s to JSON." ]
+  },
+  "CANNOT_GET_OUTER_POINTER_FOR_INNERCLASS" : {
+    "message" : [ "Failed to get outer pointer for %s" ]
+  },
+  "CLASS_HAS_UNEXPECTED_SERIALIZER" : {
+    "message" : [ "Class %s has unexpected serializer: %s" ],
+    "sqlState" : "2200W"
+  },
   "CONCURRENT_QUERY_ERROR" : {
     "message" : [ "Another instance of this query was just started by a concurrent session." ]
   },
@@ -13,6 +23,12 @@
   "DUPLICATE_KEY" : {
     "message" : [ "Found duplicate keys '%s'" ],
     "sqlState" : "23000"
+  },
+  "EXPRESSION_DECODING" : {
+    "message" : [ "Error while decoding: %s" ]
+  },
+  "EXPRESSION_ENCODING" : {
+    "message" : [ "Error while encoding: %s" ]
   },
   "FAILED_RENAME_PATH" : {
     "message" : [ "Failed to rename %s to %s as destination already exists" ],
@@ -46,6 +62,10 @@
     "message" : [ "Index %s must be between 0 and the length of the ArrayData." ],
     "sqlState" : "22023"
   },
+  "INITIAL_TYPE_NOT_TARGET_DATA_TYPE" : {
+    "message" : [ "Initial type %s must be %s" ],
+    "sqlState" : "42000"
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
     "sqlState" : "42000"
@@ -53,6 +73,12 @@
   "INVALID_FRACTION_OF_SECOND" : {
     "message" : [ "The fraction of sec must be zero. Valid range is [0, 60]." ],
     "sqlState" : "22023"
+  },
+  "MALFORMED_JSON" : {
+    "message" : [ "Malformed JSON" ]
+  },
+  "MALFORMED_JSON_RECORDS_IN_SCHEMA_INFERENCE" : {
+    "message" : [ "Malformed records are detected in schema inference. Parse Mode: %s. Reasons: %s" ]
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
@@ -73,6 +99,10 @@
   "NON_PARTITION_COLUMN" : {
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
+  },
+  "OPERATE_ARRAY_EXCEEDING_LIMIT" : {
+    "message" : [ "Unsuccessful try to %s with %s elements due to due to exceeding the array size limit %s." ],
+    "sqlState" : "2202E"
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
@@ -105,19 +135,6 @@
     "message" : [ "Writing job aborted" ],
     "sqlState" : "40000"
   },
-  "EXPRESSION_DECODING" : {
-    "message" : [ "Error while decoding: %s" ],
-  },
-  "EXPRESSION_ENCODING" : {
-    "message" : [ "Error while encoding: %s" ]
-  },
-  "CLASS_HAS_UNEXPECTED_SERIALIZER" : {
-    "message" : [ "Class $s has unexpected serializer: %s" ],
-    "sqlState" : "2200W"
-  },
-  "CANNOT_GET_OUTER_POINTER_FOR_INNERCLASS" : {
-    "message" : [ "Failed to get outer pointer for %s" ]
-  },
   "USER_DEFINED_TYPE_NOT_ANNOTATED_AND_REGISTERED" : {
     "message" : [ "%s is not annotated with SQLUserDefinedType nor registered with UDTRegistration." ]
   },
@@ -136,22 +153,5 @@
   "SQL_ARRAY_INDEX_NOT_START_AT_ONE" : {
     "message" : [ "SQL array indices start at 1" ],
     "sqlState" : "0700B"
-  },
-  "FAILED_OPERATE_ARRAY_EXCEEDING_LIMIT" : {
-    "message" : [ "Unsuccessful try to %s with %s elements due to due to exceeding the array size limit %s." ],
-    "sqlState" : "2202E"
-  },
-  "INITIAL_TYPE_NOT_TARGET_DATA_TYPE" : {
-    "message" : [ "Initial type %s must be %s" ],
-    "sqlState" : "42000"
-  },
-  "CANNOT_CONVERT_COLUMN_TO_JSON" : {
-    "message" : [ "Unable to convert column %s of type %s to JSON." ]
-  },
-  "MALFORMED_JSON_RECORDS_IN_SCHEMA_INFERENCE" : {
-    "message" : [ "Malformed records are detected in schema inference. Parse Mode: %s. Reasons: %s" ]
-  },
-  "MALFORMED_JSON" : {
-    "message" : [ "Malformed JSON" ]
   }
 }
