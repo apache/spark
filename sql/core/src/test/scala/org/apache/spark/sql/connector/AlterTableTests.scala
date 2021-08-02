@@ -23,6 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.withDefaultOwnership
 import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 
@@ -404,6 +405,37 @@ trait AlterTableTests extends SharedSparkSession {
       }
       assert(e.message.contains(
         "Found duplicate column(s) in the user specified columns: `point.z`"))
+    }
+  }
+
+  test("SPARK-36381: Adding/Rename columns exist check in case sensitive") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, rename int) USING $v2Format")
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false")
+      {
+        var e = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t ADD COLUMNS (ID int)")
+        }
+        assert(e.message.contains(
+          "Cannot add column, because ID already exists in root"))
+
+        e = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $t RENAME COLUMN id TO rename")
+        }
+        assert(e.message.contains(
+          "Cannot rename column, because rename already exists in root"))
+      }
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+        sql(s"ALTER TABLE $t ADD COLUMNS (ID int)")
+        sql(s"ALTER TABLE $t RENAME COLUMN id TO RENAME")
+        val tableName = fullTableName(t)
+        val table = getTableMetadata(tableName)
+        assert(table.schema === new StructType()
+          .add("RENAME", IntegerType)
+          .add("rename", IntegerType)
+          .add("ID", IntegerType))
+      }
     }
   }
 
