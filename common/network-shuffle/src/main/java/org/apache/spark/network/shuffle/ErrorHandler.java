@@ -105,16 +105,16 @@ public interface ErrorHandler {
         return false;
       }
 
-      String errorStackTrace = Throwables.getStackTraceAsString(t);
       // If the block is too late or stale block push, there is no need to retry it
-      return !errorStackTrace.contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX);
+      String msg = t.getMessage();
+      return !(msg != null && msg.contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX));
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
-      String errorStackTrace = Throwables.getStackTraceAsString(t);
-      return !(errorStackTrace.contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) ||
-        errorStackTrace.contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX));
+      String msg = t.getMessage();
+      return !(msg != null && (msg.contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) ||
+        msg.contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX)));
     }
   }
 
@@ -125,12 +125,14 @@ public interface ErrorHandler {
 
     @Override
     public boolean shouldRetryError(Throwable t) {
-      return !Throwables.getStackTraceAsString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
+      String msg = t.getMessage();
+      return !(msg != null && msg.contains(STALE_SHUFFLE_BLOCK_FETCH));
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
-      return !Throwables.getStackTraceAsString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
+      String msg = t.getMessage();
+      return !(msg != null && msg.contains(STALE_SHUFFLE_BLOCK_FETCH));
     }
   }
 }

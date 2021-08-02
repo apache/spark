@@ -78,10 +78,10 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         if (t.getCause != null && t.getCause.isInstanceOf[FileNotFoundException]) {
           return false
         }
-        val errorStackTraceString = Throwables.getStackTraceAsString(t)
         // If the block is too late or the invalid block push, there is no need to retry it
-        !errorStackTraceString.contains(
-          BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX)
+        val msg = t.getMessage
+        !(msg != null && msg.contains(
+          BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))
       }
     }
   }
@@ -242,10 +242,16 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         handleResult(PushResult(blockId, exception))
       }
     }
+    // In addition to randomizing the order of the push requests, further randomize the order
+    // of blocks within the push request to further reduce the likelihood of shuffle server side
+    // collision of pushed blocks. This does not increase the cost of reading unmerged shuffle
+    // files on the executor side, because we are still reading MB-size chunks and only randomize
+    // the in-memory sliced buffers post reading.
+    val blocksToPush = Utils.randomize(blockIds.zip(
+      sliceReqBufferIntoBlockBuffers(request.reqBuffer, request.blocks.map(_._2))))
     SparkEnv.get.blockManager.blockStoreClient.pushBlocks(
-      address.host, address.port, blockIds.toArray,
-      sliceReqBufferIntoBlockBuffers(request.reqBuffer, request.blocks.map(_._2)),
-      blockPushListener)
+      address.host, address.port, blocksToPush.map(_._1).toArray,
+      blocksToPush.map(_._2).toArray, blockPushListener)
   }
 
   /**

@@ -220,12 +220,11 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val errorHandler = pusher.createErrorHandler()
     assert(
       !errorHandler.shouldRetryError(new RuntimeException(
-        new IllegalArgumentException(
-          BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))))
+        BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX)))
     assert(errorHandler.shouldRetryError(new RuntimeException(new ConnectException())))
     assert(
-      errorHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
-        BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))))
+      errorHandler.shouldRetryError(new RuntimeException(
+        BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX)))
     assert (errorHandler.shouldRetryError(new Throwable()))
   }
 
@@ -234,11 +233,9 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val errorHandler = pusher.createErrorHandler()
     assert(
       !errorHandler.shouldLogError(new RuntimeException(
-        new IllegalArgumentException(
-          BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))))
+        BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX)))
     assert(!errorHandler.shouldLogError(new RuntimeException(
-      new IllegalArgumentException(
-        BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))))
+        BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX)))
     assert(errorHandler.shouldLogError(new Throwable()))
   }
 

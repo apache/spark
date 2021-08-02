@@ -125,7 +125,27 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       .maximumWeight(conf.mergedIndexCacheSize())
       .weigher((Weigher<File, ShuffleIndexInformation>) (file, indexInfo) -> indexInfo.getSize())
       .build(indexCacheLoader);
-    this.errorHandler = new ErrorHandler.BlockPushErrorHandler();
+    this.errorHandler = createErrorHandler();
+  }
+
+  @VisibleForTesting
+  protected ErrorHandler.BlockPushErrorHandler createErrorHandler() {
+    return new ErrorHandler.BlockPushErrorHandler() {
+      // On the shuffle server side, we need to check within the message of both the exception
+      // and the cause of the exception. This is because in
+      // TransportRequestHandler#processStreamUpload, the actual exception could be wrapped inside
+      // an IOException.
+      @Override
+      public boolean shouldLogError(Throwable t) {
+        String msg = t.getMessage();
+        Throwable cause = t.getCause();
+        return !((msg != null && (msg.contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) ||
+          msg.contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))) ||
+          (cause != null && cause.getMessage() != null &&
+          (cause.getMessage().contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) ||
+          cause.getMessage().contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))));
+      }
+    };
   }
 
   @VisibleForTesting
@@ -379,9 +399,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public StreamCallbackWithID receiveBlockDataAsStream(PushBlockStream msg) {
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(msg.appId);
-    final String streamId = String.format("%s_%d_%d_%d_%d",
-      OneForOneBlockPusher.SHUFFLE_PUSH_BLOCK_PREFIX, msg.shuffleId, msg.shuffleMergeId,
-      msg.mapIndex, msg.reduceId);
+    // Use string concatenation here to avoid the overhead with String.format on every
+    // pushed block.
+    final String streamId = OneForOneBlockPusher.SHUFFLE_PUSH_BLOCK_PREFIX + "_"
+      + msg.shuffleId + "_" + msg.shuffleMergeId + "_" + msg.mapIndex + "_" + msg.reduceId;
     if (appShuffleInfo.attemptId != msg.appAttemptId) {
       // If this Block belongs to a former application attempt, it is considered late,
       // as only the blocks from the current application attempt will be merged
@@ -472,8 +493,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           if (isStaleBlockOrTooLate) {
             // Throw an exception here so the block data is drained from channel and server
             // responds RpcFailure to the client.
-            throw new RuntimeException(String.format("Block %s %s", streamId,
-              ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX));
+            throw new RuntimeException("Block " + streamId + " " +
+              ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX);
           }
           // For duplicate block that is received before the shuffle merge finalizes, the
           // server should respond success to the client.
@@ -863,8 +884,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         if (isStaleOrTooLate(appShuffleInfo.shuffles.get(partitionInfo.shuffleId),
             partitionInfo.shuffleMergeId, partitionInfo.reduceId)) {
           deferredBufs = null;
-          throw new RuntimeException(String.format("Block %s is %s", streamId,
-            ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX));
+          throw new RuntimeException("Block " + streamId + " " +
+            ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX);
         }
 
         // Check if we can commit this block
@@ -913,9 +934,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           }
         } else {
           deferredBufs = null;
-          throw new RuntimeException(String.format("%s %s to merged shuffle",
-            ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX,
-            streamId));
+          throw new RuntimeException(
+            ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX + " "
+            + streamId + "to merged shuffle");
         }
       }
       isWriting = false;

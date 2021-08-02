@@ -31,11 +31,11 @@ public class ErrorHandlerSuite {
   @Test
   public void testErrorRetry() {
     ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
-    assertFalse(pushHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))));
+    assertFalse(pushHandler.shouldRetryError(new RuntimeException(
+      ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX)));
     assertFalse(pushHandler.shouldRetryError(new RuntimeException(new ConnectException())));
-    assertTrue(pushHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))));
+    assertTrue(pushHandler.shouldRetryError(new RuntimeException(
+      ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX)));
     assertTrue(pushHandler.shouldRetryError(new Throwable()));
 
     ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();
@@ -46,10 +46,10 @@ public class ErrorHandlerSuite {
   @Test
   public void testErrorLogging() {
     ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
-    assertFalse(pushHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))));
-    assertFalse(pushHandler.shouldLogError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))));
+    assertFalse(pushHandler.shouldLogError(new RuntimeException(
+      ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX)));
+    assertFalse(pushHandler.shouldLogError(new RuntimeException(
+      ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX)));
     assertTrue(pushHandler.shouldLogError(new Throwable()));
 
     ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();

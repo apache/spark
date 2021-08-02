@@ -103,6 +103,20 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
+  @Test
+  public void testErrorLogging() {
+    ErrorHandler.BlockPushErrorHandler errorHandler = pushResolver.createErrorHandler();
+    assertFalse(errorHandler.shouldLogError(new RuntimeException(
+      ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX)));
+    assertFalse(errorHandler.shouldLogError(new RuntimeException(
+      ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX)));
+    assertFalse(errorHandler.shouldLogError(new RuntimeException(new IOException(
+      ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))));
+    assertFalse(errorHandler.shouldLogError(new RuntimeException(new IOException(
+      ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))));
+    assertTrue(errorHandler.shouldLogError(new Throwable()));
+  }
+
   @Test(expected = RuntimeException.class)
   public void testNoIndexFile() {
     try {
