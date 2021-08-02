@@ -157,7 +157,7 @@ private[spark] class AppStatusStore(
       if (it.hasNext()) {
         it.next().info
       } else {
-        throw SparkCoreErrors.notFoundStageId(stageId)
+        throw SparkCoreErrors.noStageWithId(stageId)
       }
     } finally {
       it.close()
