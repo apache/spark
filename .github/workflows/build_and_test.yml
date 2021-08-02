@@ -252,6 +252,8 @@ jobs:
     # Run the tests.
     - name: Run tests
       run: |
+        # TODO(SPARK-36345): Install mlflow>=1.0 and sklearn in Python 3.9 of the base image
+        python3.9 -m pip install 'mlflow>=1.0' sklearn
         export PATH=$PATH:$HOME/miniconda/bin
         ./dev/run-tests --parallelism 1 --modules "$MODULES_TO_TEST"
     - name: Upload test results to report

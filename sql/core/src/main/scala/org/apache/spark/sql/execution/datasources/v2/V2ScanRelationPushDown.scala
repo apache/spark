@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -76,9 +78,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           if filters.isEmpty && project.forall(_.isInstanceOf[AttributeReference]) =>
           sHolder.builder match {
             case _: SupportsPushDownAggregates =>
+              val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
+              var ordinal = 0
               val aggregates = resultExpressions.flatMap { expr =>
                 expr.collect {
-                  case agg: AggregateExpression => agg
+                  // Do not push down duplicated aggregate expressions. For example,
+                  // `SELECT max(a) + 1, max(a) + 2 FROM ...`, we should only push down one
+                  // `max(a)` to the data source.
+                  case agg: AggregateExpression
+                      if !aggExprToOutputOrdinal.contains(agg.canonicalized) =>
+                    aggExprToOutputOrdinal(agg.canonicalized) = ordinal
+                    ordinal += 1
+                    agg
                 }
               }
               val pushedAggregates = PushDownUtils
@@ -144,19 +155,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
                 // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
                 // scalastyle:on
-                var i = 0
                 val aggOutput = output.drop(groupAttrs.length)
                 plan.transformExpressions {
                   case agg: AggregateExpression =>
+                    val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
                     val aggFunction: aggregate.AggregateFunction =
                       agg.aggregateFunction match {
-                        case max: aggregate.Max => max.copy(child = aggOutput(i))
-                        case min: aggregate.Min => min.copy(child = aggOutput(i))
-                        case sum: aggregate.Sum => sum.copy(child = aggOutput(i))
-                        case _: aggregate.Count => aggregate.Sum(aggOutput(i))
+                        case max: aggregate.Max => max.copy(child = aggOutput(ordinal))
+                        case min: aggregate.Min => min.copy(child = aggOutput(ordinal))
+                        case sum: aggregate.Sum => sum.copy(child = aggOutput(ordinal))
+                        case _: aggregate.Count => aggregate.Sum(aggOutput(ordinal))
                         case other => other
                       }
-                    i += 1
                     agg.copy(aggregateFunction = aggFunction)
                 }
               }

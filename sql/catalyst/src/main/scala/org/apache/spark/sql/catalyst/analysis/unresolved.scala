@@ -333,6 +333,9 @@ abstract class Star extends LeafExpression with NamedExpression {
   override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
   override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
+
+  override def withName(newName: String): NamedExpression =
+    throw new UnresolvedException("withName")
   override lazy val resolved = false
 
   def expand(input: LogicalPlan, resolver: Resolver): Seq[NamedExpression]
@@ -468,6 +471,9 @@ case class MultiAlias(child: Expression, names: Seq[String])
 
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
 
+  override def withName(newName: String): NamedExpression =
+    throw new UnresolvedException("withName")
+
   final override val nodePatterns: Seq[TreePattern] = Seq(MULTI_ALIAS)
 
   override lazy val resolved = false
@@ -537,6 +543,9 @@ case class UnresolvedAlias(
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def name: String = throw new UnresolvedException("name")
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
+
+  override def withName(newName: String): NamedExpression =
+    throw new UnresolvedException("withName")
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ALIAS)
 
   override lazy val resolved = false

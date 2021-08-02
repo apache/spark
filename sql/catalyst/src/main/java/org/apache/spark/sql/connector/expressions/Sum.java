@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.expressions;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.types.DataType;
 
 /**
  * An aggregate function that returns the summation of all the values in a group.
@@ -28,22 +27,23 @@ import org.apache.spark.sql.types.DataType;
 @Evolving
 public final class Sum implements AggregateFunc {
   private final FieldReference column;
-  private final DataType dataType;
   private final boolean isDistinct;
 
-  public Sum(FieldReference column, DataType dataType, boolean isDistinct) {
+  public Sum(FieldReference column, boolean isDistinct) {
     this.column = column;
-    this.dataType = dataType;
     this.isDistinct = isDistinct;
   }
 
   public FieldReference column() { return column; }
-  public DataType dataType() { return dataType; }
   public boolean isDistinct() { return isDistinct; }
 
   @Override
   public String toString() {
-    return "Sum(" + column.describe() + "," + dataType + "," + isDistinct + ")";
+    if (isDistinct) {
+      return "SUM(DISTINCT " + column.describe() + ")";
+    } else {
+      return "SUM(" + column.describe() + ")";
+    }
   }
 
   @Override

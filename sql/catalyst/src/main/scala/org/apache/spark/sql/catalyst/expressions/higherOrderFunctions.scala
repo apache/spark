@@ -48,6 +48,8 @@ case class UnresolvedNamedLambdaVariable(nameParts: Seq[String])
   override def qualifier: Seq[String] = throw new UnresolvedException("qualifier")
   override def toAttribute: Attribute = throw new UnresolvedException("toAttribute")
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
+  override def withName(newName: String): NamedExpression =
+    throw new UnresolvedException("withName")
   override lazy val resolved = false
   final override val nodePatterns: Seq[TreePattern] = Seq(LAMBDA_VARIABLE)
 
@@ -83,6 +85,9 @@ case class NamedLambdaVariable(
 
   override def newInstance(): NamedExpression =
     copy(exprId = NamedExpression.newExprId, value = new AtomicReference())
+
+  override def withName(newName: String): NamedExpression =
+    NamedLambdaVariable(newName, dataType, nullable, exprId, value)
 
   override def toAttribute: Attribute = {
     AttributeReference(name, dataType, nullable, Metadata.empty)(exprId, Seq.empty)
