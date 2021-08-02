@@ -169,11 +169,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   def applyColumnPruning(plan: LogicalPlan): LogicalPlan = plan.transform {
     case ScanOperation(project, filters, sHolder: ScanBuilderHolder) =>
       // column pruning
-      val normalizedProjects = DataSourceStrategy
-        .normalizeExprs(project, sHolder.output)
-        .asInstanceOf[Seq[NamedExpression]]
       val (scan, output) = PushDownUtils.pruneColumns(
-        sHolder.builder, sHolder.relation, normalizedProjects, filters)
+        sHolder.builder, sHolder.relation, project, filters)
 
       logInfo(
         s"""
@@ -184,7 +181,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
 
-      val projectionOverSchema = ProjectionOverSchema(output.toStructType)
+      val projectionOverSchema = ProjectionOverSchema(output.toStructType, output.map(_.exprId))
       val projectionFunc = (expr: Expression) => expr transformDown {
         case projectionOverSchema(newExpr) => newExpr
       }
@@ -194,7 +191,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val withFilter = newFilterCondition.map(Filter(_, scanRelation)).getOrElse(scanRelation)
 
       val withProjection = if (withFilter.output != project) {
-        val newProjects = normalizedProjects
+        val newProjects = project
           .map(projectionFunc)
           .asInstanceOf[Seq[NamedExpression]]
         Project(newProjects, withFilter)
