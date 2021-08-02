@@ -108,7 +108,7 @@ class JacksonParser(
         // List([str_a_2,null], [null,str_b_3])
         //
       case START_ARRAY if allowArrayAsStructs =>
-        val array = convertArray(parser, elementConverter)
+        val array = convertArray(parser, elementConverter, isRoot = true)
         // Here, as we support reading top level JSON arrays and take every element
         // in such an array as a row, this case is possible.
         if (array.numElements() == 0) {
@@ -450,10 +450,13 @@ class JacksonParser(
    */
   private def convertArray(
       parser: JsonParser,
-      fieldConverter: ValueConverter): ArrayData = {
+      fieldConverter: ValueConverter,
+      isRoot: Boolean = false): ArrayData = {
     val values = ArrayBuffer.empty[Any]
     while (nextUntil(parser, JsonToken.END_ARRAY)) {
-      values += fieldConverter.apply(parser)
+      val v = fieldConverter.apply(parser)
+      if (isRoot && v == null) throw QueryExecutionErrors.rootConverterReturnNullError()
+      values += v
     }
 
     new GenericArrayData(values.toArray)
