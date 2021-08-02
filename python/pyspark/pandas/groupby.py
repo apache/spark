@@ -97,7 +97,11 @@ if TYPE_CHECKING:
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
 
-_builtin_table = {builtins.sum: np.sum, builtins.max: np.max, builtins.min: np.min}
+_builtin_table = {
+    builtins.sum: np.sum,
+    builtins.max: np.max,
+    builtins.min: np.min,
+}  # type: Dict[Callable, Callable]
 
 
 class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
