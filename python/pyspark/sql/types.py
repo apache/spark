@@ -107,7 +107,9 @@ class NullType(DataType, metaclass=DataTypeSingleton):
 
     The data type representing None, used for the types that cannot be inferred.
     """
-    pass
+    @classmethod
+    def typeName(cls):
+        return 'void'
 
 
 class AtomicType(DataType):
