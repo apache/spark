@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionM
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
@@ -951,6 +952,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         colsToAdd.foreach { colToAdd =>
           checkColumnNotExists("add", colToAdd.name, table.schema)
         }
+        SchemaUtils.checkColumnNameDuplication(
+          colsToAdd.map(_.name.quoted),
+          "in the user specified columns",
+          alter.conf.resolver)
 
       case AlterTableRenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)

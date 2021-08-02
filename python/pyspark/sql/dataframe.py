@@ -1864,7 +1864,7 @@ class DataFrame(PandasMapOpsMixin, PandasConversionMixin):
         >>> observed_df.count()
         2
         >>> observation.get
-        Row(count=2, max(age)=5)
+        {'count': 2, 'max(age)': 5}
         """
         from pyspark.sql import Observation
         assert isinstance(observation, Observation), "observation should be Observation"
