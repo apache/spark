@@ -913,10 +913,17 @@ object CollapseRepartition extends Rule[LogicalPlan] {
       case (false, true) => if (r.numPartitions >= child.numPartitions) child else r
       case _ => r.copy(child = child.child)
     }
+    case r @ Repartition(_, _, p @ Project(_, child: RepartitionOperation)) =>
+      (r.shuffle, child.shuffle) match {
+        case (false, true) => if (r.numPartitions >= child.numPartitions) p else r
+        case _ => r.copy(child = p.copy(child = child.child))
+      }
     // Case 2: When a RepartitionByExpression has a child of Repartition or RepartitionByExpression
     // we can remove the child.
     case r @ RepartitionByExpression(_, child: RepartitionOperation, _) =>
       r.copy(child = child.child)
+    case r @ RepartitionByExpression(_, p @ Project(_, child: RepartitionOperation), _) =>
+      r.copy(child = p.copy(child = child.child))
   }
 }
 

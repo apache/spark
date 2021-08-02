@@ -195,4 +195,39 @@ class CollapseRepartitionSuite extends PlanTest {
     comparePlans(optimized1, correctAnswer)
     comparePlans(optimized2, correctAnswer)
   }
+
+  test("SPARK-36376: distribute number less than coalesce number") {
+    val originalQuery = testRelation
+      .distribute('a, 'b)(10).select('a)
+      .coalesce(20)
+    val correctAnswer = testRelation.distribute('a, 'b)(10).select('a)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-36376: distribute number greater than coalesce number") {
+    val originalQuery = testRelation
+      .distribute('a, 'b)(30).select('a)
+      .coalesce(20)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
+  }
+
+  test("SPARK-36376: repartition above distribute") {
+    val originalQuery = testRelation
+      .distribute('a, 'b)(30).select('a)
+      .repartition(20)
+    val correctAnswer = testRelation.select('a).repartition(20)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("SPARK-36376: distribute above distribute") {
+    val originalQuery = testRelation
+      .distribute('a, 'b)(10).select('a)
+      .distribute('a)(20)
+    val correctAnswer = testRelation.select('a).distribute('a)(20)
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
 }
