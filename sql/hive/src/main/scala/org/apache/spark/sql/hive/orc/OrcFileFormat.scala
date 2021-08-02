@@ -194,7 +194,7 @@ class OrcFileFormat extends FileFormat with DataSourceRegister with Serializable
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
-    case _: AtomicType => true
+    case at: AtomicType if !at.isInstanceOf[TimestampNTZType] => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
 
