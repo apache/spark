@@ -1573,13 +1573,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         index = self._psdf._internal.index_spark_column_names[0]
 
         stat_exprs = []
-        for psser, c in zip(self._agg_columns, self._agg_columns_scols):
+        for psser, scol in zip(self._agg_columns, self._agg_columns_scols):
             name = psser._internal.data_spark_column_names[0]
 
             if skipna:
-                order_column = Column(c._jc.desc_nulls_last())
+                order_column = scol.desc_nulls_last()
             else:
-                order_column = Column(c._jc.desc_nulls_first())
+                order_column = scol.desc_nulls_first()
+
             window = Window.partitionBy(*groupkey_names).orderBy(
                 order_column, NATURAL_ORDER_COLUMN_NAME
             )
@@ -1655,13 +1656,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         index = self._psdf._internal.index_spark_column_names[0]
 
         stat_exprs = []
-        for psser, c in zip(self._agg_columns, self._agg_columns_scols):
+        for psser, scol in zip(self._agg_columns, self._agg_columns_scols):
             name = psser._internal.data_spark_column_names[0]
 
             if skipna:
-                order_column = Column(c._jc.asc_nulls_last())
+                order_column = scol.asc_nulls_last()
             else:
-                order_column = Column(c._jc.asc_nulls_first())
+                order_column = scol.asc_nulls_first()
+
             window = Window.partitionBy(*groupkey_names).orderBy(
                 order_column, NATURAL_ORDER_COLUMN_NAME
             )
@@ -2524,40 +2526,18 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
     def _reduce_for_stat_function(
         self, sfun: Callable[[Column], Column], only_numeric: bool
     ) -> FrameLike:
-        agg_columns = self._agg_columns
-        agg_columns_scols = self._agg_columns_scols
-
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
         groupkey_scols = [s.alias(name) for s, name in zip(self._groupkeys_scols, groupkey_names)]
 
-        sdf = self._psdf._internal.spark_frame.select(groupkey_scols + agg_columns_scols)
+        agg_columns = [
+            psser
+            for psser in self._agg_columns
+            if isinstance(psser.spark.data_type, NumericType) or not only_numeric
+        ]
 
-        data_columns = []
-        column_labels = []
-        if len(agg_columns) > 0:
-            stat_exprs = []
-            for psser in agg_columns:
-                spark_type = psser.spark.data_type
-                name = psser._internal.data_spark_column_names[0]
-                label = psser._column_label
-                scol = scol_for(sdf, name)
-                # TODO: we should have a function that takes dataframes and converts the numeric
-                # types. Converting the NaNs is used in a few places, it should be in utils.
-                # Special handle floating point types because Spark's count treats nan as a valid
-                # value, whereas pandas count doesn't include nan.
-
-                # TODO(SPARK-36350): Make this work with DataTypeOps.
-                if isinstance(spark_type, (FloatType, DoubleType)):
-                    stat_exprs.append(sfun(F.nanvl(scol, SF.lit(None))).alias(name))
-                    data_columns.append(name)
-                    column_labels.append(label)
-                elif isinstance(spark_type, NumericType) or not only_numeric:
-                    stat_exprs.append(sfun(scol).alias(name))
-                    data_columns.append(name)
-                    column_labels.append(label)
-            sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
-        else:
-            sdf = sdf.select(*groupkey_names).distinct()
+        sdf = self._psdf._internal.spark_frame.select(
+            *groupkey_scols, *[psser.spark.column for psser in agg_columns]
+        )
 
         internal = InternalFrame(
             spark_frame=sdf,
@@ -2567,11 +2547,35 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 psser._internal.data_fields[0].copy(name=name)
                 for psser, name in zip(self._groupkeys, groupkey_names)
             ],
-            column_labels=column_labels,
-            data_spark_columns=[scol_for(sdf, col) for col in data_columns],
+            data_spark_columns=[
+                scol_for(sdf, psser._internal.data_spark_column_names[0]) for psser in agg_columns
+            ],
+            column_labels=[psser._column_label for psser in agg_columns],
+            data_fields=[psser._internal.data_fields[0] for psser in agg_columns],
             column_label_names=self._psdf._internal.column_label_names,
         )
         psdf = DataFrame(internal)  # type: DataFrame
+
+        if len(psdf._internal.column_labels) > 0:
+            stat_exprs = []
+            for label in psdf._internal.column_labels:
+                psser = psdf._psser_for(label)
+                stat_exprs.append(
+                    sfun(psser._dtype_op.nan_to_null(psser).spark.column).alias(
+                        psser._internal.data_spark_column_names[0]
+                    )
+                )
+            sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
+        else:
+            sdf = sdf.select(*groupkey_names).distinct()
+
+        internal = internal.copy(
+            spark_frame=sdf,
+            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
+            data_spark_columns=[scol_for(sdf, col) for col in internal.data_spark_column_names],
+            data_fields=None,
+        )
+        psdf = DataFrame(internal)
 
         if self._dropna:
             psdf = DataFrame(

@@ -1692,9 +1692,7 @@ class Index(IndexOpsMixin):
         ]
         sdf = sdf.select(index_value_columns)
 
-        sdf, force_nullable = InternalFrame.attach_default_index(
-            sdf, default_index_type="distributed-sequence"
-        )
+        sdf = InternalFrame.attach_default_index(sdf, default_index_type="distributed-sequence")
         # sdf here looks as below
         # +-----------------+-----------------+-----------------+-----------------+
         # |__index_level_0__|__index_value_0__|__index_value_1__|__index_value_2__|
@@ -1727,11 +1725,7 @@ class Index(IndexOpsMixin):
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
-            index_fields=(
-                [field.copy(nullable=True) for field in self._internal.index_fields]
-                if force_nullable
-                else self._internal.index_fields
-            ),
+            index_fields=self._internal.index_fields,
         )
 
         return DataFrame(internal).index
@@ -1829,7 +1823,7 @@ class Index(IndexOpsMixin):
         """
         sdf = self._internal.spark_frame.select(self.spark.column)
         sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf, _ = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
+        sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
         # spark_frame here looks like below
         # +-----------------+---------------+
         # |__index_level_0__|__index_value__|
@@ -1877,7 +1871,7 @@ class Index(IndexOpsMixin):
         """
         sdf = self._internal.spark_frame.select(self.spark.column)
         sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf, _ = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
+        sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
 
         return (
             sdf.orderBy(
@@ -2475,7 +2469,7 @@ class Index(IndexOpsMixin):
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
-            index_fields=[field.copy(nullable=True) for field in self._internal.index_fields],
+            index_fields=[InternalField(field.dtype) for field in self._internal.index_fields],
         )
         return DataFrame(internal).index
 

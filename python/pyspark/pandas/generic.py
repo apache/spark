@@ -44,9 +44,7 @@ from pandas.api.types import is_list_like
 from pyspark.sql import Column, functions as F
 from pyspark.sql.types import (
     BooleanType,
-    DataType,
     DoubleType,
-    FloatType,
     IntegralType,
     LongType,
     NumericType,
@@ -114,7 +112,7 @@ class Frame(object, metaclass=ABCMeta):
     @abstractmethod
     def _reduce_for_stat_function(
         self,
-        sfun: Union[Callable[[Column], Column], Callable[[Column, DataType], Column]],
+        sfun: Callable[["Series"], Column],
         name: str,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
@@ -1204,7 +1202,9 @@ class Frame(object, metaclass=ABCMeta):
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        def mean(spark_column: Column, spark_type: DataType) -> Column:
+        def mean(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1289,7 +1289,9 @@ class Frame(object, metaclass=ABCMeta):
         elif numeric_only is True and axis == 1:
             numeric_only = None
 
-        def sum(spark_column: Column, spark_type: DataType) -> Column:
+        def sum(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1373,7 +1375,9 @@ class Frame(object, metaclass=ABCMeta):
         elif numeric_only is True and axis == 1:
             numeric_only = None
 
-        def prod(spark_column: Column, spark_type: DataType) -> Column:
+        def prod(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 scol = F.min(F.coalesce(spark_column, SF.lit(True))).cast(LongType())
             elif isinstance(spark_type, NumericType):
@@ -1444,7 +1448,9 @@ class Frame(object, metaclass=ABCMeta):
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        def skew(spark_column: Column, spark_type: DataType) -> Column:
+        def skew(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1501,7 +1507,9 @@ class Frame(object, metaclass=ABCMeta):
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        def kurtosis(spark_column: Column, spark_type: DataType) -> Column:
+        def kurtosis(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1570,7 +1578,10 @@ class Frame(object, metaclass=ABCMeta):
             numeric_only = None
 
         return self._reduce_for_stat_function(
-            F.min, name="min", axis=axis, numeric_only=numeric_only
+            lambda psser: F.min(psser.spark.column),
+            name="min",
+            axis=axis,
+            numeric_only=numeric_only,
         )
 
     def max(
@@ -1625,7 +1636,10 @@ class Frame(object, metaclass=ABCMeta):
             numeric_only = None
 
         return self._reduce_for_stat_function(
-            F.max, name="max", axis=axis, numeric_only=numeric_only
+            lambda psser: F.max(psser.spark.column),
+            name="max",
+            axis=axis,
+            numeric_only=numeric_only,
         )
 
     def count(
@@ -1763,7 +1777,9 @@ class Frame(object, metaclass=ABCMeta):
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        def std(spark_column: Column, spark_type: DataType) -> Column:
+        def std(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1842,7 +1858,9 @@ class Frame(object, metaclass=ABCMeta):
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        def var(spark_column: Column, spark_type: DataType) -> Column:
+        def var(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -1955,7 +1973,9 @@ class Frame(object, metaclass=ABCMeta):
                 "accuracy must be an integer; however, got [%s]" % type(accuracy).__name__
             )
 
-        def median(spark_column: Column, spark_type: DataType) -> Column:
+        def median(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, (BooleanType, NumericType)):
                 return F.percentile_approx(spark_column.cast(DoubleType()), 0.5, accuracy)
             else:
@@ -2037,7 +2057,9 @@ class Frame(object, metaclass=ABCMeta):
         if numeric_only is None and axis == 0:
             numeric_only = True
 
-        def std(spark_column: Column, spark_type: DataType) -> Column:
+        def std(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, BooleanType):
                 spark_column = spark_column.cast(LongType())
             elif not isinstance(spark_type, NumericType):
@@ -2051,10 +2073,8 @@ class Frame(object, metaclass=ABCMeta):
             else:
                 return F.stddev_samp(spark_column)
 
-        def sem(spark_column: Column, spark_type: DataType) -> Column:
-            return std(spark_column, spark_type) / pow(
-                Frame._count_expr(spark_column, spark_type), 0.5
-            )
+        def sem(psser: "Series") -> Column:
+            return std(psser) / pow(Frame._count_expr(psser), 0.5)
 
         return self._reduce_for_stat_function(
             sem, name="sem", numeric_only=numeric_only, axis=axis, ddof=ddof
@@ -3180,14 +3200,8 @@ class Frame(object, metaclass=ABCMeta):
         )
 
     @staticmethod
-    def _count_expr(spark_column: Column, spark_type: DataType) -> Column:
-        # Special handle floating point types because Spark's count treats nan as a valid value,
-        # whereas pandas count doesn't include nan.
-        # TODO(SPARK-36350): Make this work with DataTypeOps.
-        if isinstance(spark_type, (FloatType, DoubleType)):
-            return F.count(F.nanvl(spark_column, SF.lit(None)))
-        else:
-            return F.count(spark_column)
+    def _count_expr(psser: "Series") -> Column:
+        return F.count(psser._dtype_op.nan_to_null(psser).spark.column)
 
 
 def _test() -> None:

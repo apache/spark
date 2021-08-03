@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.types._
@@ -65,7 +66,9 @@ trait ColumnarToRowTransition extends UnaryExecNode
  * [[MapPartitionsInRWithArrowExec]]. Eventually this should replace those implementations.
  */
 case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition with CodegenSupport {
-  assert(child.supportsColumnar)
+  // child plan must be columnar or an adaptive plan, which could either be row-based or
+  // columnar, but we don't know until we execute it
+  assert(child.supportsColumnar || child.isInstanceOf[AdaptiveSparkPlanExec])
 
   override def output: Seq[Attribute] = child.output
 
@@ -83,18 +86,25 @@ case class ColumnarToRowExec(child: SparkPlan) extends ColumnarToRowTransition w
   )
 
   override def doExecute(): RDD[InternalRow] = {
-    val numOutputRows = longMetric("numOutputRows")
-    val numInputBatches = longMetric("numInputBatches")
-    // This avoids calling `output` in the RDD closure, so that we don't need to include the entire
-    // plan (this) in the closure.
-    val localOutput = this.output
-    child.executeColumnar().mapPartitionsInternal { batches =>
-      val toUnsafe = UnsafeProjection.create(localOutput, localOutput)
-      batches.flatMap { batch =>
-        numInputBatches += 1
-        numOutputRows += batch.numRows()
-        batch.rowIterator().asScala.map(toUnsafe)
-      }
+    child match {
+      case a: AdaptiveSparkPlanExec if !a.finalPlanSupportsColumnar() =>
+        // if the child plan is adaptive and resulted in rows rather than columnar data
+        // then we can bypass any transition
+        a.execute()
+      case _ =>
+        val numOutputRows = longMetric("numOutputRows")
+        val numInputBatches = longMetric("numInputBatches")
+        // This avoids calling `output` in the RDD closure, so that we don't need to include
+        // the entire plan (this) in the closure.
+        val localOutput = this.output
+        child.executeColumnar().mapPartitionsInternal { batches =>
+          val toUnsafe = UnsafeProjection.create(localOutput, localOutput)
+          batches.flatMap { batch =>
+            numInputBatches += 1
+            numOutputRows += batch.numRows()
+            batch.rowIterator().asScala.map(toUnsafe)
+          }
+        }
     }
   }
 
@@ -419,6 +429,10 @@ trait RowToColumnarTransition extends UnaryExecNode
  * would only be to reduce code.
  */
 case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
+  // child plan must be row-based or an adaptive plan, which could either be row-based or
+  // columnar, but we don't know until we execute it
+  assert(!child.supportsColumnar || child.isInstanceOf[AdaptiveSparkPlanExec])
+
   override def output: Seq[Attribute] = child.output
 
   override def outputPartitioning: Partitioning = child.outputPartitioning
@@ -441,52 +455,60 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
   )
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
-    val enableOffHeapColumnVector = conf.offHeapColumnVectorEnabled
-    val numInputRows = longMetric("numInputRows")
-    val numOutputBatches = longMetric("numOutputBatches")
-    // Instead of creating a new config we are reusing columnBatchSize. In the future if we do
-    // combine with some of the Arrow conversion tools we will need to unify some of the configs.
-    val numRows = conf.columnBatchSize
-    // This avoids calling `schema` in the RDD closure, so that we don't need to include the entire
-    // plan (this) in the closure.
-    val localSchema = this.schema
-    child.execute().mapPartitionsInternal { rowIterator =>
-      if (rowIterator.hasNext) {
-        new Iterator[ColumnarBatch] {
-          private val converters = new RowToColumnConverter(localSchema)
-          private val vectors: Seq[WritableColumnVector] = if (enableOffHeapColumnVector) {
-            OffHeapColumnVector.allocateColumns(numRows, localSchema)
-          } else {
-            OnHeapColumnVector.allocateColumns(numRows, localSchema)
-          }
-          private val cb: ColumnarBatch = new ColumnarBatch(vectors.toArray)
+    child match {
+      case a: AdaptiveSparkPlanExec if a.finalPlanSupportsColumnar() =>
+        // if the child plan is adaptive and resulted in columnar data
+        // then we can bypass any transition
+        a.executeColumnar()
+      case _ =>
+        val enableOffHeapColumnVector = conf.offHeapColumnVectorEnabled
+        val numInputRows = longMetric("numInputRows")
+        val numOutputBatches = longMetric("numOutputBatches")
+        // Instead of creating a new config we are reusing columnBatchSize. In the future if we do
+        // combine with some of the Arrow conversion tools we will need to unify some of the
+        // configs.
+        val numRows = conf.columnBatchSize
+        // This avoids calling `schema` in the RDD closure, so that we don't need to include the
+        // entire plan (this) in the closure.
+        val localSchema = this.schema
+        child.execute().mapPartitionsInternal { rowIterator =>
+          if (rowIterator.hasNext) {
+            new Iterator[ColumnarBatch] {
+              private val converters = new RowToColumnConverter(localSchema)
+              private val vectors: Seq[WritableColumnVector] = if (enableOffHeapColumnVector) {
+                OffHeapColumnVector.allocateColumns(numRows, localSchema)
+              } else {
+                OnHeapColumnVector.allocateColumns(numRows, localSchema)
+              }
+              private val cb: ColumnarBatch = new ColumnarBatch(vectors.toArray)
 
-          TaskContext.get().addTaskCompletionListener[Unit] { _ =>
-            cb.close()
-          }
+              TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+                cb.close()
+              }
 
-          override def hasNext: Boolean = {
-            rowIterator.hasNext
-          }
+              override def hasNext: Boolean = {
+                rowIterator.hasNext
+              }
 
-          override def next(): ColumnarBatch = {
-            cb.setNumRows(0)
-            vectors.foreach(_.reset())
-            var rowCount = 0
-            while (rowCount < numRows && rowIterator.hasNext) {
-              val row = rowIterator.next()
-              converters.convert(row, vectors.toArray)
-              rowCount += 1
+              override def next(): ColumnarBatch = {
+                cb.setNumRows(0)
+                vectors.foreach(_.reset())
+                var rowCount = 0
+                while (rowCount < numRows && rowIterator.hasNext) {
+                  val row = rowIterator.next()
+                  converters.convert(row, vectors.toArray)
+                  rowCount += 1
+                }
+                cb.setNumRows(rowCount)
+                numInputRows += rowCount
+                numOutputBatches += 1
+                cb
+              }
             }
-            cb.setNumRows(rowCount)
-            numInputRows += rowCount
-            numOutputBatches += 1
-            cb
+          } else {
+            Iterator.empty
           }
         }
-      } else {
-        Iterator.empty
-      }
     }
   }
 

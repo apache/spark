@@ -596,8 +596,6 @@ class SparkContext(config: SparkConf) extends Logging {
     // The metrics system for Driver need to be set spark.app.id to app ID.
     // So it should start after we get app ID from the task scheduler and set spark.app.id.
     _env.metricsSystem.start(_conf.get(METRICS_STATIC_SOURCES_ENABLED))
-    // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
-    _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
     _eventLogger =
       if (isEventLogEnabled) {
@@ -638,6 +636,11 @@ class SparkContext(config: SparkConf) extends Logging {
     setupAndStartListenerBus()
     postEnvironmentUpdate()
     postApplicationStart()
+
+    // After application started, attach handlers to started server and start handler.
+    _ui.foreach(_.attachAllHandler())
+    // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
+    _env.metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
     // Post init
     _taskScheduler.postStartHook()
