@@ -179,8 +179,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   def applyColumnPruning(plan: LogicalPlan): LogicalPlan = plan.transform {
     case ScanOperation(project, filters, sHolder: ScanBuilderHolder) =>
       // column pruning
+      val normalizedProjects = DataSourceStrategy
+        .normalizeExprs(project, sHolder.output)
+        .asInstanceOf[Seq[NamedExpression]]
       val (scan, output) = PushDownUtils.pruneColumns(
-        sHolder.builder, sHolder.relation, project, filters)
+        sHolder.builder, sHolder.relation, normalizedProjects, filters)
 
       logInfo(
         s"""
