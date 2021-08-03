@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -521,7 +520,7 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
     // Eliminate no-op Projects
     case p @ Project(output, child) if child.sameOutput(p) =>
       child match {
-        case relation: DataSourceV2Relation
+        case relation: LeafNode
           if !output.zip(relation.output).forall { case (a1, a2) => a1.name == a2.name } =>
           child
         case _ =>
