@@ -3459,6 +3459,103 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         cond_inversed = cond._apply_series_op(lambda psser: ~psser)
         return self.where(cond_inversed, other)
 
+    # TODO: Support axis as 1 or 'columns'
+    def mode(
+        self, axis: Union[int, str] = 0, numeric_only: bool = False, dropna: bool = True
+    ) -> "DataFrame":
+        """
+        Get the mode(s) of each element along the selected axis.
+
+        The mode of a set of values is the value that appears most often.
+        It can be multiple values.
+
+        Parameters
+        ----------
+        axis : {0 or 'index', 1 or 'columns'}, default 0
+            The axis to iterate over while searching for the mode:
+            * 0 or 'index' : get mode of each column
+            * 1 or 'columns' : get mode of each row.
+
+        numeric_only : bool, default False
+            If True, only apply to numeric columns.
+
+        dropna : bool, default True
+            Don't consider counts of NaN/NaT.
+
+        Returns
+        -------
+        DataFrame
+            The modes of each column or row.
+
+        See Also
+        --------
+        Series.mode : Return the highest frequency value in a Series.
+        Series.value_counts : Return the counts of values in a Series.
+
+        Examples
+        --------
+        >>> psdf = ps.DataFrame(
+        ...     [("bird", 2, 2), ("mammal", 4, np.nan), ("arthropod", 8, 0), ("bird", 2, np.nan)],
+        ...     index=("falcon", "horse", "spider", "ostrich"),
+        ...     columns=("species", "legs", "wings"),
+        ... )
+        >>> psdf
+                   species  legs  wings
+        falcon        bird     2    2.0
+        horse       mammal     4    NaN
+        spider   arthropod     8    0.0
+        ostrich       bird     2    NaN
+        >>> psdf.mode().sort_values(by=list(psdf.columns)).reset_index(drop=True)
+          species  legs  wings
+        0    bird   2.0    0.0
+        1    None   NaN    2.0
+        >>> psdf.mode(dropna=False)
+          species  legs  wings
+        0    bird     2    NaN
+        >>> psdf.mode(numeric_only=True).sort_values(by='legs').reset_index(drop=True)
+           legs  wings
+        0   2.0    0.0
+        1   NaN    2.0
+        """
+        axis = validate_axis(axis)
+        if axis == 1:
+            raise NotImplementedError("Mode currently only works when axis is 0 or 'index'.")
+
+        data = self if not numeric_only else self._get_numeric_data()
+
+        new_scol = verify_temp_column_name(data._internal.spark_frame, "__row_index__")
+
+        def scol_mode(col):
+            if dropna:
+                sdf_dropna = data._internal.spark_frame.select(col).dropna()
+            else:
+                sdf_dropna = data._internal.spark_frame
+            count_df = sdf_dropna.groupBy(col).count()
+            most_value = count_df.orderBy("count", ascending=False).first()[1]
+            sdf_most_value = count_df.filter("count == {}".format(most_value)).select(col)
+
+            return sdf_most_value.withColumn(
+                new_scol, F.row_number().over(Window.orderBy(F.monotonically_increasing_id()))
+            )
+
+        new_sdf = None
+        for data_scol_name in data._internal.data_spark_column_names:
+            if new_sdf is None:
+                new_sdf = scol_mode(data_scol_name)
+            else:
+                new_sdf = new_sdf.join(scol_mode(data_scol_name), on=[new_scol], how="outer")
+
+        return DataFrame(new_sdf.drop(new_scol))
+
+    def _get_numeric_data(self):
+        data = self.copy()
+        for label in self._internal.column_labels:
+            spark_type = self._internal.spark_type_for(label)
+            is_numeric_or_boolean = isinstance(spark_type, (NumericType, BooleanType))
+            if not is_numeric_or_boolean:
+                data = data.drop(label)
+        return data
+
     @property
     def index(self) -> "Index":
         """The index (row labels) Column of the DataFrame.
