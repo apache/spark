@@ -81,8 +81,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
         val projectionOverSchema = ProjectionOverSchema(prunedDataSchema,
           DataSourceStrategy.normalizeExprsAttrNameMap(projects, output))
 
-        Some(buildNewProjection(projects, filters, prunedRelation,
-          projectionOverSchema))
+        Some(buildNewProjection(projects, filters, prunedRelation, projectionOverSchema))
       } else {
         None
       }
