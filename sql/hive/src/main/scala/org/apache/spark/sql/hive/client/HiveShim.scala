@@ -920,6 +920,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     val timeZoneId = SQLConf.get.sessionLocalTimeZone
 
+    // Because there is no way to know whether the partition properties has timeZone,
+    // client-side filtering cannot be used with TimeZoneAwareExpression.
     def hasTimeZoneAwareExpression(e: Expression): Boolean = {
       e.collectFirst {
         case t: TimeZoneAwareExpression => t

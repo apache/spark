@@ -1014,7 +1014,7 @@ object SQLConf {
         s"we cannot do filtering on the server(${HIVE_METASTORE_PARTITION_PRUNING.key})," +
         "pruning partition by getting the partition names first " +
         "and pruning using expression evaluator on client.")
-      .version("3.1.0")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
 
