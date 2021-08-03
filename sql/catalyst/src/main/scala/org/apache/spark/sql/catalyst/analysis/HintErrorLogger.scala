@@ -42,7 +42,7 @@ object HintErrorLogger extends HintErrorHandler with Logging {
     logWarning(s"A join hint $hint is specified but it is not part of a join relation.")
   }
 
-  override def hintNotSupported(hint: HintInfo, reason: String): Unit = {
+  override def joinHintNotSupported(hint: HintInfo, reason: String): Unit = {
     logWarning(s"Hint $hint is not supported in the query: $reason.")
   }
 

@@ -214,9 +214,10 @@ trait HintErrorHandler {
   def joinNotFoundForJoinHint(hint: HintInfo): Unit
 
   /**
-   * Callback for a join hint specified on a join that doesn't support this build side.
+   * Callback for a join hint specified on a join that doesn't support this build side or
+   * doesn't have equi-join keys for equi-join.
    */
-  def hintNotSupported(hint: HintInfo, reason: String): Unit
+  def joinHintNotSupported(hint: HintInfo, reason: String): Unit
 
   /**
    * Callback for a hint being overridden by another conflicting hint of the same kind.

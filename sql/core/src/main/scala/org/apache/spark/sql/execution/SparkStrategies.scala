@@ -153,12 +153,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         if ((isBroadcast && hintToBroadcastLeft(hint)) ||
           (!isBroadcast && hintToShuffleHashJoinLeft(hint))) {
           assert(hint.leftHint.isDefined)
-          hintErrorHandler.hintNotSupported(hint.leftHint.get,
+          hintErrorHandler.joinHintNotSupported(hint.leftHint.get,
             s"build left for ${joinType.sql.toLowerCase(Locale.ROOT)} join")
         } else if ((isBroadcast && hintToBroadcastRight(hint)) ||
           (!isBroadcast && hintToShuffleHashJoinRight(hint))) {
           assert(hint.rightHint.isDefined)
-          hintErrorHandler.hintNotSupported(hint.rightHint.get,
+          hintErrorHandler.joinHintNotSupported(hint.rightHint.get,
             s"build right for ${joinType.sql.toLowerCase(Locale.ROOT)} join")
         }
       }
@@ -167,7 +167,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     private def checkHintNonEquiJoin(hint: JoinHint): Unit = {
       if (hintToShuffleHashJoin(hint) || hintToSortMergeJoin(hint)) {
         assert(hint.leftHint.orElse(hint.rightHint).isDefined)
-        hintErrorHandler.hintNotSupported(hint.leftHint.orElse(hint.rightHint).get,
+        hintErrorHandler.joinHintNotSupported(hint.leftHint.orElse(hint.rightHint).get,
           "equi join keys is not existed")
       }
     }
