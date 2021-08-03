@@ -768,7 +768,7 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
 
   Seq("true", "false").foreach { legacyIntervalEnabled =>
     test("SPARK-35815: Support ANSI intervals for delay threshold" +
-      s"(${SQLConf.LEGACY_INTERVAL_ENABLED.key}=$legacyIntervalEnabled") {
+      s"(${SQLConf.LEGACY_INTERVAL_ENABLED.key}=$legacyIntervalEnabled)") {
       withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> legacyIntervalEnabled) {
         val DAYS_PER_MONTH = 31
         Seq(
