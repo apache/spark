@@ -199,7 +199,7 @@ jobs:
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20210602
+      image: dongjoon/apache-spark-github-action-image:20210730
     strategy:
       fail-fast: false
       matrix:
@@ -266,8 +266,6 @@ jobs:
     - name: Run tests
       env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
       run: |
-        # TODO(SPARK-36345): Install mlflow>=1.0 and sklearn in Python 3.9 of the base image
-        python3.9 -m pip install 'mlflow>=1.0' sklearn
         # TODO(SPARK-36361): Install coverage in Python 3.9 and PyPy 3 in the base image
         python3.9 -m pip install coverage
         pypy3 -m pip install coverage

@@ -15,29 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types
-
-import org.apache.spark.annotation.Stable
+package org.apache.spark.network.shuffle.checksum;
 
 /**
- * The data type representing `NULL` values. Please use the singleton `DataTypes.NullType`.
- *
- * @since 1.3.0
+ * The cause of shuffle data corruption.
  */
-@Stable
-class NullType private() extends DataType {
-  // The companion object and this class is separated so the companion object also subclasses
-  // this type. Otherwise, the companion object would be of type "NullType$" in byte code.
-  // Defined with a private constructor so the companion object is the only possible instantiation.
-  override def defaultSize: Int = 1
-
-  private[spark] override def asNullable: NullType = this
-
-  override def typeName: String = "void"
+public enum Cause {
+  DISK_ISSUE, NETWORK_ISSUE, UNKNOWN_ISSUE, CHECKSUM_VERIFY_PASS, UNSUPPORTED_CHECKSUM_ALGORITHM
 }
-
-/**
- * @since 1.3.0
- */
-@Stable
-case object NullType extends NullType

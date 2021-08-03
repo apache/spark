@@ -269,7 +269,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveRelations ::
       ResolveTables ::
       ResolvePartitionSpec ::
-      ResolveAlterTableColumnCommands ::
+      ResolveAlterTableCommands ::
       AddMetadataColumns ::
       DeduplicateRelations ::
       ResolveReferences ::
@@ -3607,15 +3607,15 @@ class Analyzer(override val catalogManager: CatalogManager)
    * Rule to mostly resolve, normalize and rewrite column names based on case sensitivity
    * for alter table column commands.
    */
-  object ResolveAlterTableColumnCommands extends Rule[LogicalPlan] {
+  object ResolveAlterTableCommands extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case a: AlterTableColumnCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
+      case a: AlterTableCommand if a.table.resolved && hasUnresolvedFieldName(a) =>
         val table = a.table.asInstanceOf[ResolvedTable]
         a.transformExpressions {
           case u: UnresolvedFieldName => resolveFieldNames(table, u.name, u)
         }
 
-      case a @ AlterTableAddColumns(r: ResolvedTable, cols) if !a.resolved =>
+      case a @ AddColumns(r: ResolvedTable, cols) if !a.resolved =>
         // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a
         // normalized parent name of fields to field names that belong to the parent.
         // For example, if we add columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
@@ -3668,7 +3668,7 @@ class Analyzer(override val catalogManager: CatalogManager)
         resolved.copyTagsFrom(a)
         resolved
 
-      case a @ AlterTableAlterColumn(
+      case a @ AlterColumn(
           table: ResolvedTable, ResolvedFieldName(path, field), dataType, _, _, position) =>
         val newDataType = dataType.flatMap { dt =>
           // Hive style syntax provides the column type, even if it may not have changed.
@@ -3705,7 +3705,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       }.getOrElse(throw QueryCompilationErrors.missingFieldError(fieldName, table, context.origin))
     }
 
-    private def hasUnresolvedFieldName(a: AlterTableColumnCommand): Boolean = {
+    private def hasUnresolvedFieldName(a: AlterTableCommand): Boolean = {
       a.expressions.exists(_.find(_.isInstanceOf[UnresolvedFieldName]).isDefined)
     }
   }
