@@ -69,5 +69,12 @@ trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
         assert(errMsg.contains("Cannot save interval data type into external storage"))
       }
     }
+
+    Seq("INTERVAL DAY TO SECOND", "INTERVAL YEAR TO MONTH").foreach { it =>
+      val errMsg = intercept[AnalysisException] {
+        spark.sql(s"CREATE TABLE t (i $it) USING $dataSourceFormat")
+      }.getMessage
+      assert(errMsg.contains("data source does not support"))
+    }
   }
 }

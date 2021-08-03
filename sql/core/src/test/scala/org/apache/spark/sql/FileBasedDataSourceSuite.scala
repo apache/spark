@@ -967,21 +967,6 @@ class FileBasedDataSourceSuite extends QueryTest
       checkAnswer(df, Row("v1", "v2"))
     }
   }
-
-  allFileBasedDataSources.foreach { format =>
-    test(s"SPARK-36349: disallow saving of ANSI intervals using $format") {
-      Seq(format, "").foreach { source =>
-        withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> source) {
-          Seq("INTERVAL DAY TO SECOND", "INTERVAL YEAR TO MONTH").foreach { it =>
-            val errMsg = intercept[AnalysisException] {
-              spark.sql(s"CREATE TABLE t (i $it) USING $format")
-            }.getMessage
-            assert(errMsg.contains("data source does not support"))
-          }
-        }
-      }
-    }
-  }
 }
 
 object TestingUDT {
