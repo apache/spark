@@ -46,7 +46,7 @@ trait CommonFileDataSourceSuite extends SQLHelper { self: AnyFunSuite =>
     }
 
     // Check all built-in file-based datasources except of libsvm which requires particular schema.
-    if (Set("libsvm").contains(dataSourceFormat.toLowerCase(Locale.ROOT))) {
+    if (!Set("libsvm").contains(dataSourceFormat.toLowerCase(Locale.ROOT))) {
       Seq("INTERVAL DAY TO SECOND", "INTERVAL YEAR TO MONTH").foreach { it =>
         val errMsg = intercept[AnalysisException] {
           spark.sql(s"CREATE TABLE t (i $it) USING $dataSourceFormat")
