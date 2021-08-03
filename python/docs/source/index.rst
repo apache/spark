@@ -38,7 +38,7 @@ Data Processing
 
 **Spark SQL and DataFrame**
 
-Spark SQL is a Spark module, similar to SQL, that is used for structured data processing. It provides
+Spark SQL is a Spark module, similar to SQL, that can be used for structured data processing. It provides
 a programming abstraction called DataFrame and can also act as distributed
 SQL query engine.
 
