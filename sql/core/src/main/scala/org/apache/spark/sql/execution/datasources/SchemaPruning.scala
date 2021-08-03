@@ -65,7 +65,9 @@ object SchemaPruning extends Rule[LogicalPlan] {
       filters: Seq[Expression],
       dataSchema: StructType,
       leafNodeBuilder: StructType => LeafNode): Option[LogicalPlan] = {
-    val requestedRootFields = identifyRootFields(projects, filters)
+    val (normalizedProjects, normalizedFilters) =
+      normalizeAttributeRefNames(output, projects, filters)
+    val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
 
     // If requestedRootFields includes a nested field, continue. Otherwise,
     // return op
