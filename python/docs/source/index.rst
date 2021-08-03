@@ -32,6 +32,10 @@ of Spark's features such as Spark SQL, DataFrame, Streaming, MLlib
 .. image:: ../../../docs/img/pyspark-components.png
   :alt: PySpark Components
 
+*******************
+Data Processing
+*******************
+
 **Spark SQL and DataFrame**
 
 Spark SQL is a Spark module for structured data processing. It provides
@@ -53,13 +57,19 @@ Running on top of Spark, the streaming feature in Apache Spark enables powerful
 interactive and analytical applications across both streaming and historical data,
 while inheriting Spark's ease of use and fault tolerance characteristics.
 
+*****************
+Machine Learning
+*****************
+
 **MLlib**
 
 Built on top of Spark, MLlib is a scalable machine learning library that provides
 a uniform set of high-level APIs that help users create and tune practical machine
 learning pipelines.
 
-**Spark Core**
+*****************
+Spark Core
+*****************
 
 Spark Core is the underlying general execution engine for the Spark platform that all
 other functionality is built on top of. It provides an RDD (Resilient Distributed Dataset)
