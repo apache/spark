@@ -67,7 +67,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
       leafNodeBuilder: StructType => LeafNode): Option[LogicalPlan] = {
     val (normalizedProjects, normalizedFilters) =
       normalizeAttributeRefNames(output, projects, filters)
-    val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
+    val requestedRootFields = identifyRootFields(projects, normalizedFilters)
 
     // If requestedRootFields includes a nested field, continue. Otherwise,
     // return op
@@ -80,9 +80,9 @@ object SchemaPruning extends Rule[LogicalPlan] {
       // in dataSchema.
       if (countLeaves(dataSchema) > countLeaves(prunedDataSchema)) {
         val prunedRelation = leafNodeBuilder(prunedDataSchema)
-        val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
+        val projectionOverSchema = ProjectionOverSchema(prunedDataSchema, projects.map(_.exprId))
 
-        Some(buildNewProjection(normalizedProjects, normalizedFilters, prunedRelation,
+        Some(buildNewProjection(projects, normalizedFilters, prunedRelation,
           projectionOverSchema))
       } else {
         None
