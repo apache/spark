@@ -66,12 +66,15 @@ public class RpcIntegrationSuite {
           RpcResponseCallback callback) {
         String msg = JavaUtils.bytesToString(message);
         String[] parts = msg.split("/");
-        if (parts[0].equals("hello")) {
-          callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
-        } else if (parts[0].equals("return error")) {
-          callback.onFailure(new RuntimeException("Returned: " + parts[1]));
-        } else if (parts[0].equals("throw error")) {
-          throw new RuntimeException("Thrown: " + parts[1]);
+        switch (parts[0]) {
+          case "hello":
+            callback.onSuccess(JavaUtils.stringToBytes("Hello, " + parts[1] + "!"));
+            break;
+          case "return error":
+            callback.onFailure(new RuntimeException("Returned: " + parts[1]));
+            break;
+          case "throw error":
+            throw new RuntimeException("Thrown: " + parts[1]);
         }
       }
 
@@ -302,8 +305,8 @@ public class RpcIntegrationSuite {
   @Test
   public void sendOneWayMessage() throws Exception {
     final String message = "no reply";
-    TransportClient client = clientFactory.createClient(TestUtils.getLocalHost(), server.getPort());
-    try {
+    try (TransportClient client =
+        clientFactory.createClient(TestUtils.getLocalHost(), server.getPort())) {
       client.send(JavaUtils.stringToBytes(message));
       assertEquals(0, client.getHandler().numOutstandingRequests());
 
@@ -315,8 +318,6 @@ public class RpcIntegrationSuite {
 
       assertEquals(1, oneWayMsgs.size());
       assertEquals(message, oneWayMsgs.get(0));
-    } finally {
-      client.close();
     }
   }
 
@@ -455,7 +456,7 @@ public class RpcIntegrationSuite {
         byte[] expected = new byte[base.remaining()];
         base.get(expected);
         assertEquals(expected.length, result.length);
-        assertTrue("buffers don't match", Arrays.equals(expected, result));
+        assertArrayEquals("buffers don't match", expected, result);
       }
     }
 

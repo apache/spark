@@ -14,7 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql import column, Column, DataFrame, Row
+from pyspark.sql import column
+from pyspark.sql.column import Column
+from pyspark.sql.dataframe import DataFrame
 
 __all__ = ["Observation"]
 
@@ -57,7 +59,7 @@ class Observation:
     >>> observed_df.count()
     2
     >>> observation.get
-    Row(count=2, max(age)=5)
+    {'count': 2, 'max(age)': 5}
     """
     def __init__(self, name=None):
         """Constructs a named or unnamed Observation instance.
@@ -112,18 +114,13 @@ class Observation:
 
         Returns
         -------
-        :class:`Row`
+        dict
             the observed metrics
         """
         assert self._jo is not None, 'call DataFrame.observe'
-        jrow = self._jo.get()
-        return self._to_row(jrow)
-
-    def _to_row(self, jrow):
-        field_names = jrow.schema().fieldNames()
-        values_scala_map = jrow.getValuesMap(self._jvm.PythonUtils.toSeq(list(field_names)))
-        values_java_map = self._jvm.scala.collection.JavaConversions.mapAsJavaMap(values_scala_map)
-        return Row(**values_java_map)
+        jmap = self._jo.getAsJava()
+        # return a pure Python dict, not jmap which is a py4j JavaMap
+        return {k: v for k, v in jmap.items()}
 
 
 def _test():

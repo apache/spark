@@ -32,6 +32,8 @@ class NullType private() extends DataType {
   override def defaultSize: Int = 1
 
   private[spark] override def asNullable: NullType = this
+
+  override def typeName: String = "void"
 }
 
 /**

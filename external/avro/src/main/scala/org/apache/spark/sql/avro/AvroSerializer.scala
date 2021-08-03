@@ -32,7 +32,7 @@ import org.apache.avro.generic.GenericData.Record
 import org.apache.avro.util.Utf8
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.avro.AvroUtils.{toFieldDescription, toFieldStr}
+import org.apache.spark.sql.avro.AvroUtils.{toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecializedGetters, SpecificInternalRow}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
@@ -252,34 +252,19 @@ private[sql] class AvroSerializer(
       catalystPath: Seq[String],
       avroPath: Seq[String]): InternalRow => Record = {
 
-    val avroPathStr = toFieldStr(avroPath)
-    if (avroStruct.getType != RECORD) {
-      throw new IncompatibleSchemaException(s"$avroPathStr was not a RECORD")
-    }
-    val avroFields = avroStruct.getFields.asScala
-    if (avroFields.size != catalystStruct.length) {
-      throw new IncompatibleSchemaException(
-        s"Avro $avroPathStr schema length (${avroFields.size}) doesn't match " +
-        s"SQL ${toFieldStr(catalystPath)} schema length (${catalystStruct.length})")
-    }
-    val avroSchemaHelper =
-      new AvroUtils.AvroSchemaHelper(avroStruct, avroPath, positionalFieldMatch)
+    val avroSchemaHelper = new AvroUtils.AvroSchemaHelper(
+      avroStruct, catalystStruct, avroPath, catalystPath, positionalFieldMatch)
 
-    val (avroIndices: Array[Int], fieldConverters: Array[Converter]) =
-      catalystStruct.zipWithIndex.map { case (catalystField, catalystPos) =>
-        val avroField = avroSchemaHelper.getAvroField(catalystField.name, catalystPos) match {
-          case Some(f) => f
-          case None =>
-            val fieldDescription = toFieldDescription(
-              catalystPath :+ catalystField.name, catalystPos, positionalFieldMatch)
-            throw new IncompatibleSchemaException(
-              s"Cannot find $fieldDescription in Avro schema at $avroPathStr")
-        }
+    avroSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = false)
+    avroSchemaHelper.validateNoExtraAvroFields()
+
+    val (avroIndices, fieldConverters) = avroSchemaHelper.matchedFields.map {
+      case AvroMatchedField(catalystField, _, avroField) =>
         val converter = newConverter(catalystField.dataType,
           resolveNullableType(avroField.schema(), catalystField.nullable),
           catalystPath :+ catalystField.name, avroPath :+ avroField.name)
         (avroField.pos(), converter)
-      }.toArray.unzip
+    }.toArray.unzip
 
     val numFields = catalystStruct.length
     row: InternalRow =>
