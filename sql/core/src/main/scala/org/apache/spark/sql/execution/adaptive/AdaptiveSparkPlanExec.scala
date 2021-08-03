@@ -138,7 +138,7 @@ case class AdaptiveSparkPlanExec(
   @transient private val postStageCreationRules = Seq(
     ApplyColumnarRulesAndInsertTransitions(context.session.sessionState.columnarRules),
     CollapseCodegenStages()
-  )
+  ) ++ context.session.sessionState.postStageCreationRules
 
   private def optimizeQueryStage(plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
     val optimized = queryStageOptimizerRules.foldLeft(plan) { case (latestPlan, rule) =>

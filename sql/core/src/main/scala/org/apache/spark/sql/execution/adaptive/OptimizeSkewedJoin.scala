@@ -114,9 +114,9 @@ object OptimizeSkewedJoin extends AQEShuffleReadRule {
    *    3 tasks separately.
    */
   private def tryOptimizeJoinChildren(
-                                       left: ShuffleQueryStageExec,
-                                       right: ShuffleQueryStageExec,
-                                       joinType: JoinType): Option[(SparkPlan, SparkPlan)] = {
+      left: ShuffleQueryStageExec,
+      right: ShuffleQueryStageExec,
+      joinType: JoinType): Option[(SparkPlan, SparkPlan)] = {
     val canSplitLeft = canSplitLeftSide(joinType)
     val canSplitRight = canSplitRightSide(joinType)
     if (!canSplitLeft && !canSplitRight) return None
@@ -202,9 +202,9 @@ object OptimizeSkewedJoin extends AQEShuffleReadRule {
   }
 
   def optimizeSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case smj@SortMergeJoinExec(_, _, joinType, _,
-    s1@SortExec(_, _, ShuffleStage(left: ShuffleQueryStageExec), _),
-    s2@SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false) =>
+    case smj @ SortMergeJoinExec(_, _, joinType, _,
+        s1 @ SortExec(_, _, ShuffleStage(left: ShuffleQueryStageExec), _),
+        s2 @ SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false) =>
       val newChildren = tryOptimizeJoinChildren(left, right, joinType)
       if (newChildren.isDefined) {
         val (newLeft, newRight) = newChildren.get
@@ -214,9 +214,9 @@ object OptimizeSkewedJoin extends AQEShuffleReadRule {
         smj
       }
 
-    case shj@ShuffledHashJoinExec(_, _, joinType, _, _,
-    ShuffleStage(left: ShuffleQueryStageExec),
-    ShuffleStage(right: ShuffleQueryStageExec), false) =>
+    case shj @ ShuffledHashJoinExec(_, _, joinType, _, _,
+        ShuffleStage(left: ShuffleQueryStageExec),
+        ShuffleStage(right: ShuffleQueryStageExec), false) =>
       val newChildren = tryOptimizeJoinChildren(left, right, joinType)
       if (newChildren.isDefined) {
         val (newLeft, newRight) = newChildren.get
@@ -256,7 +256,7 @@ object OptimizeSkewedJoin extends AQEShuffleReadRule {
     }
   }
 
-  private object ShuffleStage {
+  object ShuffleStage {
     def unapply(plan: SparkPlan): Option[ShuffleQueryStageExec] = plan match {
       case s: ShuffleQueryStageExec if s.isMaterialized && s.mapStats.isDefined &&
         isSupported(s.shuffle) =>
