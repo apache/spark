@@ -1247,13 +1247,12 @@ public class RemoteBlockPushResolverSuite {
     // but no blocks pushed for that shuffleMergeId
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 5));
     closed.acquire();
-    try {
-      pushResolver.getMergedBlockMeta(testApp, 0, 4, 0);
-    } catch(RuntimeException re) {
-      assertEquals("MergedBlockMeta fetch for shuffle 0 with shuffleMergeId 4 reduceId 0"
-        + " is stale shuffle block fetch request as shuffle blocks of a higher shuffleMergeId for"
-        + " the shuffle is available", re.getMessage());
-    }
+    assertFalse("MergedBlock meta file for shuffle 0 and shuffleMergeId 4 should be cleaned"
+      + " up", appShuffleInfo.getMergedShuffleMetaFile(0, 4, 0).exists());
+    assertFalse("MergedBlock index file for shuffle 0 and shuffleMergeId 4 should be cleaned"
+      + " up", appShuffleInfo.getMergedShuffleIndexFile(0, 4, 0).exists());
+    assertFalse("MergedBlock data file for shuffle 0 and shuffleMergeId 4 should be cleaned"
+      + " up", appShuffleInfo.getMergedShuffleDataFile(0, 4, 0).exists());
   }
 
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {
