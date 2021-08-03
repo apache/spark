@@ -25,18 +25,16 @@ import org.apache.spark.sql.types._
  * are adjusted to fit the schema. All other expressions are left as-is. This
  * class is motivated by columnar nested schema pruning.
  */
-case class ProjectionOverSchema(schema: StructType, exprIds: Seq[ExprId] = Seq.empty) {
+case class ProjectionOverSchema(schema: StructType, attNameMap: Map[String, String]) {
   private val fieldNames = schema.fieldNames.toSet
-  private val exprIdsToSchema = exprIds.zip(schema).toMap
 
   def unapply(expr: Expression): Option[Expression] = getProjection(expr)
 
   private def getProjection(expr: Expression): Option[Expression] =
     expr match {
-      case a: AttributeReference if fieldNames.contains(a.name) =>
-        Some(a.copy(dataType = schema(a.name).dataType)(a.exprId, a.qualifier))
-      case a: AttributeReference if exprIdsToSchema.contains(a.exprId) =>
-        Some(a.copy(dataType = exprIdsToSchema(a.exprId).dataType)(a.exprId, a.qualifier))
+      case a: AttributeReference if fieldNames.contains(attNameMap.getOrElse(a.name, a.name)) =>
+        Some(a.copy(dataType =
+          schema(attNameMap.getOrElse(a.name, a.name)).dataType)(a.exprId, a.qualifier))
       case GetArrayItem(child, arrayItemOrdinal, failOnError) =>
         getProjection(child).map {
           projection => GetArrayItem(projection, arrayItemOrdinal, failOnError)

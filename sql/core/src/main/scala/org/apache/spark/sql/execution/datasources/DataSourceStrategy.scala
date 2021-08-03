@@ -473,6 +473,19 @@ object DataSourceStrategy
     }
   }
 
+  protected[sql] def normalizeExprsAttrNameMap(
+      projects: Seq[NamedExpression],
+      output: Seq[AttributeReference]): Map[String, String] = {
+    var attNameMap: Map[String, String] = Map.empty
+    val normalizedAttNameMap = output.map(att => (att.exprId, att.name)).toMap
+    projects.map(_.transform {
+      case att: AttributeReference if normalizedAttNameMap.contains(att.exprId) =>
+        attNameMap += att.name -> normalizedAttNameMap(att.exprId)
+        att
+    })
+    attNameMap
+  }
+
   def getPushedDownFilters(
       partitionColumns: Seq[Expression],
       normalizedFilters: Seq[Expression]): ExpressionSet = {

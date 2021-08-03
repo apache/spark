@@ -229,8 +229,7 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
         }
 
         // Builds new projection.
-        val projectionOverSchema =
-          ProjectionOverSchema(prunedSchema, prunedSerializer.map(_.exprId))
+        val projectionOverSchema = ProjectionOverSchema(prunedSchema, Map.empty)
         val newProjects = p.projectList.map(_.transformDown {
           case projectionOverSchema(expr) => expr
         }).map { case expr: NamedExpression => expr }
