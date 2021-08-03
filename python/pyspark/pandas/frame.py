@@ -3469,6 +3469,10 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         The mode of a set of values is the value that appears most often.
         It can be multiple values.
 
+        .. note:: the current implementation of mode requires joins
+            multiple times(columns count - 1 times when axis is 0 or 'index'),
+            which is potentially expensive.
+
         Parameters
         ----------
         axis : {0 or 'index', 1 or 'columns'}, default 0
