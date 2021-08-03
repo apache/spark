@@ -780,10 +780,13 @@ object NullPropagation extends Rule[LogicalPlan] {
           Literal.create(null, e.dataType)
         } else if (newChildren.length == 1) {
           newChildren.head
-        } else if (!newChildren.head.nullable) {
-          newChildren.head // Returns the first expression if it is non nullable.
         } else {
-          Coalesce(newChildren)
+          val nonNullableIndex = newChildren.indexWhere(e => !e.nullable)
+          if (nonNullableIndex > -1) {
+            Coalesce(newChildren.take(nonNullableIndex + 1))
+          } else {
+            Coalesce(newChildren)
+          }
         }
 
       // If the value expression is NULL then transform the In expression to null literal.
