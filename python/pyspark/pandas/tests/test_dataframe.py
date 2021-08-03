@@ -1900,6 +1900,29 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         with self.assertRaisesRegex(TypeError, msg):
             psdf.isin(1)
 
+    def test_mode(self):
+        pdf = pd.DataFrame(
+            [("bird", 2, 2), ("mammal", 4, np.nan), ("arthropod", 8, 0), ("bird", 2, np.nan)],
+            index=("falcon", "horse", "spider", "ostrich"),
+            columns=("species", "legs", "wings"),
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(
+            psdf.mode().sort_values(by=list(psdf.columns)).reset_index(drop=True),
+            pdf.mode().sort_values(by=list(pdf.columns)).reset_index(drop=True),
+        )
+        self.assert_eq(
+            psdf.mode(numeric_only=True).sort_values(by="legs").reset_index(drop=True),
+            pdf.mode(numeric_only=True).sort_values(by="legs").reset_index(drop=True),
+        )
+
+        if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
+            # dropna parameter is supported since pandas 0.24
+            self.assert_eq(
+                psdf.mode(dropna=False).sort_values(by=list(psdf.columns)).reset_index(drop=True),
+                pdf.mode(dropna=False).sort_values(by=list(pdf.columns)).reset_index(drop=True),
+            )
+
     def test_merge(self):
         left_pdf = pd.DataFrame(
             {
