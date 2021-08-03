@@ -295,7 +295,7 @@ private[hive] object SparkSQLCLIDriver extends Logging {
       line = reader.readLine(currentPrompt + "> ")
     }
 
-    sessionState.close()
+    SessionState.detachSession()
 
     System.exit(ret)
   }
@@ -351,7 +351,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
     if (cmd_lower.equals("quit") ||
       cmd_lower.equals("exit")) {
-      sessionState.close()
+      SessionState.detachSession()
       System.exit(0)
     }
     if (tokens(0).toLowerCase(Locale.ROOT).equals("source") ||
