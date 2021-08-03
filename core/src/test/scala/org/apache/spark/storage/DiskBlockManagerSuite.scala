@@ -20,7 +20,10 @@ package org.apache.spark.storage
 import java.io.{File, FileWriter}
 import java.nio.file.{Files, Paths}
 import java.nio.file.attribute.PosixFilePermissions
+import java.util.HashMap
 
+import com.fasterxml.jackson.core.`type`.TypeReference
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach}
 
@@ -91,11 +94,11 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
   }
 
   test("should still create merge directories if one already exists under a local dir") {
-    val mergeDir0 = new File(rootDir0, DiskBlockManager.MERGE_MANAGER_DIR)
+    val mergeDir0 = new File(rootDir0, DiskBlockManager.MERGE_DIRECTORY)
     if (!mergeDir0.exists()) {
       Files.createDirectories(mergeDir0.toPath)
     }
-    val mergeDir1 = new File(rootDir1, DiskBlockManager.MERGE_MANAGER_DIR)
+    val mergeDir1 = new File(rootDir1, DiskBlockManager.MERGE_DIRECTORY)
     if (mergeDir1.exists()) {
       Utils.deleteRecursively(mergeDir1)
     }
@@ -104,7 +107,7 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
     testConf.set(config.Tests.IS_TESTING, true)
     diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
     assert(Utils.getConfiguredLocalDirs(testConf).map(
-      rootDir => new File(rootDir, DiskBlockManager.MERGE_MANAGER_DIR))
+      rootDir => new File(rootDir, DiskBlockManager.MERGE_DIRECTORY))
       .filter(mergeDir => mergeDir.exists()).length === 2)
     // mergeDir0 will be skipped as it already exists
     assert(mergeDir0.list().length === 0)
@@ -122,6 +125,20 @@ class DiskBlockManagerSuite extends SparkFunSuite with BeforeAndAfterEach with B
       Files.getPosixFilePermissions(Paths.get("target/testDir")))
     assert(permission.equals("rwxrwx---"))
     FileUtils.deleteQuietly(testDir)
+  }
+
+  test("Encode merged directory name and attemptId in shuffleManager field") {
+    testConf.set(config.APP_ATTEMPT_ID, "1");
+    diskBlockManager = new DiskBlockManager(testConf, deleteFilesOnStop = true)
+    val mergedShuffleMeta = diskBlockManager.getMergeDirectoryAndAttemptIDJsonString();
+    val mapper: ObjectMapper = new ObjectMapper
+    val typeRef: TypeReference[HashMap[String, String]] =
+      new TypeReference[HashMap[String, String]]() {}
+    val metaMap: HashMap[String, String] = mapper.readValue(mergedShuffleMeta, typeRef)
+    val mergeDir = metaMap.get(DiskBlockManager.MERGE_DIR_KEY)
+    assert(mergeDir.equals(DiskBlockManager.MERGE_DIRECTORY + "_1"))
+    val attemptId = metaMap.get(DiskBlockManager.ATTEMPT_ID_KEY)
+    assert(attemptId.equals("1"))
   }
 
   def writeToFile(file: File, numBytes: Int): Unit = {

@@ -45,7 +45,8 @@ import org.apache.spark.util.Utils
  * Spark also includes more built-in functions that are less common and are not defined here.
  * You can still access them (and all the functions defined here) using the `functions.expr()` API
  * and calling them through a SQL expression string. You can find the entire list of functions
- * at SQL API documentation.
+ * at SQL API documentation of your Spark version, see also
+ * <a href="https://spark.apache.org/docs/latest/api/sql/index.html">the latest list</a>
  *
  * As an example, `isnan` is a function that is defined here. You can use `isnan(col("myCol"))`
  * to invoke the `isnan` function. This way the programming language's compiler ensures `isnan`
@@ -2975,6 +2976,16 @@ object functions {
   def current_timestamp(): Column = withExpr { CurrentTimestamp() }
 
   /**
+   * Returns the current timestamp without time zone at the start of query evaluation
+   * as a timestamp without time zone column.
+   * All calls of localtimestamp within the same query return the same value.
+   *
+   * @group datetime_funcs
+   * @since 3.3.0
+   */
+  def localtimestamp(): Column = withExpr { LocalTimestamp() }
+
+  /**
    * Converts a date/timestamp/string to a value of string in the format specified by the date
    * format given by the second argument.
    *
@@ -3618,6 +3629,36 @@ object functions {
    */
   def window(timeColumn: Column, windowDuration: String): Column = {
     window(timeColumn, windowDuration, windowDuration, "0 second")
+  }
+
+  /**
+   * Generates session window given a timestamp specifying column.
+   *
+   * Session window is one of dynamic windows, which means the length of window is varying
+   * according to the given inputs. The length of session window is defined as "the timestamp
+   * of latest input of the session + gap duration", so when the new inputs are bound to the
+   * current session window, the end time of session window can be expanded according to the new
+   * inputs.
+   *
+   * Windows can support microsecond precision. gapDuration in the order of months are not
+   * supported.
+   *
+   * For a streaming query, you may use the function `current_timestamp` to generate windows on
+   * processing time.
+   *
+   * @param timeColumn The column or the expression to use as the timestamp for windowing by time.
+   *                   The time column must be of TimestampType.
+   * @param gapDuration A string specifying the timeout of the session, e.g. `10 minutes`,
+   *                    `1 second`. Check `org.apache.spark.unsafe.types.CalendarInterval` for
+   *                    valid duration identifiers.
+   *
+   * @group datetime_funcs
+   * @since 3.2.0
+   */
+  def session_window(timeColumn: Column, gapDuration: String): Column = {
+    withExpr {
+      SessionWindow(timeColumn.expr, gapDuration)
+    }.as("session_window")
   }
 
   /**

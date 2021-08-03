@@ -9,7 +9,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                 InputAdapter
                   Union
                     WholeStageCodegen (6)
-                      HashAggregate [s_store_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),sales,RETURNS,profit,channel,id,sum,sum,sum,sum]
+                      HashAggregate [s_store_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),sales,returns,profit,channel,id,sum,sum,sum,sum]
                         InputAdapter
                           Exchange [s_store_id] #2
                             WholeStageCodegen (5)
@@ -51,7 +51,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                     InputAdapter
                                       ReusedExchange [d_date_sk] #3
                     WholeStageCodegen (12)
-                      HashAggregate [cp_catalog_page_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),sales,RETURNS,profit,channel,id,sum,sum,sum,sum]
+                      HashAggregate [cp_catalog_page_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),sales,returns,profit,channel,id,sum,sum,sum,sum]
                         InputAdapter
                           Exchange [cp_catalog_page_id] #5
                             WholeStageCodegen (11)
@@ -86,7 +86,7 @@ TakeOrderedAndProject [channel,id,sales,returns,profit]
                                     InputAdapter
                                       ReusedExchange [d_date_sk] #3
                     WholeStageCodegen (22)
-                      HashAggregate [web_site_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),sales,RETURNS,profit,channel,id,sum,sum,sum,sum]
+                      HashAggregate [web_site_id,sum,sum,sum,sum] [sum(UnscaledValue(sales_price)),sum(UnscaledValue(return_amt)),sum(UnscaledValue(profit)),sum(UnscaledValue(net_loss)),sales,returns,profit,channel,id,sum,sum,sum,sum]
                         InputAdapter
                           Exchange [web_site_id] #7
                             WholeStageCodegen (21)

@@ -43,7 +43,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
   public UnsafeRow appendRow(Object kbase, long koff, int klen,
                              Object vbase, long voff, int vlen) {
     int uaoSize = UnsafeAlignedOffset.getUaoSize();
-    final long recordLength = 2 * uaoSize + klen + vlen + 8L;
+    final long recordLength = 2L * uaoSize + klen + vlen + 8L;
     // if run out of max supported rows or page size, return null
     if (numRows >= capacity || page == null || page.size() - pageCursor < recordLength) {
       return null;
@@ -54,7 +54,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
     UnsafeAlignedOffset.putSize(base, offset, klen + vlen + uaoSize);
     UnsafeAlignedOffset.putSize(base, offset + uaoSize, klen);
 
-    offset += 2 * uaoSize;
+    offset += 2L * uaoSize;
     Platform.copyMemory(kbase, koff, base, offset, klen);
     offset += klen;
     Platform.copyMemory(vbase, voff, base, offset, vlen);
@@ -63,11 +63,11 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
 
     pageCursor += recordLength;
 
-    keyOffsets[numRows] = recordOffset + 2 * uaoSize;
+    keyOffsets[numRows] = recordOffset + 2L * uaoSize;
 
     keyRowId = numRows;
-    keyRow.pointTo(base, recordOffset + 2 * uaoSize, klen);
-    valueRow.pointTo(base, recordOffset + 2 * uaoSize + klen, vlen);
+    keyRow.pointTo(base, recordOffset + 2L * uaoSize, klen);
+    valueRow.pointTo(base, recordOffset + 2L * uaoSize + klen, vlen);
     numRows++;
     return valueRow;
   }
@@ -104,7 +104,7 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
     int uaoSize = UnsafeAlignedOffset.getUaoSize();
     long offset = keyRow.getBaseOffset();
     int klen = keyRow.getSizeInBytes();
-    int vlen = UnsafeAlignedOffset.getSize(base, offset - uaoSize * 2) - klen - uaoSize;
+    int vlen = UnsafeAlignedOffset.getSize(base, offset - uaoSize * 2L) - klen - uaoSize;
     valueRow.pointTo(base, offset + klen, vlen);
     return valueRow;
   }
@@ -149,10 +149,10 @@ public final class VariableLengthRowBasedKeyValueBatch extends RowBasedKeyValueB
         currentklen = UnsafeAlignedOffset.getSize(base, offsetInPage + uaoSize);
         currentvlen = totalLength - currentklen;
 
-        key.pointTo(base, offsetInPage + 2 * uaoSize, currentklen);
-        value.pointTo(base, offsetInPage + 2 * uaoSize + currentklen, currentvlen);
+        key.pointTo(base, offsetInPage + 2L * uaoSize, currentklen);
+        value.pointTo(base, offsetInPage + 2L * uaoSize + currentklen, currentvlen);
 
-        offsetInPage += 2 * uaoSize + totalLength + 8;
+        offsetInPage += 2L * uaoSize + totalLength + 8;
         recordsInPage -= 1;
         return true;
       }

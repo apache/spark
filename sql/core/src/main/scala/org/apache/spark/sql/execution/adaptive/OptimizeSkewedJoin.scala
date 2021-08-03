@@ -48,7 +48,7 @@ import org.apache.spark.sql.internal.SQLConf
  * (L3, R3-1), (L3, R3-2),
  * (L4-1, R4-1), (L4-2, R4-1), (L4-1, R4-2), (L4-2, R4-2)
  */
-object OptimizeSkewedJoin extends CustomShuffleReaderRule {
+object OptimizeSkewedJoin extends AQEShuffleReadRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
 
@@ -108,15 +108,15 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
    * 2. Assuming partition0 is skewed in left side, and it has 5 mappers (Map0, Map1...Map4).
    *    And we may split the 5 Mappers into 3 mapper ranges [(Map0, Map1), (Map2, Map3), (Map4)]
    *    based on the map size and the max split number.
-   * 3. Wrap the join left child with a special shuffle reader that reads each mapper range with one
+   * 3. Wrap the join left child with a special shuffle read that loads each mapper range with one
    *    task, so total 3 tasks.
-   * 4. Wrap the join right child with a special shuffle reader that reads partition0 3 times by
+   * 4. Wrap the join right child with a special shuffle read that loads partition0 3 times by
    *    3 tasks separately.
    */
   private def tryOptimizeJoinChildren(
-      left: ShuffleQueryStageExec,
-      right: ShuffleQueryStageExec,
-      joinType: JoinType): Option[(SparkPlan, SparkPlan)] = {
+                                       left: ShuffleQueryStageExec,
+                                       right: ShuffleQueryStageExec,
+                                       joinType: JoinType): Option[(SparkPlan, SparkPlan)] = {
     val canSplitLeft = canSplitLeftSide(joinType)
     val canSplitRight = canSplitRightSide(joinType)
     if (!canSplitLeft && !canSplitRight) return None
@@ -194,17 +194,17 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
     }
     logDebug(s"number of skewed partitions: left $numSkewedLeft, right $numSkewedRight")
     if (numSkewedLeft > 0 || numSkewedRight > 0) {
-      Some((CustomShuffleReaderExec(left, leftSidePartitions.toSeq),
-        CustomShuffleReaderExec(right, rightSidePartitions.toSeq)))
+      Some((AQEShuffleReadExec(left, leftSidePartitions.toSeq),
+        AQEShuffleReadExec(right, rightSidePartitions.toSeq)))
     } else {
       None
     }
   }
 
   def optimizeSkewJoin(plan: SparkPlan): SparkPlan = plan.transformUp {
-    case smj @ SortMergeJoinExec(_, _, joinType, _,
-        s1 @ SortExec(_, _, ShuffleStage(left: ShuffleQueryStageExec), _),
-        s2 @ SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false) =>
+    case smj@SortMergeJoinExec(_, _, joinType, _,
+    s1@SortExec(_, _, ShuffleStage(left: ShuffleQueryStageExec), _),
+    s2@SortExec(_, _, ShuffleStage(right: ShuffleQueryStageExec), _), false) =>
       val newChildren = tryOptimizeJoinChildren(left, right, joinType)
       if (newChildren.isDefined) {
         val (newLeft, newRight) = newChildren.get
@@ -214,9 +214,9 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
         smj
       }
 
-    case shj @ ShuffledHashJoinExec(_, _, joinType, _, _,
-        ShuffleStage(left: ShuffleQueryStageExec),
-        ShuffleStage(right: ShuffleQueryStageExec), false) =>
+    case shj@ShuffledHashJoinExec(_, _, joinType, _, _,
+    ShuffleStage(left: ShuffleQueryStageExec),
+    ShuffleStage(right: ShuffleQueryStageExec), false) =>
       val newChildren = tryOptimizeJoinChildren(left, right, joinType)
       if (newChildren.isDefined) {
         val (newLeft, newRight) = newChildren.get
@@ -246,18 +246,22 @@ object OptimizeSkewedJoin extends CustomShuffleReaderRule {
       //     Shuffle
       //   Sort
       //     Shuffle
+      // Or
+      // SHJ
+      //   Shuffle
+      //   Shuffle
       optimizeSkewJoin(plan)
     } else {
       plan
     }
   }
-}
 
-private object ShuffleStage {
-  def unapply(plan: SparkPlan): Option[ShuffleQueryStageExec] = plan match {
-    case s: ShuffleQueryStageExec if s.isMaterialized && s.mapStats.isDefined &&
-        OptimizeSkewedJoin.supportedShuffleOrigins.contains(s.shuffle.shuffleOrigin) =>
-      Some(s)
-    case _ => None
+  private object ShuffleStage {
+    def unapply(plan: SparkPlan): Option[ShuffleQueryStageExec] = plan match {
+      case s: ShuffleQueryStageExec if s.isMaterialized && s.mapStats.isDefined &&
+        isSupported(s.shuffle) =>
+        Some(s)
+      case _ => None
+    }
   }
 }

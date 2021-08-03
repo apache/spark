@@ -22,6 +22,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.write.DataWriter
 import org.apache.spark.sql.connector.write.streaming.StreamingDataWriterFactory
+import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.util.Utils
 
 /**
@@ -32,8 +33,8 @@ import org.apache.spark.util.Utils
  *
  * We keep repeating prev.compute() and writing new epochs until the query is shut down.
  */
-class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDataWriterFactory)
-    extends RDD[Unit](prev) {
+class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDataWriterFactory,
+    customMetrics: Map[String, SQLMetric]) extends RDD[Unit](prev) {
 
   override val partitioner = prev.partitioner
 
@@ -55,9 +56,15 @@ class ContinuousWriteRDD(var prev: RDD[InternalRow], writerFactory: StreamingDat
             context.partitionId(),
             context.taskAttemptId(),
             EpochTracker.getCurrentEpoch.get)
+          var count = 0L
           while (dataIterator.hasNext) {
+            if (count % CustomMetrics.NUM_ROWS_PER_UPDATE == 0) {
+              CustomMetrics.updateMetrics(dataWriter.currentMetricsValues, customMetrics)
+            }
+            count += 1
             dataWriter.write(dataIterator.next())
           }
+          CustomMetrics.updateMetrics(dataWriter.currentMetricsValues, customMetrics)
           logInfo(s"Writer for partition ${context.partitionId()} " +
             s"in epoch ${EpochTracker.getCurrentEpoch.get} is committing.")
           val msg = dataWriter.commit()

@@ -38,7 +38,7 @@
     <dependency>
       <groupId>org.rocksdb</groupId>
       <artifactId>rocksdbjni</artifactId>
-      <version>6.2.2</version>
+      <version>6.20.3</version>
     </dependency>
     <dependency>
       <groupId>com.univocity</groupId>

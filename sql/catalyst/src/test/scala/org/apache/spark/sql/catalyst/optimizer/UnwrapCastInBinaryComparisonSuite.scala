@@ -283,6 +283,25 @@ class UnwrapCastInBinaryComparisonSuite extends PlanTest with ExpressionEvalHelp
     )
   }
 
+  test("SPARK-36130: unwrap In should skip when in.list contains an expression that " +
+    "is not literal") {
+    val add = Cast(f2, DoubleType) + 1.0d
+    val doubleLit = Literal.create(null, DoubleType)
+    assertEquivalent(In(Cast(f2, DoubleType), Seq(add)), In(Cast(f2, DoubleType), Seq(add)))
+    assertEquivalent(
+      In(Cast(f2, DoubleType), Seq(doubleLit, add)),
+      In(Cast(f2, DoubleType), Seq(doubleLit, add)))
+    assertEquivalent(
+      In(Cast(f2, DoubleType), Seq(doubleLit, 1.0d, add)),
+      In(Cast(f2, DoubleType), Seq(doubleLit, 1.0d, add)))
+    assertEquivalent(
+      In(Cast(f2, DoubleType), Seq(1.0d, add)),
+      In(Cast(f2, DoubleType), Seq(1.0d, add)))
+    assertEquivalent(
+      In(Cast(f2, DoubleType), Seq(0.0d, 1.0d, add)),
+      In(Cast(f2, DoubleType), Seq(0.0d, 1.0d, add)))
+  }
+
   private def castInt(e: Expression): Expression = Cast(e, IntegerType)
   private def castDouble(e: Expression): Expression = Cast(e, DoubleType)
   private def castDecimal2(e: Expression): Expression = Cast(e, DecimalType(10, 4))

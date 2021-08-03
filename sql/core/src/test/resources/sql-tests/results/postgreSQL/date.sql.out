@@ -454,29 +454,17 @@ struct<DATE '4714-11-23':date>
 -- !query
 SELECT date '5874897-12-31'
 -- !query schema
-struct<>
+struct<DATE '+5874897-12-31':date>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 5874897-12-31(line 1, pos 7)
-
-== SQL ==
-SELECT date '5874897-12-31'
--------^^^
++5874897-12-31
 
 
 -- !query
 SELECT date '5874898-01-01'
 -- !query schema
-struct<>
+struct<DATE '+5874898-01-01':date>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
-
-Cannot parse the DATE value: 5874898-01-01(line 1, pos 7)
-
-== SQL ==
-SELECT date '5874898-01-01'
--------^^^
++5874898-01-01
 
 
 -- !query
@@ -584,7 +572,7 @@ select make_date(-44, 3, 15)
 -- !query schema
 struct<make_date(-44, 3, 15):date>
 -- !query output
-0045-03-15
+-0044-03-15
 
 
 -- !query

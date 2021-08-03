@@ -15,15 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
+package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.StatisticsCollectionTestBase
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BinaryOperator, Expression, IsNotNull, Literal}
-import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
-import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.internal.SQLConf.ADAPTIVE_EXECUTION_ENABLED
 
-abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase with TestHiveSingleton {
+abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase {
 
   protected def format: String
 
@@ -94,10 +94,11 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase with
     val plan = qe.sparkPlan
     assert(getScanExecPartitionSize(plan) == expectedPartitionCount)
 
-    val pushedDownPartitionFilters = qe.executedPlan.collectFirst {
-      case scan: FileSourceScanExec => scan.partitionFilters
-      case scan: HiveTableScanExec => scan.partitionPruningPred
-    }.map(exps => exps.filterNot(e => e.isInstanceOf[IsNotNull]))
+    val collectFn: PartialFunction[SparkPlan, Seq[Expression]] = collectPartitionFiltersFn orElse {
+      case BatchScanExec(_, scan: FileScan, _) => scan.partitionFilters
+    }
+    val pushedDownPartitionFilters = plan.collectFirst(collectFn)
+      .map(exps => exps.filterNot(e => e.isInstanceOf[IsNotNull]))
     val pushedFilters = pushedDownPartitionFilters.map(filters => {
       filters.foldLeft("")((currentStr, exp) => {
         if (currentStr == "") {
@@ -110,6 +111,8 @@ abstract class PrunePartitionSuiteBase extends StatisticsCollectionTestBase with
 
     assert(pushedFilters == Some(expectedPushedDownFilters))
   }
+
+  protected def collectPartitionFiltersFn(): PartialFunction[SparkPlan, Seq[Expression]]
 
   protected def getScanExecPartitionSize(plan: SparkPlan): Long
 }

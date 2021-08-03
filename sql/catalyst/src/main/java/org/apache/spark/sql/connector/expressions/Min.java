@@ -15,19 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.adaptive
+package org.apache.spark.sql.connector.expressions;
 
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.exchange.ShuffleOrigin
+import org.apache.spark.annotation.Evolving;
 
 /**
- * Adaptive Query Execution rule that may create [[CustomShuffleReaderExec]] on top of query stages.
+ * An aggregate function that returns the minimum value in a group.
+ *
+ * @since 3.2.0
  */
-trait CustomShuffleReaderRule extends Rule[SparkPlan] {
+@Evolving
+public final class Min implements AggregateFunc {
+  private final FieldReference column;
 
-  /**
-   * Returns the list of [[ShuffleOrigin]]s supported by this rule.
-   */
-  def supportedShuffleOrigins: Seq[ShuffleOrigin]
+  public Min(FieldReference column) { this.column = column; }
+
+  public FieldReference column() { return column; }
+
+  @Override
+  public String toString() { return "MIN(" + column.describe() + ")"; }
+
+  @Override
+  public String describe() { return this.toString(); }
 }

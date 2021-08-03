@@ -181,7 +181,8 @@ class UpdatingSessionsIterator(
 
   private val valueProj = GenerateUnsafeProjection.generate(valuesExpressions, inputSchema)
   private val restoreProj = GenerateUnsafeProjection.generate(inputSchema,
-    groupingExpressions.map(_.toAttribute) ++ valuesExpressions.map(_.toAttribute))
+    groupingWithoutSession.map(_.toAttribute) ++ Seq(sessionExpression.toAttribute) ++
+      valuesExpressions.map(_.toAttribute))
 
   private def generateGroupingKey(): InternalRow = {
     val newRow = new SpecificInternalRow(Seq(sessionExpression.toAttribute).toStructType)
@@ -190,19 +191,21 @@ class UpdatingSessionsIterator(
   }
 
   private def closeCurrentSession(keyChanged: Boolean): Unit = {
-    assert(returnRowsIter == null || !returnRowsIter.hasNext)
-
     returnRows = rowsForCurrentSession
     rowsForCurrentSession = null
 
-    val groupingKey = generateGroupingKey()
+    val groupingKey = generateGroupingKey().copy()
 
     val currentRowsIter = returnRows.generateIterator().map { internalRow =>
       val valueRow = valueProj(internalRow)
       restoreProj(join2(groupingKey, valueRow)).copy()
     }
 
-    returnRowsIter = currentRowsIter
+    if (returnRowsIter != null && returnRowsIter.hasNext) {
+      returnRowsIter = returnRowsIter ++ currentRowsIter
+    } else {
+      returnRowsIter = currentRowsIter
+    }
 
     if (keyChanged) processedKeys.add(currentKeys)
 

@@ -449,7 +449,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
-    val schema = userSpecifiedSchema.getOrElse {
+    val schema = userSpecifiedSchema.map(_.asNullable).getOrElse {
       TextInputJsonDataSource.inferFromDataset(jsonDataset, parsedOptions)
     }
 
@@ -521,7 +521,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
         None
       }
 
-    val schema = userSpecifiedSchema.getOrElse {
+    val schema = userSpecifiedSchema.map(_.asNullable).getOrElse {
       TextInputCSVDataSource.inferFromDataset(
         sparkSession,
         csvDataset,

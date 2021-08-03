@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, JoinedRow}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
+import org.apache.spark.sql.connector.metric.{CustomMetric, CustomTaskMetric}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write._
 import org.apache.spark.sql.connector.write.streaming.{StreamingDataWriterFactory, StreamingWrite}
@@ -344,6 +345,10 @@ class InMemoryTable(
           case exc: StreamingNotSupportedOperation => exc.throwsException()
           case s => s
         }
+
+        override def supportedCustomMetrics(): Array[CustomMetric] = {
+          Array(new InMemorySimpleCustomMetric)
+        }
       }
     }
   }
@@ -604,4 +609,21 @@ private class BufferWriter extends DataWriter[InternalRow] {
   override def abort(): Unit = {}
 
   override def close(): Unit = {}
+
+  override def currentMetricsValues(): Array[CustomTaskMetric] = {
+    val metric = new CustomTaskMetric {
+      override def name(): String = "in_memory_buffer_rows"
+
+      override def value(): Long = buffer.rows.size
+    }
+    Array(metric)
+  }
+}
+
+class InMemorySimpleCustomMetric extends CustomMetric {
+  override def name(): String = "in_memory_buffer_rows"
+  override def description(): String = "number of rows in buffer"
+  override def aggregateTaskMetrics(taskMetrics: Array[Long]): String = {
+    s"in-memory rows: ${taskMetrics.sum}"
+  }
 }
