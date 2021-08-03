@@ -176,7 +176,10 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(kcidx.astype("category"), pcidx.astype("category"))
 
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
+            pass
+        elif LooseVersion(pd.__version__) >= LooseVersion("1.2"):
             self.assert_eq(
                 kcidx.astype(CategoricalDtype(["b", "c", "a"])),
                 pcidx.astype(CategoricalDtype(["b", "c", "a"])),
