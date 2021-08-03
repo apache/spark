@@ -170,7 +170,7 @@ private[sql] class AvroSerializer(
 
       case (TimestampType, LONG) => avroType.getLogicalType match {
           // For backward compatibility, if the Avro type is Long and it is not logical type
-          // (the `null` case), output the long with millisecond precision.
+          // (the `null` case), output the timestamp value as with millisecond precision.
           case null | _: TimestampMillis => (getter, ordinal) =>
             DateTimeUtils.microsToMillis(timestampRebaseFunc(getter.getLong(ordinal)))
           case _: TimestampMicros => (getter, ordinal) =>
