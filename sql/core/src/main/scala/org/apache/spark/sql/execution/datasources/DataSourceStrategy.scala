@@ -474,11 +474,17 @@ object DataSourceStrategy
   }
 
   protected[sql] def normalizeExprsAttrNameMap(
+      output: Seq[AttributeReference],
       projects: Seq[NamedExpression],
-      output: Seq[AttributeReference]): Map[String, String] = {
+      filters: Seq[Expression]): Map[String, String] = {
     var attNameMap: Map[String, String] = Map.empty
     val normalizedAttNameMap = output.map(att => (att.exprId, att.name)).toMap
     projects.map(_.transform {
+      case att: AttributeReference if normalizedAttNameMap.contains(att.exprId) =>
+        attNameMap += att.name -> normalizedAttNameMap(att.exprId)
+        att
+    })
+    filters.map(_.transform {
       case att: AttributeReference if normalizedAttNameMap.contains(att.exprId) =>
         attNameMap += att.name -> normalizedAttNameMap(att.exprId)
         att
