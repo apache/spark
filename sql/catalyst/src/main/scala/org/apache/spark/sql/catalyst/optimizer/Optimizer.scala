@@ -522,11 +522,19 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
       child match {
         case relation: LeafNode
           if !output.zip(relation.output).forall { case (a1, a2) => a1.name == a2.name } =>
-          child
+          p
         case _ =>
-          child.transformExpressionsDown {
+          val ret = child.transformExpressionsDown {
             case named: NamedExpression =>
               named.withName(output.find(_.semanticEquals(named.toAttribute)).getOrElse(named).name)
+          }
+          val schemaMatching = p.output.zip(ret.output).forall {
+            case (in, out) => in.name == out.name
+          }
+          if (schemaMatching) {
+            ret
+          } else {
+            p
           }
       }
 
