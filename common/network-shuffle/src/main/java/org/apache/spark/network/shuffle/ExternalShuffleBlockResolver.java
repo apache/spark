@@ -120,11 +120,7 @@ public class ExternalShuffleBlockResolver {
         };
     shuffleIndexCache = CacheBuilder.newBuilder()
       .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
-      .weigher(new Weigher<File, ShuffleIndexInformation>() {
-        public int weigh(File file, ShuffleIndexInformation indexInfo) {
-          return indexInfo.getSize();
-        }
-      })
+      .weigher((Weigher<File, ShuffleIndexInformation>) (file, indexInfo) -> indexInfo.getSize())
       .build(indexCacheLoader);
     db = LevelDBProvider.initLevelDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {
