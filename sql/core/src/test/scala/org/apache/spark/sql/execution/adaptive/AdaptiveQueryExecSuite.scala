@@ -1925,14 +1925,14 @@ class AdaptiveQueryExecSuite
           "SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1")
         val smj = findTopLevelSortMergeJoin(adaptive)
         assert(smj.size == 1 && smj.forall(_.isSkewJoin))
-        checkNumLocalShuffleReaders(adaptive, 3)
+        checkNumLocalShuffleReads(adaptive, 3)
 
         val (_, adaptive2) = runAdaptiveAndVerifyResult(
           "SELECT /*+ repartition */ key1 FROM skewData1 JOIN skewData2 ON key1 = key2")
         val smj2 = findTopLevelSortMergeJoin(adaptive2)
         assert(smj2.size == 1 && smj2.forall(_.isSkewJoin))
         // top level shuffle reader is local
-        checkNumLocalShuffleReaders(adaptive2, 2)
+        checkNumLocalShuffleReads(adaptive2, 2)
       }
     }
   }
