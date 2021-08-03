@@ -115,27 +115,12 @@ class OrcFileFormat
     }
   }
 
-  private def supportBatchForNestedColumn(
-      sparkSession: SparkSession,
-      schema: StructType): Boolean = {
-    val hasNestedColumn = schema.map(_.dataType).exists {
-      case _: ArrayType | _: MapType | _: StructType => true
-      case _ => false
-    }
-    if (hasNestedColumn) {
-      sparkSession.sessionState.conf.orcVectorizedReaderNestedColumnEnabled
-    } else {
-      true
-    }
-  }
-
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
     val conf = sparkSession.sessionState.conf
     conf.orcVectorizedReaderEnabled && conf.wholeStageEnabled &&
       schema.length <= conf.wholeStageMaxNumFields &&
-      schema.forall(s => supportDataType(s.dataType) &&
-        !s.dataType.isInstanceOf[UserDefinedType[_]]) &&
-      supportBatchForNestedColumn(sparkSession, schema)
+      schema.forall(s => OrcUtils.supportColumnarReads(
+        s.dataType, sparkSession.sessionState.conf.orcVectorizedReaderNestedColumnEnabled))
   }
 
   override def isSplitable(
