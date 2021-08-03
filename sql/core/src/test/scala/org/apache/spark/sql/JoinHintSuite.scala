@@ -673,6 +673,6 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
     val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
       .filter(_.contains("is not supported in the query:"))
     assert(logs.nonEmpty)
-    logs.forall(_.contains("equi join keys is not existed"))
+    logs.forall(_.contains("no equi-join keys"))
   }
 }

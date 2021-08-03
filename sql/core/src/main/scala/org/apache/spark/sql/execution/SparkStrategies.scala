@@ -168,7 +168,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       if (hintToShuffleHashJoin(hint) || hintToSortMergeJoin(hint)) {
         assert(hint.leftHint.orElse(hint.rightHint).isDefined)
         hintErrorHandler.joinHintNotSupported(hint.leftHint.orElse(hint.rightHint).get,
-          "equi join keys is not existed")
+          "no equi-join keys")
       }
     }
 
