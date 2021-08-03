@@ -48,13 +48,13 @@ case class SkewJoinAwareCost(
  * A skew join aware implementation of [[CostEvaluator]], which counts the number of
  * [[ShuffleExchangeLike]] nodes and skew join nodes in the plan.
  */
-case class SkewJoinAwareCostEvaluator(forceOptimizeSkewJoin: Boolean) extends CostEvaluator {
+case class SkewJoinAwareCostEvaluator(forceOptimizeSkewedJoin: Boolean) extends CostEvaluator {
   override def evaluateCost(plan: SparkPlan): Cost = {
     val shuffleNumber = plan.collect {
       case s: ShuffleExchangeLike => s
     }.size
 
-    if (forceOptimizeSkewJoin) {
+    if (forceOptimizeSkewedJoin) {
       val skewJoinNumber = plan.collect {
         case j: ShuffledJoin if j.isSkewJoin => j
       }.size

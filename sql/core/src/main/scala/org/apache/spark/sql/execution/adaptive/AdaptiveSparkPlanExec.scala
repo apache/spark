@@ -116,9 +116,9 @@ case class AdaptiveSparkPlanExec(
     // Apply OptimizeSkewedJoin rule at preparation side so that we can compare the cost of
     // skew join and extra shuffle nodes.
     OptimizeSkewedJoin,
-    // Add the EnsureRequirements rule here since OptimizeSkewedJoin may change the
-    // output partitioning
-    EnsureRequirements()
+    // Add the EnsureRequirements rule here and don't optimize out repartition so that we can
+    // ensure the output partitioning of OptimizeSkewedJoin is always expected.
+    EnsureRequirements(false)
   )
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
@@ -139,36 +139,6 @@ case class AdaptiveSparkPlanExec(
     ApplyColumnarRulesAndInsertTransitions(context.session.sessionState.columnarRules),
     CollapseCodegenStages()
   )
-
-  // OptimizeSkewedJoin has moved into this rules, so we should follow the finalStageOptimizerRules
-  // for the final stage.
-  private def finalStagePreparationWithExtraShuffleRules: Seq[Rule[SparkPlan]] = {
-    val origins = inputPlan.collect {
-      case s: ShuffleExchangeLike => s.shuffleOrigin
-    }
-    queryStagePreparationWithExtraShuffleRules.filter {
-      case c: AQEShuffleReadRule =>
-        origins.forall(c.supportedShuffleOrigins.contains)
-      case _ => true
-    }
-  }
-
-  // The partitioning of the query output depends on the shuffle(s) in the final stage. If the
-  // original plan contains a repartition operator, we need to preserve the specified partitioning,
-  // whether or not the repartition-introduced shuffle is optimized out because of an underlying
-  // shuffle of the same partitioning. Thus, we need to exclude some `CustomShuffleReaderRule`s
-  // from the final stage, depending on the presence and properties of repartition operators.
-  private def finalStageOptimizerRules: Seq[Rule[SparkPlan]] = {
-    val origins = inputPlan.collect {
-      case s: ShuffleExchangeLike => s.shuffleOrigin
-    }
-    val allRules = queryStageOptimizerRules ++ postStageCreationRules
-    allRules.filter {
-      case c: CustomShuffleReaderRule =>
-        origins.forall(c.supportedShuffleOrigins.contains)
-      case _ => true
-    }
-  } ++ context.session.sessionState.postStageCreationRules
 
   private def optimizeQueryStage(plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
     val optimized = queryStageOptimizerRules.foldLeft(plan) { case (latestPlan, rule) =>
@@ -698,25 +668,6 @@ case class AdaptiveSparkPlanExec(
     logicalPlan
   }
 
-  private def isFinalStage(sparkPlan: SparkPlan): Boolean = {
-    sparkPlan match {
-      // avoid top level node is Exchange
-      case _: Exchange => false
-      case plan =>
-        // Plan is regarded as a final plan iff all shuffle nodes are wrapped inside query stage
-        // and all query stages are materialized.
-        plan.find {
-          case p if p.children.exists(
-            child => child.isInstanceOf[Exchange] || child.isInstanceOf[ReusedExchangeExec]) =>
-            p match {
-              case stage: QueryStageExec if stage.isMaterialized => false
-              case _ => true
-            }
-          case _ => false
-        }.isEmpty
-    }
-  }
-
   /**
    * Re-optimize and run physical planning on the current logical plan based on the latest stats.
    */
@@ -746,14 +697,9 @@ case class AdaptiveSparkPlanExec(
   }
 
   private def rePlanWithExtraShuffle(sparkPlan: SparkPlan): SparkPlan = {
-    val preparationWithExtraShuffleRules = if (isFinalStage(sparkPlan)) {
-      finalStagePreparationWithExtraShuffleRules
-    } else {
-      queryStagePreparationWithExtraShuffleRules
-    }
     applyPhysicalRules(
       sparkPlan,
-      preparationWithExtraShuffleRules,
+      queryStagePreparationWithExtraShuffleRules,
       Some((planChangeLogger, "AQE Replanning")))
   }
 
