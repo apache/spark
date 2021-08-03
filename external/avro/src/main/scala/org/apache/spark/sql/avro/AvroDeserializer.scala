@@ -148,7 +148,7 @@ private[sql] class AvroDeserializer(
       }
 
       case (LONG, TimestampNTZType) => avroType.getLogicalType match {
-        // For keep consistent with TimestampLTZ, if the Avro type is Long and it is not
+        // To keep consistent with TimestampType, if the Avro type is Long and it is not
         // logical type (the `null` case), the value is processed as TimestampNTZ
         // with millisecond precision.
         case null | _: LocalTimestampMillis => (updater, ordinal, value) =>
