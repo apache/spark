@@ -281,9 +281,7 @@ public class SparkLauncherSuite extends BaseSuite {
 
   private void restoreSystemProperties(Map<Object, Object> properties) {
     Properties p = new Properties();
-    for (Map.Entry<Object, Object> e : properties.entrySet()) {
-      p.put(e.getKey(), e.getValue());
-    }
+    p.putAll(properties);
     System.setProperties(p);
   }
 

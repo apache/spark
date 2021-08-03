@@ -41,10 +41,17 @@ import org.apache.spark.sql.streaming.SinkProgress.DEFAULT_NUM_OUTPUT_ROWS
  */
 @Evolving
 class StateOperatorProgress private[sql](
+    val operatorName: String,
     val numRowsTotal: Long,
     val numRowsUpdated: Long,
+    val allUpdatesTimeMs: Long,
+    val numRowsRemoved: Long,
+    val allRemovalsTimeMs: Long,
+    val commitTimeMs: Long,
     val memoryUsedBytes: Long,
     val numRowsDroppedByWatermark: Long,
+    val numShufflePartitions: Long,
+    val numStateStoreInstances: Long,
     val customMetrics: ju.Map[String, JLong] = new ju.HashMap()
   ) extends Serializable {
 
@@ -57,14 +64,26 @@ class StateOperatorProgress private[sql](
   private[sql] def copy(
       newNumRowsUpdated: Long,
       newNumRowsDroppedByWatermark: Long): StateOperatorProgress =
-    new StateOperatorProgress(numRowsTotal, newNumRowsUpdated, memoryUsedBytes,
-      newNumRowsDroppedByWatermark, customMetrics)
+    new StateOperatorProgress(
+      operatorName = operatorName, numRowsTotal = numRowsTotal, numRowsUpdated = newNumRowsUpdated,
+      allUpdatesTimeMs = allUpdatesTimeMs, numRowsRemoved = numRowsRemoved,
+      allRemovalsTimeMs = allRemovalsTimeMs, commitTimeMs = commitTimeMs,
+      memoryUsedBytes = memoryUsedBytes, numRowsDroppedByWatermark = newNumRowsDroppedByWatermark,
+      numShufflePartitions = numShufflePartitions, numStateStoreInstances = numStateStoreInstances,
+      customMetrics = customMetrics)
 
   private[sql] def jsonValue: JValue = {
+    ("operatorName" -> JString(operatorName)) ~
     ("numRowsTotal" -> JInt(numRowsTotal)) ~
     ("numRowsUpdated" -> JInt(numRowsUpdated)) ~
+    ("allUpdatesTimeMs" -> JInt(allUpdatesTimeMs)) ~
+    ("numRowsRemoved" -> JInt(numRowsRemoved)) ~
+    ("allRemovalsTimeMs" -> JInt(allRemovalsTimeMs)) ~
+    ("commitTimeMs" -> JInt(commitTimeMs)) ~
     ("memoryUsedBytes" -> JInt(memoryUsedBytes)) ~
     ("numRowsDroppedByWatermark" -> JInt(numRowsDroppedByWatermark)) ~
+    ("numShufflePartitions" -> JInt(numShufflePartitions)) ~
+    ("numStateStoreInstances" -> JInt(numStateStoreInstances)) ~
     ("customMetrics" -> {
       if (!customMetrics.isEmpty) {
         val keys = customMetrics.keySet.asScala.toSeq.sorted

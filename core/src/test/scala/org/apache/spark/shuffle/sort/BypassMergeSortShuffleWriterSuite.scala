@@ -31,15 +31,20 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.executor.{ShuffleWriteMetrics, TaskMetrics}
+import org.apache.spark.internal.config
 import org.apache.spark.memory.{TaskMemoryManager, TestMemoryManager}
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper
 import org.apache.spark.serializer.{JavaSerializer, SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.IndexShuffleBlockResolver
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleChecksumTestHelper}
 import org.apache.spark.shuffle.api.ShuffleExecutorComponents
 import org.apache.spark.shuffle.sort.io.LocalDiskShuffleExecutorComponents
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
 
-class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfterEach {
+class BypassMergeSortShuffleWriterSuite
+  extends SparkFunSuite
+    with BeforeAndAfterEach
+    with ShuffleChecksumTestHelper {
 
   @Mock(answer = RETURNS_SMART_NULLS) private var blockManager: BlockManager = _
   @Mock(answer = RETURNS_SMART_NULLS) private var diskBlockManager: DiskBlockManager = _
@@ -76,10 +81,10 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
     when(taskContext.taskMemoryManager()).thenReturn(taskMemoryManager)
 
-    when(blockResolver.writeIndexFileAndCommit(
-      anyInt, anyLong, any(classOf[Array[Long]]), any(classOf[File])))
+    when(blockResolver.writeMetadataFileAndCommit(
+      anyInt, anyLong, any(classOf[Array[Long]]), any(classOf[Array[Long]]), any(classOf[File])))
       .thenAnswer { invocationOnMock =>
-        val tmp = invocationOnMock.getArguments()(3).asInstanceOf[File]
+        val tmp = invocationOnMock.getArguments()(4).asInstanceOf[File]
         if (tmp != null) {
           outputFile.delete
           tmp.renameTo(outputFile)
@@ -235,5 +240,46 @@ class BypassMergeSortShuffleWriterSuite extends SparkFunSuite with BeforeAndAfte
     assert(temporaryFilesCreated.nonEmpty)
     writer.stop( /* success = */ false)
     assert(temporaryFilesCreated.count(_.exists()) === 0)
+  }
+
+  test("write checksum file") {
+    val blockResolver = new IndexShuffleBlockResolver(conf, blockManager)
+    val shuffleId = shuffleHandle.shuffleId
+    val mapId = 0
+    val checksumBlockId = ShuffleChecksumBlockId(shuffleId, mapId, 0)
+    val dataBlockId = ShuffleDataBlockId(shuffleId, mapId, 0)
+    val indexBlockId = ShuffleIndexBlockId(shuffleId, mapId, 0)
+    val checksumAlgorithm = conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM)
+    val checksumFileName = ShuffleChecksumHelper.getChecksumFileName(
+      checksumBlockId.name, checksumAlgorithm)
+    val checksumFile = new File(tempDir, checksumFileName)
+    val dataFile = new File(tempDir, dataBlockId.name)
+    val indexFile = new File(tempDir, indexBlockId.name)
+    reset(diskBlockManager)
+    when(diskBlockManager.getFile(checksumFileName)).thenAnswer(_ => checksumFile)
+    when(diskBlockManager.getFile(dataBlockId)).thenAnswer(_ => dataFile)
+    when(diskBlockManager.getFile(indexBlockId)).thenAnswer(_ => indexFile)
+    when(diskBlockManager.createTempShuffleBlock())
+      .thenAnswer { _ =>
+        val blockId = new TempShuffleBlockId(UUID.randomUUID)
+        val file = new File(tempDir, blockId.name)
+        temporaryFilesCreated += file
+        (blockId, file)
+      }
+
+    val numPartition = shuffleHandle.dependency.partitioner.numPartitions
+    val writer = new BypassMergeSortShuffleWriter[Int, Int](
+      blockManager,
+      shuffleHandle,
+      mapId,
+      conf,
+      taskContext.taskMetrics().shuffleWriteMetrics,
+      new LocalDiskShuffleExecutorComponents(conf, blockManager, blockResolver))
+
+    writer.write(Iterator((0, 0), (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (6, 6)))
+    writer.stop( /* success = */ true)
+    assert(checksumFile.exists())
+    assert(checksumFile.length() === 8 * numPartition)
+    compareChecksums(numPartition, checksumAlgorithm, checksumFile, dataFile, indexFile)
   }
 }

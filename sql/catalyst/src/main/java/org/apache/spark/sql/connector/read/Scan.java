@@ -65,6 +65,10 @@ public interface Scan {
    * exception, data sources must overwrite this method to provide an implementation, if the
    * {@link Table} that creates this scan returns {@link TableCapability#BATCH_READ} support in its
    * {@link Table#capabilities()}.
+   * <p>
+   * If the scan supports runtime filtering and implements {@link SupportsRuntimeFiltering},
+   * this method may be called multiple times. Therefore, implementations can cache some state
+   * to avoid planning the job twice.
    *
    * @throws UnsupportedOperationException
    */
@@ -109,7 +113,6 @@ public interface Scan {
    * By default it returns empty array.
    */
   default CustomMetric[] supportedCustomMetrics() {
-    CustomMetric[] NO_METRICS = {};
-    return NO_METRICS;
+    return new CustomMetric[]{};
   }
 }

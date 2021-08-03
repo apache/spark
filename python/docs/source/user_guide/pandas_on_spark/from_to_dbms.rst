@@ -95,7 +95,7 @@ You can also write it back to the ``stocks`` table as below:
 .. code-block:: python
 
     df.price += 1
-    df.to_spark_io(
+    df.spark.to_spark_io(
         format="jdbc", mode="append",
         dbtable="stocks", url="jdbc:sqlite:{}/example.db".format(os.getcwd()))
     ps.read_sql("stocks", con="jdbc:sqlite:{}/example.db".format(os.getcwd()))

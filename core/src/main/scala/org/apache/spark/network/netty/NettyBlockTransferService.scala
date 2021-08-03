@@ -36,7 +36,7 @@ import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.client.{RpcResponseCallback, TransportClientBootstrap}
 import org.apache.spark.network.crypto.{AuthClientBootstrap, AuthServerBootstrap}
 import org.apache.spark.network.server._
-import org.apache.spark.network.shuffle.{BlockFetchingListener, DownloadFileManager, OneForOneBlockFetcher, RetryingBlockFetcher}
+import org.apache.spark.network.shuffle.{BlockFetchingListener, BlockTransferListener, DownloadFileManager, OneForOneBlockFetcher, RetryingBlockTransferor}
 import org.apache.spark.network.shuffle.protocol.{UploadBlock, UploadBlockStream}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rpc.RpcEndpointRef
@@ -61,7 +61,6 @@ private[spark] class NettyBlockTransferService(
   // TODO: Don't use Java serialization, use a more cross-version compatible serialization format.
   private val serializer = new JavaSerializer(conf)
   private val authEnabled = securityManager.isAuthenticationEnabled()
-  private val transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numCores)
 
   private[this] var transportContext: TransportContext = _
   private[this] var server: TransportServer = _
@@ -70,6 +69,7 @@ private[spark] class NettyBlockTransferService(
     val rpcHandler = new NettyBlockRpcServer(conf.getAppId, serializer, blockDataManager)
     var serverBootstrap: Option[TransportServerBootstrap] = None
     var clientBootstrap: Option[TransportClientBootstrap] = None
+    this.transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle", numCores)
     if (authEnabled) {
       serverBootstrap = Some(new AuthServerBootstrap(transportConf, securityManager))
       clientBootstrap = Some(new AuthClientBootstrap(transportConf, conf.getAppId, securityManager))
@@ -78,6 +78,7 @@ private[spark] class NettyBlockTransferService(
     clientFactory = transportContext.createClientFactory(clientBootstrap.toSeq.asJava)
     server = createServer(serverBootstrap.toList)
     appId = conf.getAppId
+
     logger.info(s"Server created on $hostName:${server.getPort}")
   }
 
@@ -116,13 +117,15 @@ private[spark] class NettyBlockTransferService(
     }
     try {
       val maxRetries = transportConf.maxIORetries()
-      val blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter {
+      val blockFetchStarter = new RetryingBlockTransferor.BlockTransferStarter {
         override def createAndStart(blockIds: Array[String],
-            listener: BlockFetchingListener): Unit = {
+            listener: BlockTransferListener): Unit = {
+          assert(listener.isInstanceOf[BlockFetchingListener],
+            s"Expecting a BlockFetchingListener, but got ${listener.getClass}")
           try {
             val client = clientFactory.createClient(host, port, maxRetries > 0)
-            new OneForOneBlockFetcher(client, appId, execId, blockIds, listener,
-              transportConf, tempFileManager).start()
+            new OneForOneBlockFetcher(client, appId, execId, blockIds,
+              listener.asInstanceOf[BlockFetchingListener], transportConf, tempFileManager).start()
           } catch {
             case e: IOException =>
               Try {
@@ -140,7 +143,7 @@ private[spark] class NettyBlockTransferService(
       if (maxRetries > 0) {
         // Note this Fetcher will correctly handle maxRetries == 0; we avoid it just in case there's
         // a bug in this code. We should remove the if statement once we're sure of the stability.
-        new RetryingBlockFetcher(transportConf, blockFetchStarter, blockIds, listener).start()
+        new RetryingBlockTransferor(transportConf, blockFetchStarter, blockIds, listener).start()
       } else {
         blockFetchStarter.createAndStart(blockIds, listener)
       }

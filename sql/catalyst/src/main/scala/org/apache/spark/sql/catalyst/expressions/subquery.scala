@@ -126,13 +126,15 @@ object SubExprUtils extends PredicateHelper {
   /**
    * Returns an expression after removing the OuterReference shell.
    */
-  def stripOuterReference(e: Expression): Expression = e.transform { case OuterReference(r) => r }
+  def stripOuterReference[E <: Expression](e: E): E = {
+    e.transform { case OuterReference(r) => r }.asInstanceOf[E]
+  }
 
   /**
    * Returns the list of expressions after removing the OuterReference shell from each of
    * the expression.
    */
-  def stripOuterReferences(e: Seq[Expression]): Seq[Expression] = e.map(stripOuterReference)
+  def stripOuterReferences[E <: Expression](e: Seq[E]): Seq[E] = e.map(stripOuterReference)
 
   /**
    * Returns the logical plan after removing the OuterReference shell from all the expressions
@@ -142,6 +144,13 @@ object SubExprUtils extends PredicateHelper {
     p.transformAllExpressionsWithPruning(_.containsPattern(OUTER_REFERENCE)) {
       case OuterReference(a) => a
     }
+  }
+
+  /**
+   * Wrap attributes in the expression with [[OuterReference]]s.
+   */
+  def wrapOuterReference[E <: Expression](e: E): E = {
+    e.transform { case a: Attribute => OuterReference(a) }.asInstanceOf[E]
   }
 
   /**

@@ -22,12 +22,11 @@ import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException, UnresolvedV2Relation}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTable, CreateTableAsSelectStatement, CreateTableStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, SerdeInfo}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, NoSuchDatabaseException, NoSuchNamespaceException, NoSuchTableException}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelectStatement, CreateTableStatement, ReplaceTableAsSelectStatement, ReplaceTableStatement, SerdeInfo}
 import org.apache.spark.sql.connector.catalog.TableChange._
-import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType, NullType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, MapType, StructField, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.Utils
 
@@ -357,17 +356,6 @@ private[sql] object CatalogV2Util {
     properties ++ Map(TableCatalog.PROP_OWNER -> Utils.getCurrentUserName())
   }
 
-  def createAlterTable(
-      originalNameParts: Seq[String],
-      catalog: CatalogPlugin,
-      tableName: Seq[String],
-      changes: Seq[TableChange]): AlterTable = {
-    val tableCatalog = catalog.asTableCatalog
-    val ident = tableName.asIdentifier
-    val unresolved = UnresolvedV2Relation(originalNameParts, tableCatalog, ident)
-    AlterTable(tableCatalog, ident, unresolved, changes)
-  }
-
   def getTableProviderCatalog(
       provider: SupportsCatalogOptions,
       catalogManager: CatalogManager,
@@ -376,23 +364,5 @@ private[sql] object CatalogV2Util {
       .map(catalogManager.catalog)
       .getOrElse(catalogManager.v2SessionCatalog)
       .asTableCatalog
-  }
-
-  def failNullType(dt: DataType): Unit = {
-    def containsNullType(dt: DataType): Boolean = dt match {
-      case ArrayType(et, _) => containsNullType(et)
-      case MapType(kt, vt, _) => containsNullType(kt) || containsNullType(vt)
-      case StructType(fields) => fields.exists(f => containsNullType(f.dataType))
-      case _ => dt.isInstanceOf[NullType]
-    }
-    if (containsNullType(dt)) {
-      throw QueryCompilationErrors.cannotCreateTablesWithNullTypeError()
-    }
-  }
-
-  def assertNoNullTypeInSchema(schema: StructType): Unit = {
-    schema.foreach { f =>
-      failNullType(f.dataType)
-    }
   }
 }

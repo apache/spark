@@ -19,18 +19,18 @@ from typing import Any, Union, cast
 
 from pandas.api.types import CategoricalDtype
 
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
-    IndexOpsLike,
-    T_IndexOps,
     _as_bool_type,
     _as_categorical_type,
     _as_other_type,
     _as_string_type,
+    _sanitize_list_like,
 )
-from pyspark.pandas.typedef import Dtype, pandas_on_spark_type
-from pyspark.sql import functions as F
+from pyspark.pandas.typedef import pandas_on_spark_type
+from pyspark.sql import functions as F, Column
 from pyspark.sql.types import ArrayType, BooleanType, NumericType, StringType
 
 
@@ -43,7 +43,8 @@ class ArrayOps(DataTypeOps):
     def pretty_name(self) -> str:
         return "arrays"
 
-    def add(self, left: T_IndexOps, right: Any) -> IndexOpsLike:
+    def add(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         if not isinstance(right, IndexOpsMixin) or (
             isinstance(right, IndexOpsMixin) and not isinstance(right.spark.data_type, ArrayType)
         ):
@@ -63,7 +64,31 @@ class ArrayOps(DataTypeOps):
 
         return column_op(F.concat)(left, right)
 
-    def astype(self, index_ops: T_IndexOps, dtype: Union[str, type, Dtype]) -> T_IndexOps:
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__lt__)(left, right)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__le__)(left, right)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__ge__)(left, right)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__gt__)(left, right)
+
+    def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         dtype, spark_type = pandas_on_spark_type(dtype)
 
         if isinstance(dtype, CategoricalDtype):
@@ -94,3 +119,27 @@ class StructOps(DataTypeOps):
     @property
     def pretty_name(self) -> str:
         return "structs"
+
+    def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__lt__)(left, right)
+
+    def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__le__)(left, right)
+
+    def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__ge__)(left, right)
+
+    def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
+        return column_op(Column.__gt__)(left, right)

@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 
 /**
  *  Removes the filter nodes with dynamic pruning that were not pushed down to the scan.
@@ -42,6 +43,7 @@ object CleanupDynamicPruningFilters extends Rule[LogicalPlan] with PredicateHelp
       _.containsAnyPattern(DYNAMIC_PRUNING_EXPRESSION, DYNAMIC_PRUNING_SUBQUERY)) {
       // pass through anything that is pushed down into PhysicalOperation
       case p @ PhysicalOperation(_, _, LogicalRelation(_: HadoopFsRelation, _, _, _)) => p
+      case p @ PhysicalOperation(_, _, _: DataSourceV2ScanRelation) => p
       // remove any Filters with DynamicPruning that didn't get pushed down to PhysicalOperation.
       case f @ Filter(condition, _) =>
         val newCondition = condition.transformWithPruning(

@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, RecoverPartitions, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{CreateTable, DataSource}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
@@ -42,13 +43,13 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
 
   private def requireDatabaseExists(dbName: String): Unit = {
     if (!sessionCatalog.databaseExists(dbName)) {
-      throw new AnalysisException(s"Database '$dbName' does not exist.")
+      throw QueryCompilationErrors.databaseDoesNotExistError(dbName)
     }
   }
 
   private def requireTableExists(dbName: String, tableName: String): Unit = {
     if (!sessionCatalog.tableExists(TableIdentifier(tableName, Some(dbName)))) {
-      throw new AnalysisException(s"Table '$tableName' does not exist in database '$dbName'.")
+      throw QueryCompilationErrors.tableDoesNotExistInDatabaseError(tableName, dbName)
     }
   }
 
@@ -215,7 +216,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     if (tableExists(dbName, tableName)) {
       makeTable(TableIdentifier(tableName, Option(dbName)))
     } else {
-      throw new AnalysisException(s"Table or view '$tableName' not found in database '$dbName'")
+      throw QueryCompilationErrors.tableOrViewNotFoundInDatabaseError(tableName, dbName)
     }
   }
 
@@ -554,8 +555,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       case SubqueryAlias(_, relationPlan) =>
         sparkSession.sharedState.cacheManager.recacheByPlan(sparkSession, relationPlan)
       case _ =>
-        throw new AnalysisException(
-          s"Unexpected type ${relation.getClass.getCanonicalName} of the relation $tableName")
+        throw QueryCompilationErrors.unexpectedTypeOfRelationError(relation, tableName)
     }
   }
 

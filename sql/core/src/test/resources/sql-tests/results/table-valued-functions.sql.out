@@ -89,7 +89,7 @@ Table-valued function range with alternatives:
     range(start: long, end: long, step: long)
     range(start: long, end: long)
     range(end: long)
-cannot be applied to (integer, null): Incompatible input data type. Expected: long; Found: null; line 1 pos 14
+cannot be applied to (integer, void): Incompatible input data type. Expected: long; Found: void; line 1 pos 14
 
 
 -- !query

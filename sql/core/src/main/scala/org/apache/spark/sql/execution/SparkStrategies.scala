@@ -324,7 +324,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           throw QueryCompilationErrors.groupAggPandasUDFUnsupportedByStreamingAggError()
         }
 
-        val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
+        val sessionWindowOption = namedGroupingExpressions.find { p =>
+          p.metadata.contains(SessionWindow.marker)
+        }
 
         // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
         // `groupingExpressions` is not extracted during logical phase.
@@ -335,12 +337,29 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         }
 
-        AggUtils.planStreamingAggregation(
-          normalizedGroupingExpressions,
-          aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
-          rewrittenResultExpressions,
-          stateVersion,
-          planLater(child))
+        sessionWindowOption match {
+          case Some(sessionWindow) =>
+            val stateVersion = conf.getConf(SQLConf.STREAMING_SESSION_WINDOW_STATE_FORMAT_VERSION)
+
+            AggUtils.planStreamingAggregationForSession(
+              normalizedGroupingExpressions,
+              sessionWindow,
+              aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+              rewrittenResultExpressions,
+              stateVersion,
+              conf.streamingSessionWindowMergeSessionInLocalPartition,
+              planLater(child))
+
+          case None =>
+            val stateVersion = conf.getConf(SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION)
+
+            AggUtils.planStreamingAggregation(
+              normalizedGroupingExpressions,
+              aggregateExpressions.map(expr => expr.asInstanceOf[AggregateExpression]),
+              rewrittenResultExpressions,
+              stateVersion,
+              planLater(child))
+        }
 
       case _ => Nil
     }
@@ -561,11 +580,13 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case FlatMapGroupsWithState(
         func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, stateEnc, outputMode, _,
-        timeout, child) =>
+        timeout, hasInitialState, stateGroupAttr, sda, sDeser, initialState, child) =>
         val stateVersion = conf.getConf(SQLConf.FLATMAPGROUPSWITHSTATE_STATE_FORMAT_VERSION)
         val execPlan = FlatMapGroupsWithStateExec(
-          func, keyDeser, valueDeser, groupAttr, dataAttr, outputAttr, None, stateEnc, stateVersion,
-          outputMode, timeout, batchTimestampMs = None, eventTimeWatermark = None, planLater(child))
+          func, keyDeser, valueDeser, sDeser, groupAttr, stateGroupAttr, dataAttr, sda, outputAttr,
+          None, stateEnc, stateVersion, outputMode, timeout, batchTimestampMs = None,
+          eventTimeWatermark = None, planLater(initialState), hasInitialState, planLater(child)
+        )
         execPlan :: Nil
       case _ =>
         Nil
@@ -669,9 +690,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.MapGroups(f, key, value, grouping, data, objAttr, child) =>
         execution.MapGroupsExec(f, key, value, grouping, data, objAttr, planLater(child)) :: Nil
       case logical.FlatMapGroupsWithState(
-          f, key, value, grouping, data, output, _, _, _, timeout, child) =>
-        execution.MapGroupsExec(
-          f, key, value, grouping, data, output, timeout, planLater(child)) :: Nil
+          f, keyDeserializer, valueDeserializer, grouping, data, output, stateEncoder, outputMode,
+          isFlatMapGroupsWithState, timeout, hasInitialState, initialStateGroupAttrs,
+          initialStateDataAttrs, initialStateDeserializer, initialState, child) =>
+        FlatMapGroupsWithStateExec.generateSparkPlanForBatchQueries(
+          f, keyDeserializer, valueDeserializer, initialStateDeserializer, grouping,
+          initialStateGroupAttrs, data, initialStateDataAttrs, output, timeout,
+          hasInitialState, planLater(initialState), planLater(child)
+        ) :: Nil
       case logical.CoGroup(f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr, left, right) =>
         execution.CoGroupExec(
           f, key, lObj, rObj, lGroup, rGroup, lAttr, rAttr, oAttr,

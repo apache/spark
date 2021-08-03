@@ -1373,17 +1373,15 @@ object RepartitionByExpression {
  */
 case class RebalancePartitions(
     partitionExpressions: Seq[Expression],
-    child: LogicalPlan) extends RepartitionOperation {
-
-  override def numPartitions: Int = conf.numShufflePartitions
+    child: LogicalPlan) extends UnaryNode {
+  override def maxRows: Option[Long] = child.maxRows
+  override def output: Seq[Attribute] = child.output
 
   def partitioning: Partitioning = if (partitionExpressions.isEmpty) {
     RoundRobinPartitioning(conf.numShufflePartitions)
   } else {
     HashPartitioning(partitionExpressions, conf.numShufflePartitions)
   }
-
-  override def shuffle: Boolean = true
 
   override protected def withNewChildInternal(newChild: LogicalPlan): RebalancePartitions =
     copy(child = newChild)
@@ -1451,9 +1449,21 @@ case class CollectMetrics(
  * A placeholder for domain join that can be added when decorrelating subqueries.
  * It should be rewritten during the optimization phase.
  */
-case class DomainJoin(domainAttrs: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output ++ domainAttrs
+case class DomainJoin(
+    domainAttrs: Seq[Attribute],
+    child: LogicalPlan,
+    joinType: JoinType = Inner,
+    condition: Option[Expression] = None) extends UnaryNode {
+
+  require(Seq(Inner, LeftOuter).contains(joinType), s"Unsupported domain join type $joinType")
+
+  override def output: Seq[Attribute] = joinType match {
+    case LeftOuter => domainAttrs ++ child.output.map(_.withNullability(true))
+    case _ => domainAttrs ++ child.output
+  }
+
   override def producedAttributes: AttributeSet = AttributeSet(domainAttrs)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): DomainJoin =
     copy(child = newChild)
 }

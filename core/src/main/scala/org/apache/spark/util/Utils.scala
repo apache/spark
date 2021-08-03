@@ -285,9 +285,11 @@ private[spark] object Utils extends Logging {
    */
   def createDirectory(dir: File): Boolean = {
     try {
-      // This sporadically fails - not sure why ... !dir.exists() && !dir.mkdirs()
-      // So attempting to create and then check if directory was created or not.
-      dir.mkdirs()
+      // SPARK-35907: The check was required by File.mkdirs() because it could sporadically
+      // fail silently. After switching to Files.createDirectories(), ideally, there should
+      // no longer be silent fails. But the check is kept for the safety concern. We can
+      // remove the check when we're sure that Files.createDirectories() would never fail silently.
+      Files.createDirectories(dir.toPath)
       if ( !dir.exists() || !dir.isDirectory) {
         logError(s"Failed to create directory " + dir)
       }
@@ -315,10 +317,14 @@ private[spark] object Utils extends Logging {
       }
       try {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
-        if (dir.exists() || !dir.mkdirs()) {
+        // SPARK-35907:
+        // This could throw more meaningful exception information if directory creation failed.
+        Files.createDirectories(dir.toPath)
+      } catch {
+        case e @ (_ : IOException | _ : SecurityException) =>
+          logError(s"Failed to create directory $dir", e)
           dir = null
-        }
-      } catch { case e: SecurityException => dir = null; }
+      }
     }
 
     dir.getCanonicalFile
@@ -2592,32 +2598,13 @@ private[spark] object Utils extends Logging {
 
   /**
    * Push based shuffle can only be enabled when the application is submitted
-   * to run in YARN mode, with external shuffle service enabled and
-   * spark.yarn.maxAttempts or the yarn cluster default max attempts is set to 1.
-   * TODO: Remove the requirement on spark.yarn.maxAttempts after SPARK-35546
-   * Support push based shuffle with multiple app attempts
+   * to run in YARN mode, with external shuffle service enabled
    */
   def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
     conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
       (conf.get(IS_TESTING).getOrElse(false) ||
         (conf.get(SHUFFLE_SERVICE_ENABLED) &&
-          conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn" &&
-          getYarnMaxAttempts(conf) == 1))
-  }
-
-  /**
-   * Returns the maximum number of attempts to register the AM in YARN mode.
-   * TODO: Remove this method after SPARK-35546 Support push based shuffle
-   * with multiple app attempts
-   */
-  def getYarnMaxAttempts(conf: SparkConf): Int = {
-    val sparkMaxAttempts = conf.getOption("spark.yarn.maxAttempts").map(_.toInt)
-    val yarnMaxAttempts = getSparkOrYarnConfig(conf, YarnConfiguration.RM_AM_MAX_ATTEMPTS,
-      YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS.toString).toInt
-    sparkMaxAttempts match {
-      case Some(x) => if (x <= yarnMaxAttempts) x else yarnMaxAttempts
-      case None => yarnMaxAttempts
-    }
+          conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn"))
   }
 
   /**

@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, LeafLike, TreeNodeTag, UnaryLike}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -298,7 +299,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * Overridden by concrete implementations of SparkPlan.
    */
   protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
-    throw new UnsupportedOperationException(s"$nodeName does not implement doExecuteBroadcast")
+    throw QueryExecutionErrors.doExecuteBroadcastNotImplementedError(nodeName)
   }
 
   /**

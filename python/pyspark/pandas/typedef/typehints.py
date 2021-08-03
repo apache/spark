@@ -24,20 +24,16 @@ from inspect import getfullargspec, isclass
 from typing import (  # noqa: F401
     Any,
     Callable,
-    Dict,
     Generic,
     List,
     Optional,
     Tuple,
-    TypeVar,
     Union,
-    cast,
 )
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype, pandas_dtype
-from pandas.api.extensions import ExtensionDtype
 
 try:
     from pandas import Int8Dtype, Int16Dtype, Int32Dtype, Int64Dtype
@@ -72,15 +68,8 @@ import pyspark.sql.types as types
 from pyspark.sql.pandas.types import to_arrow_type, from_arrow_type
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
+from pyspark.pandas._typing import Dtype, T
 from pyspark.pandas.typedef.string_typehints import resolve_string_type_hint
-
-T = TypeVar("T")
-
-Scalar = Union[
-    int, float, bool, str, bytes, decimal.Decimal, datetime.date, datetime.datetime, None
-]
-
-Dtype = Union[np.dtype, ExtensionDtype]
 
 
 # A column of data, with the data type.
@@ -171,7 +160,7 @@ def as_spark_type(tpe: Union[str, type, Dtype], *, raise_error: bool = True) -> 
     elif tpe in (bytes, np.character, np.bytes_, np.string_):
         return types.BinaryType()
     # BooleanType
-    elif tpe in (bool, np.bool, "bool", "?"):
+    elif tpe in (bool, np.bool_, "bool", "?"):
         return types.BooleanType()
     # DateType
     elif tpe in (datetime.date,):
@@ -182,13 +171,13 @@ def as_spark_type(tpe: Union[str, type, Dtype], *, raise_error: bool = True) -> 
     elif tpe in (decimal.Decimal,):
         # TODO: considering about the precision & scale for decimal type.
         return types.DecimalType(38, 18)
-    elif tpe in (float, np.float, np.float64, "float", "float64", "double"):
+    elif tpe in (float, np.float_, np.float64, "float", "float64", "double"):
         return types.DoubleType()
     elif tpe in (np.float32, "float32", "f"):
         return types.FloatType()
     elif tpe in (np.int32, "int32", "i"):
         return types.IntegerType()
-    elif tpe in (int, np.int, np.int64, "int", "int64", "long"):
+    elif tpe in (int, np.int64, "int", "int64", "long"):
         return types.LongType()
     elif tpe in (np.int16, "int16", "short"):
         return types.ShortType()
