@@ -616,10 +616,9 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
         }
 
         val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
-          .filter(_.startsWith("A join hint"))
+          .filter(_.contains("is not supported in the query:"))
         assert(logs.nonEmpty)
-        logs.forall(_.contains(
-          s"it is not supported with build left for ${joinType.split("_").mkString(" ")} join."))
+        logs.forall(_.contains(s"build left for ${joinType.split("_").mkString(" ")} join."))
       }
 
       Seq("right_outer").foreach { joinType =>
@@ -636,10 +635,9 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
             df1.join(df2.hint("SHUFFLE_HASH"), $"a1" === $"b1", joinType))
         }
         val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
-          .filter(_.startsWith("A join hint"))
+          .filter(_.contains("is not supported in the query:"))
         assert(logs.nonEmpty)
-        logs.forall(_.contains(
-          s"it is not supported with build right for ${joinType.split("_").mkString(" ")} join."))
+        logs.forall(_.contains(s"build right for ${joinType.split("_").mkString(" ")} join."))
       }
 
       Seq("inner", "cross").foreach { joinType =>
@@ -656,9 +654,25 @@ class JoinHintSuite extends PlanTest with SharedSparkSession with AdaptiveSparkP
             df1.join(df2.hint("SHUFFLE_HASH"), $"a1" === $"b1", joinType), BuildRight)
         }
         val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
-          .filter(_.startsWith("A join hint"))
+          .filter(_.contains("is not supported in the query:"))
         assert(logs.isEmpty)
       }
     }
+  }
+
+  test("SPARK-35221: Add join hint non equi-join check") {
+    val hintAppender = new LogAppender(s"join hint check for equi-join")
+    withLogAppender(hintAppender, level = Some(Level.WARN)) {
+      assertBroadcastNLJoin(
+        df1.hint("SHUFFLE_HASH").join(df2, $"a1" !== $"b1"), BuildRight)
+    }
+    withLogAppender(hintAppender, level = Some(Level.WARN)) {
+      assertBroadcastNLJoin(
+        df1.join(df2.hint("MERGE"), $"a1" !== $"b1"), BuildRight)
+    }
+    val logs = hintAppender.loggingEvents.map(_.getRenderedMessage)
+      .filter(_.contains("is not supported in the query:"))
+    assert(logs.nonEmpty)
+    logs.forall(_.contains("equi join keys is not existed"))
   }
 }

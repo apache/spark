@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Locale
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, JoinSelectionHelper, NormalizeFloatingNumbers}
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper, NormalizeFloatingNumbers}
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -141,6 +143,35 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     with JoinSelectionHelper {
     private val hintErrorHandler = conf.hintErrorHandler
 
+    private def checkHintBuildSide(
+        onlyLookingAtHint: Boolean,
+        buildSide: Option[BuildSide],
+        joinType: JoinType,
+        hint: JoinHint,
+        isBroadcast: Boolean): Unit = {
+      if (onlyLookingAtHint && buildSide.isEmpty) {
+        if ((isBroadcast && hintToBroadcastLeft(hint)) ||
+          (!isBroadcast && hintToShuffleHashJoinLeft(hint))) {
+          assert(hint.leftHint.isDefined)
+          hintErrorHandler.hintNotSupported(hint.leftHint.get,
+            s"build left for ${joinType.sql.toLowerCase(Locale.ROOT)} join")
+        } else if ((isBroadcast && hintToBroadcastRight(hint)) ||
+          (!isBroadcast && hintToShuffleHashJoinRight(hint))) {
+          assert(hint.rightHint.isDefined)
+          hintErrorHandler.hintNotSupported(hint.rightHint.get,
+            s"build right for ${joinType.sql.toLowerCase(Locale.ROOT)} join")
+        }
+      }
+    }
+
+    private def checkHintNonEquiJoin(hint: JoinHint): Unit = {
+      if (hintToShuffleHashJoin(hint) || hintToSortMergeJoin(hint)) {
+        assert(hint.leftHint.orElse(hint.rightHint).isDefined)
+        hintErrorHandler.hintNotSupported(hint.leftHint.orElse(hint.rightHint).get,
+          "equi join keys is not existed")
+      }
+    }
+
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
 
       // If it is an equi-join, we first look at the join hints w.r.t. the following order:
@@ -166,10 +197,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
           val buildSide = getBroadcastBuildSide(
             left, right, joinType, hint, onlyLookingAtHint, conf)
-          if (onlyLookingAtHint && buildSide.isEmpty &&
-            (hintToBroadcastLeft(hint) || hintToBroadcastRight(hint))) {
-            hintErrorHandler.joinBuildSideNotSupported(joinType, hint)
-          }
+          checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, true)
           buildSide.map {
             buildSide =>
               Seq(joins.BroadcastHashJoinExec(
@@ -186,10 +214,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         def createShuffleHashJoin(onlyLookingAtHint: Boolean) = {
           val buildSide = getShuffleHashJoinBuildSide(
             left, right, joinType, hint, onlyLookingAtHint, conf)
-          if (onlyLookingAtHint && buildSide.isEmpty &&
-            (hintToShuffleHashJoinLeft(hint) || hintToShuffleHashJoinRight(hint))) {
-            hintErrorHandler.joinBuildSideNotSupported(joinType, hint)
-          }
+          checkHintBuildSide(onlyLookingAtHint, buildSide, joinType, hint, false)
           buildSide.map {
             buildSide =>
               Seq(joins.ShuffledHashJoinExec(
@@ -262,6 +287,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       //      other choice. It broadcasts the smaller side for inner and full joins, broadcasts the
       //      left side for right join, and broadcasts right side for left join.
       case logical.Join(left, right, joinType, condition, hint) =>
+        checkHintNonEquiJoin(hint)
         val desiredBuildSide = if (joinType.isInstanceOf[InnerLike] || joinType == FullOuter) {
           getSmallerSide(left, right)
         } else {

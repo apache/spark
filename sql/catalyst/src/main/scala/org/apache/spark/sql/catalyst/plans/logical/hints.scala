@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.JoinType
 import org.apache.spark.sql.catalyst.trees.TreePattern.{TreePattern, UNRESOLVED_HINT}
 
 /**
@@ -217,7 +216,7 @@ trait HintErrorHandler {
   /**
    * Callback for a join hint specified on a join that doesn't support this build side.
    */
-  def joinBuildSideNotSupported(joinType: JoinType, joinHint: JoinHint): Unit
+  def hintNotSupported(hint: HintInfo, reason: String): Unit
 
   /**
    * Callback for a hint being overridden by another conflicting hint of the same kind.
