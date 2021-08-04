@@ -63,7 +63,7 @@ private[spark] object KVUtils extends Logging {
       db.setMetadata(metadata)
     } else if (dbMeta != metadata) {
       db.close()
-      throw SparkCoreErrors.metadataMismatch()
+      throw SparkCoreErrors.metadataMismatchError()
     }
 
     db

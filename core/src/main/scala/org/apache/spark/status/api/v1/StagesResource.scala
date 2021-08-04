@@ -76,7 +76,7 @@ private[v1] class StagesResource extends BaseAppResource {
       if (ret.nonEmpty) {
         ret
       } else {
-        throw SparkCoreErrors.notFoundStageId(stageId)
+        throw SparkCoreErrors.unknownStageError(stageId)
       }
     }
   }
@@ -101,9 +101,9 @@ private[v1] class StagesResource extends BaseAppResource {
         val all = ui.store.stageData(stageId, false, taskStatus)
         if (all.nonEmpty) {
           val ids = all.map(_.attemptId)
-          throw SparkCoreErrors.notFoundTrueAttempt(stageId, ids.mkString(","))
+          throw SparkCoreErrors.unknownAttemptForStageError(stageId, ids.mkString(","))
         } else {
-          throw SparkCoreErrors.notFoundStageId(stageId)
+          throw SparkCoreErrors.unknownStageError(stageId)
         }
     }
   }
@@ -117,7 +117,7 @@ private[v1] class StagesResource extends BaseAppResource {
   : TaskMetricDistributions = withUI { ui =>
     val quantiles = parseQuantileString(quantileString)
     ui.store.taskSummary(stageId, stageAttemptId, quantiles).getOrElse(
-      throw SparkCoreErrors.noTasksReportMetrics(stageId, stageAttemptId))
+      throw SparkCoreErrors.noTasksReportMetricsError(stageId, stageAttemptId))
   }
 
   @GET
@@ -263,7 +263,7 @@ private[v1] class StagesResource extends BaseAppResource {
         s.toDouble
       } catch {
         case nfe: NumberFormatException =>
-          throw new BadParameterException("quantiles", "double", s)
+          throw SparkCoreErrors.badParameterErrors("quantiles", "double", s)
       }
     }
   }

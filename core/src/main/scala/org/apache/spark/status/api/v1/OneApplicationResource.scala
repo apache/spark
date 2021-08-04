@@ -45,7 +45,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
       ui.store.job(jobId)
     } catch {
       case _: NoSuchElementException =>
-        throw SparkCoreErrors.notFoundJobId(jobId)
+        throw SparkCoreErrors.notFoundJobIdError(jobId)
     }
   }
 
@@ -57,21 +57,21 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @Path("executors/{executorId}/threads")
   def threadDump(@PathParam("executorId") execId: String): Array[ThreadStackTrace] = withUI { ui =>
     if (execId != SparkContext.DRIVER_IDENTIFIER && !execId.forall(Character.isDigit)) {
-      throw SparkCoreErrors.badParameterError(SparkContext.DRIVER_IDENTIFIER)
+      throw SparkCoreErrors.invalidExecutorIdError(SparkContext.DRIVER_IDENTIFIER)
     }
 
     val safeSparkContext = ui.sc.getOrElse {
-      throw SparkCoreErrors.serviceUnavailableError()
+      throw SparkCoreErrors.threadDumpsNotAvailableError()
     }
 
     ui.store.asOption(ui.store.executorSummary(execId)) match {
       case Some(executorSummary) if executorSummary.isActive =>
           val safeThreadDump = safeSparkContext.getExecutorThreadDump(execId).getOrElse {
-            throw SparkCoreErrors.notFoundThread()
+            throw SparkCoreErrors.noThreadDumpAvailableError()
           }
           safeThreadDump
-      case Some(_) => throw SparkCoreErrors.executorNotActive()
-      case _ => throw SparkCoreErrors.notFoundExecutor()
+      case Some(_) => throw SparkCoreErrors.executorIsNotActiveError()
+      case _ => throw SparkCoreErrors.executorNotExistError()
     }
   }
 
@@ -97,7 +97,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
       ui.store.rdd(rddId)
     } catch {
       case _: NoSuchElementException =>
-        throw SparkCoreErrors.notFoundRdd(rddId)
+        throw SparkCoreErrors.noRddFoundError(rddId)
     }
   }
 
@@ -155,7 +155,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
         .build()
     } catch {
       case NonFatal(_) =>
-        throw SparkCoreErrors.serviceUnavailableError(appId)
+        throw SparkCoreErrors.eventLogsNotAvailableError(appId)
     }
   }
 
@@ -166,7 +166,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @Path("{attemptId}")
   def applicationAttempt(): Class[OneApplicationAttemptResource] = {
     if (attemptId != null) {
-      throw SparkCoreErrors.notFoundHttpRequest(httpRequest.getRequestURI())
+      throw SparkCoreErrors.notFoundHttpRequestError(httpRequest.getRequestURI())
     }
     classOf[OneApplicationAttemptResource]
   }
@@ -178,7 +178,7 @@ private[v1] class OneApplicationResource extends AbstractApplicationResource {
   @GET
   def getApp(): ApplicationInfo = {
     val app = uiRoot.getApplicationInfo(appId)
-    app.getOrElse(app.getOrElse(throw SparkCoreErrors.notFoundAppId(appId)))
+    app.getOrElse(app.getOrElse(throw SparkCoreErrors.unknownAppError(appId)))
   }
 
 }
@@ -192,7 +192,7 @@ private[v1] class OneApplicationAttemptResource extends AbstractApplicationResou
         app.attempts.find(_.attemptId.contains(attemptId))
       }
       .getOrElse {
-        throw SparkCoreErrors.notFoundAppIddAndAttemptId(appId, attemptId)
+        throw SparkCoreErrors.notFoundAppWithAttemptError(appId, attemptId)
       }
   }
 

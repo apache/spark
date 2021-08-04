@@ -147,94 +147,94 @@ object SparkCoreErrors {
     new SparkException("Checkpoint dir must be specified.")
   }
 
-  def failToGetApplicationInfo(): Throwable = {
+  def failToGetApplicationInfoError(): Throwable = {
     new NoSuchElementException("Failed to get the application information. " +
       "If you are starting up Spark, please wait a while until it's ready.")
   }
 
-  def noStageWithId(stageId: Int): Throwable = {
+  def noStageWithIdError(stageId: Int): Throwable = {
     new NoSuchElementException(s"No stage with id $stageId")
   }
 
-  def failToGetApplicationSummary(): Throwable = {
+  def failToGetApplicationSummaryError(): Throwable = {
     new NoSuchElementException("Failed to get the application summary. " +
       "If you are starting up Spark, please wait a while until it's ready.")
   }
 
-  def metadataMismatch(): Throwable = {
+  def metadataMismatchError(): Throwable = {
     new MetadataMismatchException()
   }
 
-  def indexOutOfBound(idx: Int): Throwable = {
+  def indexOutOfBoundError(idx: Int): Throwable = {
     new IndexOutOfBoundsException(idx.toString)
   }
 
-  def notAuthorizedUser(user: String): Throwable = {
+  def notAuthorizedUserError(user: String): Throwable = {
     new ForbiddenException(s"""user "$user" is not authorized""")
   }
 
-  def notFoundAppKey(appKey: String): Throwable = {
+  def notFoundAppKeyError(appKey: String): Throwable = {
     new NotFoundException(s"no such app: $appKey")
   }
 
-  def notFoundJobId(jobId: Int): Throwable = {
+  def notFoundJobIdError(jobId: Int): Throwable = {
     new NotFoundException("unknown job: " + jobId)
   }
 
-  def badParameterError(url: String): Throwable = {
+  def invalidExecutorIdError(url: String): Throwable = {
     new BadParameterException(s"Invalid executorId: neither '$url' nor number.")
   }
 
-  def serviceUnavailableError(): Throwable = {
+  def threadDumpsNotAvailableError(): Throwable = {
     new ServiceUnavailable("Thread dumps not available through the history server.")
   }
 
-  def notFoundThread(): Throwable = {
+  def noThreadDumpAvailableError(): Throwable = {
     new NotFoundException("No thread dump is available.")
   }
 
-  def notFoundHttpRequest(uri: String): Throwable = {
+  def notFoundHttpRequestError(uri: String): Throwable = {
     new NotFoundException(uri)
   }
 
-  def notFoundExecutor(): Throwable = {
+  def executorNotExistError(): Throwable = {
     new NotFoundException("Executor does not exist.")
   }
 
-  def executorNotActive(): Throwable = {
+  def executorIsNotActiveError(): Throwable = {
     new BadParameterException("Executor is not active.")
   }
 
-  def notFoundRdd(rddId: Int): Throwable = {
+  def noRddFoundError(rddId: Int): Throwable = {
     new NotFoundException(s"no rdd found w/ id $rddId")
   }
 
-  def serviceUnavailableError(appId: String): Throwable = {
+  def eventLogsNotAvailableError(appId: String): Throwable = {
     new ServiceUnavailable(s"Event logs are not available for app: $appId.")
   }
 
-  def notFoundAppId(appId: String): Throwable = {
-    new NotFoundException("unknown app: " + appId)
+  def unknownAppError(appId: String): Throwable = {
+    new NotFoundException(s"unknown app: $appId")
   }
 
-  def notFoundAppIddAndAttemptId(appId: String, attemptId: String): Throwable = {
+  def notFoundAppWithAttemptError(appId: String, attemptId: String): Throwable = {
     new NotFoundException(s"unknown app $appId, attempt $attemptId")
   }
 
-  def notFoundStageId(stageId: Int): Throwable = {
+  def unknownStageError(stageId: Int): Throwable = {
     new NotFoundException(s"unknown stage: $stageId")
   }
 
-  def notFoundTrueAttempt(stageId: Int, msg: String): Throwable = {
+  def unknownAttemptForStageError(stageId: Int, msg: String): Throwable = {
     new NotFoundException(s"unknown attempt for stage $stageId.  Found attempts: [$msg]")
   }
 
-  def noTasksReportMetrics(stageId: Int, stageAttemptId: Int): Throwable = {
+  def noTasksReportMetricsError(stageId: Int, stageAttemptId: Int): Throwable = {
     new NotFoundException(s"No tasks reported metrics for $stageId / $stageAttemptId yet.")
   }
 
-  def badParameterErrors(s: String): Throwable = {
-    new BadParameterException("quantiles", "double", s)
+  def badParameterErrors(param: String, exp: String, actual: String): Throwable = {
+    new BadParameterException(param, exp, actual)
   }
 
   def webApplicationError(originalValue: String): Throwable = {

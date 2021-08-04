@@ -847,7 +847,7 @@ private class RDDPartitionSeq extends Seq[v1.RDDPartitionInfo] {
       curr += 1
       e = e.next
     }
-    if (e != null) e.value else throw SparkCoreErrors.indexOutOfBound(idx)
+    if (e != null) e.value else throw SparkCoreErrors.indexOutOfBoundError(idx)
   }
 
   override def iterator: Iterator[v1.RDDPartitionInfo] = {

@@ -138,14 +138,14 @@ private[v1] trait BaseAppResource extends ApiRequestContext {
       uiRoot.withSparkUI(appId, Option(attemptId)) { ui =>
         val user = httpRequest.getRemoteUser()
         if (!ui.securityManager.checkUIViewPermissions(user)) {
-          throw SparkCoreErrors.notAuthorizedUser(user)
+          throw SparkCoreErrors.notAuthorizedUserError(user)
         }
         fn(ui)
       }
     } catch {
       case _: NoSuchElementException =>
         val appKey = Option(attemptId).map(appId + "/" + _).getOrElse(appId)
-        throw SparkCoreErrors.notFoundAppKey(appKey)
+        throw SparkCoreErrors.notFoundAppKeyError(appKey)
     }
   }
 
@@ -153,12 +153,12 @@ private[v1] trait BaseAppResource extends ApiRequestContext {
     try {
       val user = httpRequest.getRemoteUser()
       if (!uiRoot.checkUIViewPermissions(appId, Option(attemptId), user)) {
-        throw SparkCoreErrors.notAuthorizedUser(user)
+        throw SparkCoreErrors.notAuthorizedUserError(user)
       }
     } catch {
       case _: NoSuchElementException =>
         val appKey = Option(attemptId).map(appId + "/" + _).getOrElse(appId)
-        throw SparkCoreErrors.notFoundAppKey(appKey)
+        throw SparkCoreErrors.notFoundAppKeyError(appKey)
     }
   }
 }

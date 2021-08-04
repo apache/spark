@@ -49,7 +49,7 @@ private[spark] class AppStatusStore(
       }
     } catch {
       case _: NoSuchElementException =>
-        throw SparkCoreErrors.failToGetApplicationInfo()
+        throw SparkCoreErrors.failToGetApplicationInfoError()
     }
   }
 
@@ -157,7 +157,7 @@ private[spark] class AppStatusStore(
       if (it.hasNext()) {
         it.next().info
       } else {
-        throw SparkCoreErrors.noStageWithId(stageId)
+        throw SparkCoreErrors.noStageWithIdError(stageId)
       }
     } finally {
       it.close()
@@ -659,7 +659,7 @@ private[spark] class AppStatusStore(
       store.read(classOf[AppSummary], classOf[AppSummary].getName())
     } catch {
       case _: NoSuchElementException =>
-        throw SparkCoreErrors.failToGetApplicationSummary()
+        throw SparkCoreErrors.failToGetApplicationSummaryError()
     }
   }
 
