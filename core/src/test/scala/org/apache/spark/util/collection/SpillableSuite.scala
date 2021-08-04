@@ -17,16 +17,13 @@
 
 package org.apache.spark.util.collection
 
-import java.io.{File, IOException}
+import java.io.{File, FileOutputStream, IOException}
 import java.util.UUID
-
 import scala.collection.mutable.ArrayBuffer
-
 import org.mockito.ArgumentMatchers.{any, anyInt}
 import org.mockito.Mockito.{mock, when}
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark.{SparkConf, SparkEnv, SparkFunSuite, TaskContext}
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.internal.config
@@ -183,6 +180,65 @@ class ExternalSorterSpillSuite extends SpillableSuite {
     val dataSizes = {
       val spillBatchSize = conf.get(config.SHUFFLE_SPILL_BATCH_SIZE)
       Seq(spillBatchSize, spillBatchSize + 1, 0)
+    }
+
+    dataSizes.foreach { dataSize =>
+      val dataBuffer = new PartitionedPairBuffer[Int, Int]
+      (0 until dataSize.toInt).foreach(i => dataBuffer.insert(0, 0, i))
+      val externalSorter = new TestExternalSorter[Int, Int, Int](taskContext)
+      externalSorter.spill(dataBuffer)
+    }
+
+    // Verify recordsWritten same as data size
+    assert(metricsCreated.length == dataSizes.length)
+    metricsCreated.zip(dataSizes).foreach {
+      case (metrics, dataSize) => assert(metrics.recordsWritten == dataSize)
+    }
+
+    // Verify bytesWritten same as file size
+    assert(metricsCreated.length == filesCreated.length)
+    filesCreated.foreach(file => assert(file.exists()))
+    metricsCreated.zip(filesCreated).foreach {
+      case (metrics, file) => assert(metrics.bytesWritten == file.length())
+    }
+  }
+
+  test("Close will wirte some meta data to os") {
+
+    when(blockManager.getDiskWriter(
+      any(classOf[BlockId]),
+      any(classOf[File]),
+      any(classOf[SerializerInstance]),
+      anyInt(),
+      any(classOf[ShuffleWriteMetrics])
+    )).thenAnswer((invocation: InvocationOnMock) => {
+      val args = invocation.getArguments
+      val shuffleWriteMetrics = args(4).asInstanceOf[ShuffleWriteMetrics]
+      metricsCreated += shuffleWriteMetrics
+      new DiskBlockObjectWriter(
+        args(1).asInstanceOf[File],
+        blockManager.serializerManager,
+        args(2).asInstanceOf[SerializerInstance],
+        args(3).asInstanceOf[Int],
+        false,
+        shuffleWriteMetrics,
+        args(0).asInstanceOf[BlockId]
+      ) {
+        override def closeResources(): Unit = {
+          val meta = "suffix".getBytes("UTF-8")
+          new FileOutputStream(file, true).write(meta)
+          super.closeResources()
+        }
+      }
+    })
+
+    // Test data size corresponds to three different scenarios:
+    // 1. spillBatchSize -> `objectsWritten == 0`
+    // 2. spillBatchSize + 1 -> `objectsWritten > 0`
+    // 3. 0 -> Not enter `inMemoryIterator.hasNext` loop and `objectsWritten == 0`
+    val dataSizes = {
+      val spillBatchSize = conf.get(config.SHUFFLE_SPILL_BATCH_SIZE)
+      Seq(spillBatchSize + 1)
     }
 
     dataSizes.foreach { dataSize =>
