@@ -119,14 +119,13 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
   override lazy val references: AttributeSet = AttributeSet(this)
 
   def withNullability(newNullability: Boolean): Attribute
-  def withName(newName: String): Attribute
   def withQualifier(newQualifier: Seq[String]): Attribute
+  def withName(newName: String): Attribute
   def withMetadata(newMetadata: Metadata): Attribute
   def withExprId(newExprId: ExprId): Attribute
   def withDataType(newType: DataType): Attribute
 
   override def toAttribute: Attribute = this
-
   def newInstance(): Attribute
 
 }
