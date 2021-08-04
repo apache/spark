@@ -420,10 +420,14 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
     val df2 = spark.range(5).select(slowUDF($"id") as 'a)
     val testDf = df1.join(broadcast(df2), "a")
     withSQLConf(SQLConf.BROADCAST_TIMEOUT.key -> timeout.toString) {
-      val e = intercept[Exception] {
-        testDf.collect()
+      if (conf.adaptiveExecutionEnabled) {
+        checkAnswer(testDf, df1.join(spark.range(5), "a"))
+      } else {
+        val e = intercept[Exception] {
+          testDf.collect()
+        }
+        assert(e.getMessage.contains(s"Could not execute broadcast in $timeout secs."))
       }
-      assert(e.getMessage.contains(s"Could not execute broadcast in $timeout secs."))
     }
   }
 
