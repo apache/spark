@@ -513,12 +513,18 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       }
     } else {
       appShuffleInfo.shuffles.compute(msg.shuffleId, (id, value) -> {
-        if (null == value || msg.shuffleMergeId != value.shuffleMergeId ||
+        if (null == value || msg.shuffleMergeId < value.shuffleMergeId ||
           INDETERMINATE_SHUFFLE_FINALIZED == value.shuffleMergePartitions) {
           throw new RuntimeException(String.format(
             "Shuffle merge finalize request for shuffle %s with" + " shuffleMergeId %s is %s",
             msg.shuffleId, msg.shuffleMergeId,
             ErrorHandler.BlockPushErrorHandler.STALE_SHUFFLE_FINALIZE_SUFFIX));
+        } else if (msg.shuffleMergeId > value.shuffleMergeId) {
+          // If no blocks pushed for the finalizeShuffleMerge shuffleMergeId then return
+          // empty MergeStatuses but cleanup the older shuffleMergeId files.
+          mergedShuffleCleaner.execute(() ->
+            closeAndDeletePartitionFiles(value.shuffleMergePartitions));
+          return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
         } else {
           shuffleMergePartitionsRef.set(value.shuffleMergePartitions);
           return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
