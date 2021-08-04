@@ -525,7 +525,8 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
             case attr: Attribute =>
               attr.withName(projectList.find(_.semanticEquals(attr)).getOrElse(attr).name)
             case alias: Alias =>
-              alias.withName(projectList.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
+              alias.withName(
+                projectList.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
             case other => other
           }
           p.copy(projectList = newList)
@@ -534,7 +535,8 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
             case attr: Attribute =>
               attr.withName(projectList.find(_.semanticEquals(attr)).getOrElse(attr).name)
             case alias: Alias =>
-              alias.withName(projectList.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
+              alias.withName(
+                projectList.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
             case other => other
           }
           agg.copy(aggregateExpressions = newAggExprs)
