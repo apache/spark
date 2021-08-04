@@ -1,1 +1,0 @@
---IMPORT timestamp_ntz.sql
