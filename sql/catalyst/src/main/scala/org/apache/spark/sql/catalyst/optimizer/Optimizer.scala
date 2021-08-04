@@ -520,15 +520,18 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
     // Eliminate no-op Projects
     case p @ Project(output, child) if child.sameOutput(p) =>
       child match {
-        case relation: LeafNode
-          if !output.zip(relation.output).forall { case (a1, a2) => a1.name == a2.name } =>
-          p
-        case _ =>
+        case _: Project | _: Aggregate =>
           child.transformExpressionsDown {
             case attr: Attribute =>
               attr.withName(output.find(_.semanticEquals(attr)).getOrElse(attr).name)
             case alias: Alias =>
               alias.withName(output.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
+          }
+        case _ =>
+          if (!output.zip(child.output).forall { case (a1, a2) => a1.name == a2.name }) {
+            child
+          } else {
+            p
           }
       }
 
