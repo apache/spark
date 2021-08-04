@@ -3529,7 +3529,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         new_scol = verify_temp_column_name(data._internal.spark_frame, "__row_index__")
 
-        def scol_mode(col):
+        def scol_mode(col: Column) -> SparkDataFrame:
             if dropna:
                 sdf_dropna = data._internal.spark_frame.select(col).dropna()
             else:
@@ -3551,7 +3551,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
         return DataFrame(new_sdf.drop(new_scol))
 
-    def _get_numeric_data(self):
+    def _get_numeric_data(self) -> "DataFrame":
         data = self.copy()
         for label in self._internal.column_labels:
             spark_type = self._internal.spark_type_for(label)
