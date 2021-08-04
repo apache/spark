@@ -131,7 +131,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test("PVs with local hostpath storage on statefulsets", pvTestTag, MinikubeTag) {
+  test("PVs with local hostpath storage on statefulsets", k8sTestTag, MinikubeTag) {
     sparkAppConf
       .set(s"spark.kubernetes.driver.volumes.persistentVolumeClaim.data.mount.path",
         CONTAINER_MOUNT_PATH)
@@ -162,7 +162,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test("PVs with local hostpath and storageClass on statefulsets", pvTestTag, MinikubeTag) {
+  test("PVs with local hostpath and storageClass on statefulsets", k8sTestTag, MinikubeTag) {
     sparkAppConf
       .set(s"spark.kubernetes.driver.volumes.persistentVolumeClaim.data.mount.path",
         CONTAINER_MOUNT_PATH)
@@ -196,7 +196,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test("PVs with local storage", pvTestTag, MinikubeTag) {
+  test("PVs with local storage", k8sTestTag, MinikubeTag) {
     sparkAppConf
       .set(s"spark.kubernetes.driver.volumes.persistentVolumeClaim.data.mount.path",
         CONTAINER_MOUNT_PATH)
