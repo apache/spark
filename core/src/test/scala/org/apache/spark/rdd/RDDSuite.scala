@@ -285,7 +285,6 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       assert(sum === -1000)
     }
     sc.conf.remove(ENABLE_EXECUTOR_TREE_AGGREGATE)
-
   }
 
   test("treeReduce") {
