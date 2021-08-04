@@ -254,9 +254,8 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
           if (failBlock) {
             failBlock = false
             // Fail the first block with the collision exception.
-            blockPushListener.onBlockPushFailure(blockId, new RuntimeException(
-              new IllegalArgumentException(
-                BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX)))
+            blockPushListener.onBlockPushFailure(blockId, new BlockPushNonFatalFailure(
+              ErrorCode.BLOCK_APPEND_COLLISION_DETECTED))
           } else {
             pushedBlocks += blockId
             blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))

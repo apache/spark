@@ -57,27 +57,6 @@ public interface ErrorHandler {
    */
   class BlockPushErrorHandler implements ErrorHandler {
     /**
-     * String constant used for generating exception messages indicating a block to be merged
-     * arrives too late or stale block push in the case of indeterminate stage retries on the
-     * server side, and also for later checking such exceptions on the client side. When we get
-     * a block push failure because of the block push being stale or arrives too late, we will
-     * not retry pushing the block nor log the exception on the client side.
-     */
-    public static final String TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX =
-      "is received after merged shuffle is finalized or stale block push as shuffle blocks of a"
-        + " higher shuffleMergeId for the shuffle is being pushed";
-
-    /**
-     * String constant used for generating exception messages indicating the server couldn't
-     * append a block after all available attempts due to collision with other blocks belonging
-     * to the same shuffle partition, and also for later checking such exceptions on the client
-     * side. When we get a block push failure because of the block couldn't be written due to
-     * this reason, we will not log the exception on the client side.
-     */
-    public static final String BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX =
-      "Couldn't find an opportunity to write block";
-
-    /**
      * String constant used for generating exception messages indicating the server encountered
      * IOExceptions multiple times, greater than the configured threshold, while trying to merged
      * shuffle blocks of the same shuffle partition. When the client receives this this response,
