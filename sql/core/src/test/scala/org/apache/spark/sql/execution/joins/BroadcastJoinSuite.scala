@@ -48,6 +48,8 @@ abstract class BroadcastJoinSuiteBase extends QueryTest with SQLTestUtils
 
   protected var spark: SparkSession = null
 
+  private val EnsureRequirements = new EnsureRequirements()
+
   /**
    * Create a new [[SparkSession]] running in local-cluster mode with unsafe and codegen enabled.
    */

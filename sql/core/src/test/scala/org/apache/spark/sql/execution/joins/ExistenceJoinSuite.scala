@@ -31,6 +31,8 @@ import org.apache.spark.sql.types.{BooleanType, DoubleType, IntegerType, StructT
 
 class ExistenceJoinSuite extends SparkPlanTest with SharedSparkSession {
 
+  private val EnsureRequirements = new EnsureRequirements()
+
   private lazy val left = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(1, 2.0),

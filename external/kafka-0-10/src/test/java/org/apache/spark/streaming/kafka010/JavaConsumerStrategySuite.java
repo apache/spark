@@ -49,9 +49,7 @@ public class JavaConsumerStrategySuite implements Serializable {
     final Map<TopicPartition, Long> offsets = new HashMap<>();
     offsets.put(tp1, 23L);
     final Map<TopicPartition, Object> dummyOffsets = new HashMap<>();
-    for (Map.Entry<TopicPartition, Long> kv : offsets.entrySet()) {
-      dummyOffsets.put(kv.getKey(), kv.getValue());
-    }
+    dummyOffsets.putAll(offsets);
     final scala.collection.Map<TopicPartition, Object> sOffsets =
       JavaConverters.mapAsScalaMap(dummyOffsets);
 

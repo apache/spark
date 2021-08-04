@@ -16,27 +16,33 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.jdbc
 
+import scala.util.control.NonFatal
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.expressions.{Aggregation, Count, CountStar, FieldReference, Max, Min, Sum}
+import org.apache.spark.sql.connector.expressions.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{LongType, StructField, StructType}
+import org.apache.spark.sql.types.StructType
 
 case class JDBCScanBuilder(
     session: SparkSession,
     schema: StructType,
     jdbcOptions: JDBCOptions)
-  extends ScanBuilder with SupportsPushDownFilters with SupportsPushDownRequiredColumns
-    with SupportsPushDownAggregates{
+  extends ScanBuilder
+    with SupportsPushDownFilters
+    with SupportsPushDownRequiredColumns
+    with SupportsPushDownAggregates
+    with Logging {
 
   private val isCaseSensitive = session.sessionState.conf.caseSensitiveAnalysis
 
   private var pushedFilter = Array.empty[Filter]
 
-  private var prunedSchema = schema
+  private var finalSchema = schema
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
     if (jdbcOptions.pushDownPredicate) {
@@ -51,56 +57,45 @@ case class JDBCScanBuilder(
 
   override def pushedFilters(): Array[Filter] = pushedFilter
 
-  private var pushedAggregations = Option.empty[Aggregation]
+  private var pushedAggregateList: Array[String] = Array()
 
-  private var pushedAggregateColumn: Array[String] = Array()
-
-  private def getStructFieldForCol(col: FieldReference): StructField =
-    schema.fields(schema.fieldNames.toList.indexOf(col.fieldNames.head))
+  private var pushedGroupByCols: Option[Array[String]] = None
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!jdbcOptions.pushDownAggregate) return false
 
     val dialect = JdbcDialects.get(jdbcOptions.url)
     val compiledAgg = JDBCRDD.compileAggregates(aggregation.aggregateExpressions, dialect)
+    if (compiledAgg.isEmpty) return false
 
-    var outputSchema = new StructType()
-    aggregation.groupByColumns.foreach { col =>
-      val structField = getStructFieldForCol(col)
-      outputSchema = outputSchema.add(structField)
-      pushedAggregateColumn = pushedAggregateColumn :+ dialect.quoteIdentifier(structField.name)
+    val groupByCols = aggregation.groupByColumns.map { col =>
+      if (col.fieldNames.length != 1) return false
+      dialect.quoteIdentifier(col.fieldNames.head)
     }
 
     // The column names here are already quoted and can be used to build sql string directly.
     // e.g. "DEPT","NAME",MAX("SALARY"),MIN("BONUS") =>
     // SELECT "DEPT","NAME",MAX("SALARY"),MIN("BONUS") FROM "test"."employee"
     //   GROUP BY "DEPT", "NAME"
-    pushedAggregateColumn = pushedAggregateColumn ++ compiledAgg
-
-    aggregation.aggregateExpressions.foreach {
-      case max: Max =>
-        val structField = getStructFieldForCol(max.column)
-        outputSchema = outputSchema.add(structField.copy("max(" + structField.name + ")"))
-      case min: Min =>
-        val structField = getStructFieldForCol(min.column)
-        outputSchema = outputSchema.add(structField.copy("min(" + structField.name + ")"))
-      case count: Count =>
-        val distinct = if (count.isDistinct) "DISTINCT " else ""
-        val structField = getStructFieldForCol(count.column)
-        outputSchema =
-          outputSchema.add(StructField(s"count($distinct" + structField.name + ")", LongType))
-      case _: CountStar =>
-        outputSchema = outputSchema.add(StructField("count(*)", LongType))
-      case sum: Sum =>
-        val distinct = if (sum.isDistinct) "DISTINCT " else ""
-        val structField = getStructFieldForCol(sum.column)
-        outputSchema =
-          outputSchema.add(StructField(s"sum($distinct" + structField.name + ")", sum.dataType))
-      case _ => return false
+    val selectList = groupByCols ++ compiledAgg.get
+    val groupByClause = if (groupByCols.isEmpty) {
+      ""
+    } else {
+      "GROUP BY " + groupByCols.mkString(",")
     }
-    this.pushedAggregations = Some(aggregation)
-    prunedSchema = outputSchema
-    true
+
+    val aggQuery = s"SELECT ${selectList.mkString(",")} FROM ${jdbcOptions.tableOrQuery} " +
+      s"WHERE 1=0 $groupByClause"
+    try {
+      finalSchema = JDBCRDD.getQueryOutputSchema(aggQuery, jdbcOptions, dialect)
+      pushedAggregateList = selectList
+      pushedGroupByCols = Some(groupByCols)
+      true
+    } catch {
+      case NonFatal(e) =>
+        logError("Failed to push down aggregation to JDBC", e)
+        false
+    }
   }
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
@@ -112,7 +107,7 @@ case class JDBCScanBuilder(
       val colName = PartitioningUtils.getColName(field, isCaseSensitive)
       requiredCols.contains(colName)
     }
-    prunedSchema = StructType(fields)
+    finalSchema = StructType(fields)
   }
 
   override def build(): Scan = {
@@ -120,19 +115,14 @@ case class JDBCScanBuilder(
     val timeZoneId = session.sessionState.conf.sessionLocalTimeZone
     val parts = JDBCRelation.columnPartition(schema, resolver, timeZoneId, jdbcOptions)
 
-    // in prunedSchema, the schema is either pruned in pushAggregation (if aggregates are
+    // the `finalSchema` is either pruned in pushAggregation (if aggregates are
     // pushed down), or pruned in pruneColumns (in regular column pruning). These
     // two are mutual exclusive.
     // For aggregate push down case, we want to pass down the quoted column lists such as
     // "DEPT","NAME",MAX("SALARY"),MIN("BONUS"), instead of getting column names from
     // prunedSchema and quote them (will become "MAX(SALARY)", "MIN(BONUS)" and can't
     // be used in sql string.
-    val groupByColumns = if (pushedAggregations.nonEmpty) {
-      Some(pushedAggregations.get.groupByColumns)
-    } else {
-      Option.empty[Array[FieldReference]]
-    }
-    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), prunedSchema, pushedFilter,
-      pushedAggregateColumn, groupByColumns)
+    JDBCScan(JDBCRelation(schema, parts, jdbcOptions)(session), finalSchema, pushedFilter,
+      pushedAggregateList, pushedGroupByCols)
   }
 }
