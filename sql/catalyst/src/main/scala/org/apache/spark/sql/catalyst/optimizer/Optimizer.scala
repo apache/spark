@@ -528,7 +528,7 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
               alias.withName(output.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
           }
         case _ =>
-          if (!output.zip(child.output).forall { case (a1, a2) => a1.name == a2.name }) {
+          if (output.zip(child.output).forall { case (a1, a2) => a1.name == a2.name }) {
             child
           } else {
             p
