@@ -44,7 +44,7 @@ SQL query engine.
 
 **pandas API on Spark**
 
-pandas API on Spark allows you to scale your pandas workload out.
+The pandas API on Spark allows you to scale your pandas workload out.
 With this package, you can:
 
 * Be immediately productive with Spark, with no learning curve, if you are already familiar with pandas.
