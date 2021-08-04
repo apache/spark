@@ -33,6 +33,10 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REBALANCE_PARTITIONS_BY_NONE,
       REBALANCE_PARTITIONS_BY_COL)
 
+  override def isSupported(shuffle: ShuffleExchangeLike): Boolean = {
+    shuffle.outputPartitioning != SinglePartition && super.isSupported(shuffle)
+  }
+
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!conf.coalesceShufflePartitionsEnabled) {
       return plan
@@ -52,7 +56,7 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     val shuffleStageInfos = collectShuffleStageInfos(plan)
     // ShuffleExchanges introduced by repartition do not support changing the number of partitions.
     // We change the number of partitions in the stage only if all the ShuffleExchanges support it.
-    if (!shuffleStageInfos.forall(s => supportCoalesce(s.shuffleStage.shuffle))) {
+    if (!shuffleStageInfos.forall(s => isSupported(s.shuffleStage.shuffle))) {
       plan
     } else {
       // Ideally, this rule should simply coalesce partition w.r.t. the target size specified by
@@ -105,10 +109,6 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
         AQEShuffleReadExec(stage, specs)
       }.getOrElse(plan)
     case other => other.mapChildren(updateShuffleReads(_, specsMap))
-  }
-
-  private def supportCoalesce(s: ShuffleExchangeLike): Boolean = {
-    s.outputPartitioning != SinglePartition && supportedShuffleOrigins.contains(s.shuffleOrigin)
   }
 }
 

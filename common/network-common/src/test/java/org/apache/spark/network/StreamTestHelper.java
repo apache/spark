@@ -57,16 +57,13 @@ class StreamTestHelper {
     largeBuffer = createBuffer(100000);
 
     testFile = File.createTempFile("stream-test-file", "txt", tempDir);
-    FileOutputStream fp = new FileOutputStream(testFile);
-    try {
+    try (FileOutputStream fp = new FileOutputStream(testFile)) {
       Random rnd = new Random();
       for (int i = 0; i < 512; i++) {
         byte[] fileContent = new byte[1024];
         rnd.nextBytes(fileContent);
         fp.write(fileContent);
       }
-    } finally {
-      fp.close();
     }
   }
 

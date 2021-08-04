@@ -59,6 +59,9 @@ class DecimalPrecisionSuite extends AnalysisTest with BeforeAndAfter {
     val comparison = analyzer.execute(plan).collect {
       case Project(Alias(e: BinaryComparison, _) :: Nil, _) => e
     }.head
+    // Only add necessary cast.
+    assert(comparison.left.children.forall(_.dataType !== expectedType))
+    assert(comparison.right.children.forall(_.dataType !== expectedType))
     assert(comparison.left.dataType === expectedType)
     assert(comparison.right.dataType === expectedType)
   }
