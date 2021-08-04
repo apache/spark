@@ -36,7 +36,10 @@ import org.apache.spark.network.buffer.NettyManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.server.BlockPushNonFatalFailure;
+import org.apache.spark.network.server.BlockPushNonFatalFailure.ErrorCode;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
+import org.apache.spark.network.shuffle.protocol.PushBlockNonFatalErrorCode;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 
 
@@ -142,13 +145,13 @@ public class OneForOneBlockPusherSuite {
       Map.Entry<String, ManagedBuffer> entry = blockIterator.next();
       ManagedBuffer block = entry.getValue();
       if (block != null && block.nioByteBuffer().capacity() > 0) {
-        callback.onSuccess(header);
+        callback.onSuccess(ByteBuffer.allocate(0));
       } else if (block != null) {
-        callback.onFailure(new RuntimeException("Failed " + entry.getKey()
-          + ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX));
+        callback.onSuccess(new PushBlockNonFatalErrorCode(
+          ErrorCode.BLOCK_APPEND_COLLISION_DETECTED.id()).toByteBuffer());
       } else {
-        callback.onFailure(new RuntimeException("Quick fail " + entry.getKey()
-          + ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX));
+        callback.onFailure(new BlockPushNonFatalFailure(
+          ErrorCode.TOO_LATE_OR_STALE_BLOCK_PUSH));
       }
       assertEquals(msgIterator.next(), message);
       return null;

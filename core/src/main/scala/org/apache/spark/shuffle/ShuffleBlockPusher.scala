@@ -31,6 +31,8 @@ import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.server.BlockPushNonFatalFailure
+import org.apache.spark.network.server.BlockPushNonFatalFailure.ErrorCode
 import org.apache.spark.network.shuffle.BlockPushingListener
 import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
 import org.apache.spark.network.util.TransportConf
@@ -77,9 +79,9 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
           return false
         }
         // If the block is too late or the invalid block push, there is no need to retry it
-        val msg = t.getMessage
-        !(msg != null && msg.contains(
-          BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))
+        !(t.isInstanceOf[BlockPushNonFatalFailure] &&
+          t.asInstanceOf[BlockPushNonFatalFailure].getErrorCode()
+            == ErrorCode.TOO_LATE_OR_STALE_BLOCK_PUSH)
       }
     }
   }

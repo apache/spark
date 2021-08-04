@@ -56,9 +56,12 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.buffer.FileSegmentManagedBuffer;
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
+import org.apache.spark.network.server.BlockPushNonFatalFailure;
+import org.apache.spark.network.server.BlockPushNonFatalFailure.ErrorCode;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
+import org.apache.spark.network.shuffle.protocol.PushBlockNonFatalErrorCode;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
@@ -131,19 +134,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @VisibleForTesting
   protected ErrorHandler.BlockPushErrorHandler createErrorHandler() {
     return new ErrorHandler.BlockPushErrorHandler() {
-      // On the shuffle server side, we need to check within the message of both the exception
-      // and the cause of the exception. This is because in
-      // TransportRequestHandler#processStreamUpload, the actual exception could be wrapped inside
-      // an IOException.
+      // Explicitly use a shuffle service side error handler for handling exceptions.
+      // BlockPushNonException on the server side only has the response field set. It
+      // might require different handling logic compared with a client side error handler.
       @Override
       public boolean shouldLogError(Throwable t) {
-        String msg = t.getMessage();
-        Throwable cause = t.getCause();
-        return !((msg != null && (msg.contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) ||
-          msg.contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))) ||
-          (cause != null && cause.getMessage() != null &&
-          (cause.getMessage().contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) ||
-          cause.getMessage().contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))));
+        return !(t instanceof BlockPushNonFatalFailure);
       }
     };
   }
@@ -492,9 +488,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         public void onComplete(String streamId) {
           if (isStaleBlockOrTooLate) {
             // Throw an exception here so the block data is drained from channel and server
-            // responds RpcFailure to the client.
-            throw new RuntimeException("Block " + streamId + " " +
-              ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX);
+            // responds the error code to the client.
+            throw new BlockPushNonFatalFailure(
+              new PushBlockNonFatalErrorCode(ErrorCode.TOO_LATE_OR_STALE_BLOCK_PUSH.id())
+                .toByteBuffer());
           }
           // For duplicate block that is received before the shuffle merge finalizes, the
           // server should respond success to the client.
@@ -884,8 +881,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         if (isStaleOrTooLate(appShuffleInfo.shuffles.get(partitionInfo.shuffleId),
             partitionInfo.shuffleMergeId, partitionInfo.reduceId)) {
           deferredBufs = null;
-          throw new RuntimeException("Block " + streamId + " " +
-            ErrorHandler.BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX);
+          throw new BlockPushNonFatalFailure(
+            new PushBlockNonFatalErrorCode(ErrorCode.TOO_LATE_OR_STALE_BLOCK_PUSH.id())
+              .toByteBuffer());
         }
 
         // Check if we can commit this block
@@ -934,9 +932,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           }
         } else {
           deferredBufs = null;
-          throw new RuntimeException(
-            ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX + " "
-            + streamId + " to merged shuffle");
+          throw new BlockPushNonFatalFailure(
+            new PushBlockNonFatalErrorCode(ErrorCode.BLOCK_APPEND_COLLISION_DETECTED.id())
+              .toByteBuffer());
         }
       }
       isWriting = false;

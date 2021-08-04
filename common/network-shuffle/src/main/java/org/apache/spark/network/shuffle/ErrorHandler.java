@@ -23,6 +23,9 @@ import java.net.ConnectException;
 import com.google.common.base.Throwables;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.network.server.BlockPushNonFatalFailure;
+
+import static org.apache.spark.network.server.BlockPushNonFatalFailure.ErrorCode.*;
 
 /**
  * Plugs into {@link RetryingBlockTransferor} to further control when an exception should be retried
@@ -106,15 +109,13 @@ public interface ErrorHandler {
       }
 
       // If the block is too late or stale block push, there is no need to retry it
-      String msg = t.getMessage();
-      return !(msg != null && msg.contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX));
+      return !(t instanceof BlockPushNonFatalFailure &&
+        ((BlockPushNonFatalFailure) t).getErrorCode() == TOO_LATE_OR_STALE_BLOCK_PUSH);
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
-      String msg = t.getMessage();
-      return !(msg != null && (msg.contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) ||
-        msg.contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX)));
+      return !(t instanceof BlockPushNonFatalFailure);
     }
   }
 
@@ -125,14 +126,12 @@ public interface ErrorHandler {
 
     @Override
     public boolean shouldRetryError(Throwable t) {
-      String msg = t.getMessage();
-      return !(msg != null && msg.contains(STALE_SHUFFLE_BLOCK_FETCH));
+      return !Throwables.getStackTraceAsString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
-      String msg = t.getMessage();
-      return !(msg != null && msg.contains(STALE_SHUFFLE_BLOCK_FETCH));
+      return !Throwables.getStackTraceAsString(t).contains(STALE_SHUFFLE_BLOCK_FETCH);
     }
   }
 }
