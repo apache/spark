@@ -263,6 +263,27 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   /**
+   * Reverts write metrics that haven't been committed yet and delete the file held
+   * by current `DiskBlockObjectWriter`. Callers should invoke this function when there
+   * are runtime exceptions in file writing process and the file is no longer needed.
+   */
+  def deleteHeldFile(): Unit = {
+    Utils.tryWithSafeFinally {
+      if (initialized) {
+        writeMetrics.decBytesWritten(reportedPosition - committedPosition)
+        writeMetrics.decRecordsWritten(numRecordsWritten)
+        closeResources()
+      }
+    } {
+      if (file.exists()) {
+        if (!file.delete()) {
+          logWarning(s"Error deleting $file")
+        }
+      }
+    }
+  }
+
+  /**
    * Writes a key-value pair.
    */
   override def write(key: Any, value: Any): Unit = {
