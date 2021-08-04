@@ -3509,14 +3509,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         horse       mammal     4    NaN
         spider   arthropod     8    0.0
         ostrich       bird     2    NaN
-        >>> psdf.mode().sort_values(by=list(psdf.columns)).reset_index(drop=True)
+        >>> psdf.mode().sort_values(by=list(psdf.columns)).sort_index()
           species  legs  wings
         0    bird   2.0    0.0
         1    None   NaN    2.0
         >>> psdf.mode(dropna=False)
           species  legs  wings
         0    bird     2    NaN
-        >>> psdf.mode(numeric_only=True).sort_values(by='legs').reset_index(drop=True)
+        >>> psdf.mode(numeric_only=True).sort_values(by='legs')..sort_index()
            legs  wings
         0   2.0    0.0
         1   NaN    2.0
