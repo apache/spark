@@ -66,7 +66,7 @@ case class AdaptiveSparkPlanExec(
     @transient context: AdaptiveExecutionContext,
     @transient preprocessingRules: Seq[Rule[SparkPlan]],
     @transient isSubquery: Boolean,
-    @transient outputColumnar: Boolean = false)
+    @transient override val supportsColumnar: Boolean = false)
   extends LeafExecNode {
 
   @transient private val lock = new Object()
@@ -100,7 +100,7 @@ case class AdaptiveSparkPlanExec(
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
-  private def queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
+  @transient private val queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
     RemoveRedundantProjects,
     // For cases like `df.repartition(a, b).select(c)`, there is no distribution requirement for
     // the final plan, but we do need to respect the user-specified repartition. Here we ask
@@ -125,13 +125,14 @@ case class AdaptiveSparkPlanExec(
     OptimizeShuffleWithLocalRead
   )
 
+  @transient private val staticPostStageCreationRules: Seq[Rule[SparkPlan]] =
+    CollapseCodegenStages() +: context.session.sessionState.postStageCreationRules
+
   // A list of physical optimizer rules to be applied right after a new stage is created. The input
   // plan to these rules has exchange as its root node.
-  @transient private def postStageCreationRules(outputColumnar: Boolean) = Seq(
+  private def postStageCreationRules(outputColumnar: Boolean) =
     ApplyColumnarRulesAndInsertTransitions(
-      context.session.sessionState.columnarRules, outputColumnar),
-    CollapseCodegenStages()
-  ) ++ context.session.sessionState.postStageCreationRules
+      context.session.sessionState.columnarRules, outputColumnar) +: staticPostStageCreationRules
 
   private def optimizeQueryStage(plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
     val optimized = queryStageOptimizerRules.foldLeft(plan) { case (latestPlan, rule) =>
@@ -308,7 +309,7 @@ case class AdaptiveSparkPlanExec(
       // Run the final plan when there's no more unfinished stages.
       currentPhysicalPlan = applyPhysicalRules(
         optimizeQueryStage(result.newPlan, isFinalStage = true),
-        postStageCreationRules(outputColumnar),
+        postStageCreationRules(supportsColumnar),
         Some((planChangeLogger, "AQE Post Stage Creation")))
       isFinalPlan = true
       executionId.foreach(onUpdatePlan(_, Seq(currentPhysicalPlan)))
@@ -342,8 +343,6 @@ case class AdaptiveSparkPlanExec(
   override def doExecute(): RDD[InternalRow] = {
     withFinalPlanUpdate(_.execute())
   }
-
-  override def supportsColumnar: Boolean = outputColumnar
 
   override def doExecuteColumnar(): RDD[ColumnarBatch] = {
     withFinalPlanUpdate(_.executeColumnar())

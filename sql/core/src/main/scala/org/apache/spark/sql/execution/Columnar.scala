@@ -497,10 +497,13 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
 /**
  * Apply any user defined [[ColumnarRule]]s and find the correct place to insert transitions
  * to/from columnar formatted data.
+ *
+ * @param columnarRules custom columnar rules
+ * @param outputColumnar whether or not the produced plan should output columnar format.
  */
 case class ApplyColumnarRulesAndInsertTransitions(
     columnarRules: Seq[ColumnarRule],
-    outputColumnar: Boolean = false)
+    outputColumnar: Boolean)
   extends Rule[SparkPlan] {
 
   /**
