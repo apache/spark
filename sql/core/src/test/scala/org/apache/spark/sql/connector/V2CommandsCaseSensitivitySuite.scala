@@ -249,6 +249,28 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
       expectErrorOnCaseSensitive = false)
   }
 
+  test("SPARK-36381: Check column name exist case sensitive and insensitive when add column") {
+    alterTableTest(
+      AddColumns(
+        table,
+        Seq(QualifiedColType(
+          None,
+          "ID",
+          LongType,
+          true,
+          None,
+          Some(UnresolvedFieldPosition(ColumnPosition.after("id")))))),
+      Seq("Cannot add column, because ID already exists in root"),
+      expectErrorOnCaseSensitive = false)
+  }
+
+  test("SPARK-36381: Check column name exist case sensitive and insensitive when rename column") {
+    alterTableTest(
+      RenameColumn(table, UnresolvedFieldName(Array("id")), "DATA"),
+      Seq("Cannot rename column, because DATA already exists in root"),
+      expectErrorOnCaseSensitive = false)
+  }
+
   test("AlterTable: drop column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
