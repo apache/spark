@@ -940,8 +940,9 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates the options used for alter table commands after table and columns are resolved.
    */
   private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
-    def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
-      if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
+    def checkColumnNotExists(
+      op: String, fieldNames: Seq[String], struct: StructType, r: Resolver): Unit = {
+      if (struct.findNestedField(fieldNames, includeCollections = true, r).isDefined) {
         alter.failAnalysis(s"Cannot $op column, because ${fieldNames.quoted} " +
           s"already exists in ${struct.treeString}")
       }
@@ -950,7 +951,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
     alter match {
       case AddColumns(table: ResolvedTable, colsToAdd) =>
         colsToAdd.foreach { colToAdd =>
-          checkColumnNotExists("add", colToAdd.name, table.schema)
+          checkColumnNotExists("add", colToAdd.name, table.schema, alter.conf.resolver)
         }
         SchemaUtils.checkColumnNameDuplication(
           colsToAdd.map(_.name.quoted),
@@ -958,7 +959,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           alter.conf.resolver)
 
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
-        checkColumnNotExists("rename", col.path :+ newName, table.schema)
+        checkColumnNotExists("rename", col.path :+ newName, table.schema, alter.conf.resolver)
 
       case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
         val fieldName = col.name.quoted
