@@ -2611,7 +2611,7 @@
             </args>
             <jvmArgs>
               <jvmArg>-Xss128m</jvmArg>
-              <jvmArg>-Xms1024m</jvmArg>
+              <jvmArg>-Xms1025m</jvmArg>
               <jvmArg>-Xmx3200m</jvmArg>
               <jvmArg>-XX:MaxMetaspaceSize=2g</jvmArg>
               <jvmArg>-XX:ReservedCodeCacheSize=${CodeCacheSize}</jvmArg>
