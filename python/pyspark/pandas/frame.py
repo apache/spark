@@ -3473,6 +3473,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             multiple times(columns count - 1 times when axis is 0 or 'index'),
             which is potentially expensive.
 
+        .. note:: the order of multiple modes (within a column when axis is 0 or 'index')
+            is not determined.
+
         Parameters
         ----------
         axis : {0 or 'index', 1 or 'columns'}, default 0
@@ -3509,14 +3512,14 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         horse       mammal     4    NaN
         spider   arthropod     8    0.0
         ostrich       bird     2    NaN
-        >>> psdf.mode().sort_values(by=list(psdf.columns)).sort_index()
+        >>> psdf.mode()  # doctest: +SKIP
           species  legs  wings
         0    bird   2.0    0.0
         1    None   NaN    2.0
         >>> psdf.mode(dropna=False)
           species  legs  wings
         0    bird     2    NaN
-        >>> psdf.mode(numeric_only=True).sort_values(by='legs')..sort_index()
+        >>> psdf.mode(numeric_only=True)  # doctest: +SKIP
            legs  wings
         0   2.0    0.0
         1   NaN    2.0

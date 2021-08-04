@@ -1902,25 +1902,25 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
 
     def test_mode(self):
         pdf = pd.DataFrame(
-            [("bird", 2, 2), ("mammal", 4, np.nan), ("arthropod", 8, 0), ("bird", 2, np.nan)],
+            [("bird", 2, 2), ("mammal", 4, 0), ("arthropod", 8, 0), ("bird", 2, np.nan)],
             index=("falcon", "horse", "spider", "ostrich"),
             columns=("species", "legs", "wings"),
         )
         psdf = ps.from_pandas(pdf)
         self.assert_eq(
-            psdf.mode().sort_values(by=list(psdf.columns)).sort_index(),
-            pdf.mode().sort_values(by=list(pdf.columns)),
+            psdf.mode(),
+            pdf.mode(),
         )
         self.assert_eq(
-            psdf.mode(numeric_only=True).sort_values(by="legs").sort_index(),
-            pdf.mode(numeric_only=True).sort_values(by="legs"),
+            psdf.mode(numeric_only=True),
+            pdf.mode(numeric_only=True),
         )
 
         if LooseVersion(pd.__version__) >= LooseVersion("0.24.0"):
             # dropna parameter is supported since pandas 0.24
             self.assert_eq(
-                psdf.mode(dropna=False).sort_values(by=list(psdf.columns)).sort_index(),
-                pdf.mode(dropna=False).sort_values(by=list(pdf.columns)),
+                psdf.mode(dropna=False),
+                pdf.mode(dropna=False),
             )
 
     def test_merge(self):
