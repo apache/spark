@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStream}
 import java.nio.channels.{ClosedByInterruptException, FileChannel}
+import java.nio.file.Files
 import java.util.zip.Checksum
 
 import org.apache.spark.internal.Logging
@@ -27,6 +28,7 @@ import org.apache.spark.serializer.{SerializationStream, SerializerInstance, Ser
 import org.apache.spark.shuffle.ShuffleWriteMetricsReporter
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.PairsWriter
+
 
 /**
  * A class for writing JVM objects directly to a file on disk. This class allows data to be appended
@@ -267,7 +269,7 @@ private[spark] class DiskBlockObjectWriter(
    * by current `DiskBlockObjectWriter`. Callers should invoke this function when there
    * are runtime exceptions in file writing process and the file is no longer needed.
    */
-  def deleteHeldFile(): Unit = {
+  def closeAndDelete(): Unit = {
     Utils.tryWithSafeFinally {
       if (initialized) {
         writeMetrics.decBytesWritten(reportedPosition - committedPosition)
@@ -275,10 +277,8 @@ private[spark] class DiskBlockObjectWriter(
         closeResources()
       }
     } {
-      if (file.exists()) {
-        if (!file.delete()) {
-          logWarning(s"Error deleting $file")
-        }
+      if (!Files.deleteIfExists(file.toPath)) {
+        logWarning(s"Error deleting $file")
       }
     }
   }

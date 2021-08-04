@@ -289,7 +289,7 @@ final class BypassMergeSortShuffleWriter<K, V>
           try {
             for (DiskBlockObjectWriter writer : partitionWriters) {
               // This method explicitly does _not_ throw exceptions:
-              writer.deleteHeldFile();
+              writer.closeAndDelete();
             }
           } finally {
             partitionWriters = null;
