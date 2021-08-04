@@ -2108,9 +2108,9 @@ package object config {
 
   private[spark] val PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT =
     ConfigBuilder("spark.shuffle.push.merge.results.timeout")
-      .doc("Specify the max amount of time DAGScheduler waits for the merge results from " +
-        "all remote shuffle services for a given shuffle. DAGScheduler will start to submit " +
-        "following stages if not all results are received within the timeout.")
+      .doc("The amount of time driver waits, after all mappers have finished for a given shuffle" +
+        " map stage, before it sends merge finalize requests to remote shuffle services. This" +
+        " allows the shuffle services extra time to merge blocks.")
       .version("3.2.0")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= 0L, "Timeout must be >= 0.")
@@ -2129,22 +2129,21 @@ package object config {
 
   private[spark] val SHUFFLE_MERGER_MAX_RETAINED_LOCATIONS =
     ConfigBuilder("spark.shuffle.push.maxRetainedMergerLocations")
-      .doc("Maximum number of shuffle push merger locations cached for push based shuffle. " +
-        "Currently, shuffle push merger locations are nothing but external shuffle services " +
-        "which are responsible for handling pushed blocks and merging them and serving " +
-        "merged blocks for later shuffle fetch.")
+      .doc("Maximum number of merger locations cached for push based shuffle. Currently, merger" +
+        " locations are hosts of external shuffle services responsible for handling pushed" +
+        " blocks, merging them and serving merged blocks for later shuffle fetch.")
       .version("3.1.0")
       .intConf
       .createWithDefault(500)
 
   private[spark] val SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO =
     ConfigBuilder("spark.shuffle.push.mergersMinThresholdRatio")
-      .doc("The minimum number of shuffle merger locations required to enable push based " +
-        "shuffle for a stage. This is specified as a ratio of the number of partitions in " +
-        "the child stage. For example, a reduce stage which has 100 partitions and uses the " +
-        "default value 0.05 requires at least 5 unique merger locations to enable push based " +
-        "shuffle. Merger locations are currently defined as external shuffle services.")
-      .version("3.1.0")
+      .doc("Ratio used to compute the minimum number of shuffle merger locations required for" +
+        " a stage based on the number of partitions for the reducer stage. For example, a reduce" +
+        " stage which has 100 partitions and uses the default value 0.05 requires at least 5" +
+        " unique merger locations to enable push based shuffle. Merger locations are currently" +
+        " defined as external shuffle services.")
+      .version("3.2.0")
       .doubleConf
       .createWithDefault(0.05)
 
@@ -2159,7 +2158,7 @@ package object config {
         "stage with spark.shuffle.push.mergersMinStaticThreshold as 5 and " +
         s"${SHUFFLE_MERGER_LOCATIONS_MIN_THRESHOLD_RATIO.key} set to 0.05, we would need " +
         "at least 50 mergers to enable push based shuffle for that stage.")
-      .version("3.1.0")
+      .version("3.2.0")
       .intConf
       .createWithDefault(5)
 

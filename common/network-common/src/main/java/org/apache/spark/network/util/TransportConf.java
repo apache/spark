@@ -383,7 +383,7 @@ public class TransportConf {
    * 'org.apache.spark.network.shuffle.RemoteBlockPushResolver'.
    */
   public String mergedShuffleFileManagerImpl() {
-    return conf.get("spark.shuffle.server.mergedShuffleFileManagerImpl",
+    return conf.get("spark.shuffle.push.server.mergedShuffleFileManagerImpl",
       "org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager");
   }
 
@@ -399,7 +399,7 @@ public class TransportConf {
    */
   public int minChunkSizeInMergedShuffleFile() {
     return Ints.checkedCast(JavaUtils.byteStringAsBytes(
-      conf.get("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "2m")));
+      conf.get("spark.shuffle.push.server.minChunkSizeInMergedShuffleFile", "2m")));
   }
 
   /**
@@ -407,7 +407,7 @@ public class TransportConf {
    */
   public long mergedIndexCacheSize() {
     return JavaUtils.byteStringAsBytes(
-      conf.get("spark.shuffle.server.mergedIndexCacheSize", "100m"));
+      conf.get("spark.shuffle.push.server.mergedIndexCacheSize", "100m"));
   }
 
   /**
@@ -417,7 +417,7 @@ public class TransportConf {
    * blocks for this shuffle partition.
    */
   public int ioExceptionsThresholdDuringMerge() {
-    return conf.getInt("spark.shuffle.server.ioExceptionsThresholdDuringMerge", 4);
+    return conf.getInt("spark.shuffle.push.server.ioExceptionsThresholdDuringMerge", 4);
   }
 
   /**
