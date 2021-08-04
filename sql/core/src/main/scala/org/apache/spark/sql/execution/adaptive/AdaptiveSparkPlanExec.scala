@@ -40,6 +40,8 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.DisableUnnecessaryBucketedScan
 import org.apache.spark.sql.execution.exchange._
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -79,6 +81,13 @@ case class AdaptiveSparkPlanExec(
     case "ERROR" => logError(_)
     case _ => logDebug(_)
   }
+
+  override lazy val metrics = Map(
+    "num broadcast join conversions" ->
+      SQLMetrics.createMetric(sparkContext, "num broadcast join conversions"),
+    "num skew join conversions" ->
+      SQLMetrics.createMetric(sparkContext, "num skew join conversions")
+  )
 
   @transient private val planChangeLogger = new PlanChangeLogger[SparkPlan]()
 
@@ -331,6 +340,9 @@ case class AdaptiveSparkPlanExec(
     if (!isSubquery && currentPhysicalPlan.find(_.subqueries.nonEmpty).isDefined) {
       getExecutionId.foreach(onUpdatePlan(_, Seq.empty))
     }
+    getExecutionId.foreach({ execId =>
+      updateMetrics(execId)
+    })
     logOnLevel(s"Final plan: $currentPhysicalPlan")
   }
 
@@ -705,6 +717,26 @@ case class AdaptiveSparkPlanExec(
         executionId,
         context.qe.explainString(planDescriptionMode),
         SparkPlanInfo.fromSparkPlan(context.qe.executedPlan)))
+    }
+  }
+
+  private def updateMetrics(execId: Long) = {
+    object AQEHelper extends AdaptiveSparkPlanHelper
+    val numBhjInitial = AQEHelper.collect(initialPlan)({
+      case _: BroadcastHashJoinExec => 1
+      case _ => 0
+    }).sum
+    val (numBhjAqe, numSkewJoins) = AQEHelper.collect(currentPhysicalPlan)({
+      case _: BroadcastHashJoinExec => (1, 0)
+      case smj: SortMergeJoinExec if smj.isSkewJoin => (0, 1)
+      case _ => (0, 0)
+    }).foldLeft(0, 0)((b, t) => (b._1 + t._1, b._2 + t._2))
+    metrics("num broadcast join conversions").set(numBhjAqe - numBhjInitial)
+    metrics("num skew join conversions").set(numSkewJoins)
+    val v = metrics.filter(!_._2.isZero())
+    if (v.nonEmpty) {
+      // only send an update if there is something to report
+      SQLMetrics.postDriverMetricUpdates(sparkContext, execId.toString, v.values.toSeq)
     }
   }
 

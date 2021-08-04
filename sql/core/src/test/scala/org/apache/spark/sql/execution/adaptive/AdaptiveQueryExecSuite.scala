@@ -27,7 +27,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, SubqueryExec, UnaryExecNode}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -2038,6 +2038,61 @@ class AdaptiveQueryExecSuite
           """.stripMargin)
         assert(findTopLevelLimit(origin2).size == 1)
         assert(findTopLevelLimit(adaptive2).isEmpty)
+      }
+    }
+  }
+
+  test("SPARK-36416: AdaptiveSparkPlanExec metrics") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "80") {
+      val dfAdaptive = sql("select * from testData3 where a + 1 = " +
+        " (SELECT min(b) FROM testData join testData2 ON key = a where value = '1')")
+      val plan =
+        dfAdaptive.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+      dfAdaptive.collect()
+      val adaptivePlan = dfAdaptive.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+      val subqueries = subqueriesAll(adaptivePlan).map(_.asInstanceOf[SubqueryExec].child)
+      assert(subqueries.size == 1)
+      val subQuery = subqueries.head
+      val bhj = findTopLevelBroadcastHashJoin(subQuery)
+      assert(bhj.size == 1)
+      checkNumLocalShuffleReads(subQuery, 1)
+      assert(subQuery.metrics("num broadcast join conversions").value == 1)
+      assert(subQuery.metrics("num skew join conversions").value == 0)
+      assert(adaptivePlan.metrics("num broadcast join conversions").value == 0)
+      assert(adaptivePlan.metrics("num skew join conversions").value == 0)
+    }
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
+      withTempView("skewData1", "skewData2", "data3") {
+        spark
+          .range(0, 100, 1, 10)
+          .selectExpr("id % 3 as key1", "id as value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 100, 1, 10)
+          .selectExpr("id % 1 as key2", "id as value2")
+          .createOrReplaceTempView("skewData2")
+        spark
+          .range(0, 10, 1, 10)
+          .selectExpr("id as key3", "id as value3")
+          .createOrReplaceTempView("data3")
+
+        val dfAdaptive = sql("SELECT key1 FROM skewData1 JOIN skewData2 ON key1 = key2" +
+          " INNER JOIN data3 ON key1 + 1 = key3")
+        val plan =
+          dfAdaptive.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec].executedPlan
+        dfAdaptive.collect()
+        val adaptivePlan =
+          dfAdaptive.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        assert(collect(adaptivePlan)({ case s: SortMergeJoinExec if s.isSkewJoin => s }).size == 2,
+          "wong number of skewed joins")
+        assert(adaptivePlan.metrics("num broadcast join conversions").value == 0)
+        assert(adaptivePlan.metrics("num skew join conversions").value == 2)
       }
     }
   }
