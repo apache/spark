@@ -178,7 +178,7 @@ object SparkCoreErrors {
   }
 
   def notFoundJobIdError(jobId: Int): Throwable = {
-    new NotFoundException("unknown job: " + jobId)
+    new NotFoundException(s"unknown job: $jobId")
   }
 
   def invalidExecutorIdError(url: String): Throwable = {
