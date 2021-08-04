@@ -102,8 +102,6 @@ trait NamedExpression extends Expression {
   /** Returns a copy of this expression with a new `exprId`. */
   def newInstance(): NamedExpression
 
-  def withName(newName: String): NamedExpression
-
   protected def typeSuffix =
     if (resolved) {
       dataType match {
@@ -121,14 +119,13 @@ abstract class Attribute extends LeafExpression with NamedExpression with NullIn
   override lazy val references: AttributeSet = AttributeSet(this)
 
   def withNullability(newNullability: Boolean): Attribute
+  def withName(newName: String): Attribute
   def withQualifier(newQualifier: Seq[String]): Attribute
   def withMetadata(newMetadata: Metadata): Attribute
   def withExprId(newExprId: ExprId): Attribute
   def withDataType(newType: DataType): Attribute
 
   override def toAttribute: Attribute = this
-
-  override def withName(newName: String): Attribute
 
   def newInstance(): Attribute
 
@@ -192,7 +189,7 @@ case class Alias(child: Expression, name: String)(
     }
   }
 
-  override def withName(newName: String): NamedExpression = {
+  def withName(newName: String): NamedExpression = {
     Alias(child, newName)(
       exprId = exprId,
       qualifier = qualifier,
@@ -434,8 +431,6 @@ case class OuterReference(e: NamedExpression)
   override def toAttribute: Attribute = e.toAttribute
   override def newInstance(): NamedExpression = OuterReference(e.newInstance())
   final override val nodePatterns: Seq[TreePattern] = Seq(OUTER_REFERENCE)
-
-  override def withName(newName: String): NamedExpression = OuterReference(e.withName(newName))
 }
 
 object VirtualColumn {
