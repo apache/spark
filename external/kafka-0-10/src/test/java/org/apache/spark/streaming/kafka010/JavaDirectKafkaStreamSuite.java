@@ -96,7 +96,8 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
     JavaDStream<String> stream1 = istream1.transform(
       // Make sure you can get offset ranges from the rdd
-      (Function<JavaRDD<ConsumerRecord<String, String>>, JavaRDD<ConsumerRecord<String, String>>>) rdd -> {
+      (Function<JavaRDD<ConsumerRecord<String, String>>,
+        JavaRDD<ConsumerRecord<String, String>>>) rdd -> {
         OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
         offsetRanges.set(offsets);
         Assert.assertEquals(topic1, offsets[0].topic());
@@ -118,7 +119,8 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
     JavaDStream<String> stream2 = istream2.transform(
       // Make sure you can get offset ranges from the rdd
-      (Function<JavaRDD<ConsumerRecord<String, String>>, JavaRDD<ConsumerRecord<String, String>>>) rdd -> {
+      (Function<JavaRDD<ConsumerRecord<String, String>>,
+        JavaRDD<ConsumerRecord<String, String>>>) rdd -> {
         OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
         offsetRanges.set(offsets);
         Assert.assertEquals(topic2, offsets[0].topic());
