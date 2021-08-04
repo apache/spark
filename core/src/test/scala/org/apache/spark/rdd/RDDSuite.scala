@@ -32,7 +32,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
+import org.apache.spark.internal.config.{ENABLE_EXECUTOR_TREE_AGGREGATE, RDD_PARALLEL_LISTING_THRESHOLD}
 import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -273,6 +273,19 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
       val sum = rdd.treeAggregate(Array(0))(op, op, depth)
       assert(sum(0) === -1000)
     }
+  }
+
+  test("treeAggregate with ENABLE_EXECUTOR_TREE_AGGREGATE true") {
+    val rdd = sc.makeRDD(-1000 until 1000, 10)
+    def seqOp: (Long, Int) => Long = (c: Long, x: Int) => c + x
+    def combOp: (Long, Long) => Long = (c1: Long, c2: Long) => c1 + c2
+    sc.conf.set(ENABLE_EXECUTOR_TREE_AGGREGATE, true)
+    for (depth <- 1 until 10) {
+      val sum = rdd.treeAggregate(0L)(seqOp, combOp, depth)
+      assert(sum === -1000)
+    }
+    sc.conf.remove(ENABLE_EXECUTOR_TREE_AGGREGATE)
+
   }
 
   test("treeReduce") {

@@ -315,6 +315,12 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
+  private[spark] val ENABLE_EXECUTOR_TREE_AGGREGATE = ConfigBuilder("spark.executor.treeAggregate")
+      .doc("If true, last fold operation in the treeAggregate would be computed as a spark " +
+        "task on the executors.")
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val CORES_MAX = ConfigBuilder("spark.cores.max")
     .doc("When running on a standalone deploy cluster or a Mesos cluster in coarse-grained " +
       "sharing mode, the maximum amount of CPU cores to request for the application from across " +
