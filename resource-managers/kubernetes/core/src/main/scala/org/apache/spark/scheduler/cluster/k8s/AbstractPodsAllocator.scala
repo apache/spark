@@ -20,10 +20,25 @@ import io.fabric8.kubernetes.api.model.Pod
 import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.util.Clock
 
-private[spark] abstract class AbstractPodsAllocator {
+
+/**
+ * :: DeveloperApi ::
+ * A abstract interface for allowing different types of pods allocation.
+ *
+ * The internal Spark implementations are [[StatefulsetPodsAllocator]]
+ * and [[ExecutorPodsAllocator]]. This may be useful for folks integrating with custom schedulers
+ * such as Volcano, Yunikorn, etc.
+ *
+ * This API may change or be removed at anytime.
+ *
+ * @since 3.3.0
+ */
+@DeveloperApi
+abstract class AbstractPodsAllocator {
 
   def this(conf: SparkConf,
     secMgr: SecurityManager,
