@@ -257,6 +257,8 @@ The behavior of some SQL operators can be different under ANSI mode (`spark.sql.
   - `map_col[key]`: This operator throws `NoSuchElementException` if key does not exist in map.
   - `GROUP BY`: aliases in a select list can not be used in GROUP BY clauses. Each column referenced in a GROUP BY clause shall unambiguously reference a column of the table resulting from the FROM clause.
 
+### Special functions for migrating to ANSI mode
+
 ### SQL Keywords
 
 When `spark.sql.ansi.enabled` is true, Spark SQL will use the ANSI mode parser.
