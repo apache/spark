@@ -518,45 +518,30 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAnyPattern(PROJECT, WINDOW), ruleId) {
     // Eliminate no-op Projects
-    case p @ Project(output, child) if child.sameOutput(p) =>
-//      child match {
-//        case _: Project | _: Aggregate =>
-//          child.transformExpressionsDown {
-//            case attr: Attribute =>
-//              attr.withName(output.find(_.semanticEquals(attr)).getOrElse(attr).name)
-//            case alias: Alias =>
-//          alias.withName(output.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
-//          }
-//        case _ =>
-//          if (output.zip(child.output).forall { case (a1, a2) => a1.name == a2.name }) {
-//            child
-//          } else {
-//            p
-//          }
-//      }
+    case p @ Project(projectList, child) if child.sameOutput(p) =>
       val newChild = child match {
         case p: Project =>
           val newList = p.projectList.map {
             case attr: Attribute =>
-              attr.withName(output.find(_.semanticEquals(attr)).getOrElse(attr).name)
+              attr.withName(projectList.find(_.semanticEquals(attr)).getOrElse(attr).name)
             case alias: Alias =>
-              alias.withName(output.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
+              alias.withName(projectList.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
             case other => other
           }
           p.copy(projectList = newList)
         case agg: Aggregate =>
           val newAggExprs = agg.aggregateExpressions.map {
             case attr: Attribute =>
-              attr.withName(output.find(_.semanticEquals(attr)).getOrElse(attr).name)
+              attr.withName(projectList.find(_.semanticEquals(attr)).getOrElse(attr).name)
             case alias: Alias =>
-              alias.withName(output.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
+              alias.withName(projectList.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
             case other => other
           }
           agg.copy(aggregateExpressions = newAggExprs)
         case _ =>
           child
       }
-      if (newChild.output.zip(output).forall { case (a1, a2) => a1.name == a2.name }) {
+      if (newChild.output.zip(projectList).forall { case (a1, a2) => a1.name == a2.name }) {
         newChild
       } else {
         p
