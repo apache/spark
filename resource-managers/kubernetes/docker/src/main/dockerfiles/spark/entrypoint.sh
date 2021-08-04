@@ -109,5 +109,10 @@ case "$1" in
     ;;
 esac
 
+# Clean up the local storage incase we've been restarted so we don't have any orphan disk blocks.
+if [ -z "${SPARK_LOCAL_DIRS}" ]; then
+  rm -rf "${SPARK_LOCAL_DIRS}"/[[:digit:]]+([[:digit:]])
+fi
+
 # Execute the container CMD under tini for better hygiene
 exec /usr/bin/tini -s -- "${CMD[@]}"

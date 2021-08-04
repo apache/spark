@@ -325,11 +325,11 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_ALLOCATION_PODSALLOCATOR =
     ConfigBuilder("spark.kubernetes.allocation.podsallocator")
-      .doc("Allocator to use for pods. Possible values are direct (the default) and statefulset." +
+      .doc("Allocator to use for pods. Possible values are direct (the default) and statefulset " +
+        ", or a full class name of a class implementing AbstractPodsAllocator. " +
         "Future version may add Job or replicaset.")
       .version("3.3.0")
       .stringConf
-      .checkValues(Set("direct", "statefulset"))
       .createWithDefault("direct")
 
   val KUBERNETES_ALLOCATION_BATCH_SIZE =
