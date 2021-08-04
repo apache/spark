@@ -77,6 +77,8 @@ abstract class EventLogFileReadersSuite extends SparkFunSuite with LocalSparkCon
         }
       } else {
         fileSystem.mkdirs(path)
+        fileSystem.create(getAppStatusFilePath(path, "app", None, true))
+        fileSystem.create(getEventLogFilePath(path, "app", None, 1, None))
       }
 
       val reader = EventLogFileReader(fileSystem, path)
