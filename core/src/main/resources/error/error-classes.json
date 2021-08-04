@@ -4,7 +4,7 @@
     "sqlState" : "42000"
   },
   "COLUMN_ALIASES_NOT_ALLOWED_IN_OPERATION" : {
-    "message" : [ "Columns aliases are not allowed in %s." ],
+    "message" : [ "Column aliases are not allowed in %s." ],
     "sqlState" : "42000"
   },
   "DIVIDE_BY_ZERO" : {

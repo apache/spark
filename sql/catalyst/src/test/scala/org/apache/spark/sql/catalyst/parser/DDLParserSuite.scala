@@ -1408,7 +1408,7 @@ class DDLParserSuite extends AnalysisTest {
       parsePlan("DELETE FROM testcat.ns1.ns2.tbl AS t(a,b,c,d) WHERE d = 2")
     }
 
-    assert(exc.getMessage.contains("Columns aliases are not allowed in DELETE."))
+    assert(exc.getMessage.contains("Column aliases are not allowed in DELETE."))
     assert(exc.getErrorClass == "COLUMN_ALIASES_NOT_ALLOWED_IN_OPERATION")
   }
 
@@ -1449,7 +1449,7 @@ class DDLParserSuite extends AnalysisTest {
         """.stripMargin)
     }
 
-    assert(exc.getMessage.contains("Columns aliases are not allowed in UPDATE."))
+    assert(exc.getMessage.contains("Column aliases are not allowed in UPDATE."))
     assert(exc.getErrorClass == "COLUMN_ALIASES_NOT_ALLOWED_IN_OPERATION")
   }
 
@@ -1586,7 +1586,7 @@ class DDLParserSuite extends AnalysisTest {
             """.stripMargin)
         }
 
-        assert(exc.getMessage.contains("Columns aliases are not allowed in MERGE."))
+        assert(exc.getMessage.contains("Column aliases are not allowed in MERGE."))
         assert(exc.getErrorClass == "COLUMN_ALIASES_NOT_ALLOWED_IN_OPERATION")
     }
   }
