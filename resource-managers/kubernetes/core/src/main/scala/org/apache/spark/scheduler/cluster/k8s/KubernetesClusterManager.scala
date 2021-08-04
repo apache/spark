@@ -19,6 +19,7 @@ package org.apache.spark.scheduler.cluster.k8s
 import java.io.File
 
 import io.fabric8.kubernetes.client.Config
+import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
@@ -26,7 +27,7 @@ import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{ExternalClusterManager, SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
-import org.apache.spark.util.{SystemClock, ThreadUtils}
+import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
 
 private[spark] class KubernetesClusterManager extends ExternalClusterManager with Logging {
 
@@ -109,17 +110,20 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       kubernetesClient,
       snapshotsStore)
 
-    val executorPodsAllocator = sc.conf.get(KUBERNETES_ALLOCATION_PODSALLOCATOR) match {
+    val executorPodsAllocatorName = sc.conf.get(KUBERNETES_ALLOCATION_PODSALLOCATOR) match {
       case "statefulset" =>
-        new StatefulsetPodsAllocator(
-          sc.conf,
-          sc.env.securityManager,
-          new KubernetesExecutorBuilder(),
-          kubernetesClient,
-          snapshotsStore,
-          new SystemClock())
+        "org.apache.spark.scheduler.cluster.k8s.StatefulsetPodsAllocator"
       case "direct" =>
-        new ExecutorPodsAllocator(
+        "org.apache.spark.scheduler.cluster.k8s.ExecutorPodsAllocator"
+    }
+
+    val executorPodsAllocator = {
+      val cls = Utils.classForName[AbstractPodsAllocator](executorPodsAllocatorName)
+      val cstr = cls.getConstructor(
+        classOf[SecurityManager], classOf[KubernetesExecutorBuilder],
+        classOf[KubernetesClient],
+        classOf[ExecutorPodsSnapshotsStore], classOf[Clock])
+      cstr.newInstance(
           sc.conf,
           sc.env.securityManager,
           new KubernetesExecutorBuilder(),

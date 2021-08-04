@@ -23,6 +23,7 @@ import scala.collection.JavaConverters._
 import io.fabric8.kubernetes.api.model.ContainerStateTerminated
 import io.fabric8.kubernetes.api.model.Pod
 
+import org.apache.spark.SparkException
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
 
@@ -71,7 +72,7 @@ object ExecutorPodsSnapshot extends Logging {
             case execIdRE(id) =>
               (id.toLong, toState(pod))
             case _ =>
-              throw new Exception(s"Failed to parse podname ${podName}")
+              throw new SparkException(s"Failed to parse podname ${podName}")
           }
         case id =>
           // We have a "real" id label
