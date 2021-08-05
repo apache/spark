@@ -72,7 +72,6 @@ case class ParquetWrite(
 
     ParquetOutputFormat.setWriteSupportClass(job, classOf[ParquetWriteSupport])
 
-    // TODO: Check V2 insert schema together.
     ParquetSchemaConverter.checkFieldNames(dataSchema)
     // This metadata is useful for keeping UDTs like Vector/Matrix.
     ParquetWriteSupport.setSchema(dataSchema, conf)
