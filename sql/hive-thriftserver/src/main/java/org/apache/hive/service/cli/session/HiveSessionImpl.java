@@ -69,6 +69,7 @@ import org.apache.hive.service.cli.operation.Operation;
 import org.apache.hive.service.cli.operation.OperationManager;
 import org.apache.hive.service.rpc.thrift.TProtocolVersion;
 import org.apache.hive.service.server.ThreadWithGarbageCleanup;
+import org.apache.spark.sql.hive.HiveUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -665,11 +666,9 @@ public class HiveSessionImpl implements HiveSession {
       if (null != hiveHist) {
         hiveHist.closeStream();
       }
+      HiveUtils.detachSessionState(sessionState);
+      sessionState = null;
     } finally {
-      if (sessionState != null) {
-        SessionState.detachSession();
-        sessionState = null;
-      }
       release(true);
     }
   }

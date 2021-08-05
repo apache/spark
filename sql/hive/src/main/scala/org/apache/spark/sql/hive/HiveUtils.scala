@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.File
+import java.io.{File, IOException}
 import java.net.{URL, URLClassLoader}
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -26,6 +26,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 import scala.util.Try
 
+import org.apache.commons.io.FileUtils
 import org.apache.commons.lang3.{JavaVersion, SystemUtils}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
@@ -571,6 +572,25 @@ private[spark] object HiveUtils extends Logging {
       val partCols = hiveTable.getPartCols.asScala.map(HiveClientImpl.fromHiveColumn)
       val dataCols = hiveTable.getCols.asScala.map(HiveClientImpl.fromHiveColumn)
       table.copy(schema = StructType((dataCols ++ partCols).toSeq))
+    }
+  }
+
+  def detachSessionState(state: SessionState): Unit = {
+    if (state == null) {
+      return
+    }
+    val resourceDir = new File(state.getConf.getVar(HiveConf.ConfVars.DOWNLOADED_RESOURCES_DIR))
+    logDebug(s"Removing resource dir $resourceDir")
+    try {
+      if (resourceDir.exists) {
+        FileUtils.deleteDirectory(resourceDir)
+      }
+    }
+    catch {
+      case e: IOException =>
+        logInfo(s"Error removing session resource dir $resourceDir", e)
+    } finally {
+      SessionState.detachSession()
     }
   }
 }

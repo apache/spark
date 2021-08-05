@@ -174,6 +174,8 @@ private[hive] class HiveClientImpl(
     shim.setCurrentSessionState(state)
     state.out = new PrintStream(outputBuffer, true, UTF_8.name())
     state.err = new PrintStream(outputBuffer, true, UTF_8.name())
+    val resourceDir = new Path(hiveConf.getVar(HiveConf.ConfVars.DOWNLOADED_RESOURCES_DIR))
+    org.apache.hadoop.fs.FileSystem.getLocal(hiveConf).deleteOnExit(resourceDir)
     state
   }
 
