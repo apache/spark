@@ -110,7 +110,9 @@ private[spark] class MetricsSystem private (
     if (running) {
       sinks.foreach(_.stop)
       registry.removeMatching((_: String, _: Metric) => true)
-      sourcesWithListeners.keySet.foreach(removeSource)
+      sourcesWithListeners.synchronized {
+        sourcesWithListeners.keySet.foreach(removeSource)
+      }
     } else {
       logWarning("Stopping a MetricsSystem that is not running")
     }
@@ -159,20 +161,24 @@ private[spark] class MetricsSystem private (
     sourcesWithListeners.keySet.filter(_.sourceName == sourceName).toSeq
   }
 
-  def registerSource(source: Source): Unit = sourcesWithListeners.synchronized {
+  def registerSource(source: Source): Unit = {
     try {
       val listener = new MetricsSystemListener(buildRegistryName(source))
       source.metricRegistry.addListener(listener)
-      sourcesWithListeners += source -> listener
+      sourcesWithListeners.synchronized {
+        sourcesWithListeners += source -> listener
+      }
     } catch {
       case e: IllegalArgumentException => logInfo("Metrics already registered", e)
     }
   }
 
-  def removeSource(source: Source): Unit = sourcesWithListeners.synchronized {
+  def removeSource(source: Source): Unit = {
     val regName = buildRegistryName(source)
     registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
-sourcesWithListeners.remove(source).foreach(source.metricRegistry.removeListener)
+    sourcesWithListeners.synchronized {
+      sourcesWithListeners.remove(source).foreach(source.metricRegistry.removeListener)
+    }
   }
 
   private def registerSources(): Unit = {
