@@ -76,6 +76,34 @@ object PushDownUtils extends PredicateHelper {
   }
 
   /**
+   * separate partition filters and data filters for file based data source,
+   * and return partition filters
+   *
+   * @return partition filters.
+   */
+  def getPartitionFilters(
+      scanBuilder: ScanBuilder,
+      relation: DataSourceV2Relation,
+      normalizedFilters: Seq[Expression]): Seq[Expression] = {
+    scanBuilder match {
+      case fileBuilder: FileScanBuilder =>
+        val partitionColumns = relation.resolve(
+          fileBuilder.readPartitionSchema(),
+          fileBuilder.getSparkSession.sessionState.analyzer.resolver)
+        val partitionSet = AttributeSet(partitionColumns)
+        val (partitionKeyFilters, dataFilters) = normalizedFilters.partition(f =>
+          f.references.subsetOf(partitionSet)
+        )
+        val extraPartitionFilter =
+          dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
+        val partitionFilter = partitionKeyFilters ++ extraPartitionFilter
+        partitionFilter
+
+      case _ => Seq.empty[Expression]
+    }
+  }
+
+  /**
    * Pushes down aggregates to the data source reader
    *
    * @return pushed aggregation.

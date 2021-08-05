@@ -48,7 +48,7 @@ abstract class FileScanBuilder(
     StructType(fields)
   }
 
-  protected def readPartitionSchema(): StructType = {
+  def readPartitionSchema(): StructType = {
     val requiredNameSet = createRequiredNameSet()
     val fields = partitionSchema.fields.filter { field =>
       val colName = PartitioningUtils.getColName(field, isCaseSensitive)
@@ -56,6 +56,8 @@ abstract class FileScanBuilder(
     }
     StructType(fields)
   }
+
+  def getSparkSession: SparkSession = sparkSession
 
   private def createRequiredNameSet(): Set[String] =
     requiredSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet

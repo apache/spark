@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, ExpressionSet, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.planning.ScanOperation
@@ -59,6 +59,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val (pushedFilters, postScanFiltersWithoutSubquery) = PushDownUtils.pushFilters(
         sHolder.builder, normalizedFiltersWithoutSubquery)
       val postScanFilters = postScanFiltersWithoutSubquery ++ normalizedFiltersWithSubquery
+      val partitionFilters = PushDownUtils
+        .getPartitionFilters(sHolder.builder, sHolder.relation, normalizedFiltersWithoutSubquery)
+      if ((ExpressionSet(postScanFilters) -- partitionFilters.filter(_.references.nonEmpty))
+        .toSeq.isEmpty) {
+        sHolder.hasPostScanBuilder = false
+      }
 
       logInfo(
         s"""
@@ -76,7 +82,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case aggNode @ Aggregate(groupingExpressions, resultExpressions, child) =>
       child match {
         case ScanOperation(project, filters, sHolder: ScanBuilderHolder)
-          if filters.isEmpty && project.forall(_.isInstanceOf[AttributeReference]) =>
+          if (filters.isEmpty || !sHolder.mightHavePostScanBuilder)
+            && project.forall(_.isInstanceOf[AttributeReference]) =>
           sHolder.builder match {
             case _: SupportsPushDownAggregates =>
               val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
@@ -239,7 +246,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 case class ScanBuilderHolder(
     output: Seq[AttributeReference],
     relation: DataSourceV2Relation,
-    builder: ScanBuilder) extends LeafNode
+    builder: ScanBuilder,
+    var mightHavePostScanBuilder: Boolean = true) extends LeafNode
 
 // A wrapper for v1 scan to carry the translated filters and the handled ones. This is required by
 // the physical v1 scan node.
