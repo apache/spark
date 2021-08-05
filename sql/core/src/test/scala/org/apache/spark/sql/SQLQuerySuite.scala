@@ -3411,13 +3411,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       checkAnswer(
         sql(
           """
-            |select x, count(x) c from t
-            |group by x grouping sets(x)
-          """.stripMargin),
-        Seq(Row("a", 2), Row("b", 1)))
-      checkAnswer(
-        sql(
-          """
             |select count(x) c, x from t
             |group by x grouping sets(x)
           """.stripMargin),
