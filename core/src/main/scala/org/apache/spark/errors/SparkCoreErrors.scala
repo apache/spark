@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
-import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, RDDBlockId, UnrecognizedBlockId}
+import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
@@ -156,7 +156,7 @@ object SparkCoreErrors {
   }
 
   def cannotSaveBlockOnDecommissionedExecutorError(blockId: BlockId): Throwable = {
-    new SparkException(s"Block $blockId cannot be saved on decommissioned executor")
+    new BlockSavedOnDecommissionedBlockManagerException(blockId)
   }
 
   def waitingForReplicationToFinishError(e: Throwable): Throwable = {
