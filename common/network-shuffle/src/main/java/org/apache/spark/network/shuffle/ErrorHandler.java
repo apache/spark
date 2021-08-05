@@ -25,7 +25,7 @@ import com.google.common.base.Throwables;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
 
-import static org.apache.spark.network.server.BlockPushNonFatalFailure.ErrorCode.*;
+import static org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode.*;
 
 /**
  * Plugs into {@link RetryingBlockTransferor} to further control when an exception should be retried
@@ -89,7 +89,8 @@ public interface ErrorHandler {
 
       // If the block is too late or stale block push, there is no need to retry it
       return !(t instanceof BlockPushNonFatalFailure &&
-        ((BlockPushNonFatalFailure) t).getErrorCode() == TOO_LATE_OR_STALE_BLOCK_PUSH);
+        (((BlockPushNonFatalFailure) t).getReturnCode() == TOO_LATE_BLOCK_PUSH ||
+          ((BlockPushNonFatalFailure) t).getReturnCode() == STALE_BLOCK_PUSH));
     }
 
     @Override

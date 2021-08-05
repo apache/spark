@@ -213,7 +213,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         public void onComplete(String streamId) throws IOException {
            try {
              streamHandler.onComplete(streamId);
-             callback.onSuccess(ByteBuffer.allocate(0));
+             callback.onSuccess(streamHandler.getCompletionResponse());
            } catch (BlockPushNonFatalFailure ex) {
              // Respond an RPC message with the error code to client instead of using exceptions
              // encoded in the RPCFailure. This type of exceptions gets thrown more frequently

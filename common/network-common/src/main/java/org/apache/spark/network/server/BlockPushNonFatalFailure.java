@@ -42,14 +42,14 @@ public class BlockPushNonFatalFailure extends RuntimeException {
    * The error code of the failure. This field is only set on the client side when a
    * BlockPushNonFatalFailure is recreated from the error code received from the server.
    */
-  private ErrorCode errorCode;
+  private ReturnCode returnCode;
 
   public BlockPushNonFatalFailure(ByteBuffer response) {
     this.response = response;
   }
 
-  public BlockPushNonFatalFailure(ErrorCode errorCode) {
-    this.errorCode = errorCode;
+  public BlockPushNonFatalFailure(ReturnCode returnCode) {
+    this.returnCode = returnCode;
   }
 
   /**
@@ -65,39 +65,50 @@ public class BlockPushNonFatalFailure extends RuntimeException {
     return response;
   }
 
-  public ErrorCode getErrorCode() {
-    return errorCode;
+  public ReturnCode getReturnCode() {
+    return returnCode;
   }
 
-  public enum ErrorCode {
+  public enum ReturnCode {
     /**
-     * Indicate a block to be merged arrives too late or stale block push in the case of
-     * indeterminate stage retries on the server side. When we get a block push failure
-     * because of the block push being stale or arrives too late, we will not retry pushing
-     * the block
+     * Indicate the case of a successful merge of a pushed block.
      */
-    TOO_LATE_OR_STALE_BLOCK_PUSH(0),
+    SUCCESS(0),
+    /**
+     * Indicate a block to be merged arrives too late on the server side, i.e. after the
+     * corresponding shuffle has been merge finalized. When the client gets this code, it
+     * will not retry pushing the block.
+     */
+    TOO_LATE_BLOCK_PUSH(1),
     /**
      * Indicating the server couldn't append a block after all available attempts due to
      * collision with other blocks belonging to the same shuffle partition.
      */
-    BLOCK_APPEND_COLLISION_DETECTED(1);
+    BLOCK_APPEND_COLLISION_DETECTED(2),
+    /**
+     * Indicate a block received on the server side is a stale block push in the case of
+     * indeterminate stage retries. When the client receives this code, it will not retry
+     * pushing the block.
+     */
+    STALE_BLOCK_PUSH(3);
 
     private final byte id;
 
-    ErrorCode(int id) {
-      assert id < 128 : "Cannot have more than 128 block push error code";
+    ReturnCode(int id) {
+      assert id < 128 : "Cannot have more than 128 block push return code";
       this.id = (byte) id;
     }
 
     public byte id() { return id; }
   }
 
-  public static ErrorCode getErrorCode(byte id) {
+  public static ReturnCode getReturnCode(byte id) {
     switch (id) {
-      case 0: return ErrorCode.TOO_LATE_OR_STALE_BLOCK_PUSH;
-      case 1: return ErrorCode.BLOCK_APPEND_COLLISION_DETECTED;
-      default: throw new IllegalArgumentException("Unknown block push error code: " + id);
+      case 0: return ReturnCode.SUCCESS;
+      case 1: return ReturnCode.TOO_LATE_BLOCK_PUSH;
+      case 2: return ReturnCode.BLOCK_APPEND_COLLISION_DETECTED;
+      case 3: return ReturnCode.STALE_BLOCK_PUSH;
+      default: throw new IllegalArgumentException("Unknown block push return code: " + id);
     }
   }
 }

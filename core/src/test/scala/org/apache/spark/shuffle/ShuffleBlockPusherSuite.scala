@@ -23,20 +23,17 @@ import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.ArrayBuffer
-
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.BeforeAndAfterEach
-
 import org.apache.spark._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.server.BlockPushNonFatalFailure
-import org.apache.spark.network.server.BlockPushNonFatalFailure.ErrorCode
+import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode
 import org.apache.spark.network.shuffle.{BlockPushingListener, BlockStoreClient}
-import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.ShuffleBlockPusher.PushRequest
@@ -222,11 +219,14 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val errorHandler = pusher.createErrorHandler()
     assert(
       !errorHandler.shouldRetryError(new BlockPushNonFatalFailure(
-        ErrorCode.TOO_LATE_OR_STALE_BLOCK_PUSH)))
+        ReturnCode.TOO_LATE_BLOCK_PUSH)))
+    assert(
+      !errorHandler.shouldRetryError(new BlockPushNonFatalFailure(
+        ReturnCode.STALE_BLOCK_PUSH)))
     assert(errorHandler.shouldRetryError(new RuntimeException(new ConnectException())))
     assert(
       errorHandler.shouldRetryError(new BlockPushNonFatalFailure(
-        ErrorCode.BLOCK_APPEND_COLLISION_DETECTED)))
+        ReturnCode.BLOCK_APPEND_COLLISION_DETECTED)))
     assert (errorHandler.shouldRetryError(new Throwable()))
   }
 
@@ -235,9 +235,12 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val errorHandler = pusher.createErrorHandler()
     assert(
       !errorHandler.shouldLogError(new BlockPushNonFatalFailure(
-        ErrorCode.TOO_LATE_OR_STALE_BLOCK_PUSH)))
+        ReturnCode.TOO_LATE_BLOCK_PUSH)))
+    assert(
+      !errorHandler.shouldLogError(new BlockPushNonFatalFailure(
+        ReturnCode.STALE_BLOCK_PUSH)))
     assert(!errorHandler.shouldLogError(new BlockPushNonFatalFailure(
-      ErrorCode.BLOCK_APPEND_COLLISION_DETECTED)))
+      ReturnCode.BLOCK_APPEND_COLLISION_DETECTED)))
     assert(errorHandler.shouldLogError(new Throwable()))
   }
 
@@ -255,7 +258,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
             failBlock = false
             // Fail the first block with the collision exception.
             blockPushListener.onBlockPushFailure(blockId, new BlockPushNonFatalFailure(
-              ErrorCode.BLOCK_APPEND_COLLISION_DETECTED))
+              ReturnCode.BLOCK_APPEND_COLLISION_DETECTED))
           } else {
             pushedBlocks += blockId
             blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))
@@ -284,7 +287,7 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
             failBlock = false
             // Fail the first block with the too late exception.
             blockPushListener.onBlockPushFailure(blockId, new BlockPushNonFatalFailure(
-              ErrorCode.TOO_LATE_OR_STALE_BLOCK_PUSH))
+              ReturnCode.TOO_LATE_BLOCK_PUSH))
           } else {
             pushedBlocks += blockId
             blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))
