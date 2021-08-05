@@ -477,19 +477,19 @@ object DataSourceStrategy
       output: Seq[AttributeReference],
       projects: Seq[NamedExpression],
       filters: Seq[Expression]): Map[String, String] = {
-    var attNameMap: Map[String, String] = Map.empty
-    val normalizedAttNameMap = output.map(att => (att.exprId, att.name)).toMap
+    var attrNameMap: Map[String, String] = Map.empty
+    val normalizedAttrNameMap = output.map(att => (att.exprId, att.name)).toMap
     projects.map(_.transform {
-      case att: AttributeReference if normalizedAttNameMap.contains(att.exprId) =>
-        attNameMap += att.name -> normalizedAttNameMap(att.exprId)
+      case att: AttributeReference if normalizedAttrNameMap.contains(att.exprId) =>
+        attrNameMap += att.name -> normalizedAttrNameMap(att.exprId)
         att
     })
     filters.map(_.transform {
-      case att: AttributeReference if normalizedAttNameMap.contains(att.exprId) =>
-        attNameMap += att.name -> normalizedAttNameMap(att.exprId)
+      case att: AttributeReference if normalizedAttrNameMap.contains(att.exprId) =>
+        attrNameMap += att.name -> normalizedAttrNameMap(att.exprId)
         att
     })
-    attNameMap
+    attrNameMap
   }
 
   def getPushedDownFilters(
