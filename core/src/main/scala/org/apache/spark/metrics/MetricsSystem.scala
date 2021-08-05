@@ -275,14 +275,10 @@ private[spark] object MetricsSystem {
     }
   }
 
-  def createMetricsSystem(instance: String, conf: SparkConf): MetricsSystem = {
-    new MetricsSystem(instance, conf, new MetricRegistry)
-  }
-
   def createMetricsSystem(
      instance: String,
      conf: SparkConf,
-     registry: MetricRegistry): MetricsSystem = {
+     registry: MetricRegistry = new MetricRegistry): MetricsSystem = {
     new MetricsSystem(instance, conf, registry)
   }
 }
