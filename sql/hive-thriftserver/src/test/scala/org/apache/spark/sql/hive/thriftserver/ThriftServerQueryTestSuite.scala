@@ -83,9 +83,12 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     "postgreSQL/case.sql",
     // SPARK-28624
     "date.sql",
-    "datetime.sql",
+    "timestamp.sql",
     "datetime-legacy.sql",
-    "ansi/datetime.sql",
+    "ansi/date.sql",
+    "ansi/timestamp.sql",
+    "timestampNTZ/timestamp.sql",
+    "timestampNTZ/timestamp_ansi.sql",
     // SPARK-28620
     "postgreSQL/float4.sql",
     // SPARK-28636
