@@ -65,11 +65,10 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
       // `total shuffle size / Spark default parallelism`. In case the `Spark default parallelism`
       // is too big, this rule also respect the minimum partition size specified by
       // COALESCE_PARTITIONS_MIN_PARTITION_SIZE (default 1MB).
-      val parallelismFirst = conf.getConf(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST)
       // For history reason, this rule also need to support the config
       // COALESCE_PARTITIONS_MIN_PARTITION_NUM. We should remove this config in the future.
       val minNumPartitions = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM).getOrElse {
-        if (parallelismFirst) {
+        if (conf.getConf(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST)) {
           // We fall back to Spark default parallelism if the minimum number of coalesced partitions
           // is not set, so to avoid perf regressions compared to no coalescing.
           session.sparkContext.defaultParallelism
