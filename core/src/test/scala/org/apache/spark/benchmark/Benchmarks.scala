@@ -68,6 +68,9 @@ import com.google.common.reflect.ClassPath
  *     "`find . -name 'spark-core*-SNAPSHOT-tests.jar'`" \
  *     "org.apache.spark.sql.execution.datasources.*"
  * }}}
+ *
+ * if you define TPC_DS_DATA_LOC environment variable with a proper TPC-DS data location,
+ * TPCDSQueryBenchmark is triggered as well.
  */
 
 object Benchmarks {
