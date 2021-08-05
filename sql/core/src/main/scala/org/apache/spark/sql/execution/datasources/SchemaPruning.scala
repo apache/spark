@@ -108,14 +108,14 @@ object SchemaPruning extends Rule[LogicalPlan] {
       output: Seq[AttributeReference],
       projects: Seq[NamedExpression],
       filters: Seq[Expression]): (Seq[NamedExpression], Seq[Expression]) = {
-    val normalizedAttrNameMap = output.map(att => (att.exprId, att.name)).toMap
+    val normalizedAttNameMap = output.map(att => (att.exprId, att.name)).toMap
     val normalizedProjects = projects.map(_.transform {
-      case att: AttributeReference if normalizedAttrNameMap.contains(att.exprId) =>
-        att.withName(normalizedAttrNameMap(att.exprId))
+      case att: AttributeReference if normalizedAttNameMap.contains(att.exprId) =>
+        att.withName(normalizedAttNameMap(att.exprId))
     }).map { case expr: NamedExpression => expr }
     val normalizedFilters = filters.map(_.transform {
-      case att: AttributeReference if normalizedAttrNameMap.contains(att.exprId) =>
-        att.withName(normalizedAttrNameMap(att.exprId))
+      case att: AttributeReference if normalizedAttNameMap.contains(att.exprId) =>
+        att.withName(normalizedAttNameMap(att.exprId))
     })
     (normalizedProjects, normalizedFilters)
   }

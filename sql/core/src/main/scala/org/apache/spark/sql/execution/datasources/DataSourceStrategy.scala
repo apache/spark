@@ -480,14 +480,14 @@ object DataSourceStrategy
     var attrNameMap: Map[String, String] = Map.empty
     val normalizedAttrNameMap = output.map(att => (att.exprId, att.name)).toMap
     projects.map(_.transform {
-      case att: AttributeReference if normalizedAttrNameMap.contains(att.exprId) =>
-        attrNameMap += att.name -> normalizedAttrNameMap(att.exprId)
-        att
+      case attr: AttributeReference if normalizedAttrNameMap.contains(attr.exprId) =>
+        attrNameMap += attr.name -> normalizedAttrNameMap(attr.exprId)
+        attr
     })
     filters.map(_.transform {
-      case att: AttributeReference if normalizedAttrNameMap.contains(att.exprId) =>
-        attrNameMap += att.name -> normalizedAttrNameMap(att.exprId)
-        att
+      case attr: AttributeReference if normalizedAttrNameMap.contains(attr.exprId) =>
+        attrNameMap += attr.name -> normalizedAttrNameMap(attr.exprId)
+        attr
     })
     attrNameMap
   }
