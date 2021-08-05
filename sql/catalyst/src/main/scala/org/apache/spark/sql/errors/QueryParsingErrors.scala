@@ -29,10 +29,6 @@ import org.apache.spark.sql.catalyst.trees.Origin
  */
 object QueryParsingErrors {
 
-  def invalidInsertIntoError(ctx: InsertIntoContext): Throwable = {
-    new ParseException("INVALID_INSERT_INTO_CONTEXT", Array.empty, ctx)
-  }
-
   def insertOverwriteDirectoryUnsupportedError(ctx: InsertIntoContext): Throwable = {
     new ParseException("OPERATION_UNSUPPORTED", Array("INSERT OVERWRITE DIRECTORY"), ctx)
   }

@@ -292,8 +292,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       case hiveDir: InsertOverwriteHiveDirContext =>
         val (isLocal, storage, provider) = visitInsertOverwriteHiveDir(hiveDir)
         InsertIntoDir(isLocal, storage, provider, query, overwrite = true)
-      case _ =>
-        throw QueryParsingErrors.invalidInsertIntoError(ctx)
     }
   }
 

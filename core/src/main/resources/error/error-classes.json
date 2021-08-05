@@ -49,10 +49,6 @@
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
     "sqlState" : "42000"
   },
-  "INVALID_INSERT_INTO_CONTEXT" : {
-    "message" : [ "Invalid InsertIntoContext" ],
-    "sqlState" : "42000"
-  },
   "INVALID_LATERAL_JOIN_RELATION" : {
     "message" : [ "LATERAL can only be used with subquery" ],
     "sqlState" : "42000"
