@@ -2187,7 +2187,13 @@ abstract class AvroSuite
       }
     }
   }
+}
 
+class AvroV1Suite extends AvroSuite {
+  override protected def sparkConf: SparkConf =
+    super
+      .sparkConf
+      .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 
   test("SPARK-36271: V1 insert should check schema field name too") {
     withView("v") {
@@ -2210,13 +2216,6 @@ abstract class AvroSuite
       }
     }
   }
-}
-
-class AvroV1Suite extends AvroSuite {
-  override protected def sparkConf: SparkConf =
-    super
-      .sparkConf
-      .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
 }
 
 class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {
