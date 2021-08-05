@@ -23,12 +23,14 @@ import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.ArrayBuffer
+
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.Answers.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark._
 import org.apache.spark.network.buffer.ManagedBuffer
 import org.apache.spark.network.server.BlockPushNonFatalFailure
