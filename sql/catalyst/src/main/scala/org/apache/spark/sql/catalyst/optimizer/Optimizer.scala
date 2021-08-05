@@ -515,16 +515,12 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  * Remove no-op operators from the query plan that do not make any modifications.
  */
 object RemoveNoopOperators extends Rule[LogicalPlan] {
-  def restoreOriginalOutputName(
-      output: Seq[NamedExpression],
-      projectList: Seq[NamedExpression]): Seq[NamedExpression] = {
-    output.map {
-      case attr: Attribute =>
-        attr.withName(projectList.find(_.semanticEquals(attr)).getOrElse(attr).name)
-      case alias: Alias =>
-        alias.withName(
-          projectList.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
-      case other => other
+  def restoreOriginalOutputNames(
+      projectList: Seq[NamedExpression],
+      originalNames: Seq[String]): Seq[NamedExpression] = {
+    projectList.zip(originalNames).map {
+      case (attr: Attribute, name) => attr.withName(name)
+      case (alias: Alias, name) => alias.withName(name)
     }
   }
 
@@ -534,10 +530,10 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
     case p @ Project(projectList, child) if child.sameOutput(p) =>
       val newChild = child match {
         case p: Project =>
-          p.copy(projectList = restoreOriginalOutputName(p.projectList, projectList))
+          p.copy(projectList = restoreOriginalOutputNames(p.projectList, projectList.map(_.name)))
         case agg: Aggregate =>
           agg.copy(aggregateExpressions =
-            restoreOriginalOutputName(agg.aggregateExpressions, projectList))
+            restoreOriginalOutputNames(agg.aggregateExpressions, projectList.map(_.name)))
         case _ =>
           child
       }
