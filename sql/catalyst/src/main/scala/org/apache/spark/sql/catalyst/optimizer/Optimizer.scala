@@ -518,21 +518,36 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  * Remove no-op operators from the query plan that do not make any modifications.
  */
 object RemoveNoopOperators extends Rule[LogicalPlan] {
+  def resolveOutputAttrName(
+    output: Seq[NamedExpression],
+    projectList: Seq[NamedExpression]): Seq[NamedExpression] = {
+    output.map {
+      case attr: Attribute =>
+        attr.withName(projectList.find(_.semanticEquals(attr)).getOrElse(attr).name)
+      case alias: Alias =>
+        alias.withName(
+          projectList.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
+      case other => other
+    }
+  }
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAnyPattern(PROJECT, WINDOW), ruleId) {
     // Eliminate no-op Projects
-    case p @ Project(output, child) if child.sameOutput(p) =>
-      child match {
-        case relation: LeafNode
-          if !output.zip(relation.output).forall { case (a1, a2) => a1.name == a2.name } =>
-          p
+    case p @ Project(projectList, child) if child.sameOutput(p) =>
+      val newChild = child match {
+        case p: Project =>
+          p.copy(projectList = resolveOutputAttrName(p.projectList, projectList))
+        case agg: Aggregate =>
+          agg.copy(aggregateExpressions =
+            resolveOutputAttrName(agg.aggregateExpressions, projectList))
         case _ =>
-          child.transformExpressionsDown {
-            case attr: Attribute =>
-              attr.withName(output.find(_.semanticEquals(attr)).getOrElse(attr).name)
-            case alias: Alias =>
-              alias.withName(output.find(_.semanticEquals(alias.toAttribute)).getOrElse(alias).name)
-          }
+          child
+      }
+      if (newChild.output.zip(projectList).forall { case (a1, a2) => a1.name == a2.name }) {
+        newChild
+      } else {
+        p
       }
 
     // Eliminate no-op Window
