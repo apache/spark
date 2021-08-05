@@ -42,7 +42,7 @@ import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc._
 import org.apache.spark.sql.execution.datasources.json.TextInputJsonDataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2Utils}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{MapType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -402,7 +402,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def json(paths: String*): DataFrame = format("json").load(paths : _*)
+  def json(paths: String*): DataFrame = {
+    userSpecifiedSchema.foreach(checkJsonSchema)
+    format("json").load(paths : _*)
+  }
 
   /**
    * Loads a `JavaRDD[String]` storing JSON objects (<a href="http://jsonlines.org/">JSON
@@ -449,6 +452,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       sparkSession.sessionState.conf.sessionLocalTimeZone,
       sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
+    userSpecifiedSchema.foreach(checkJsonSchema)
     val schema = userSpecifiedSchema.map(_.asNullable).getOrElse {
       TextInputJsonDataSource.inferFromDataset(jsonDataset, parsedOptions)
     }
@@ -469,6 +473,14 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
     }
     sparkSession.internalCreateDataFrame(parsed, schema, isStreaming = jsonDataset.isStreaming)
   }
+
+  private def checkJsonSchema(schema: StructType): Unit = schema.existsRecursively{
+      case MapType(keyType, _, _) if keyType != StringType =>
+        throw new AnalysisException(
+          s"Input schema $schema can only contain StringType as a key type for a MapType.")
+      case _ => false
+    }
+
 
   /**
    * Loads a CSV file and returns the result as a `DataFrame`. See the documentation on the
