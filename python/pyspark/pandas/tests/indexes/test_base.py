@@ -1527,10 +1527,8 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 almost=True,
             )
 
+            # Bug in Index.union dropping duplicated values is fixed in pandas 1.3
             if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-                # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-                pass
-            else:
                 self.assert_eq(psidx2.union(psidx1), pidx2.union(pidx1))
                 self.assert_eq(
                     psidx2.union([1, 2, 3, 4, 3, 4, 3, 4]),
@@ -1540,6 +1538,19 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 self.assert_eq(
                     psidx2.union(ps.Series([1, 2, 3, 4, 3, 4, 3, 4])),
                     pidx2.union(pd.Series([1, 2, 3, 4, 3, 4, 3, 4])),
+                    almost=True,
+                )
+            else:
+                expected = pd.Index([1, 2, 3, 3, 3, 4, 4, 4, 5, 6])
+                self.assert_eq(psidx2.union(psidx1), expected)
+                self.assert_eq(
+                    psidx2.union([1, 2, 3, 4, 3, 4, 3, 4]),
+                    expected,
+                    almost=True,
+                )
+                self.assert_eq(
+                    psidx2.union(ps.Series([1, 2, 3, 4, 3, 4, 3, 4])),
+                    expected,
                     almost=True,
                 )
 
@@ -1553,10 +1564,8 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         psmidx3 = ps.from_pandas(pmidx3)
         psmidx4 = ps.from_pandas(pmidx4)
 
+        # Bug in MultiIndex.union dropping duplicated values is fixed in pandas 1.3
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        else:
             self.assert_eq(psmidx1.union(psmidx2), pmidx1.union(pmidx2))
             self.assert_eq(psmidx2.union(psmidx1), pmidx2.union(pmidx1))
             self.assert_eq(psmidx3.union(psmidx4), pmidx3.union(pmidx4))
@@ -1577,13 +1586,37 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 psmidx4.union([(1, 1), (1, 2), (1, 3), (1, 4), (1, 3), (1, 4)]),
                 pmidx4.union([(1, 1), (1, 2), (1, 3), (1, 4), (1, 3), (1, 4)]),
             )
+        else:
+            expected = pd.MultiIndex.from_tuples(
+                [("x", "a"), ("x", "a"), ("x", "b"), ("x", "b"), ("x", "c"), ("x", "d")]
+            )
+            self.assert_eq(psmidx1.union(psmidx2), expected)
+            self.assert_eq(psmidx2.union(psmidx1), expected)
+            self.assert_eq(
+                psmidx1.union([("x", "a"), ("x", "b"), ("x", "c"), ("x", "d")]),
+                expected,
+            )
+            self.assert_eq(
+                psmidx2.union([("x", "a"), ("x", "b"), ("x", "a"), ("x", "b")]),
+                expected,
+            )
 
+            expected = pd.MultiIndex.from_tuples(
+                [(1, 1), (1, 2), (1, 3), (1, 3), (1, 4), (1, 4), (1, 5), (1, 6)]
+            )
+            self.assert_eq(psmidx3.union(psmidx4), expected)
+            self.assert_eq(psmidx4.union(psmidx3), expected)
+            self.assert_eq(
+                psmidx3.union([(1, 3), (1, 4), (1, 5), (1, 6)]),
+                expected,
+            )
+            self.assert_eq(
+                psmidx4.union([(1, 1), (1, 2), (1, 3), (1, 4), (1, 3), (1, 4)]),
+                expected,
+            )
+
+        # Bug in MultiIndex.union dropping duplicated values is fixed in pandas 1.3
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        # Testing if the result is correct after sort=False.
-        # The `sort` argument is added in pandas 0.24.
-        elif LooseVersion(pd.__version__) >= LooseVersion("0.24"):
             self.assert_eq(
                 psmidx1.union(psmidx2, sort=False).sort_values(),
                 pmidx1.union(pmidx2, sort=False).sort_values(),
@@ -1627,6 +1660,52 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 pmidx4.union(
                     [(1, 1), (1, 2), (1, 3), (1, 4), (1, 3), (1, 4)], sort=False
                 ).sort_values(),
+            )
+        elif LooseVersion(pd.__version__) >= LooseVersion("0.24"):
+            expected = pd.MultiIndex.from_tuples(
+                [("x", "a"), ("x", "a"), ("x", "b"), ("x", "b"), ("x", "c"), ("x", "d")]
+            )
+            self.assert_eq(
+                psmidx1.union(psmidx2, sort=False).sort_values(),
+                expected,
+            )
+            self.assert_eq(
+                psmidx2.union(psmidx1, sort=False).sort_values(),
+                expected,
+            )
+            self.assert_eq(
+                psmidx1.union(
+                    [("x", "a"), ("x", "b"), ("x", "c"), ("x", "d")], sort=False
+                ).sort_values(),
+                expected,
+            )
+            self.assert_eq(
+                psmidx2.union(
+                    [("x", "a"), ("x", "b"), ("x", "a"), ("x", "b")], sort=False
+                ).sort_values(),
+                expected,
+            )
+
+            expected = pd.MultiIndex.from_tuples(
+                [(1, 1), (1, 2), (1, 3), (1, 3), (1, 4), (1, 4), (1, 5), (1, 6)]
+            )
+            self.assert_eq(
+                psmidx3.union(psmidx4, sort=False).sort_values(),
+                expected,
+            )
+            self.assert_eq(
+                psmidx4.union(psmidx3, sort=False).sort_values(),
+                expected,
+            )
+            self.assert_eq(
+                psmidx3.union([(1, 3), (1, 4), (1, 5), (1, 6)], sort=False).sort_values(),
+                expected,
+            )
+            self.assert_eq(
+                psmidx4.union(
+                    [(1, 1), (1, 2), (1, 3), (1, 4), (1, 3), (1, 4)], sort=False
+                ).sort_values(),
+                expected,
             )
 
         self.assertRaises(NotImplementedError, lambda: psidx1.union(psmidx1))
