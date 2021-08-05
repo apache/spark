@@ -250,8 +250,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     val (blockPushIds, blockPushBuffers) = Utils.randomize(blockIds.zip(
       sliceReqBufferIntoBlockBuffers(request.reqBuffer, request.blocks.map(_._2)))).unzip
     SparkEnv.get.blockManager.blockStoreClient.pushBlocks(
-      address.host, address.port, blocksToPush.map(_._1).toArray,
-      blocksToPush.map(_._2).toArray, blockPushListener)
+      address.host, address.port, blockPushIds.toArray,
+      blockPushBuffers.toArray, blockPushListener)
   }
 
   /**
