@@ -73,7 +73,6 @@ from pyspark.sql.types import (  # noqa: F401 (SPARK-34943)
     BooleanType,
     DataType,
     DoubleType,
-    FloatType,
     NumericType,
     Row,
     StringType,
@@ -3541,9 +3540,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             most_value = count_df.orderBy("count", ascending=False).first()[1]
             sdf_most_value = count_df.filter("count == {}".format(most_value)).select(col)
 
-            return sdf_most_value.withColumn(
-                new_scol, F.row_number().over(Window.orderBy(F.monotonically_increasing_id()))
-            )
+            return InternalFrame.attach_sequence_column(sdf_most_value, new_scol)
 
         new_sdf = None
         for data_scol_name in data._internal.data_spark_column_names:
