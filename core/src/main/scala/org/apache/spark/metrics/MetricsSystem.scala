@@ -172,8 +172,7 @@ private[spark] class MetricsSystem private (
   def removeSource(source: Source): Unit = sourcesWithListeners.synchronized {
     val regName = buildRegistryName(source)
     registry.removeMatching((name: String, _: Metric) => name.startsWith(regName))
-    sourcesWithListeners.get(source).foreach(source.metricRegistry.removeListener)
-    sourcesWithListeners.remove(source)
+sourcesWithListeners.remove(source).foreach(source.metricRegistry.removeListener)
   }
 
   private def registerSources(): Unit = {
