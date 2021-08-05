@@ -521,6 +521,7 @@ object RemoveNoopOperators extends Rule[LogicalPlan] {
     projectList.zip(originalNames).map {
       case (attr: Attribute, name) => attr.withName(name)
       case (alias: Alias, name) => alias.withName(name)
+      case (other, _) => other
     }
   }
 
