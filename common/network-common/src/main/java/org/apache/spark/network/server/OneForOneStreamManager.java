@@ -78,7 +78,7 @@ public class OneForOneStreamManager extends StreamManager {
     StreamState state = streams.get(streamId);
     if (state == null) {
       throw new IllegalStateException(String.format(
-        "Requested chunk has been removed for streamId %s", streamId));
+        "Requested chunk not available since streamId %s is closed", streamId));
     } else if (chunkIndex != state.curChunk) {
       throw new IllegalStateException(String.format(
         "Received out-of-order chunk index %s (expected %s)", chunkIndex, state.curChunk));
