@@ -3511,13 +3511,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         horse       mammal     4    NaN
         spider   arthropod     8    0.0
         ostrich       bird     2    NaN
+
         >>> psdf.mode()  # doctest: +SKIP
           species  legs  wings
         0    bird   2.0    0.0
         1    None   NaN    2.0
+
         >>> psdf.mode(dropna=False)
           species  legs  wings
         0    bird     2    NaN
+
         >>> psdf.mode(numeric_only=True)  # doctest: +SKIP
            legs  wings
         0   2.0    0.0
