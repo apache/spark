@@ -247,8 +247,8 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
     // collision of pushed blocks. This does not increase the cost of reading unmerged shuffle
     // files on the executor side, because we are still reading MB-size chunks and only randomize
     // the in-memory sliced buffers post reading.
-    val blocksToPush = Utils.randomize(blockIds.zip(
-      sliceReqBufferIntoBlockBuffers(request.reqBuffer, request.blocks.map(_._2))))
+    val (blockPushIds, blockPushBuffers) = Utils.randomize(blockIds.zip(
+      sliceReqBufferIntoBlockBuffers(request.reqBuffer, request.blocks.map(_._2)))).unzip
     SparkEnv.get.blockManager.blockStoreClient.pushBlocks(
       address.host, address.port, blocksToPush.map(_._1).toArray,
       blocksToPush.map(_._2).toArray, blockPushListener)
