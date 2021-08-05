@@ -21,7 +21,7 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
@@ -120,8 +120,8 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     val executorPodsAllocator = {
       val cls = Utils.classForName[AbstractPodsAllocator](executorPodsAllocatorName)
       val cstr = cls.getConstructor(
-        classOf[SecurityManager], classOf[KubernetesExecutorBuilder],
-        classOf[KubernetesClient],
+        classOf[SparkConf], classOf[SecurityManager],
+        classOf[KubernetesExecutorBuilder], classOf[KubernetesClient],
         classOf[ExecutorPodsSnapshotsStore], classOf[Clock])
       cstr.newInstance(
           sc.conf,
