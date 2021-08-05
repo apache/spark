@@ -195,14 +195,16 @@ class ValidatorTestUtilsMixin:
 class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
 
     def test_gen_avg_and_std_metrics(self):
-        metrics_all = np.array([
+        metrics_all = [
             [1.0, 3.0, 2.0, 4.0],
             [3.0, 2.0, 2.0, 4.0],
             [3.0, 2.5, 2.1, 8.0],
-        ])
+        ]
         avg_metrics, std_metrics = CrossValidator._gen_avg_and_std_metrics(metrics_all)
-        assert np.allclose(avg_metrics, np.array([2.33333333, 2.5, 2.03333333, 5.33333333]))
-        assert np.allclose(std_metrics, np.array([0.94280904, 0.40824829, 0.04714045, 1.88561808]))
+        assert np.allclose(avg_metrics, [2.33333333, 2.5, 2.03333333, 5.33333333])
+        assert np.allclose(std_metrics, [0.94280904, 0.40824829, 0.04714045, 1.88561808])
+        assert isinstance(avg_metrics, list)
+        assert isinstance(std_metrics, list)
 
     def test_copy(self):
         dataset = self.spark.createDataFrame([

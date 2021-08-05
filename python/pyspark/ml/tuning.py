@@ -718,7 +718,7 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
     def _gen_avg_and_std_metrics(metrics_all):
         avg_metrics = np.mean(metrics_all, axis=0)
         std_metrics = np.std(metrics_all, axis=0)
-        return avg_metrics, std_metrics
+        return list(avg_metrics), list(std_metrics)
 
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
