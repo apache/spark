@@ -876,28 +876,32 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       } else {
         logDebug(s"Hive metastore filter is '$filter'.")
         val tryDirectSqlConfVar = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL
-        // We should get this config value from the metaStore. otherwise hit SPARK-18681.
-        // To be compatible with hive-0.12 and hive-0.13, In the future we can achieve this by:
-        // val tryDirectSql = hive.getMetaConf(tryDirectSqlConfVar.varname).toBoolean
-        val tryDirectSql = hive.getMSC.getConfigValue(tryDirectSqlConfVar.varname,
-          tryDirectSqlConfVar.defaultBoolVal.toString).toBoolean
+        val shouldFallback = SQLConf.get.metastorePartitionPruningFallbackOnException
         try {
           // Hive may throw an exception when calling this method in some circumstances, such as
           // when filtering on a non-string partition column when the hive config key
-          // hive.metastore.try.direct.sql is false
+          // hive.metastore.try.direct.sql is false. In some cases the remote metastore will throw
+          // exceptions even if the config is true, due to various reasons including the
+          // underlying RDBMS, Hive bugs when generating the filter, etc.
+          //
+          // Because of the above we'll fallback to use `Hive.getAllPartitionsOf` when the exception
+          // occurs and the config`spark.sql.hive.metastorePartitionPruningFallbackOnException` is
+          // enabled.
           getPartitionsByFilterMethod.invoke(hive, table, filter)
             .asInstanceOf[JArrayList[Partition]]
         } catch {
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
-              !tryDirectSql =>
+              shouldFallback =>
             logWarning("Caught Hive MetaException attempting to get partition metadata by " +
               "filter from Hive. Falling back to fetching all partition metadata, which will " +
               "degrade performance. Modifying your Hive metastore configuration to set " +
-              s"${tryDirectSqlConfVar.varname} to true may resolve this problem.", ex)
+              s"${tryDirectSqlConfVar.varname} to true (if it is not true already) may resolve " +
+              "this problem. Otherwise, to avoid degraded performance you can set " +
+              s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} " +
+              " to false and let the query fail instead.", ex)
             // HiveShim clients are expected to handle a superset of the requested partitions
             getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]]
-          case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] &&
-              tryDirectSql =>
+          case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
             throw QueryExecutionErrors.getPartitionMetadataByFilterError(ex)
         }
       }

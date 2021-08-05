@@ -58,18 +58,15 @@ public class JavaColumnExpressionSuite {
       createStructField("b", StringType, false)));
     Dataset<Row> df = spark.createDataFrame(rows, schema);
     // Test with different types of collections
-    Assert.assertTrue(Arrays.equals(
+    Assert.assertArrayEquals(
       (Row[]) df.filter(df.col("a").isInCollection(Arrays.asList(1, 2))).collect(),
-      (Row[]) df.filter((FilterFunction<Row>) r -> r.getInt(0) == 1 || r.getInt(0) == 2).collect()
-    ));
-    Assert.assertTrue(Arrays.equals(
+      (Row[]) df.filter((FilterFunction<Row>) r -> r.getInt(0) == 1 || r.getInt(0) == 2).collect());
+    Assert.assertArrayEquals(
       (Row[]) df.filter(df.col("a").isInCollection(new HashSet<>(Arrays.asList(1, 2)))).collect(),
-      (Row[]) df.filter((FilterFunction<Row>) r -> r.getInt(0) == 1 || r.getInt(0) == 2).collect()
-    ));
-    Assert.assertTrue(Arrays.equals(
+      (Row[]) df.filter((FilterFunction<Row>) r -> r.getInt(0) == 1 || r.getInt(0) == 2).collect());
+    Assert.assertArrayEquals(
       (Row[]) df.filter(df.col("a").isInCollection(new ArrayList<>(Arrays.asList(3, 1)))).collect(),
-      (Row[]) df.filter((FilterFunction<Row>) r -> r.getInt(0) == 3 || r.getInt(0) == 1).collect()
-    ));
+      (Row[]) df.filter((FilterFunction<Row>) r -> r.getInt(0) == 3 || r.getInt(0) == 1).collect());
   }
 
   @Test

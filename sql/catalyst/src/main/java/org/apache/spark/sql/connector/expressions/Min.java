@@ -33,7 +33,7 @@ public final class Min implements AggregateFunc {
   public FieldReference column() { return column; }
 
   @Override
-  public String toString() { return "Min(" + column.describe() + ")"; }
+  public String toString() { return "MIN(" + column.describe() + ")"; }
 
   @Override
   public String describe() { return this.toString(); }

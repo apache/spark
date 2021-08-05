@@ -34,7 +34,7 @@ import scala.util.{Failure, Random, Success, Try}
 import scala.util.control.NonFatal
 
 import com.codahale.metrics.{MetricRegistry, MetricSet}
-import com.google.common.cache.CacheBuilder
+import com.github.benmanes.caffeine.cache.Caffeine
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark._
@@ -49,12 +49,13 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle._
+import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.{MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
@@ -122,7 +123,7 @@ private[spark] class HostLocalDirManager(
     blockStoreClient: BlockStoreClient) extends Logging {
 
   private val executorIdToLocalDirsCache =
-    CacheBuilder
+    Caffeine
       .newBuilder()
       .maximumSize(cacheSize)
       .build[String, Array[String]]()
@@ -281,6 +282,28 @@ private[spark] class BlockManager(
   }
 
   override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString
+
+  /**
+   * Diagnose the possible cause of the shuffle data corruption by verifying the shuffle checksums
+   *
+   * @param blockId The blockId of the corrupted shuffle block
+   * @param checksumByReader The checksum value of the corrupted block
+   * @param algorithm The cheksum algorithm that is used when calculating the checksum value
+   */
+  override def diagnoseShuffleBlockCorruption(
+      blockId: BlockId,
+      checksumByReader: Long,
+      algorithm: String): Cause = {
+    assert(blockId.isInstanceOf[ShuffleBlockId],
+      s"Corruption diagnosis only supports shuffle block yet, but got $blockId")
+    val shuffleBlock = blockId.asInstanceOf[ShuffleBlockId]
+    val resolver = shuffleManager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
+    val checksumFile =
+      resolver.getChecksumFile(shuffleBlock.shuffleId, shuffleBlock.mapId, algorithm)
+    val reduceId = shuffleBlock.reduceId
+    ShuffleChecksumHelper.diagnoseCorruption(
+      algorithm, checksumFile, reduceId, resolver.getBlockData(shuffleBlock), checksumByReader)
+  }
 
   /**
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.
@@ -750,7 +773,7 @@ private[spark] class BlockManager(
    * which will be memory efficient when performing certain operations.
    */
   def getLocalMergedBlockData(
-      blockId: ShuffleBlockId,
+      blockId: ShuffleMergedBlockId,
       dirs: Array[String]): Seq[ManagedBuffer] = {
     shuffleManager.shuffleBlockResolver.getMergedBlockData(blockId, Some(dirs))
   }
@@ -759,7 +782,7 @@ private[spark] class BlockManager(
    * Get the local merged shuffle block meta data for the given block ID.
    */
   def getLocalMergedBlockMeta(
-      blockId: ShuffleBlockId,
+      blockId: ShuffleMergedBlockId,
       dirs: Array[String]): MergedBlockMeta = {
     shuffleManager.shuffleBlockResolver.getMergedBlockMeta(blockId, Some(dirs))
   }

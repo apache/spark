@@ -1032,6 +1032,24 @@ Apart from these, the following properties are also available, and may be useful
   </td>
   <td>1.6.0</td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.checksum.enabled</code></td>
+  <td>true</td>
+  <td>
+    Whether to calculate the checksum of shuffle data. If enabled, Spark will calculate the checksum values for each partition
+    data within the map output file and store the values in a checksum file on the disk. When there's shuffle data corruption
+    detected, Spark will try to diagnose the cause (e.g., network issue, disk issue, etc.) of the corruption by using the checksum file.
+  </td>
+  <td>3.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.checksum.algorithm</code></td>
+  <td>ADLER32</td>
+  <td>
+    The algorithm is used to calculate the shuffle checksum. Currently, it only supports built-in algorithms of JDK, e.g., ADLER32, CRC32.
+  </td>
+  <td>3.2.0</td>
+</tr>
 </table>
 
 ### Spark UI
