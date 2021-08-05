@@ -259,12 +259,10 @@ The behavior of some SQL operators can be different under ANSI mode (`spark.sql.
 
 ### Useful Functions for ANSI Mode
 
-After turning ANSI mode on, if you expect some of your SQL operations to not throw exceptions on errors, as Spark's default behavior, you can use the following functions.
+When ANSI mode is on, it throws exceptions for invalid operations. You can use the following SQL functions to suppress such exceptions.
   - `try_cast`: identical to `CAST`, except that it returns `NULL` result instead of throwing an exception on runtime error.
   - `try_add`: identical to the add operator `+`, except that it returns `NULL` result instead of throwing an exception on integral value overflow.
   - `try_divide`: identical to the division operator `/`, except that it returns `NULL` result instead of throwing an exception on dividing 0.
-
-Note that the behavior of these expressions doesn't depend on configuration `spark.sql.ansi.enabled`.
 
 ### SQL Keywords
 
