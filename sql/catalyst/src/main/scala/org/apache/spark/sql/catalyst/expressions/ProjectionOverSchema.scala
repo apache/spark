@@ -22,7 +22,8 @@ import org.apache.spark.sql.types._
 /**
  * A Scala extractor that projects an expression over a given schema. Data types,
  * field indexes and field counts of complex type extractors and attributes
- * are adjusted to fit the schema. All other expressions are left as-is. This
+ * are adjusted to fit the schema by keep a attribute name map by origin expression
+ * and normalized expression. All other expressions are left as-is. This
  * class is motivated by columnar nested schema pruning.
  */
 case class ProjectionOverSchema(schema: StructType, attrNameMap: Map[String, String]) {
