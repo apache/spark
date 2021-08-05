@@ -93,13 +93,14 @@ case "$1" in
       -Xms$SPARK_EXECUTOR_MEMORY
       -Xmx$SPARK_EXECUTOR_MEMORY
       -cp "$SPARK_CLASSPATH:$SPARK_DIST_CLASSPATH"
-      org.apache.spark.executor.CoarseGrainedExecutorBackend
+      org.apache.spark.scheduler.cluster.k8s.KubernetesExecutorBackend
       --driver-url $SPARK_DRIVER_URL
       --executor-id $SPARK_EXECUTOR_ID
       --cores $SPARK_EXECUTOR_CORES
       --app-id $SPARK_APPLICATION_ID
       --hostname $SPARK_EXECUTOR_POD_IP
       --resourceProfileId $SPARK_RESOURCE_PROFILE_ID
+      --podName $SPARK_EXECUTOR_POD_NAME
     )
     ;;
 
@@ -108,11 +109,6 @@ case "$1" in
     CMD=("$@")
     ;;
 esac
-
-# Clean up the local storage incase we've been restarted so we don't have any orphan disk blocks.
-if [ -z "${SPARK_LOCAL_DIRS}" ]; then
-  rm -rf "${SPARK_LOCAL_DIRS}"/[[:digit:]][[:digit:]]*
-fi
 
 # Execute the container CMD under tini for better hygiene
 exec /usr/bin/tini -s -- "${CMD[@]}"
