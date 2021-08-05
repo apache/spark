@@ -63,7 +63,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         .getPartitionFilters(sHolder.builder, sHolder.relation, normalizedFiltersWithoutSubquery)
       if ((ExpressionSet(postScanFilters) -- partitionFilters.filter(_.references.nonEmpty))
         .toSeq.isEmpty) {
-        sHolder.hasPostScanBuilder = false
+        sHolder.mightHavePostScanBuilder = false
       }
 
       logInfo(
