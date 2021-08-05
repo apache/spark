@@ -19,9 +19,12 @@ package org.apache.spark.network.shuffle.protocol;
 
 import java.util.Objects;
 
+import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
+
+import org.apache.spark.network.server.BlockPushNonFatalFailure;
 
 /**
  * Error code indicating a non-fatal failure of a block push request.
@@ -36,6 +39,7 @@ public class BlockPushReturnCode extends BlockTransferMessage {
   public final byte returnCode;
 
   public BlockPushReturnCode(byte returnCode) {
+    Preconditions.checkNotNull(BlockPushNonFatalFailure.getReturnCode(returnCode));
     this.returnCode = returnCode;
   }
 

@@ -84,6 +84,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private static final int UNDEFINED_ATTEMPT_ID = -1;
   // Shuffles of determinate stages will have shuffleMergeId set to 0
   private static final int DETERMINATE_SHUFFLE_MERGE_ID = 0;
+  private static final ErrorHandler.BlockPushErrorHandler ERROR_HANDLER = createErrorHandler();
+  // ByteBuffer to respond to client upon a successful merge of a pushed block
+  private static final ByteBuffer SUCCESS_RESPONSE =
+    new BlockPushReturnCode(ReturnCode.SUCCESS.id()).toByteBuffer().asReadOnlyBuffer();
 
   // ConcurrentHashMap doesn't allow null for keys or values which is why this is required.
   // Marker to identify finalized indeterminate shuffle partitions in the case of indeterminate
@@ -104,7 +108,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private final TransportConf conf;
   private final int minChunkSize;
   private final int ioExceptionsThresholdDuringMerge;
-  private final ErrorHandler.BlockPushErrorHandler errorHandler;
 
   @SuppressWarnings("UnstableApiUsage")
   private final LoadingCache<File, ShuffleIndexInformation> indexCache;
@@ -122,11 +125,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       .maximumWeight(conf.mergedIndexCacheSize())
       .weigher((Weigher<File, ShuffleIndexInformation>)(file, indexInfo) -> indexInfo.getSize())
       .build(ShuffleIndexInformation::new);
-    this.errorHandler = createErrorHandler();
   }
 
   @VisibleForTesting
-  protected ErrorHandler.BlockPushErrorHandler createErrorHandler() {
+  protected static ErrorHandler.BlockPushErrorHandler createErrorHandler() {
     return new ErrorHandler.BlockPushErrorHandler() {
       // Explicitly use a shuffle service side error handler for handling exceptions.
       // BlockPushNonException on the server side only has the response field set. It
@@ -386,10 +388,6 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public StreamCallbackWithID receiveBlockDataAsStream(PushBlockStream msg) {
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(msg.appId);
-    // Use string concatenation here to avoid the overhead with String.format on every
-    // pushed block.
-    final String streamId = OneForOneBlockPusher.SHUFFLE_PUSH_BLOCK_PREFIX + "_"
-      + msg.shuffleId + "_" + msg.shuffleMergeId + "_" + msg.mapIndex + "_" + msg.reduceId;
     if (appShuffleInfo.attemptId != msg.appAttemptId) {
       // If this Block belongs to a former application attempt, it is considered late,
       // as only the blocks from the current application attempt will be merged
@@ -399,6 +397,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           + "with the current attempt id %s stored in shuffle service for application %s",
           msg.appAttemptId, appShuffleInfo.attemptId, msg.appId));
     }
+    // Use string concatenation here to avoid the overhead with String.format on every
+    // pushed block.
+    final String streamId = OneForOneBlockPusher.SHUFFLE_PUSH_BLOCK_PREFIX + "_"
+      + msg.shuffleId + "_" + msg.shuffleMergeId + "_" + msg.mapIndex + "_" + msg.reduceId;
     // Retrieve merged shuffle file metadata
     AppShufflePartitionInfo partitionInfoBeforeCheck;
     boolean isStaleBlock = false;
@@ -464,8 +466,11 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       return new PushBlockStreamCallback(
         this, appShuffleInfo, streamId, partitionInfo, msg.mapIndex);
     } else {
-      final boolean finalIsTooLate = isTooLate;
-      final boolean finalIsStaleBlock = isStaleBlock;
+      final BlockPushNonFatalFailure failure = isTooLate ?
+        new BlockPushNonFatalFailure(
+          new BlockPushReturnCode(ReturnCode.TOO_LATE_BLOCK_PUSH.id()).toByteBuffer()) :
+        (isStaleBlock ? new BlockPushNonFatalFailure(
+          new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id()).toByteBuffer()) : null);
       // For a duplicate block or a block which is late or stale block from an older
       // shuffleMergeId, respond back with a callback that handles them differently.
       return new StreamCallbackWithID() {
@@ -484,12 +489,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         public void onComplete(String streamId) {
           // Throw non-fatal failure here so the block data is drained from channel and server
           // responds the error code to the client.
-          if (finalIsTooLate) {
-            throw new BlockPushNonFatalFailure(
-              new BlockPushReturnCode(ReturnCode.TOO_LATE_BLOCK_PUSH.id()).toByteBuffer());
-          } else if (finalIsStaleBlock) {
-            throw new BlockPushNonFatalFailure(
-              new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id()).toByteBuffer());
+          if (failure != null) {
+            throw failure;
           }
           // For duplicate block that is received before the shuffle merge finalizes, the
           // server should respond success to the client.
@@ -501,7 +502,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
         @Override
         public ByteBuffer getCompletionResponse() {
-          return new BlockPushReturnCode(ReturnCode.SUCCESS.id()).toByteBuffer();
+          return SUCCESS_RESPONSE.duplicate();
         }
       };
     }
@@ -698,7 +699,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     @Override
     public ByteBuffer getCompletionResponse() {
-      return new BlockPushReturnCode(ReturnCode.SUCCESS.id()).toByteBuffer();
+      return SUCCESS_RESPONSE.duplicate();
     }
 
     /**
@@ -819,10 +820,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       // to disk as well. This way, we avoid having to buffer the entirety of every blocks in
       // memory, while still providing the necessary guarantee.
       synchronized (partitionInfo) {
-        if (isStale(appShuffleInfo.shuffles.get(partitionInfo.shuffleId),
-            partitionInfo.shuffleMergeId) ||
-            isTooLate(appShuffleInfo.shuffles.get(partitionInfo.shuffleId),
-            partitionInfo.reduceId)) {
+        AppShuffleMergePartitionsInfo info = appShuffleInfo.shuffles.get(partitionInfo.shuffleId);
+        if (isStale(info, partitionInfo.shuffleMergeId) ||
+            isTooLate(info, partitionInfo.reduceId)) {
           deferredBufs = null;
           return;
         }
@@ -900,14 +900,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         // generating shuffle output for the shuffle ID. By the time we finish reading this
         // message, the block request is either stale or too late. We should thus respond
         // the error code to the client.
-        if (isTooLate(appShuffleInfo.shuffles.get(partitionInfo.shuffleId),
-          partitionInfo.reduceId)) {
+        AppShuffleMergePartitionsInfo info = appShuffleInfo.shuffles.get(partitionInfo.shuffleId);
+        if (isTooLate(info, partitionInfo.reduceId)) {
           deferredBufs = null;
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.TOO_LATE_BLOCK_PUSH.id()).toByteBuffer());
         }
-        if (isStale(appShuffleInfo.shuffles.get(partitionInfo.shuffleId),
-          partitionInfo.shuffleMergeId)) {
+        if (isStale(info, partitionInfo.shuffleMergeId)) {
           deferredBufs = null;
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id()).toByteBuffer());
@@ -969,7 +968,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     @Override
     public void onFailure(String streamId, Throwable throwable) throws IOException {
-      if (mergeManager.errorHandler.shouldLogError(throwable)) {
+      if (ERROR_HANDLER.shouldLogError(throwable)) {
         logger.error("Encountered issue when merging {}", streamId, throwable);
       } else {
         logger.debug("Encountered issue when merging {}", streamId, throwable);
@@ -980,10 +979,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       // an opportunity to write the block data to disk, we should also ignore here.
       if (isWriting) {
         synchronized (partitionInfo) {
-          if (!isTooLate(appShuffleInfo.shuffles.get(partitionInfo.shuffleId),
-              partitionInfo.reduceId) &&
-              !isStale(appShuffleInfo.shuffles.get(partitionInfo.shuffleId),
-              partitionInfo.shuffleMergeId)) {
+          AppShuffleMergePartitionsInfo info =
+            appShuffleInfo.shuffles.get(partitionInfo.shuffleId);
+          if (!isTooLate(info, partitionInfo.reduceId) &&
+              !isStale(info, partitionInfo.shuffleMergeId)) {
             logger.debug("{} shuffleId {} shuffleMergeId {} reduceId {}"
               + " encountered failure", partitionInfo.appId, partitionInfo.shuffleId,
               partitionInfo.shuffleMergeId, partitionInfo.reduceId);

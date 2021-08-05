@@ -108,7 +108,7 @@ public class RemoteBlockPushResolverSuite {
 
   @Test
   public void testErrorLogging() {
-    ErrorHandler.BlockPushErrorHandler errorHandler = pushResolver.createErrorHandler();
+    ErrorHandler.BlockPushErrorHandler errorHandler = RemoteBlockPushResolver.createErrorHandler();
     assertFalse(errorHandler.shouldLogError(new BlockPushNonFatalFailure(
       BlockPushNonFatalFailure.ReturnCode.TOO_LATE_BLOCK_PUSH)));
     assertFalse(errorHandler.shouldLogError(new BlockPushNonFatalFailure(

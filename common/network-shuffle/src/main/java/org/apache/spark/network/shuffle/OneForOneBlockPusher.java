@@ -29,6 +29,7 @@ import org.apache.spark.network.buffer.NioManagedBuffer;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
+import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
 import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
@@ -82,9 +83,9 @@ public class OneForOneBlockPusher {
     public void onSuccess(ByteBuffer response) {
       BlockPushReturnCode returnCode =
         (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(response);
-      // If the return code is not 0, the server has responded some error code. Handle
+      // If the return code is not SUCCESS, the server has responded some error code. Handle
       // the error accordingly.
-      if (returnCode.returnCode > 0) {
+      if (returnCode.returnCode != ReturnCode.SUCCESS.id()) {
         checkAndFailRemainingBlocks(index, new BlockPushNonFatalFailure(
           BlockPushNonFatalFailure.getReturnCode(returnCode.returnCode)));
       } else {

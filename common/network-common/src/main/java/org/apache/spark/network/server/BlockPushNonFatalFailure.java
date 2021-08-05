@@ -19,6 +19,8 @@ package org.apache.spark.network.server;
 
 import java.nio.ByteBuffer;
 
+import com.google.common.base.Preconditions;
+
 /**
  * A special RuntimeException thrown when shuffle service experiences a non-fatal failure
  * with handling block push requests with push-based shuffle. Due to the best-effort nature
@@ -62,10 +64,14 @@ public class BlockPushNonFatalFailure extends RuntimeException {
   }
 
   public ByteBuffer getResponse() {
+    // Ensure we do not invoke this method if response is not set
+    Preconditions.checkNotNull(response);
     return response;
   }
 
   public ReturnCode getReturnCode() {
+    // Ensure we do not invoke this method if returnCode is not set
+    Preconditions.checkNotNull(returnCode);
     return returnCode;
   }
 
