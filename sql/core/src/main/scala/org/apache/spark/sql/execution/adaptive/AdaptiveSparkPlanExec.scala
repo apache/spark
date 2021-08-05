@@ -130,9 +130,9 @@ case class AdaptiveSparkPlanExec(
 
   // A list of physical optimizer rules to be applied right after a new stage is created. The input
   // plan to these rules has exchange as its root node.
-  private def postStageCreationRules(outputColumnar: Boolean) =
+  private def postStageCreationRules(outputsColumnar: Boolean) =
     ApplyColumnarRulesAndInsertTransitions(
-      context.session.sessionState.columnarRules, outputColumnar) +: staticPostStageCreationRules
+      context.session.sessionState.columnarRules, outputsColumnar) +: staticPostStageCreationRules
 
   private def optimizeQueryStage(plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
     val optimized = queryStageOptimizerRules.foldLeft(plan) { case (latestPlan, rule) =>
@@ -522,7 +522,7 @@ case class AdaptiveSparkPlanExec(
       case s: ShuffleExchangeLike =>
         val newShuffle = applyPhysicalRules(
           s.withNewChildren(Seq(optimizedPlan)),
-          postStageCreationRules(outputColumnar = false),
+          postStageCreationRules(outputsColumnar = false),
           Some((planChangeLogger, "AQE Post Stage Creation")))
         if (!newShuffle.isInstanceOf[ShuffleExchangeLike]) {
           throw new IllegalStateException(
@@ -532,7 +532,7 @@ case class AdaptiveSparkPlanExec(
       case b: BroadcastExchangeLike =>
         val newBroadcast = applyPhysicalRules(
           b.withNewChildren(Seq(optimizedPlan)),
-          postStageCreationRules(outputColumnar = false),
+          postStageCreationRules(outputsColumnar = false),
           Some((planChangeLogger, "AQE Post Stage Creation")))
         if (!newBroadcast.isInstanceOf[BroadcastExchangeLike]) {
           throw new IllegalStateException(

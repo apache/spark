@@ -415,7 +415,7 @@ object QueryExecution {
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan,
       ApplyColumnarRulesAndInsertTransitions(
-        sparkSession.sessionState.columnarRules, outputColumnar = false),
+        sparkSession.sessionState.columnarRules, outputsColumnar = false),
       CollapseCodegenStages()) ++
       (if (subquery) {
         Nil
