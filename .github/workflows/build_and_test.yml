@@ -220,7 +220,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
-      METASPACE_SIZE: 128m
+      METASPACE_SIZE: 1g
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
