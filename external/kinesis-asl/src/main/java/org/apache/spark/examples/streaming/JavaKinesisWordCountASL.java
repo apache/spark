@@ -19,6 +19,7 @@ package org.apache.spark.examples.streaming;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -160,17 +161,29 @@ public final class JavaKinesisWordCountASL { // needs to be public for access fr
     }
 
     // Convert each line of Array[Byte] to String, and split into words
-    JavaDStream<String> words = unionStreams.flatMap(
-      (FlatMapFunction<byte[], String>) line -> {
+    JavaDStream<String> words = unionStreams.flatMap(new FlatMapFunction<byte[], String>() {
+      @Override
+      public Iterator<String> call(byte[] line) {
         String s = new String(line, StandardCharsets.UTF_8);
         return Arrays.asList(WORD_SEPARATOR.split(s)).iterator();
-      });
+      }
+    });
 
     // Map each word to a (word, 1) tuple so we can reduce by key to count the words
     JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
-      (PairFunction<String, String, Integer>) s -> new Tuple2<>(s, 1)
+        new PairFunction<String, String, Integer>() {
+          @Override
+          public Tuple2<String, Integer> call(String s) {
+            return new Tuple2<>(s, 1);
+          }
+        }
     ).reduceByKey(
-      (Function2<Integer, Integer, Integer>) Integer::sum
+        new Function2<Integer, Integer, Integer>() {
+          @Override
+          public Integer call(Integer i1, Integer i2) {
+            return i1 + i2;
+          }
+        }
     );
 
     // Print the first 10 wordCounts
