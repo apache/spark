@@ -338,7 +338,6 @@ object ParquetUtils {
               value = currentMin
             }
           case count: Count =>
-
             rowCount += block.getRowCount
             var isPartitionCol = false;
             if (partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive))
