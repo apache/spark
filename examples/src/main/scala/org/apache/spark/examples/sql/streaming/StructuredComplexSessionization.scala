@@ -87,59 +87,61 @@ object StructuredComplexSessionization {
       .add("event_type", StringType, nullable = false)
       .add("timestamp", LongType, nullable = false)
 
+    val gapDuration = 1000 * 60 * 5 // 5 mins
+
     // Parse the line into event, as described in classdoc.
     val events = lines
       .select(from_json(col("value"), jsonSchema).as("event"))
       .selectExpr("event.user_id", "event.event_type", "event.timestamp")
       .as[(String, String, Long)]
       .map { case (userId, eventType, timestamp) =>
-        Event(userId, EventTypes.withName(eventType), timestamp)
+        SessionEvent(userId, EventTypes.withName(eventType), timestamp, gapDuration)
       }
 
     // Sessionize the events. Track number of events, start and end timestamps of session,
     // and report session when session is closed.
-
     // FIXME: ...implement from here...
     val sessionUpdates = events
       .groupByKey(event => event.userId)
-      .mapGroupsWithState[Events, Session](GroupStateTimeout.EventTimeTimeout) {
-        case (sessionId: String, events: Iterator[Event], state: GroupState[Events]) =>
+      .mapGroupsWithState[List[SessionAcc], Session](GroupStateTimeout.EventTimeTimeout) {
+        case (userId: String, events: Iterator[SessionEvent],
+            state: GroupState[List[SessionAcc]]) =>
 
-          def handleEvict(sessionId: String, state: GroupState[Events]): Iterator[Session] = {
+          def handleEvict(): Iterator[Session] = {
             state.getOption match {
               case Some(lst) =>
-                // we sort events by timestamp
-                val (evicted, kept) = lst.events.span {
-                  s => s.timestamp < state.getCurrentWatermarkMs()
+                // we sort sessions by timestamp
+                val (evicted, kept) = lst.span {
+                  s => s.endTime < state.getCurrentWatermarkMs()
                 }
 
                 if (kept.isEmpty) {
                   state.remove()
                 } else {
-                  state.update(Events(kept))
-                  state.setTimeoutTimestamp(kept.head.timestamp)
+                  state.update(kept)
+                  state.setTimeoutTimestamp(kept.head.endTime)
                 }
 
-
-
-                outputMode match {
-                  case s if s == OutputMode.Append() =>
-                    evicted.iterator.map(si => SessionUpdate(sessionId,
-                      si.sessionStartTimestampMs / 1000,
-                      si.sessionEndTimestampMs / 1000,
-                      si.durationMs / 1000, si.numEvents))
-                  case s if s == OutputMode.Update() => Seq.empty[SessionUpdate].iterator
-                  case s => throw new UnsupportedOperationException(s"Not supported output mode $s")
-                }
+                evicted.map { session =>
+                  Session(userId, session.endTime - session.startTime, session.events.length)
+                }.iterator
 
               case None =>
                 state.remove()
-                Seq.empty[SessionUpdate].iterator
+                Seq.empty[Session].iterator
             }
           }
 
+          def handleEvent(event: SessionEvent): Unit = {
+            state.getOption match {
+              case Some(lst) =>
+                var idx = 0
 
 
+              case None =>
+
+            }
+          }
       }
 
 
@@ -192,14 +194,38 @@ object EventTypes extends Enumeration {
   val NEW_EVENT, CLOSE_SESSION = Value
 }
 
-case class Event(userId: String, eventType: EventTypes.Value, timestamp: Long)
+case class SessionEvent(
+    userId: String,
+    eventType: EventTypes.Value,
+    startTimestamp: Long,
+    endTimestamp: Long)
 
-case class Events(events: List[Event])
+object SessionEvent {
+  def apply(
+      userId: String,
+      eventTypeStr: String,
+      timestamp: Long,
+      gapDuration: Long): SessionEvent = {
+    val eventType = EventTypes.withName(eventTypeStr)
+    val endTime = if (eventType == EventTypes.CLOSE_SESSION)  {
+      timestamp
+    } else {
+      timestamp + gapDuration
+    }
+    SessionEvent(userId, eventType, timestamp, endTime)
+  }
+}
+
+case class SessionAcc(events: List[SessionEvent]) {
+  private val sortedEvents: List[SessionEvent] = events.sortBy(_.startTimestamp)
+  def startTime: Long = sortedEvents.head.startTimestamp
+  def endTime: Long = sortedEvents.last.endTimestamp
+}
 
 /**
  * User-defined data type representing the session information returned by mapGroupsWithState.
  *
- * @param id          Id of the session
+ * @param id          Id of the user
  * @param durationMs  Duration the session was active, that is, from first event to its expiry
  * @param numEvents   Number of events received by the session while it was active
  */
