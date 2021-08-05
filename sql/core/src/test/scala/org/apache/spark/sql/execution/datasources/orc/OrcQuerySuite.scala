@@ -34,7 +34,9 @@ import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -710,6 +712,33 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
           case l: LogicalRelation => l.relation.asInstanceOf[HadoopFsRelation].fileFormat.getClass
         }
         assert(fileFormat == Some(classOf[OrcFileFormat]))
+      }
+    }
+  }
+
+  test("SPARK-34862: Support ORC vectorized reader for nested column") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(10).map { x =>
+        val stringColumn = s"$x" * 10
+        val structColumn = (x, s"$x" * 100)
+        val arrayColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
+        val mapColumn = Map(
+          s"$x" -> (x * 0.1, (x, s"$x" * 100)),
+          (s"$x" * 2) -> (x * 0.2, (x, s"$x" * 200)),
+          (s"$x" * 3) -> (x * 0.3, (x, s"$x" * 300)))
+        (x, stringColumn, structColumn, arrayColumn, mapColumn)
+      }.toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
+      df.write.format("orc").save(path)
+
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+        val readDf = spark.read.orc(path)
+        val vectorizationEnabled = readDf.queryExecution.executedPlan.find {
+          case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
+          case _ => false
+        }.isDefined
+        assert(vectorizationEnabled)
+        checkAnswer(readDf, df)
       }
     }
   }

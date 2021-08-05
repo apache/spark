@@ -20,6 +20,7 @@ A wrapper for GroupedData to behave similar to pandas GroupBy.
 """
 
 from abc import ABCMeta, abstractmethod
+import builtins
 import sys
 import inspect
 from collections import OrderedDict, namedtuple
@@ -43,6 +44,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
 
@@ -94,6 +96,12 @@ if TYPE_CHECKING:
 
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
+
+_builtin_table = {
+    builtins.sum: np.sum,
+    builtins.max: np.max,
+    builtins.min: np.min,
+}  # type: Dict[Callable, Callable]
 
 
 class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
@@ -1143,8 +1151,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1    52
         Name: B, dtype: int64
         """
-        from pandas.core.base import SelectionMixin
-
         if not isinstance(func, Callable):  # type: ignore
             raise TypeError("%s object is not callable" % type(func).__name__)
 
@@ -1171,9 +1177,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if is_series_groupby:
             name = psdf.columns[-1]
-            pandas_apply = SelectionMixin._builtin_table.get(func, func)
+            pandas_apply = _builtin_table.get(func, func)
         else:
-            f = SelectionMixin._builtin_table.get(func, func)
+            f = _builtin_table.get(func, func)
 
             def pandas_apply(pdf: pd.DataFrame, *a: Any, **k: Any) -> Any:
                 return f(pdf.drop(groupkey_names, axis=1), *a, **k)
@@ -1346,8 +1352,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         5    6
         Name: B, dtype: int64
         """
-        from pandas.core.base import SelectionMixin
-
         if not isinstance(func, Callable):  # type: ignore
             raise TypeError("%s object is not callable" % type(func).__name__)
 
@@ -1378,7 +1382,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 return pd.DataFrame(pdf.groupby(groupkey_names)[pdf.columns[-1]].filter(func))
 
         else:
-            f = SelectionMixin._builtin_table.get(func, func)
+            f = _builtin_table.get(func, func)
 
             def wrapped_func(pdf: pd.DataFrame) -> pd.DataFrame:
                 return f(pdf.drop(groupkey_names, axis=1))
