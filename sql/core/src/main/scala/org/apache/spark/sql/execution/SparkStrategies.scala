@@ -149,17 +149,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         joinType: JoinType,
         hint: JoinHint,
         isBroadcast: Boolean): Unit = {
+      def invalidBuildSideInHint(hintInfo: HintInfo, buildSide: String): Unit = {
+        hintErrorHandler.joinHintNotSupported(hintInfo,
+          s"build $buildSide for ${joinType.sql.toLowerCase(Locale.ROOT)} join")
+      }
+
       if (onlyLookingAtHint && buildSide.isEmpty) {
-        if ((isBroadcast && hintToBroadcastLeft(hint)) ||
-          (!isBroadcast && hintToShuffleHashJoinLeft(hint))) {
-          assert(hint.leftHint.isDefined)
-          hintErrorHandler.joinHintNotSupported(hint.leftHint.get,
-            s"build left for ${joinType.sql.toLowerCase(Locale.ROOT)} join")
-        } else if ((isBroadcast && hintToBroadcastRight(hint)) ||
-          (!isBroadcast && hintToShuffleHashJoinRight(hint))) {
-          assert(hint.rightHint.isDefined)
-          hintErrorHandler.joinHintNotSupported(hint.rightHint.get,
-            s"build right for ${joinType.sql.toLowerCase(Locale.ROOT)} join")
+        if (isBroadcast) {
+          // check broadcast hash join
+          if (hintToBroadcastLeft(hint)) invalidBuildSideInHint(hint.leftHint.get, "left")
+          if (hintToBroadcastRight(hint)) invalidBuildSideInHint(hint.rightHint.get, "right")
+        } else {
+          // check shuffle hash join
+          if (hintToShuffleHashJoinLeft(hint)) invalidBuildSideInHint(hint.leftHint.get, "left")
+          if (hintToShuffleHashJoinRight(hint)) invalidBuildSideInHint(hint.rightHint.get, "right")
         }
       }
     }
