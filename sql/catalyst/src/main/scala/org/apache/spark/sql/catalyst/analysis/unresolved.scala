@@ -537,7 +537,6 @@ case class UnresolvedAlias(
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def name: String = throw new UnresolvedException("name")
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
-
   final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_ALIAS)
 
   override lazy val resolved = false
