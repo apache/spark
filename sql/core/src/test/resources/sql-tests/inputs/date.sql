@@ -25,29 +25,30 @@ select to_date("16", "dd");
 -- invalid: there is no 29 in February, 1970
 select to_date("02-29", "MM-dd");
 
--- `dayofweek` accepts both date and timestamp inputs.
-select dayofweek('2007-02-03'), dayofweek('2009-07-30'), dayofweek('2017-05-27'),
-  dayofweek(null), dayofweek('1582-10-15 13:10:15'), dayofweek(timestamp'1582-10-15 13:10:15');
+-- `dayofweek` accepts both date and timestamp ltz/ntz inputs.
+select dayofweek('2007-02-03'), dayofweek('2009-07-30'), dayofweek('2017-05-27'), dayofweek(null),
+  dayofweek('1582-10-15 13:10:15'), dayofweek(timestamp_ltz'1582-10-15 13:10:15'), dayofweek(timestamp_ntz'1582-10-15 13:10:15');
 
--- `weekday` accepts both date and timestamp inputs.
-select weekday('2007-02-03'), weekday('2009-07-30'), weekday('2017-05-27'),
-  weekday(null), weekday('1582-10-15 13:10:15'), weekday(timestamp'1582-10-15 13:10:15');
+-- `weekday` accepts both date and timestamp ltz/ntz inputs.
+select weekday('2007-02-03'), weekday('2009-07-30'), weekday('2017-05-27'), weekday(null),
+  weekday('1582-10-15 13:10:15'), weekday(timestamp_ltz'1582-10-15 13:10:15'), weekday(timestamp_ntz'1582-10-15 13:10:15');
 
--- `year` accepts both date and timestamp inputs.
-select year('1500-01-01'), year('1582-10-15 13:10:15'), year(timestamp'1582-10-15 13:10:15');
+-- `year` accepts both date and timestamp ltz/ntz inputs.
+select year('1500-01-01'), year('1582-10-15 13:10:15'), year(timestamp_ltz'1582-10-15 13:10:15'), year(timestamp_ntz'1582-10-15 13:10:15');
 
--- `month` accepts both date and timestamp inputs.
-select month('1500-01-01'), month('1582-10-15 13:10:15'), month(timestamp'1582-10-15 13:10:15');
+-- `month` accepts both date and timestamp ltz/ntz inputs.
+select month('1500-01-01'), month('1582-10-15 13:10:15'), month(timestamp_ltz'1582-10-15 13:10:15'), month(timestamp_ntz'1582-10-15 13:10:15');
 
--- `dayOfYear` accepts both date and timestamp inputs.
-select dayOfYear('1500-01-01'), dayOfYear('1582-10-15 13:10:15'), dayOfYear(timestamp'1582-10-15 13:10:15');
+-- `dayOfYear` accepts both date and timestamp ltz/ntz inputs.
+select dayOfYear('1500-01-01'), dayOfYear('1582-10-15 13:10:15'), dayOfYear(timestamp_ltz'1582-10-15 13:10:15'), dayOfYear(timestamp_ntz'1582-10-15 13:10:15');
 
 -- next_day
 select next_day("2015-07-23", "Mon");
 select next_day("2015-07-23", "xx");
 select next_day("2015-07-23 12:12:12", "Mon");
--- next_date does not accept timestamp input
-select next_day(timestamp"2015-07-23 12:12:12", "Mon");
+-- next_date does not accept timestamp lzt/ntz input
+select next_day(timestamp_ltz"2015-07-23 12:12:12", "Mon");
+select next_day(timestamp_ntz"2015-07-23 12:12:12", "Mon");
 select next_day("xx", "Mon");
 select next_day(null, "Mon");
 select next_day(null, "xx");
@@ -66,17 +67,17 @@ select date_add('2011-11-11', '1.2');
 -- null input leads to null result.
 select date_add(null, 1);
 select date_add(date'2011-11-11', null);
--- `date_add` accepts both date and timestamp inputs.
+-- `date_add` accepts both date and timestamp ltz/ntz inputs.
 select date_add(date'2011-11-11', 1);
-select date_add(timestamp'2011-11-11 12:12:12', 1);
+select date_add(timestamp_ltz'2011-11-11 12:12:12', 1), date_add(timestamp_ntz'2011-11-11 12:12:12', 1);
 
 -- date sub
 select date_sub(date'2011-11-11', 1);
 -- the second parameter can be a string literal if it can be parsed to int
 select date_sub(date'2011-11-11', '1');
 select date_sub(date'2011-11-11', '1.2');
--- `date_sub` accepts both date and timestamp inputs.
-select date_sub(timestamp'2011-11-11 12:12:12', 1);
+-- `date_sub` accepts both date and timestamp ltz/ntz inputs.
+select date_sub(timestamp_ltz'2011-11-11 12:12:12', 1), date_sub(timestamp_ntz'2011-11-11 12:12:12', 1);
 -- null input leads to null result.
 select date_sub(null, 1);
 select date_sub(date'2011-11-11', null);
