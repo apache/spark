@@ -57,8 +57,11 @@ private[spark] class TaskDescription(
     val addedJars: Map[String, Long],
     val addedArchives: Map[String, Long],
     val properties: Properties,
+    val cpus: Int,
     val resources: immutable.Map[String, ResourceInformation],
     val serializedTask: ByteBuffer) {
+
+  assert(cpus > 0, "CPUs per task should be > 0")
 
   override def toString: String = s"TaskDescription($name)"
 }
@@ -112,6 +115,9 @@ private[spark] object TaskDescription {
       dataOut.writeInt(bytes.length)
       dataOut.write(bytes)
     }
+
+    // Write cpus.
+    dataOut.writeInt(taskDescription.cpus)
 
     // Write resources.
     serializeResources(taskDescription.resources, dataOut)
@@ -185,6 +191,9 @@ private[spark] object TaskDescription {
       properties.setProperty(key, new String(valueBytes, StandardCharsets.UTF_8))
     }
 
+    // Read cpus.
+    val cpus = dataIn.readInt()
+
     // Read resources.
     val resources = deserializeResources(dataIn)
 
@@ -192,6 +201,6 @@ private[spark] object TaskDescription {
     val serializedTask = byteBuffer.slice()
 
     new TaskDescription(taskId, attemptNumber, executorId, name, index, partitionId, taskFiles,
-      taskJars, taskArchives, properties, resources, serializedTask)
+      taskJars, taskArchives, properties, cpus, resources, serializedTask)
   }
 }
