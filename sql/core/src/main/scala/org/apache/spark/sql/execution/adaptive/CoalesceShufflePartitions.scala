@@ -59,34 +59,32 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     if (!shuffleStageInfos.forall(s => isSupported(s.shuffleStage.shuffle))) {
       plan
     } else {
-      // Ideally, this rule should simply coalesce partition w.r.t. the target size specified by
+      // Ideally, this rule should simply coalesce partitions w.r.t. the target size specified by
       // ADVISORY_PARTITION_SIZE_IN_BYTES (default 64MB). To avoid perf regression in AQE, this
-      // rule by default ignores the target size (set it to 0), and only respect the minimum
-      // partition size specified by COALESCE_PARTITIONS_MIN_PARTITION_SIZE (default 1MB).
-      // For history reason, this rule also need to support the config
-      // COALESCE_PARTITIONS_MIN_PARTITION_NUM: if it's set, we will respect both the target
-      // size and minimum partition number, no matter COALESCE_PARTITIONS_PARALLELISM_FIRST is true
-      // or false.
-      // TODO: remove the `minNumPartitions` parameter from
-      //       `ShufflePartitionsUtil.coalescePartitions` after we remove the config
-      //       COALESCE_PARTITIONS_MIN_PARTITION_NUM
-      val minPartitionNum = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM)
-      val advisorySize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
-      // `minPartitionSize` can be at most 20% of `advisorySize`.
-      val minPartitionSize = math.min(
-        advisorySize / 5, conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE))
+      // rule by default tries to maximize the parallelism and set the target size to
+      // `total shuffle size / Spark default parallelism`. In case the `Spark default parallelism`
+      // is too big, this rule also respect the minimum partition size specified by
+      // COALESCE_PARTITIONS_MIN_PARTITION_SIZE (default 1MB).
       val parallelismFirst = conf.getConf(SQLConf.COALESCE_PARTITIONS_PARALLELISM_FIRST)
-      val advisoryTargetSize = if (minPartitionNum.isEmpty && parallelismFirst) {
-        0
-      } else {
-        advisorySize
+      // For history reason, this rule also need to support the config
+      // COALESCE_PARTITIONS_MIN_PARTITION_NUM. We should remove this config in the future.
+      val minNumPartitions = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM).getOrElse {
+        if (parallelismFirst) {
+          // We fall back to Spark default parallelism if the minimum number of coalesced partitions
+          // is not set, so to avoid perf regressions compared to no coalescing.
+          session.sparkContext.defaultParallelism
+        } else {
+          // If we don't need to maximize the parallelism, we set `minPartitionNum` to 1, so that
+          // the specified advisory partition size will be respected.
+          1
+        }
       }
       val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
         shuffleStageInfos.map(_.shuffleStage.mapStats),
         shuffleStageInfos.map(_.partitionSpecs),
-        advisoryTargetSize = advisoryTargetSize,
-        minNumPartitions = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM).getOrElse(1),
-        minPartitionSize = minPartitionSize)
+        advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
+        minNumPartitions = minNumPartitions,
+        minPartitionSize = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE))
 
       if (newPartitionSpecs.nonEmpty) {
         val specsMap = shuffleStageInfos.zip(newPartitionSpecs).map { case (stageInfo, partSpecs) =>
