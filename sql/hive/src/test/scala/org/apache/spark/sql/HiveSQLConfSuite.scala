@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.internal.SQLConfSuite
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
-class HiveSQLConfSuite extends SQLConfSuite {
+class HiveSQLConfSuite extends TestHiveSingleton {
 
   test("SPARK-36421: Validate all SQL configs to prevent from wrong use for ConfigEntry") {
-    val df = sql("set -v").select("Meaning")
+    val df = spark.sql("set -v").select("Meaning")
     assert(df.collect().forall(!_.getString(0).contains("ConfigEntry")))
   }
 }
