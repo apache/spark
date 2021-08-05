@@ -112,7 +112,7 @@ NULL
 create temporary view ttf1 as select * from values
   (1, 2),
   (2, 3)
-  as ttf1(current_date, current_timestamp)
+  as ttf1(`current_date`, `current_timestamp`)
 -- !query schema
 struct<>
 -- !query output

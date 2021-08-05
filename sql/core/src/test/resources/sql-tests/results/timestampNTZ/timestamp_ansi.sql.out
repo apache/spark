@@ -119,29 +119,20 @@ The fraction of sec must be zero. Valid range is [0, 60].
 create temporary view ttf1 as select * from values
   (1, 2),
   (2, 3)
-  as ttf1(current_date, current_timestamp)
+  as ttf1(`current_date`, `current_timestamp`)
 -- !query schema
 struct<>
 -- !query output
-org.apache.spark.sql.catalyst.parser.ParseException
 
-no viable alternative at input 'current_date'(line 4, pos 10)
-
-== SQL ==
-create temporary view ttf1 as select * from values
-  (1, 2),
-  (2, 3)
-  as ttf1(current_date, current_timestamp)
-----------^^^
 
 
 -- !query
 select current_date, current_timestamp from ttf1
 -- !query schema
-struct<>
+struct<current_date():date,current_timestamp():timestamp>
 -- !query output
-org.apache.spark.sql.AnalysisException
-Table or view not found: ttf1; line 1 pos 44
+2021-08-04	2021-08-04 23:54:48.473
+2021-08-04	2021-08-04 23:54:48.473
 
 
 -- !query

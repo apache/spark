@@ -25,7 +25,7 @@ SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007);
 create temporary view ttf1 as select * from values
   (1, 2),
   (2, 3)
-  as ttf1(current_date, current_timestamp);
+  as ttf1(`current_date`, `current_timestamp`);
 select current_date, current_timestamp from ttf1;
 
 create temporary view ttf2 as select * from values
