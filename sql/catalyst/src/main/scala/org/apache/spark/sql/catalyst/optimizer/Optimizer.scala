@@ -237,6 +237,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewritePredicateSubquery,
       ColumnPruning,
       CollapseProject,
+      RemoveRedundantAliases,
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
@@ -519,11 +520,12 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  */
 object RemoveNoopOperators extends Rule[LogicalPlan] {
   def restoreOriginalOutputNames(
-    projectList: Seq[NamedExpression],
-    originalNames: Seq[String]): Seq[NamedExpression] = {
+      projectList: Seq[NamedExpression],
+      originalNames: Seq[String]): Seq[NamedExpression] = {
     projectList.zip(originalNames).map {
       case (attr: Attribute, name) => attr.withName(name)
       case (alias: Alias, name) => alias.withName(name)
+      case (other, _) => other
     }
   }
 

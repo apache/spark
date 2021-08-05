@@ -34,7 +34,7 @@ import scala.util.{Failure, Random, Success, Try}
 import scala.util.control.NonFatal
 
 import com.codahale.metrics.{MetricRegistry, MetricSet}
-import com.google.common.cache.CacheBuilder
+import com.github.benmanes.caffeine.cache.Caffeine
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark._
@@ -123,7 +123,7 @@ private[spark] class HostLocalDirManager(
     blockStoreClient: BlockStoreClient) extends Logging {
 
   private val executorIdToLocalDirsCache =
-    CacheBuilder
+    Caffeine
       .newBuilder()
       .maximumSize(cacheSize)
       .build[String, Array[String]]()

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, TestTable2, UnresolvedFieldName, UnresolvedFieldPosition}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAddColumns, AlterTableAlterColumn, AlterTableColumnCommand, AlterTableDropColumns, AlterTableRenameColumn, CreateTableAsSelect, LogicalPlan, QualifiedColType, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -140,7 +140,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     Seq("POINT.Z", "poInt.z", "poInt.Z").foreach { ref =>
       val field = ref.split("\\.")
       alterTableTest(
-        AlterTableAddColumns(
+        AddColumns(
           table,
           Seq(QualifiedColType(
             Some(UnresolvedFieldName(field.init)), field.last, LongType, true, None, None))),
@@ -152,7 +152,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: add column resolution - positional") {
     Seq("ID", "iD").foreach { ref =>
       alterTableTest(
-        AlterTableAddColumns(
+        AddColumns(
           table,
           Seq(QualifiedColType(
             None,
@@ -168,7 +168,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
 
   test("AlterTable: add column resolution - column position referencing new column") {
     alterTableTest(
-      AlterTableAddColumns(
+      AddColumns(
         table,
         Seq(QualifiedColType(
           None,
@@ -191,7 +191,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: add column resolution - nested positional") {
     Seq("X", "Y").foreach { ref =>
       alterTableTest(
-        AlterTableAddColumns(
+        AddColumns(
           table,
           Seq(QualifiedColType(
             Some(UnresolvedFieldName(Seq("point"))),
@@ -207,7 +207,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
 
   test("AlterTable: add column resolution - column position referencing new nested column") {
     alterTableTest(
-      AlterTableAddColumns(
+      AddColumns(
         table,
         Seq(QualifiedColType(
           Some(UnresolvedFieldName(Seq("point"))),
@@ -229,7 +229,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
 
   test("SPARK-36372: Adding duplicate columns should not be allowed") {
     alterTableTest(
-      AlterTableAddColumns(
+      AddColumns(
         table,
         Seq(QualifiedColType(
           Some(UnresolvedFieldName(Seq("point"))),
@@ -249,10 +249,32 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
       expectErrorOnCaseSensitive = false)
   }
 
+  test("SPARK-36381: Check column name exist case sensitive and insensitive when add column") {
+    alterTableTest(
+      AddColumns(
+        table,
+        Seq(QualifiedColType(
+          None,
+          "ID",
+          LongType,
+          true,
+          None,
+          Some(UnresolvedFieldPosition(ColumnPosition.after("id")))))),
+      Seq("Cannot add column, because ID already exists in root"),
+      expectErrorOnCaseSensitive = false)
+  }
+
+  test("SPARK-36381: Check column name exist case sensitive and insensitive when rename column") {
+    alterTableTest(
+      RenameColumn(table, UnresolvedFieldName(Array("id")), "DATA"),
+      Seq("Cannot rename column, because DATA already exists in root"),
+      expectErrorOnCaseSensitive = false)
+  }
+
   test("AlterTable: drop column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterTableDropColumns(table, Seq(UnresolvedFieldName(ref))),
+        DropColumns(table, Seq(UnresolvedFieldName(ref))),
         Seq("Missing field " + ref.quoted)
       )
     }
@@ -261,7 +283,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: rename column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterTableRenameColumn(table, UnresolvedFieldName(ref), "newName"),
+        RenameColumn(table, UnresolvedFieldName(ref), "newName"),
         Seq("Missing field " + ref.quoted)
       )
     }
@@ -270,7 +292,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: drop column nullability resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterTableAlterColumn(table, UnresolvedFieldName(ref), None, Some(true), None, None),
+        AlterColumn(table, UnresolvedFieldName(ref), None, Some(true), None, None),
         Seq("Missing field " + ref.quoted)
       )
     }
@@ -279,7 +301,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: change column type resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterTableAlterColumn(table, UnresolvedFieldName(ref), Some(StringType), None, None, None),
+        AlterColumn(table, UnresolvedFieldName(ref), Some(StringType), None, None, None),
         Seq("Missing field " + ref.quoted)
       )
     }
@@ -288,14 +310,14 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   test("AlterTable: change column comment resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
-        AlterTableAlterColumn(table, UnresolvedFieldName(ref), None, None, Some("comment"), None),
+        AlterColumn(table, UnresolvedFieldName(ref), None, None, Some("comment"), None),
         Seq("Missing field " + ref.quoted)
       )
     }
   }
 
   private def alterTableTest(
-      alter: AlterTableColumnCommand,
+      alter: AlterTableCommand,
       error: Seq[String],
       expectErrorOnCaseSensitive: Boolean = true): Unit = {
     Seq(true, false).foreach { caseSensitive =>

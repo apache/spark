@@ -52,8 +52,6 @@ object OptimizeSkewedJoin extends AQEShuffleReadRule {
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] = Seq(ENSURE_REQUIREMENTS)
 
-  override def mayAddExtraShuffles: Boolean = true
-
   /**
    * A partition is considered as a skewed partition if its size is larger than the median
    * partition size * SKEW_JOIN_SKEWED_PARTITION_FACTOR and also larger than
@@ -257,13 +255,12 @@ object OptimizeSkewedJoin extends AQEShuffleReadRule {
       plan
     }
   }
-}
 
-private object ShuffleStage {
-  def unapply(plan: SparkPlan): Option[ShuffleQueryStageExec] = plan match {
-    case s: ShuffleQueryStageExec if s.mapStats.isDefined &&
-        OptimizeSkewedJoin.supportedShuffleOrigins.contains(s.shuffle.shuffleOrigin) =>
-      Some(s)
-    case _ => None
+  object ShuffleStage {
+    def unapply(plan: SparkPlan): Option[ShuffleQueryStageExec] = plan match {
+      case s: ShuffleQueryStageExec if s.mapStats.isDefined && isSupported(s.shuffle) =>
+        Some(s)
+      case _ => None
+    }
   }
 }
