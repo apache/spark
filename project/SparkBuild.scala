@@ -1066,12 +1066,12 @@ object TestSettings {
     // SPARK-29282 This is for consistency between JDK8 and JDK11.
     javaOptions in Test ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xmx3200m -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
+      s"-Xmx4g -Xss4m -XX:MaxMetaspaceSize=$metaspaceSize -XX:+UseParallelGC -XX:-UseDynamicNumberOfGCThreads"
         .split(" ").toSeq
     },
     javaOptions ++= {
       val metaspaceSize = sys.env.get("METASPACE_SIZE").getOrElse("1300m")
-      s"-Xmx3200m -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
+      s"-Xmx4g -XX:MaxMetaspaceSize=$metaspaceSize".split(" ").toSeq
     },
     // Exclude tags defined in a system property
     testOptions in Test += Tests.Argument(TestFrameworks.ScalaTest,

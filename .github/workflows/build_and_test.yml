@@ -169,7 +169,7 @@ jobs:
       GITHUB_PREV_SHA: ${{ github.event.before }}
       GITHUB_INPUT_BRANCH: ${{ github.event.inputs.target }}
       SPARK_LOCAL_IP: localhost
-      METASPACE_SIZE: 128m
+      METASPACE_SIZE: 1g
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
