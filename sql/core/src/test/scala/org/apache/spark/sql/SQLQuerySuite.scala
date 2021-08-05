@@ -4202,19 +4202,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
       }
     }
   }
-
-  test("SPARK-36352: Optimizer should keep schema name not changed") {
-    withTable("t") {
-      sql("CREATE TABLE t1(a INT, b INT) USING PARQUET")
-      sql(
-        """
-          |INSERT INTO t1 VALUES
-          |(1, 2),
-          |(2, 3)""".stripMargin)
-      val df = sql("SELECT C FROM (SELECT a + b AS c FROM t1)")
-      assert(df.queryExecution.executedPlan.output.map(_.name) == Seq("C"))
-    }
-  }
 }
 
 case class Foo(bar: Option[String])

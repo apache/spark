@@ -73,11 +73,12 @@ class RuleExecutorSuite extends SparkFunSuite {
 
   test("structural integrity checker - verify initial input") {
     object WithSIChecker extends RuleExecutor[Expression] {
-      override protected def isPlanIntegral(input: Expression, result: Expression): Boolean =
-        result match {
-          case IntegerLiteral(_) => true
-          case _ => false
-        }
+      override protected def isPlanIntegral(
+          previousPlan: Expression,
+          currentPlan: Expression): Boolean = currentPlan match {
+        case IntegerLiteral(_) => true
+        case _ => false
+      }
       val batches = Batch("once", FixedPoint(1), DecrementLiterals) :: Nil
     }
 
@@ -92,11 +93,12 @@ class RuleExecutorSuite extends SparkFunSuite {
 
   test("structural integrity checker - verify rule execution result") {
     object WithSICheckerForPositiveLiteral extends RuleExecutor[Expression] {
-      override protected def isPlanIntegral(input: Expression, result: Expression): Boolean =
-        result match {
-          case IntegerLiteral(i) if i > 0 => true
-          case _ => false
-        }
+      override protected def isPlanIntegral(
+          previousPlan: Expression,
+          currentPlan: Expression): Boolean = currentPlan match {
+        case IntegerLiteral(i) if i > 0 => true
+        case _ => false
+      }
       val batches = Batch("once", FixedPoint(1), DecrementLiterals) :: Nil
     }
 

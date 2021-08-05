@@ -156,7 +156,7 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
    * `Optimizer`, so we can catch rules that return invalid plans. The check function returns
    * `false` if the given plan doesn't pass the structural integrity check.
    */
-  protected def isPlanIntegral(input: TreeType, result: TreeType): Boolean = true
+  protected def isPlanIntegral(previousPlan: TreeType, currentPlan: TreeType): Boolean = true
 
   /**
    * Util method for checking whether a plan remains the same if re-optimized.

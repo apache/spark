@@ -46,13 +46,13 @@ abstract class Optimizer(catalogManager: CatalogManager)
   // - is still resolved
   // - only host special expressions in supported operators
   // - has globally-unique attribute IDs
-  override protected def isPlanIntegral(input: LogicalPlan, result: LogicalPlan): Boolean = {
-    !Utils.isTesting || (result.resolved &&
-      result.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
-      LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(result) &&
-      input.output.zip(result.output).forall { case (in, out) =>
-        in.name == out.name
-      })
+  override protected def isPlanIntegral(
+      previousPlan: LogicalPlan,
+      currentPlan: LogicalPlan): Boolean = {
+    !Utils.isTesting || (currentPlan.resolved &&
+      currentPlan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
+      LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
+      previousPlan.schema == currentPlan.schema)
   }
 
   override protected val excludedOnceBatches: Set[String] =
