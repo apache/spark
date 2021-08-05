@@ -1663,13 +1663,12 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
  * 2. Combines two adjacent [[Limit]] operators into one, merging the
  *    expressions into one single expression.
  */
-object EliminateLimits extends Rule[LogicalPlan] {
+trait EliminateLimitsBase extends Rule[LogicalPlan] {
   private def canEliminate(limitExpr: Expression, child: LogicalPlan): Boolean = {
     limitExpr.foldable && child.maxRows.exists { _ <= limitExpr.eval().asInstanceOf[Int] }
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
-    _.containsPattern(LIMIT), ruleId) {
+  def commonApplyFunc: PartialFunction[LogicalPlan, LogicalPlan] = {
     case Limit(l, child) if canEliminate(l, child) =>
       child
     case GlobalLimit(l, child) if canEliminate(l, child) =>
@@ -1681,6 +1680,13 @@ object EliminateLimits extends Rule[LogicalPlan] {
       LocalLimit(Least(Seq(ne, le)), grandChild)
     case Limit(le, Limit(ne, grandChild)) =>
       Limit(Least(Seq(ne, le)), grandChild)
+  }
+}
+
+object EliminateLimits extends EliminateLimitsBase {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan.transformDownWithPruning(
+    _.containsPattern(LIMIT), ruleId) {
+    commonApplyFunc
   }
 }
 
