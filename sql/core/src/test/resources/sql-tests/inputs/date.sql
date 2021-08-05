@@ -3,8 +3,12 @@
 select date '2019-01-01\t';
 select date '2020-01-01中文';
 
--- date with year outside [0000-9999]
-select date'999999-03-18', date'-0001-1-28', date'0015';
+select make_date(2019, 1, 1), make_date(12, 12, 12);
+-- invalid month
+select make_date(2000, 13, 1);
+-- invalid day
+select make_date(2000, 1, 33);
+
 -- invalid: year field must have at least 4 digits
 select date'015';
 -- invalid: month field can have at most 2 digits

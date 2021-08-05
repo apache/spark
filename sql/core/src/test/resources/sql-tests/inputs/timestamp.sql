@@ -3,8 +3,6 @@
 select timestamp '2019-01-01\t';
 select timestamp '2019-01-01中文';
 
--- timestamp with year outside [0000-9999]
-select timestamp'-1969-12-31 16:00:00', timestamp'0015-03-18 16:00:00', timestamp'-000001', timestamp'99999-03-18T12:03:17';
 -- invalid: year too large
 select timestamp'4294967297';
 -- invalid: minute field can have at most 2 digits
@@ -21,12 +19,27 @@ SELECT make_timestamp(2021, 07, 11, 6, 30, 45.678);
 SELECT make_timestamp(2021, 07, 11, 6, 30, 45.678, 'CET');
 SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007);
 
+-- [SPARK-31710] TIMESTAMP_SECONDS, TIMESTAMP_MILLISECONDS and TIMESTAMP_MICROSECONDS that always create timestamp_ltz
+select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null);
+select TIMESTAMP_SECONDS(1.23), TIMESTAMP_SECONDS(1.23d), TIMESTAMP_SECONDS(FLOAT(1.23));
+select TIMESTAMP_MILLIS(1230219000123),TIMESTAMP_MILLIS(-1230219000123),TIMESTAMP_MILLIS(null);
+select TIMESTAMP_MICROS(1230219000123123),TIMESTAMP_MICROS(-1230219000123123),TIMESTAMP_MICROS(null);
+-- overflow exception
+select TIMESTAMP_SECONDS(1230219000123123);
+select TIMESTAMP_SECONDS(-1230219000123123);
+select TIMESTAMP_MILLIS(92233720368547758);
+select TIMESTAMP_MILLIS(-92233720368547758);
+-- truncate exception
+select TIMESTAMP_SECONDS(0.1234567);
+-- truncation is OK for float/double
+select TIMESTAMP_SECONDS(0.1234567d), TIMESTAMP_SECONDS(FLOAT(0.1234567));
+
 -- [SPARK-22333]: timeFunctionCall has conflicts with columnReference
 create temporary view ttf1 as select * from values
   (1, 2),
   (2, 3)
   as ttf1(`current_date`, `current_timestamp`);
-select current_date, current_timestamp from ttf1;
+select typeof(current_date), typeof(current_timestamp) from ttf1;
 
 create temporary view ttf2 as select * from values
   (1, 2),
