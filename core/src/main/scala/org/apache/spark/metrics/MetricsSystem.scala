@@ -162,14 +162,10 @@ private[spark] class MetricsSystem private (
   }
 
   def registerSource(source: Source): Unit = {
-    try {
-      val listener = new MetricsSystemListener(buildRegistryName(source))
-      source.metricRegistry.addListener(listener)
-      sourcesWithListeners.synchronized {
-        sourcesWithListeners += source -> listener
-      }
-    } catch {
-      case e: IllegalArgumentException => logInfo("Metrics already registered", e)
+    val listener = new MetricsSystemListener(buildRegistryName(source))
+    source.metricRegistry.addListener(listener)
+    sourcesWithListeners.synchronized {
+      sourcesWithListeners += source -> listener
     }
   }
 
@@ -234,11 +230,28 @@ private[spark] class MetricsSystem private (
       extends MetricRegistryListener {
     def metricName(name: String): String = MetricRegistry.name(prefix, name)
 
+    def registerMetric[T](name: String, metric: T): Unit = {
+      try {
+        registry.register(metricName(name), metric)
+      } catch {
+        case e: IllegalArgumentException => logInfo("Metrics already registered", e)
+      }
+    }
+
     override def onHistogramAdded(name: String, histogram: Histogram): Unit =
-      registry.register(metricName(name), histogram)
+      registerMetric(name, histogram)
 
     override def onCounterAdded(name: String, counter: Counter): Unit =
-      registry.register(metricName(name), counter)
+      registerMetric(name, counter)
+
+    override def onMeterAdded(name: String, meter: Meter): Unit =
+      registerMetric(name, meter)
+
+    override def onGaugeAdded(name: String, gauge: Gauge[_]): Unit =
+      registerMetric(name, gauge)
+
+    override def onTimerAdded(name: String, timer: Timer): Unit =
+      registerMetric(name, timer)
 
     override def onHistogramRemoved(name: String): Unit =
       registry.remove(metricName(name))
@@ -249,20 +262,11 @@ private[spark] class MetricsSystem private (
     override def onMeterRemoved(name: String): Unit =
       registry.remove(metricName(name))
 
-    override def onTimerAdded(name: String, timer: Timer): Unit =
-      registry.register(metricName(name), timer)
-
     override def onCounterRemoved(name: String): Unit =
       registry.remove(metricName(name))
 
-    override def onGaugeAdded(name: String, gauge: Gauge[_]): Unit =
-      registry.register(metricName(name), gauge)
-
     override def onTimerRemoved(name: String): Unit =
       registry.remove(metricName(name))
-
-    override def onMeterAdded(name: String, meter: Meter): Unit =
-      registry.register(metricName(name), meter)
   }
 }
 
