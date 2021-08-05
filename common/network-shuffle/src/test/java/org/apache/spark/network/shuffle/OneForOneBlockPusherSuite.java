@@ -143,15 +143,16 @@ public class OneForOneBlockPusherSuite {
       BlockTransferMessage message = BlockTransferMessage.Decoder.fromByteBuffer(header);
       RpcResponseCallback callback = (RpcResponseCallback) invocation.getArguments()[2];
       Map.Entry<String, ManagedBuffer> entry = blockIterator.next();
+      String blockId = entry.getKey();
       ManagedBuffer block = entry.getValue();
       if (block != null && block.nioByteBuffer().capacity() > 0) {
-        callback.onSuccess(new BlockPushReturnCode(ReturnCode.SUCCESS.id()).toByteBuffer());
+        callback.onSuccess(new BlockPushReturnCode(ReturnCode.SUCCESS.id(), "").toByteBuffer());
       } else if (block != null) {
         callback.onSuccess(new BlockPushReturnCode(
-          ReturnCode.BLOCK_APPEND_COLLISION_DETECTED.id()).toByteBuffer());
+          ReturnCode.BLOCK_APPEND_COLLISION_DETECTED.id(), blockId).toByteBuffer());
       } else {
         callback.onFailure(new BlockPushNonFatalFailure(
-          ReturnCode.TOO_LATE_BLOCK_PUSH));
+          ReturnCode.TOO_LATE_BLOCK_PUSH, ""));
       }
       assertEquals(msgIterator.next(), message);
       return null;

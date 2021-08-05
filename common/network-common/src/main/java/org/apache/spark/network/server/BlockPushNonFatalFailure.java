@@ -46,11 +46,13 @@ public class BlockPushNonFatalFailure extends RuntimeException {
    */
   private ReturnCode returnCode;
 
-  public BlockPushNonFatalFailure(ByteBuffer response) {
+  public BlockPushNonFatalFailure(ByteBuffer response, String msg) {
+    super(msg);
     this.response = response;
   }
 
-  public BlockPushNonFatalFailure(ReturnCode returnCode) {
+  public BlockPushNonFatalFailure(ReturnCode returnCode, String msg) {
+    super(msg);
     this.returnCode = returnCode;
   }
 

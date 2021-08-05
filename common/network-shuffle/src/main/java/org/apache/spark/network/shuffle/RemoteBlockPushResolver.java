@@ -58,6 +58,7 @@ import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.client.StreamCallbackWithID;
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
 import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
+import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler;
 import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
@@ -87,7 +88,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   private static final ErrorHandler.BlockPushErrorHandler ERROR_HANDLER = createErrorHandler();
   // ByteBuffer to respond to client upon a successful merge of a pushed block
   private static final ByteBuffer SUCCESS_RESPONSE =
-    new BlockPushReturnCode(ReturnCode.SUCCESS.id()).toByteBuffer().asReadOnlyBuffer();
+    new BlockPushReturnCode(ReturnCode.SUCCESS.id(), "").toByteBuffer().asReadOnlyBuffer();
 
   // ConcurrentHashMap doesn't allow null for keys or values which is why this is required.
   // Marker to identify finalized indeterminate shuffle partitions in the case of indeterminate
@@ -158,7 +159,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       AppShuffleInfo appShuffleInfo,
       int shuffleId,
       int shuffleMergeId,
-      int reduceId) throws BlockPushNonFatalFailure {
+      int reduceId,
+      String blockId) throws BlockPushNonFatalFailure {
     ConcurrentMap<Integer, AppShuffleMergePartitionsInfo> shuffles = appShuffleInfo.shuffles;
     AppShuffleMergePartitionsInfo shufflePartitionsWithMergeId =
       shuffles.compute(shuffleId, (id, appShuffleMergePartitionsInfo) -> {
@@ -170,7 +172,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           // In that case the block is considered late. In the case of indeterminate stages, most
           // recent shuffleMergeId finalized would be pointing to INDETERMINATE_SHUFFLE_FINALIZED
           if (dataFile.exists()) {
-            return null;
+            throw new BlockPushNonFatalFailure(new BlockPushReturnCode(
+              ReturnCode.TOO_LATE_BLOCK_PUSH.id(), blockId).toByteBuffer(),
+              "Block " + blockId + BlockPushErrorHandler.TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX);
           } else {
             logger.info("Creating a new attempt for shuffle blocks push request for shuffle {}"
               + " with shuffleMergeId {} for application {}_{}", shuffleId, shuffleMergeId,
@@ -182,7 +186,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           // current incoming one
           int latestShuffleMergeId = appShuffleMergePartitionsInfo.shuffleMergeId;
           if (latestShuffleMergeId > shuffleMergeId) {
-            throw new BlockPushNonFatalFailure(ReturnCode.STALE_BLOCK_PUSH);
+            throw new BlockPushNonFatalFailure(
+              new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id(), blockId).toByteBuffer(),
+              "Block " + blockId + BlockPushErrorHandler.TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX);
           } else if (latestShuffleMergeId == shuffleMergeId) {
             return appShuffleMergePartitionsInfo;
           } else {
@@ -203,7 +209,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     // It only gets here when the shuffle is already finalized.
     if (null == shufflePartitionsWithMergeId ||
         INDETERMINATE_SHUFFLE_FINALIZED == shufflePartitionsWithMergeId.shuffleMergePartitions) {
-      return null;
+      throw new BlockPushNonFatalFailure(
+        new BlockPushReturnCode(ReturnCode.TOO_LATE_BLOCK_PUSH.id(), blockId).toByteBuffer(),
+        "Block " + blockId + BlockPushErrorHandler.TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX);
     }
 
     Map<Integer, AppShufflePartitionInfo> shuffleMergePartitions =
@@ -403,18 +411,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       + msg.shuffleId + "_" + msg.shuffleMergeId + "_" + msg.mapIndex + "_" + msg.reduceId;
     // Retrieve merged shuffle file metadata
     AppShufflePartitionInfo partitionInfoBeforeCheck;
-    boolean isStaleBlock = false;
-    boolean isTooLate = false;
+    BlockPushNonFatalFailure failure = null;
     try {
       partitionInfoBeforeCheck = getOrCreateAppShufflePartitionInfo(appShuffleInfo, msg.shuffleId,
-        msg.shuffleMergeId, msg.reduceId);
-      isTooLate = partitionInfoBeforeCheck == null;
+        msg.shuffleMergeId, msg.reduceId, streamId);
     } catch(BlockPushNonFatalFailure bpf) {
       // Set partitionInfoBeforeCheck to null so that stale block push gets handled.
       partitionInfoBeforeCheck = null;
-      if (bpf.getReturnCode() == ReturnCode.STALE_BLOCK_PUSH) {
-        isStaleBlock = true;
-      }
+      failure = bpf;
     }
     // Here partitionInfo will be null in 3 cases:
     // 1) The request is received for a block that has already been merged, this is possible due
@@ -460,17 +464,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
 
     // Check if the given block is already merged by checking the bitmap against the given map
     // index
-    final AppShufflePartitionInfo partitionInfo = isStaleBlock || isTooLate ? null :
+    final AppShufflePartitionInfo partitionInfo = failure != null ? null :
       partitionInfoBeforeCheck.mapTracker.contains(msg.mapIndex) ? null : partitionInfoBeforeCheck;
     if (partitionInfo != null) {
       return new PushBlockStreamCallback(
         this, appShuffleInfo, streamId, partitionInfo, msg.mapIndex);
     } else {
-      final BlockPushNonFatalFailure failure = isTooLate ?
-        new BlockPushNonFatalFailure(
-          new BlockPushReturnCode(ReturnCode.TOO_LATE_BLOCK_PUSH.id()).toByteBuffer()) :
-        (isStaleBlock ? new BlockPushNonFatalFailure(
-          new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id()).toByteBuffer()) : null);
+      final BlockPushNonFatalFailure finalFailure = failure;
       // For a duplicate block or a block which is late or stale block from an older
       // shuffleMergeId, respond back with a callback that handles them differently.
       return new StreamCallbackWithID() {
@@ -489,8 +489,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         public void onComplete(String streamId) {
           // Throw non-fatal failure here so the block data is drained from channel and server
           // responds the error code to the client.
-          if (failure != null) {
-            throw failure;
+          if (finalFailure != null) {
+            throw finalFailure;
           }
           // For duplicate block that is received before the shuffle merge finalizes, the
           // server should respond success to the client.
@@ -904,12 +904,14 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         if (isTooLate(info, partitionInfo.reduceId)) {
           deferredBufs = null;
           throw new BlockPushNonFatalFailure(
-            new BlockPushReturnCode(ReturnCode.TOO_LATE_BLOCK_PUSH.id()).toByteBuffer());
+            new BlockPushReturnCode(ReturnCode.TOO_LATE_BLOCK_PUSH.id(), streamId).toByteBuffer(),
+            "Block " + streamId + BlockPushErrorHandler.TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX);
         }
         if (isStale(info, partitionInfo.shuffleMergeId)) {
           deferredBufs = null;
           throw new BlockPushNonFatalFailure(
-            new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id()).toByteBuffer());
+            new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id(), streamId).toByteBuffer(),
+            "Block " + streamId + BlockPushErrorHandler.STALE_BLOCK_PUSH_MESSAGE_SUFFIX);
         }
 
         // Check if we can commit this block
@@ -959,8 +961,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         } else {
           deferredBufs = null;
           throw new BlockPushNonFatalFailure(
-            new BlockPushReturnCode(ReturnCode.BLOCK_APPEND_COLLISION_DETECTED.id())
-              .toByteBuffer());
+            new BlockPushReturnCode(ReturnCode.BLOCK_APPEND_COLLISION_DETECTED.id(), streamId)
+              .toByteBuffer(),
+            "Block " + streamId + BlockPushErrorHandler.BLOCK_APPEND_COLLISION_MSG_SUFFIX);
         }
       }
       isWriting = false;

@@ -110,11 +110,11 @@ public class RemoteBlockPushResolverSuite {
   public void testErrorLogging() {
     ErrorHandler.BlockPushErrorHandler errorHandler = RemoteBlockPushResolver.createErrorHandler();
     assertFalse(errorHandler.shouldLogError(new BlockPushNonFatalFailure(
-      BlockPushNonFatalFailure.ReturnCode.TOO_LATE_BLOCK_PUSH)));
+      BlockPushNonFatalFailure.ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
     assertFalse(errorHandler.shouldLogError(new BlockPushNonFatalFailure(
-      BlockPushNonFatalFailure.ReturnCode.STALE_BLOCK_PUSH)));
+      BlockPushNonFatalFailure.ReturnCode.STALE_BLOCK_PUSH, "")));
     assertFalse(errorHandler.shouldLogError(new BlockPushNonFatalFailure(
-      BlockPushNonFatalFailure.ReturnCode.BLOCK_APPEND_COLLISION_DETECTED)));
+      BlockPushNonFatalFailure.ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, "")));
     assertTrue(errorHandler.shouldLogError(new Throwable()));
   }
 

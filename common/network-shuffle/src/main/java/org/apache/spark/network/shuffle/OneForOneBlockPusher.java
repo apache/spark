@@ -21,6 +21,7 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Map;
 
+import com.google.common.base.Preconditions;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -30,6 +31,7 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
 import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
+import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler;
 import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
@@ -81,13 +83,29 @@ public class OneForOneBlockPusher {
 
     @Override
     public void onSuccess(ByteBuffer response) {
-      BlockPushReturnCode returnCode =
+      BlockPushReturnCode pushResponse =
         (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(response);
       // If the return code is not SUCCESS, the server has responded some error code. Handle
       // the error accordingly.
-      if (returnCode.returnCode != ReturnCode.SUCCESS.id()) {
-        checkAndFailRemainingBlocks(index, new BlockPushNonFatalFailure(
-          BlockPushNonFatalFailure.getReturnCode(returnCode.returnCode)));
+      ReturnCode returnCode = BlockPushNonFatalFailure.getReturnCode(pushResponse.returnCode);
+      if (returnCode != ReturnCode.SUCCESS) {
+        String blockId = pushResponse.failureBlockId;
+        Preconditions.checkArgument(!blockId.isEmpty());
+        String msg = null;
+        switch (returnCode) {
+          case STALE_BLOCK_PUSH:
+            msg = "Block " + blockId + BlockPushErrorHandler.STALE_BLOCK_PUSH_MESSAGE_SUFFIX;
+            break;
+          case TOO_LATE_BLOCK_PUSH:
+            msg = "Block " + blockId + BlockPushErrorHandler.TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX;
+            break;
+          case BLOCK_APPEND_COLLISION_DETECTED:
+            msg = "Block " + blockId + BlockPushErrorHandler.BLOCK_APPEND_COLLISION_MSG_SUFFIX;
+            break;
+          default:
+            throw new IllegalArgumentException("Unknown block push error code: " + returnCode);
+        }
+        checkAndFailRemainingBlocks(index, new BlockPushNonFatalFailure(returnCode, msg));
       } else {
         // On receipt of a successful block push
         listener.onBlockPushSuccess(blockId, new NioManagedBuffer(ByteBuffer.allocate(0)));

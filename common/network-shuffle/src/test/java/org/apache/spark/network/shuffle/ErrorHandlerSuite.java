@@ -35,12 +35,12 @@ public class ErrorHandlerSuite {
   public void testErrorRetry() {
     ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
     assertFalse(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
-      ReturnCode.TOO_LATE_BLOCK_PUSH)));
+      ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
     assertFalse(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
-      ReturnCode.STALE_BLOCK_PUSH)));
+      ReturnCode.STALE_BLOCK_PUSH, "")));
     assertFalse(pushHandler.shouldRetryError(new RuntimeException(new ConnectException())));
     assertTrue(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
-      ReturnCode.BLOCK_APPEND_COLLISION_DETECTED)));
+      ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, "")));
     assertTrue(pushHandler.shouldRetryError(new Throwable()));
 
     ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();
@@ -52,11 +52,11 @@ public class ErrorHandlerSuite {
   public void testErrorLogging() {
     ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
     assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
-      ReturnCode.TOO_LATE_BLOCK_PUSH)));
+      ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
     assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
-      ReturnCode.STALE_BLOCK_PUSH)));
+      ReturnCode.STALE_BLOCK_PUSH, "")));
     assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
-      ReturnCode.BLOCK_APPEND_COLLISION_DETECTED)));
+      ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, "")));
     assertTrue(pushHandler.shouldLogError(new Throwable()));
 
     ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();
