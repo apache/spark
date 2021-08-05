@@ -2943,6 +2943,34 @@ class DataFrameSuite extends QueryTest
       .withSequenceColumn("default_index").collect().map(_.getLong(0))
     assert(ids.toSet === Range(0, 10).toSet)
   }
+
+  test("SPARK-35320 DataFrame read in Json format should fail if the schema provided " +
+    "by the user contains a MapType with a key type different of StringType") {
+
+    Seq((MapType(IntegerType, StringType), """{"1": "test"}"""),
+      (StructType(Seq(StructField("test", MapType(IntegerType, StringType)))),
+        """"test": {"1": "test"}"""),
+      (ArrayType(MapType(IntegerType, StringType)), """[{"1": "test"}]"""),
+      (MapType(StringType, MapType(IntegerType, StringType)), """{"key": {"1" : "test"}}""")
+    ).foreach { case (schema, jsonData) =>
+      withTempDir { dir =>
+        val colName = "col"
+        val msg = "can only contain StringType as a key type for a MapType"
+
+        val thrown1 = intercept[AnalysisException] (
+          spark.read.schema(StructType(Seq(StructField(colName, schema))))
+            .json(Seq(jsonData).toDS()).collect())
+        assert(thrown1.getMessage contains msg)
+
+        val jsonDir = new File(dir, "json").getCanonicalPath
+        Seq(jsonData).toDF(colName).write.json(jsonDir)
+        val thrown2 = intercept[AnalysisException] (
+          spark.read.schema(StructType(Seq(StructField(colName, schema))))
+            .json(jsonDir).collect())
+        assert(thrown2.getMessage contains msg)
+      }
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
