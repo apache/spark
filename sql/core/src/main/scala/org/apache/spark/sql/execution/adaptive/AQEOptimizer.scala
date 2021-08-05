@@ -70,6 +70,6 @@ class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
     !Utils.isTesting || (currentPlan.resolved &&
       currentPlan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
       LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
-      previousPlan.schema == currentPlan.schema)
+      previousPlan.schema.sameType(currentPlan.schema))
   }
 }

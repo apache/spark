@@ -52,7 +52,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     !Utils.isTesting || (currentPlan.resolved &&
       currentPlan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
       LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
-      previousPlan.schema == currentPlan.schema)
+      previousPlan.schema.sameType(currentPlan.schema))
   }
 
   override protected val excludedOnceBatches: Set[String] =
