@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.sources.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.OutputMode
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{MapType, StructType}
 
 /**
  * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
@@ -498,10 +498,20 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // Ideally this should be done in `NormalizeFloatingNumbers`, but we do it here because
         // `groupingExpressions` is not extracted during logical phase.
         val normalizedGroupingExpressions = groupingExpressions.map { e =>
-          NormalizeFloatingNumbers.normalize(e) match {
-            case n: NamedExpression => n
-            // Keep the name of the original expression.
-            case other => Alias(other, e.name)(exprId = e.exprId)
+          e.dataType match {
+            // Support use of MapType in the group by when aggregateExpressions
+            // does not contain the MapType attribute and both keys and value
+            // are not Float/Double.
+            case MapType(kt, vt, _)
+              if !aggregateExpressions.exists(_.references == e.references) &&
+                !NormalizeFloatingNumbers.needNormalize(kt) &&
+                !NormalizeFloatingNumbers.needNormalize(vt) => e
+            case _ =>
+              NormalizeFloatingNumbers.normalize(e) match {
+                case n: NamedExpression => n
+                // Keep the name of the original expression.
+                case other => Alias(other, e.name)(exprId = e.exprId)
+              }
           }
         }
 

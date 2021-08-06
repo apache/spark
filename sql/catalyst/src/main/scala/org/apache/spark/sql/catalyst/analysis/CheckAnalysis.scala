@@ -318,7 +318,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
               }
 
               // Check if the data type of expr is orderable.
-              if (!RowOrdering.isOrderable(expr.dataType)) {
+              if (!RowOrdering.isOrderable(expr.dataType, isGroupingExpr = true)) {
                 failAnalysis(
                   s"expression ${expr.sql} cannot be used as a grouping expression " +
                     s"because its data type ${expr.dataType.catalogString} is not an orderable " +

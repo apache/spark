@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.types.MapType
 
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
@@ -76,14 +77,22 @@ object AggUtils {
           resultExpressions = resultExpressions,
           child = child)
       } else {
-        SortAggregateExec(
-          requiredChildDistributionExpressions = requiredChildDistributionExpressions,
-          groupingExpressions = groupingExpressions,
-          aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
-          aggregateAttributes = aggregateAttributes,
-          initialInputBufferOffset = initialInputBufferOffset,
-          resultExpressions = resultExpressions,
-          child = child)
+        // In SortAggregateExec there is one step that checks whether
+        // expression datatype is orderable or not over there Map
+        // is not orderable, Adding the validation for checking
+        // the Maptype in grouping expression
+        if (!groupingExpressions.exists(_.dataType.isInstanceOf[MapType])) {
+          SortAggregateExec(
+            requiredChildDistributionExpressions = requiredChildDistributionExpressions,
+            groupingExpressions = groupingExpressions,
+            aggregateExpressions = mayRemoveAggFilters(aggregateExpressions),
+            aggregateAttributes = aggregateAttributes,
+            initialInputBufferOffset = initialInputBufferOffset,
+            resultExpressions = resultExpressions,
+            child = child)
+        } else {
+          throw new IllegalStateException("grouping keys cannot be map type for SortAggregateExec")
+        }
       }
     }
   }

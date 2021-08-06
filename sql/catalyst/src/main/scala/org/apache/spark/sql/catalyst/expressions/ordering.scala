@@ -97,13 +97,18 @@ object InterpretedOrdering {
 object RowOrdering extends CodeGeneratorWithInterpretedFallback[Seq[SortOrder], BaseOrdering] {
 
   /**
-   * Returns true iff the data type can be ordered (i.e. can be sorted).
+   * Returns true if the data type can be ordered (i.e. can be sorted).
    */
-  def isOrderable(dataType: DataType): Boolean = dataType match {
+  def isOrderable(dataType: DataType,
+     isGroupingExpr: Boolean = false): Boolean = dataType match {
     case NullType => true
     case dt: AtomicType => true
     case struct: StructType => struct.fields.forall(f => isOrderable(f.dataType))
     case array: ArrayType => isOrderable(array.elementType)
+    // Support MapType when the request comes from check
+    // analysis for the grouping expression
+    case map: MapType if isGroupingExpr =>
+      isOrderable(map.keyType) && isOrderable(map.valueType)
     case udt: UserDefinedType[_] => isOrderable(udt.sqlType)
     case _ => false
   }
