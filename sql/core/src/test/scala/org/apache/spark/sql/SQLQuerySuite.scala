@@ -4270,35 +4270,6 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
-  test("SPARK-36447: nested non-deterministic CTEs referenced more than once are not inlined") {
-    withView("t") {
-      Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
-      val df = sql(
-        s"""with
-           |v1 as (
-           |  select c1, c2, rand() c3 from t
-           |),
-           |v2 as (
-           |  select c1, c2, rand() c4 from v1 where c3 in (select c3 from v1)
-           |)
-           |select count(*) from (
-           |  select * from v2 where c1 > 0 union select * from v2 where c2 > 0
-           |)
-         """.stripMargin)
-      checkAnswer(df, Row(2) :: Nil)
-      assert(
-        df.queryExecution.analyzed.collect {
-          case WithCTE(_, cteDefs) => cteDefs
-        }.head.length == 2,
-        "With-CTE should contain 2 CTE defs after analysis.")
-      assert(
-        df.queryExecution.optimizedPlan.collect {
-          case WithCTE(_, cteDefs) => cteDefs
-        }.head.length == 2,
-        "With-CTE should contain 2 CTE def after optimization.")
-    }
-  }
-
   test("SPARK-36447: nested CTEs only the deterministic is inlined") {
     withView("t") {
       Seq((0, 1), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t")
