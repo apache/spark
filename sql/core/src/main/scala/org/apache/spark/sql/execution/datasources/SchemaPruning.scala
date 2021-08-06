@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
-import org.apache.spark.sql.util.SchemaUtils
+import org.apache.spark.sql.util.SchemaUtils._
 
 /**
  * Prunes unnecessary physical columns given a [[PhysicalOperation]] over a data source relation.
@@ -83,7 +83,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
         val prunedRelation = leafNodeBuilder(prunedDataSchema)
         val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
 
-        Some(buildNewProjection(normalizedProjects, projects, normalizedFilters,
+        Some(buildNewProjection(projects, normalizedProjects, normalizedFilters,
           prunedRelation, projectionOverSchema))
       } else {
         None
@@ -125,8 +125,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
    * Builds the new output [[Project]] Spark SQL operator that has the `leafNode`.
    */
   private def buildNewProjection(
+      projects: Seq[NamedExpression],
       normalizedProjects: Seq[NamedExpression],
-      previousProjectList: Seq[NamedExpression],
       filters: Seq[Expression],
       leafNode: LeafNode,
       projectionOverSchema: ProjectionOverSchema): Project = {
@@ -153,9 +153,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
       logDebug(s"New projects:\n${newProjects.map(_.treeString).mkString("\n")}")
     }
 
-    val withPreviousAttrNameProject =
-      SchemaUtils.restoreOriginalOutputNames(newProjects, previousProjectList.map(_.name))
-    Project(withPreviousAttrNameProject, projectionChild)
+    Project(restoreOriginalOutputNames(newProjects, projects.map(_.name)), projectionChild)
   }
 
   /**
