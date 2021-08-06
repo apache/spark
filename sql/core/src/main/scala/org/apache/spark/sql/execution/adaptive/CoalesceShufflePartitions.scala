@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Utils
 
 /**
  * A rule to coalesce the shuffle partitions based on the map output statistics, which can
@@ -78,12 +79,22 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
           1
         }
       }
+      val advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES)
+      val minPartitionSize = if (Utils.isTesting) {
+        // In the tests, we usually set the target size to a very small value that is even smaller
+        // than the default value of the min partition size. Here we also adjust the min partition
+        // size to be not larger than 20% of the target size, so that the tests don't need to set
+        // both configs all the time to check the coalescing behavior.
+        conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE).min(advisoryTargetSize / 5)
+      } else {
+        conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE)
+      }
       val newPartitionSpecs = ShufflePartitionsUtil.coalescePartitions(
         shuffleStageInfos.map(_.shuffleStage.mapStats),
         shuffleStageInfos.map(_.partitionSpecs),
-        advisoryTargetSize = conf.getConf(SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES),
+        advisoryTargetSize = advisoryTargetSize,
         minNumPartitions = minNumPartitions,
-        minPartitionSize = conf.getConf(SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_SIZE))
+        minPartitionSize = minPartitionSize)
 
       if (newPartitionSpecs.nonEmpty) {
         val specsMap = shuffleStageInfos.zip(newPartitionSpecs).map { case (stageInfo, partSpecs) =>
