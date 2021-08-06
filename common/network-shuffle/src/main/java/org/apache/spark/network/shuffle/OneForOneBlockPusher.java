@@ -91,7 +91,7 @@ public class OneForOneBlockPusher {
       if (returnCode != ReturnCode.SUCCESS) {
         String blockId = pushResponse.failureBlockId;
         Preconditions.checkArgument(!blockId.isEmpty());
-        String msg = null;
+        String msg;
         switch (returnCode) {
           case STALE_BLOCK_PUSH:
             msg = "Block " + blockId + BlockPushErrorHandler.STALE_BLOCK_PUSH_MESSAGE_SUFFIX;
