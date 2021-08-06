@@ -625,11 +625,6 @@ case class AdaptiveSparkPlanExec(
         val newLogicalPlan = logicalPlan.transformDown {
           case p if p.eq(logicalNode) => newLogicalNode
         }
-        assert(newLogicalPlan != logicalPlan,
-          s"logicalNode: $logicalNode; " +
-            s"logicalPlan: $logicalPlan " +
-            s"physicalPlan: $currentPhysicalPlan" +
-            s"stage: $stage")
         logicalPlan = newLogicalPlan
 
       case _ => // Ignore those earlier stages that have been wrapped in later stages.
