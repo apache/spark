@@ -375,7 +375,6 @@ object SparkExecuteStatementOperation {
   def getTableSchema(structType: StructType): TableSchema = {
     val schema = structType.map { field =>
       val attrTypeString = field.dataType match {
-        case NullType => "void"
         case CalendarIntervalType => StringType.catalogString
         case _: YearMonthIntervalType => "interval_year_month"
         case _: DayTimeIntervalType => "interval_day_time"

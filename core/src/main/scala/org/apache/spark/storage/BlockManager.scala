@@ -34,10 +34,11 @@ import scala.util.{Failure, Random, Success, Try}
 import scala.util.control.NonFatal
 
 import com.codahale.metrics.{MetricRegistry, MetricSet}
-import com.google.common.cache.CacheBuilder
+import com.github.benmanes.caffeine.cache.Caffeine
 import org.apache.commons.io.IOUtils
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
@@ -49,12 +50,13 @@ import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.client.StreamCallbackWithID
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle._
+import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.serializer.{SerializerInstance, SerializerManager}
-import org.apache.spark.shuffle.{MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
+import org.apache.spark.shuffle.{IndexShuffleBlockResolver, MigratableResolver, ShuffleManager, ShuffleWriteMetricsReporter}
 import org.apache.spark.storage.BlockManagerMessages.{DecommissionBlockManager, ReplicateBlock}
 import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
@@ -122,7 +124,7 @@ private[spark] class HostLocalDirManager(
     blockStoreClient: BlockStoreClient) extends Logging {
 
   private val executorIdToLocalDirsCache =
-    CacheBuilder
+    Caffeine
       .newBuilder()
       .maximumSize(cacheSize)
       .build[String, Array[String]]()
@@ -270,7 +272,7 @@ private[spark] class BlockManager(
     // Don't reject broadcast blocks since they may be stored during task exec and
     // don't need to be migrated.
     if (isDecommissioning() && !blockId.isBroadcast) {
-        throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
+      throw SparkCoreErrors.cannotSaveBlockOnDecommissionedExecutorError(blockId)
     }
   }
 
@@ -281,6 +283,28 @@ private[spark] class BlockManager(
   }
 
   override def getLocalDiskDirs: Array[String] = diskBlockManager.localDirsString
+
+  /**
+   * Diagnose the possible cause of the shuffle data corruption by verifying the shuffle checksums
+   *
+   * @param blockId The blockId of the corrupted shuffle block
+   * @param checksumByReader The checksum value of the corrupted block
+   * @param algorithm The cheksum algorithm that is used when calculating the checksum value
+   */
+  override def diagnoseShuffleBlockCorruption(
+      blockId: BlockId,
+      checksumByReader: Long,
+      algorithm: String): Cause = {
+    assert(blockId.isInstanceOf[ShuffleBlockId],
+      s"Corruption diagnosis only supports shuffle block yet, but got $blockId")
+    val shuffleBlock = blockId.asInstanceOf[ShuffleBlockId]
+    val resolver = shuffleManager.shuffleBlockResolver.asInstanceOf[IndexShuffleBlockResolver]
+    val checksumFile =
+      resolver.getChecksumFile(shuffleBlock.shuffleId, shuffleBlock.mapId, algorithm)
+    val reduceId = shuffleBlock.reduceId
+    ShuffleChecksumHelper.diagnoseCorruption(
+      algorithm, checksumFile, reduceId, resolver.getBlockData(shuffleBlock), checksumByReader)
+  }
 
   /**
    * Abstraction for storing blocks from bytes, whether they start in memory or on disk.
@@ -391,8 +415,7 @@ private[spark] class BlockManager(
           try {
             ThreadUtils.awaitReady(replicationFuture, Duration.Inf)
           } catch {
-            case NonFatal(t) =>
-              throw new SparkException("Error occurred while waiting for replication to finish", t)
+            case NonFatal(t) => throw SparkCoreErrors.waitingForReplicationToFinishError(t)
           }
         }
         if (blockWasSuccessfullyStored) {
@@ -563,9 +586,7 @@ private[spark] class BlockManager(
           logError(s"Failed to connect to external shuffle server, will retry ${MAX_ATTEMPTS - i}"
             + s" more times after waiting $SLEEP_TIME_SECS seconds...", e)
           Thread.sleep(SLEEP_TIME_SECS * 1000L)
-        case NonFatal(e) =>
-          throw new SparkException("Unable to register with external shuffle server due to : " +
-            e.getMessage, e)
+        case NonFatal(e) => throw SparkCoreErrors.unableToRegisterWithExternalShuffleServerError(e)
       }
     }
   }
@@ -633,7 +654,7 @@ private[spark] class BlockManager(
         ThreadUtils.awaitReady(task, Duration.Inf)
       } catch {
         case NonFatal(t) =>
-          throw new Exception("Error occurred while waiting for async. reregistration", t)
+          throw SparkCoreErrors.waitingForAsyncReregistrationError(t)
       }
     }
   }
@@ -670,7 +691,7 @@ private[spark] class BlockManager(
           // likely that the master has outdated block statuses for this block. Therefore, we send
           // an RPC so that this block is marked as being unavailable from this block manager.
           reportBlockStatus(blockId, BlockStatus.empty)
-          throw new BlockNotFoundException(blockId.toString)
+          throw SparkCoreErrors.blockNotFoundError(blockId)
       }
     }
   }
@@ -701,9 +722,9 @@ private[spark] class BlockManager(
       try {
         return migratableResolver.putShuffleBlockAsStream(blockId, serializerManager)
       } catch {
-        case e: ClassCastException => throw new SparkException(
-          s"Unexpected shuffle block ${blockId} with unsupported shuffle " +
-          s"resolver ${shuffleManager.shuffleBlockResolver}")
+        case e: ClassCastException =>
+          throw SparkCoreErrors.unexpectedShuffleBlockWithUnsupportedResolverError(shuffleManager,
+            blockId)
       }
     }
     logDebug(s"Putting regular block ${blockId}")
@@ -731,7 +752,7 @@ private[spark] class BlockManager(
         val blockStored = TempFileBasedBlockStoreUpdater(
           blockId, level, classTag, tmpFile, blockSize).save()
         if (!blockStored) {
-          throw new Exception(s"Failure while trying to store block $blockId on $blockManagerId.")
+          throw SparkCoreErrors.failToStoreBlockOnBlockManagerError(blockManagerId, blockId)
         }
       }
 
@@ -750,7 +771,7 @@ private[spark] class BlockManager(
    * which will be memory efficient when performing certain operations.
    */
   def getLocalMergedBlockData(
-      blockId: ShuffleBlockId,
+      blockId: ShuffleMergedBlockId,
       dirs: Array[String]): Seq[ManagedBuffer] = {
     shuffleManager.shuffleBlockResolver.getMergedBlockData(blockId, Some(dirs))
   }
@@ -759,7 +780,7 @@ private[spark] class BlockManager(
    * Get the local merged shuffle block meta data for the given block ID.
    */
   def getLocalMergedBlockMeta(
-      blockId: ShuffleBlockId,
+      blockId: ShuffleMergedBlockId,
       dirs: Array[String]): MergedBlockMeta = {
     shuffleManager.shuffleBlockResolver.getMergedBlockMeta(blockId, Some(dirs))
   }
@@ -873,7 +894,7 @@ private[spark] class BlockManager(
     releaseLock(blockId)
     // Remove the missing block so that its unavailability is reported to the driver
     removeBlock(blockId)
-    throw new SparkException(s"Block $blockId was not found even though it's read-locked")
+    throw SparkCoreErrors.readLockedBlockNotFoundError(blockId)
   }
 
   /**
@@ -1278,7 +1299,7 @@ private[spark] class BlockManager(
           // Since we held a read lock between the doPut() and get() calls, the block should not
           // have been evicted, so get() not returning the block indicates some internal error.
           releaseLock(blockId)
-          throw new SparkException(s"get() failed for block $blockId even though we held a lock")
+          throw SparkCoreErrors.failToGetBlockWithLockError(blockId)
         }
         // We already hold a read lock on the block from the doPut() call and getLocalValues()
         // acquires the lock again, so we need to call releaseLock() here so that the net number

@@ -384,6 +384,29 @@ trait AlterTableTests extends SharedSparkSession {
     }
   }
 
+  test("SPARK-36372: Adding duplicate columns should not be allowed") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int) USING $v2Format")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD COLUMNS (data string, data1 string, data string)")
+      }
+      assert(e.message.contains("Found duplicate column(s) in the user specified columns: `data`"))
+    }
+  }
+
+  test("SPARK-36372: Adding duplicate nested columns should not be allowed") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id int, point struct<x: double, y: double>) USING $v2Format")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t ADD COLUMNS (point.z double, point.z double, point.xx double)")
+      }
+      assert(e.message.contains(
+        "Found duplicate column(s) in the user specified columns: `point.z`"))
+    }
+  }
+
   test("AlterTable: update column type int -> long") {
     val t = s"${catalogAndNamespace}table_name"
     withTable(t) {

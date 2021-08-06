@@ -1054,7 +1054,7 @@ class MultiIndex(Index):
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
-            index_fields=[field.copy(nullable=True) for field in self._internal.index_fields],
+            index_fields=[InternalField(field.dtype) for field in self._internal.index_fields],
         )
         return DataFrame(internal).index
 

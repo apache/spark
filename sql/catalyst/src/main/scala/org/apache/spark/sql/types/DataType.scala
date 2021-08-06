@@ -195,6 +195,8 @@ object DataType {
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)
       case CHAR_TYPE(length) => CharType(length.toInt)
       case VARCHAR_TYPE(length) => VarcharType(length.toInt)
+      // For backwards compatibility, previously the type name of NullType is "null"
+      case "null" => NullType
       case other => otherTypes.getOrElse(
         other,
         throw new IllegalArgumentException(

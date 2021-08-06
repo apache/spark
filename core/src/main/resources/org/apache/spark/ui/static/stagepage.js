@@ -242,6 +242,7 @@ function createDataTableForTaskSummaryMetricsTable(taskSummaryMetricsTable) {
         { "type": "duration", "targets": 5 }
       ],
       "paging": false,
+      "info": false,
       "searching": false,
       "order": [[0, "asc"]],
       "bSort": false,

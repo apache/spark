@@ -1321,7 +1321,7 @@ object QueryExecutionErrors {
       s"""
          |Caught Hive MetaException attempting to get partition metadata by filter
          |from Hive. You can set the Spark configuration setting
-         |${SQLConf.HIVE_MANAGE_FILESOURCE_PARTITIONS.key} to false to work around
+         |${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION} to true to work around
          |this problem, however this will result in degraded performance. Please
          |report a bug: https://issues.apache.org/jira/browse/SPARK
        """.stripMargin.replaceAll("\n", " "), e)

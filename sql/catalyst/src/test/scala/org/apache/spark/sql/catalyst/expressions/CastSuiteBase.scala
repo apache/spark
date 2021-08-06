@@ -150,7 +150,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       c.set(Calendar.MILLISECOND, 0)
       checkCastStringToTimestamp("2015-03-18", new Timestamp(c.getTimeInMillis))
       checkCastStringToTimestamp("2015-03-18 ", new Timestamp(c.getTimeInMillis))
-      checkCastStringToTimestamp("2015-03-18T", new Timestamp(c.getTimeInMillis))
 
       c = Calendar.getInstance(tz)
       c.set(2015, 2, 18, 12, 3, 17)

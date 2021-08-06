@@ -68,6 +68,24 @@ class DataFrameTests(ReusedSQLTestCase):
         pydoc.render_doc(df.foo)
         pydoc.render_doc(df.take(1))
 
+    def test_drop_duplicates(self):
+        # SPARK-36034 test that drop duplicates throws a type error when in correct type provided
+        df = self.spark.createDataFrame(
+            [("Alice", 50), ("Alice", 60)],
+            ["name", "age"]
+        )
+
+        # shouldn't drop a non-null row
+        self.assertEqual(df.dropDuplicates().count(), 2)
+
+        self.assertEqual(df.dropDuplicates(["name"]).count(), 1)
+
+        self.assertEqual(df.dropDuplicates(["name", "age"]).count(), 2)
+
+        type_error_msg = "Parameter 'subset' must be a list of columns"
+        with self.assertRaisesRegex(TypeError, type_error_msg):
+            df.dropDuplicates("name")
+
     def test_dropna(self):
         schema = StructType([
             StructField("name", StringType(), True),
@@ -418,8 +436,8 @@ class DataFrameTests(ReusedSQLTestCase):
         ], [row.asDict() for row in actual])
 
         # test that we retrieve the metrics
-        self.assertEqual(named_observation.get, Row(cnt=3, sum=6, mean=2.0))
-        self.assertEqual(unnamed_observation.get, Row(rows=3))
+        self.assertEqual(named_observation.get, dict(cnt=3, sum=6, mean=2.0))
+        self.assertEqual(unnamed_observation.get, dict(rows=3))
 
         # observation requires name (if given) to be non empty string
         with self.assertRaisesRegex(TypeError, 'name should be a string'):

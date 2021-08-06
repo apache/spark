@@ -103,6 +103,7 @@ from pyspark.pandas.utils import (
     validate_axis,
     validate_bool_kwarg,
     validate_how,
+    validate_mode,
     verify_temp_column_name,
 )
 from pyspark.pandas.generic import Frame
@@ -641,7 +642,7 @@ class DataFrame(Frame, Generic[T]):
 
     def _reduce_for_stat_function(
         self,
-        sfun: Union[Callable[[Column], Column], Callable[[Column, DataType], Column]],
+        sfun: Callable[["Series"], Column],
         name: str,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
@@ -663,7 +664,6 @@ class DataFrame(Frame, Generic[T]):
             is mainly for pandas compatibility. Only 'DataFrame.count' uses this parameter
             currently.
         """
-        from inspect import signature
         from pyspark.pandas.series import Series, first_series
 
         axis = validate_axis(axis)
@@ -672,29 +672,19 @@ class DataFrame(Frame, Generic[T]):
 
             exprs = [SF.lit(None).cast(StringType()).alias(SPARK_DEFAULT_INDEX_NAME)]
             new_column_labels = []
-            num_args = len(signature(sfun).parameters)
             for label in self._internal.column_labels:
-                spark_column = self._internal.spark_column_for(label)
-                spark_type = self._internal.spark_type_for(label)
+                psser = self._psser_for(label)
 
-                is_numeric_or_boolean = isinstance(spark_type, (NumericType, BooleanType))
+                is_numeric_or_boolean = isinstance(
+                    psser.spark.data_type, (NumericType, BooleanType)
+                )
                 keep_column = not numeric_only or is_numeric_or_boolean
 
                 if keep_column:
-                    if num_args == 1:
-                        # Only pass in the column if sfun accepts only one arg
-                        scol = cast(Callable[[Column], Column], sfun)(spark_column)
-                    else:  # must be 2
-                        assert num_args == 2
-                        # Pass in both the column and its data type if sfun accepts two args
-                        scol = cast(Callable[[Column, DataType], Column], sfun)(
-                            spark_column, spark_type
-                        )
+                    scol = sfun(psser)
 
                     if min_count > 0:
-                        scol = F.when(
-                            Frame._count_expr(spark_column, spark_type) >= min_count, scol
-                        )
+                        scol = F.when(Frame._count_expr(psser) >= min_count, scol)
 
                     exprs.append(scol.alias(name_like_string(label)))
                     new_column_labels.append(label)
@@ -4563,11 +4553,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         self,
         name: str,
         format: Optional[str] = None,
-        mode: str = "overwrite",
+        mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
         **options: Any
     ) -> None:
+        mode = validate_mode(mode)
         return self.spark.to_table(name, format, mode, partition_cols, index_col, **options)
 
     to_table.__doc__ = SparkFrameMethods.to_table.__doc__
@@ -4575,7 +4566,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def to_delta(
         self,
         path: str,
-        mode: str = "overwrite",
+        mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
         **options: "OptionalPrimitiveType"
@@ -4587,14 +4578,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         path : str, required
             Path to write to.
-        mode : str {'append', 'overwrite', 'ignore', 'error', 'errorifexists'}, default
-            'overwrite'. Specifies the behavior of the save operation when the destination
-            exists already.
+        mode : str
+            Python write mode, default 'w'.
 
-            - 'append': Append the new data to existing data.
-            - 'overwrite': Overwrite existing data.
-            - 'ignore': Silently ignore this operation if data already exists.
-            - 'error' or 'errorifexists': Throw an exception if data already exists.
+            .. note:: mode can accept the strings for Spark writing mode.
+                Such as 'append', 'overwrite', 'ignore', 'error', 'errorifexists'.
+
+                - 'append' (equivalent to 'a'): Append the new data to existing data.
+                - 'overwrite' (equivalent to 'w'): Overwrite existing data.
+                - 'ignore': Silently ignore this operation if data already exists.
+                - 'error' or 'errorifexists': Throw an exception if data already exists.
 
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
@@ -4641,6 +4634,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore
 
+        mode = validate_mode(mode)
         self.spark.to_spark_io(
             path=path,
             mode=mode,
@@ -4653,7 +4647,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def to_parquet(
         self,
         path: str,
-        mode: str = "overwrite",
+        mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         compression: Optional[str] = None,
         index_col: Optional[Union[str, List[str]]] = None,
@@ -4666,14 +4660,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         path : str, required
             Path to write to.
-        mode : str {'append', 'overwrite', 'ignore', 'error', 'errorifexists'},
-            default 'overwrite'. Specifies the behavior of the save operation when the
-            destination exists already.
+        mode : str
+            Python write mode, default 'w'.
 
-            - 'append': Append the new data to existing data.
-            - 'overwrite': Overwrite existing data.
-            - 'ignore': Silently ignore this operation if data already exists.
-            - 'error' or 'errorifexists': Throw an exception if data already exists.
+            .. note:: mode can accept the strings for Spark writing mode.
+                Such as 'append', 'overwrite', 'ignore', 'error', 'errorifexists'.
+
+                - 'append' (equivalent to 'a'): Append the new data to existing data.
+                - 'overwrite' (equivalent to 'w'): Overwrite existing data.
+                - 'ignore': Silently ignore this operation if data already exists.
+                - 'error' or 'errorifexists': Throw an exception if data already exists.
 
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
@@ -4715,6 +4711,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore
 
+        mode = validate_mode(mode)
         builder = self.to_spark(index_col=index_col).write.mode(mode)
         if partition_cols is not None:
             builder.partitionBy(partition_cols)
@@ -4725,7 +4722,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
     def to_orc(
         self,
         path: str,
-        mode: str = "overwrite",
+        mode: str = "w",
         partition_cols: Optional[Union[str, List[str]]] = None,
         index_col: Optional[Union[str, List[str]]] = None,
         **options: "OptionalPrimitiveType"
@@ -4737,14 +4734,16 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         ----------
         path : str, required
             Path to write to.
-        mode : str {'append', 'overwrite', 'ignore', 'error', 'errorifexists'},
-            default 'overwrite'. Specifies the behavior of the save operation when the
-            destination exists already.
+        mode : str
+            Python write mode, default 'w'.
 
-            - 'append': Append the new data to existing data.
-            - 'overwrite': Overwrite existing data.
-            - 'ignore': Silently ignore this operation if data already exists.
-            - 'error' or 'errorifexists': Throw an exception if data already exists.
+            .. note:: mode can accept the strings for Spark writing mode.
+                Such as 'append', 'overwrite', 'ignore', 'error', 'errorifexists'.
+
+                - 'append' (equivalent to 'a'): Append the new data to existing data.
+                - 'overwrite' (equivalent to 'w'): Overwrite existing data.
+                - 'ignore': Silently ignore this operation if data already exists.
+                - 'error' or 'errorifexists': Throw an exception if data already exists.
 
         partition_cols : str or list of str, optional, default None
             Names of partitioning columns
@@ -4784,6 +4783,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         if "options" in options and isinstance(options.get("options"), dict) and len(options) == 1:
             options = options.get("options")  # type: ignore
 
+        mode = validate_mode(mode)
         self.spark.to_spark_io(
             path=path,
             mode=mode,
@@ -4808,7 +4808,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         .. deprecated:: 3.2.0
             Use :func:`DataFrame.spark.to_spark_io` instead.
         """
-        warnings.warn("Deprecated in 3.2, Use spark.to_spark_io instead.", FutureWarning)
+        warnings.warn("Deprecated in 3.2, Use DataFrame.spark.to_spark_io instead.", FutureWarning)
         return self.spark.to_spark_io(path, format, mode, partition_cols, index_col, **options)
 
     to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
@@ -5313,13 +5313,12 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
 
                 internal = internal.with_filter(cond)
 
+            psdf = DataFrame(internal)
+
             null_counts = []
             for label in internal.column_labels:
-                scol = internal.spark_column_for(label)
-                if isinstance(internal.spark_type_for(label), (FloatType, DoubleType)):
-                    cond = scol.isNull() | F.isnan(scol)
-                else:
-                    cond = scol.isNull()
+                psser = psdf._psser_for(label)
+                cond = psser.isnull().spark.column
                 null_counts.append(
                     F.sum(F.when(~cond, 1).otherwise(0)).alias(name_like_string(label))
                 )
@@ -6751,12 +6750,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             raise ValueError("invalid na_position: '{}'".format(na_position))
 
         # Mapper: Get a spark column function for (ascending, na_position) combination
-        # Note that 'asc_nulls_first' and friends were added as of Spark 2.4, see SPARK-23847.
         mapper = {
-            (True, "first"): lambda x: Column(getattr(x._jc, "asc_nulls_first")()),
-            (True, "last"): lambda x: Column(getattr(x._jc, "asc_nulls_last")()),
-            (False, "first"): lambda x: Column(getattr(x._jc, "desc_nulls_first")()),
-            (False, "last"): lambda x: Column(getattr(x._jc, "desc_nulls_last")()),
+            (True, "first"): Column.asc_nulls_first,
+            (True, "last"): Column.asc_nulls_last,
+            (False, "first"): Column.desc_nulls_first,
+            (False, "last"): Column.desc_nulls_last,
         }
         by = [mapper[(asc, na_position)](scol) for scol, asc in zip(by, ascending)]
         sdf = self._internal.resolved_copy.spark_frame.sort(*by, NATURAL_ORDER_COLUMN_NAME)
@@ -8475,15 +8473,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         exprs = []
         column_labels = []
         for label in self._internal.column_labels:
-            scol = self._internal.spark_column_for(label)
-            spark_type = self._internal.spark_type_for(label)
-            if isinstance(spark_type, DoubleType) or isinstance(spark_type, FloatType):
-                exprs.append(
-                    F.nanvl(scol, SF.lit(None)).alias(self._internal.spark_column_name_for(label))
-                )
-                column_labels.append(label)
-            elif isinstance(spark_type, NumericType):
-                exprs.append(scol)
+            psser = self._psser_for(label)
+            if isinstance(psser.spark.data_type, NumericType):
+                exprs.append(psser._dtype_op.nan_to_null(psser).spark.column)
                 column_labels.append(label)
 
         if len(exprs) == 0:
@@ -10802,7 +10794,9 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             if v < 0.0 or v > 1.0:
                 raise ValueError("percentiles should all be in the interval [0, 1].")
 
-        def quantile(spark_column: Column, spark_type: DataType) -> Column:
+        def quantile(psser: "Series") -> Column:
+            spark_type = psser.spark.data_type
+            spark_column = psser.spark.column
             if isinstance(spark_type, (BooleanType, NumericType)):
                 return F.percentile_approx(spark_column.cast(DoubleType()), qq, accuracy)
             else:
@@ -10828,13 +10822,15 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             for label, column in zip(
                 self._internal.column_labels, self._internal.data_spark_column_names
             ):
-                spark_type = self._internal.spark_type_for(label)
+                psser = self._psser_for(label)
 
-                is_numeric_or_boolean = isinstance(spark_type, (NumericType, BooleanType))
+                is_numeric_or_boolean = isinstance(
+                    psser.spark.data_type, (NumericType, BooleanType)
+                )
                 keep_column = not numeric_only or is_numeric_or_boolean
 
                 if keep_column:
-                    percentile_col = quantile(self._internal.spark_column_for(label), spark_type)
+                    percentile_col = quantile(psser)
                     percentile_cols.append(percentile_col.alias(column))
                     percentile_col_names.append(column)
                     column_labels.append(label)
