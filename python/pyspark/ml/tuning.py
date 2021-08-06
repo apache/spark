@@ -892,16 +892,17 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
 
 class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
     """
-
     CrossValidatorModel contains the model with the highest average cross-validation
     metric across folds and uses this model to transform input data. CrossValidatorModel
     also tracks the metrics for each param map evaluated.
 
+    .. versionadded:: 1.4.0
+
+    Notes
+    -----
     Since version 3.3.0, CrossValidatorModel contains a new attribute "stdMetrics",
     which represent standard deviation of metrics for each paramMap in
     CrossValidator.estimatorParamMaps.
-
-    .. versionadded:: 1.4.0
     """
 
     def __init__(self, bestModel, avgMetrics=None, subModels=None, stdMetrics=None):
