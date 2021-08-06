@@ -3468,13 +3468,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         The mode of a set of values is the value that appears most often.
         It can be multiple values.
 
-        .. note:: the current implementation of mode requires joins
-            multiple times(columns count - 1 times when axis is 0 or 'index'),
-            which is potentially expensive.
-
-        .. note:: the order of multiple modes (within a column when axis is 0 or 'index')
-            is not determined.
-
         Parameters
         ----------
         axis : {0 or 'index', 1 or 'columns'}, default 0
@@ -3525,6 +3518,13 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
            legs  wings
         0   2.0    0.0
         1   NaN    2.0
+
+        Notes
+        -----
+        The current implementation of mode requires joins multiple times
+        (columns count - 1 times when axis is 0 or 'index'), which is potentially expensive.
+
+        The order of multiple modes (within each column when axis is 0 or 'index') is undetermined.
         """
         axis = validate_axis(axis)
         if axis == 1:
