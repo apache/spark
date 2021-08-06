@@ -147,13 +147,14 @@ object SchemaPruning extends Rule[LogicalPlan] {
     val newProjects = normalizedProjects.map(_.transformDown {
       case projectionOverSchema(expr) => expr
     }).map { case expr: NamedExpression => expr }
-    val withPreviousAttrNameProject =
-      DataSourceStrategy.normalizeExprs(newProjects, previousProjectList.map(_.toAttribute))
-        .asInstanceOf[Seq[NamedExpression]]
+
     if (log.isDebugEnabled) {
       logDebug(s"New projects:\n${newProjects.map(_.treeString).mkString("\n")}")
     }
 
+    val withPreviousAttrNameProject =
+      DataSourceStrategy.normalizeExprs(newProjects, previousProjectList.map(_.toAttribute))
+        .asInstanceOf[Seq[NamedExpression]]
     Project(withPreviousAttrNameProject, projectionChild)
   }
 
