@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Coalesce, Expression}
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnStat, Histogram, Join, Statistics}
@@ -177,14 +177,15 @@ case class JoinEstimation(join: Join) extends Logging {
    * @return join cardinality, and column stats for join keys after the join
    */
   // scalastyle:on
-  private def computeCardinalityAndStats(keyPairs: Seq[(AttributeReference, AttributeReference)])
-    : (BigInt, AttributeMap[ColumnStat]) = {
+  private def computeCardinalityAndStats
+    (keyPairs: Seq[(AttributeReference, AttributeReference, Boolean)]):
+    (BigInt, AttributeMap[ColumnStat]) = {
     // If there's no column stats available for join keys, estimate as cartesian product.
     var joinCard: BigInt = leftStats.rowCount.get * rightStats.rowCount.get
     val keyStatsAfterJoin = new mutable.HashMap[Attribute, ColumnStat]()
     var i = 0
     while(i < keyPairs.length && joinCard != 0) {
-      val (leftKey, rightKey) = keyPairs(i)
+      val (leftKey, rightKey, isEqualNullSafe) = keyPairs(i)
       // Check if the two sides are disjoint
       val leftKeyStat = leftStats.attributeStats(leftKey)
       val rightKeyStat = rightStats.attributeStats(rightKey)
@@ -196,7 +197,7 @@ case class JoinEstimation(join: Join) extends Logging {
           case (Some(l: Histogram), Some(r: Histogram)) =>
             computeByHistogram(leftKey, rightKey, l, r, newMin, newMax)
           case _ =>
-            computeByNdv(leftKey, rightKey, newMin, newMax)
+            computeByNdv(leftKey, rightKey, newMin, newMax, isEqualNullSafe)
         }
         keyStatsAfterJoin += (
           // Histograms are propagated as unchanged. During future estimation, they should be
@@ -221,12 +222,27 @@ case class JoinEstimation(join: Join) extends Logging {
       leftKey: AttributeReference,
       rightKey: AttributeReference,
       min: Option[Any],
-      max: Option[Any]): (BigInt, ColumnStat) = {
+      max: Option[Any],
+      isEqualNullSafe: Boolean): (BigInt, ColumnStat) = {
     val leftKeyStat = leftStats.attributeStats(leftKey)
     val rightKeyStat = rightStats.attributeStats(rightKey)
     val maxNdv = leftKeyStat.distinctCount.get.max(rightKeyStat.distinctCount.get)
+
     // Compute cardinality by the basic formula.
-    val card = BigDecimal(leftStats.rowCount.get * rightStats.rowCount.get) / BigDecimal(maxNdv)
+    val (card, nullCount: BigInt) = if (isEqualNullSafe) {
+      val leftNullRowCount: BigInt = leftKeyStat.nullCount.getOrElse(0)
+      val rightNullRowCount: BigInt = rightKeyStat.nullCount.getOrElse(0)
+      val leftNonNullRowCount = leftStats.rowCount.get - leftNullRowCount
+      val rightNonNullRowCount = rightStats.rowCount.get - rightNullRowCount
+
+      val nonNullCount = BigDecimal(leftNonNullRowCount * rightNonNullRowCount) / BigDecimal(maxNdv)
+      val nullCount = leftNullRowCount * rightNullRowCount
+
+      // If this key pair is from EqualNullSafe, null joint rows should be counted.
+      (nonNullCount + BigDecimal(nullCount), nullCount)
+    } else {
+      (BigDecimal(leftStats.rowCount.get * rightStats.rowCount.get) / BigDecimal(maxNdv), BigInt(0))
+    }
 
     // Get the intersected column stat.
     val newNdv = Some(leftKeyStat.distinctCount.get.min(rightKeyStat.distinctCount.get))
@@ -240,7 +256,7 @@ case class JoinEstimation(join: Join) extends Logging {
     } else {
       None
     }
-    val newStats = ColumnStat(newNdv, min, max, Some(0), newAvgLen, newMaxLen)
+    val newStats = ColumnStat(newNdv, min, max, Some(nullCount), newAvgLen, newMaxLen)
 
     (ceil(card), newStats)
   }
@@ -321,15 +337,16 @@ case class JoinEstimation(join: Join) extends Logging {
     outputAttrStats.toSeq
   }
 
+  // return Seq[(leftKey, rightKey, isEqualNullSafe)]
   private def extractJoinKeysWithColStats(
       leftKeys: Seq[Expression],
-      rightKeys: Seq[Expression]): Seq[(AttributeReference, AttributeReference)] = {
+      rightKeys: Seq[Expression]): Seq[(AttributeReference, AttributeReference, Boolean)] = {
     leftKeys.zip(rightKeys).collect {
-      // Currently we don't deal with equal joins like key1 = key2 + 5.
-      // Note: join keys from EqualNullSafe also fall into this case (Coalesce), consider to
-      // support it in the future by using `nullCount` in column stats.
+      // join keys from EqualNullSafe
+      case (Coalesce(Seq(lk: AttributeReference, _)), Coalesce(Seq(rk: AttributeReference, _)))
+        if columnStatsWithCountsExist((leftStats, lk), (rightStats, rk)) => (lk, rk, true)
       case (lk: AttributeReference, rk: AttributeReference)
-        if columnStatsWithCountsExist((leftStats, lk), (rightStats, rk)) => (lk, rk)
+        if columnStatsWithCountsExist((leftStats, lk), (rightStats, rk)) => (lk, rk, false)
     }
   }
 

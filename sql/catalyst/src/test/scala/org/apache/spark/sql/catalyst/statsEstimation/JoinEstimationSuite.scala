@@ -21,7 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeMap, AttributeReference, EqualTo}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.EstimationUtils._
@@ -42,7 +42,11 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     attr("key-2-4") -> ColumnStat(distinctCount = Some(3), min = Some(2), max = Some(4),
       nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
     attr("key-2-3") -> ColumnStat(distinctCount = Some(2), min = Some(2), max = Some(3),
-      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4))
+      nullCount = Some(0), avgLen = Some(4), maxLen = Some(4)),
+    attr("key-1-5-3nulls") -> ColumnStat(distinctCount = Some(5), min = Some(1), max = Some(5),
+      nullCount = Some(3), avgLen = Some(4), maxLen = Some(4)),
+    attr("key-1-2-2nulls") -> ColumnStat(distinctCount = Some(2), min = Some(1), max = Some(2),
+      nullCount = Some(2), avgLen = Some(4), maxLen = Some(4))
   ))
 
   private val nameToAttr: Map[String, Attribute] = columnInfo.map(kv => kv._1.name -> kv._1)
@@ -66,6 +70,20 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     outputList = Seq("key-1-2", "key-2-3").map(nameToAttr),
     rowCount = 2,
     attributeStats = AttributeMap(Seq("key-1-2", "key-2-3").map(nameToColInfo)))
+
+  // Suppose table4 (key-1-5 int, key-1-5-3nulls int) has 8 records:
+  //    (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (1, null), (2, null), 3(3, null)
+  private val table4 = StatsTestPlan(
+    outputList = Seq("key-1-5", "key-1-5-3nulls").map(nameToAttr),
+    rowCount = 8,
+    attributeStats = AttributeMap(Seq("key-1-5", "key-1-5-3nulls").map(nameToColInfo)))
+  // Suppose table3 (key-1-2 int, key-1-2-2nulls int) has 4 records:
+  //     (1, 1), (2, 2), (1, null), (2, null)
+  private val table5 = StatsTestPlan(
+    outputList = Seq("key-1-2", "key-1-2-2nulls").map(nameToAttr),
+    rowCount = 4,
+    attributeStats = AttributeMap(Seq("key-1-2", "key-1-2-2nulls").map(nameToColInfo))
+  )
 
   private def estimateByHistogram(
       leftHistogram: Histogram,
@@ -375,6 +393,29 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
       attributeStats = AttributeMap(
         Seq(nameToAttr("key-1-5") -> joinedColStat, nameToAttr("key-1-2") -> joinedColStat,
           nameToAttr("key-5-9") -> colStatForkey59, nameToColInfo("key-2-4"))))
+    assert(join.stats == expectedStats)
+  }
+
+  test("inner join with equal null safe") {
+    // Suppose table4 (key-1-5 int, key-1-5-3nulls int) has 8 records:
+    //    (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (1, null), (2, null), 3(3, null)
+    // Suppose table3 (key-1-2 int, key-1-2-2nulls int) has 4 records:
+    //     (1, 1), (2, 2), (1, null), (2, null)
+    val join = Join(table4, table5, Inner,
+      Some(EqualNullSafe(nameToAttr("key-1-5-3nulls"), nameToAttr("key-1-2-2nulls"))),
+      JoinHint.NONE)
+    // Update column stats for equi null safe join keys (key-1-5-3nulls and key-1-2-2nulls).
+    val joinedColStat = ColumnStat(distinctCount = Some(2), min = Some(1), max = Some(2),
+      nullCount = Some(6), avgLen = Some(4), maxLen = Some(4))
+
+    val expectedStats = Statistics(
+      sizeInBytes = 8 * (8 + 4 * 4),
+      rowCount = Some(8),
+      attributeStats = AttributeMap(
+        Seq(nameToAttr("key-1-5-3nulls") -> joinedColStat,
+          nameToAttr("key-1-2-2nulls") -> joinedColStat,
+          nameToColInfo("key-1-5"),
+          nameToColInfo("key-1-2"))))
     assert(join.stats == expectedStats)
   }
 
