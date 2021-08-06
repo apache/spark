@@ -575,6 +575,14 @@ private[spark] object HiveUtils extends Logging {
     }
   }
 
+  /**
+   * HIVE-11499 (1.3.0, 2.0.0) obtains HiveClient when SessionState is closed.
+   * If it is null, a HiveClient is created.
+   * HIVE-17368 (2.4.0, 3.0.0) fixes this problem.
+   * Because we avoid calling SessionState.close,
+   * and HIVE-12853 (>=2.1) will create a temporary directory
+   * in SessionState during initialization, so the directory needs to be cleaned up.
+   */
   def detachSessionState(state: SessionState): Unit = {
     if (state == null) {
       return
