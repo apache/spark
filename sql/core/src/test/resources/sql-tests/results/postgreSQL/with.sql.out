@@ -21,7 +21,7 @@ SELECT count(*) FROM (
 -- !query schema
 struct<count(1):bigint>
 -- !query output
-10
+5
 
 
 -- !query
