@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownA
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaUtils
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
@@ -208,8 +209,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           .map(projectionFunc)
           .asInstanceOf[Seq[NamedExpression]]
         val withPreviousAttrNameProject =
-          DataSourceStrategy.normalizeExprs(newProjects, project.map(_.toAttribute))
-            .asInstanceOf[Seq[NamedExpression]]
+          SchemaUtils.restoreOriginalOutputNames(newProjects, project.map(_.name))
         Project(withPreviousAttrNameProject, withFilter)
       } else {
         withFilter

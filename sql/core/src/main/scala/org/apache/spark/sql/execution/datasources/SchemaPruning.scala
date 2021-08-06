@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Prunes unnecessary physical columns given a [[PhysicalOperation]] over a data source relation.
@@ -153,8 +154,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
     }
 
     val withPreviousAttrNameProject =
-      DataSourceStrategy.normalizeExprs(newProjects, previousProjectList.map(_.toAttribute))
-        .asInstanceOf[Seq[NamedExpression]]
+      SchemaUtils.restoreOriginalOutputNames(newProjects, previousProjectList.map(_.name))
     Project(withPreviousAttrNameProject, projectionChild)
   }
 
