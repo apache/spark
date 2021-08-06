@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions.{AnsiCast, AttributeReference, EqualTo, Expression, InSubquery, IntegerLiteral, ListQuery, Literal, StringLiteral}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
-import org.apache.spark.sql.catalyst.plans.logical.{AlterTableAlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
+import org.apache.spark.sql.catalyst.plans.logical.{AlterColumn, AnalysisOnlyCommand, AppendData, Assignment, CreateTableAsSelect, CreateTableStatement, CreateV2Table, DeleteAction, DeleteFromTable, DescribeRelation, DropTable, InsertAction, LocalRelation, LogicalPlan, MergeIntoTable, OneRowRelation, Project, SetTableLocation, SetTableProperties, ShowTableProperties, SubqueryAlias, UnsetTableProperties, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogNotFoundException, Identifier, Table, TableCapability, TableCatalog, V1Table}
@@ -1132,7 +1132,7 @@ class PlanResolutionSuite extends AnalysisTest {
             "ALTER COLUMN with qualified column is only supported with v2 tables"))
         } else {
           parsed1 match {
-            case AlterTableAlterColumn(
+            case AlterColumn(
                 _: ResolvedTable,
                 column: ResolvedFieldName,
                 Some(LongType),
@@ -1144,7 +1144,7 @@ class PlanResolutionSuite extends AnalysisTest {
           }
 
           parsed2 match {
-            case AlterTableAlterColumn(
+            case AlterColumn(
                 _: ResolvedTable,
                 column: ResolvedFieldName,
                 None,
@@ -1198,14 +1198,14 @@ class PlanResolutionSuite extends AnalysisTest {
   test("alter table: hive style change column") {
     Seq("v2Table", "testcat.tab").foreach { tblName =>
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i int COMMENT 'an index'") match {
-        case AlterTableAlterColumn(
+        case AlterColumn(
             _: ResolvedTable, _: ResolvedFieldName, None, None, Some(comment), None) =>
           assert(comment == "an index")
         case _ => fail("expect AlterTableAlterColumn with comment change only")
       }
 
       parseAndResolve(s"ALTER TABLE $tblName CHANGE COLUMN i i long COMMENT 'an index'") match {
-        case AlterTableAlterColumn(
+        case AlterColumn(
             _: ResolvedTable, _: ResolvedFieldName, Some(dataType), None, Some(comment), None) =>
           assert(comment == "an index")
           assert(dataType == LongType)
@@ -1241,7 +1241,7 @@ class PlanResolutionSuite extends AnalysisTest {
       val catalog = if (isSessionCatalog) v2SessionCatalog else testCat
       val tableIdent = if (isSessionCatalog) "v2Table" else "tab"
       parsed match {
-        case AlterTableAlterColumn(r: ResolvedTable, _, _, _, _, _) =>
+        case AlterColumn(r: ResolvedTable, _, _, _, _, _) =>
           assert(r.catalog == catalog)
           assert(r.identifier.name() == tableIdent)
         case Project(_, AsDataSourceV2Relation(r)) =>

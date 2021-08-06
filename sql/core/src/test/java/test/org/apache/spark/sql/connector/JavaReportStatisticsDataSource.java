@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.read.SupportsReportStatistics;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 public class JavaReportStatisticsDataSource implements TestingV2Source {
-  class MyScanBuilder extends JavaSimpleScanBuilder implements SupportsReportStatistics {
+  static class MyScanBuilder extends JavaSimpleScanBuilder implements SupportsReportStatistics {
     @Override
     public Statistics estimateStatistics() {
       return new Statistics() {

@@ -766,55 +766,62 @@ class EventTimeWatermarkSuite extends StreamTest with BeforeAndAfter with Matche
     }
   }
 
-  test("SPARK-35815: Support ANSI intervals for delay threshold") {
-    val DAYS_PER_MONTH = 31
-    Seq(
-      // Conventional form and some variants
-      (Seq("3 days", "Interval 3 day", "inTerval '3' day"), 3 * MILLIS_PER_DAY),
-      (Seq(" 5 hours", "INTERVAL 5 hour", "interval '5' hour"), 5 * MILLIS_PER_HOUR),
-      (Seq("\t8 minutes", "interval 8 minute", "interval '8' minute"), 8 * MILLIS_PER_MINUTE),
-      (Seq("10 seconds", "interval 10 second", "interval '10' second"), 10 * MILLIS_PER_SECOND),
-      (Seq("1 years", "interval 1 year", "interval '1' year"),
-        MONTHS_PER_YEAR * DAYS_PER_MONTH * MILLIS_PER_DAY),
-      (Seq("1 months", "interval 1 month", "interval '1' month"), DAYS_PER_MONTH * MILLIS_PER_DAY),
-      (Seq(
-        "1 day 2 hours 3 minutes 4 seconds",
-        " interval 1 day 2 hours 3 minutes 4 seconds",
-        "\tinterval '1' day '2' hours '3' minutes '4' seconds",
-        "interval '1 2:3:4' day to second"),
-        MILLIS_PER_DAY + 2 * MILLIS_PER_HOUR + 3 * MILLIS_PER_MINUTE + 4 * MILLIS_PER_SECOND),
-      (Seq(
-        " 1 year 2 months",
-        "interval 1 year 2 month",
-        "interval '1' year '2' month",
-        "\tinterval '1-2' year to month"),
-        (MONTHS_PER_YEAR * DAYS_PER_MONTH + 2 * DAYS_PER_MONTH) * MILLIS_PER_DAY)
-    ).foreach { case (delayThresholdVariants, expectedMs) =>
-      delayThresholdVariants.foreach { case delayThreshold =>
-        val df = MemoryStream[Int].toDF
-          .withColumn("eventTime", timestamp_seconds($"value"))
-          .withWatermark("eventTime", delayThreshold)
-        val eventTimeAttr = df.queryExecution.analyzed.output.find(a => a.name == "eventTime")
-        assert(eventTimeAttr.isDefined)
-        val metadata = eventTimeAttr.get.metadata
-        assert(metadata.contains(EventTimeWatermark.delayKey))
-        assert(metadata.getLong(EventTimeWatermark.delayKey) === expectedMs)
-      }
-    }
+  Seq("true", "false").foreach { legacyIntervalEnabled =>
+    test("SPARK-35815: Support ANSI intervals for delay threshold " +
+      s"(${SQLConf.LEGACY_INTERVAL_ENABLED.key}=$legacyIntervalEnabled)") {
+      withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> legacyIntervalEnabled) {
+        val DAYS_PER_MONTH = 31
+        Seq(
+          // Conventional form and some variants
+          (Seq("3 days", "Interval 3 day", "inTerval '3' day"), 3 * MILLIS_PER_DAY),
+          (Seq(" 5 hours", "INTERVAL 5 hour", "interval '5' hour"), 5 * MILLIS_PER_HOUR),
+          (Seq("\t8 minutes", "interval 8 minute", "interval '8' minute"), 8 * MILLIS_PER_MINUTE),
+          (Seq("10 seconds", "interval 10 second", "interval '10' second"),
+            10 * MILLIS_PER_SECOND),
+          (Seq("1 years", "interval 1 year", "interval '1' year"),
+            MONTHS_PER_YEAR * DAYS_PER_MONTH * MILLIS_PER_DAY),
+          (Seq("1 months", "interval 1 month", "interval '1' month"),
+            DAYS_PER_MONTH * MILLIS_PER_DAY),
+          (Seq(
+            "1 day 2 hours 3 minutes 4 seconds",
+            " interval 1 day 2 hours 3 minutes 4 seconds",
+            "\tinterval '1' day '2' hours '3' minutes '4' seconds",
+            "interval '1 2:3:4' day to second"),
+            MILLIS_PER_DAY + 2 * MILLIS_PER_HOUR + 3 * MILLIS_PER_MINUTE + 4 * MILLIS_PER_SECOND),
+          (Seq(
+            " 1 year 2 months",
+            "interval 1 year 2 month",
+            "interval '1' year '2' month",
+            "\tinterval '1-2' year to month"),
+            (MONTHS_PER_YEAR * DAYS_PER_MONTH + 2 * DAYS_PER_MONTH) * MILLIS_PER_DAY)
+        ).foreach { case (delayThresholdVariants, expectedMs) =>
+          delayThresholdVariants.foreach { case delayThreshold =>
+            val df = MemoryStream[Int].toDF
+              .withColumn("eventTime", timestamp_seconds($"value"))
+              .withWatermark("eventTime", delayThreshold)
+            val eventTimeAttr = df.queryExecution.analyzed.output.find(a => a.name == "eventTime")
+            assert(eventTimeAttr.isDefined)
+            val metadata = eventTimeAttr.get.metadata
+            assert(metadata.contains(EventTimeWatermark.delayKey))
+            assert(metadata.getLong(EventTimeWatermark.delayKey) === expectedMs)
+          }
+        }
 
-    // Invalid interval patterns
-    Seq(
-      "1 foo",
-      "interva 2 day",
-      "intrval '3' day",
-      "interval 4 foo",
-      "interval '5' foo",
-      "interval '1 2:3:4' day to hour",
-      "interval '1 2' year to month").foreach { delayThreshold =>
-      intercept[AnalysisException] {
-        val df = MemoryStream[Int].toDF
-          .withColumn("eventTime", timestamp_seconds($"value"))
-          .withWatermark("eventTime", delayThreshold)
+        // Invalid interval patterns
+        Seq(
+          "1 foo",
+          "interva 2 day",
+          "intrval '3' day",
+          "interval 4 foo",
+          "interval '5' foo",
+          "interval '1 2:3:4' day to hour",
+          "interval '1 2' year to month").foreach { delayThreshold =>
+          intercept[AnalysisException] {
+            val df = MemoryStream[Int].toDF
+              .withColumn("eventTime", timestamp_seconds($"value"))
+              .withWatermark("eventTime", delayThreshold)
+          }
+        }
       }
     }
   }

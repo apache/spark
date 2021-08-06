@@ -22,12 +22,12 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
-import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, RangePartitioning, RoundRobinPartitioning, UnknownPartitioning}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeLike}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.vectorized.ColumnarBatch
-
 
 /**
  * A wrapper of shuffle query stage, which follows the given partition arrangement.
@@ -51,6 +51,7 @@ case class AQEShuffleReadExec private(
   override def supportsColumnar: Boolean = child.supportsColumnar
 
   override def output: Seq[Attribute] = child.output
+
   override lazy val outputPartitioning: Partitioning = {
     // If it is a local shuffle read with one mapper per task, then the output partitioning is
     // the same as the plan before shuffle.
@@ -68,6 +69,21 @@ case class AQEShuffleReadExec private(
           }
         case _ =>
           throw new IllegalStateException("operating on canonicalization plan")
+      }
+    } else if (isCoalescedRead) {
+      // For coalesced shuffle read, the data distribution is not changed, only the number of
+      // partitions is changed.
+      child.outputPartitioning match {
+        case h: HashPartitioning =>
+          CurrentOrigin.withOrigin(h.origin)(h.copy(numPartitions = partitionSpecs.length))
+        case r: RangePartitioning =>
+          CurrentOrigin.withOrigin(r.origin)(r.copy(numPartitions = partitionSpecs.length))
+        // This can only happen for `REBALANCE_PARTITIONS_BY_NONE`, which uses
+        // `RoundRobinPartitioning` but we don't need to retain the number of partitions.
+        case r: RoundRobinPartitioning =>
+          r.copy(numPartitions = partitionSpecs.length)
+        case other => throw new IllegalStateException(
+          "Unexpected partitioning for coalesced shuffle read: " + other)
       }
     } else {
       UnknownPartitioning(partitionSpecs.length)
@@ -92,7 +108,7 @@ case class AQEShuffleReadExec private(
   /**
    * Returns true iff some partitions were actually combined
    */
-  private def isCoalesced(spec: ShufflePartitionSpec) = spec match {
+  private def isCoalescedSpec(spec: ShufflePartitionSpec) = spec match {
     case CoalescedPartitionSpec(0, 0, _) => true
     case s: CoalescedPartitionSpec => s.endReducerIndex - s.startReducerIndex > 1
     case _ => false
@@ -102,7 +118,7 @@ case class AQEShuffleReadExec private(
    * Returns true iff some non-empty partitions were combined
    */
   def hasCoalescedPartition: Boolean = {
-    partitionSpecs.exists(isCoalesced)
+    partitionSpecs.exists(isCoalescedSpec)
   }
 
   def hasSkewedPartition: Boolean =
@@ -111,6 +127,16 @@ case class AQEShuffleReadExec private(
   def isLocalRead: Boolean =
     partitionSpecs.exists(_.isInstanceOf[PartialMapperPartitionSpec]) ||
       partitionSpecs.exists(_.isInstanceOf[CoalescedMapperPartitionSpec])
+
+  def isCoalescedRead: Boolean = {
+    partitionSpecs.sliding(2).forall {
+      // A single partition spec which is `CoalescedPartitionSpec` also means coalesced read.
+      case Seq(_: CoalescedPartitionSpec) => true
+      case Seq(l: CoalescedPartitionSpec, r: CoalescedPartitionSpec) =>
+        l.endReducerIndex <= r.startReducerIndex
+      case _ => false
+    }
+  }
 
   private def shuffleStage = child match {
     case stage: ShuffleQueryStageExec => Some(stage)
@@ -159,7 +185,7 @@ case class AQEShuffleReadExec private(
 
     if (hasCoalescedPartition) {
       val numCoalescedPartitionsMetric = metrics("numCoalescedPartitions")
-      val x = partitionSpecs.count(isCoalesced)
+      val x = partitionSpecs.count(isCoalescedSpec)
       numCoalescedPartitionsMetric.set(x)
       driverAccumUpdates += numCoalescedPartitionsMetric.id -> x
     }

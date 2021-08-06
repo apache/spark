@@ -395,6 +395,14 @@ private[spark] object Config extends Logging {
         " positive time value.")
       .createWithDefaultString("30s")
 
+  val KUBERNETES_EXECUTOR_API_POLLING_WITH_RESOURCE_VERSION =
+    ConfigBuilder("spark.kubernetes.executor.enablePollingWithResourceVersion")
+      .doc("If true, `resourceVersion` is set with `0` during invoking pod listing APIs " +
+        "in order to allow API Server-side caching. This should be used carefully.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_EXECUTOR_EVENT_PROCESSING_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.eventProcessingInterval")
       .doc("Interval between successive inspection of executor events sent from the" +

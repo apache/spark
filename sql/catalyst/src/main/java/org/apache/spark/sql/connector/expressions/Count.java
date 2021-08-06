@@ -38,7 +38,13 @@ public final class Count implements AggregateFunc {
   public boolean isDistinct() { return isDistinct; }
 
   @Override
-  public String toString() { return "Count(" + column.describe() + "," + isDistinct + ")"; }
+  public String toString() {
+    if (isDistinct) {
+      return "COUNT(DISTINCT " + column.describe() + ")";
+    } else {
+      return "COUNT(" + column.describe() + ")";
+    }
+  }
 
   @Override
   public String describe() { return this.toString(); }

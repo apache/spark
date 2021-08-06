@@ -20,15 +20,12 @@ An internal immutable DataFrame with some metadata to manage indexes.
 """
 import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, TYPE_CHECKING, cast
-from itertools import accumulate
-import py4j
 
 import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype  # noqa: F401
 from pyspark._globals import _NoValue, _NoValueType
 from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame, Window
-from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import (  # noqa: F401
     BooleanType,
     DataType,
@@ -64,7 +61,6 @@ from pyspark.pandas.utils import (
     name_like_string,
     scol_for,
     spark_column_equals,
-    verify_temp_column_name,
 )
 
 
@@ -636,7 +632,7 @@ class InternalFrame(object):
             )
 
             # Create default index.
-            spark_frame, force_nullable = InternalFrame.attach_default_index(spark_frame)
+            spark_frame = InternalFrame.attach_default_index(spark_frame)
             index_spark_columns = [scol_for(spark_frame, SPARK_DEFAULT_INDEX_NAME)]
 
             index_fields = [
@@ -658,7 +654,6 @@ class InternalFrame(object):
                     data_fields = [
                         field.copy(
                             name=name_like_string(struct_field.name),
-                            nullable=(force_nullable or field.nullable),
                         )
                         for field, struct_field in zip(data_fields, data_struct_fields)
                     ]
@@ -836,7 +831,7 @@ class InternalFrame(object):
     @staticmethod
     def attach_default_index(
         sdf: SparkDataFrame, default_index_type: Optional[str] = None
-    ) -> Tuple[SparkDataFrame, bool]:
+    ) -> SparkDataFrame:
         """
         This method attaches a default index to Spark DataFrame. Spark does not have the index
         notion so corresponding column should be generated.
@@ -848,13 +843,13 @@ class InternalFrame(object):
 
         It adds the default index column '__index_level_0__'.
 
-        >>> spark_frame = InternalFrame.attach_default_index(spark_frame)[0]
+        >>> spark_frame = InternalFrame.attach_default_index(spark_frame)
         >>> spark_frame
         DataFrame[__index_level_0__: bigint, id: bigint]
 
         It throws an exception if the given column name already exists.
 
-        >>> InternalFrame.attach_default_index(spark_frame)[0]
+        >>> InternalFrame.attach_default_index(spark_frame)
         ... # doctest: +ELLIPSIS
         Traceback (most recent call last):
           ...
@@ -881,34 +876,26 @@ class InternalFrame(object):
             )
 
     @staticmethod
-    def attach_sequence_column(
-        sdf: SparkDataFrame, column_name: str
-    ) -> Tuple[SparkDataFrame, bool]:
+    def attach_sequence_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
         scols = [scol_for(sdf, column) for column in sdf.columns]
         sequential_index = (
             F.row_number().over(Window.orderBy(F.monotonically_increasing_id())).cast("long") - 1
         )
-        return sdf.select(sequential_index.alias(column_name), *scols), False
+        return sdf.select(sequential_index.alias(column_name), *scols)
 
     @staticmethod
-    def attach_distributed_column(
-        sdf: SparkDataFrame, column_name: str
-    ) -> Tuple[SparkDataFrame, bool]:
+    def attach_distributed_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
         scols = [scol_for(sdf, column) for column in sdf.columns]
-        return sdf.select(F.monotonically_increasing_id().alias(column_name), *scols), False
+        return sdf.select(F.monotonically_increasing_id().alias(column_name), *scols)
 
     @staticmethod
-    def attach_distributed_sequence_column(
-        sdf: SparkDataFrame, column_name: str
-    ) -> Tuple[SparkDataFrame, bool]:
+    def attach_distributed_sequence_column(sdf: SparkDataFrame, column_name: str) -> SparkDataFrame:
         """
         This method attaches a Spark column that has a sequence in a distributed manner.
         This is equivalent to the column assigned when default index type 'distributed-sequence'.
 
         >>> sdf = ps.DataFrame(['a', 'b', 'c']).to_spark()
-        >>> sdf, force_nullable = (
-        ...     InternalFrame.attach_distributed_sequence_column(sdf, column_name="sequence")
-        ... )
+        >>> sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name="sequence")
         >>> sdf.show()  # doctest: +NORMALIZE_WHITESPACE
         +--------+---+
         |sequence|  0|
@@ -917,123 +904,20 @@ class InternalFrame(object):
         |       1|  b|
         |       2|  c|
         +--------+---+
-        >>> force_nullable
-        True
         """
         if len(sdf.columns) > 0:
-            try:
-                jdf = sdf._jdf.toDF()  # type: ignore
-
-                sql_ctx = sdf.sql_ctx
-                encoders = sql_ctx._jvm.org.apache.spark.sql.Encoders  # type: ignore
-                encoder = encoders.tuple(jdf.exprEnc(), encoders.scalaLong())
-
-                jrdd = jdf.localCheckpoint(False).rdd().zipWithIndex()
-
-                df = SparkDataFrame(
-                    sql_ctx.sparkSession._jsparkSession.createDataset(  # type: ignore
-                        jrdd, encoder
-                    ).toDF(),
-                    sql_ctx,
-                )
-                columns = df.columns
-                return (
-                    df.selectExpr(
-                        "`{}` as `{}`".format(columns[1], column_name), "`{}`.*".format(columns[0])
-                    ),
-                    True,
-                )
-            except py4j.protocol.Py4JError:
-                if is_testing():
-                    raise
-                return InternalFrame._attach_distributed_sequence_column(sdf, column_name)
+            return SparkDataFrame(
+                sdf._jdf.toDF().withSequenceColumn(column_name),  # type: ignore
+                sdf.sql_ctx,
+            )
         else:
             cnt = sdf.count()
             if cnt > 0:
-                return default_session().range(cnt).toDF(column_name), False
+                return default_session().range(cnt).toDF(column_name)
             else:
-                return (
-                    default_session().createDataFrame(
-                        [],
-                        schema=StructType().add(column_name, data_type=LongType(), nullable=False),
-                    ),
-                    False,
+                return default_session().createDataFrame(
+                    [], schema=StructType().add(column_name, data_type=LongType(), nullable=False)
                 )
-
-    @staticmethod
-    def _attach_distributed_sequence_column(
-        sdf: SparkDataFrame, column_name: str
-    ) -> Tuple[SparkDataFrame, bool]:
-        """
-        >>> sdf = ps.DataFrame(['a', 'b', 'c']).to_spark()
-        >>> sdf, force_nullable = (
-        ...     InternalFrame._attach_distributed_sequence_column(sdf, column_name="sequence")
-        ... )
-        >>> sdf.sort("sequence").show()  # doctest: +NORMALIZE_WHITESPACE
-        +--------+---+
-        |sequence|  0|
-        +--------+---+
-        |       0|  a|
-        |       1|  b|
-        |       2|  c|
-        +--------+---+
-        >>> force_nullable
-        False
-        """
-        scols = [scol_for(sdf, column) for column in sdf.columns]
-
-        spark_partition_column = verify_temp_column_name(sdf, "__spark_partition_id__")
-        offset_column = verify_temp_column_name(sdf, "__offset__")
-        row_number_column = verify_temp_column_name(sdf, "__row_number__")
-
-        # 1. Calculates counts per each partition ID. `counts` here is, for instance,
-        #     {
-        #         1: 83,
-        #         6: 83,
-        #         3: 83,
-        #         ...
-        #     }
-        sdf = sdf.withColumn(spark_partition_column, F.spark_partition_id())
-
-        # Checkpoint the DataFrame to fix the partition ID.
-        sdf = sdf.localCheckpoint(eager=False)
-
-        counts = map(
-            lambda x: (x["key"], x["count"]),
-            sdf.groupby(sdf[spark_partition_column].alias("key")).count().collect(),
-        )
-
-        # 2. Calculates cumulative sum in an order of partition id.
-        #     Note that it does not matter if partition id guarantees its order or not.
-        #     We just need a one-by-one sequential id.
-
-        # sort by partition key.
-        sorted_counts = sorted(counts, key=lambda x: x[0])
-        # get cumulative sum in an order of partition key.
-        cumulative_counts = [0] + list(accumulate(map(lambda count: count[1], sorted_counts)))
-        # zip it with partition key.
-        sums = dict(zip(map(lambda count: count[0], sorted_counts), cumulative_counts))
-
-        # 3. Attach offset for each partition.
-        @pandas_udf(returnType=LongType())  # type: ignore
-        def offset(id: pd.Series) -> pd.Series:
-            current_partition_offset = sums[id.iloc[0]]
-            return pd.Series(current_partition_offset).repeat(len(id))
-
-        sdf = sdf.withColumn(offset_column, offset(spark_partition_column))
-
-        # 4. Calculate row_number in each partition.
-        w = Window.partitionBy(spark_partition_column).orderBy(F.monotonically_increasing_id())
-        row_number = F.row_number().over(w)
-        sdf = sdf.withColumn(row_number_column, row_number)
-
-        # 5. Calculate the index.
-        return (
-            sdf.select(
-                (sdf[offset_column] + sdf[row_number_column] - 1).alias(column_name), *scols
-            ),
-            False,
-        )
 
     def spark_column_for(self, label: Label) -> Column:
         """Return Spark Column for the given column label."""
