@@ -92,9 +92,9 @@ private[spark] object HiveUtils extends Logging {
       | 3. "path"
       |   Use Hive jars configured by `spark.sql.hive.metastore.jars.path`
       |   in comma separated format. Support both local or remote paths.The provided jars
-      |   should be the same version as ${HIVE_METASTORE_VERSION}.
+      |   should be the same version as `${HIVE_METASTORE_VERSION.key}`.
       | 4. A classpath in the standard format for both Hive and Hadoop. The provided jars
-      |   should be the same version as ${HIVE_METASTORE_VERSION}.
+      |   should be the same version as `${HIVE_METASTORE_VERSION.key}`.
       """.stripMargin)
     .version("1.4.0")
     .stringConf
@@ -103,7 +103,7 @@ private[spark] object HiveUtils extends Logging {
   val HIVE_METASTORE_JARS_PATH = buildStaticConf("spark.sql.hive.metastore.jars.path")
     .doc(s"""
       | Comma-separated paths of the jars that used to instantiate the HiveMetastoreClient.
-      | This configuration is useful only when `{$HIVE_METASTORE_JARS.key}` is set as `path`.
+      | This configuration is useful only when `${HIVE_METASTORE_JARS.key}` is set as `path`.
       | The paths can be any of the following format:
       | 1. file://path/to/jar/foo.jar
       | 2. hdfs://nameservice/path/to/jar/foo.jar
