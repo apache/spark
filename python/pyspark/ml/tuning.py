@@ -499,7 +499,10 @@ class CrossValidatorModelReader(MLReader):
             bestModelPath = os.path.join(path, 'bestModel')
             bestModel = DefaultParamsReader.loadParamsInstance(bestModelPath, self.sc)
             avgMetrics = metadata['avgMetrics']
-            stdMetrics = metadata['stdMetrics']
+            if 'stdMetrics' in metadata:
+                stdMetrics = metadata['stdMetrics']
+            else:
+                stdMetrics = None
             persistSubModels = ('persistSubModels' in metadata) and metadata['persistSubModels']
 
             if persistSubModels:
@@ -538,8 +541,10 @@ class CrossValidatorModelWriter(MLWriter):
         persistSubModels = _ValidatorSharedReadWrite \
             .getValidatorModelWriterPersistSubModelsParam(self)
         extraMetadata = {'avgMetrics': instance.avgMetrics,
-                         'persistSubModels': persistSubModels,
-                         'stdMetrics': instance.stdMetrics}
+                         'persistSubModels': persistSubModels}
+        if instance.stdMetrics:
+            extraMetadata['stdMetrics'] = instance.stdMetrics
+
         _ValidatorSharedReadWrite.saveImpl(path, instance, self.sc, extraMetadata=extraMetadata)
         bestModelPath = os.path.join(path, 'bestModel')
         instance.bestModel.save(bestModelPath)
@@ -891,6 +896,10 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
     CrossValidatorModel contains the model with the highest average cross-validation
     metric across folds and uses this model to transform input data. CrossValidatorModel
     also tracks the metrics for each param map evaluated.
+
+    Since version 3.2.1, CrossValidatorModel contains a new attribute "stdMetrics",
+    which represent standard deviation of metrics for each paramMap in
+    CrossValidator.estimatorParamMaps.
 
     .. versionadded:: 1.4.0
     """

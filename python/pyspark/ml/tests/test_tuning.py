@@ -372,6 +372,15 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
             loadedCvModel.isSet(param) for param in loadedCvModel.params
         ))
 
+        # mimic old version CrossValidatorModel (without stdMetrics attribute)
+        # test loading model backwards compatibility
+        cvModel2 = cvModel.copy()
+        cvModel2.stdMetrics = []
+        cvModelPath2 = temp_path + "/cvModel2"
+        cvModel2.save(cvModelPath2)
+        loadedCvModel2 = CrossValidatorModel.load(cvModelPath2)
+        assert loadedCvModel2.stdMetrics == []
+
     def test_save_load_trained_model(self):
         self._run_test_save_load_trained_model(LogisticRegression, LogisticRegressionModel)
         self._run_test_save_load_trained_model(DummyLogisticRegression,
