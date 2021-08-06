@@ -2515,7 +2515,7 @@ case class MakeTimestampLTZ(
        NULL
   """,
   group = "datetime_funcs",
-  note = "",
+  note = "If the specified sec is an int, this value represents seconds.",
   since = "3.0.0")
 // scalastyle:on line.size.limit
 case class MakeTimestamp(
@@ -2560,7 +2560,7 @@ case class MakeTimestamp(
   // them to the fractional part of `sec`.
   override def inputTypes: Seq[AbstractDataType] =
     Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType,
-      TypeCollection(DecimalType(8, 6), IntegerType)) ++ timezone.map(_ => StringType)
+      DecimalType(8, 6), IntegerType) ++ timezone.map(_ => StringType)
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
