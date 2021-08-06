@@ -2657,14 +2657,6 @@ private[spark] object Utils extends Logging {
     try f.apply(resource) finally resource.close()
   }
 
-  def closeQuietly(closeable: Closeable, consumer: Consumer[IOException]): Unit = {
-    if (closeable != null) try closeable.close()
-    catch {
-      case e: IOException =>
-        if (consumer != null) consumer.accept(e)
-    }
-  }
-
   /**
    * Returns a path of temporary file which is in the same directory with `path`.
    */

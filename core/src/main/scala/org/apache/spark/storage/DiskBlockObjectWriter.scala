@@ -154,7 +154,7 @@ private[spark] class DiskBlockObjectWriter(
    * Close and cleanup all resources.
    * Should call after committing or reverting partial writes.
    */
-  protected def closeResources(): Unit = {
+  private def closeResources(): Unit = {
     if (initialized) {
       Utils.tryWithSafeFinally {
         mcs.manualClose()
