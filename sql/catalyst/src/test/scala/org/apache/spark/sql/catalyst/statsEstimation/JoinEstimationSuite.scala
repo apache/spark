@@ -77,7 +77,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
     outputList = Seq("key-1-5", "key-1-5-3nulls").map(nameToAttr),
     rowCount = 8,
     attributeStats = AttributeMap(Seq("key-1-5", "key-1-5-3nulls").map(nameToColInfo)))
-  // Suppose table3 (key-1-2 int, key-1-2-2nulls int) has 4 records:
+  // Suppose table5 (key-1-2 int, key-1-2-2nulls int) has 4 records:
   //     (1, 1), (2, 2), (1, null), (2, null)
   private val table5 = StatsTestPlan(
     outputList = Seq("key-1-2", "key-1-2-2nulls").map(nameToAttr),
@@ -399,7 +399,7 @@ class JoinEstimationSuite extends StatsEstimationTestBase {
   test("inner join with equal null safe") {
     // Suppose table4 (key-1-5 int, key-1-5-3nulls int) has 8 records:
     //    (1, 1), (2, 2), (3, 3), (4, 4), (5, 5), (1, null), (2, null), 3(3, null)
-    // Suppose table3 (key-1-2 int, key-1-2-2nulls int) has 4 records:
+    // Suppose table5 (key-1-2 int, key-1-2-2nulls int) has 4 records:
     //     (1, 1), (2, 2), (1, null), (2, null)
     val join = Join(table4, table5, Inner,
       Some(EqualNullSafe(nameToAttr("key-1-5-3nulls"), nameToAttr("key-1-2-2nulls"))),
