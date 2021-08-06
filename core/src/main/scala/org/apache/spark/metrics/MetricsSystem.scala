@@ -230,7 +230,7 @@ private[spark] class MetricsSystem private (
       extends MetricRegistryListener {
     def metricName(name: String): String = MetricRegistry.name(prefix, name)
 
-    def registerMetric[T](name: String, metric: T): Unit = {
+    def registerMetric[T <: Metric](name: String, metric: T): Unit = {
       try {
         registry.register(metricName(name), metric)
       } catch {
