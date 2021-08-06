@@ -21,7 +21,7 @@ import java.io.File
 import io.fabric8.kubernetes.client.Config
 import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.k8s.{KubernetesConf, KubernetesUtils, SparkKubernetesClientFactory}
 import org.apache.spark.deploy.k8s.Config._
 import org.apache.spark.deploy.k8s.Constants.DEFAULT_EXECUTOR_CONTAINER_NAME
@@ -110,27 +110,7 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       kubernetesClient,
       snapshotsStore)
 
-    val executorPodsAllocatorName = sc.conf.get(KUBERNETES_ALLOCATION_PODSALLOCATOR) match {
-      case "statefulset" =>
-        "org.apache.spark.scheduler.cluster.k8s.StatefulsetPodsAllocator"
-      case "direct" =>
-        "org.apache.spark.scheduler.cluster.k8s.ExecutorPodsAllocator"
-    }
-
-    val executorPodsAllocator = {
-      val cls = Utils.classForName[AbstractPodsAllocator](executorPodsAllocatorName)
-      val cstr = cls.getConstructor(
-        classOf[SparkConf], classOf[SecurityManager],
-        classOf[KubernetesExecutorBuilder], classOf[KubernetesClient],
-        classOf[ExecutorPodsSnapshotsStore], classOf[Clock])
-      cstr.newInstance(
-          sc.conf,
-          sc.env.securityManager,
-          new KubernetesExecutorBuilder(),
-          kubernetesClient,
-          snapshotsStore,
-          new SystemClock())
-    }
+    val executorPodsAllocator = makeExecutorPodsAllocator(sc, kubernetesClient, snapshotsStore)
 
     val podsWatchEventSource = new ExecutorPodsWatchSnapshotSource(
       snapshotsStore,
@@ -151,6 +131,31 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
       executorPodsLifecycleEventHandler,
       podsWatchEventSource,
       podsPollingEventSource)
+  }
+
+  private[k8s] def makeExecutorPodsAllocator(sc: SparkContext, kubernetesClient: KubernetesClient,
+      snapshotsStore: ExecutorPodsSnapshotsStore) = {
+    val executorPodsAllocatorName = sc.conf.get(KUBERNETES_ALLOCATION_PODSALLOCATOR) match {
+      case "statefulset" =>
+        "org.apache.spark.scheduler.cluster.k8s.StatefulsetPodsAllocator"
+      case "direct" =>
+        "org.apache.spark.scheduler.cluster.k8s.ExecutorPodsAllocator"
+      case fullClass =>
+        fullClass
+    }
+
+    val cls = Utils.classForName[AbstractPodsAllocator](executorPodsAllocatorName)
+    val cstr = cls.getConstructor(
+      classOf[SparkConf], classOf[org.apache.spark.SecurityManager],
+      classOf[KubernetesExecutorBuilder], classOf[KubernetesClient],
+      classOf[ExecutorPodsSnapshotsStore], classOf[Clock])
+    cstr.newInstance(
+      sc.conf,
+      sc.env.securityManager,
+      new KubernetesExecutorBuilder(),
+      kubernetesClient,
+      snapshotsStore,
+      new SystemClock())
   }
 
   override def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {

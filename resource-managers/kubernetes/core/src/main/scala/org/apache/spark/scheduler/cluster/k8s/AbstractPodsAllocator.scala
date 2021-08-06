@@ -17,12 +17,9 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import io.fabric8.kubernetes.api.model.Pod
-import io.fabric8.kubernetes.client.KubernetesClient
 
-import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.resource.ResourceProfile
-import org.apache.spark.util.Clock
 
 
 /**
@@ -39,14 +36,6 @@ import org.apache.spark.util.Clock
  */
 @DeveloperApi
 abstract class AbstractPodsAllocator {
-
-  def this(conf: SparkConf,
-    secMgr: SecurityManager,
-    executorBuilder: KubernetesExecutorBuilder,
-    kubernetesClient: KubernetesClient,
-    snapshotsStore: ExecutorPodsSnapshotsStore,
-    clock: Clock) = this
-
   /*
    * Set the total expected executors for an application
    */
