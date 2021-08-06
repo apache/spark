@@ -82,7 +82,6 @@ object SchemaPruning extends Rule[LogicalPlan] {
         val prunedRelation = leafNodeBuilder(prunedDataSchema)
         val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
 
-        // Here use origin projects and filters to keep output schema not change.
         Some(buildNewProjection(normalizedProjects, projects, normalizedFilters,
           prunedRelation, projectionOverSchema))
       } else {
