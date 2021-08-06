@@ -21,7 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{NULL_CHECK, TreePattern}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{COALESCE, NULL_CHECK, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
 
@@ -54,6 +54,8 @@ case class Coalesce(children: Seq[Expression]) extends ComplexTypeMergingExpress
 
   // Coalesce is foldable if all children are foldable.
   override def foldable: Boolean = children.forall(_.foldable)
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(COALESCE)
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.length < 1) {
