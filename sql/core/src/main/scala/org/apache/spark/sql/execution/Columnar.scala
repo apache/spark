@@ -526,12 +526,10 @@ case class ApplyColumnarRulesAndInsertTransitions(
    */
   private def insertTransitions(plan: SparkPlan, outputsColumnar: Boolean): SparkPlan = {
     if (outputsColumnar) {
-      // The tree feels kind of backwards
-      // This is the end of the columnar processing so go back to rows
       insertRowToColumnar(plan)
     } else if (plan.supportsColumnar) {
-      // The tree feels kind of backwards
-      // This is the end of the columnar processing so go back to rows
+      // `outputsColumnar` is false but the plan outputs columnar format, so add a
+      // to-row transition here.
       ColumnarToRowExec(insertRowToColumnar(plan))
     } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
       plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar = false)))
