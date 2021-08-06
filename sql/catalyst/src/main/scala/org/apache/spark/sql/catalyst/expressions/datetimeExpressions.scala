@@ -2507,12 +2507,15 @@ case class MakeTimestampLTZ(
        2014-12-27 21:30:45.887
       > SELECT _FUNC_(2019, 6, 30, 23, 59, 60);
        2019-07-01 00:00:00
+      > SELECT _FUNC_(2019, 6, 30, 23, 59, 1);
+       2019-06-30 23:59:01
       > SELECT _FUNC_(2019, 13, 1, 10, 11, 12, 'PST');
        NULL
       > SELECT _FUNC_(null, 7, 22, 15, 30, 0);
        NULL
   """,
   group = "datetime_funcs",
+  note = "",
   since = "3.0.0")
 // scalastyle:on line.size.limit
 case class MakeTimestamp(
@@ -2556,12 +2559,19 @@ case class MakeTimestamp(
   // Accept `sec` as DecimalType to avoid loosing precision of microseconds while converting
   // them to the fractional part of `sec`.
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(8, 6)) ++
-    timezone.map(_ => StringType)
+    Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType,
+      TypeCollection(DecimalType(8, 6), IntegerType)) ++ timezone.map(_ => StringType)
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
+
+  private lazy val toDecimal = sec.dataType match {
+    case DecimalType() =>
+      (secEval: Any) => secEval.asInstanceOf[Decimal]
+    case IntegerType =>
+      (secEval: Any) => Decimal(BigDecimal(secEval.asInstanceOf[Int]), 8, 6)
+  }
 
   private def toMicros(
       year: Int,
@@ -2617,7 +2627,7 @@ case class MakeTimestamp(
       day.asInstanceOf[Int],
       hour.asInstanceOf[Int],
       min.asInstanceOf[Int],
-      sec.asInstanceOf[Decimal],
+      toDecimal(sec),
       zid)
   }
 
@@ -2625,6 +2635,7 @@ case class MakeTimestamp(
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
     val d = Decimal.getClass.getName.stripSuffix("$")
+    val decimalValue = ctx.freshName("decimalValue")
     val failOnErrorBranch = if (failOnError) "throw e;" else s"${ev.isNull} = true;"
     nullSafeCodeGen(ctx, ev, (year, month, day, hour, min, secAndNanos, timezone) => {
       val zoneId = timezone.map(tz => s"$dtu.getZoneId(${tz}.toString())").getOrElse(zid)
@@ -2632,15 +2643,25 @@ case class MakeTimestamp(
         s"""
            |java.time.Instant instant = ldt.atZone($zoneId).toInstant();
            |${ev.value} = $dtu.instantToMicros(instant);
-           |""".stripMargin
+         """.stripMargin
       } else {
         s"${ev.value} = $dtu.localDateTimeToMicros(ldt);"
       }
+      val toDecimalCode = sec.dataType match {
+        case DecimalType() =>
+          s"org.apache.spark.sql.types.Decimal $decimalValue = $secAndNanos;"
+        case IntegerType =>
+          s"""
+             |org.apache.spark.sql.types.Decimal $decimalValue =
+             |$d$$.MODULE$$.apply(new java.math.BigDecimal($secAndNanos), 8, 6);
+           """.stripMargin
+      }
       s"""
       try {
-        org.apache.spark.sql.types.Decimal secFloor = $secAndNanos.floor();
+        $toDecimalCode
+        org.apache.spark.sql.types.Decimal secFloor = $decimalValue.floor();
         org.apache.spark.sql.types.Decimal nanosPerSec = $d$$.MODULE$$.apply(1000000000L, 10, 0);
-        int nanos = (($secAndNanos.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
+        int nanos = (($decimalValue.$$minus(secFloor)).$$times(nanosPerSec)).toInt();
         int seconds = secFloor.toInt();
         java.time.LocalDateTime ldt;
         if (seconds == 60) {
