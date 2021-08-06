@@ -998,13 +998,23 @@ object SQLConf {
       .checkValue(_ > 0, "The value of metastorePartitionPruningInSetThreshold must be positive")
       .createWithDefault(1000)
 
+  val HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION =
+    buildConf("spark.sql.hive.metastorePartitionPruningFallbackOnException")
+      .doc("Whether to fallback to get all partitions from Hive metastore and perform partition " +
+        "pruning on Spark client side, when encountering MetaException from the metastore. Note " +
+        "that Spark query performance may degrade if this is enabled and there are many " +
+        "partitions to be listed. If this is disabled, Spark will fail the query instead.")
+      .version("3.3.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val HIVE_MANAGE_FILESOURCE_PARTITIONS =
     buildConf("spark.sql.hive.manageFilesourcePartitions")
       .doc("When true, enable metastore partition management for file source tables as well. " +
            "This includes both datasource and converted Hive tables. When partition management " +
            "is enabled, datasource tables store partition in the Hive metastore, and use the " +
            s"metastore to prune partitions during query planning when " +
-           s"$HIVE_METASTORE_PARTITION_PRUNING is set to true.")
+           s"${HIVE_METASTORE_PARTITION_PRUNING.key} is set to true.")
       .version("2.1.1")
       .booleanConf
       .createWithDefault(true)
@@ -3648,6 +3658,9 @@ class SQLConf extends Serializable with Logging {
 
   def metastorePartitionPruningInSetThreshold: Int =
     getConf(HIVE_METASTORE_PARTITION_PRUNING_INSET_THRESHOLD)
+
+  def metastorePartitionPruningFallbackOnException: Boolean =
+    getConf(HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION)
 
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 
