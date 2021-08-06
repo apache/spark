@@ -3459,14 +3459,19 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         return self.where(cond_inversed, other)
 
     # TODO: Support axis as 1 or 'columns'
-    def mode(
-        self, axis: Union[int, str] = 0, numeric_only: bool = False, dropna: bool = True
-    ) -> "DataFrame":
+    def mode(self, axis: Axis, numeric_only: bool = False, dropna: bool = True) -> "DataFrame":
         """
         Get the mode(s) of each element along the selected axis.
 
         The mode of a set of values is the value that appears most often.
         It can be multiple values.
+
+        Notes
+        -----
+        The current implementation of mode requires joins multiple times
+        (columns count - 1 times when axis is 0 or 'index'), which is potentially expensive.
+
+        The order of multiple modes (within each column when axis is 0 or 'index') is undetermined.
 
         Parameters
         ----------
@@ -3518,13 +3523,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
            legs  wings
         0   2.0    0.0
         1   NaN    2.0
-
-        Notes
-        -----
-        The current implementation of mode requires joins multiple times
-        (columns count - 1 times when axis is 0 or 'index'), which is potentially expensive.
-
-        The order of multiple modes (within each column when axis is 0 or 'index') is undetermined.
         """
         axis = validate_axis(axis)
         if axis == 1:

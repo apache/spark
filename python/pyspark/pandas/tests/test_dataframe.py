@@ -1923,6 +1923,8 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
                 pdf.mode(dropna=False),
             )
 
+        self.assert_eq(ps.DataFrame([[]]).mode(), pd.DataFrame([[]]).mode())
+
     def test_merge(self):
         left_pdf = pd.DataFrame(
             {
