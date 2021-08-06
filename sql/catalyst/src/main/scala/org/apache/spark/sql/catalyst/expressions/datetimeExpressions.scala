@@ -2515,7 +2515,9 @@ case class MakeTimestampLTZ(
        NULL
   """,
   group = "datetime_funcs",
-  note = "If the specified sec is an int, this value represents seconds.",
+  note = """
+    If the specified sec is an int, this value represents seconds.
+  """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
 case class MakeTimestamp(
