@@ -1658,15 +1658,10 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * This rule is applied by normal and AQE Optimizer, and optimizes Limit operators by:
+ * This rule is applied by both normal and AQE Optimizer, and optimizes Limit operators by:
  * 1. Eliminate [[Limit]]/[[GlobalLimit]] operators if it's child max row <= limit.
  * 2. Combines two adjacent [[Limit]] operators into one, merging the
  *    expressions into one single expression.
- *
- * For AQE Optimizer side:
- * [[LogicalQueryStage]] override the maxRows, so we can use the maxRows of logic plan to decide
- * if we can eliminate limits. And we check if [[LogicalQueryStage]] is materialized at stats,
- * if it is not materialized the maxRows is none.
  */
 object EliminateLimits extends Rule[LogicalPlan] {
   private def canEliminate(limitExpr: Expression, child: LogicalPlan): Boolean = {
