@@ -255,7 +255,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   override def canCast(from: DataType, to: DataType): Boolean = AnsiCast.canCast(from, to)
 
   /**
-   * Promotes string literals that appear in arithmetic and comparison expressions.
+   * Promotes string literals that appear in arithmetic, comparison, and datetime expressions.
    */
   object PromoteStringLiterals extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
