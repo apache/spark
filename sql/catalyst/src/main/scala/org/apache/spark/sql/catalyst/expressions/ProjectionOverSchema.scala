@@ -22,20 +22,18 @@ import org.apache.spark.sql.types._
 /**
  * A Scala extractor that projects an expression over a given schema. Data types,
  * field indexes and field counts of complex type extractors and attributes
- * are adjusted to fit the schema by keep a attribute name map by origin expression
- * and normalized expression. All other expressions are left as-is. This
+ * are adjusted to fit the schema. All other expressions are left as-is. This
  * class is motivated by columnar nested schema pruning.
  */
-case class ProjectionOverSchema(schema: StructType, attrNameMap: Map[String, String]) {
+case class ProjectionOverSchema(schema: StructType) {
   private val fieldNames = schema.fieldNames.toSet
 
   def unapply(expr: Expression): Option[Expression] = getProjection(expr)
 
   private def getProjection(expr: Expression): Option[Expression] =
     expr match {
-      case a: AttributeReference if fieldNames.contains(attrNameMap.getOrElse(a.name, a.name)) =>
-        Some(a.copy(dataType =
-          schema(attrNameMap.getOrElse(a.name, a.name)).dataType)(a.exprId, a.qualifier))
+      case a: AttributeReference if fieldNames.contains(a.name) =>
+        Some(a.copy(dataType = schema(a.name).dataType)(a.exprId, a.qualifier))
       case GetArrayItem(child, arrayItemOrdinal, failOnError) =>
         getProjection(child).map {
           projection => GetArrayItem(projection, arrayItemOrdinal, failOnError)

@@ -80,11 +80,11 @@ object SchemaPruning extends Rule[LogicalPlan] {
       // in dataSchema.
       if (countLeaves(dataSchema) > countLeaves(prunedDataSchema)) {
         val prunedRelation = leafNodeBuilder(prunedDataSchema)
-        val projectionOverSchema = ProjectionOverSchema(prunedDataSchema,
-          DataSourceStrategy.normalizeExprsAttrNameMap(output, projects, filters))
+        val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
 
         // Here use origin projects and filters to keep output schema not change.
-        Some(buildNewProjection(projects, filters, prunedRelation, projectionOverSchema))
+        Some(buildNewProjection(normalizedProjects, projects, normalizedFilters,
+          prunedRelation, projectionOverSchema))
       } else {
         None
       }
@@ -125,7 +125,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
    * Builds the new output [[Project]] Spark SQL operator that has the `leafNode`.
    */
   private def buildNewProjection(
-      projects: Seq[NamedExpression],
+      normalizedProjects: Seq[NamedExpression],
+      previousProjectList: Seq[NamedExpression],
       filters: Seq[Expression],
       leafNode: LeafNode,
       projectionOverSchema: ProjectionOverSchema): Project = {
@@ -144,15 +145,17 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
     // Construct the new projections of our Project by
     // rewriting the original projections
-    val newProjects = projects.map(_.transformDown {
+    val newProjects = normalizedProjects.map(_.transformDown {
       case projectionOverSchema(expr) => expr
     }).map { case expr: NamedExpression => expr }
-
+    val withPreviousAttrNameProject =
+      DataSourceStrategy.normalizeExprs(newProjects, previousProjectList.map(_.toAttribute))
+        .asInstanceOf[Seq[NamedExpression]]
     if (log.isDebugEnabled) {
       logDebug(s"New projects:\n${newProjects.map(_.treeString).mkString("\n")}")
     }
 
-    Project(newProjects, projectionChild)
+    Project(withPreviousAttrNameProject, projectionChild)
   }
 
   /**

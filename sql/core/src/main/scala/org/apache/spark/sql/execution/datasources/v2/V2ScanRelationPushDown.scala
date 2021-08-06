@@ -194,8 +194,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val scanRelation = DataSourceV2ScanRelation(sHolder.relation, wrappedScan, output)
 
-      val projectionOverSchema = ProjectionOverSchema(output.toStructType,
-        DataSourceStrategy.normalizeExprsAttrNameMap(sHolder.output, project, Seq.empty))
+      val projectionOverSchema = ProjectionOverSchema(output.toStructType)
       val projectionFunc = (expr: Expression) => expr transformDown {
         case projectionOverSchema(newExpr) => newExpr
       }
@@ -206,10 +205,13 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
       val withProjection = if (withFilter.output != project) {
         // Here use origin projects and filters to keep output schema not change.
-        val newProjects = project
+        val newProjects = normalizedProjects
           .map(projectionFunc)
           .asInstanceOf[Seq[NamedExpression]]
-        Project(newProjects, withFilter)
+        val withPreviousAttrNameProject =
+          DataSourceStrategy.normalizeExprs(newProjects, plan.output)
+            .asInstanceOf[Seq[NamedExpression]]
+        Project(withPreviousAttrNameProject, withFilter)
       } else {
         withFilter
       }
