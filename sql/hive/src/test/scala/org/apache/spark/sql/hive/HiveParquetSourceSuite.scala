@@ -206,7 +206,7 @@ class HiveParquetSourceSuite extends ParquetPartitioningTest {
     }
   }
 
-  // After pushing down aggregate to parquet, we can have something like MAX(C) in column name
+  // We can have something like MAX(C) in column name for aggregate push down
   // ignore this test for now
   ignore("Aggregation attribute names can't contain special chars \" ,;{}()\\n\\t=\"") {
     withTempDir { tempDir =>

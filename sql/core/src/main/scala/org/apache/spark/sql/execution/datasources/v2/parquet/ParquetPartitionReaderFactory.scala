@@ -125,7 +125,7 @@ case class ParquetPartitionReaderFactory(
         override def get(): InternalRow = {
           count += 1
           val footer = getFooter(file)
-          ParquetUtils.createInternalRowFromAggResult(footer, dataSchema, partitionSchema,
+          ParquetUtils.createAggInternalRowFromFooter(footer, dataSchema, partitionSchema,
             aggregation.get, readDataSchema, datetimeRebaseModeInRead, isCaseSensitive)
         }
 
@@ -159,7 +159,7 @@ case class ParquetPartitionReaderFactory(
         override def get(): ColumnarBatch = {
           count += 1
           val footer = getFooter(file)
-          ParquetUtils.createColumnarBatchFromAggResult(footer, dataSchema, partitionSchema,
+          ParquetUtils.createAggColumnarBatchFromFooter(footer, dataSchema, partitionSchema,
             aggregation.get, readDataSchema, enableOffHeapColumnVector, datetimeRebaseModeInRead,
             isCaseSensitive)
         }

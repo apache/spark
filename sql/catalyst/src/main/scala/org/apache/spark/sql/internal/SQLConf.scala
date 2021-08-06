@@ -854,7 +854,8 @@ object SQLConf {
       .createWithDefault(10)
 
   val PARQUET_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.aggregatePushdown")
-    .doc("Enables Parquet aggregate push-down optimization when set to true.")
+    .doc("If true, MAX/MIN/COUNT without filter and group by will be pushed" +
+      " down to parquet for optimization. ")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)

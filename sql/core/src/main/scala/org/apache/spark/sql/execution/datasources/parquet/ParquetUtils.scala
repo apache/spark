@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.connector.expressions.{Aggregation, Count, CountStar, Max, Min}
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitioningUtils}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
+import org.apache.spark.sql.internal.SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED
 import org.apache.spark.sql.types.{BinaryType, ByteType, DateType, Decimal, DecimalType, IntegerType, LongType, ShortType, StringType, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
@@ -153,7 +154,7 @@ object ParquetUtils {
    *
    * @return Aggregate results in the format of InternalRow
    */
-  private[sql] def createInternalRowFromAggResult(
+  private[sql] def createAggInternalRowFromFooter(
       footer: ParquetMetadata,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -184,7 +185,8 @@ object ParquetUtils {
           case d: DecimalType =>
             val decimal = Decimal(values(i).asInstanceOf[Integer].toLong, d.precision, d.scale)
             mutableRow.setDecimal(i, decimal, d.precision)
-          case _ => throw new SparkException("Unexpected type for INT32")
+          case _ => throw new SparkException(s"Unexpected type ${aggSchema.fields(i).dataType}" +
+            " for INT32")
         }
       case (PrimitiveType.PrimitiveTypeName.INT64, i) =>
         aggSchema.fields(i).dataType match {
@@ -193,7 +195,8 @@ object ParquetUtils {
           case d: DecimalType =>
             val decimal = Decimal(values(i).asInstanceOf[Long], d.precision, d.scale)
             mutableRow.setDecimal(i, decimal, d.precision)
-          case _ => throw new SparkException("Unexpected type for INT64")
+          case _ => throw new SparkException(s"Unexpected type ${aggSchema.fields(i).dataType}" +
+            " for INT64")
         }
       case (PrimitiveType.PrimitiveTypeName.FLOAT, i) =>
         mutableRow.setFloat(i, values(i).asInstanceOf[Float])
@@ -212,7 +215,8 @@ object ParquetUtils {
             val decimal =
               Decimal(new BigDecimal(new BigInteger(bytes), d.scale), d.precision, d.scale)
             mutableRow.setDecimal(i, decimal, d.precision)
-          case _ => throw new SparkException("Unexpected type for Binary")
+          case _ => throw new SparkException(s"Unexpected type ${aggSchema.fields(i).dataType}" +
+            " for Binary")
         }
       case (PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY, i) =>
         val bytes = values(i).asInstanceOf[Binary].getBytes
@@ -221,7 +225,8 @@ object ParquetUtils {
             val decimal =
               Decimal(new BigDecimal(new BigInteger(bytes), d.scale), d.precision, d.scale)
             mutableRow.setDecimal(i, decimal, d.precision)
-          case _ => throw new SparkException("Unexpected type for FIXED_LEN_BYTE_ARRAY")
+          case _ => throw new SparkException(s"Unexpected type ${aggSchema.fields(i).dataType}" +
+            " for FIXED_LEN_BYTE_ARRAY")
         }
       case _ =>
         throw new SparkException("Unexpected parquet type name")
@@ -238,7 +243,7 @@ object ParquetUtils {
    *
    * @return Aggregate results in the format of ColumnarBatch
    */
-  private[sql] def createColumnarBatchFromAggResult(
+  private[sql] def createAggColumnarBatchFromFooter(
       footer: ParquetMetadata,
       dataSchema: StructType,
       partitionSchema: StructType,
@@ -272,7 +277,8 @@ object ParquetUtils {
             val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
               datetimeRebaseMode, "Parquet")
             columnVectors(i).appendInt(dateRebaseFunc(values(i).asInstanceOf[Integer]))
-          case _ => throw new SparkException("Unexpected type for INT32")
+          case _ => throw new SparkException(s"Unexpected type ${aggSchema.fields(i).dataType}" +
+            s" for INT32")
         }
       case (PrimitiveType.PrimitiveTypeName.INT64, i) =>
         columnVectors(i).appendLong(values(i).asInstanceOf[Long])
@@ -368,7 +374,7 @@ object ParquetUtils {
   }
 
   /**
-   * get the Max or Min value for ith column in the current block
+   * Get the Max or Min value for ith column in the current block
    *
    * @return the Max or Min value
    */
@@ -379,7 +385,7 @@ object ParquetUtils {
     val statistics = columnChunkMetaData.get(i).getStatistics()
     if (!statistics.hasNonNullValue) {
       throw new UnsupportedOperationException("No min/max found for parquet file, Set SQLConf" +
-        " PARQUET_AGGREGATE_PUSHDOWN_ENABLED to false and execute again")
+        s" ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute again")
     } else {
       if (isMax) statistics.genericGetMax() else statistics.genericGetMin()
     }
@@ -391,7 +397,7 @@ object ParquetUtils {
     val statistics = columnChunkMetaData.get(i).getStatistics()
     if (!statistics.isNumNullsSet()) {
       throw new UnsupportedOperationException("Number of nulls not set for parquet file." +
-        "  Set SQLConf PARQUET_AGGREGATE_PUSHDOWN_ENABLED to false and execute again")
+        s" Set SQLConf ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute again")
     }
     statistics.getNumNulls();
   }
