@@ -92,7 +92,7 @@ select date_add('2011-11-11', str) from v;
 select date_sub('2011-11-11', str) from v;
 
 -- non-literal string column add/sub with integer
-create or replace temp view v2 as select '2011-11-11' str;
+create temp view v2 as select '2011-11-11' str;
 select date_add(str, 1) from v2;
 select date_sub(str, 1) from v2;
 

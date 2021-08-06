@@ -429,7 +429,7 @@ cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), v.str)' due to data type mi
 
 
 -- !query
-create or replace temp view v2 as select '2011-11-11' str
+create temp view v2 as select '2011-11-11' str
 -- !query schema
 struct<>
 -- !query output
