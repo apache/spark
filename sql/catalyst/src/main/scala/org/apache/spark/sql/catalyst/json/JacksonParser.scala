@@ -330,8 +330,12 @@ class JacksonParser(
     case udt: UserDefinedType[_] =>
       makeConverter(udt.sqlType)
 
-    // We don't actually hit this exception though, we keep it for understandability
-    case _ => throw QueryExecutionErrors.unsupportedTypeError(dataType)
+    case _ =>
+      (parser: JsonParser) =>
+        // Here, we pass empty `PartialFunction` so that this case can be
+        // handled as a failed conversion. It will throw an exception as
+        // long as the value is not null.
+        parseJsonToken[AnyRef](parser, dataType)(PartialFunction.empty[JsonToken, AnyRef])
   }
 
   /**
