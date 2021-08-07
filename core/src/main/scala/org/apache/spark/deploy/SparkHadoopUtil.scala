@@ -54,7 +54,7 @@ private[spark] class SparkHadoopUtil extends Logging {
    * SPARK-36328: Save Credentials for each partitioned table to reuse the FileSystem
    * Delegation Token.
    */
-  private[this] val credentialsMapForPartitionedTable = new ConcurrentHashMap[String, Credentials]()
+  private[spark] val credentialsMapForPartitionedTable = new ConcurrentHashMap[String, Credentials]()
 
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
