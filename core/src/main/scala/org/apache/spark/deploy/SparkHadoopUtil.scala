@@ -146,8 +146,8 @@ private[spark] class SparkHadoopUtil extends Logging {
    * @param conf a map/reduce job configuration.
    * @param partitionedTableUUID UUID for current partitioned table.
    */
-  def addCurrentHivePartitionedTableCredentials(conf: JobConf,
-                                                partitionedTableUUID: String): Unit = {
+  def addCurrentPartitionedTableCredentials(conf: JobConf,
+                                            partitionedTableUUID: String): Unit = {
     val jobCreds = conf.getCredentials()
     if(credentialsMapForPartitionedTable.contains(partitionedTableUUID)) {
       jobCreds.addAll(credentialsMapForPartitionedTable.get(partitionedTableUUID))

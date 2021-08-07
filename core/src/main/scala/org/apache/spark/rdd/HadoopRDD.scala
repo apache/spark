@@ -207,7 +207,7 @@ class HadoopRDD[K, V](
     // FileSystem Delegation Token.
     if(partitionedTableUUID == null) SparkHadoopUtil.get.addCredentials(jobConf)
     else SparkHadoopUtil.get.
-      addCurrentHivePartitionedTableCredentials(jobConf, partitionedTableUUID)
+      addCurrentPartitionedTableCredentials(jobConf, partitionedTableUUID)
     try {
       val allInputSplits = getInputFormat(jobConf).getSplits(jobConf, minPartitions)
       val inputSplits = if (ignoreEmptySplits) {

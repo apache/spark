@@ -388,7 +388,7 @@ class HadoopTableReader(
     HadoopTableReader.initializeLocalJobConfFunc(path, partDesc.getTableDesc)(newJobConf)
     // SPARK-36328: Add the credentials from previous JobConf into the new JobConf to reuse the
     // FileSystem Delegation Token.
-    SparkHadoopUtil.get.addCurrentHivePartitionedTableCredentials(newJobConf, partitionedTableUUID)
+    SparkHadoopUtil.get.addCurrentPartitionedTableCredentials(newJobConf, partitionedTableUUID)
     val inputFormatClass = partDesc.getInputFileFormatClass
       .asInstanceOf[Class[newInputClass[Writable, Writable]]]
     createNewHadoopRDD(inputFormatClass, newJobConf)
