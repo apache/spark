@@ -147,6 +147,15 @@ private[spark] object Config extends Logging {
   val CLIENT_CERT_FILE_CONF_SUFFIX = "clientCertFile"
   val CA_CERT_FILE_CONF_SUFFIX = "caCertFile"
 
+
+  val KUBERNETES_CLIENT_OAUTH_TOKEN_PROVIDER =
+    ConfigBuilder("spark.kubernetes.client.oauth.token.provider.class")
+      .doc("A class that implements fabric's OAuthTokenProvider interface to " +
+        "provide a token refresh for long running jobs.")
+      .version("3.1.3")
+      .stringConf
+      .createOptional
+
   val SUBMISSION_CLIENT_REQUEST_TIMEOUT =
     ConfigBuilder("spark.kubernetes.submission.requestTimeout")
       .doc("request timeout to be used in milliseconds for starting the driver")
