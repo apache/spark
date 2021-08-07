@@ -414,7 +414,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     try {
       partitionInfoBeforeCheck = getOrCreateAppShufflePartitionInfo(appShuffleInfo, msg.shuffleId,
         msg.shuffleMergeId, msg.reduceId, streamId);
-    } catch(BlockPushNonFatalFailure bpf) {
+    } catch (BlockPushNonFatalFailure bpf) {
       // Set partitionInfoBeforeCheck to null so that stale block push gets handled.
       partitionInfoBeforeCheck = null;
       failure = bpf;

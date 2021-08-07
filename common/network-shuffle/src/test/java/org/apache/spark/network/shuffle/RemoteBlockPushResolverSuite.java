@@ -320,9 +320,11 @@ public class RemoteBlockPushResolverSuite {
     try {
       stream1.onComplete(stream1.getID());
     } catch (BlockPushNonFatalFailure e) {
+      BlockPushReturnCode errorCode =
+        (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
       assertEquals(BlockPushNonFatalFailure.ReturnCode.TOO_LATE_BLOCK_PUSH.id(),
-        ((BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse()))
-          .returnCode);
+        errorCode.returnCode);
+      assertEquals(errorCode.failureBlockId, stream1.getID());
       MergedBlockMeta blockMeta = pushResolver.getMergedBlockMeta(TEST_APP, 0, 0, 0);
       validateChunks(TEST_APP, 0, 0, 0, blockMeta, new int[]{9}, new int[][]{{0}});
       throw e;
@@ -378,9 +380,11 @@ public class RemoteBlockPushResolverSuite {
     try {
       stream2.onComplete(stream2.getID());
     } catch (BlockPushNonFatalFailure e) {
+      BlockPushReturnCode errorCode =
+        (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
       assertEquals(BlockPushNonFatalFailure.ReturnCode.BLOCK_APPEND_COLLISION_DETECTED.id(),
-        ((BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse()))
-          .returnCode);
+        errorCode.returnCode);
+      assertEquals(errorCode.failureBlockId, stream2.getID());
       throw e;
     }
   }
@@ -406,9 +410,11 @@ public class RemoteBlockPushResolverSuite {
     try {
       stream3.onComplete(stream3.getID());
     } catch (BlockPushNonFatalFailure e) {
+      BlockPushReturnCode errorCode =
+        (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
       assertEquals(BlockPushNonFatalFailure.ReturnCode.BLOCK_APPEND_COLLISION_DETECTED.id(),
-        ((BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse()))
-          .returnCode);
+        errorCode.returnCode);
+      assertEquals(errorCode.failureBlockId, stream3.getID());
       failedEx = e;
     }
     // stream 1 now completes
@@ -914,9 +920,11 @@ public class RemoteBlockPushResolverSuite {
     try {
       stream3.onComplete(stream3.getID());
     } catch (BlockPushNonFatalFailure e) {
+      BlockPushReturnCode errorCode =
+        (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
       assertEquals(BlockPushNonFatalFailure.ReturnCode.BLOCK_APPEND_COLLISION_DETECTED.id(),
-        ((BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse()))
-          .returnCode);
+        errorCode.returnCode);
+      assertEquals(errorCode.failureBlockId, stream3.getID());
       failedEx = e;
     }
     // Stream 2 writes more and completes
@@ -1088,9 +1096,11 @@ public class RemoteBlockPushResolverSuite {
       // stream 1 push should be rejected as it is from an older shuffleMergeId
       stream1.onComplete(stream1.getID());
     } catch (BlockPushNonFatalFailure e) {
+      BlockPushReturnCode errorCode =
+        (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
       assertEquals(BlockPushNonFatalFailure.ReturnCode.STALE_BLOCK_PUSH.id(),
-        ((BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse()))
-          .returnCode);
+        errorCode.returnCode);
+      assertEquals(errorCode.failureBlockId, stream1.getID());
     }
     // stream 2 now completes
     stream2.onComplete(stream2.getID());
@@ -1114,10 +1124,12 @@ public class RemoteBlockPushResolverSuite {
     try {
       // stream 1 push should be rejected as it is from an older shuffleMergeId
       stream1.onComplete(stream1.getID());
-    } catch(BlockPushNonFatalFailure e) {
+    } catch (BlockPushNonFatalFailure e) {
+      BlockPushReturnCode errorCode =
+        (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
       assertEquals(BlockPushNonFatalFailure.ReturnCode.STALE_BLOCK_PUSH.id(),
-        ((BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse()))
-          .returnCode);
+        errorCode.returnCode);
+      assertEquals(errorCode.failureBlockId, stream1.getID());
     }
     // stream 2 now completes
     stream2.onComplete(stream2.getID());
@@ -1169,9 +1181,11 @@ public class RemoteBlockPushResolverSuite {
       // stream 1 push should be rejected as it is from an older shuffleMergeId
       stream1.onComplete(stream1.getID());
     } catch (BlockPushNonFatalFailure e) {
+      BlockPushReturnCode errorCode =
+        (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse());
       assertEquals(BlockPushNonFatalFailure.ReturnCode.STALE_BLOCK_PUSH.id(),
-        ((BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(e.getResponse()))
-          .returnCode);
+        errorCode.returnCode);
+      assertEquals(errorCode.failureBlockId, stream1.getID());
     }
     // stream 2 now completes
     stream2.onComplete(stream2.getID());
