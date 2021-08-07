@@ -71,7 +71,7 @@ case class ParquetScanBuilder(
   private var filters: Array[Filter] = Array.empty
 
   override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    this.filters = filters
+    this.filters = (filters.toSet -- separateFilters(filters).toSet).toArray
     this.filters
   }
 
@@ -82,6 +82,6 @@ case class ParquetScanBuilder(
 
   override def build(): Scan = {
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
-      readPartitionSchema(), pushedParquetFilters, options)
+      readPartitionSchema(), pushedParquetFilters, options, partitionFilters, dataFilters)
   }
 }

@@ -45,8 +45,8 @@ case class OrcScanBuilder(
   override protected val supportsNestedSchemaPruning: Boolean = true
 
   override def build(): Scan = {
-    OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema,
-      readDataSchema(), readPartitionSchema(), options, pushedFilters())
+    OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
+      readPartitionSchema(), options, pushedFilters(), partitionFilters, dataFilters)
   }
 
   private var _pushedFilters: Array[Filter] = Array.empty
@@ -57,7 +57,7 @@ case class OrcScanBuilder(
         readDataSchema(), SQLConf.get.caseSensitiveAnalysis)
       _pushedFilters = OrcFilters.convertibleFilters(dataTypeMap, filters).toArray
     }
-    filters
+    (filters.toSet -- separateFilters(filters).toSet).toArray
   }
 
   override def pushedFilters(): Array[Filter] = _pushedFilters

@@ -63,6 +63,11 @@ object PushDownUtils extends PredicateHelper {
           }
         }
 
+        r match {
+          case f: FileScanBuilder => f.translatedFilterToExprMap(translatedFilterToExpr)
+          case _ =>
+        }
+
         // Data source filters that need to be evaluated again after scanning. which means
         // the data source cannot guarantee the rows returned can pass these filters.
         // As a result we must return it so Spark can plan an extra filter operator.
@@ -72,34 +77,6 @@ object PushDownUtils extends PredicateHelper {
         (r.pushedFilters(), (untranslatableExprs ++ postScanFilters).toSeq)
 
       case _ => (Nil, filters)
-    }
-  }
-
-  /**
-   * separate partition filters and data filters for file based data source,
-   * and return partition filters
-   *
-   * @return partition filters.
-   */
-  def getPartitionFilters(
-      scanBuilder: ScanBuilder,
-      relation: DataSourceV2Relation,
-      normalizedFilters: Seq[Expression]): Seq[Expression] = {
-    scanBuilder match {
-      case fileBuilder: FileScanBuilder =>
-        val partitionColumns = relation.resolve(
-          fileBuilder.readPartitionSchema(),
-          fileBuilder.getSparkSession.sessionState.analyzer.resolver)
-        val partitionSet = AttributeSet(partitionColumns)
-        val (partitionKeyFilters, dataFilters) = normalizedFilters.partition(f =>
-          f.references.subsetOf(partitionSet)
-        )
-        val extraPartitionFilter =
-          dataFilters.flatMap(extractPredicatesWithinOutputSet(_, partitionSet))
-        val partitionFilter = partitionKeyFilters ++ extraPartitionFilter
-        partitionFilter
-
-      case _ => Seq.empty[Expression]
     }
   }
 
