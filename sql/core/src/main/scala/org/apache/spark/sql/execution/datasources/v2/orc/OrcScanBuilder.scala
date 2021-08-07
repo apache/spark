@@ -57,7 +57,7 @@ case class OrcScanBuilder(
         readDataSchema(), SQLConf.get.caseSensitiveAnalysis)
       _pushedFilters = OrcFilters.convertibleFilters(dataTypeMap, filters).toArray
     }
-    (filters.toSet -- separateFilters(filters).toSet).toArray
+    filters
   }
 
   override def pushedFilters(): Array[Filter] = _pushedFilters

@@ -36,10 +36,6 @@ abstract class FileScanBuilder(
   protected var requiredSchema = StructType(dataSchema.fields ++ partitionSchema.fields)
   protected var partitionFilters = Seq.empty[Expression]
   protected var dataFilters = Seq.empty[Expression]
-  private var _translatedFilterToExprMap = mutable.HashMap.empty[Filter, Expression]
-
-  def translatedFilterToExprMap(map: mutable.HashMap[Filter, Expression]): Unit =
-    _translatedFilterToExprMap = map
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // [SPARK-30107] While `requiredSchema` might have pruned nested columns,
@@ -68,19 +64,21 @@ abstract class FileScanBuilder(
     StructType(fields)
   }
 
-  protected def separateFilters(filters: Array[Filter]): Array[Filter] = {
+  def separateFilters(
+      filters: Array[Filter],
+      map: mutable.HashMap[Filter, Expression]): (Array[Filter], Seq[Expression]) = {
     val partitionColNames =
       partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
     val (partitionfilters, datafilters) = filters.partition(f =>
       f.references.toSet.subsetOf(partitionColNames)
     )
     partitionFilters = partitionfilters.map { filter =>
-      DataSourceStrategy.rebuildExpressionFromFilter(filter, _translatedFilterToExprMap)
+      DataSourceStrategy.rebuildExpressionFromFilter(filter, map)
     }
     dataFilters = datafilters.map { filter =>
-      DataSourceStrategy.rebuildExpressionFromFilter(filter, _translatedFilterToExprMap)
+      DataSourceStrategy.rebuildExpressionFromFilter(filter, map)
     }
-    partitionfilters
+    (partitionfilters, dataFilters)
   }
 
   private def createRequiredNameSet(): Set[String] =

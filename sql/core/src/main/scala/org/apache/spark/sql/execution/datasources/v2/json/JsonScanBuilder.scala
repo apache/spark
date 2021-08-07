@@ -51,7 +51,7 @@ class JsonScanBuilder (
     if (sparkSession.sessionState.conf.jsonFilterPushDown) {
       _pushedFilters = StructFilters.pushedFilters(filters, dataSchema)
     }
-    (filters.toSet -- separateFilters(filters).toSet).toArray
+    filters
   }
 
   override def pushedFilters(): Array[Filter] = _pushedFilters

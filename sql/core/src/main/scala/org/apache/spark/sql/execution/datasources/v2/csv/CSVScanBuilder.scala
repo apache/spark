@@ -53,7 +53,7 @@ case class CSVScanBuilder(
     if (sparkSession.sessionState.conf.csvFilterPushDown) {
       _pushedFilters = StructFilters.pushedFilters(filters, dataSchema)
     }
-    (filters.toSet -- separateFilters(filters).toSet).toArray
+    filters
   }
 
   override def pushedFilters(): Array[Filter] = _pushedFilters
