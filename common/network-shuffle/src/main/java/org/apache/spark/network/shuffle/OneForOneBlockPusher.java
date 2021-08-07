@@ -31,7 +31,6 @@ import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.server.BlockPushNonFatalFailure;
 import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
-import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler;
 import org.apache.spark.network.shuffle.protocol.BlockPushReturnCode;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
 import org.apache.spark.network.shuffle.protocol.PushBlockStream;
@@ -91,21 +90,8 @@ public class OneForOneBlockPusher {
       if (returnCode != ReturnCode.SUCCESS) {
         String blockId = pushResponse.failureBlockId;
         Preconditions.checkArgument(!blockId.isEmpty());
-        String msg;
-        switch (returnCode) {
-          case STALE_BLOCK_PUSH:
-            msg = "Block " + blockId + BlockPushErrorHandler.STALE_BLOCK_PUSH_MESSAGE_SUFFIX;
-            break;
-          case TOO_LATE_BLOCK_PUSH:
-            msg = "Block " + blockId + BlockPushErrorHandler.TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX;
-            break;
-          case BLOCK_APPEND_COLLISION_DETECTED:
-            msg = "Block " + blockId + BlockPushErrorHandler.BLOCK_APPEND_COLLISION_MSG_SUFFIX;
-            break;
-          default:
-            throw new IllegalArgumentException("Unknown block push error code: " + returnCode);
-        }
-        checkAndFailRemainingBlocks(index, new BlockPushNonFatalFailure(returnCode, msg));
+        checkAndFailRemainingBlocks(index, new BlockPushNonFatalFailure(returnCode,
+          BlockPushNonFatalFailure.getErrorMsg(blockId, returnCode)));
       } else {
         // On receipt of a successful block push
         listener.onBlockPushSuccess(blockId, new NioManagedBuffer(ByteBuffer.allocate(0)));

@@ -30,6 +30,32 @@ import com.google.common.base.Preconditions;
  * scenarios, we throw this special RuntimeException.
  */
 public class BlockPushNonFatalFailure extends RuntimeException {
+  /**
+   * String constant used for generating exception messages indicating a block to be merged
+   * arrives too late on the server side. When we get a block push failure because of the
+   * block arrives too late, we will not retry pushing the block nor log the exception on
+   * the client side.
+   */
+  public static final String TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX =
+    " is received after merged shuffle is finalized";
+
+  /**
+   * String constant used for generating exception messages indicating a block to be merged
+   * is a stale block push in the case of indeterminate stage retries on the server side.
+   * When we get a block push failure because of the block push being stale, we will not
+   * retry pushing the block nor log the exception on the client side.
+   */
+  public static final String STALE_BLOCK_PUSH_MESSAGE_SUFFIX =
+    " is a stale block push from an indeterminate stage retry";
+
+  /**
+   * String constant used for generating exception messages indicating the server couldn't
+   * append a block after all available attempts due to collision with other blocks belonging
+   * to the same shuffle partition. When we get a block push failure because of the block
+   * couldn't be written due to this reason, we will not log the exception on the client side.
+   */
+  public static final String BLOCK_APPEND_COLLISION_MSG_SUFFIX =
+    " experienced merge collision on the server side";
 
   /**
    * The error code of the failure, encoded as a ByteBuffer to be responded back to the client.
@@ -117,6 +143,20 @@ public class BlockPushNonFatalFailure extends RuntimeException {
       case 2: return ReturnCode.BLOCK_APPEND_COLLISION_DETECTED;
       case 3: return ReturnCode.STALE_BLOCK_PUSH;
       default: throw new IllegalArgumentException("Unknown block push return code: " + id);
+    }
+  }
+
+  public static String getErrorMsg(String blockId, ReturnCode errorCode) {
+    Preconditions.checkArgument(errorCode != ReturnCode.SUCCESS);
+    switch (errorCode) {
+      case STALE_BLOCK_PUSH:
+        return "Block " + blockId + STALE_BLOCK_PUSH_MESSAGE_SUFFIX;
+      case TOO_LATE_BLOCK_PUSH:
+        return "Block " + blockId + TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX;
+      case BLOCK_APPEND_COLLISION_DETECTED:
+        return "Block " + blockId + BLOCK_APPEND_COLLISION_MSG_SUFFIX;
+      default:
+        throw new IllegalArgumentException("Unknown block push error code: " + errorCode);
     }
   }
 }
