@@ -89,6 +89,7 @@ private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: Inp
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param minPartitions Minimum number of HadoopRDD partitions (Hadoop Splits) to generate.
+ * @param partitionedTableUUID UUID for partitioned table.
  *
  * @note Instantiating this class directly is not recommended, please use
  * `org.apache.spark.SparkContext.hadoopRDD()`
@@ -202,6 +203,8 @@ class HadoopRDD[K, V](
   override def getPartitions: Array[Partition] = {
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
+    // SPARK-36328: Add the credentials from previous JobConf into the new JobConf to reuse the
+    // FileSystem Delegation Token.
     if(partitionedTableUUID == null) SparkHadoopUtil.get.addCredentials(jobConf)
     else SparkHadoopUtil.get.
       addCurrentHivePartitionedTableCredentials(jobConf, partitionedTableUUID)

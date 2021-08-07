@@ -51,10 +51,10 @@ private[spark] class SparkHadoopUtil extends Logging {
   UserGroupInformation.setConfiguration(conf)
 
   /**
-   * SPARK-36328: Save Credentials for each hive partitioned table to reuse the FileSystem
+   * SPARK-36328: Save Credentials for each partitioned table to reuse the FileSystem
    * Delegation Token.
    */
-  val credentialsMapForHivePartitionedTable = new ConcurrentHashMap[String, Credentials]()
+  val credentialsMapForPartitionedTable = new ConcurrentHashMap[String, Credentials]()
 
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
@@ -140,14 +140,20 @@ private[spark] class SparkHadoopUtil extends Logging {
     jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
   }
 
+  /**
+   * SPARK-36328: Add the credentials from previous JobConf into the new JobConf to reuse the
+   * FileSystem Delegation Token.
+   * @param conf a map/reduce job configuration.
+   * @param partitionedTableUUID UUID for current partitioned table.
+   */
   def addCurrentHivePartitionedTableCredentials(conf: JobConf,
                                                 partitionedTableUUID: String): Unit = {
     val jobCreds = conf.getCredentials()
-    if(credentialsMapForHivePartitionedTable.contains(partitionedTableUUID)) {
-      jobCreds.addAll(credentialsMapForHivePartitionedTable.get(partitionedTableUUID))
+    if(credentialsMapForPartitionedTable.contains(partitionedTableUUID)) {
+      jobCreds.addAll(credentialsMapForPartitionedTable.get(partitionedTableUUID))
     } else {
       jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
-      credentialsMapForHivePartitionedTable.put(partitionedTableUUID, jobCreds)
+      credentialsMapForPartitionedTable.put(partitionedTableUUID, jobCreds)
     }
   }
 

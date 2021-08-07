@@ -143,6 +143,7 @@ class HadoopTableReader(
   }
 
   override def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[InternalRow] = {
+    // SPARK-36328: Generate UUID for current partitioned table.
     val partitionedTableUUID = UUID.randomUUID().toString
     val partitionToDeserializer = partitions.map(part =>
       (part, part.getDeserializer.getClass.asInstanceOf[Class[Deserializer]])).toMap
@@ -158,6 +159,7 @@ class HadoopTableReader(
    *     class to use to deserialize input Writables from the corresponding partition.
    * @param filterOpt If defined, then the filter is used to reject files contained in the data
    *     subdirectory of each partition being read. If None, then all files are accepted.
+   * @param partitionedTableUUID UUID for current partitioned table.
    */
   def makeRDDForPartitionedTable(
       partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]],
@@ -384,6 +386,8 @@ class HadoopTableReader(
                                  partitionedTableUUID: String): RDD[Writable] = {
     val newJobConf = new JobConf(hadoopConf)
     HadoopTableReader.initializeLocalJobConfFunc(path, partDesc.getTableDesc)(newJobConf)
+    // SPARK-36328: Add the credentials from previous JobConf into the new JobConf to reuse the
+    // FileSystem Delegation Token.
     SparkHadoopUtil.get.addCurrentHivePartitionedTableCredentials(newJobConf, partitionedTableUUID)
     val inputFormatClass = partDesc.getInputFileFormatClass
       .asInstanceOf[Class[newInputClass[Writable, Writable]]]
