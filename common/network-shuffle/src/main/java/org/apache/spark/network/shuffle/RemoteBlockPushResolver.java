@@ -173,7 +173,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           if (dataFile.exists()) {
             throw new BlockPushNonFatalFailure(new BlockPushReturnCode(
               ReturnCode.TOO_LATE_BLOCK_PUSH.id(), blockId).toByteBuffer(),
-              "Block " + blockId + BlockPushNonFatalFailure.TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX);
+              BlockPushNonFatalFailure.getErrorMsg(blockId, ReturnCode.TOO_LATE_BLOCK_PUSH));
           } else {
             logger.info("Creating a new attempt for shuffle blocks push request for shuffle {}"
               + " with shuffleMergeId {} for application {}_{}", shuffleId, shuffleMergeId,
@@ -187,7 +187,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           if (latestShuffleMergeId > shuffleMergeId) {
             throw new BlockPushNonFatalFailure(
               new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id(), blockId).toByteBuffer(),
-              "Block " + blockId + BlockPushNonFatalFailure.TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX);
+              BlockPushNonFatalFailure.getErrorMsg(blockId, ReturnCode.STALE_BLOCK_PUSH));
           } else if (latestShuffleMergeId == shuffleMergeId) {
             return appShuffleMergePartitionsInfo;
           } else {
@@ -210,7 +210,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         INDETERMINATE_SHUFFLE_FINALIZED == shufflePartitionsWithMergeId.shuffleMergePartitions) {
       throw new BlockPushNonFatalFailure(
         new BlockPushReturnCode(ReturnCode.TOO_LATE_BLOCK_PUSH.id(), blockId).toByteBuffer(),
-        "Block " + blockId + BlockPushNonFatalFailure.TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX);
+        BlockPushNonFatalFailure.getErrorMsg(blockId, ReturnCode.TOO_LATE_BLOCK_PUSH));
     }
 
     Map<Integer, AppShufflePartitionInfo> shuffleMergePartitions =
@@ -904,13 +904,13 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           deferredBufs = null;
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.TOO_LATE_BLOCK_PUSH.id(), streamId).toByteBuffer(),
-            "Block " + streamId + BlockPushNonFatalFailure.TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX);
+            BlockPushNonFatalFailure.getErrorMsg(streamId, ReturnCode.TOO_LATE_BLOCK_PUSH));
         }
         if (isStale(info, partitionInfo.shuffleMergeId)) {
           deferredBufs = null;
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id(), streamId).toByteBuffer(),
-            "Block " + streamId + BlockPushNonFatalFailure.STALE_BLOCK_PUSH_MESSAGE_SUFFIX);
+            BlockPushNonFatalFailure.getErrorMsg(streamId, ReturnCode.STALE_BLOCK_PUSH));
         }
 
         // Check if we can commit this block
@@ -961,8 +961,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
           deferredBufs = null;
           throw new BlockPushNonFatalFailure(
             new BlockPushReturnCode(ReturnCode.BLOCK_APPEND_COLLISION_DETECTED.id(), streamId)
-              .toByteBuffer(),
-            "Block " + streamId + BlockPushNonFatalFailure.BLOCK_APPEND_COLLISION_MSG_SUFFIX);
+              .toByteBuffer(), BlockPushNonFatalFailure.getErrorMsg(
+                streamId, ReturnCode.BLOCK_APPEND_COLLISION_DETECTED));
         }
       }
       isWriting = false;
