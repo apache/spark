@@ -26,7 +26,7 @@ object HivePartitionedTableCredentialsSuite extends QueryTest
   with SQLTestUtils with TestHiveSingleton {
   test("SPARK-36328:  Add the credentials from previous JobConf into the new JobConf" +
     " to reuse the FileSystem Delegation Token ") {
-    // The test is based on the repro provided in SPARK-36328
+    // The suite is based on the repro provided in SPARK-36328
     // scalastyle:off hadoopconfiguration
     spark.sparkContext.hadoopConfiguration.set("hive.server2.authentication", "KERBEROS")
     // scalastyle:on hadoopconfiguration
