@@ -21,6 +21,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Date, Locale}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
@@ -48,6 +49,12 @@ private[spark] class SparkHadoopUtil extends Logging {
   private val sparkConf = new SparkConf(false).loadFromSystemProperties(true)
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
+
+  /**
+   * SPARK-36328: Save Credentials for each hive partitioned table to reuse the FileSystem
+   * Delegation Token.
+   */
+  val credentialsMapForHivePartitionedTable = new ConcurrentHashMap[String, Credentials]()
 
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
@@ -131,6 +138,17 @@ private[spark] class SparkHadoopUtil extends Logging {
   def addCredentials(conf: JobConf): Unit = {
     val jobCreds = conf.getCredentials()
     jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
+  }
+
+  def addCurrentHivePartitionedTableCredentials(conf: JobConf,
+                                                partitionedTableUUID: String): Unit = {
+    val jobCreds = conf.getCredentials()
+    if(credentialsMapForHivePartitionedTable.contains(partitionedTableUUID)) {
+      jobCreds.addAll(credentialsMapForHivePartitionedTable.get(partitionedTableUUID))
+    } else {
+      jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
+      credentialsMapForHivePartitionedTable.put(partitionedTableUUID, jobCreds)
+    }
   }
 
   def addCurrentUserCredentials(creds: Credentials): Unit = {

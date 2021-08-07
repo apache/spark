@@ -101,7 +101,8 @@ class HadoopRDD[K, V](
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    minPartitions: Int)
+    minPartitions: Int,
+    partitionedTableUUID: String = null)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   if (initLocalJobConfFuncOpt.isDefined) {
@@ -201,7 +202,9 @@ class HadoopRDD[K, V](
   override def getPartitions: Array[Partition] = {
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
-    SparkHadoopUtil.get.addCredentials(jobConf)
+    if(partitionedTableUUID == null) SparkHadoopUtil.get.addCredentials(jobConf)
+    else SparkHadoopUtil.get.
+      addCurrentHivePartitionedTableCredentials(jobConf, partitionedTableUUID)
     try {
       val allInputSplits = getInputFormat(jobConf).getSplits(jobConf, minPartitions)
       val inputSplits = if (ignoreEmptySplits) {
