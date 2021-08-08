@@ -1427,6 +1427,33 @@ class DataFrameAggregateSuite extends QueryTest
     assert (df.schema == expectedSchema)
     checkAnswer(df, Seq(Row(LocalDateTime.parse(ts1), 2), Row(LocalDateTime.parse(ts2), 1)))
   }
+
+  test("SPARK-36452: Support Map Type column in group by") {
+    var df = Seq((1, Map(1 -> 2)), (2, Map(1 -> 2))).toDF("id", "mapInfo")
+    // group by map column
+    checkAnswer(df.groupBy("mapInfo").count(), Seq(Row(Map[Any, Any](1 -> 2), 2)))
+    // group by map column and other column
+    checkAnswer(df.groupBy("id", "mapInfo").count(),
+      Seq(Row(1, Map[Any, Any](1 -> 2), 1), Row(2, Map[Any, Any](1 -> 2), 1)))
+    checkAnswer(df.groupBy("mapInfo").agg(avg("id")),
+      Seq(Row(Map[Any, Any](1 -> 2), 1.5)))
+    // Does not support if the map type if present in the aggregated expression
+    var error = intercept[IllegalStateException] {
+      df.groupBy("mapInfo").agg(max(map_keys(col("mapinfo")))).collect
+    }
+    assert(error.getMessage.contains("grouping/join/window partition keys cannot be map type."))
+    // Does not support if the map type with float/double keys or value
+    df = Seq((1, Map(1 -> 2.0)), (2, Map(1 -> 2.0))).toDF("id", "mapInfo")
+    error = intercept[IllegalStateException] {
+      df.groupBy("mapInfo").agg(max(map_keys(col("mapinfo")))).collect
+    }
+    assert(error.getMessage.contains("grouping/join/window partition keys cannot be map type."))
+    df = Seq((1, Map(1.1 -> 2.0)), (2, Map(1.1 -> 2.0))).toDF("id", "mapInfo")
+    error = intercept[IllegalStateException] {
+      df.groupBy("mapInfo").agg(max(map_keys(col("mapinfo")))).collect
+    }
+    assert(error.getMessage.contains("grouping/join/window partition keys cannot be map type."))
+  }
 }
 
 case class B(c: Option[Double])

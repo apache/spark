@@ -588,6 +588,7 @@ class AnalysisErrorSuite extends AnalysisTest {
       FloatType, DoubleType, DecimalType(25, 5), DecimalType(6, 5),
       DateType, TimestampType,
       ArrayType(IntegerType),
+      MapType(StringType, LongType),
       new StructType()
         .add("f1", FloatType, nullable = true)
         .add("f2", StringType, nullable = true),
@@ -600,7 +601,6 @@ class AnalysisErrorSuite extends AnalysisTest {
     }
 
     val unsupportedDataTypes = Seq(
-      MapType(StringType, LongType),
       new StructType()
         .add("f1", FloatType, nullable = true)
         .add("f2", MapType(StringType, LongType), nullable = true),
