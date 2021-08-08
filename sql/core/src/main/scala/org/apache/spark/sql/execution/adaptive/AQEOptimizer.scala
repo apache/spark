@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity, PlanHelper}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
 /**
@@ -70,6 +71,6 @@ class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
     !Utils.isTesting || (currentPlan.resolved &&
       currentPlan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
       LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
-      previousPlan.schema.sameType(currentPlan.schema))
+      DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema))
   }
 }

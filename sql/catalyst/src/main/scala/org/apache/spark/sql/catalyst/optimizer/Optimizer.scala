@@ -54,7 +54,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
     !Utils.isTesting || (currentPlan.resolved &&
       currentPlan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
       LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
-      previousPlan.schema.sameType(currentPlan.schema))
+      DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema))
   }
 
   override protected val excludedOnceBatches: Set[String] =
