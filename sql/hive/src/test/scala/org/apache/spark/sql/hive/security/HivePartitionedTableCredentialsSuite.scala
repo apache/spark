@@ -17,19 +17,17 @@
 
 package org.apache.spark.sql.hive.security
 
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.hadoop.security.UserGroupInformation
+
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
 object HivePartitionedTableCredentialsSuite extends QueryTest
   with SQLTestUtils with TestHiveSingleton {
-  test("SPARK-36328:  Add the credentials from previous JobConf into the new JobConf" +
-    " to reuse the FileSystem Delegation Token ") {
+  test("SPARK-36328: Reuse the FileSystem delegation token" +
+    " while querying partitioned hive table.") {
     // The suite is based on the repro provided in SPARK-36328
-    // scalastyle:off hadoopconfiguration
-    spark.sparkContext.hadoopConfiguration.set("hive.server2.authentication", "KERBEROS")
-    // scalastyle:on hadoopconfiguration
     withTable("parttable") {
       // create partitioned table
       sql("create table parttable (key char(1), value int) partitioned by (p int);")
@@ -39,8 +37,8 @@ object HivePartitionedTableCredentialsSuite extends QueryTest
       // execute query
       checkAnswer(sql("select value, count(*) from parttable group by value."),
         Seq[Row](Row(1, 3), Row(2, 3), Row(3, 3)))
-      // Only one Credentials cached.
-      assert(SparkHadoopUtil.get.credentialsMapForPartitionedTable.size() == 1)
+      // Only one token cached.
+      assert(UserGroupInformation.getCurrentUser.getCredentials.getAllTokens.size() == 1)
     }
   }
 }

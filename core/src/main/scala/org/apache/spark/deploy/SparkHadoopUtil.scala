@@ -21,7 +21,6 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import java.security.PrivilegedExceptionAction
 import java.text.DateFormat
 import java.util.{Arrays, Date, Locale}
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConverters._
 import scala.collection.immutable.Map
@@ -49,12 +48,6 @@ private[spark] class SparkHadoopUtil extends Logging {
   private val sparkConf = new SparkConf(false).loadFromSystemProperties(true)
   val conf: Configuration = newConfiguration(sparkConf)
   UserGroupInformation.setConfiguration(conf)
-
-  /**
-   * SPARK-36328: Save Credentials for each partitioned table to reuse the FileSystem
-   * Delegation Token.
-   */
-  val credentialsMapForPartitionedTable = new ConcurrentHashMap[String, Credentials]()
 
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
@@ -141,20 +134,13 @@ private[spark] class SparkHadoopUtil extends Logging {
   }
 
   /**
-   * SPARK-36328: Add the credentials from previous JobConf into the new JobConf to reuse the
-   * FileSystem Delegation Token.
+   * SPARK-36328: Reuse the FileSystem delegation token while querying partitioned hive table.
    * @param conf a map/reduce job configuration.
-   * @param partitionedTableUUID UUID for current partitioned table.
+   * @param credentials provide the facilities of reading and writing secret keys and Tokens.
    */
-  def addCurrentPartitionedTableCredentials(conf: JobConf,
-                                            partitionedTableUUID: String): Unit = {
+  def addCurrentCredentials(conf: JobConf, credentials: Credentials): Unit = {
     val jobCreds = conf.getCredentials()
-    if(credentialsMapForPartitionedTable.contains(partitionedTableUUID)) {
-      jobCreds.addAll(credentialsMapForPartitionedTable.get(partitionedTableUUID))
-    } else {
-      jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
-      credentialsMapForPartitionedTable.put(partitionedTableUUID, jobCreds)
-    }
+    jobCreds.addAll(credentials)
   }
 
   def addCurrentUserCredentials(creds: Credentials): Unit = {

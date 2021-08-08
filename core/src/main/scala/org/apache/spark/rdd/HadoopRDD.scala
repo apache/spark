@@ -42,7 +42,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.rdd.HadoopRDD.HadoopMapPartitionsWithSplitRDD
 import org.apache.spark.scheduler.{HDFSCacheTaskLocation, HostTaskLocation}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{NextIterator, SerializableConfiguration, ShutdownHookManager, Utils}
+import org.apache.spark.util.{NextIterator, SerializableConfiguration, SerializableCredentials, ShutdownHookManager, Utils}
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -89,7 +89,8 @@ private[spark] class HadoopPartition(rddId: Int, override val index: Int, s: Inp
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param minPartitions Minimum number of HadoopRDD partitions (Hadoop Splits) to generate.
- * @param partitionedTableUUID UUID for partitioned table.
+ * @param broadcastedCredentials SPARK-36328: broadcasted Credentials to make it easier to pass
+ *   Credentials between jobs on distributed Executors.
  *
  * @note Instantiating this class directly is not recommended, please use
  * `org.apache.spark.SparkContext.hadoopRDD()`
@@ -103,7 +104,7 @@ class HadoopRDD[K, V](
     keyClass: Class[K],
     valueClass: Class[V],
     minPartitions: Int,
-    partitionedTableUUID: String = null)
+    broadcastedCredentials: Broadcast[SerializableCredentials] = null)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   if (initLocalJobConfFuncOpt.isDefined) {
@@ -203,11 +204,9 @@ class HadoopRDD[K, V](
   override def getPartitions: Array[Partition] = {
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
-    // SPARK-36328: Add the credentials from previous JobConf into the new JobConf to reuse the
-    // FileSystem Delegation Token.
-    if(partitionedTableUUID == null) SparkHadoopUtil.get.addCredentials(jobConf)
-    else SparkHadoopUtil.get.
-      addCurrentPartitionedTableCredentials(jobConf, partitionedTableUUID)
+    // SPARK-36328: Reuse the FileSystem delegation token while querying partitioned hive table.
+    if(broadcastedCredentials == null) SparkHadoopUtil.get.addCredentials(jobConf)
+    else SparkHadoopUtil.get.addCurrentCredentials(jobConf, broadcastedCredentials.value.value)
     try {
       val allInputSplits = getInputFormat(jobConf).getSplits(jobConf, minPartitions)
       val inputSplits = if (ignoreEmptySplits) {

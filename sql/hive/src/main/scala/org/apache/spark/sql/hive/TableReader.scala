@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.util.{Properties, UUID}
+import java.util.Properties
 
 import scala.collection.JavaConverters._
 
@@ -34,6 +34,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat => oldInputClass, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => newInputClass}
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -46,7 +47,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{SerializableConfiguration, Utils}
+import org.apache.spark.util.{SerializableConfiguration, SerializableCredentials, Utils}
 
 /**
  * A trait for subclasses that handle table scans.
@@ -89,6 +90,13 @@ class HadoopTableReader(
 
   private val _broadcastedHadoopConf =
     sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
+
+  /**
+   * SPARK-36328: broadcasted credentials to make it easier to pass Credentials between jobs
+   * on distributed Executors.
+   */
+  private val _broadcastedCredentials = sparkSession.sparkContext.broadcast(
+      new SerializableCredentials(UserGroupInformation.getCurrentUser.getCredentials))
 
   override def conf: SQLConf = sparkSession.sessionState.conf
 
@@ -143,11 +151,9 @@ class HadoopTableReader(
   }
 
   override def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[InternalRow] = {
-    // SPARK-36328: Generate UUID for current partitioned table.
-    val partitionedTableUUID = UUID.randomUUID().toString
     val partitionToDeserializer = partitions.map(part =>
       (part, part.getDeserializer.getClass.asInstanceOf[Class[Deserializer]])).toMap
-    makeRDDForPartitionedTable(partitionToDeserializer, filterOpt = None, partitionedTableUUID)
+    makeRDDForPartitionedTable(partitionToDeserializer, filterOpt = None)
   }
 
   /**
@@ -159,11 +165,10 @@ class HadoopTableReader(
    *     class to use to deserialize input Writables from the corresponding partition.
    * @param filterOpt If defined, then the filter is used to reject files contained in the data
    *     subdirectory of each partition being read. If None, then all files are accepted.
-   * @param partitionedTableUUID UUID for current partitioned table.
    */
   def makeRDDForPartitionedTable(
       partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]],
-      filterOpt: Option[PathFilter], partitionedTableUUID: String): RDD[InternalRow] = {
+      filterOpt: Option[PathFilter]): RDD[InternalRow] = {
 
     // SPARK-5068:get FileStatus and do the filtering locally when the path is not exists
     def verifyPartitionPath(
@@ -249,7 +254,7 @@ class HadoopTableReader(
       // Create local references so that the outer object isn't serialized.
       val localTableDesc = tableDesc
 
-      createHadoopRDD(partDesc, inputPathStr, partitionedTableUUID).mapPartitions { iter =>
+      createHadoopRDD(partDesc, inputPathStr).mapPartitions { iter =>
         val hconf = broadcastedHiveConf.value.value
         val deserializer = localDeserializer.getConstructor().newInstance()
         // SPARK-13709: For SerDes like AvroSerDe, some essential information (e.g. Avro schema
@@ -318,13 +323,12 @@ class HadoopTableReader(
     }
   }
 
-  private def createHadoopRDD(partitionDesc: PartitionDesc, inputPathStr: String,
-                              partitionedTableUUID: String): RDD[Writable] = {
+  private def createHadoopRDD(partitionDesc: PartitionDesc, inputPathStr: String): RDD[Writable] = {
     val inputFormatClazz = partitionDesc.getInputFileFormatClass
     if (classOf[newInputClass[_, _]].isAssignableFrom(inputFormatClazz)) {
-      createNewHadoopRDD(partitionDesc, inputPathStr, partitionedTableUUID)
+      createNewHadoopRDD(partitionDesc, inputPathStr)
     } else {
-      createOldHadoopRDD(partitionDesc, inputPathStr, partitionedTableUUID)
+      createOldHadoopRDD(partitionDesc, inputPathStr)
     }
   }
 
@@ -343,19 +347,17 @@ class HadoopTableReader(
    * Creates a HadoopRDD based on the broadcasted HiveConf and other job properties that will be
    * applied locally on each executor.
    */
-  private def createOldHadoopRDD(partitionDesc: PartitionDesc, path: String,
-                                 partitionedTableUUID: String): RDD[Writable] = {
+  private def createOldHadoopRDD(partitionDesc: PartitionDesc, path: String): RDD[Writable] = {
     val initializeJobConfFunc =
       HadoopTableReader.initializeLocalJobConfFunc(path, partitionDesc.getTableDesc) _
     val inputFormatClass = partitionDesc.getInputFileFormatClass
       .asInstanceOf[Class[oldInputClass[Writable, Writable]]]
-    createOldHadoopRDD(inputFormatClass, initializeJobConfFunc, partitionedTableUUID)
+    createOldHadoopRDD(inputFormatClass, initializeJobConfFunc)
   }
 
   private def createOldHadoopRDD(
       inputFormatClass: Class[oldInputClass[Writable, Writable]],
-      initializeJobConfFunc: JobConf => Unit,
-      partitionedTableUUID: String = null): RDD[Writable] = {
+      initializeJobConfFunc: JobConf => Unit): RDD[Writable] = {
     val rdd = new HadoopRDD(
       sparkSession.sparkContext,
       _broadcastedHadoopConf.asInstanceOf[Broadcast[SerializableConfiguration]],
@@ -364,7 +366,7 @@ class HadoopTableReader(
       classOf[Writable],
       classOf[Writable],
       _minSplitsPerRDD,
-      partitionedTableUUID)
+      _broadcastedCredentials)
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
@@ -382,13 +384,12 @@ class HadoopTableReader(
     createNewHadoopRDD(inputFormatClass, newJobConf)
   }
 
-  private def createNewHadoopRDD(partDesc: PartitionDesc, path: String,
-                                 partitionedTableUUID: String): RDD[Writable] = {
+  private def createNewHadoopRDD(partDesc: PartitionDesc, path: String): RDD[Writable] = {
     val newJobConf = new JobConf(hadoopConf)
     HadoopTableReader.initializeLocalJobConfFunc(path, partDesc.getTableDesc)(newJobConf)
-    // SPARK-36328: Add the credentials from previous JobConf into the new JobConf to reuse the
-    // FileSystem Delegation Token.
-    SparkHadoopUtil.get.addCurrentPartitionedTableCredentials(newJobConf, partitionedTableUUID)
+    // SPARK-36328: Reuse the FileSystem delegation token while querying partitioned hive table.
+    SparkHadoopUtil.get.addCurrentCredentials(newJobConf,
+      _broadcastedCredentials.value.value)
     val inputFormatClass = partDesc.getInputFileFormatClass
       .asInstanceOf[Class[newInputClass[Writable, Writable]]]
     createNewHadoopRDD(inputFormatClass, newJobConf)
