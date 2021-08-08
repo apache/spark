@@ -47,6 +47,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
   // - is still resolved
   // - only host special expressions in supported operators
   // - has globally-unique attribute IDs
+  // - optimized plan have same schema with previous plan.
   override protected def isPlanIntegral(
       previousPlan: LogicalPlan,
       currentPlan: LogicalPlan): Boolean = {
