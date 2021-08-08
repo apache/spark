@@ -150,9 +150,9 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_CLIENT_OAUTH_TOKEN_PROVIDER =
     ConfigBuilder("spark.kubernetes.client.oauth.token.provider.class")
-      .doc("A class that implements fabric's OAuthTokenProvider interface to " +
+      .doc("A class that implements OAuthTokenProvider interface to " +
         "provide a token refresh for long running jobs.")
-      .version("3.1.3")
+      .version("3.3.0")
       .stringConf
       .createOptional
 
