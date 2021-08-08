@@ -656,6 +656,8 @@ abstract class TypeCoercionBase {
       (leftType, rightType) match {
         case (_: DecimalType, NullType) => true
         case (NullType, _: DecimalType) => true
+        case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
+        case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
         case _ =>
           // If DecimalType operands are involved except for the two cases above,
           // DecimalPrecision will handle it.
@@ -866,6 +868,9 @@ object TypeCoercion extends TypeCoercionBase {
 
       case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
         Some(TimestampType)
+
+      case (_: DayTimeIntervalType, _: DayTimeIntervalType) => Some(DayTimeIntervalType())
+      case (_: YearMonthIntervalType, _: YearMonthIntervalType) => Some(YearMonthIntervalType())
 
       case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
         Some(TimestampNTZType)

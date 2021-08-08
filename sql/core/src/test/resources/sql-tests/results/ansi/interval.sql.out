@@ -818,10 +818,9 @@ struct<map(1, INTERVAL '1' DAY, 2, INTERVAL '2' DAY):map<int,interval day>>
 -- !query
 select map(1, interval 1 year, 2, interval 2 month)
 -- !query schema
-struct<>
+struct<map(1, INTERVAL '1' YEAR, 2, INTERVAL '2' MONTH):map<int,interval year to month>>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'map(1, INTERVAL '1' YEAR, 2, INTERVAL '2' MONTH)' due to data type mismatch: The given values of function map should all be the same type, but they are [interval year, interval month]; line 1 pos 7
+{1:1-0,2:0-2}
 
 
 -- !query

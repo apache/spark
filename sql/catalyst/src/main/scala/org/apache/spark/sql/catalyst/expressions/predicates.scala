@@ -840,17 +840,10 @@ abstract class BinaryComparison extends BinaryOperator with Predicate {
 
   final override val nodePatterns: Seq[TreePattern] = Seq(BINARY_COMPARISON)
 
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val matched = (left.dataType, right.dataType) match {
-      case (l: DayTimeIntervalType, r: DayTimeIntervalType) => TypeCheckResult.TypeCheckSuccess
-      case (l: YearMonthIntervalType, r: YearMonthIntervalType) => TypeCheckResult.TypeCheckSuccess
-      case (_, _) => super.checkInputDataTypes()
-    }
-    matched match {
-      case TypeCheckResult.TypeCheckSuccess =>
-        TypeUtils.checkForOrderingExpr(left.dataType, this.getClass.getSimpleName)
-      case failure => failure
-    }
+  override def checkInputDataTypes(): TypeCheckResult = super.checkInputDataTypes() match {
+    case TypeCheckResult.TypeCheckSuccess =>
+      TypeUtils.checkForOrderingExpr(left.dataType, this.getClass.getSimpleName)
+    case failure => failure
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {

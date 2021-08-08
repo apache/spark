@@ -120,6 +120,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
       Some(TimestampType)
 
+    case (_: DayTimeIntervalType, _: DayTimeIntervalType) => Some(DayTimeIntervalType())
+    case (_: YearMonthIntervalType, _: YearMonthIntervalType) => Some(YearMonthIntervalType())
+
     case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
 
