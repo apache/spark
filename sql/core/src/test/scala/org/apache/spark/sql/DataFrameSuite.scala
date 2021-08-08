@@ -2963,7 +2963,7 @@ class DataFrameSuite extends QueryTest
           Seq(s"""{"$structKeyName": "$stringRep"}""").toDF("col")
             .withColumn("col", from_json(col("col"), jsonSchema))
             .write.json(jsonDir)
-          val dfSchema = StructType(Seq(StructField("col",jsonSchema)))
+          val dfSchema = StructType(Seq(StructField("col", jsonSchema)))
           val dfRead = spark.read.schema(dfSchema).json(jsonDir)
           val compare = spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(Row(value)))),
             dfSchema)
