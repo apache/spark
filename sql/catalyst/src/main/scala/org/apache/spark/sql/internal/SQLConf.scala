@@ -1008,8 +1008,8 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  val HIVE_METASTORE_PARTITION_PRUNING_EVAL_CLIENT_SIDE =
-    buildConf("spark.sql.hive.metastorePartitionPruningEvalClientSide")
+  val HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK =
+    buildConf("spark.sql.hive.metastorePartitionPruningFastFallback")
       .doc(s"When true and " +
         s"we cannot do filtering on the server(${HIVE_METASTORE_PARTITION_PRUNING.key})," +
         "pruning partition by getting the partition names first " +
@@ -3672,8 +3672,8 @@ class SQLConf extends Serializable with Logging {
   def metastorePartitionPruningFallbackOnException: Boolean =
     getConf(HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION)
 
-  def metastorePartitionPruningEvalClientSide: Boolean =
-    getConf(HIVE_METASTORE_PARTITION_PRUNING_EVAL_CLIENT_SIDE)
+  def metastorePartitionPruningFastFallback: Boolean =
+    getConf(HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK)
 
   def manageFilesourcePartitions: Boolean = getConf(HIVE_MANAGE_FILESOURCE_PARTITIONS)
 

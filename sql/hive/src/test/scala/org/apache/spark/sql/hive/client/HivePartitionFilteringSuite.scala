@@ -42,6 +42,7 @@ class HivePartitionFilteringSuite(version: String)
 
   private val tryDirectSqlKey = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL.varname
   private val fallbackKey = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key
+  private val pruningFastFallback = SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FAST_FALLBACK.key
 
   // Support default partition in metastoredirectsql since HIVE-11898(Hive 2.0.0).
   private val defaultPartition = if (version >= "2.0") Some(DEFAULT_PARTITION_NAME) else None
@@ -580,7 +581,7 @@ class HivePartitionFilteringSuite(version: String)
 
   test("getPartitionsByFilter: substr(chunk,0,1)=a") {
     Seq("true" -> Seq("aa", "ab"), "false" -> chunkValue).foreach { t =>
-      withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_EVAL_CLIENT_SIDE.key -> t._1) {
+      withSQLConf(pruningFastFallback -> t._1) {
         testMetastorePartitionFiltering(
           Substring(attr("chunk"), Literal(0), Literal(1)) === "a",
           dsValue,
@@ -595,7 +596,7 @@ class HivePartitionFilteringSuite(version: String)
   test("getPartitionsByFilter: year(d)=2019") {
     Seq("true" -> Seq("2019-01-01", "2019-01-02", "2019-01-03"),
       "false" -> dateValue).foreach { t =>
-      withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_EVAL_CLIENT_SIDE.key -> t._1) {
+      withSQLConf(pruningFastFallback -> t._1) {
         testMetastorePartitionFiltering(
           Year(attr("d")) === 2019,
           dsValue,
@@ -609,7 +610,7 @@ class HivePartitionFilteringSuite(version: String)
 
   test("getPartitionsByFilter: datestr=concat(2020-,01-,01)") {
     Seq("true" -> Seq("2020-01-01"), "false" -> dateStrValue).foreach { t =>
-      withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING_EVAL_CLIENT_SIDE.key -> t._1) {
+      withSQLConf(pruningFastFallback -> t._1) {
         testMetastorePartitionFiltering(
           attr("datestr") === Concat(Seq("2020-", "01-", "01")),
           dsValue,
@@ -618,6 +619,18 @@ class HivePartitionFilteringSuite(version: String)
           dateValue,
           t._2)
       }
+    }
+  }
+
+  test(s"getPartitionsByFilter: ds=20170101 when $fallbackKey=true") {
+    withSQLConf(fallbackKey -> "true",
+      pruningFastFallback -> "true") {
+      val client = init(false)
+      val filteredPartitions = client.getPartitionsByFilter(client.getTable("default", "test"),
+        Seq(attr("ds") === 20170101))
+
+      assert(filteredPartitions.size == 1 * hValue.size * chunkValue.size *
+        dateValue.size * dateStrValue.size)
     }
   }
 

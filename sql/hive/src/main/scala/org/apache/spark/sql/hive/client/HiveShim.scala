@@ -876,7 +876,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
     val partitions =
       if (filter.isEmpty) {
-        prunePartitionsEvalClientSide(hive, table, catalogTable, predicates)
+        prunePartitionsFastFallback(hive, table, catalogTable, predicates)
       } else {
         logDebug(s"Hive metastore filter is '$filter'.")
         val tryDirectSqlConfVar = HiveConf.ConfVars.METASTORE_TRY_DIRECT_SQL
@@ -904,20 +904,20 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
               s"${SQLConf.HIVE_METASTORE_PARTITION_PRUNING_FALLBACK_ON_EXCEPTION.key} " +
               " to false and let the query fail instead.", ex)
             // HiveShim clients are expected to handle a superset of the requested partitions
-            prunePartitionsEvalClientSide(hive, table, catalogTable, predicates)
+            prunePartitionsFastFallback(hive, table, catalogTable, predicates)
           case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
             throw QueryExecutionErrors.getPartitionMetadataByFilterError(ex)
         }
       }
 
-    partitions.toSeq
+    partitions
   }
 
-  def prunePartitionsEvalClientSide(hive: Hive,
+  private def prunePartitionsFastFallback(
+      hive: Hive,
       table: Table,
       catalogTable: CatalogTable,
       predicates: Seq[Expression]): Seq[Partition] = {
-
     val timeZoneId = SQLConf.get.sessionLocalTimeZone
 
     // Because there is no way to know whether the partition properties has timeZone,
@@ -928,7 +928,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       }.isDefined
     }
 
-    if (!SQLConf.get.metastorePartitionPruningEvalClientSide ||
+    if (!SQLConf.get.metastorePartitionPruningFastFallback ||
       predicates.isEmpty ||
       predicates.exists(hasTimeZoneAwareExpression)) {
       getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
@@ -936,22 +936,8 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
       try {
         val partitionSchema = CharVarcharUtils.replaceCharVarcharWithStringInSchema(
           catalogTable.partitionSchema)
-        val partitionColumnNames = catalogTable.partitionColumnNames.toSet
-
-        val nonPartitionPruningPredicates = predicates.filterNot {
-          _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
-        }
-        if (nonPartitionPruningPredicates.nonEmpty) {
-          throw QueryCompilationErrors.nonPartitionPruningPredicatesNotExpectedError(
-            nonPartitionPruningPredicates)
-        }
-
-        val boundPredicate =
-          Predicate.createInterpreted(predicates.reduce(And).transform {
-            case att: AttributeReference =>
-              val index = partitionSchema.indexWhere(_.name == att.name)
-              BoundReference(index, partitionSchema(index).dataType, nullable = true)
-          })
+        val boundPredicate = ExternalCatalogUtils.generatePartitionPredicateByFilter(
+          catalogTable, partitionSchema, predicates)
 
         def toRow(spec: TablePartitionSpec): InternalRow = {
           InternalRow.fromSeq(partitionSchema.map { field =>
@@ -966,15 +952,15 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
 
         val allPartitionNames = hive.getPartitionNames(
           table.getDbName, table.getTableName, -1).asScala
-        val partSpec = allPartitionNames.filter { p =>
+        val partNames = allPartitionNames.filter { p =>
           val spec = PartitioningUtils.parsePathFragment(p)
           boundPredicate.eval(toRow(spec))
         }
-        hive.getPartitionsByNames(table, partSpec.asJava).asScala.toSeq
+        hive.getPartitionsByNames(table, partNames.asJava).asScala.toSeq
       } catch {
-        case NonFatal(e) =>
+        case ex: InvocationTargetException if ex.getCause.isInstanceOf[MetaException] =>
           logWarning("Caught Hive MetaException attempting to get partition metadata by " +
-            "filter from client side. Falling back to fetching all partition metadata", e)
+            "filter from client side. Falling back to fetching all partition metadata", ex)
           getAllPartitionsMethod.invoke(hive, table).asInstanceOf[JSet[Partition]].asScala.toSeq
       }
     }
