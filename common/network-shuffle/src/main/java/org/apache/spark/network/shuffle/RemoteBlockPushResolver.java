@@ -1022,7 +1022,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     public void setDataFilePos(long dataFilePos) {
-      logger.trace("{} current pos {} update pos {}", toString(), this.dataFilePos, dataFilePos);
+      logger.trace("{} current pos {} update pos {}", this, this.dataFilePos, dataFilePos);
       this.dataFilePos = dataFilePos;
     }
 
@@ -1031,7 +1031,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     void setCurrentMapIndex(int mapIndex) {
-      logger.trace("{} mapIndex {} current mapIndex {}", toString(), currentMapIndex, mapIndex);
+      logger.trace("{} mapIndex {} current mapIndex {}", this, currentMapIndex, mapIndex);
       this.currentMapIndex = mapIndex;
     }
 
@@ -1040,7 +1040,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     }
 
     void blockMerged(int mapIndex) {
-      logger.debug("{} updated merging mapIndex {}", toString(), mapIndex);
+      logger.debug("{} updated merging mapIndex {}", this, mapIndex);
       mapTracker.add(mapIndex);
       chunkTracker.add(mapIndex);
       lastMergedMapIndex = mapIndex;
@@ -1058,7 +1058,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
      */
     void updateChunkInfo(long chunkOffset, int mapIndex) throws IOException {
       try {
-        logger.trace("{} index current {} updated {}", toString(), this.lastChunkOffset,
+        logger.trace("{} index current {} updated {}", this, this.lastChunkOffset,
           chunkOffset);
         if (indexMetaUpdateFailed) {
           indexFile.getChannel().position(indexFile.getPos());
@@ -1087,7 +1087,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
         return;
       }
       chunkTracker.add(mapIndex);
-      logger.trace("{} mapIndex {} write chunk to meta file", toString(), mapIndex);
+      logger.trace("{} mapIndex {} write chunk to meta file", this, mapIndex);
       if (indexMetaUpdateFailed) {
         metaFile.getChannel().position(metaFile.getPos());
       }
