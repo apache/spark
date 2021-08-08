@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, TestTable2, UnresolvedFieldName, UnresolvedFieldPosition}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceColumns, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -316,17 +316,34 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     }
   }
 
+  test("SPARK-36449: Replacing columns with duplicate name should not be allowed") {
+    alterTableTest(
+      () => ReplaceColumns(
+        table,
+        Seq(QualifiedColType(None, "f", LongType, true, None, None),
+          QualifiedColType(None, "F", LongType, true, None, None))),
+      Seq("Found duplicate column(s) in the user specified columns: `f`"),
+      expectErrorOnCaseSensitive = false)
+  }
+
   private def alterTableTest(
       alter: AlterTableCommand,
       error: Seq[String],
       expectErrorOnCaseSensitive: Boolean = true): Unit = {
+    alterTableTest(() => alter, error, expectErrorOnCaseSensitive)
+  }
+
+  private def alterTableTest(
+      f: () => AlterTableCommand,
+      error: Seq[String],
+      expectErrorOnCaseSensitive: Boolean): Unit = {
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val expectError = if (expectErrorOnCaseSensitive) caseSensitive else !caseSensitive
         if (expectError) {
-          assertAnalysisError(alter, error, caseSensitive)
+          assertAnalysisError(f(), error, caseSensitive)
         } else {
-          assertAnalysisSuccess(alter, caseSensitive)
+          assertAnalysisSuccess(f(), caseSensitive)
         }
       }
     }
