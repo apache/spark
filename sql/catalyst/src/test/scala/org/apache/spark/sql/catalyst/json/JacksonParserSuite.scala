@@ -19,24 +19,26 @@ package org.apache.spark.sql.catalyst.json
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.util.BadRecordException
 import org.apache.spark.sql.sources.{EqualTo, Filter, StringStartsWith}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.types.UTF8String
 
 class JacksonParserSuite extends SparkFunSuite {
-  test("skipping rows using pushdown filters") {
-    def check(
-      input: String = """{"i":1, "s": "a"}""",
-      schema: StructType = StructType.fromDDL("i INTEGER"),
-      filters: Seq[Filter],
-      expected: Seq[InternalRow]): Unit = {
-      val options = new JSONOptions(Map.empty[String, String], "GMT", "")
-      val parser = new JacksonParser(schema, options, false, filters)
-      val createParser = CreateJacksonParser.string _
-      val actual = parser.parse(input, createParser, UTF8String.fromString)
-      assert(actual === expected)
-    }
 
+  def check(
+    input: String = """{"i":1, "s": "a"}""",
+    schema: StructType = StructType.fromDDL("i INTEGER"),
+    filters: Seq[Filter],
+    expected: Seq[InternalRow]): Unit = {
+    val options = new JSONOptions(Map.empty[String, String], "GMT", "")
+    val parser = new JacksonParser(schema, options, false, filters)
+    val createParser = CreateJacksonParser.string _
+    val actual = parser.parse(input, createParser, UTF8String.fromString)
+    assert(actual === expected)
+  }
+
+  test("skipping rows using pushdown filters") {
     check(filters = Seq(), expected = Seq(InternalRow(1)))
     check(filters = Seq(EqualTo("i", 1)), expected = Seq(InternalRow(1)))
     check(filters = Seq(EqualTo("i", 2)), expected = Seq.empty)
@@ -53,5 +55,18 @@ class JacksonParserSuite extends SparkFunSuite {
       schema = StructType.fromDDL("i INTEGER, d DOUBLE"),
       filters = Seq(EqualTo("d", 3.14)),
       expected = Seq(InternalRow(1, 3.14)))
+  }
+
+  test("SPARK-36453 Jackson parser should work with all floating point special literals") {
+    val schema = StructType.fromDDL("d DOUBLE")
+    Seq("inf", "Inf", "+Inf", "infinity", "+Infinity").foreach(v =>
+      check(s"""{"d": "$v"}""", schema, Seq(), Seq(InternalRow(Double.PositiveInfinity))))
+    Seq("-inf", "-Inf", "-infinity", "-Infinity").foreach(v =>
+      check(s"""{"d": "$v"}""", schema, Seq(), Seq(InternalRow(Double.NegativeInfinity))))
+    Seq("NaN", "nan").foreach(v =>
+      check(s"""{"d": "$v"}""", schema, Seq(), Seq(InternalRow(Double.NaN))))
+    assertThrows[BadRecordException](
+      check(s"""{"d": "other"}""", schema, Seq(), Seq(InternalRow(Double.NaN)))
+    )
   }
 }

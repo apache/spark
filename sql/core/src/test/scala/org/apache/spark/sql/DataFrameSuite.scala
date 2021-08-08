@@ -2943,6 +2943,34 @@ class DataFrameSuite extends QueryTest
       .withSequenceColumn("default_index").collect().map(_.getLong(0))
     assert(ids.toSet === Range(0, 10).toSet)
   }
+
+  test("SPARK-36453 json processing should work with all floating point special literals") {
+    val inf = Seq("inf", "Inf", "+Inf", "infinity", "+Infinity")
+    val infNeg = Seq("-inf", "-Inf", "-infinity", "-Infinity")
+    val nan = Seq("NaN", "nan")
+    val structKeyName = "d"
+
+    (inf.map((_, Double.PositiveInfinity, "DOUBLE")) ++
+    infNeg.map((_, Double.NegativeInfinity, "DOUBLE")) ++
+    nan.map((_, Double.NaN, "DOUBLE")) ++
+    inf.map((_, Float.PositiveInfinity, "FLOAT")) ++
+    infNeg.map((_, Float.NegativeInfinity, "FLOAT")) ++
+    nan.map((_, Float.NaN, "FLOAT"))).foreach{
+      case (stringRep, value, schemaType) =>
+        val jsonSchema = StructType.fromDDL(s"$structKeyName $schemaType")
+        withTempDir { dir =>
+          val jsonDir = new File(dir, "json").getCanonicalPath
+          Seq(s"""{"$structKeyName": "$stringRep"}""").toDF("col")
+            .withColumn("col", from_json(col("col"), jsonSchema))
+            .write.json(jsonDir)
+          val dfSchema = StructType(Seq(StructField("col",jsonSchema)))
+          val dfRead = spark.read.schema(dfSchema).json(jsonDir)
+          val compare = spark.createDataFrame(spark.sparkContext.parallelize(Seq(Row(Row(value)))),
+            dfSchema)
+          checkAnswer(dfRead, compare)
+        }
+    }
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)

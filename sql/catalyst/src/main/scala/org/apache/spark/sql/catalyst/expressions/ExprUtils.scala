@@ -94,4 +94,20 @@ object ExprUtils {
       }
     }
   }
+
+  /**
+   * We process literals such as 'Infinity', 'Inf', '-Infinity' and 'NaN' etc in case
+   * insensitive manner to be compatible with other database systems such as PostgreSQL and DB2.
+   */
+  def processFloatingPointSpecialLiterals(v: String, isFloat: Boolean): Any = {
+    v.trim.toLowerCase(Locale.ROOT) match {
+      case "inf" | "+inf" | "infinity" | "+infinity" =>
+        if (isFloat) Float.PositiveInfinity else Double.PositiveInfinity
+      case "-inf" | "-infinity" =>
+        if (isFloat) Float.NegativeInfinity else Double.NegativeInfinity
+      case "nan" =>
+        if (isFloat) Float.NaN else Double.NaN
+      case _ => null
+    }
+  }
 }

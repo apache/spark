@@ -255,22 +255,6 @@ object Cast {
   }
 
   def resolvableNullability(from: Boolean, to: Boolean): Boolean = !from || to
-
-  /**
-   * We process literals such as 'Infinity', 'Inf', '-Infinity' and 'NaN' etc in case
-   * insensitive manner to be compatible with other database systems such as PostgreSQL and DB2.
-   */
-  def processFloatingPointSpecialLiterals(v: String, isFloat: Boolean): Any = {
-    v.trim.toLowerCase(Locale.ROOT) match {
-      case "inf" | "+inf" | "infinity" | "+infinity" =>
-        if (isFloat) Float.PositiveInfinity else Double.PositiveInfinity
-      case "-inf" | "-infinity" =>
-        if (isFloat) Float.NegativeInfinity else Double.NegativeInfinity
-      case "nan" =>
-        if (isFloat) Float.NaN else Double.NaN
-      case _ => null
-    }
-  }
 }
 
 abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression with NullIntolerant {
@@ -790,7 +774,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val doubleStr = s.toString
         try doubleStr.toDouble catch {
           case _: NumberFormatException =>
-            val d = Cast.processFloatingPointSpecialLiterals(doubleStr, false)
+            val d = ExprUtils.processFloatingPointSpecialLiterals(doubleStr, false)
             if(ansiEnabled && d == null) {
               throw QueryExecutionErrors.invalidInputSyntaxForNumericError(s)
             } else {
@@ -815,7 +799,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
         val floatStr = s.toString
         try floatStr.toFloat catch {
           case _: NumberFormatException =>
-            val f = Cast.processFloatingPointSpecialLiterals(floatStr, true)
+            val f = ExprUtils.processFloatingPointSpecialLiterals(floatStr, true)
             if (ansiEnabled && f == null) {
               throw QueryExecutionErrors.invalidInputSyntaxForNumericError(s)
             } else {

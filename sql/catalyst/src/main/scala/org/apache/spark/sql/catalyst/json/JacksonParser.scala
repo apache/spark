@@ -197,12 +197,12 @@ class JacksonParser(
 
         case VALUE_STRING if parser.getTextLength >= 1 =>
           // Special case handling for NaN and Infinity.
-          parser.getText match {
-            case "NaN" => Float.NaN
-            case "Infinity" => Float.PositiveInfinity
-            case "-Infinity" => Float.NegativeInfinity
-            case _ => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
+          val specialLiteral = ExprUtils.processFloatingPointSpecialLiterals(parser.getText, true)
+          if(specialLiteral == null) {
+            throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
               parser, VALUE_STRING, FloatType)
+          } else {
+            specialLiteral.asInstanceOf[Float]
           }
       }
 
@@ -213,12 +213,12 @@ class JacksonParser(
 
         case VALUE_STRING if parser.getTextLength >= 1 =>
           // Special case handling for NaN and Infinity.
-          parser.getText match {
-            case "NaN" => Double.NaN
-            case "Infinity" => Double.PositiveInfinity
-            case "-Infinity" => Double.NegativeInfinity
-            case _ => throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
+          val specialLiteral = ExprUtils.processFloatingPointSpecialLiterals(parser.getText, false)
+          if(specialLiteral == null) {
+            throw QueryExecutionErrors.cannotParseStringAsDataTypeError(
               parser, VALUE_STRING, DoubleType)
+          } else {
+            specialLiteral.asInstanceOf[Double]
           }
       }
 
