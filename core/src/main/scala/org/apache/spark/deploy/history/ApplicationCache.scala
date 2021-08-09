@@ -18,15 +18,14 @@
 package org.apache.spark.deploy.history
 
 import java.util.NoSuchElementException
-import java.util.concurrent.ExecutionException
+import java.util.concurrent.CompletionException
 import javax.servlet.{DispatcherType, Filter, FilterChain, FilterConfig, ServletException, ServletRequest, ServletResponse}
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.collection.JavaConverters._
 
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
-import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache, RemovalListener, RemovalNotification}
-import com.google.common.util.concurrent.UncheckedExecutionException
+import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache, RemovalCause, RemovalListener}
 import org.eclipse.jetty.servlet.FilterHolder
 
 import org.apache.spark.internal.Logging
@@ -62,21 +61,27 @@ private[history] class ApplicationCache(
 
     /**
      * Removal event notifies the provider to detach the UI.
-     * @param rm removal notification
+     * @param key removal key
+     * @param value removal value
+     * @param cause the reason why a `CacheEntry` was removed, it should
+     *              always be `SIZE` because `appCache` configured with
+     *              `maximumSize` eviction strategy
      */
-    override def onRemoval(rm: RemovalNotification[CacheKey, CacheEntry]): Unit = {
+    override def onRemoval(key: CacheKey, value: CacheEntry, cause: RemovalCause): Unit = {
       metrics.evictionCount.inc()
-      val key = rm.getKey
-      logDebug(s"Evicting entry ${key}")
-      operations.detachSparkUI(key.appId, key.attemptId, rm.getValue().loadedUI.ui)
+      logDebug(s"Evicting entry $key")
+      operations.detachSparkUI(key.appId, key.attemptId, value.loadedUI.ui)
     }
   }
 
   private val appCache: LoadingCache[CacheKey, CacheEntry] = {
-    CacheBuilder.newBuilder()
-        .maximumSize(retainedApplications)
-        .removalListener(removalListener)
-        .build(appLoader)
+    val builder = Caffeine.newBuilder()
+      .maximumSize(retainedApplications)
+      .removalListener(removalListener)
+      // SPARK-34309: Use custom Executor to compatible with
+      // the data eviction behavior of Guava cache
+      .executor((command: Runnable) => command.run())
+    builder.build[CacheKey, CacheEntry](appLoader)
   }
 
   /**
@@ -86,9 +91,9 @@ private[history] class ApplicationCache(
 
   def get(appId: String, attemptId: Option[String] = None): CacheEntry = {
     try {
-      appCache.get(new CacheKey(appId, attemptId))
+      appCache.get(CacheKey(appId, attemptId))
     } catch {
-      case e @ (_: ExecutionException | _: UncheckedExecutionException) =>
+      case e @ (_: CompletionException | _: RuntimeException) =>
         throw Option(e.getCause()).getOrElse(e)
     }
   }
@@ -127,7 +132,7 @@ private[history] class ApplicationCache(
   }
 
   /** @return Number of cached UIs. */
-  def size(): Long = appCache.size()
+  def size(): Long = appCache.estimatedSize()
 
   private def time[T](t: Timer)(f: => T): T = {
     val timeCtx = t.time()
@@ -156,18 +161,19 @@ private[history] class ApplicationCache(
    */
   @throws[NoSuchElementException]
   private def loadApplicationEntry(appId: String, attemptId: Option[String]): CacheEntry = {
-    logDebug(s"Loading application Entry $appId/$attemptId")
+    lazy val application = s"$appId/${attemptId.mkString}"
+    logDebug(s"Loading application Entry $application")
     metrics.loadCount.inc()
     val loadedUI = time(metrics.loadTimer) {
       metrics.lookupCount.inc()
       operations.getAppUI(appId, attemptId) match {
         case Some(loadedUI) =>
-          logDebug(s"Loaded application $appId/$attemptId")
+          logDebug(s"Loaded application $application")
           loadedUI
         case None =>
           metrics.lookupFailureCount.inc()
           // guava's cache logs via java.util log, so is of limited use. Hence: our own message
-          logInfo(s"Failed to load application attempt $appId/$attemptId")
+          logInfo(s"Failed to load application attempt $application")
           throw new NoSuchElementException(s"no application with application Id '$appId'" +
               attemptId.map { id => s" attemptId '$id'" }.getOrElse(" and no attempt Id"))
       }
@@ -182,7 +188,7 @@ private[history] class ApplicationCache(
       new CacheEntry(loadedUI, completed)
     } catch {
       case e: Exception =>
-        logWarning(s"Failed to initialize application UI for $appId/$attemptId", e)
+        logWarning(s"Failed to initialize application UI for $application", e)
         operations.detachSparkUI(appId, attemptId, loadedUI.ui)
         throw e
     }
@@ -196,7 +202,7 @@ private[history] class ApplicationCache(
     val sb = new StringBuilder(s"ApplicationCache(" +
           s" retainedApplications= $retainedApplications)")
     sb.append(s"; time= ${clock.getTimeMillis()}")
-    sb.append(s"; entry count= ${appCache.size()}\n")
+    sb.append(s"; entry count= ${appCache.estimatedSize()}\n")
     sb.append("----\n")
     appCache.asMap().asScala.foreach {
       case(key, entry) => sb.append(s"  $key -> $entry\n")

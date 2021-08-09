@@ -17,11 +17,18 @@
 # under the License.
 #
 
-name: "Pull Request Labeler"
+# Intentionally has a general name.
+# because the test status check created in GitHub Actions
+# currently randomly picks any associated workflow.
+# So, the name was changed to make sense in that context too.
+# See also https://github.community/t/specify-check-suite-when-creating-a-checkrun/118380/10
+
+name: "On pull requests"
 on: pull_request_target
 
 jobs:
   label:
+    name: Label pull requests
     runs-on: ubuntu-latest
     steps:
     # In order to get back the negated matches like in the old config,

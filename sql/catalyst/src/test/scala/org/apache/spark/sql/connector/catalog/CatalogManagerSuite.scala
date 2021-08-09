@@ -23,16 +23,15 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.analysis.{EmptyFunctionRegistry, FakeV2SessionCatalog, NoSuchNamespaceException}
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog => V1InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.connector.InMemoryTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
 
   private def createSessionCatalog(): SessionCatalog = {
-    val catalog = new InMemoryCatalog()
+    val catalog = new V1InMemoryCatalog()
     catalog.createDatabase(
       CatalogDatabase(SessionCatalog.DEFAULT_DATABASE, "", new URI("fake"), Map.empty),
       ignoreIfExists = true)

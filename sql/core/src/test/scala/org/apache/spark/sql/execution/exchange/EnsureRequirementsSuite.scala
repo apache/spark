@@ -22,12 +22,15 @@ import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, PartitioningCollection}
 import org.apache.spark.sql.execution.{DummySparkPlan, SortExec}
 import org.apache.spark.sql.execution.joins.SortMergeJoinExec
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = Literal(1)
   private val exprB = Literal(2)
   private val exprC = Literal(3)
+
+  private val EnsureRequirements = new EnsureRequirements()
 
   test("reorder should handle PartitioningCollection") {
     val plan1 = DummySparkPlan(
@@ -117,6 +120,19 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         assert(leftKeys === Seq(exprB, exprC))
         assert(rightKeys === Seq(exprB, exprA))
       case other => fail(other.toString)
+    }
+  }
+
+  test("SPARK-35675: EnsureRequirements remove shuffle should respect PartitioningCollection") {
+    import testImplicits._
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df1 = Seq((1, 2)).toDF("c1", "c2")
+      val df2 = Seq((1, 3)).toDF("c3", "c4")
+      val res = df1.join(df2, $"c1" === $"c3").repartition($"c1")
+      assert(res.queryExecution.executedPlan.collect {
+        case s: ShuffleExchangeLike => s
+      }.size == 2)
     }
   }
 }

@@ -17,12 +17,18 @@
 
 package org.apache.spark.network.shuffle;
 
-import java.io.IOException;
+import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
+import java.util.Map;
+import java.util.zip.CheckedInputStream;
+import java.util.zip.Checksum;
 
 import com.codahale.metrics.Meter;
+import com.codahale.metrics.Metric;
 import com.codahale.metrics.Timer;
+import com.google.common.io.ByteStreams;
+import com.google.common.io.Files;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
@@ -34,13 +40,20 @@ import static org.mockito.Mockito.*;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
 import org.apache.spark.network.buffer.NioManagedBuffer;
+import org.apache.spark.network.client.MergedBlockMetaResponseCallback;
 import org.apache.spark.network.client.RpcResponseCallback;
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.protocol.MergedBlockMetaRequest;
 import org.apache.spark.network.server.OneForOneStreamManager;
 import org.apache.spark.network.server.RpcHandler;
+import org.apache.spark.network.shuffle.checksum.Cause;
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.network.shuffle.protocol.BlockTransferMessage;
+import org.apache.spark.network.shuffle.protocol.CorruptionCause;
+import org.apache.spark.network.shuffle.protocol.DiagnoseCorruption;
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import org.apache.spark.network.shuffle.protocol.FetchShuffleBlocks;
+import org.apache.spark.network.shuffle.protocol.FetchShuffleBlockChunks;
 import org.apache.spark.network.shuffle.protocol.FinalizeShuffleMerge;
 import org.apache.spark.network.shuffle.protocol.MergeStatuses;
 import org.apache.spark.network.shuffle.protocol.OpenBlocks;
@@ -100,7 +113,112 @@ public class ExternalBlockHandlerSuite {
 
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
-    verifyOpenBlockLatencyMetrics();
+    verifyOpenBlockLatencyMetrics(2, 2);
+  }
+
+  private void checkDiagnosisResult(
+      String algorithm,
+      Cause expectedCaused) throws IOException {
+    String appId = "app0";
+    String execId = "execId";
+    int shuffleId = 0;
+    long mapId = 0;
+    int reduceId = 0;
+
+    // prepare the checksum file
+    File tmpDir = Files.createTempDir();
+    File checksumFile = new File(tmpDir,
+      "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".checksum." + algorithm);
+    DataOutputStream out = new DataOutputStream(new FileOutputStream(checksumFile));
+    long checksumByReader = 0L;
+    if (expectedCaused != Cause.UNSUPPORTED_CHECKSUM_ALGORITHM) {
+      Checksum checksum = ShuffleChecksumHelper.getChecksumByAlgorithm(algorithm);
+      CheckedInputStream checkedIn = new CheckedInputStream(
+        blockMarkers[0].createInputStream(), checksum);
+      byte[] buffer = new byte[10];
+      ByteStreams.readFully(checkedIn, buffer, 0, (int) blockMarkers[0].size());
+      long checksumByWriter = checkedIn.getChecksum().getValue();
+
+      switch (expectedCaused) {
+        // when checksumByWriter != checksumRecalculated
+        case DISK_ISSUE:
+          out.writeLong(checksumByWriter - 1);
+          checksumByReader = checksumByWriter;
+          break;
+
+        // when checksumByWriter == checksumRecalculated and checksumByReader != checksumByWriter
+        case NETWORK_ISSUE:
+          out.writeLong(checksumByWriter);
+          checksumByReader = checksumByWriter - 1;
+          break;
+
+        case UNKNOWN_ISSUE:
+          // write a int instead of a long to corrupt the checksum file
+          out.writeInt(0);
+          checksumByReader = checksumByWriter;
+          break;
+
+        default:
+          out.writeLong(checksumByWriter);
+          checksumByReader = checksumByWriter;
+      }
+    }
+    out.close();
+
+    when(blockResolver.getBlockData(appId, execId, shuffleId, mapId, reduceId))
+      .thenReturn(blockMarkers[0]);
+    Cause actualCause = ShuffleChecksumHelper.diagnoseCorruption(algorithm, checksumFile, reduceId,
+      blockResolver.getBlockData(appId, execId, shuffleId, mapId, reduceId), checksumByReader);
+    when(blockResolver
+      .diagnoseShuffleBlockCorruption(
+        appId, execId, shuffleId, mapId, reduceId, checksumByReader, algorithm))
+      .thenReturn(actualCause);
+
+    when(client.getClientId()).thenReturn(appId);
+    RpcResponseCallback callback = mock(RpcResponseCallback.class);
+
+    DiagnoseCorruption diagnoseMsg = new DiagnoseCorruption(
+      appId, execId, shuffleId, mapId, reduceId, checksumByReader, algorithm);
+    handler.receive(client, diagnoseMsg.toByteBuffer(), callback);
+
+    ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
+    verify(callback, times(1)).onSuccess(response.capture());
+    verify(callback, never()).onFailure(any());
+
+    CorruptionCause cause =
+      (CorruptionCause) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
+    assertEquals(expectedCaused, cause.cause);
+    tmpDir.delete();
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisDiskIssue() throws IOException {
+    checkDiagnosisResult( "ADLER32", Cause.DISK_ISSUE);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisNetworkIssue() throws IOException {
+    checkDiagnosisResult("ADLER32", Cause.NETWORK_ISSUE);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisUnknownIssue() throws IOException {
+    checkDiagnosisResult("ADLER32", Cause.UNKNOWN_ISSUE);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisChecksumVerifyPass() throws IOException {
+    checkDiagnosisResult("ADLER32", Cause.CHECKSUM_VERIFY_PASS);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisUnSupportedAlgorithm() throws IOException {
+    checkDiagnosisResult("XXX", Cause.UNSUPPORTED_CHECKSUM_ALGORITHM);
+  }
+
+  @Test
+  public void testShuffleCorruptionDiagnosisCRC32() throws IOException {
+    checkDiagnosisResult("CRC32", Cause.CHECKSUM_VERIFY_PASS);
   }
 
   @Test
@@ -114,7 +232,7 @@ public class ExternalBlockHandlerSuite {
 
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 0);
     verify(blockResolver, times(1)).getBlockData("app0", "exec1", 0, 0, 1);
-    verifyOpenBlockLatencyMetrics();
+    verifyOpenBlockLatencyMetrics(2, 2);
   }
 
   @Test
@@ -123,14 +241,14 @@ public class ExternalBlockHandlerSuite {
       new NioManagedBuffer(ByteBuffer.wrap(new byte[10]))
     };
     when(blockResolver.getContinuousBlocksData(
-      "app0", "exec1", 0, 0, 0, 1)).thenReturn(batchBlockMarkers[0]);
+      "app0", "exec1", 0, 0, 0, 3)).thenReturn(batchBlockMarkers[0]);
 
     FetchShuffleBlocks fetchShuffleBlocks = new FetchShuffleBlocks(
-      "app0", "exec1", 0, new long[] { 0 }, new int[][] {{ 0, 1 }}, true);
+      "app0", "exec1", 0, new long[] { 0 }, new int[][] {{ 0, 3 }}, true);
     checkOpenBlocksReceive(fetchShuffleBlocks, batchBlockMarkers);
 
-    verify(blockResolver, times(1)).getContinuousBlocksData("app0", "exec1", 0, 0, 0, 1);
-    verifyOpenBlockLatencyMetrics();
+    verify(blockResolver, times(1)).getContinuousBlocksData("app0", "exec1", 0, 0, 0, 3);
+    verifyOpenBlockLatencyMetrics(3, 1);
   }
 
   @Test
@@ -144,7 +262,7 @@ public class ExternalBlockHandlerSuite {
 
     verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 0);
     verify(blockResolver, times(1)).getRddBlockData("app0", "exec1", 0, 1);
-    verifyOpenBlockLatencyMetrics();
+    verifyOpenBlockLatencyMetrics(2, 2);
   }
 
   @Test
@@ -192,17 +310,20 @@ public class ExternalBlockHandlerSuite {
     assertFalse(buffers.hasNext());
   }
 
-  private void verifyOpenBlockLatencyMetrics() {
-    Timer openBlockRequestLatencyMillis = (Timer) ((ExternalBlockHandler) handler)
+  private void verifyOpenBlockLatencyMetrics(
+      int blockTransferCount,
+      int blockTransferMessageCount) {
+    Map<String, Metric> metricMap = ((ExternalBlockHandler) handler)
         .getAllMetrics()
-        .getMetrics()
-        .get("openBlockRequestLatencyMillis");
+        .getMetrics();
+    Timer openBlockRequestLatencyMillis = (Timer) metricMap.get("openBlockRequestLatencyMillis");
     assertEquals(1, openBlockRequestLatencyMillis.getCount());
     // Verify block transfer metrics
-    Meter blockTransferRateBytes = (Meter) ((ExternalBlockHandler) handler)
-        .getAllMetrics()
-        .getMetrics()
-        .get("blockTransferRateBytes");
+    Meter blockTransferRate = (Meter) metricMap.get("blockTransferRate");
+    assertEquals(blockTransferCount, blockTransferRate.getCount());
+    Meter blockTransferMessageRate = (Meter) metricMap.get("blockTransferMessageRate");
+    assertEquals(blockTransferMessageCount, blockTransferMessageRate.getCount());
+    Meter blockTransferRateBytes = (Meter) metricMap.get("blockTransferRateBytes");
     assertEquals(10, blockTransferRateBytes.getCount());
   }
 
@@ -235,9 +356,9 @@ public class ExternalBlockHandlerSuite {
   public void testFinalizeShuffleMerge() throws IOException {
     RpcResponseCallback callback = mock(RpcResponseCallback.class);
 
-    FinalizeShuffleMerge req = new FinalizeShuffleMerge("app0", 0);
+    FinalizeShuffleMerge req = new FinalizeShuffleMerge("app0", 1, 0, 0);
     RoaringBitmap bitmap = RoaringBitmap.bitmapOf(0, 1, 2);
-    MergeStatuses statuses = new MergeStatuses(0, new RoaringBitmap[]{bitmap},
+    MergeStatuses statuses = new MergeStatuses(0, 0, new RoaringBitmap[]{bitmap},
       new int[]{3}, new long[]{30});
     when(mergedShuffleManager.finalizeShuffleMerge(req)).thenReturn(statuses);
 
@@ -257,5 +378,115 @@ public class ExternalBlockHandlerSuite {
         .getMetrics()
         .get("finalizeShuffleMergeLatencyMillis");
     assertEquals(1, finalizeShuffleMergeLatencyMillis.getCount());
+  }
+
+  @Test
+  public void testFetchMergedBlocksMeta() {
+    when(mergedShuffleManager.getMergedBlockMeta("app0", 0, 0, 0)).thenReturn(
+      new MergedBlockMeta(1, mock(ManagedBuffer.class)));
+    when(mergedShuffleManager.getMergedBlockMeta("app0", 0, 0, 1)).thenReturn(
+      new MergedBlockMeta(3, mock(ManagedBuffer.class)));
+    when(mergedShuffleManager.getMergedBlockMeta("app0", 0, 0, 2)).thenReturn(
+      new MergedBlockMeta(5, mock(ManagedBuffer.class)));
+
+    int[] expectedCount = new int[]{1, 3, 5};
+    String appId = "app0";
+    long requestId = 0L;
+    for (int reduceId = 0; reduceId < 3; reduceId++) {
+      MergedBlockMetaRequest req = new MergedBlockMetaRequest(requestId++, appId, 0, 0, reduceId);
+      MergedBlockMetaResponseCallback callback = mock(MergedBlockMetaResponseCallback.class);
+      handler.getMergedBlockMetaReqHandler()
+        .receiveMergeBlockMetaReq(client, req, callback);
+      verify(mergedShuffleManager, times(1)).getMergedBlockMeta("app0", 0, 0, reduceId);
+
+      ArgumentCaptor<Integer> numChunksResponse = ArgumentCaptor.forClass(Integer.class);
+      ArgumentCaptor<ManagedBuffer> chunkBitmapResponse =
+        ArgumentCaptor.forClass(ManagedBuffer.class);
+      verify(callback, times(1)).onSuccess(numChunksResponse.capture(),
+        chunkBitmapResponse.capture());
+      assertEquals("num chunks in merged block " + reduceId, expectedCount[reduceId],
+        numChunksResponse.getValue().intValue());
+      assertNotNull("chunks bitmap buffer " + reduceId, chunkBitmapResponse.getValue());
+    }
+  }
+
+  @Test
+  public void testOpenBlocksWithShuffleChunks() {
+    verifyBlockChunkFetches(true);
+  }
+
+  @Test
+  public void testFetchShuffleChunks() {
+    verifyBlockChunkFetches(false);
+  }
+
+  private void verifyBlockChunkFetches(boolean useOpenBlocks) {
+    RpcResponseCallback callback = mock(RpcResponseCallback.class);
+    ByteBuffer buffer;
+    if (useOpenBlocks) {
+      OpenBlocks openBlocks =
+        new OpenBlocks("app0", "exec1",
+          new String[] {"shuffleChunk_0_0_0_0", "shuffleChunk_0_0_0_1", "shuffleChunk_0_0_1_0",
+            "shuffleChunk_0_0_1_1"});
+      buffer = openBlocks.toByteBuffer();
+    } else {
+      FetchShuffleBlockChunks fetchChunks = new FetchShuffleBlockChunks(
+        "app0", "exec1", 0, 0, new int[] {0, 1}, new int[][] {{0, 1}, {0, 1}});
+      buffer = fetchChunks.toByteBuffer();
+    }
+    ManagedBuffer[][] buffers = new ManagedBuffer[][] {
+      {
+        new NioManagedBuffer(ByteBuffer.wrap(new byte[5])),
+        new NioManagedBuffer(ByteBuffer.wrap(new byte[7]))
+      },
+      {
+        new NioManagedBuffer(ByteBuffer.wrap(new byte[5])),
+        new NioManagedBuffer(ByteBuffer.wrap(new byte[7]))
+      }
+    };
+    for (int reduceId = 0; reduceId < 2; reduceId++) {
+      for (int chunkId = 0; chunkId < 2; chunkId++) {
+        when(mergedShuffleManager.getMergedBlockData(
+          "app0", 0, 0, reduceId, chunkId)).thenReturn(buffers[reduceId][chunkId]);
+      }
+    }
+    handler.receive(client, buffer, callback);
+    ArgumentCaptor<ByteBuffer> response = ArgumentCaptor.forClass(ByteBuffer.class);
+    verify(callback, times(1)).onSuccess(response.capture());
+    verify(callback, never()).onFailure(any());
+    StreamHandle handle =
+      (StreamHandle) BlockTransferMessage.Decoder.fromByteBuffer(response.getValue());
+    assertEquals(4, handle.numChunks);
+
+    @SuppressWarnings("unchecked")
+    ArgumentCaptor<Iterator<ManagedBuffer>> stream = (ArgumentCaptor<Iterator<ManagedBuffer>>)
+      (ArgumentCaptor<?>) ArgumentCaptor.forClass(Iterator.class);
+    verify(streamManager, times(1)).registerStream(any(), stream.capture(), any());
+    Iterator<ManagedBuffer> bufferIter = stream.getValue();
+    for (int reduceId = 0; reduceId < 2; reduceId++) {
+      for (int chunkId = 0; chunkId < 2; chunkId++) {
+        assertEquals(buffers[reduceId][chunkId], bufferIter.next());
+      }
+    }
+    assertFalse(bufferIter.hasNext());
+    verify(mergedShuffleManager, never()).getMergedBlockMeta(anyString(), anyInt(), anyInt(),
+        anyInt());
+    verify(blockResolver, never()).getBlockData(
+      anyString(), anyString(), anyInt(), anyInt(), anyInt());
+    verify(mergedShuffleManager, times(1)).getMergedBlockData("app0", 0, 0, 0, 0);
+    verify(mergedShuffleManager, times(1)).getMergedBlockData("app0", 0, 0, 0, 1);
+
+    // Verify open block request latency metrics
+    Timer openBlockRequestLatencyMillis = (Timer) ((ExternalBlockHandler) handler)
+      .getAllMetrics()
+      .getMetrics()
+      .get("openBlockRequestLatencyMillis");
+    assertEquals(1, openBlockRequestLatencyMillis.getCount());
+    // Verify block transfer metrics
+    Meter blockTransferRateBytes = (Meter) ((ExternalBlockHandler) handler)
+      .getAllMetrics()
+      .getMetrics()
+      .get("blockTransferRateBytes");
+    assertEquals(24, blockTransferRateBytes.getCount());
   }
 }

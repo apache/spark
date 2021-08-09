@@ -297,14 +297,39 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val d1 = Date.valueOf("2015-07-31")
     val d2 = Date.valueOf("2015-12-31")
     val i = new CalendarInterval(2, 2, 2000000L)
+    val day = "1 day"
+    val ym = "1 year 2 month"
+    val dt = "1 day 2 hour 3 minute 4 second 5 millisecond 6 microsecond"
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
-      df.selectExpr(s"d + INTERVAL'${i.toString}'"),
-      Seq(Row(Date.valueOf("2015-10-02")), Row(Date.valueOf("2016-03-02"))))
+      df.selectExpr(s"d + INTERVAL'$ym'"),
+      Seq(Row(Date.valueOf("2016-09-30")),
+        Row(Date.valueOf("2017-02-28"))))
     checkAnswer(
-      df.selectExpr(s"t + INTERVAL'${i.toString}'"),
-      Seq(Row(Timestamp.valueOf("2015-10-03 00:00:01")),
-        Row(Timestamp.valueOf("2016-03-02 00:00:02"))))
+      df.selectExpr(s"t + INTERVAL'$ym'"),
+      Seq(Row(Timestamp.valueOf("2016-09-30 23:59:59")),
+        Row(Timestamp.valueOf("2017-02-28 00:00:00"))))
+    checkAnswer(
+      df.selectExpr(s"d + INTERVAL'$dt'"),
+      Seq(Row(Timestamp.valueOf("2015-08-01 02:03:04.005006")),
+        Row(Timestamp.valueOf("2016-01-01 02:03:04.005006"))))
+    checkAnswer(
+      df.selectExpr(s"d + INTERVAL '$day'"),
+      Seq(Row(Date.valueOf("2015-08-01")),
+        Row(Date.valueOf("2016-01-01"))))
+    checkAnswer(
+      df.selectExpr(s"t + INTERVAL'$dt'"),
+      Seq(Row(Timestamp.valueOf("2015-08-02 02:03:03.005006")),
+        Row(Timestamp.valueOf("2016-01-01 02:03:04.005006"))))
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      checkAnswer(
+        df.selectExpr(s"d + INTERVAL'${i.toString}'"),
+        Seq(Row(Date.valueOf("2015-10-02")), Row(Date.valueOf("2016-03-02"))))
+      checkAnswer(
+        df.selectExpr(s"t + INTERVAL'${i.toString}'"),
+        Seq(Row(Timestamp.valueOf("2015-10-03 00:00:01")),
+          Row(Timestamp.valueOf("2016-03-02 00:00:02"))))
+    }
   }
 
   test("time_sub") {
@@ -313,54 +338,39 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
     val d1 = Date.valueOf("2015-09-30")
     val d2 = Date.valueOf("2016-02-29")
     val i = new CalendarInterval(2, 2, 2000000L)
+    val day = "1 day"
+    val ym = "1 year 2 month"
+    val dt = "1 day 2 hour 3 minute 4 second 5 millisecond 6 microsecond"
     val df = Seq((1, t1, d1), (3, t2, d2)).toDF("n", "t", "d")
     checkAnswer(
-      df.selectExpr(s"d - INTERVAL'${i.toString}'"),
-      Seq(Row(Date.valueOf("2015-07-27")), Row(Date.valueOf("2015-12-26"))))
+      df.selectExpr(s"d - INTERVAL'$ym'"),
+      Seq(Row(Date.valueOf("2014-07-30")),
+        Row(Date.valueOf("2014-12-29"))))
     checkAnswer(
-      df.selectExpr(s"t - INTERVAL'${i.toString}'"),
-      Seq(Row(Timestamp.valueOf("2015-07-29 23:59:59")),
-        Row(Timestamp.valueOf("2015-12-27 00:00:00"))))
-  }
-
-  test("function make_interval") {
-    val t1 = Timestamp.valueOf("2015-10-01 00:00:01")
-    val t2 = Timestamp.valueOf("2016-02-29 00:00:02")
-    val df = Seq((t1), (t2)).toDF("t")
-    // adds two hours to times
+      df.selectExpr(s"t - INTERVAL'$ym'"),
+      Seq(Row(Timestamp.valueOf("2014-08-01 00:00:01")),
+        Row(Timestamp.valueOf("2014-12-29 00:00:02"))))
     checkAnswer(
-      df.select(col("t") + make_interval(hours = lit(2))),
-      Seq(Row(Timestamp.valueOf("2015-10-01 02:00:01")),
-        Row(Timestamp.valueOf("2016-02-29 02:00:02"))))
-    // adds four days and two hours to times
+      df.selectExpr(s"d - INTERVAL'$dt'"),
+      Seq(Row(Timestamp.valueOf("2015-09-28 21:56:55.994994")),
+        Row(Timestamp.valueOf("2016-02-27 21:56:55.994994"))))
     checkAnswer(
-      df.select(col("t") + make_interval(hours = lit(2), days = lit(4))),
-      Seq(Row(Timestamp.valueOf("2015-10-05 02:00:01")),
-        Row(Timestamp.valueOf("2016-03-04 02:00:02"))))
-    // subtracts two hours from times
+      df.selectExpr(s"d - INTERVAL '$day'"),
+      Seq(Row(Date.valueOf("2015-09-29")),
+        Row(Date.valueOf("2016-02-28"))))
     checkAnswer(
-      df.select(col("t") + make_interval(hours = lit(-2))),
-      Seq(Row(Timestamp.valueOf("2015-09-30 22:00:01")),
-        Row(Timestamp.valueOf("2016-02-28 22:00:02"))))
-
-    val d1 = Date.valueOf("2015-08-31")
-    val d2 = Date.valueOf("2015-02-28")
-    val df2 = Seq((d1), (d2)).toDF("d")
-    // adding an hour to a date does nothing
-    checkAnswer(
-      df2.select(col("d") + make_interval(hours = lit(1))),
-      Seq(Row(Date.valueOf("2015-08-31")),
-        Row(Date.valueOf("2015-02-28"))))
-    // adds three years to date
-    checkAnswer(
-      df2.select(col("d") + make_interval(years = lit(3))),
-      Seq(Row(Date.valueOf("2018-08-31")),
-        Row(Date.valueOf("2018-02-28"))))
-    // subtracts 1 week, one day from date
-    checkAnswer(
-      df2.select(col("d") - make_interval(weeks = lit(1), days = lit(1))),
-      Seq(Row(Date.valueOf("2015-08-23")),
-        Row(Date.valueOf("2015-02-20"))))
+      df.selectExpr(s"t - INTERVAL'$dt'"),
+      Seq(Row(Timestamp.valueOf("2015-09-29 21:56:56.994994")),
+        Row(Timestamp.valueOf("2016-02-27 21:56:57.994994"))))
+    withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> "true") {
+      checkAnswer(
+        df.selectExpr(s"d - INTERVAL'${i.toString}'"),
+        Seq(Row(Date.valueOf("2015-07-27")), Row(Date.valueOf("2015-12-26"))))
+      checkAnswer(
+        df.selectExpr(s"t - INTERVAL'${i.toString}'"),
+        Seq(Row(Timestamp.valueOf("2015-07-29 23:59:59")),
+          Row(Timestamp.valueOf("2015-12-27 00:00:00"))))
+    }
   }
 
   test("function add_months") {
@@ -627,16 +637,22 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
         val date2 = Date.valueOf("2015-07-25")
         val ts1 = Timestamp.valueOf("2015-07-24 10:00:00.3")
         val ts2 = Timestamp.valueOf("2015-07-25 02:02:02.2")
+        val ntzTs1 = LocalDateTime.parse("2015-07-24T10:00:00.3")
+        val ntzTs2 = LocalDateTime.parse("2015-07-25T02:02:02.2")
         val s1 = "2015/07/24 10:00:00.5"
         val s2 = "2015/07/25 02:02:02.6"
         val ss1 = "2015-07-24 10:00:00"
         val ss2 = "2015-07-25 02:02:02"
         val fmt = "yyyy/MM/dd HH:mm:ss.S"
-        val df = Seq((date1, ts1, s1, ss1), (date2, ts2, s2, ss2)).toDF("d", "ts", "s", "ss")
+        val df = Seq((date1, ts1, ntzTs1, s1, ss1), (date2, ts2, ntzTs2, s2, ss2)).toDF(
+          "d", "ts", "ntzTs", "s", "ss")
         checkAnswer(df.select(unix_timestamp(col("ts"))), Seq(
           Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
         checkAnswer(df.select(unix_timestamp(col("ss"))), Seq(
           Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
+        checkAnswer(df.select(unix_timestamp(col("ntzTs"))), Seq(
+          Row(secs(DateTimeUtils.microsToMillis(DateTimeUtils.localDateTimeToMicros(ntzTs1)))),
+          Row(secs(DateTimeUtils.microsToMillis(DateTimeUtils.localDateTimeToMicros(ntzTs2))))))
         checkAnswer(df.select(unix_timestamp(col("d"), fmt)), Seq(
           Row(secs(date1.getTime)), Row(secs(date2.getTime))))
         checkAnswer(df.select(unix_timestamp(col("s"), fmt)), Seq(
@@ -645,6 +661,9 @@ class DateFunctionsSuite extends QueryTest with SharedSparkSession {
           Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
         checkAnswer(df.selectExpr("unix_timestamp(ss)"), Seq(
           Row(secs(ts1.getTime)), Row(secs(ts2.getTime))))
+        checkAnswer(df.selectExpr("unix_timestamp(ntzTs)"), Seq(
+          Row(secs(DateTimeUtils.microsToMillis(DateTimeUtils.localDateTimeToMicros(ntzTs1)))),
+          Row(secs(DateTimeUtils.microsToMillis(DateTimeUtils.localDateTimeToMicros(ntzTs2))))))
         checkAnswer(df.selectExpr(s"unix_timestamp(d, '$fmt')"), Seq(
           Row(secs(date1.getTime)), Row(secs(date2.getTime))))
         checkAnswer(df.selectExpr(s"unix_timestamp(s, '$fmt')"), Seq(

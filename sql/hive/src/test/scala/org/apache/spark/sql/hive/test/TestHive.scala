@@ -42,7 +42,7 @@ import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.execution.{QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution.{CommandExecutionMode, QueryExecution, SQLExecution}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf, WithTestConf}
@@ -130,11 +130,11 @@ class TestHiveContext(
    * when running in the JVM, i.e. it needs to be false when calling from Python.
    */
   def this(sc: SparkContext, loadTestTables: Boolean = true) = {
-    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc), loadTestTables))
+    this(new TestHiveSparkSession(TestHiveContext.withHiveExternalCatalog(sc), loadTestTables))
   }
 
   def this(sc: SparkContext, hiveClient: HiveClient) = {
-    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc),
+    this(new TestHiveSparkSession(TestHiveContext.withHiveExternalCatalog(sc),
       hiveClient,
       loadTestTables = false))
   }
@@ -223,7 +223,7 @@ private[hive] class TestHiveSparkSession(
 
   @transient
   override lazy val sessionState: SessionState = {
-    new TestHiveSessionStateBuilder(this, parentSessionState, Map.empty).build()
+    new TestHiveSessionStateBuilder(this, parentSessionState).build()
   }
 
   lazy val metadataHive: HiveClient = {
@@ -584,8 +584,9 @@ private[hive] class TestHiveSparkSession(
 
 private[hive] class TestHiveQueryExecution(
     sparkSession: TestHiveSparkSession,
-    logicalPlan: LogicalPlan)
-  extends QueryExecution(sparkSession, logicalPlan) with Logging {
+    logicalPlan: LogicalPlan,
+    mode: CommandExecutionMode.Value = CommandExecutionMode.ALL)
+  extends QueryExecution(sparkSession, logicalPlan, mode = mode) with Logging {
 
   def this(sparkSession: TestHiveSparkSession, sql: String) = {
     this(sparkSession, sparkSession.sessionState.sqlParser.parsePlan(sql))
@@ -647,22 +648,26 @@ private[hive] object TestHiveContext {
     scratchDir
   }
 
+  private def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
+    sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
+    sc
+  }
 }
 
 private[sql] class TestHiveSessionStateBuilder(
     session: SparkSession,
-    state: Option[SessionState],
-    options: Map[String, String])
-  extends HiveSessionStateBuilder(session, state, options)
+    state: Option[SessionState])
+  extends HiveSessionStateBuilder(session, state)
   with WithTestConf {
 
   override def overrideConfs: Map[String, String] = TestHiveContext.overrideConfs
 
-  override def createQueryExecution: (LogicalPlan) => QueryExecution = { plan =>
-    new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan)
-  }
+  override def createQueryExecution:
+    (LogicalPlan, CommandExecutionMode.Value) => QueryExecution =
+      (plan, mode) =>
+        new TestHiveQueryExecution(session.asInstanceOf[TestHiveSparkSession], plan, mode)
 
-  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _, Map.empty)
+  override protected def newBuilder: NewBuilder = new TestHiveSessionStateBuilder(_, _)
 }
 
 private[hive] object HiveTestJars {

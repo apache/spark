@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.columnar
 import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.columnar.ColumnBuilder._
 import org.apache.spark.sql.execution.columnar.compression.{AllCompressionSchemes, CompressibleColumnBuilder}
 import org.apache.spark.sql.types._
@@ -173,8 +174,9 @@ private[columnar] object ColumnBuilder {
       case BooleanType => new BooleanColumnBuilder
       case ByteType => new ByteColumnBuilder
       case ShortType => new ShortColumnBuilder
-      case IntegerType | DateType => new IntColumnBuilder
-      case LongType | TimestampType => new LongColumnBuilder
+      case IntegerType | DateType | _: YearMonthIntervalType => new IntColumnBuilder
+      case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+        new LongColumnBuilder
       case FloatType => new FloatColumnBuilder
       case DoubleType => new DoubleColumnBuilder
       case StringType => new StringColumnBuilder
@@ -189,7 +191,7 @@ private[columnar] object ColumnBuilder {
       case udt: UserDefinedType[_] =>
         return apply(udt.sqlType, initialSize, columnName, useCompression)
       case other =>
-        throw new Exception(s"not supported type: $other")
+        throw QueryExecutionErrors.notSupportTypeError(other)
     }
 
     builder.initialize(initialSize, columnName, useCompression)

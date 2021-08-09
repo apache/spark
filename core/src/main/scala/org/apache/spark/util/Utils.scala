@@ -31,7 +31,7 @@ import java.security.SecureRandom
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
 import java.util.concurrent.TimeUnit.NANOSECONDS
-import java.util.zip.GZIPInputStream
+import java.util.zip.{GZIPInputStream, ZipInputStream}
 
 import scala.annotation.tailrec
 import scala.collection.JavaConverters._
@@ -44,10 +44,12 @@ import scala.util.control.{ControlThrowable, NonFatal}
 import scala.util.matching.Regex
 
 import _root_.io.netty.channel.unix.Errors.NativeIoException
-import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache}
+import com.google.common.collect.Interners
 import com.google.common.io.{ByteStreams, Files => GFiles}
 import com.google.common.net.InetAddresses
 import org.apache.commons.codec.binary.Hex
+import org.apache.commons.io.IOUtils
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
@@ -96,11 +98,13 @@ private[spark] object Utils extends Logging {
    */
   val DEFAULT_DRIVER_MEM_MB = JavaUtils.DEFAULT_DRIVER_MEM_MB.toInt
 
-  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+  val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
   /** Scheme used for files that are locally available on worker nodes in the cluster. */
   val LOCAL_SCHEME = "local"
+
+  private val weakStringInterner = Interners.newWeakInterner[String]()
 
   private val PATTERN_FOR_COMMAND_LINE_ARG = "-D(.+?)=(.+)".r
 
@@ -172,6 +176,11 @@ private[spark] object Utils extends Logging {
     } finally {
       isWrapper.close()
     }
+  }
+
+  /** String interning to reduce the memory usage. */
+  def weakIntern(s: String): String = {
+    weakStringInterner.intern(s)
   }
 
   /**
@@ -276,9 +285,11 @@ private[spark] object Utils extends Logging {
    */
   def createDirectory(dir: File): Boolean = {
     try {
-      // This sporadically fails - not sure why ... !dir.exists() && !dir.mkdirs()
-      // So attempting to create and then check if directory was created or not.
-      dir.mkdirs()
+      // SPARK-35907: The check was required by File.mkdirs() because it could sporadically
+      // fail silently. After switching to Files.createDirectories(), ideally, there should
+      // no longer be silent fails. But the check is kept for the safety concern. We can
+      // remove the check when we're sure that Files.createDirectories() would never fail silently.
+      Files.createDirectories(dir.toPath)
       if ( !dir.exists() || !dir.isDirectory) {
         logError(s"Failed to create directory " + dir)
       }
@@ -306,10 +317,14 @@ private[spark] object Utils extends Logging {
       }
       try {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
-        if (dir.exists() || !dir.mkdirs()) {
+        // SPARK-35907:
+        // This could throw more meaningful exception information if directory creation failed.
+        Files.createDirectories(dir.toPath)
+      } catch {
+        case e @ (_ : IOException | _ : SecurityException) =>
+          logError(s"Failed to create directory $dir", e)
           dir = null
-        }
-      } catch { case e: SecurityException => dir = null; }
+      }
     }
 
     dir.getCanonicalFile
@@ -1130,6 +1145,22 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Lists files recursively.
+   */
+  def recursiveList(f: File): Array[File] = {
+    require(f.isDirectory)
+    val result = f.listFiles.toBuffer
+    val dirList = result.filter(_.isDirectory)
+    while (dirList.nonEmpty) {
+      val curDir = dirList.remove(0)
+      val files = curDir.listFiles()
+      result ++= files
+      dirList ++= files.filter(_.isDirectory)
+    }
+    result.toArray
+  }
+
+  /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
    * Throws an exception if deletion is unsuccessful.
@@ -1585,13 +1616,16 @@ private[spark] object Utils extends Logging {
     if (compressedLogFileLengthCache == null) {
       val compressedLogFileLengthCacheSize = sparkConf.get(
         UNCOMPRESSED_LOG_FILE_LENGTH_CACHE_SIZE_CONF)
-      compressedLogFileLengthCache = CacheBuilder.newBuilder()
-        .maximumSize(compressedLogFileLengthCacheSize)
-        .build[String, java.lang.Long](new CacheLoader[String, java.lang.Long]() {
-        override def load(path: String): java.lang.Long = {
-          Utils.getCompressedFileLength(new File(path))
-        }
-      })
+      compressedLogFileLengthCache = {
+        val builder = Caffeine.newBuilder()
+          .maximumSize(compressedLogFileLengthCacheSize)
+        builder.build[String, java.lang.Long](
+          new CacheLoader[String, java.lang.Long]() {
+            override def load(path: String): java.lang.Long = {
+              Utils.getCompressedFileLength(new File(path))
+            }
+          })
+      }
     }
     compressedLogFileLengthCache
   }
@@ -2051,7 +2085,7 @@ private[spark] object Utils extends Logging {
     } catch {
       case e: URISyntaxException =>
     }
-    new File(path).getAbsoluteFile().toURI()
+    new File(path).getCanonicalFile().toURI()
   }
 
   /** Resolve a comma-separated list of paths. */
@@ -2060,6 +2094,17 @@ private[spark] object Utils extends Logging {
       ""
     } else {
       paths.split(",").filter(_.trim.nonEmpty).map { p => Utils.resolveURI(p) }.mkString(",")
+    }
+  }
+
+  /** Check whether a path is an absolute URI. */
+  def isAbsoluteURI(path: String): Boolean = {
+    try {
+      val uri = new URI(path: String)
+      uri.isAbsolute
+    } catch {
+      case _: URISyntaxException =>
+        false
     }
   }
 
@@ -2555,11 +2600,14 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Push based shuffle can only be enabled when external shuffle service is enabled.
+   * Push based shuffle can only be enabled when the application is submitted
+   * to run in YARN mode, with external shuffle service enabled
    */
   def isPushBasedShuffleEnabled(conf: SparkConf): Boolean = {
     conf.get(PUSH_BASED_SHUFFLE_ENABLED) &&
-      (conf.get(IS_TESTING).getOrElse(false) || conf.get(SHUFFLE_SERVICE_ENABLED))
+      (conf.get(IS_TESTING).getOrElse(false) ||
+        (conf.get(SHUFFLE_SERVICE_ENABLED) &&
+          conf.get(SparkLauncher.SPARK_MASTER, null) == "yarn"))
   }
 
   /**
@@ -2859,6 +2907,34 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Returns true if and only if the underlying class is a member class.
+   *
+   * Note: jdk8u throws a "Malformed class name" error if a given class is a deeply-nested
+   * inner class (See SPARK-34607 for details). This issue has already been fixed in jdk9+, so
+   * we can remove this helper method safely if we drop the support of jdk8u.
+   */
+  def isMemberClass(cls: Class[_]): Boolean = {
+    try {
+      cls.isMemberClass
+    } catch {
+      case _: InternalError =>
+        // We emulate jdk8u `Class.isMemberClass` below:
+        //   public boolean isMemberClass() {
+        //     return getSimpleBinaryName() != null && !isLocalOrAnonymousClass();
+        //   }
+        // `getSimpleBinaryName()` returns null if a given class is a top-level class,
+        // so we replace it with `cls.getEnclosingClass != null`. The second condition checks
+        // if a given class is not a local or an anonymous class, so we replace it with
+        // `cls.getEnclosingMethod == null` because `cls.getEnclosingMethod()` return a value
+        // only in either case (JVM Spec 4.8.6).
+        //
+        // Note: The newer jdk evaluates `!isLocalOrAnonymousClass()` first,
+        // we reorder the conditions to follow it.
+        cls.getEnclosingMethod == null && cls.getEnclosingClass != null
+    }
+  }
+
+  /**
    * Safer than Class obj's getSimpleName which may throw Malformed class name error in scala.
    * This method mimics scalatest's getSimpleNameOfAnObjectsClass.
    */
@@ -2970,6 +3046,9 @@ private[spark] object Utils extends Logging {
 
   /** Create a new properties object with the same values as `props` */
   def cloneProperties(props: Properties): Properties = {
+    if (props == null) {
+      return props
+    }
     val resultProps = new Properties()
     props.forEach((k, v) => resultProps.put(k, v))
     resultProps
@@ -3018,6 +3097,52 @@ private[spark] object Utils extends Logging {
     } else {
       0
     }
+  }
+
+  def executorTimeoutMs(conf: SparkConf): Long = {
+    // "spark.network.timeout" uses "seconds", while `spark.storage.blockManagerSlaveTimeoutMs` uses
+    // "milliseconds"
+    conf.get(config.STORAGE_BLOCKMANAGER_HEARTBEAT_TIMEOUT)
+      .getOrElse(Utils.timeStringAsMs(s"${conf.get(Network.NETWORK_TIMEOUT)}s"))
+  }
+
+  /** Returns a string message about delegation token generation failure */
+  def createFailedToGetTokenMessage(serviceName: String, e: scala.Throwable): String = {
+    val message = "Failed to get token from service %s due to %s. " +
+      "If %s is not used, set spark.security.credentials.%s.enabled to false."
+    message.format(serviceName, e, serviceName, serviceName)
+  }
+
+  /**
+   * Decompress a zip file into a local dir. File names are read from the zip file. Note, we skip
+   * addressing the directory here. Also, we rely on the caller side to address any exceptions.
+   */
+  def unzipFilesFromFile(fs: FileSystem, dfsZipFile: Path, localDir: File): Seq[File] = {
+    val files = new ArrayBuffer[File]()
+    val in = new ZipInputStream(fs.open(dfsZipFile))
+    var out: OutputStream = null
+    try {
+      var entry = in.getNextEntry()
+      while (entry != null) {
+        if (!entry.isDirectory) {
+          val fileName = localDir.toPath.resolve(entry.getName).getFileName.toString
+          val outFile = new File(localDir, fileName)
+          files += outFile
+          out = new FileOutputStream(outFile)
+          IOUtils.copy(in, out)
+          out.close()
+          in.closeEntry()
+        }
+        entry = in.getNextEntry()
+      }
+      in.close() // so that any error in closing does not get ignored
+      logInfo(s"Unzipped from $dfsZipFile\n\t${files.mkString("\n\t")}")
+    } finally {
+      // Close everything no matter what happened
+      IOUtils.closeQuietly(in)
+      IOUtils.closeQuietly(out)
+    }
+    files.toSeq
   }
 }
 

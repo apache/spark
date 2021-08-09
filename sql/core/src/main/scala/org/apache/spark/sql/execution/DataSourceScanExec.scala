@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.truncatedString
+import org.apache.spark.sql.connector.expressions.Aggregation
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -54,7 +55,7 @@ trait DataSourceScanExec extends LeafExecNode {
   // Metadata that describes more details of this scan.
   protected def metadata: Map[String, String]
 
-  protected val maxMetadataValueLength = sqlContext.sessionState.conf.maxMetadataStringLength
+  protected val maxMetadataValueLength = conf.maxMetadataStringLength
 
   override def simpleString(maxFields: Int): String = {
     val metadataEntries = metadata.toSeq.sorted.map {
@@ -86,7 +87,7 @@ trait DataSourceScanExec extends LeafExecNode {
    * Shorthand for calling redactString() without specifying redacting rules
    */
   protected def redact(text: String): String = {
-    Utils.redact(sqlContext.sessionState.conf.stringRedactionPattern, text)
+    Utils.redact(conf.stringRedactionPattern, text)
   }
 
   /**
@@ -102,6 +103,7 @@ case class RowDataSourceScanExec(
     requiredSchema: StructType,
     filters: Set[Filter],
     handledFilters: Set[Filter],
+    aggregation: Option[Aggregation],
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     tableIdentifier: Option[TableIdentifier])
@@ -129,12 +131,29 @@ case class RowDataSourceScanExec(
   override def inputRDD: RDD[InternalRow] = rdd
 
   override val metadata: Map[String, String] = {
-    val markedFilters = for (filter <- filters) yield {
-      if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
+
+    def seqToString(seq: Seq[Any]): String = seq.mkString("[", ", ", "]")
+
+    val (aggString, groupByString) = if (aggregation.nonEmpty) {
+      (seqToString(aggregation.get.aggregateExpressions),
+        seqToString(aggregation.get.groupByColumns))
+    } else {
+      ("[]", "[]")
     }
+
+    val markedFilters = if (filters.nonEmpty) {
+      for (filter <- filters) yield {
+        if (handledFilters.contains(filter)) s"*$filter" else s"$filter"
+      }
+    } else {
+      handledFilters
+    }
+
     Map(
       "ReadSchema" -> requiredSchema.catalogString,
-      "PushedFilters" -> markedFilters.mkString("[", ", ", "]"))
+      "PushedFilters" -> seqToString(markedFilters.toSeq),
+      "PushedAggregates" -> aggString,
+      "PushedGroupby" -> groupByString)
   }
 
   // Don't care about `rdd` and `tableIdentifier` when canonicalizing.
@@ -179,7 +198,7 @@ case class FileSourceScanExec(
 
   private lazy val needsUnsafeRowConversion: Boolean = {
     if (relation.fileFormat.isInstanceOf[ParquetSource]) {
-      sqlContext.conf.parquetVectorizedReaderEnabled
+      conf.parquetVectorizedReaderEnabled
     } else {
       false
     }
@@ -410,7 +429,7 @@ case class FileSourceScanExec(
       createBucketedReadRDD(relation.bucketSpec.get, readFile, dynamicallySelectedPartitions,
         relation)
     } else {
-      createNonBucketedReadRDD(readFile, dynamicallySelectedPartitions, relation)
+      createReadRDD(readFile, dynamicallySelectedPartitions, relation)
     }
     sendDriverMetrics()
     readRDD
@@ -518,7 +537,7 @@ case class FileSourceScanExec(
 
   /**
    * Create an RDD for bucketed reads.
-   * The non-bucketed variant of this function is [[createNonBucketedReadRDD]].
+   * The non-bucketed variant of this function is [[createReadRDD]].
    *
    * The algorithm is pretty simple: each RDD partition being returned should include all the files
    * with the same bucket id from all the given Hive partitions.
@@ -580,7 +599,7 @@ case class FileSourceScanExec(
    * @param selectedPartitions Hive-style partition that are part of the read.
    * @param fsRelation [[HadoopFsRelation]] associated with the read.
    */
-  private def createNonBucketedReadRDD(
+  private def createReadRDD(
       readFile: (PartitionedFile) => Iterator[InternalRow],
       selectedPartitions: Array[PartitionDirectory],
       fsRelation: HadoopFsRelation): RDD[InternalRow] = {
@@ -594,14 +613,8 @@ case class FileSourceScanExec(
     val bucketingEnabled = fsRelation.sparkSession.sessionState.conf.bucketingEnabled
     val shouldProcess: Path => Boolean = optionalBucketSet match {
       case Some(bucketSet) if bucketingEnabled =>
-        filePath => {
-          BucketingUtils.getBucketId(filePath.getName) match {
-            case Some(id) => bucketSet.get(id)
-            case None =>
-              // Do not prune the file if bucket file name is invalid
-              true
-          }
-        }
+        // Do not prune the file if bucket file name is invalid
+        filePath => BucketingUtils.getBucketId(filePath.getName).forall(bucketSet.get)
       case _ =>
         _ => true
     }

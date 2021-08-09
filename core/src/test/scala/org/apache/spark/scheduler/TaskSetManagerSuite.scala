@@ -1777,9 +1777,11 @@ class TaskSetManagerSuite
 
     val taskResourceAssignments = Map(GPU -> new ResourceInformation(GPU, Array("0", "1")))
     val taskOption =
-      manager.resourceOffer("exec1", "host1", NO_PREF, taskResourceAssignments)._1
+      manager.resourceOffer("exec1", "host1", NO_PREF, 2, taskResourceAssignments)._1
     assert(taskOption.isDefined)
+    val allocatedCpus = taskOption.get.cpus
     val allocatedResources = taskOption.get.resources
+    assert(allocatedCpus == 2)
     assert(allocatedResources.size == 1)
     assert(allocatedResources(GPU).addresses sameElements Array("0", "1"))
   }
@@ -2226,7 +2228,7 @@ class TaskSetManagerSuite
       numTasks = 2,
       numExecutorCores = 2,
       numCoresPerTask = 1,
-      Some("3000") // spark.speculation.min.threshold
+      Some("3000") // spark.speculation.minTaskRuntime
     )
     // Task duration can't be 0, advance 1 sec
     clock.advance(1000)

@@ -47,10 +47,13 @@ NULL
 #'               \item \code{to_date} and \code{to_timestamp}: it is the string to use to parse
 #'                    Column \code{x} to DateType or TimestampType.
 #'               \item \code{trunc}: it is the string to use to specify the truncation method.
-#'                    For example, "year", "yyyy", "yy" for truncate by year, or "month", "mon",
-#'                    "mm" for truncate by month.
+#'                    'year', 'yyyy', 'yy' to truncate by year,
+#'                    or 'month', 'mon', 'mm' to truncate by month
+#'                    Other options are: 'week', 'quarter'
 #'               \item \code{date_trunc}: it is similar with \code{trunc}'s but additionally
-#'                    supports "day", "dd", "second", "minute", "hour", "week" and "quarter".
+#'                    supports
+#'                    'day', 'dd' to truncate by day,
+#'                    'microsecond', 'millisecond', 'second', 'minute' and 'hour'
 #'               }
 #' @param ... additional argument(s).
 #' @name column_datetime_functions
@@ -258,11 +261,19 @@ NULL
 #'          \item \code{to_json}, \code{from_json} and \code{schema_of_json}: this contains
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the JSON data source.
+#'              You can find the JSON-specific options for reading/writing JSON files in
+#'              \url{
+#'              https://spark.apache.org/docs/latest/sql-data-sources-json.html#data-source-option}{
+#'              Data Source Option} in the version you use.
 #'          \item \code{to_json}: it supports the "pretty" option which enables pretty
 #'              JSON generation.
 #'          \item \code{to_csv}, \code{from_csv} and \code{schema_of_csv}: this contains
 #'              additional named properties to control how it is converted and accepts the
 #'              same options as the CSV data source.
+#'              You can find the CSV-specific options for reading/writing CSV files in
+#'              \url{
+#'              https://spark.apache.org/docs/latest/sql-data-sources-csv.html#data-source-option}{
+#'              Data Source Option} in the version you use.
 #'          \item \code{arrays_zip}, this contains additional Columns of arrays to be merged.
 #'          \item \code{map_concat}, this contains additional Columns of maps to be unioned.
 #'          }
@@ -1003,6 +1014,7 @@ setMethod("dayofmonth",
 #' @details
 #' \code{dayofweek}: Extracts the day of the week as an integer from a
 #' given date/timestamp/string.
+#' Ranges from 1 for a Sunday through to 7 for a Saturday
 #'
 #' @rdname column_datetime_functions
 #' @aliases dayofweek dayofweek,Column-method
@@ -1572,6 +1584,19 @@ setMethod("overlay",
 
     column(jc)
   })
+
+#' @details
+#' \code{product}: Returns the product of the values in a group.
+#'
+#' @rdname column_aggregate_functions
+#' @aliases product product,Column-method
+#' @note product since 3.2.0
+setMethod("product",
+          signature(x = "Column"),
+          function(x) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "product", x@jc)
+            column(jc)
+          })
 
 #' @details
 #' \code{quarter}: Extracts the quarter as an integer from a given date/timestamp/string.
@@ -2312,6 +2337,8 @@ setMethod("var_samp",
 
 #' @details
 #' \code{weekofyear}: Extracts the week number as an integer from a given date/timestamp/string.
+#' A week is considered to start on a Monday and week 1 is the first week with more than 3 days,
+#' as defined by ISO 8601
 #'
 #' @rdname column_datetime_functions
 #' @aliases weekofyear weekofyear,Column-method
@@ -3657,7 +3684,12 @@ unresolved_named_lambda_var <- function(...) {
     "org.apache.spark.sql.Column",
     newJObject(
       "org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable",
-      list(...)
+      lapply(list(...), function(x) {
+        handledCallJStatic(
+          "org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable",
+          "freshVarName",
+          x)
+      })
     )
   )
   column(jc)

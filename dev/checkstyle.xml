@@ -185,6 +185,9 @@
             <property name="format" value="throw new \w+Error\("/>
             <property name="message" value="Avoid throwing error in application code."/>
         </module>
-
+        <module name="RegexpSinglelineJava">
+            <property name="format" value="Objects\.toStringHelper"/>
+            <property name="message" value="Avoid using Object.toStringHelper. Use ToStringBuilder instead." />
+        </module>
     </module>
 </module>

@@ -28,7 +28,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.datasources.{FileMetaCacheManager, SQLHadoopMapReduceCommitProtocol}
+import org.apache.spark.sql.execution.datasources.{SchemaColumnConvertNotSupportedException, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
@@ -841,34 +841,62 @@ abstract class ParquetQuerySuite extends QueryTest with ParquetTest with SharedS
     testMigration(fromTsType = "TIMESTAMP_MICROS", toTsType = "INT96")
   }
 
-  test("SPARK-33449: simple select queries with file meta cache") {
-    withSQLConf(SQLConf.FILE_META_CACHE_PARQUET_ENABLED.key -> "true") {
-      val tableName = "parquet_use_meta_cache"
-      withTable(tableName) {
-        (0 until 10).map(i => (i, i.toString)).toDF("id", "value")
-          .write.saveAsTable(tableName)
-        try {
-          val statsBeforeQuery = FileMetaCacheManager.cacheStats
-          checkAnswer(sql(s"SELECT id FROM  $tableName where id > 5"),
-            (6 until 10).map(Row.apply(_)))
-          val statsAfterQuery1 = FileMetaCacheManager.cacheStats
-          // The 1st query triggers 4 times file meta read: 2 times related to
-          // push down filter and 2 times related to file read. The 1st query
-          // run twice: df.collect() and df.rdd.count(), so it triggers 8 times
-          // file meta read in total. missCount is 2 because cache is empty and
-          // 2 meta files need load, other 6 times will read meta from cache.
-          assert(statsAfterQuery1.missCount() - statsBeforeQuery.missCount() == 2)
-          assert(statsAfterQuery1.hitCount() - statsBeforeQuery.hitCount() == 6)
-          checkAnswer(sql(s"SELECT id FROM $tableName where id < 5"),
-            (0 until 5).map(Row.apply(_)))
-          val statsAfterQuery2 = FileMetaCacheManager.cacheStats
-          // The 2nd query also triggers 8 times file meta read in total and
-          // all read from meta cache, so missCount no growth and hitCount
-          // increase 8 times.
-          assert(statsAfterQuery2.missCount() - statsAfterQuery1.missCount() == 0)
-          assert(statsAfterQuery2.hitCount() - statsAfterQuery1.hitCount() == 8)
-        } finally {
-          FileMetaCacheManager.cleanUp()
+  test("SPARK-34212 Parquet should read decimals correctly") {
+    def readParquet(schema: String, path: File): DataFrame = {
+      spark.read.schema(schema).parquet(path.toString)
+    }
+
+    withTempPath { path =>
+      // a is int-decimal (4 bytes), b is long-decimal (8 bytes), c is binary-decimal (16 bytes)
+      val df = sql("SELECT 1.0 a, CAST(1.23 AS DECIMAL(17, 2)) b, CAST(1.23 AS DECIMAL(36, 2)) c")
+      df.write.parquet(path.toString)
+
+      withAllParquetReaders {
+        // We can read the decimal parquet field with a larger precision, if scale is the same.
+        val schema = "a DECIMAL(9, 1), b DECIMAL(18, 2), c DECIMAL(38, 2)"
+        checkAnswer(readParquet(schema, path), df)
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        val schema1 = "a DECIMAL(3, 2), b DECIMAL(18, 3), c DECIMAL(37, 3)"
+        checkAnswer(readParquet(schema1, path), df)
+        val schema2 = "a DECIMAL(3, 0), b DECIMAL(18, 1), c DECIMAL(37, 1)"
+        checkAnswer(readParquet(schema2, path), Row(1, 1.2, 1.2))
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        Seq("a DECIMAL(3, 2)", "b DECIMAL(18, 1)", "c DECIMAL(37, 1)").foreach { schema =>
+          val e = intercept[SparkException] {
+            readParquet(schema, path).collect()
+          }.getCause.getCause
+          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
+        }
+      }
+    }
+
+    // tests for parquet types without decimal metadata.
+    withTempPath { path =>
+      val df = sql(s"SELECT 1 a, 123456 b, ${Int.MaxValue.toLong * 10} c, CAST('1.2' AS BINARY) d")
+      df.write.parquet(path.toString)
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        checkAnswer(readParquet("a DECIMAL(3, 2)", path), sql("SELECT 1.00"))
+        checkAnswer(readParquet("b DECIMAL(3, 2)", path), Row(null))
+        checkAnswer(readParquet("b DECIMAL(11, 1)", path), sql("SELECT 123456.0"))
+        checkAnswer(readParquet("c DECIMAL(11, 1)", path), Row(null))
+        checkAnswer(readParquet("c DECIMAL(13, 0)", path), df.select("c"))
+        val e = intercept[SparkException] {
+          readParquet("d DECIMAL(3, 2)", path).collect()
+        }.getCause
+        assert(e.getMessage.contains("Please read this column/field as Spark BINARY type"))
+      }
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        Seq("a DECIMAL(3, 2)", "c DECIMAL(18, 1)", "d DECIMAL(37, 1)").foreach { schema =>
+          val e = intercept[SparkException] {
+            readParquet(schema, path).collect()
+          }.getCause.getCause
+          assert(e.isInstanceOf[SchemaColumnConvertNotSupportedException])
         }
       }
     }

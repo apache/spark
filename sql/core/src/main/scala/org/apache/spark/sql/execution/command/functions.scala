@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import java.util.Locale
 
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
@@ -55,23 +55,20 @@ case class CreateFunctionCommand(
     isTemp: Boolean,
     ignoreIfExists: Boolean,
     replace: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   if (ignoreIfExists && replace) {
-    throw new AnalysisException("CREATE FUNCTION with both IF NOT EXISTS and REPLACE" +
-      " is not allowed.")
+    throw QueryCompilationErrors.createFuncWithBothIfNotExistsAndReplaceError()
   }
 
   // Disallow to define a temporary function with `IF NOT EXISTS`
   if (ignoreIfExists && isTemp) {
-    throw new AnalysisException(
-      "It is not allowed to define a TEMPORARY function with IF NOT EXISTS.")
+    throw QueryCompilationErrors.defineTempFuncWithIfNotExistsError()
   }
 
   // Temporary function names should not contain database prefix like "database.function"
   if (databaseName.isDefined && isTemp) {
-    throw new AnalysisException(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
-      s"is not allowed: '${databaseName.get}'")
+    throw QueryCompilationErrors.specifyingDBInCreateTempFuncError(databaseName.get)
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
@@ -112,7 +109,7 @@ case class CreateFunctionCommand(
  */
 case class DescribeFunctionCommand(
     functionName: FunctionIdentifier,
-    isExtended: Boolean) extends RunnableCommand {
+    isExtended: Boolean) extends LeafRunnableCommand {
 
   override val output: Seq[Attribute] = {
     val schema = StructType(StructField("function_desc", StringType, nullable = false) :: Nil)
@@ -120,7 +117,8 @@ case class DescribeFunctionCommand(
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
+    // Hard code "<>", "!=", "between", "case", and "||"
+    // for now as there is no corresponding functions.
     functionName.funcName.toLowerCase(Locale.ROOT) match {
       case "<>" =>
         Row(s"Function: $functionName") ::
@@ -140,6 +138,9 @@ case class DescribeFunctionCommand(
             "[WHEN expr4 THEN expr5]* [ELSE expr6] END - " +
             "When `expr1` = `expr2`, returns `expr3`; " +
             "when `expr1` = `expr4`, return `expr5`; else return `expr6`.") :: Nil
+      case "||" =>
+        Row("Function: ||") ::
+          Row("Usage: expr1 || expr2 - Returns the concatenation of `expr1` and `expr2`.") :: Nil
       case _ =>
         try {
           val info = sparkSession.sessionState.catalog.lookupFunctionInfo(functionName)
@@ -173,17 +174,16 @@ case class DropFunctionCommand(
     functionName: String,
     ifExists: Boolean,
     isTemp: Boolean)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
       if (databaseName.isDefined) {
-        throw new AnalysisException(s"Specifying a database in DROP TEMPORARY FUNCTION " +
-          s"is not allowed: '${databaseName.get}'")
+        throw QueryCompilationErrors.specifyingDBInDropTempFuncError(databaseName.get)
       }
       if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName))) {
-        throw new AnalysisException(s"Cannot drop native function '$functionName'")
+        throw QueryCompilationErrors.cannotDropNativeFuncError(functionName)
       }
       catalog.dropTempFunction(functionName, ifExists)
     } else {
@@ -212,7 +212,7 @@ case class ShowFunctionsCommand(
     pattern: Option[String],
     showUserFunctions: Boolean,
     showSystemFunctions: Boolean,
-    override val output: Seq[Attribute]) extends RunnableCommand {
+    override val output: Seq[Attribute]) extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val dbName = db.getOrElse(sparkSession.sessionState.catalog.getCurrentDatabase)
@@ -225,8 +225,10 @@ case class ShowFunctionsCommand(
           case (f, "USER") if showUserFunctions => f.unquotedString
           case (f, "SYSTEM") if showSystemFunctions => f.unquotedString
         }
-    // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
-    // "<>", "!=", "between", and "case" is SystemFunctions, only show when showSystemFunctions=true
+    // Hard code "<>", "!=", "between", "case", and "||"
+    // for now as there is no corresponding functions.
+    // "<>", "!=", "between", "case", and "||" is SystemFunctions,
+    // only show when showSystemFunctions=true
     if (showSystemFunctions) {
       (functionNames ++
         StringUtils.filterPattern(FunctionsCommand.virtualOperators, pattern.getOrElse("*")))
@@ -249,15 +251,15 @@ case class ShowFunctionsCommand(
 case class RefreshFunctionCommand(
     databaseName: Option[String],
     functionName: String)
-  extends RunnableCommand {
+  extends LeafRunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (FunctionRegistry.builtin.functionExists(FunctionIdentifier(functionName, databaseName))) {
-      throw new AnalysisException(s"Cannot refresh built-in function $functionName")
+      throw QueryCompilationErrors.cannotRefreshBuiltInFuncError(functionName)
     }
     if (catalog.isTemporaryFunction(FunctionIdentifier(functionName, databaseName))) {
-      throw new AnalysisException(s"Cannot refresh temporary function $functionName")
+      throw QueryCompilationErrors.cannotRefreshTempFuncError(functionName)
     }
 
     val identifier = FunctionIdentifier(
@@ -270,7 +272,7 @@ case class RefreshFunctionCommand(
     } else {
       // clear cached function and throw exception
       catalog.unregisterFunction(identifier)
-      throw new NoSuchFunctionException(identifier.database.get, identifier.funcName)
+      throw QueryCompilationErrors.noSuchFunctionError(identifier)
     }
 
     Seq.empty[Row]
@@ -280,5 +282,5 @@ case class RefreshFunctionCommand(
 object FunctionsCommand {
   // operators that do not have corresponding functions.
   // They should be handled `DescribeFunctionCommand`, `ShowFunctionsCommand`
-  val virtualOperators = Seq("!=", "<>", "between", "case")
+  val virtualOperators = Seq("!=", "<>", "between", "case", "||")
 }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import java.io.IOException
 import java.net.URI
 
 import scala.collection.JavaConverters._
@@ -26,6 +25,7 @@ import scala.util.{Failure, Try}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.mapred.FileSplit
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.parquet.filter2.compat.FilterCompat
@@ -36,7 +36,7 @@ import org.apache.parquet.hadoop.ParquetOutputFormat.JobSummaryLevel
 import org.apache.parquet.hadoop.codec.CodecConfig
 import org.apache.parquet.hadoop.util.ContextUtil
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.TaskContext
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.SQLConf
@@ -227,10 +228,6 @@ class ParquetFileFormat
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
 
-    hadoopConf.setBoolean(
-      SQLConf.FILE_META_CACHE_PARQUET_ENABLED.key,
-      sparkSession.sessionState.conf.fileMetaCacheParquetEnabled)
-
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
@@ -263,30 +260,27 @@ class ParquetFileFormat
       assert(file.partitionValues.numFields == partitionSchema.size)
 
       val filePath = new Path(new URI(file.filePath))
-      val split =
-        new org.apache.parquet.hadoop.ParquetInputSplit(
-          filePath,
-          file.start,
-          file.start + file.length,
-          file.length,
-          Array.empty,
-          null)
+      val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
 
       val sharedConf = broadcastedHadoopConf.value.value
-      val metaCacheEnabled =
-        sharedConf.getBoolean(SQLConf.FILE_META_CACHE_PARQUET_ENABLED.key, false)
 
-      lazy val footerFileMetaData = if (metaCacheEnabled) {
-        FileMetaCacheManager.get(ParquetFileMetaKey(filePath, sharedConf))
-          .asInstanceOf[ParquetFileMeta].footer.getFileMetaData
-      } else {
-        ParquetFileReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
-      }
+      lazy val footerFileMetaData =
+        ParquetFooterReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
+      val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
+        footerFileMetaData.getKeyValueMetaData.get,
+        datetimeRebaseModeInRead)
       // Try to push down filters when filter push-down is enabled.
       val pushed = if (enableParquetFilterPushDown) {
         val parquetSchema = footerFileMetaData.getSchema
-        val parquetFilters = new ParquetFilters(parquetSchema, pushDownDate, pushDownTimestamp,
-          pushDownDecimal, pushDownStringStartWith, pushDownInFilterThreshold, isCaseSensitive)
+        val parquetFilters = new ParquetFilters(
+          parquetSchema,
+          pushDownDate,
+          pushDownTimestamp,
+          pushDownDecimal,
+          pushDownStringStartWith,
+          pushDownInFilterThreshold,
+          isCaseSensitive,
+          datetimeRebaseMode)
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
@@ -312,9 +306,6 @@ class ParquetFileFormat
           None
         }
 
-      val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
-        footerFileMetaData.getKeyValueMetaData.get,
-        datetimeRebaseModeInRead)
       val int96RebaseMode = DataSourceUtils.int96RebaseMode(
         footerFileMetaData.getKeyValueMetaData.get,
         int96RebaseModeInRead)
@@ -336,13 +327,6 @@ class ParquetFileFormat
           int96RebaseMode.toString,
           enableOffHeapColumnVector && taskContext.isDefined,
           capacity)
-        // Set footer before initialize.
-        if (metaCacheEnabled) {
-          val fileMeta = FileMetaCacheManager
-            .get(ParquetFileMetaKey(filePath, sharedConf))
-            .asInstanceOf[ParquetFileMeta]
-          vectorizedReader.setCachedFooter(fileMeta.footer)
-        }
         val iter = new RecordReaderIterator(vectorizedReader)
         // SPARK-23457 Register a task completion listener before `initialization`.
         taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
@@ -389,6 +373,8 @@ class ParquetFileFormat
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
+    case _: DayTimeIntervalType | _: YearMonthIntervalType => false
+
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
@@ -401,6 +387,10 @@ class ParquetFileFormat
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
 
     case _ => false
+  }
+
+  override def supportFieldName(name: String): Boolean = {
+    !name.matches(".*[ ,;{}()\n\t=].*")
   }
 }
 
@@ -453,7 +443,7 @@ object ParquetFileFormat extends Logging {
 
     finalSchemas.reduceOption { (left, right) =>
       try left.merge(right) catch { case e: Throwable =>
-        throw new SparkException(s"Failed to merge incompatible schemas $left and $right", e)
+        throw QueryExecutionErrors.failedToMergeIncompatibleSchemasError(left, right, e)
       }
     }
   }
@@ -473,14 +463,14 @@ object ParquetFileFormat extends Logging {
         // ParquetFileReader.readFooter throws RuntimeException, instead of IOException,
         // when it can't read the footer.
         Some(new Footer(currentFile.getPath(),
-          ParquetFileReader.readFooter(
+          ParquetFooterReader.readFooter(
             conf, currentFile, SKIP_ROW_GROUPS)))
       } catch { case e: RuntimeException =>
         if (ignoreCorruptFiles) {
           logWarning(s"Skipped the footer in the corrupted file: $currentFile", e)
           None
         } else {
-          throw new IOException(s"Could not read footer for file: $currentFile", e)
+          throw QueryExecutionErrors.cannotReadFooterForFileError(currentFile, e)
         }
       }
     }.flatten

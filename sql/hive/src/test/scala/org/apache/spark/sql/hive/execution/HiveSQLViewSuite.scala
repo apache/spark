@@ -19,8 +19,9 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType, HiveTableRelation}
 import org.apache.spark.sql.execution.SQLViewSuite
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types.{NullType, StructType}
 
@@ -48,10 +49,10 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
               s"""
                  |CREATE $viewMode view1
                  |AS SELECT
-                 |$permanentFuncName(str),
-                 |$builtInFuncNameInLowerCase(id),
-                 |$builtInFuncNameInMixedCase(id) as aBs,
-                 |$hiveFuncName(id, 5) over()
+                 |$permanentFuncName(str) as myUpper,
+                 |$builtInFuncNameInLowerCase(id) as abs_lower,
+                 |$builtInFuncNameInMixedCase(id) as abs_mixed,
+                 |$hiveFuncName(id, 5) over() as func
                  |FROM tab1
                """.stripMargin)
             checkAnswer(sql("select count(*) FROM view1"), Row(10))
@@ -155,6 +156,27 @@ class HiveSQLViewSuite extends SQLViewSuite with TestHiveSingleton {
         df2,
         Row(null, 1)
       )
+    }
+  }
+
+  test("SPARK-35792: ignore optimization configs used in RelationConversions") {
+    withTable("t_orc") {
+      withView("v_orc") {
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+          spark.sql("create table t_orc stored as orc as select 1 as a, 2 as b")
+          spark.sql("create view v_orc as select * from t_orc")
+        }
+        withSQLConf(HiveUtils.CONVERT_METASTORE_ORC.key -> "false") {
+          val relationInTable = sql("select * from t_orc").queryExecution.analyzed.collect {
+            case r: HiveTableRelation => r
+          }.headOption
+          val relationInView = sql("select * from v_orc").queryExecution.analyzed.collect {
+            case r: HiveTableRelation => r
+          }.headOption
+          assert(relationInTable.isDefined)
+          assert(relationInView.isDefined)
+        }
+      }
     }
   }
 }

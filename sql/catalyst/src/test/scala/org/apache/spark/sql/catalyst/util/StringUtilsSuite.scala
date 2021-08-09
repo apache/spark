@@ -128,4 +128,14 @@ class StringUtilsSuite extends SparkFunSuite with SQLHelper {
       assert(concat.toString === "plan fragment 0plan fragment 1... 15 more characters")
     }
   }
+
+  test("SPARK-34872: quoteIfNeeded should quote a string which contains non-word characters") {
+    assert(quoteIfNeeded("a b") === "`a b`")
+    assert(quoteIfNeeded("a*b") === "`a*b`")
+    assert(quoteIfNeeded("123") === "`123`")
+    assert(quoteIfNeeded("1a") === "1a")
+    assert(quoteIfNeeded("_ab_") === "_ab_")
+    assert(quoteIfNeeded("_") === "_")
+    assert(quoteIfNeeded("") === "``")
+  }
 }

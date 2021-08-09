@@ -210,4 +210,15 @@ trait AlterTableRenamePartitionSuiteBase extends QueryTest with DDLCommandTestUt
       }
     }
   }
+
+  test("SPARK-33474: Support typed literals as partition spec values") {
+    withNamespaceAndTable("ns", "tbl") { t =>
+      sql(s"CREATE TABLE $t(name STRING, part DATE) USING PARQUET PARTITIONED BY (part)")
+      sql(s"ALTER TABLE $t ADD PARTITION(part = date'2020-01-01')")
+      checkPartitions(t, Map("part" -> "2020-01-01"))
+      sql(s"ALTER TABLE $t PARTITION (part = date'2020-01-01')" +
+        s" RENAME TO PARTITION (part = date'2020-01-02')")
+      checkPartitions(t, Map("part" -> "2020-01-02"))
+    }
+  }
 }

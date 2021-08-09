@@ -184,7 +184,8 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
           missingCol.setIsConstant();
           orcVectorWrappers[i] = missingCol;
         } else {
-          orcVectorWrappers[i] = new OrcColumnVector(dt, wrap.batch().cols[colId]);
+          orcVectorWrappers[i] = OrcColumnVectorUtils.toOrcColumnVector(
+            dt, wrap.batch().cols[colId]);
         }
       }
     }

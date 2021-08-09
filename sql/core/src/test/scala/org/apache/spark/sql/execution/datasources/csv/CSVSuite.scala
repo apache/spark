@@ -34,7 +34,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
-import org.apache.spark.sql.{AnalysisException, Column, DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Encoders, QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
 import org.apache.spark.sql.internal.SQLConf
@@ -2409,7 +2409,7 @@ abstract class CSVSuite
             val errorMsg = intercept[AnalysisException] {
               readback.filter($"AAA" === 2 && $"bbb" === 3).collect()
             }.getMessage
-            assert(errorMsg.contains("cannot resolve '`AAA`'"))
+            assert(errorMsg.contains("cannot resolve 'AAA'"))
           }
         }
       }
@@ -2450,6 +2450,37 @@ abstract class CSVSuite
         .csv(dataPath).collect()
       val exceptResults = Array(row1, row2)
       assert(result.sameElements(exceptResults))
+    }
+  }
+
+  test("SPARK-34768: counting a long record with ignoreTrailingWhiteSpace set to true") {
+    val bufSize = 128
+    val line = "X" * (bufSize - 1) + "| |"
+    withTempPath { path =>
+      Seq(line).toDF.write.text(path.getAbsolutePath)
+      assert(spark.read.format("csv")
+        .option("delimiter", "|")
+        .option("ignoreTrailingWhiteSpace", "true").load(path.getAbsolutePath).count() == 1)
+    }
+  }
+
+  test("SPARK-35912: turn non-nullable schema into a nullable schema") {
+    val inputCSVString = """1,"""
+
+    val schema = StructType(Seq(
+      StructField("c1", IntegerType, nullable = false),
+      StructField("c2", IntegerType, nullable = false)))
+    val expected = schema.asNullable
+
+    Seq("DROPMALFORMED", "FAILFAST", "PERMISSIVE").foreach { mode =>
+      val csv = spark.createDataset(
+        spark.sparkContext.parallelize(inputCSVString:: Nil))(Encoders.STRING)
+      val df = spark.read
+        .option("mode", mode)
+        .schema(schema)
+        .csv(csv)
+      assert(df.schema == expected)
+      checkAnswer(df, Row(1, null) :: Nil)
     }
   }
 }

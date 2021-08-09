@@ -23,7 +23,7 @@ import time
 import unittest
 
 from pyspark import SparkConf, SparkContext, TaskContext, BarrierTaskContext
-from pyspark.testing.utils import PySparkTestCase, SPARK_HOME
+from pyspark.testing.utils import PySparkTestCase, SPARK_HOME, eventually
 
 
 class TaskContextTests(PySparkTestCase):
@@ -79,7 +79,7 @@ class TaskContextTests(PySparkTestCase):
             partition_id = tc.partitionId()
             attempt_id = tc.taskAttemptId()
             if attempt_number == 0 and partition_id == 0:
-                raise Exception("Failing on first attempt")
+                raise RuntimeError("Failing on first attempt")
             else:
                 return [x, partition_id, attempt_number, attempt_id]
         result = rdd.map(fail_on_first).collect()
@@ -244,7 +244,7 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         for pid in pids:
             self.assertTrue(pid in worker_pids)
 
-    def test_task_context_correct_with_python_worker_reuse(self):
+    def check_task_context_correct_with_python_worker_reuse(self):
         """Verify the task context correct when reused python worker"""
         # start a normal job first to start all workers and get all worker pids
         worker_pids = self.sc.parallelize(range(2), 2).map(lambda x: os.getpid()).collect()
@@ -263,7 +263,6 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         # normal stage after normal stage
         normal_result = rdd.mapPartitions(context).collect()
         tps, bps, pids = zip(*normal_result)
-        print(tps)
         self.assertTrue(tps == (0, 1))
         self.assertTrue(bps == (-1, -1))
         for pid in pids:
@@ -282,6 +281,14 @@ class TaskContextTestsWithWorkerReuse(unittest.TestCase):
         self.assertTrue(bps == (-1, -1))
         for pid in pids:
             self.assertTrue(pid in worker_pids)
+        return True
+
+    def test_task_context_correct_with_python_worker_reuse(self):
+        # Retrying the check as the PIDs from Python workers might be different even
+        # when reusing Python workers is enabled if a Python worker is dead for some reasons
+        # (e.g., socket connection failure) and new Python worker is created.
+        eventually(
+            self.check_task_context_correct_with_python_worker_reuse, catch_assertions=True)
 
     def tearDown(self):
         self.sc.stop()
@@ -302,9 +309,16 @@ class TaskContextTestsWithResources(unittest.TestCase):
         conf = SparkConf().set("spark.test.home", SPARK_HOME)
         conf = conf.set("spark.worker.resource.gpu.discoveryScript", self.tempFile.name)
         conf = conf.set("spark.worker.resource.gpu.amount", 1)
+        conf = conf.set("spark.task.cpus", 2)
         conf = conf.set("spark.task.resource.gpu.amount", "1")
         conf = conf.set("spark.executor.resource.gpu.amount", "1")
-        self.sc = SparkContext('local-cluster[2,1,1024]', class_name, conf=conf)
+        self.sc = SparkContext('local-cluster[2,2,1024]', class_name, conf=conf)
+
+    def test_cpus(self):
+        """Test the cpus are available."""
+        rdd = self.sc.parallelize(range(10))
+        cpus = rdd.map(lambda x: TaskContext.get().cpus()).take(1)[0]
+        self.assertEqual(cpus, 2)
 
     def test_resources(self):
         """Test the resources are available."""

@@ -26,6 +26,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -110,7 +111,7 @@ trait FileFormat {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
-    throw new UnsupportedOperationException(s"buildReader is not supported for $this")
+    throw QueryExecutionErrors.buildReaderUnsupportedForFileFormatError(this.toString)
   }
 
   /**
@@ -162,6 +163,12 @@ trait FileFormat {
    * By default all data types are supported.
    */
   def supportDataType(dataType: DataType): Boolean = true
+
+  /**
+   * Returns whether this format supports the given filed name in read/write path.
+   * By default all field name is supported.
+   */
+  def supportFieldName(name: String): Boolean = true
 }
 
 /**

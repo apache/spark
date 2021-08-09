@@ -18,11 +18,12 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.util.concurrent.TimeUnit
 
-import com.google.common.cache.CacheBuilder
-import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
-import io.fabric8.kubernetes.client.KubernetesClient
 import scala.collection.JavaConverters._
 import scala.collection.mutable
+
+import com.github.benmanes.caffeine.cache.Caffeine
+import io.fabric8.kubernetes.api.model.{Pod, PodBuilder}
+import io.fabric8.kubernetes.client.KubernetesClient
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.k8s.Config._
@@ -47,7 +48,7 @@ private[spark] class ExecutorPodsLifecycleManager(
   // to avoid doing so. Expire cache entries so that this data structure doesn't grow beyond
   // bounds.
   private lazy val removedExecutorsCache =
-    CacheBuilder.newBuilder()
+    Caffeine.newBuilder()
       .expireAfterWrite(3, TimeUnit.MINUTES)
       .build[java.lang.Long, java.lang.Long]()
 
@@ -221,10 +222,17 @@ private[spark] class ExecutorPodsLifecycleManager(
     val pod = podState.pod
     val reason = Option(pod.getStatus.getReason)
     val message = Option(pod.getStatus.getMessage)
+    val explained = describeExitCode(exitCode)
+    val exitMsg = s"The executor with id $execId exited with exit code $explained."
+    val reasonStr = reason.map(r => s"The API gave the following brief reason: ${r}")
+    val msgStr = message.map(m => s"The API gave the following message: ${m}")
+
+
     s"""
-       |The executor with id $execId exited with exit code $exitCode.
-       |The API gave the following brief reason: ${reason.getOrElse("N/A")}
-       |The API gave the following message: ${message.getOrElse("N/A")}
+       |${exitMsg}
+       |${reasonStr.getOrElse("")}
+       |${msgStr.getOrElse("")}
+       |
        |The API gave the following container statuses:
        |
        |${containersDescription(pod)}
@@ -246,4 +254,25 @@ private[spark] class ExecutorPodsLifecycleManager(
 
 private object ExecutorPodsLifecycleManager {
   val UNKNOWN_EXIT_CODE = -1
+
+  // A utility function to try and help people figure out whats gone wrong faster.
+  def describeExitCode(code: Int): String = {
+    val humanStr = code match {
+      case 0 => "(success)"
+      case 1 => "(generic, look at logs to clarify)"
+      case 42 => "(Douglas Adams fan)"
+      // Spark specific
+      case 10 | 50 => "(Uncaught exception)"
+      case 52 => "(JVM OOM)"
+      case 53 => "(DiskStore failed to create temp dir)"
+      // K8s & JVM specific exit codes
+      case 126 => "(not executable - possibly perm or arch)"
+      case 137 => "(SIGKILL, possible container OOM)"
+      case 139 => "(SIGSEGV: that's unexpected)"
+      case 255 => "(exit-1, your guess is as good as mine)"
+      case _ => "(unexpected)"
+    }
+    s"${code}${humanStr}"
+  }
+
 }

@@ -55,9 +55,8 @@ case class OverwriteByExpressionExecV1(
     write: V1Write) extends V1FallbackWriters
 
 /** Some helper interfaces that use V2 write semantics through the V1 writer interface. */
-sealed trait V1FallbackWriters extends V2CommandExec with SupportsV1Write {
+sealed trait V1FallbackWriters extends LeafV2CommandExec with SupportsV1Write {
   override def output: Seq[Attribute] = Nil
-  override final def children: Seq[SparkPlan] = Nil
 
   def table: SupportsWrite
   def refreshCache: () => Unit
@@ -77,7 +76,7 @@ trait SupportsV1Write extends SparkPlan {
   def plan: LogicalPlan
 
   protected def writeWithV1(relation: InsertableRelation): Seq[InternalRow] = {
-    relation.insert(Dataset.ofRows(sqlContext.sparkSession, plan), overwrite = false)
+    relation.insert(Dataset.ofRows(session, plan), overwrite = false)
     Nil
   }
 }

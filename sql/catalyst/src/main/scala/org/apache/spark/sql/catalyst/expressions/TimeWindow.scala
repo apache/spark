@@ -17,15 +17,15 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodeGenerator, ExprCode}
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.TreePattern.{TIME_WINDOW, TreePattern}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.catalyst.util.IntervalUtils
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
 
 case class TimeWindow(
     timeColumn: Expression,
@@ -59,11 +59,12 @@ case class TimeWindow(
   }
 
   override def child: Expression = timeColumn
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampType)
   override def dataType: DataType = new StructType()
-    .add(StructField("start", TimestampType))
-    .add(StructField("end", TimestampType))
+    .add(StructField("start", child.dataType))
+    .add(StructField("end", child.dataType))
   override def prettyName: String = "window"
+  final override val nodePatterns: Seq[TreePattern] = Seq(TIME_WINDOW)
 
   // This expression is replaced in the analyzer.
   override lazy val resolved = false
@@ -92,6 +93,9 @@ case class TimeWindow(
     }
     dataTypeCheck
   }
+
+  override protected def withNewChildInternal(newChild: Expression): TimeWindow =
+    copy(timeColumn = newChild)
 }
 
 object TimeWindow {
@@ -104,25 +108,24 @@ object TimeWindow {
    * @return The interval duration in microseconds. SparkSQL casts TimestampType has microsecond
    *         precision.
    */
-  private def getIntervalInMicroSeconds(interval: String): Long = {
-    val cal = IntervalUtils.stringToInterval(UTF8String.fromString(interval))
+  def getIntervalInMicroSeconds(interval: String): Long = {
+    val cal = IntervalUtils.fromIntervalString(interval)
     if (cal.months != 0) {
       throw new IllegalArgumentException(
         s"Intervals greater than a month is not supported ($interval).")
     }
-    cal.days * MICROS_PER_DAY + cal.microseconds
+    Math.addExact(Math.multiplyExact(cal.days, MICROS_PER_DAY), cal.microseconds)
   }
 
   /**
    * Parses the duration expression to generate the long value for the original constructor so
    * that we can use `window` in SQL.
    */
-  private def parseExpression(expr: Expression): Long = expr match {
+  def parseExpression(expr: Expression): Long = expr match {
     case NonNullLiteral(s, StringType) => getIntervalInMicroSeconds(s.toString)
     case IntegerLiteral(i) => i.toLong
     case NonNullLiteral(l, LongType) => l.toString.toLong
-    case _ => throw new AnalysisException("The duration and time inputs to window must be " +
-      "an integer, long or string literal.")
+    case _ => throw QueryCompilationErrors.invalidLiteralForWindowDurationError()
   }
 
   def apply(
@@ -155,4 +158,7 @@ case class PreciseTimestampConversion(
        """.stripMargin)
   }
   override def nullSafeEval(input: Any): Any = input
+
+  override protected def withNewChildInternal(newChild: Expression): PreciseTimestampConversion =
+    copy(child = newChild)
 }

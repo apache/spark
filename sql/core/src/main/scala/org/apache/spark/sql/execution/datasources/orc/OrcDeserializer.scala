@@ -23,6 +23,7 @@ import org.apache.orc.mapred.{OrcList, OrcMap, OrcStruct, OrcTimestamp}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -189,7 +190,7 @@ class OrcDeserializer(
       case udt: UserDefinedType[_] => newWriter(udt.sqlType, updater)
 
       case _ =>
-        throw new UnsupportedOperationException(s"$dataType is not supported yet.")
+        throw QueryExecutionErrors.dataTypeUnsupportedYetError(dataType)
     }
 
   private def createArrayData(elementType: DataType, length: Int): ArrayData = elementType match {

@@ -17,9 +17,9 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.{File, IOException}
+import java.io.IOException
 import java.lang.reflect.{InvocationTargetException, Modifier}
-import java.net.{URI, URL, URLEncoder}
+import java.net.{URI, URLEncoder}
 import java.security.PrivilegedExceptionAction
 import java.util.concurrent.{TimeoutException, TimeUnit}
 
@@ -50,6 +50,7 @@ import org.apache.spark.internal.config.UI._
 import org.apache.spark.metrics.{MetricsSystem, MetricsSystemInstances}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.rpc._
+import org.apache.spark.scheduler.MiscellaneousProcessDetails
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, YarnSchedulerBackend}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util._
@@ -65,6 +66,11 @@ private[spark] class ApplicationMaster(
   // TODO: Currently, task to container is computed once (TaskSetManager) - which need not be
   // optimal as more containers are available. Might need to handle this better.
 
+  private def extractLogUrls: Map[String, String] = {
+    YarnContainerInfoHelper.getLogUrls(SparkHadoopUtil.
+      newConfiguration(sparkConf), None).getOrElse(Map())
+  }
+
   private val appAttemptId =
     if (System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name()) != null) {
       YarnSparkHadoopUtil.getContainerId.getApplicationAttemptId()
@@ -79,10 +85,7 @@ private[spark] class ApplicationMaster(
   private var metricsSystem: Option[MetricsSystem] = None
 
   private val userClassLoader = {
-    val classpath = Client.getUserClasspath(sparkConf)
-    val urls = classpath.map { entry =>
-      new URL("file:" + new File(entry.getPath()).getAbsolutePath())
-    }
+    val urls = Client.getUserClasspathUrls(sparkConf, isClusterMode)
 
     if (isClusterMode) {
       if (Client.isUserClassPathFirst(sparkConf, isDriver = true)) {
@@ -776,6 +779,15 @@ private[spark] class ApplicationMaster(
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
+      // if deployment mode for yarn Application is client
+      // then send the AM Log Info to spark driver
+      if (!isClusterMode) {
+        val hostPort = YarnContainerInfoHelper.getNodeManagerHttpAddress(None)
+        val yarnAMID = "yarn-am"
+        val info = new MiscellaneousProcessDetails(hostPort,
+          sparkConf.get(AM_CORES), extractLogUrls)
+        driver.send(MiscellaneousProcessAdded(System.currentTimeMillis(), yarnAMID, info))
+      }
     }
 
     override def receive: PartialFunction[Any, Unit] = {

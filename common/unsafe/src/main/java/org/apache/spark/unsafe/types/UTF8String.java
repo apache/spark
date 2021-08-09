@@ -29,7 +29,6 @@ import com.esotericsoftware.kryo.Kryo;
 import com.esotericsoftware.kryo.KryoSerializable;
 import com.esotericsoftware.kryo.io.Input;
 import com.esotericsoftware.kryo.io.Output;
-import com.google.common.primitives.Ints;
 
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.UTF8StringBuilder;
@@ -484,7 +483,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   private UTF8String toTitleCaseSlow() {
-    StringBuffer sb = new StringBuffer();
+    StringBuilder sb = new StringBuilder();
     String s = toString();
     sb.append(s);
     sb.setCharAt(0, Character.toTitleCase(sb.charAt(0)));
@@ -563,10 +562,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   /**
-   * Trims whitespaces ({@literal <=} ASCII 32) from both ends of this string.
+   * Trims whitespace ASCII characters from both ends of this string.
    *
-   * Note that, this method is the same as java's {@link String#trim}, and different from
-   * {@link UTF8String#trim()} which remove only spaces(= ASCII 32) from both ends.
+   * Note that, this method is different from {@link UTF8String#trim()} which removes
+   * only spaces(= ASCII 32) from both ends.
    *
    * @return A UTF8String whose value is this UTF8String, with any leading and trailing white
    * space removed, or this UTF8String if it has no leading or trailing whitespace.
@@ -574,13 +573,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    */
   public UTF8String trimAll() {
     int s = 0;
-    // skip all of the whitespaces (<=0x20) in the left side
+    // skip all of the whitespaces in the left side
     while (s < this.numBytes && Character.isWhitespace(getByte(s))) s++;
     if (s == this.numBytes) {
       // Everything trimmed
       return EMPTY_UTF8;
     }
-    // skip all of the whitespaces (<=0x20) in the right side
+    // skip all of the whitespaces in the right side
     int e = this.numBytes - 1;
     while (e > s && Character.isWhitespace(getByte(e))) e--;
     if (s == 0 && e == numBytes - 1) {
@@ -764,7 +763,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
 
-    byte[] newBytes = new byte[numBytes * times];
+    byte[] newBytes = new byte[Math.multiplyExact(numBytes, times)];
     copyMemory(this.base, this.offset, newBytes, BYTE_ARRAY_OFFSET, numBytes);
 
     int copied = 1;
@@ -907,7 +906,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       // the partial string of the padding
       UTF8String remain = pad.substring(0, spaces - padChars * count);
 
-      byte[] data = new byte[this.numBytes + pad.numBytes * count + remain.numBytes];
+      int resultSize =
+        Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
+      byte[] data = new byte[resultSize];
       copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET, this.numBytes);
       int offset = this.numBytes;
       int idx = 0;
@@ -939,7 +940,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       // the partial string of the padding
       UTF8String remain = pad.substring(0, spaces - padChars * count);
 
-      byte[] data = new byte[this.numBytes + pad.numBytes * count + remain.numBytes];
+      int resultSize =
+        Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
+      byte[] data = new byte[resultSize];
 
       int offset = 0;
       int idx = 0;
@@ -962,21 +965,20 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   public static UTF8String concat(UTF8String... inputs) {
     // Compute the total length of the result.
     long totalLength = 0;
-    for (int i = 0; i < inputs.length; i++) {
-      if (inputs[i] != null) {
-        totalLength += (long)inputs[i].numBytes;
-      } else {
+    for (UTF8String input : inputs) {
+      if (input == null) {
         return null;
       }
+      totalLength += input.numBytes;
     }
 
     // Allocate a new byte array, and copy the inputs one by one into it.
-    final byte[] result = new byte[Ints.checkedCast(totalLength)];
+    final byte[] result = new byte[Math.toIntExact(totalLength)];
     int offset = 0;
-    for (int i = 0; i < inputs.length; i++) {
-      int len = inputs[i].numBytes;
+    for (UTF8String input : inputs) {
+      int len = input.numBytes;
       copyMemory(
-        inputs[i].base, inputs[i].offset,
+        input.base, input.offset,
         result, BYTE_ARRAY_OFFSET + offset,
         len);
       offset += len;
@@ -993,11 +995,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return null;
     }
 
-    int numInputBytes = 0;  // total number of bytes from the inputs
+    long numInputBytes = 0L;  // total number of bytes from the inputs
     int numInputs = 0;      // number of non-null inputs
-    for (int i = 0; i < inputs.length; i++) {
-      if (inputs[i] != null) {
-        numInputBytes += inputs[i].numBytes;
+    for (UTF8String input : inputs) {
+      if (input != null) {
+        numInputBytes += input.numBytes;
         numInputs++;
       }
     }
@@ -1009,7 +1011,8 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     // Allocate a new byte array, and copy the inputs one by one into it.
     // The size of the new array is the size of all inputs, plus the separators.
-    final byte[] result = new byte[numInputBytes + (numInputs - 1) * separator.numBytes];
+    int resultSize = Math.toIntExact(numInputBytes + (numInputs - 1) * (long)separator.numBytes);
+    final byte[] result = new byte[resultSize];
     int offset = 0;
 
     for (int i = 0, j = 0; i < inputs.length; i++) {

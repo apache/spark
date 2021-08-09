@@ -46,10 +46,11 @@ import org.apache.spark.tags.DockerTest
  * An actual sequence of commands to run the test is as follows
  *
  *  $ git clone https://github.com/oracle/docker-images.git
- *  // Head SHA: 3e352a22618070595f823977a0fd1a3a8071a83c
+ *  // Head SHA: 3f422c4a35b423dfcdbcc57a84f01db6c82eb6c1
  *  $ cd docker-images/OracleDatabase/SingleInstance/dockerfiles
- *  $ ./buildDockerImage.sh -v 18.4.0 -x
+ *  $ ./buildContainerImage.sh -v 18.4.0 -x
  *  $ export ORACLE_DOCKER_IMAGE_NAME=oracle/database:18.4.0-xe
+ *  $ export ENABLE_DOCKER_INTEGRATION_TESTS=1
  *  $ cd $SPARK_HOME
  *  $ ./build/sbt -Pdocker-integration-tests
  *    "testOnly org.apache.spark.sql.jdbc.OracleIntegrationSuite"
@@ -61,7 +62,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
   import testImplicits._
 
   override val db = new DatabaseOnDocker {
-    override val imageName = sys.env("ORACLE_DOCKER_IMAGE_NAME")
+    lazy override val imageName = sys.env("ORACLE_DOCKER_IMAGE_NAME")
     override val env = Map(
       "ORACLE_PWD" -> "oracle"
     )
@@ -446,9 +447,9 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSpark
       case LogicalRelation(JDBCRelation(_, parts, _), _, _, _) =>
         val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
         assert(whereClauses === Set(
-          """"D" < '2018-07-10' or "D" is null""",
-          """"D" >= '2018-07-10' AND "D" < '2018-07-14'""",
-          """"D" >= '2018-07-14'"""))
+          """"D" < '2018-07-11' or "D" is null""",
+          """"D" >= '2018-07-11' AND "D" < '2018-07-15'""",
+          """"D" >= '2018-07-15'"""))
     }
     assert(df1.collect.toSet === expectedResult)
 

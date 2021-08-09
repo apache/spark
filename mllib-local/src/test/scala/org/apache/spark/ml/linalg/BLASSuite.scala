@@ -24,7 +24,7 @@ import org.apache.spark.ml.util.TestingUtils._
 class BLASSuite extends SparkMLFunSuite {
 
   test("nativeL1Threshold") {
-    assert(getBLAS(128) == BLAS.f2jBLAS)
+    assert(getBLAS(128) == BLAS.javaBLAS)
     assert(getBLAS(256) == BLAS.nativeBLAS)
     assert(getBLAS(512) == BLAS.nativeBLAS)
   }

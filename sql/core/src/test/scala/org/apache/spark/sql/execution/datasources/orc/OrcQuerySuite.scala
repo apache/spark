@@ -34,7 +34,9 @@ import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.datasources.{FileMetaCacheManager, HadoopFsRelation, LogicalRelation, RecordReaderIterator}
+import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -714,35 +716,29 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-33449: simple select queries with file meta cache") {
-    withSQLConf(SQLConf.FILE_META_CACHE_ORC_ENABLED.key -> "true") {
-      val tableName = "orc_use_meta_cache"
-      withTable(tableName) {
-        (0 until 10).map(i => (i, i.toString)).toDF("id", "value")
-          .write.format("orc").saveAsTable(tableName)
-        try {
-          val statsBeforeQuery = FileMetaCacheManager.cacheStats
-          checkAnswer(sql(s"SELECT id FROM $tableName where id > 5"),
-            (6 until 10).map(Row.apply(_)))
-          val statsAfterQuery1 = FileMetaCacheManager.cacheStats
-          // The 1st query triggers 4 times file meta read: 2 times related to
-          // push down filter and 2 times related to file read. The 1st query
-          // run twice: df.collect() and df.rdd.count(), so it triggers 8 times
-          // file meta read in total. missCount is 2 because cache is empty and
-          // 2 meta files need load, other 6 times will read meta from cache.
-          assert(statsAfterQuery1.missCount() - statsBeforeQuery.missCount() == 2)
-          assert(statsAfterQuery1.hitCount() - statsBeforeQuery.hitCount() == 6)
-          checkAnswer(sql(s"SELECT id FROM $tableName where id < 5"),
-            (0 until 5).map(Row.apply(_)))
-          val statsAfterQuery2 = FileMetaCacheManager.cacheStats
-          // The 2nd query also triggers 8 times file meta read in total and
-          // all read from meta cache, so missCount no growth and hitCount
-          // increase 8 times.
-          assert(statsAfterQuery2.missCount() - statsAfterQuery1.missCount() == 0)
-          assert(statsAfterQuery2.hitCount() - statsAfterQuery1.hitCount() == 8)
-        } finally {
-          FileMetaCacheManager.cleanUp()
-        }
+  test("SPARK-34862: Support ORC vectorized reader for nested column") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val df = spark.range(10).map { x =>
+        val stringColumn = s"$x" * 10
+        val structColumn = (x, s"$x" * 100)
+        val arrayColumn = (0 until 5).map(i => (x + i, s"$x" * 5))
+        val mapColumn = Map(
+          s"$x" -> (x * 0.1, (x, s"$x" * 100)),
+          (s"$x" * 2) -> (x * 0.2, (x, s"$x" * 200)),
+          (s"$x" * 3) -> (x * 0.3, (x, s"$x" * 300)))
+        (x, stringColumn, structColumn, arrayColumn, mapColumn)
+      }.toDF("int_col", "string_col", "struct_col", "array_col", "map_col")
+      df.write.format("orc").save(path)
+
+      withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "true") {
+        val readDf = spark.read.orc(path)
+        val vectorizationEnabled = readDf.queryExecution.executedPlan.find {
+          case scan @ (_: FileSourceScanExec | _: BatchScanExec) => scan.supportsColumnar
+          case _ => false
+        }.isDefined
+        assert(vectorizationEnabled)
+        checkAnswer(readDf, df)
       }
     }
   }

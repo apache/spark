@@ -230,4 +230,37 @@ class LimitPushdownSuite extends PlanTest {
       comparePlans(optimized, correctAnswer)
     }
   }
+
+  test("SPARK-34622: Fix Push down limit through join if its output is not match the LocalLimit") {
+    val joinCondition = Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr)
+    val originalQuery = x.join(y, LeftOuter, joinCondition).select("x.a".attr).limit(5)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val correctAnswer =
+      Limit(5, LocalLimit(5, x).join(y, LeftOuter, joinCondition).select("x.a".attr)).analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-36183: Push down limit 1 through Aggregate if it is group only") {
+    // Push down when it is group only and limit 1.
+    comparePlans(
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(1).analyze),
+      LocalLimit(1, x).select("x.a".attr).limit(1).analyze)
+
+    comparePlans(
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).select("x.a".attr).limit(1).analyze),
+      LocalLimit(1, x).select("x.a".attr).select("x.a".attr).limit(1).analyze)
+
+    comparePlans(
+      Optimize.execute(x.union(y).groupBy("x.a".attr)("x.a".attr).limit(1).analyze),
+      LocalLimit(1, LocalLimit(1, x).union(LocalLimit(1, y))).select("x.a".attr).limit(1).analyze)
+
+    // No push down
+    comparePlans(
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr).limit(2).analyze),
+      x.groupBy("x.a".attr)("x.a".attr).limit(2).analyze)
+
+    comparePlans(
+      Optimize.execute(x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze),
+      x.groupBy("x.a".attr)("x.a".attr, count("x.a".attr)).limit(1).analyze)
+  }
 }

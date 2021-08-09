@@ -28,7 +28,7 @@ import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.internal.config
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, TempTableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchDatabaseException, NoSuchFunctionException, TableFunctionRegistry, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.connector.catalog.SupportsNamespaces.PROP_OWNER
@@ -823,12 +823,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       var message = intercept[AnalysisException] {
         sql(s"DROP DATABASE $dbName")
       }.getMessage
-      // TODO: Unify the exception.
-      if (isUsingHiveMetastore) {
-        assert(message.contains(s"NoSuchObjectException: $dbNameWithoutBackTicks"))
-      } else {
-        assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
-      }
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
 
       message = intercept[AnalysisException] {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
@@ -1261,6 +1256,17 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
     // set table partition location
     sql("ALTER TABLE dbx.tab1 PARTITION (a='1', b='2') SET LOCATION '/path/to/part/ways'")
     verifyLocation(new URI("/path/to/part/ways"), Some(partSpec))
+    // set location for partition spec in the upper case
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      sql("ALTER TABLE dbx.tab1 PARTITION (A='1', B='2') SET LOCATION '/path/to/part/ways2'")
+      verifyLocation(new URI("/path/to/part/ways2"), Some(partSpec))
+    }
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val errMsg = intercept[AnalysisException] {
+        sql("ALTER TABLE dbx.tab1 PARTITION (A='1', B='2') SET LOCATION '/path/to/part/ways3'")
+      }.getMessage
+      assert(errMsg.contains("not a valid partition column"))
+    }
     // set table location without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
     sql("ALTER TABLE tab1 SET LOCATION '/swanky/steak/place'")
@@ -1688,6 +1694,7 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
   test("show functions") {
     withUserDefinedFunction("add_one" -> true) {
       val numFunctions = FunctionRegistry.functionSet.size.toLong +
+        TableFunctionRegistry.functionSet.size.toLong +
         FunctionsCommand.virtualOperators.size.toLong
       assert(sql("show functions").count() === numFunctions)
       assert(sql("show system functions").count() === numFunctions)
@@ -2298,7 +2305,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE tmp_v ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains("'tmp_v' is a view not a table"))
+      assert(e.message.contains(
+        "tmp_v is a temp view. 'ALTER TABLE ... ADD COLUMNS' expects a table."))
     }
   }
 
@@ -2308,7 +2316,8 @@ abstract class DDLSuite extends QueryTest with SQLTestUtils {
       val e = intercept[AnalysisException] {
         sql("ALTER TABLE v1 ADD COLUMNS (c3 INT)")
       }
-      assert(e.message.contains("ALTER ADD COLUMNS does not support views"))
+      assert(e.message.contains(
+        "default.v1 is a view. 'ALTER TABLE ... ADD COLUMNS' expects a table."))
     }
   }
 

@@ -60,7 +60,7 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
       .map(new File(_)).getOrElse(Utils.createTempDir(namePrefix = "test-spark"))
   private val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
   val hiveVersion = if (SystemUtils.isJavaVersionAtLeast(JavaVersion.JAVA_9)) {
-    "2.3.8"
+    HiveUtils.builtinHiveVersion
   } else {
     "1.2.1"
   }
@@ -203,12 +203,14 @@ class HiveExternalCatalogVersionsSuite extends SparkSubmitTestUtils {
         tryDownloadSpark(version, sparkTestingDir.getCanonicalPath)
       }
 
+      // Extract major.minor for testing Spark 3.1.x and 3.0.x with metastore 2.3.9 and Java 11.
+      val hiveMetastoreVersion = """^\d+\.\d+""".r.findFirstIn(hiveVersion).get
       val args = Seq(
         "--name", "prepare testing tables",
         "--master", "local[2]",
         "--conf", s"${UI_ENABLED.key}=false",
         "--conf", s"${MASTER_REST_SERVER_ENABLED.key}=false",
-        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveVersion",
+        "--conf", s"${HiveUtils.HIVE_METASTORE_VERSION.key}=$hiveMetastoreVersion",
         "--conf", s"${HiveUtils.HIVE_METASTORE_JARS.key}=maven",
         "--conf", s"${WAREHOUSE_PATH.key}=${wareHousePath.getCanonicalPath}",
         "--conf", s"spark.sql.test.version.index=$index",

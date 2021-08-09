@@ -21,7 +21,7 @@ import java.io._
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
-import java.time.{LocalDate, ZoneId}
+import java.time.ZoneId
 import java.util.Locale
 
 import com.fasterxml.jackson.core.JsonFactory
@@ -1510,8 +1510,7 @@ abstract class JsonSuite
       """{"col0":"Spark 1.3.1","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" ::
       """{"col0":"Spark 1.4.1","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" ::
       """{"col0":"Spark 1.4.1","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" ::
-      """{"col0":"Spark 1.5.0","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" ::
-      """{"col0":"Spark 1.5.0","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"16436","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" :: Nil
+      """{"col0":"Spark 1.5.0","col1":"YSBzdHJpbmcgaW4gYmluYXJ5","col3":true,"col4":1,"col5":2,"col6":3,"col7":9223372036854775807,"col8":0.25,"col9":0.75,"col10":1234.23456,"col11":1.23456,"col12":"2015-01-01","col13":"2015-01-01 23:50:59.123","col14":[2,3,4],"col15":{"a string":2000},"col16":{"f1":4.75,"f2":[false,true]},"col17":[0.25,2.25,4.25]}""" :: Nil
     // scalastyle:on
 
     // Generate data for the current version.
@@ -1537,7 +1536,6 @@ abstract class JsonSuite
           "Spark 1.3.1",
           "Spark 1.4.1",
           "Spark 1.4.1",
-          "Spark 1.5.0",
           "Spark 1.5.0",
           "Spark " + spark.sparkContext.version,
           "Spark " + spark.sparkContext.version)
@@ -2684,16 +2682,13 @@ abstract class JsonSuite
   }
 
   test("SPARK-30960, SPARK-31641: parse date/timestamp string with legacy format") {
-    val julianDay = -141704 // 1582-01-01 in Julian calendar
     val ds = Seq(
-      s"{'t': '2020-1-12 3:23:34.12', 'd': '2020-1-12 T', 'd2': '12345', 'd3': '$julianDay'}"
+      s"{'t': '2020-1-12 3:23:34.12', 'd': '2020-1-12 T'}"
     ).toDS()
-    val json = spark.read.schema("t timestamp, d date, d2 date, d3 date").json(ds)
+    val json = spark.read.schema("t timestamp, d date").json(ds)
     checkAnswer(json, Row(
       Timestamp.valueOf("2020-1-12 3:23:34.12"),
-      Date.valueOf("2020-1-12"),
-      Date.valueOf(LocalDate.ofEpochDay(12345)),
-      Date.valueOf("1582-01-01")))
+      Date.valueOf("2020-1-12")))
   }
 
   test("exception mode for parsing date/timestamp string") {
@@ -2819,7 +2814,7 @@ abstract class JsonSuite
             val errorMsg = intercept[AnalysisException] {
               readback.filter($"AAA" === 0 && $"bbb" === 1).collect()
             }.getMessage
-            assert(errorMsg.contains("cannot resolve '`AAA`'"))
+            assert(errorMsg.contains("cannot resolve 'AAA'"))
             // Schema inferring
             val readback2 = spark.read.json(path.getCanonicalPath)
             checkAnswer(
@@ -2843,6 +2838,125 @@ abstract class JsonSuite
         .json(s"$basePath/${"""(\[|\]|\{|\})""".r.replaceAllIn(jsonTableName, """\\$1""")}")
       assert(readback.collect sameElements Array(Row(0), Row(1), Row(2)))
     }
+  }
+
+  test("SPARK-35047: Write Non-ASCII character as codepoint") {
+    // scalastyle:off nonascii
+    withTempPaths(2) { paths =>
+      paths.foreach(_.delete())
+      val seq = Seq("a", "\n", "\u3042")
+      val df = seq.toDF
+
+      val basePath1 = paths(0).getCanonicalPath
+      df.write.option("writeNonAsciiCharacterAsCodePoint", "true")
+        .option("pretty", "false").json(basePath1)
+      val actualText1 = spark.read.option("wholetext", "true").text(basePath1)
+        .sort("value").map(_.getString(0)).collect().mkString
+      val expectedText1 =
+        s"""{"value":"\\n"}
+           |{"value":"\\u3042"}
+           |{"value":"a"}
+           |""".stripMargin
+      assert(actualText1 === expectedText1)
+
+      val actualJson1 = spark.read.json(basePath1)
+        .sort("value").map(_.getString(0)).collect().mkString
+      val expectedJson1 = "\na\u3042"
+      assert(actualJson1 === expectedJson1)
+
+      // Test for pretty printed JSON.
+      // If multiLine option is set to true, the format should be should be
+      // one JSON record per file. So LEAF_NODE_DEFAULT_PARALLELISM is set here.
+      withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> s"${seq.length}") {
+        val basePath2 = paths(1).getCanonicalPath
+        df.write.option("writeNonAsciiCharacterAsCodePoint", "true")
+          .option("pretty", "true").json(basePath2)
+        val actualText2 = spark.read.option("wholetext", "true").text(basePath2)
+          .sort("value").map(_.getString(0)).collect().mkString
+        val expectedText2 =
+          s"""{
+             |  "value" : "\\n"
+             |}
+             |{
+             |  "value" : "\\u3042"
+             |}
+             |{
+             |  "value" : "a"
+             |}
+             |""".stripMargin
+        assert(actualText2 === expectedText2)
+
+        val actualJson2 = spark.read.option("multiLine", "true").json(basePath2)
+          .sort("value").map(_.getString(0)).collect().mkString
+        val expectedJson2 = "\na\u3042"
+        assert(actualJson2 === expectedJson2)
+      }
+    }
+    // scalastyle:on nonascii
+  }
+
+  test("SPARK-35104: Fix wrong indentation for multiple JSON even if `pretty` option is true") {
+    withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+      withTempPath { path =>
+        val basePath = path.getCanonicalPath
+        val df = Seq("a", "b", "c").toDF
+        df.write.option("pretty", "true").json(basePath)
+
+        val expectedText =
+          s"""{
+             |  "value" : "a"
+             |}
+             |{
+             |  "value" : "b"
+             |}
+             |{
+             |  "value" : "c"
+             |}
+             |""".stripMargin
+        val actualText = spark.read.option("wholetext", "true")
+          .text(basePath).map(_.getString(0)).collect().mkString
+        assert(actualText === expectedText)
+      }
+    }
+  }
+
+  test("SPARK-35912: turn non-nullable schema into a nullable schema") {
+    // JSON field is missing.
+    val missingFieldInput = """{"c1": 1}"""
+    // JSON filed is null.
+    val nullValueInput = """{"c1": 1, "c2": null}"""
+
+    val schema = StructType(Seq(
+      StructField("c1", IntegerType, nullable = false),
+      StructField("c2", IntegerType, nullable = false)))
+    val expected = schema.asNullable
+
+    Seq(missingFieldInput, nullValueInput).foreach { jsonString =>
+      Seq("DROPMALFORMED", "FAILFAST", "PERMISSIVE").foreach { mode =>
+        val json = spark.createDataset(
+          spark.sparkContext.parallelize(jsonString:: Nil))(Encoders.STRING)
+        val df = spark.read
+          .option("mode", mode)
+          .schema(schema)
+          .json(json)
+        assert(df.schema == expected)
+        checkAnswer(df, Row(1, null) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-36379: proceed parsing with root nulls in permissive mode") {
+    assert(intercept[SparkException] {
+      spark.read.option("mode", "failfast")
+        .schema("a string").json(Seq("""[{"a": "str"}, null]""").toDS).collect()
+    }.getMessage.contains("Malformed records are detected"))
+
+    // Permissive modes should proceed parsing malformed records (null).
+    // Here, since an array fails to parse in the middle, we will return one row.
+    checkAnswer(
+      spark.read.option("mode", "permissive")
+        .json(Seq("""[{"a": "str"}, null, {"a": "str"}]""").toDS),
+      Row(null) :: Nil)
   }
 }
 

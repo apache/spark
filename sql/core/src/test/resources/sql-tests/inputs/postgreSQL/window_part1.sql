@@ -135,7 +135,7 @@ FROM tenk1 GROUP BY ten, two WINDOW win AS (PARTITION BY two ORDER BY ten);
 -- FROM empsalary WINDOW w1 AS (ORDER BY salary), w2 AS (ORDER BY salary);
 
 -- subplan
--- [SPARK-28379] Correlated scalar subqueries must be aggregated
+-- Cannot specify window frame for lead function
 -- SELECT lead(ten, (SELECT two FROM tenk1 WHERE s.unique2 = unique2)) OVER (PARTITION BY four ORDER BY ten)
 -- FROM tenk1 s WHERE unique2 < 10;
 

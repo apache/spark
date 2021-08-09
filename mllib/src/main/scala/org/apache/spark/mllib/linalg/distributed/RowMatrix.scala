@@ -91,19 +91,34 @@ class RowMatrix @Since("1.0.0") (
   private[mllib] def multiplyGramianMatrixBy(v: BDV[Double]): BDV[Double] = {
     val n = numCols().toInt
     val vbr = rows.context.broadcast(v)
-    rows.treeAggregate(BDV.zeros[Double](n))(
+    rows.treeAggregate(null.asInstanceOf[BDV[Double]])(
       seqOp = (U, r) => {
         val rBrz = r.asBreeze
         val a = rBrz.dot(vbr.value)
+        val theU =
+          if (U == null) {
+            BDV.zeros[Double](n)
+          } else {
+            U
+          }
         rBrz match {
           // use specialized axpy for better performance
-          case _: BDV[_] => brzAxpy(a, rBrz.asInstanceOf[BDV[Double]], U)
-          case _: BSV[_] => brzAxpy(a, rBrz.asInstanceOf[BSV[Double]], U)
+          case _: BDV[_] => brzAxpy(a, rBrz.asInstanceOf[BDV[Double]], theU)
+          case _: BSV[_] => brzAxpy(a, rBrz.asInstanceOf[BSV[Double]], theU)
           case _ => throw new UnsupportedOperationException(
             s"Do not support vector operation from type ${rBrz.getClass.getName}.")
         }
-        U
-      }, combOp = (U1, U2) => U1 += U2)
+        theU
+      }, combOp = (U1, U2) => {
+        if (U1 == null) {
+          U2
+        } else if (U2 == null) {
+          U1
+        } else {
+          U1 += U2
+          U1
+        }
+      })
   }
 
   /**
@@ -421,6 +436,11 @@ class RowMatrix @Since("1.0.0") (
     }
   }
 
+  // The matrix is sparse, if all the rows has sparsity more than 0.5.
+  private def isSparseMatrix: Boolean = {
+    rows.filter(row => row.sparsity() < 0.5).isEmpty()
+  }
+
   /**
    * Computes the covariance matrix, treating each row as an observation.
    *
@@ -438,8 +458,8 @@ class RowMatrix @Since("1.0.0") (
     require(m > 1, s"RowMatrix.computeCovariance called on matrix with only $m rows." +
       "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
     val mean = Vectors.fromML(summary.mean)
-
-    if (rows.first().isInstanceOf[DenseVector]) {
+    // If all the rows are sparse vectors, then compute based on `computeSparseVectorCovariance`.
+    if (!isSparseMatrix) {
       computeDenseVectorCovariance(mean, n, m)
     } else {
       computeSparseVectorCovariance(mean, n, m)

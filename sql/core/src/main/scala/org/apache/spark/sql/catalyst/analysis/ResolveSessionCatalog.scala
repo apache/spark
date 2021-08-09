@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogStorageFormat, 
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableChange, V1Table}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
@@ -46,126 +46,52 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case AlterTableAddColumnsStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), cols) =>
-      cols.foreach(c => failNullType(c.dataType))
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          cols.foreach { c =>
-            assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
-            if (!c.nullable) {
-              throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
-            }
-          }
-          AlterTableAddColumnsCommand(tbl.asTableIdentifier, cols.map(convertToStructField))
-      }.getOrElse {
-        val changes = cols.map { col =>
-          TableChange.addColumn(
-            col.name.toArray,
-            col.dataType,
-            col.nullable,
-            col.comment.orNull,
-            col.position.orNull)
+    case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
+      cols.foreach { c =>
+        assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
+        if (!c.nullable) {
+          throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
         }
-        createAlterTable(nameParts, catalog, tbl, changes)
       }
+      AlterTableAddColumnsCommand(ident.asTableIdentifier, cols.map(convertToStructField))
 
-    case AlterTableReplaceColumnsStatement(
-        nameParts @ SessionCatalogAndTable(catalog, tbl), cols) =>
-      cols.foreach(c => failNullType(c.dataType))
-      val changes: Seq[TableChange] = loadTable(catalog, tbl.asIdentifier) match {
-        case Some(_: V1Table) =>
-          throw QueryCompilationErrors.replaceColumnsOnlySupportedWithV2TableError
-        case Some(table) =>
-          // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
-          val deleteChanges = table.schema.fieldNames.map { name =>
-            TableChange.deleteColumn(Array(name))
-          }
-          val addChanges = cols.map { col =>
-            TableChange.addColumn(
-              col.name.toArray,
-              col.dataType,
-              col.nullable,
-              col.comment.orNull,
-              col.position.orNull)
-          }
-          deleteChanges ++ addChanges
-        case None => Seq() // Unresolved table will be handled in CheckAnalysis.
-      }
-      createAlterTable(nameParts, catalog, tbl, changes)
+    case ReplaceColumns(ResolvedV1TableIdentifier(_), _) =>
+      throw QueryCompilationErrors.replaceColumnsOnlySupportedWithV2TableError
 
-    case a @ AlterTableAlterColumnStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), _, _, _, _, _) =>
-      a.dataType.foreach(failNullType)
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          if (a.column.length > 1) {
-            throw QueryCompilationErrors.alterQualifiedColumnOnlySupportedWithV2TableError
-          }
-          if (a.nullable.isDefined) {
-            throw QueryCompilationErrors.alterColumnWithV1TableCannotSpecifyNotNullError
-          }
-          if (a.position.isDefined) {
-            throw QueryCompilationErrors.alterOnlySupportedWithV2TableError
-          }
-          val builder = new MetadataBuilder
-          // Add comment to metadata
-          a.comment.map(c => builder.putString("comment", c))
-          val colName = a.column(0)
-          val dataType = a.dataType.getOrElse {
-            v1Table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
-              .map(_._2.dataType)
-              .getOrElse {
-                throw QueryCompilationErrors.alterColumnCannotFindColumnInV1TableError(
-                  quoteIfNeeded(colName), v1Table)
-              }
-          }
-          val newColumn = StructField(
-            colName,
-            dataType,
-            nullable = true,
-            builder.build())
-          AlterTableChangeColumnCommand(tbl.asTableIdentifier, colName, newColumn)
-      }.getOrElse {
-        val colName = a.column.toArray
-        val typeChange = a.dataType.map { newDataType =>
-          TableChange.updateColumnType(colName, newDataType)
-        }
-        val nullabilityChange = a.nullable.map { nullable =>
-          TableChange.updateColumnNullability(colName, nullable)
-        }
-        val commentChange = a.comment.map { newComment =>
-          TableChange.updateColumnComment(colName, newComment)
-        }
-        val positionChange = a.position.map { newPosition =>
-          TableChange.updateColumnPosition(colName, newPosition)
-        }
-        createAlterTable(
-          nameParts,
-          catalog,
-          tbl,
-          typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange)
+    case a @ AlterColumn(ResolvedV1TableAndIdentifier(table, ident), _, _, _, _, _) =>
+      if (a.column.name.length > 1) {
+        throw QueryCompilationErrors.alterQualifiedColumnOnlySupportedWithV2TableError
       }
+      if (a.nullable.isDefined) {
+        throw QueryCompilationErrors.alterColumnWithV1TableCannotSpecifyNotNullError
+      }
+      if (a.position.isDefined) {
+        throw QueryCompilationErrors.alterOnlySupportedWithV2TableError
+      }
+      val builder = new MetadataBuilder
+      // Add comment to metadata
+      a.comment.map(c => builder.putString("comment", c))
+      val colName = a.column.name(0)
+      val dataType = a.dataType.getOrElse {
+        table.schema.findNestedField(Seq(colName), resolver = conf.resolver)
+          .map(_._2.dataType)
+          .getOrElse {
+            throw QueryCompilationErrors.alterColumnCannotFindColumnInV1TableError(
+              quoteIfNeeded(colName), table)
+          }
+      }
+      val newColumn = StructField(
+        colName,
+        dataType,
+        nullable = true,
+        builder.build())
+      AlterTableChangeColumnCommand(ident.asTableIdentifier, colName, newColumn)
 
-    case AlterTableRenameColumnStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), col, newName) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          throw QueryCompilationErrors.renameColumnOnlySupportedWithV2TableError
-      }.getOrElse {
-        val changes = Seq(TableChange.renameColumn(col.toArray, newName))
-        createAlterTable(nameParts, catalog, tbl, changes)
-      }
+    case RenameColumn(ResolvedV1TableIdentifier(_), _, _) =>
+      throw QueryCompilationErrors.renameColumnOnlySupportedWithV2TableError
 
-    case AlterTableDropColumnsStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), cols) =>
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          throw QueryCompilationErrors.dropColumnOnlySupportedWithV2TableError
-      }.getOrElse {
-        val changes = cols.map(col => TableChange.deleteColumn(col.toArray))
-        createAlterTable(nameParts, catalog, tbl, changes)
-      }
+    case DropColumns(ResolvedV1TableIdentifier(_), _) =>
+      throw QueryCompilationErrors.dropColumnOnlySupportedWithV2TableError
 
     case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
       AlterTableSetPropertiesCommand(ident.asTableIdentifier, props, isView = false)
@@ -179,8 +105,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     case UnsetViewProperties(ResolvedView(ident, _), keys, ifExists) =>
       AlterTableUnsetPropertiesCommand(ident.asTableIdentifier, keys, ifExists, isView = true)
 
-    case d @ DescribeNamespace(DatabaseInSessionCatalog(db), _) =>
-      DescribeDatabaseCommand(db, d.extended)
+    case DescribeNamespace(DatabaseInSessionCatalog(db), extended, output) =>
+      val newOutput = if (conf.getConf(SQLConf.LEGACY_KEEP_COMMAND_OUTPUT_SCHEMA)) {
+        assert(output.length == 2)
+        Seq(output.head.withName("database_description_item"),
+          output.last.withName("database_description_value"))
+      } else {
+        output
+      }
+      DescribeDatabaseCommand(db, extended, newOutput)
 
     case SetNamespaceProperties(DatabaseInSessionCatalog(db), properties) =>
       AlterDatabasePropertiesCommand(db, properties)
@@ -200,20 +133,22 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       AlterTableRenameCommand(oldName.asTableIdentifier, newName.asTableIdentifier, isView)
 
     // Use v1 command to describe (temp) view, as v2 catalog doesn't support view yet.
-    case DescribeRelation(ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended) =>
-      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended)
+    case DescribeRelation(
+         ResolvedV1TableOrViewIdentifier(ident), partitionSpec, isExtended, output) =>
+      DescribeTableCommand(ident.asTableIdentifier, partitionSpec, isExtended, output)
 
-    case DescribeColumn(ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended) =>
+    case DescribeColumn(
+         ResolvedViewIdentifier(ident), column: UnresolvedAttribute, isExtended, output) =>
       // For views, the column will not be resolved by `ResolveReferences` because
       // `ResolvedView` stores only the identifier.
-      DescribeColumnCommand(ident.asTableIdentifier, column.nameParts, isExtended)
+      DescribeColumnCommand(ident.asTableIdentifier, column.nameParts, isExtended, output)
 
-    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended) =>
+    case DescribeColumn(ResolvedV1TableIdentifier(ident), column, isExtended, output) =>
       column match {
         case u: UnresolvedAttribute =>
           throw QueryCompilationErrors.columnDoesNotExistError(u.name)
         case a: Attribute =>
-          DescribeColumnCommand(ident.asTableIdentifier, a.qualifier :+ a.name, isExtended)
+          DescribeColumnCommand(ident.asTableIdentifier, a.qualifier :+ a.name, isExtended, output)
         case Alias(child, _) =>
           throw QueryCompilationErrors.commandNotSupportNestedColumnError(
             "DESC TABLE COLUMN", toPrettySQL(child))
@@ -225,7 +160,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // session catalog and the table provider is not v2.
     case c @ CreateTableStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      assertNoNullTypeInSchema(c.tableSchema)
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.provider, c.options, c.location, c.serde, ctas = false)
       if (!isV2Provider(provider)) {
@@ -247,9 +181,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case c @ CreateTableAsSelectStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _, _) =>
-      if (c.asSelect.resolved) {
-        assertNoNullTypeInSchema(c.asSelect.schema)
-      }
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.provider, c.options, c.location, c.serde, ctas = true)
       if (!isV2Provider(provider)) {
@@ -280,7 +211,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // session catalog and the table provider is not v2.
     case c @ ReplaceTableStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
-      assertNoNullTypeInSchema(c.tableSchema)
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.replaceTableOnlySupportedWithV2TableError
@@ -297,9 +227,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case c @ ReplaceTableAsSelectStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      if (c.asSelect.resolved) {
-        assertNoNullTypeInSchema(c.asSelect.schema)
-      }
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.replaceTableAsSelectOnlySupportedWithV2TableError
@@ -373,6 +300,9 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         AnalyzePartitionCommand(ident.asTableIdentifier, partitionSpec, noScan)
       }
 
+    case AnalyzeTables(DatabaseInSessionCatalog(db), noScan) =>
+      AnalyzeTablesCommand(Some(db), noScan)
+
     case AnalyzeColumn(ResolvedV1TableOrViewIdentifier(ident), columnNames, allColumns) =>
       AnalyzeColumnCommand(ident.asTableIdentifier, columnNames, allColumns)
 
@@ -387,17 +317,20 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         isOverwrite,
         partition)
 
-    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde) =>
+    case ShowCreateTable(ResolvedV1TableOrViewIdentifier(ident), asSerde, output) =>
       if (asSerde) {
-        ShowCreateTableAsSerdeCommand(ident.asTableIdentifier)
+        ShowCreateTableAsSerdeCommand(ident.asTableIdentifier, output)
       } else {
-        ShowCreateTableCommand(ident.asTableIdentifier)
+        ShowCreateTableCommand(ident.asTableIdentifier, output)
       }
 
-    case TruncateTable(ResolvedV1TableIdentifier(ident), partitionSpec) =>
+    case TruncateTable(ResolvedV1TableIdentifier(ident)) =>
+      TruncateTableCommand(ident.asTableIdentifier, None)
+
+    case TruncatePartition(ResolvedV1TableIdentifier(ident), partitionSpec) =>
       TruncateTableCommand(
         ident.asTableIdentifier,
-        partitionSpec.toSeq.asUnresolvedPartitionSpecs.map(_.spec).headOption)
+        Seq(partitionSpec).asUnresolvedPartitionSpecs.map(_.spec).headOption)
 
     case s @ ShowPartitions(
         ResolvedV1TableOrViewIdentifier(ident),
@@ -467,7 +400,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case CreateViewStatement(
       tbl, userSpecifiedColumns, comment, properties,
-      originalText, child, allowExisting, replace, viewType) if child.resolved =>
+      originalText, child, allowExisting, replace, viewType) =>
 
       val v1TableName = if (viewType != PersistedView) {
         // temp view doesn't belong to any catalog and we shouldn't resolve catalog in the name.
@@ -476,15 +409,15 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         parseV1Table(tbl, "CREATE VIEW")
       }
       CreateViewCommand(
-        v1TableName.asTableIdentifier,
-        userSpecifiedColumns,
-        comment,
-        properties,
-        originalText,
-        child,
-        allowExisting,
-        replace,
-        viewType)
+        name = v1TableName.asTableIdentifier,
+        userSpecifiedColumns = userSpecifiedColumns,
+        comment = comment,
+        properties = properties,
+        originalText = originalText,
+        plan = child,
+        allowExisting = allowExisting,
+        replace = replace,
+        viewType = viewType)
 
     case ShowViews(resolved: ResolvedNamespace, pattern, output) =>
       resolved match {
@@ -657,6 +590,14 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   object ResolvedViewIdentifier {
     def unapply(resolved: LogicalPlan): Option[Identifier] = resolved match {
       case ResolvedView(ident, _) => Some(ident)
+      case _ => None
+    }
+  }
+
+  object ResolvedV1TableAndIdentifier {
+    def unapply(resolved: LogicalPlan): Option[(V1Table, Identifier)] = resolved match {
+      case ResolvedTable(catalog, ident, table: V1Table, _) if isSessionCatalog(catalog) =>
+        Some(table -> ident)
       case _ => None
     }
   }

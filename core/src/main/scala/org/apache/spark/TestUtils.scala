@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, FileOutputStream}
-import java.net.{HttpURLConnection, URI, URL}
+import java.net.{HttpURLConnection, InetSocketAddress, URI, URL}
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files => JavaFiles, Paths}
 import java.nio.file.attribute.PosixFilePermission.{OWNER_EXECUTE, OWNER_READ, OWNER_WRITE}
@@ -34,6 +34,7 @@ import javax.tools.{JavaFileObject, SimpleJavaFileObject, ToolProvider}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.io.Source
 import scala.reflect.{classTag, ClassTag}
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
@@ -41,6 +42,11 @@ import scala.util.Try
 import com.google.common.io.{ByteStreams, Files}
 import org.apache.commons.lang3.StringUtils
 import org.apache.log4j.PropertyConfigurator
+import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.handler.DefaultHandler
+import org.eclipse.jetty.server.handler.HandlerList
+import org.eclipse.jetty.server.handler.ResourceHandler
 import org.json4s.JsonAST.JValue
 import org.json4s.jackson.JsonMethods.{compact, render}
 
@@ -314,6 +320,18 @@ private[spark] object TestUtils {
     }
   }
 
+  /**
+   * Returns the response message from an HTTP(S) URL.
+   */
+  def httpResponseMessage(
+    url: URL,
+    method: String = "GET",
+    headers: Seq[(String, String)] = Nil): String = {
+    withHttpConnection(url, method, headers = headers) { connection =>
+      Source.fromInputStream(connection.getInputStream, "utf-8").getLines().mkString("\n")
+    }
+  }
+
   def withHttpConnection[T](
       url: URL,
       method: String = "GET",
@@ -361,6 +379,22 @@ private[spark] object TestUtils {
     } finally {
       sc.listenerBus.waitUntilEmpty()
       sc.listenerBus.removeListener(listener)
+    }
+  }
+
+  def withHttpServer(resBaseDir: String = ".")(body: URL => Unit): Unit = {
+    // 0 as port means choosing randomly from the available ports
+    val server = new Server(new InetSocketAddress(Utils.localCanonicalHostName, 0))
+    val resHandler = new ResourceHandler()
+    resHandler.setResourceBase(resBaseDir)
+    val handlers = new HandlerList()
+    handlers.setHandlers(Array[Handler](resHandler, new DefaultHandler()))
+    server.setHandler(handlers)
+    server.start()
+    try {
+      body(server.getURI.toURL)
+    } finally {
+      server.stop()
     }
   }
 

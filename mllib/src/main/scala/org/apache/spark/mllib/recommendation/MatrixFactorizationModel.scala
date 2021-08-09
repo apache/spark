@@ -21,7 +21,6 @@ import java.io.IOException
 import java.lang.{Integer => JavaInteger}
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
-import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.google.common.collect.{Ordering => GuavaOrdering}
 import org.apache.hadoop.fs.Path
 import org.json4s._
@@ -85,7 +84,7 @@ class MatrixFactorizationModel @Since("0.8.0") (
 
     val userVector = userFeatureSeq.head
     val productVector = productFeatureSeq.head
-    blas.ddot(rank, userVector, 1, productVector, 1)
+    BLAS.nativeBLAS.ddot(rank, userVector, 1, productVector, 1)
   }
 
   /**
@@ -136,7 +135,7 @@ class MatrixFactorizationModel @Since("0.8.0") (
       }
       users.join(productFeatures).map {
         case (product, ((user, uFeatures), pFeatures)) =>
-          Rating(user, product, blas.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
+          Rating(user, product, BLAS.nativeBLAS.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
       }
     } else {
       val products = productFeatures.join(usersProducts.map(_.swap)).map {
@@ -144,7 +143,7 @@ class MatrixFactorizationModel @Since("0.8.0") (
       }
       products.join(userFeatures).map {
         case (user, ((product, pFeatures), uFeatures)) =>
-          Rating(user, product, blas.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
+          Rating(user, product, BLAS.nativeBLAS.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
       }
     }
   }
@@ -263,7 +262,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
       recommendableFeatures: RDD[(Int, Array[Double])],
       num: Int): Array[(Int, Double)] = {
     val scored = recommendableFeatures.map { case (id, features) =>
-      (id, blas.ddot(features.length, recommendToFeatures, 1, features, 1))
+      (id, BLAS.nativeBLAS.ddot(features.length, recommendToFeatures, 1, features, 1))
     }
     scored.top(num)(Ordering.by(_._2))
   }
@@ -320,7 +319,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
 
           Iterator.range(0, m).flatMap { i =>
             // scores = i-th vec in srcMat * dstMat
-            BLAS.f2jBLAS.dgemv("T", rank, n, 1.0F, dstMat, 0, rank,
+            BLAS.javaBLAS.dgemv("T", rank, n, 1.0F, dstMat, 0, rank,
               srcMat, i * rank, 1, 0.0F, scores, 0, 1)
 
             val srcId = srcIds(i)

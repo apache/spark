@@ -247,7 +247,8 @@ class HiveShowCreateTableSuite extends ShowCreateTableSuite with TestHiveSinglet
       val createTable = "CREATE TABLE `t1` (`a` STRUCT<`b`: STRING>) USING hive"
       sql(createTable)
       val shownDDL = getShowDDL("SHOW CREATE TABLE t1")
-      assert(shownDDL == "CREATE TABLE `default`.`t1` (`a` STRUCT<`b`: STRING>)")
+      assert(shownDDL.substring(0, shownDDL.indexOf(" USING")) ==
+        "CREATE TABLE `default`.`t1` ( `a` STRUCT<`b`: STRING>)")
 
       checkCreateTable("t1", serde = true)
     }

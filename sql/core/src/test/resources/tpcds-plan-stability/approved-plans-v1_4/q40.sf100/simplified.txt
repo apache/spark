@@ -12,8 +12,8 @@ TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
                       Project [cs_warehouse_sk,cs_sales_price,cs_sold_date_sk,cr_refunded_cash,i_item_id]
                         BroadcastHashJoin [cs_item_sk,i_item_sk]
                           Project [cs_warehouse_sk,cs_item_sk,cs_sales_price,cs_sold_date_sk,cr_refunded_cash]
-                            InputAdapter
-                              SortMergeJoin [cs_order_number,cs_item_sk,cr_order_number,cr_item_sk]
+                            SortMergeJoin [cs_order_number,cs_item_sk,cr_order_number,cr_item_sk]
+                              InputAdapter
                                 WholeStageCodegen (2)
                                   Sort [cs_order_number,cs_item_sk]
                                     InputAdapter
@@ -24,7 +24,13 @@ TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
                                               InputAdapter
                                                 Scan parquet default.catalog_sales [cs_warehouse_sk,cs_item_sk,cs_order_number,cs_sales_price,cs_sold_date_sk]
                                                   SubqueryBroadcast [d_date_sk] #1
-                                                    ReusedExchange [d_date_sk,d_date] #3
+                                                    BroadcastExchange #3
+                                                      WholeStageCodegen (1)
+                                                        Filter [d_date,d_date_sk]
+                                                          ColumnarToRow
+                                                            InputAdapter
+                                                              Scan parquet default.date_dim [d_date_sk,d_date]
+                              InputAdapter
                                 WholeStageCodegen (4)
                                   Sort [cr_order_number,cr_item_sk]
                                     InputAdapter
@@ -44,12 +50,7 @@ TakeOrderedAndProject [w_state,i_item_id,sales_before,sales_after]
                                       InputAdapter
                                         Scan parquet default.item [i_item_sk,i_item_id,i_current_price]
                       InputAdapter
-                        BroadcastExchange #3
-                          WholeStageCodegen (6)
-                            Filter [d_date,d_date_sk]
-                              ColumnarToRow
-                                InputAdapter
-                                  Scan parquet default.date_dim [d_date_sk,d_date]
+                        ReusedExchange [d_date_sk,d_date] #3
                   InputAdapter
                     BroadcastExchange #6
                       WholeStageCodegen (7)

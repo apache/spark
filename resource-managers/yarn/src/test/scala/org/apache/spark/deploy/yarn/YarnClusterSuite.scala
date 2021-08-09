@@ -18,7 +18,9 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
+import java.net.URL
 import java.nio.charset.StandardCharsets
+import java.nio.file.Paths
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
@@ -29,6 +31,7 @@ import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.ConverterUtils
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.exceptions.TestFailedException
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
@@ -149,12 +152,48 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, result)
   }
 
-  test("run Spark in yarn-client mode with additional jar") {
-    testWithAddJar(true)
+  test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'local'") {
+    testWithAddJar(clientMode = true, "local")
   }
 
-  test("run Spark in yarn-cluster mode with additional jar") {
-    testWithAddJar(false)
+  test("SPARK-35672: run Spark in yarn-cluster mode with additional jar using URI scheme 'local'") {
+    testWithAddJar(clientMode = false, "local")
+  }
+
+  test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'local' " +
+      "and gateway-replacement path") {
+    // Use the original jar URL, but set up the gateway/replacement configs such that if
+    // replacement occurs, things will break. This ensures the replacement doesn't apply to the
+    // driver in 'client' mode. Executors will fail in this case because they still apply the
+    // replacement in client mode.
+    testWithAddJar(clientMode = true, "local", Some(jarUrl => {
+      (jarUrl.getPath, Map(
+        GATEWAY_ROOT_PATH.key -> Paths.get(jarUrl.toURI).getParent.toString,
+        REPLACEMENT_ROOT_PATH.key -> "/nonexistent/path/"
+      ))
+    }), expectExecutorFailure = true)
+  }
+
+  test("SPARK-35672: run Spark in yarn-cluster mode with additional jar using URI scheme 'local' " +
+      "and gateway-replacement path") {
+    // Put a prefix in front of the original jar URL which causes it to be an invalid path.
+    // Set up the gateway/replacement configs such that if replacement occurs, it is a valid
+    // path again (by removing the prefix). This ensures the replacement is applied.
+    val gatewayPath = "/replaceme/nonexistent/"
+    testWithAddJar(clientMode = false, "local", Some(jarUrl => {
+      (gatewayPath + jarUrl.getPath, Map(
+        GATEWAY_ROOT_PATH.key -> gatewayPath,
+        REPLACEMENT_ROOT_PATH.key -> ""
+      ))
+    }))
+  }
+
+  test("SPARK-35672: run Spark in yarn-client mode with additional jar using URI scheme 'file'") {
+    testWithAddJar(clientMode = true, "file")
+  }
+
+  test("SPARK-35672: run Spark in yarn-cluster mode with additional jar using URI scheme 'file'") {
+    testWithAddJar(clientMode = false, "file")
   }
 
   test("run Spark in yarn-cluster mode unsuccessfully") {
@@ -285,16 +324,23 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     checkResult(finalState, result)
   }
 
-  private def testWithAddJar(clientMode: Boolean): Unit = {
+  private def testWithAddJar(
+      clientMode: Boolean,
+      jarUriScheme: String,
+      jarUrlToPathAndConfs: Option[URL => (String, Map[String, String])] = None,
+      expectExecutorFailure: Boolean = false): Unit = {
     val originalJar = TestUtils.createJarWithFiles(Map("test.resource" -> "ORIGINAL"), tempDir)
+    val (jarPath, extraConf) = jarUrlToPathAndConfs
+        .map(_.apply(originalJar))
+        .getOrElse((originalJar.getPath, Map[String, String]()))
     val driverResult = File.createTempFile("driver", null, tempDir)
     val executorResult = File.createTempFile("executor", null, tempDir)
     val finalState = runSpark(clientMode, mainClassName(YarnClasspathTest.getClass),
-      appArgs = Seq(driverResult.getAbsolutePath(), executorResult.getAbsolutePath()),
-      extraClassPath = Seq(originalJar.getPath()),
-      extraJars = Seq("local:" + originalJar.getPath()))
+      appArgs = Seq(driverResult.getAbsolutePath, executorResult.getAbsolutePath),
+      extraJars = Seq(s"$jarUriScheme:$jarPath"),
+      extraConf = extraConf)
     checkResult(finalState, driverResult, "ORIGINAL")
-    checkResult(finalState, executorResult, "ORIGINAL")
+    checkResult(finalState, executorResult, if (expectExecutorFailure) "failure" else "ORIGINAL")
   }
 
   private def testPySpark(
@@ -367,6 +413,64 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       )
     )
     checkResult(finalState, result, "true")
+  }
+
+  def createEmptyIvySettingsFile: File = {
+    val emptyIvySettings = File.createTempFile("ivy", ".xml")
+    Files.write("<ivysettings />", emptyIvySettings, StandardCharsets.UTF_8)
+    emptyIvySettings
+  }
+
+  test("SPARK-34472: ivySettings file with no scheme or file:// scheme should be " +
+    "localized on driver in cluster mode") {
+    val emptyIvySettings = createEmptyIvySettingsFile
+    // For file:// URIs or URIs without scheme, make sure that ivySettings conf was changed
+    // to the localized file. So the expected ivySettings path on the driver will start with
+    // the file name and then some random UUID suffix
+    testIvySettingsDistribution(clientMode = false, emptyIvySettings.getAbsolutePath,
+      emptyIvySettings.getName, prefixMatch = true)
+    testIvySettingsDistribution(clientMode = false, s"file://${emptyIvySettings.getAbsolutePath}",
+      emptyIvySettings.getName, prefixMatch = true)
+  }
+
+  test("SPARK-34472: ivySettings file with no scheme or file:// scheme should retain " +
+    "user provided path in client mode") {
+    val emptyIvySettings = createEmptyIvySettingsFile
+    // In client mode, the file is present locally on the driver and so does not need to be
+    // distributed. So the user provided path should be kept as is.
+    testIvySettingsDistribution(clientMode = true, emptyIvySettings.getAbsolutePath,
+      emptyIvySettings.getAbsolutePath)
+    testIvySettingsDistribution(clientMode = true, s"file://${emptyIvySettings.getAbsolutePath}",
+      s"file://${emptyIvySettings.getAbsolutePath}")
+  }
+
+  test("SPARK-34472: ivySettings file with non-file:// schemes should throw an error") {
+    val emptyIvySettings = createEmptyIvySettingsFile
+    val e1 = intercept[TestFailedException] {
+      testIvySettingsDistribution(clientMode = false,
+        s"local://${emptyIvySettings.getAbsolutePath}", "")
+    }
+    assert(e1.getMessage.contains("IllegalArgumentException: " +
+      "Scheme local not supported in spark.jars.ivySettings"))
+    val e2 = intercept[TestFailedException] {
+      testIvySettingsDistribution(clientMode = false,
+        s"hdfs://${emptyIvySettings.getAbsolutePath}", "")
+    }
+    assert(e2.getMessage.contains("IllegalArgumentException: " +
+      "Scheme hdfs not supported in spark.jars.ivySettings"))
+  }
+
+  def testIvySettingsDistribution(clientMode: Boolean, ivySettingsPath: String,
+    expectedIvySettingsPrefixOnDriver: String, prefixMatch: Boolean = false): Unit = {
+    val result = File.createTempFile("result", null, tempDir)
+    val outFile = File.createTempFile("out", null, tempDir)
+    val finalState = runSpark(clientMode = clientMode,
+      mainClassName(YarnAddJarTest.getClass),
+      appArgs = Seq(result.getAbsolutePath, expectedIvySettingsPrefixOnDriver,
+        prefixMatch.toString),
+      extraConf = Map("spark.jars.ivySettings" -> ivySettingsPath),
+      outFile = Option(outFile))
+    checkResult(finalState, result, outFile = Option(outFile))
   }
 }
 
@@ -581,6 +685,50 @@ private object YarnClasspathTest extends Logging {
     }
   }
 
+}
+
+private object YarnAddJarTest extends Logging {
+  def main(args: Array[String]): Unit = {
+    if (args.length != 3) {
+      // scalastyle:off println
+      System.err.println(
+        s"""
+           |Invalid command line: ${args.mkString(" ")}
+           |
+           |Usage: YarnAddJarTest [result file] [expected ivy settings path] [prefix match]
+        """.stripMargin)
+      // scalastyle:on println
+      System.exit(1)
+    }
+
+    val resultPath = args(0)
+    val expectedIvySettingsPath = args(1)
+    val prefixMatch = args(2).toBoolean
+    val sc = new SparkContext(new SparkConf())
+
+    var result = "failure"
+    try {
+      val settingsFile = sc.getConf.get("spark.jars.ivySettings")
+      if (prefixMatch) {
+        assert(settingsFile !== expectedIvySettingsPath)
+        assert(settingsFile.startsWith(expectedIvySettingsPath))
+      } else {
+        assert(settingsFile === expectedIvySettingsPath)
+      }
+
+      val caught = intercept[RuntimeException] {
+        sc.addJar("ivy://org.fake-project.test:test:1.0.0")
+      }
+      if (caught.getMessage.contains("unresolved dependency: org.fake-project.test#test")) {
+        // "unresolved dependency" is expected as the dependency does not exist
+        // but exception like "Ivy settings file <file> does not exist" should result in failure
+        result = "success"
+      }
+    } finally {
+      Files.write(result, new File(resultPath), StandardCharsets.UTF_8)
+      sc.stop()
+    }
+  }
 }
 
 private object YarnLauncherTestApp {

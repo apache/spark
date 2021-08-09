@@ -20,9 +20,13 @@ package org.apache.spark.sql.execution.datasources.v2
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.expressions.{Aggregation, FieldReference}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
+import org.apache.spark.sql.execution.datasources.PushableColumnWithoutNestedColumn
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
@@ -71,6 +75,38 @@ object PushDownUtils extends PredicateHelper {
   }
 
   /**
+   * Pushes down aggregates to the data source reader
+   *
+   * @return pushed aggregation.
+   */
+  def pushAggregates(
+      scanBuilder: ScanBuilder,
+      aggregates: Seq[AggregateExpression],
+      groupBy: Seq[Expression]): Option[Aggregation] = {
+
+    def columnAsString(e: Expression): Option[FieldReference] = e match {
+      case PushableColumnWithoutNestedColumn(name) =>
+        Some(FieldReference(name).asInstanceOf[FieldReference])
+      case _ => None
+    }
+
+    scanBuilder match {
+      case r: SupportsPushDownAggregates if aggregates.nonEmpty =>
+        val translatedAggregates = aggregates.flatMap(DataSourceStrategy.translateAggregate)
+        val translatedGroupBys = groupBy.flatMap(columnAsString)
+
+        if (translatedAggregates.length != aggregates.length ||
+          translatedGroupBys.length != groupBy.length) {
+          return None
+        }
+
+        val agg = new Aggregation(translatedAggregates.toArray, translatedGroupBys.toArray)
+        Some(agg).filter(r.pushAggregation)
+      case _ => None
+    }
+  }
+
+  /**
    * Applies column pruning to the data source, w.r.t. the references of the given expressions.
    *
    * @return the `Scan` instance (since column pruning is the last step of operator pushdown),
@@ -81,6 +117,10 @@ object PushDownUtils extends PredicateHelper {
       relation: DataSourceV2Relation,
       projects: Seq[NamedExpression],
       filters: Seq[Expression]): (Scan, Seq[AttributeReference]) = {
+    val exprs = projects ++ filters
+    val requiredColumns = AttributeSet(exprs.flatMap(_.references))
+    val neededOutput = relation.output.filter(requiredColumns.contains)
+
     scanBuilder match {
       case r: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled =>
         val rootFields = SchemaPruning.identifyRootFields(projects, filters)
@@ -89,14 +129,12 @@ object PushDownUtils extends PredicateHelper {
         } else {
           new StructType()
         }
-        r.pruneColumns(prunedSchema)
+        val neededFieldNames = neededOutput.map(_.name).toSet
+        r.pruneColumns(StructType(prunedSchema.filter(f => neededFieldNames.contains(f.name))))
         val scan = r.build()
         scan -> toOutputAttrs(scan.readSchema(), relation)
 
       case r: SupportsPushDownRequiredColumns =>
-        val exprs = projects ++ filters
-        val requiredColumns = AttributeSet(exprs.flatMap(_.references))
-        val neededOutput = relation.output.filter(requiredColumns.contains)
         r.pruneColumns(neededOutput.toStructType)
         val scan = r.build()
         // always project, in case the relation's output has been updated and doesn't match

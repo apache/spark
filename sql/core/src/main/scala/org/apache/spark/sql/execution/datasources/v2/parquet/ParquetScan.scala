@@ -103,7 +103,7 @@ case class ParquetScan(
   }
 
   override def getMetaData(): Map[String, String] = {
-    super.getMetaData() ++ Map("PushedFilers" -> seqToString(pushedFilters))
+    super.getMetaData() ++ Map("PushedFilters" -> seqToString(pushedFilters))
   }
 
   override def withFilters(

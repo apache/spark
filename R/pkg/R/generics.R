@@ -1251,6 +1251,10 @@ setGeneric("posexplode", function(x) { standardGeneric("posexplode") })
 #' @name NULL
 setGeneric("posexplode_outer", function(x) { standardGeneric("posexplode_outer") })
 
+#' @rdname column_aggregate_functions
+#' @name NULL
+setGeneric("product", function(x) { standardGeneric("product") })
+
 #' @rdname column_datetime_functions
 #' @name NULL
 setGeneric("quarter", function(x) { standardGeneric("quarter") })

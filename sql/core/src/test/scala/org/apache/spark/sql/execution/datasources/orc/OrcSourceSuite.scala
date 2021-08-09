@@ -337,7 +337,7 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDa
     }
 
     // Test all the valid options of spark.sql.orc.compression.codec
-    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO", "ZSTD").foreach { c =>
+    Seq("NONE", "UNCOMPRESSED", "SNAPPY", "ZLIB", "LZO", "ZSTD", "LZ4").foreach { c =>
       withSQLConf(SQLConf.ORC_COMPRESSION.key -> c) {
         val expected = if (c == "UNCOMPRESSED") "NONE" else c
         assert(new OrcOptions(Map.empty[String, String], conf).compressionCodec == expected)
@@ -539,6 +539,16 @@ abstract class OrcSuite extends OrcTest with BeforeAndAfterAll with CommonFileDa
       }
     }
   }
+
+  test("SPARK-35612: Support LZ4 compression in ORC data source") {
+    withTempPath { dir =>
+      val path = dir.getAbsolutePath
+      spark.range(3).write.option("compression", "lz4").orc(path)
+      checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
+      val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
+      assert(files.nonEmpty && files.forall(_.getName.contains("lz4")))
+    }
+  }
 }
 
 class OrcSourceSuite extends OrcSuite with SharedSparkSession {
@@ -600,6 +610,24 @@ class OrcSourceSuite extends OrcSuite with SharedSparkSession {
       val path = dir.getAbsolutePath
       spark.range(3).write.option("compression", "zstd").orc(path)
       checkAnswer(spark.read.orc(path), Seq(Row(0), Row(1), Row(2)))
+      val files = OrcUtils.listOrcFiles(path, spark.sessionState.newHadoopConf())
+      assert(files.nonEmpty && files.forall(_.getName.contains("zstd")))
+    }
+  }
+
+  test("SPARK-34897: Support reconcile schemas based on index after nested column pruning") {
+    withTable("t1") {
+      spark.sql(
+        """
+          |CREATE TABLE t1 (
+          |  _col0 INT,
+          |  _col1 STRING,
+          |  _col2 STRUCT<c1: STRING, c2: STRING, c3: STRING, c4: BIGINT>)
+          |USING ORC
+          |""".stripMargin)
+
+      spark.sql("INSERT INTO t1 values(1, '2', struct('a', 'b', 'c', 10L))")
+      checkAnswer(spark.sql("SELECT _col0, _col2.c1 FROM t1"), Seq(Row(1, "a")))
     }
   }
 }

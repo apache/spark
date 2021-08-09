@@ -73,7 +73,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
   }
 
   private def finalStatus(tracker: BasicWriteTaskStatsTracker): BasicWriteTaskStats = {
-    tracker.getFinalStats().asInstanceOf[BasicWriteTaskStats]
+    tracker.getFinalStats(0L).asInstanceOf[BasicWriteTaskStats]
   }
 
   test("No files in run") {
@@ -149,7 +149,7 @@ class BasicWriteTaskStatsTrackerSuite extends SparkFunSuite {
   test("Three files, last one empty") {
     val file1 = new Path(tempDirPath, "f-3-1")
     val file2 = new Path(tempDirPath, "f-3-2")
-    val file3 = new Path(tempDirPath, "f-3-2")
+    val file3 = new Path(tempDirPath, "f-3-3")
     val tracker = new BasicWriteTaskStatsTracker(conf)
     tracker.newFile(file1.toString)
     write1(file1)

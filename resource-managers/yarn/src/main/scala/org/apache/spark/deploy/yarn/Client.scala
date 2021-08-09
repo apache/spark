@@ -18,9 +18,10 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.{FileSystem => _, _}
-import java.net.{InetAddress, UnknownHostException, URI}
+import java.net.{InetAddress, UnknownHostException, URI, URL}
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 import java.util.{Locale, Properties, UUID}
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
@@ -30,7 +31,6 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, ListBuffer, Map}
 import scala.util.control.NonFatal
 
 import com.google.common.base.Objects
-import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission
@@ -401,7 +401,13 @@ private[spark] class Client(
     if (force || !compareFs(srcFs, destFs) || "file".equals(srcFs.getScheme)) {
       destPath = new Path(destDir, destName.getOrElse(srcPath.getName()))
       logInfo(s"Uploading resource $srcPath -> $destPath")
-      FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
+      try {
+        FileUtil.copy(srcFs, srcPath, destFs, destPath, false, hadoopConf)
+      } catch {
+        // HADOOP-16878 changes the behavior to throw exceptions when src equals to dest
+        case e: PathOperationException
+            if srcFs.makeQualified(srcPath).equals(destFs.makeQualified(destPath)) =>
+      }
       destFs.setReplication(destPath, replication)
       destFs.setPermission(destPath, new FsPermission(APP_FILE_PERMISSION))
     } else {
@@ -518,6 +524,32 @@ private[spark] class Client(
       require(localizedPath != null, "Keytab file already distributed.")
     }
 
+    // If we passed in a ivySettings file, make sure we copy the file to the distributed cache
+    // in cluster mode so that the driver can access it
+    val ivySettings = sparkConf.getOption("spark.jars.ivySettings")
+    val ivySettingsLocalizedPath: Option[String] = ivySettings match {
+      case Some(ivySettingsPath) if isClusterMode =>
+        val uri = new URI(ivySettingsPath)
+        Option(uri.getScheme).getOrElse("file") match {
+          case "file" =>
+            val ivySettingsFile = new File(uri.getPath)
+            require(ivySettingsFile.exists(), s"Ivy settings file $ivySettingsFile not found")
+            require(ivySettingsFile.isFile(), s"Ivy settings file $ivySettingsFile is not a" +
+              "normal file")
+            // Generate a file name that can be used for the ivySettings file, that does not
+            // conflict with any user file.
+            val localizedFileName = Some(ivySettingsFile.getName() + "-" +
+              UUID.randomUUID().toString)
+            val (_, localizedPath) = distribute(ivySettingsPath, destName = localizedFileName)
+            require(localizedPath != null, "IvySettings file already distributed.")
+            Some(localizedPath)
+          case scheme =>
+            throw new IllegalArgumentException(s"Scheme $scheme not supported in " +
+              "spark.jars.ivySettings")
+        }
+      case _ => None
+    }
+
     /**
      * Add Spark to the cache. There are two settings that control what files to add to the cache:
      * - if a Spark archive is defined, use the archive. The archive is expected to contain
@@ -576,7 +608,7 @@ private[spark] class Client(
             jarsDir.listFiles().foreach { f =>
               if (f.isFile && f.getName.toLowerCase(Locale.ROOT).endsWith(".jar") && f.canRead) {
                 jarsStream.putNextEntry(new ZipEntry(f.getName))
-                Files.copy(f, jarsStream)
+                Files.copy(f.toPath, jarsStream)
                 jarsStream.closeEntry()
               }
             }
@@ -672,7 +704,18 @@ private[spark] class Client(
     val remoteFs = FileSystem.get(remoteConfArchivePath.toUri(), hadoopConf)
     cachedResourcesConf.set(CACHED_CONF_ARCHIVE, remoteConfArchivePath.toString())
 
-    val localConfArchive = new Path(createConfArchive().toURI())
+    val confsToOverride = Map.empty[String, String]
+    // If propagating the keytab to the AM, override the keytab name with the name of the
+    // distributed file.
+    amKeytabFileName.foreach { kt => confsToOverride.put(KEYTAB.key, kt) }
+
+    // If propagating the ivySettings file to the distributed cache, override the ivySettings
+    // file name with the name of the distributed file.
+    ivySettingsLocalizedPath.foreach { path =>
+      confsToOverride.put("spark.jars.ivySettings", path)
+    }
+
+    val localConfArchive = new Path(createConfArchive(confsToOverride).toURI())
     copyFileToRemote(destDir, localConfArchive, replication, symlinkCache, force = true,
       destName = Some(LOCALIZED_CONF_ARCHIVE))
 
@@ -701,8 +744,10 @@ private[spark] class Client(
    *
    * The archive also contains some Spark configuration. Namely, it saves the contents of
    * SparkConf in a file to be loaded by the AM process.
+   *
+   * @param confsToOverride configs that should overriden when creating the final spark conf file
    */
-  private def createConfArchive(): File = {
+  private def createConfArchive(confsToOverride: Map[String, String]): File = {
     val hadoopConfFiles = new HashMap[String, File]()
 
     // SPARK_CONF_DIR shows up in the classpath before HADOOP_CONF_DIR/YARN_CONF_DIR
@@ -764,7 +809,7 @@ private[spark] class Client(
             if url.getProtocol == "file" } {
         val file = new File(url.getPath())
         confStream.putNextEntry(new ZipEntry(file.getName()))
-        Files.copy(file, confStream)
+        Files.copy(file.toPath, confStream)
         confStream.closeEntry()
       }
 
@@ -775,7 +820,7 @@ private[spark] class Client(
       hadoopConfFiles.foreach { case (name, file) =>
         if (file.canRead()) {
           confStream.putNextEntry(new ZipEntry(s"$LOCALIZED_HADOOP_CONF_DIR/$name"))
-          Files.copy(file, confStream)
+          Files.copy(file.toPath, confStream)
           confStream.closeEntry()
         }
       }
@@ -788,11 +833,7 @@ private[spark] class Client(
 
       // Save Spark configuration to a file in the archive.
       val props = confToProperties(sparkConf)
-
-      // If propagating the keytab to the AM, override the keytab name with the name of the
-      // distributed file.
-      amKeytabFileName.foreach { kt => props.setProperty(KEYTAB.key, kt) }
-
+      confsToOverride.foreach { case (k, v) => props.setProperty(k, v)}
       writePropertiesToArchive(props, SPARK_CONF_FILE, confStream)
 
       // Write the distributed cache config to the archive.
@@ -1267,7 +1308,7 @@ private[spark] class Client(
 
 }
 
-private object Client extends Logging {
+private[spark] object Client extends Logging {
 
   // Alias for the user jar
   val APP_JAR_NAME: String = "__app__.jar"
@@ -1427,6 +1468,32 @@ private object Client extends Logging {
     val mainUri = getMainJarUri(conf.get(APP_JAR))
     val secondaryUris = getSecondaryJarUris(conf.get(SECONDARY_JARS))
     (mainUri ++ secondaryUris).toArray
+  }
+
+  /**
+   * Returns a list of local, absolute file URLs representing the user classpath. Note that this
+   * must be executed on the same host which will access the URLs, as it will resolve relative
+   * paths based on the current working directory.
+   *
+   * @param conf Spark configuration.
+   * @param useClusterPath Whether to use the 'cluster' path when resolving paths with the
+   *                       `local` scheme. This should be used when running on the cluster, but
+   *                       not when running on the gateway (i.e. for the driver in `client` mode).
+   * @return Array of local URLs ready to be passed to a [[java.net.URLClassLoader]].
+   */
+  def getUserClasspathUrls(conf: SparkConf, useClusterPath: Boolean): Array[URL] = {
+    Client.getUserClasspath(conf).map { uri =>
+      val inputPath = uri.getPath
+      val replacedFilePath = if (Utils.isLocalUri(uri.toString) && useClusterPath) {
+        Client.getClusterPath(conf, inputPath)
+      } else {
+        // Any other URI schemes should have been resolved by this point
+        assert(uri.getScheme == null || uri.getScheme == "file" || Utils.isLocalUri(uri.toString),
+          "getUserClasspath should only return 'file' or 'local' URIs but found: " + uri)
+        inputPath
+      }
+      Paths.get(replacedFilePath).toAbsolutePath.toUri.toURL
+    }
   }
 
   private def getMainJarUri(mainJar: Option[String]): Option[URI] = {
