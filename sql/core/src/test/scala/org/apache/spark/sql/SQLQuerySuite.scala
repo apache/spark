@@ -3405,6 +3405,19 @@ class SQLQuerySuite extends QueryTest with SharedSparkSession with AdaptiveSpark
     }
   }
 
+  test("SPARK-36339: References to grouping attributes should be replaced") {
+    withTempView("t") {
+      Seq("a", "a", "b").toDF("x").createOrReplaceTempView("t")
+      checkAnswer(
+        sql(
+          """
+            |select count(x) c, x from t
+            |group by x grouping sets(x)
+          """.stripMargin),
+        Seq(Row(2, "a"), Row(1, "b")))
+    }
+  }
+
   test("SPARK-31166: UNION map<null, null> and other maps should not fail") {
     checkAnswer(
       sql("(SELECT map()) UNION ALL (SELECT map(1, 2))"),

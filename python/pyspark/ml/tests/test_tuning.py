@@ -194,6 +194,18 @@ class ValidatorTestUtilsMixin:
 
 class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
 
+    def test_gen_avg_and_std_metrics(self):
+        metrics_all = [
+            [1.0, 3.0, 2.0, 4.0],
+            [3.0, 2.0, 2.0, 4.0],
+            [3.0, 2.5, 2.1, 8.0],
+        ]
+        avg_metrics, std_metrics = CrossValidator._gen_avg_and_std_metrics(metrics_all)
+        assert np.allclose(avg_metrics, [2.33333333, 2.5, 2.03333333, 5.33333333])
+        assert np.allclose(std_metrics, [0.94280904, 0.40824829, 0.04714045, 1.88561808])
+        assert isinstance(avg_metrics, list)
+        assert isinstance(std_metrics, list)
+
     def test_copy(self):
         dataset = self.spark.createDataFrame([
             (10, 10.0),
@@ -232,6 +244,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         for index in range(len(cvModel.avgMetrics)):
             self.assertTrue(abs(cvModel.avgMetrics[index] - cvModelCopied.avgMetrics[index])
                             < 0.0001)
+        self.assertTrue(np.allclose(cvModel.stdMetrics, cvModelCopied.stdMetrics))
         # SPARK-32092: CrossValidatorModel.copy() needs to copy all existing params
         for param in [
             lambda x: x.getNumFolds(),
@@ -245,6 +258,12 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
             cvModelCopied.avgMetrics[0],
             'foo',
             "Changing the original avgMetrics should not affect the copied model"
+        )
+        cvModel.stdMetrics[0] = 'foo'
+        self.assertNotEqual(
+            cvModelCopied.stdMetrics[0],
+            'foo',
+            "Changing the original stdMetrics should not affect the copied model"
         )
         cvModel.subModels[0][0].getInducedError = lambda: 'foo'
         self.assertNotEqual(
@@ -353,6 +372,15 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
             loadedCvModel.isSet(param) for param in loadedCvModel.params
         ))
 
+        # mimic old version CrossValidatorModel (without stdMetrics attribute)
+        # test loading model backwards compatibility
+        cvModel2 = cvModel.copy()
+        cvModel2.stdMetrics = []
+        cvModelPath2 = temp_path + "/cvModel2"
+        cvModel2.save(cvModelPath2)
+        loadedCvModel2 = CrossValidatorModel.load(cvModelPath2)
+        assert loadedCvModel2.stdMetrics == []
+
     def test_save_load_trained_model(self):
         self._run_test_save_load_trained_model(LogisticRegression, LogisticRegressionModel)
         self._run_test_save_load_trained_model(DummyLogisticRegression,
@@ -414,6 +442,7 @@ class CrossValidatorTests(SparkSessionTestCase, ValidatorTestUtilsMixin):
         cv.setParallelism(2)
         cvParallelModel = cv.fit(dataset)
         self.assertEqual(cvSerialModel.avgMetrics, cvParallelModel.avgMetrics)
+        self.assertEqual(cvSerialModel.stdMetrics, cvParallelModel.stdMetrics)
 
     def test_expose_sub_models(self):
         temp_path = tempfile.mkdtemp()
