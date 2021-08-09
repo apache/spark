@@ -752,10 +752,10 @@ object NullPropagation extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT)
+    t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT, COALESCE)
       || t.containsAllPatterns(WINDOW_EXPRESSION, CAST, LITERAL), ruleId) {
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
-      t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT)
+      t => t.containsAnyPattern(NULL_CHECK, NULL_LITERAL, COUNT, COALESCE)
         || t.containsAllPatterns(WINDOW_EXPRESSION, CAST, LITERAL), ruleId) {
       case e @ WindowExpression(Cast(Literal(0L, _), _, _, _), _) =>
         Cast(Literal(0L), e.dataType, Option(conf.sessionLocalTimeZone))
@@ -781,7 +781,12 @@ object NullPropagation extends Rule[LogicalPlan] {
         } else if (newChildren.length == 1) {
           newChildren.head
         } else {
-          Coalesce(newChildren)
+          val nonNullableIndex = newChildren.indexWhere(e => !e.nullable)
+          if (nonNullableIndex > -1) {
+            Coalesce(newChildren.take(nonNullableIndex + 1))
+          } else {
+            Coalesce(newChildren)
+          }
         }
 
       // If the value expression is NULL then transform the In expression to null literal.

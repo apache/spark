@@ -22,7 +22,7 @@ import java.util.{Arrays, Locale}
 
 import scala.concurrent.duration._
 
-import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
@@ -97,7 +97,7 @@ object SQLMetrics {
   val cachedSQLAccumIdentifier = Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
 
   private val metricsCache: LoadingCache[String, Option[String]] =
-    CacheBuilder.newBuilder().maximumSize(10000)
+    Caffeine.newBuilder().maximumSize(10000)
     .build(new CacheLoader[String, Option[String]] {
       override def load(name: String): Option[String] = {
         Option(name)
