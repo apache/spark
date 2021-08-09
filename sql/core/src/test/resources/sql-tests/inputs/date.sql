@@ -73,7 +73,8 @@ select date_add(null, 1);
 select date_add(date'2011-11-11', null);
 -- `date_add` accepts both date and timestamp ltz/ntz inputs.
 select date_add(date'2011-11-11', 1);
-select date_add(timestamp_ltz'2011-11-11 12:12:12', 1), date_add(timestamp_ntz'2011-11-11 12:12:12', 1);
+select date_add(timestamp_ltz'2011-11-11 12:12:12', 1);
+select date_add(timestamp_ntz'2011-11-11 12:12:12', 1);
 
 -- date sub
 select date_sub(date'2011-11-11', 1);
@@ -109,6 +110,7 @@ select date '2001-09-28' - null;
 select '2011-11-11' - interval '2' day;
 select null - date '2019-10-06';
 select date '2001-10-01' - date '2001-09-28';
+select '2011-11-11 11:11:11' - date'2011-11-11';
 
 -- Unsupported narrow text style
 select to_date('26/October/2015', 'dd/MMMMM/yyyy');
