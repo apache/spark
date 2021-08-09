@@ -287,7 +287,7 @@ case class SessionAcc(events: List[SessionEvent]) {
 }
 
 /**
- * User-defined data type representing the session information returned by mapGroupsWithState.
+ * User-defined data type representing the session information returned by flatMapGroupsWithState.
  *
  * @param id          Id of the user
  * @param durationMs  Duration the session was active, that is, from first event to its expiry

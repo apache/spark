@@ -63,14 +63,14 @@ import static org.apache.spark.sql.functions.*;
  * - No further event is provided for the user ID within 5 seconds
  * - An event having CLOSE_SESSION as event_type is provided for the user ID
  * <p>
- * Usage: StructuredComplexSessionization <hostname> <port>
+ * Usage: JavaStructuredComplexSessionization <hostname> <port>
  * <hostname> and <port> describe the TCP server that Structured Streaming
  * would connect to receive data.
  * <p>
  * To run this on your local machine, you need to first run a Netcat server
  * `$ nc -lk 9999`
  * and then run the example
- * `$ bin/run-example sql.streaming.StructuredComplexSessionization
+ * `$ bin/run-example sql.streaming.JavaStructuredComplexSessionization
  * localhost 9999`
  * <p>
  * Here's a set of events for example:
