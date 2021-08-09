@@ -561,7 +561,7 @@ case class JsonToStructs(
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
     case _: StructType | _: ArrayType | _: MapType =>
-      ExprUtils.checkJsonSchema(nullableSchema).map{
+      ExprUtils.checkJsonSchema(nullableSchema).map {
         TypeCheckResult.TypeCheckFailure(_)
       } getOrElse {
         super.checkInputDataTypes()
