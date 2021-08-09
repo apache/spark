@@ -1654,7 +1654,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * This rule optimizes Limit operators by:
+ * This rule is applied by both normal and AQE Optimizer, and optimizes Limit operators by:
  * 1. Eliminate [[Limit]]/[[GlobalLimit]] operators if it's child max row <= limit.
  * 2. Combines two adjacent [[Limit]] operators into one, merging the
  *    expressions into one single expression.
@@ -1672,11 +1672,11 @@ object EliminateLimits extends Rule[LogicalPlan] {
       child
 
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>
-      GlobalLimit(Least(Seq(ne, le)), grandChild)
+      GlobalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
     case LocalLimit(le, LocalLimit(ne, grandChild)) =>
-      LocalLimit(Least(Seq(ne, le)), grandChild)
+      LocalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
     case Limit(le, Limit(ne, grandChild)) =>
-      Limit(Least(Seq(ne, le)), grandChild)
+      Limit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
   }
 }
 
