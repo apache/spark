@@ -318,7 +318,7 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
 
   test("SPARK-36449: Replacing columns with duplicate name should not be allowed") {
     alterTableTest(
-      () => ReplaceColumns(
+      ReplaceColumns(
         table,
         Seq(QualifiedColType(None, "f", LongType, true, None, None),
           QualifiedColType(None, "F", LongType, true, None, None))),
@@ -327,23 +327,16 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
   }
 
   private def alterTableTest(
-      alter: AlterTableCommand,
+      alter: => AlterTableCommand,
       error: Seq[String],
       expectErrorOnCaseSensitive: Boolean = true): Unit = {
-    alterTableTest(() => alter, error, expectErrorOnCaseSensitive)
-  }
-
-  private def alterTableTest(
-      f: () => AlterTableCommand,
-      error: Seq[String],
-      expectErrorOnCaseSensitive: Boolean): Unit = {
     Seq(true, false).foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive.toString) {
         val expectError = if (expectErrorOnCaseSensitive) caseSensitive else !caseSensitive
         if (expectError) {
-          assertAnalysisError(f(), error, caseSensitive)
+          assertAnalysisError(alter, error, caseSensitive)
         } else {
-          assertAnalysisSuccess(f(), caseSensitive)
+          assertAnalysisSuccess(alter, caseSensitive)
         }
       }
     }
