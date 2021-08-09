@@ -81,9 +81,9 @@ import org.apache.spark.sql.types.{StringType, StructType, TimestampType}
  * +-----+----------+---------+
  * (The last event is not reflected into output due to watermark.)
  *
- * Note that there're two different sessions for 'user1'. All events are occurred within
- * gap duration for nearest events, but they don't compose a single session due to the
- * event of CLOSE_SESSION.
+ * Note that there're three different sessions for 'user1'. The events in first two sessions
+ * are occurred within gap duration for nearest events, but they don't compose a single session
+ * due to the event of CLOSE_SESSION.
  *
  * Also note that the implementation is simplified one. This example doesn't address
  * - UPDATE MODE (the semantic is not clear for session window with event time processing)

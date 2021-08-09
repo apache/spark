@@ -98,14 +98,14 @@ import static org.apache.spark.sql.functions.*;
  * +-----+----------+---------+
  * (The last event is not reflected into output due to watermark.)
  * <p>
- * Note that there're two different sessions for 'user1'. All events are occurred within
- * gap duration for nearest events, but they don't compose a single session due to the
- * event of CLOSE_SESSION.
+ * Note that there're three different sessions for 'user1'. The events in first two sessions
+ * are occurred within gap duration for nearest events, but they don't compose a single session
+ * due to the event of CLOSE_SESSION.
  * <p>
  * Also note that the implementation is simplified one. This example doesn't address
  * - UPDATE MODE (the semantic is not clear for session window with event time processing)
  * - partial merge (events in session which are earlier than watermark can be aggregated)
- * - other possible optimizations (the implementation is ported from Scala example)
+ * - other possible optimizations (especially the implementation is ported from Scala example)
  */
 public final class JavaStructuredComplexSessionization {
   public static void main(String[] args) throws Exception {
