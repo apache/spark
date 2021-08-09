@@ -1080,9 +1080,6 @@ class Analyzer(override val catalogManager: CatalogManager)
             }.getOrElse(write)
           case _ => write
         }
-
-      case u: UnresolvedV2Relation =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
 
     /**
