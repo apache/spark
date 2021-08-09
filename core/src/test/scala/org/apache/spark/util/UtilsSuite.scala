@@ -245,8 +245,8 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
         assert(mergedStream.read() === -1)
         assert(byteBufferInputStream.chunkedByteBuffer === null)
       } finally {
-        IOUtils.closeQuietly(mergedStream)
-        IOUtils.closeQuietly(in)
+        Utils.closeQuietly(mergedStream)
+        Utils.closeQuietly(in)
       }
     }
   }

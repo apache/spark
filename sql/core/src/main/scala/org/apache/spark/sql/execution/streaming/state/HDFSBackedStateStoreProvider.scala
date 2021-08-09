@@ -27,7 +27,6 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import com.google.common.io.ByteStreams
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
 
@@ -542,7 +541,7 @@ private[sql] class HDFSBackedStateStoreProvider extends StateStoreProvider with 
       rawStream: CancellableFSDataOutputStream): Unit = {
     try {
       if (rawStream != null) rawStream.cancel()
-      IOUtils.closeQuietly(compressedStream)
+      Utils.closeQuietly(compressedStream)
     } catch {
       case e: FSError if e.getCause.isInstanceOf[IOException] =>
         // Closing the compressedStream causes the stream to write/flush flush data into the

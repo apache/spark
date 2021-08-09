@@ -380,7 +380,7 @@ class FileAppenderSuite extends SparkFunSuite with BeforeAndAfter with Logging {
         try {
           IOUtils.toString(inputStream, StandardCharsets.UTF_8)
         } finally {
-          IOUtils.closeQuietly(inputStream)
+          Utils.closeQuietly(inputStream)
         }
       } else {
         Files.toString(file, StandardCharsets.UTF_8)

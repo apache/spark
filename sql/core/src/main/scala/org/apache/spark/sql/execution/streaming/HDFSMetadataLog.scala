@@ -22,7 +22,6 @@ import java.nio.charset.StandardCharsets
 
 import scala.reflect.ClassTag
 
-import org.apache.commons.io.IOUtils
 import org.apache.hadoop.fs._
 import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
@@ -30,6 +29,7 @@ import org.json4s.jackson.Serialization
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.util.Utils
 
 
 /**
@@ -147,7 +147,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           throw new IllegalStateException(
             s"Failed to read log file $batchMetadataFile. ${ise.getMessage}", ise)
       } finally {
-        IOUtils.closeQuietly(input)
+        Utils.closeQuietly(input)
       }
     } else {
       throw QueryExecutionErrors.batchMetadataFileNotFoundError(batchMetadataFile)

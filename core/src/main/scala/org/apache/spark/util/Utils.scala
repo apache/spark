@@ -2658,6 +2658,24 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Closes the given Closeable as a null-safe operation while consuming IOException
+   * by the given consumer.
+   *
+   * @param closeable The resource to close, may be null.
+   * @param consumer Consumes the IOException thrown by Closeable#close().
+   */
+  def closeQuietly(closeable: Closeable, consumer: IOException => Unit = null): Unit = {
+    if (closeable != null) {
+      try {
+        closeable.close()
+      } catch {
+        case ioe: IOException =>
+          if (consumer != null) consumer.apply(ioe)
+      }
+    }
+  }
+
+  /**
    * Returns a path of temporary file which is in the same directory with `path`.
    */
   def tempFileWith(path: File): File = {
@@ -3139,8 +3157,8 @@ private[spark] object Utils extends Logging {
       logInfo(s"Unzipped from $dfsZipFile\n\t${files.mkString("\n\t")}")
     } finally {
       // Close everything no matter what happened
-      IOUtils.closeQuietly(in)
-      IOUtils.closeQuietly(out)
+      Utils.closeQuietly(in)
+      Utils.closeQuietly(out)
     }
     files.toSeq
   }
