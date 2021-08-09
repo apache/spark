@@ -31,9 +31,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.*;
+
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.Weigher;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
@@ -43,10 +47,6 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-import com.google.common.cache.Weigher;
 import com.google.common.primitives.Ints;
 import com.google.common.primitives.Longs;
 import org.roaringbitmap.RoaringBitmap;
@@ -115,16 +115,10 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       NettyUtils.createThreadFactory("spark-shuffle-merged-shuffle-directory-cleaner"));
     this.minChunkSize = conf.minChunkSizeInMergedShuffleFile();
     this.ioExceptionsThresholdDuringMerge = conf.ioExceptionsThresholdDuringMerge();
-    CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
-      new CacheLoader<File, ShuffleIndexInformation>() {
-        public ShuffleIndexInformation load(File file) throws IOException {
-          return new ShuffleIndexInformation(file);
-        }
-      };
-    indexCache = CacheBuilder.newBuilder()
+    indexCache = Caffeine.newBuilder()
       .maximumWeight(conf.mergedIndexCacheSize())
-      .weigher((Weigher<File, ShuffleIndexInformation>) (file, indexInfo) -> indexInfo.getSize())
-      .build(indexCacheLoader);
+      .weigher((Weigher<File, ShuffleIndexInformation>)(file, indexInfo) -> indexInfo.getSize())
+      .build(ShuffleIndexInformation::new);
     this.errorHandler = new ErrorHandler.BlockPushErrorHandler();
   }
 
@@ -299,7 +293,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       ShuffleIndexRecord shuffleIndexRecord = shuffleIndexInformation.getIndex(chunkId);
       return new FileSegmentManagedBuffer(
         conf, dataFile, shuffleIndexRecord.getOffset(), shuffleIndexRecord.getLength());
-    } catch (ExecutionException e) {
+    } catch (CompletionException e) {
       throw new RuntimeException(String.format(
         "Failed to open merged shuffle index file %s", indexFile.getPath()), e);
     }
@@ -513,12 +507,18 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       }
     } else {
       appShuffleInfo.shuffles.compute(msg.shuffleId, (id, value) -> {
-        if (null == value || msg.shuffleMergeId != value.shuffleMergeId ||
+        if (null == value || msg.shuffleMergeId < value.shuffleMergeId ||
           INDETERMINATE_SHUFFLE_FINALIZED == value.shuffleMergePartitions) {
           throw new RuntimeException(String.format(
             "Shuffle merge finalize request for shuffle %s with" + " shuffleMergeId %s is %s",
             msg.shuffleId, msg.shuffleMergeId,
             ErrorHandler.BlockPushErrorHandler.STALE_SHUFFLE_FINALIZE_SUFFIX));
+        } else if (msg.shuffleMergeId > value.shuffleMergeId) {
+          // If no blocks pushed for the finalizeShuffleMerge shuffleMergeId then return
+          // empty MergeStatuses but cleanup the older shuffleMergeId files.
+          mergedShuffleCleaner.execute(() ->
+            closeAndDeletePartitionFiles(value.shuffleMergePartitions));
+          return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);
         } else {
           shuffleMergePartitionsRef.set(value.shuffleMergePartitions);
           return new AppShuffleMergePartitionsInfo(msg.shuffleMergeId, true);

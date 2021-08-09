@@ -392,7 +392,7 @@ private[spark] class TaskSchedulerImpl(
             val prof = sc.resourceProfileManager.resourceProfileFromId(taskSetRpID)
             val taskCpus = ResourceProfile.getTaskCpusOrDefaultForProfile(prof, conf)
             val (taskDescOption, didReject, index) =
-              taskSet.resourceOffer(execId, host, maxLocality, taskResAssignments)
+              taskSet.resourceOffer(execId, host, maxLocality, taskCpus, taskResAssignments)
             noDelayScheduleRejects &= !didReject
             for (task <- taskDescOption) {
               val (locality, resources) = if (task != null) {
@@ -714,6 +714,7 @@ private[spark] class TaskSchedulerImpl(
                 task.index,
                 task.taskLocality,
                 false,
+                task.assignedCores,
                 task.assignedResources,
                 launchTime)
               addRunningTask(taskDesc.taskId, taskDesc.executorId, taskSet)

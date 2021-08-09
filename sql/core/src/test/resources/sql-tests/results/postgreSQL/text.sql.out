@@ -130,7 +130,7 @@ select concat_ws(',',10,20,null,30)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'concat_ws(',', 10, 20, NULL, 30)' due to data type mismatch: argument 2 requires (array<string> or string) type, however, '10' is of int type. argument 3 requires (array<string> or string) type, however, '20' is of int type. argument 4 requires (array<string> or string) type, however, 'NULL' is of null type. argument 5 requires (array<string> or string) type, however, '30' is of int type.; line 1 pos 7
+cannot resolve 'concat_ws(',', 10, 20, NULL, 30)' due to data type mismatch: argument 2 requires (array<string> or string) type, however, '10' is of int type. argument 3 requires (array<string> or string) type, however, '20' is of int type. argument 4 requires (array<string> or string) type, however, 'NULL' is of void type. argument 5 requires (array<string> or string) type, however, '30' is of int type.; line 1 pos 7
 
 
 -- !query
@@ -139,7 +139,7 @@ select concat_ws('',10,20,null,30)
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'concat_ws('', 10, 20, NULL, 30)' due to data type mismatch: argument 2 requires (array<string> or string) type, however, '10' is of int type. argument 3 requires (array<string> or string) type, however, '20' is of int type. argument 4 requires (array<string> or string) type, however, 'NULL' is of null type. argument 5 requires (array<string> or string) type, however, '30' is of int type.; line 1 pos 7
+cannot resolve 'concat_ws('', 10, 20, NULL, 30)' due to data type mismatch: argument 2 requires (array<string> or string) type, however, '10' is of int type. argument 3 requires (array<string> or string) type, however, '20' is of int type. argument 4 requires (array<string> or string) type, however, 'NULL' is of void type. argument 5 requires (array<string> or string) type, however, '30' is of int type.; line 1 pos 7
 
 
 -- !query
@@ -148,7 +148,7 @@ select concat_ws(NULL,10,20,null,30) is null
 struct<>
 -- !query output
 org.apache.spark.sql.AnalysisException
-cannot resolve 'concat_ws(CAST(NULL AS STRING), 10, 20, NULL, 30)' due to data type mismatch: argument 2 requires (array<string> or string) type, however, '10' is of int type. argument 3 requires (array<string> or string) type, however, '20' is of int type. argument 4 requires (array<string> or string) type, however, 'NULL' is of null type. argument 5 requires (array<string> or string) type, however, '30' is of int type.; line 1 pos 7
+cannot resolve 'concat_ws(CAST(NULL AS STRING), 10, 20, NULL, 30)' due to data type mismatch: argument 2 requires (array<string> or string) type, however, '10' is of int type. argument 3 requires (array<string> or string) type, however, '20' is of int type. argument 4 requires (array<string> or string) type, however, 'NULL' is of void type. argument 5 requires (array<string> or string) type, however, '30' is of int type.; line 1 pos 7
 
 
 -- !query

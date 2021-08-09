@@ -21,6 +21,7 @@ import java.util.UUID
 
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.network.shuffle.RemoteBlockPushResolver
 
 /**
@@ -94,7 +95,7 @@ case class ShuffleIndexBlockId(shuffleId: Int, mapId: Long, reduceId: Int) exten
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".index"
 }
 
-@Since("3.3.0")
+@Since("3.2.0")
 @DeveloperApi
 case class ShuffleChecksumBlockId(shuffleId: Int, mapId: Long, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".checksum"
@@ -191,7 +192,7 @@ class UnrecognizedBlockId(name: String)
 @DeveloperApi
 object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
-  val SHUFFLE = "shuffle_([0-9]+)_(-?[0-9]+)_([0-9]+)".r
+  val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_BATCH = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)".r
   val SHUFFLE_DATA = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).data".r
   val SHUFFLE_INDEX = "shuffle_([0-9]+)_([0-9]+)_([0-9]+).index".r
@@ -250,7 +251,6 @@ object BlockId {
       TempShuffleBlockId(UUID.fromString(uuid))
     case TEST(value) =>
       TestBlockId(value)
-    case _ =>
-      throw new UnrecognizedBlockId(name)
+    case _ => throw SparkCoreErrors.unrecognizedBlockIdError(name)
   }
 }

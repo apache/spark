@@ -199,7 +199,7 @@ jobs:
     name: "Build modules (${{ format('{0}, {1} job', needs.configure-jobs.outputs.branch, needs.configure-jobs.outputs.type) }}): ${{ matrix.modules }}"
     runs-on: ubuntu-20.04
     container:
-      image: dongjoon/apache-spark-github-action-image:20210602
+      image: dongjoon/apache-spark-github-action-image:20210730
     strategy:
       fail-fast: false
       matrix:
@@ -220,7 +220,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
-      METASPACE_SIZE: 128m
+      METASPACE_SIZE: 1g
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -266,8 +266,6 @@ jobs:
     - name: Run tests
       env: ${{ fromJSON(needs.configure-jobs.outputs.envs) }}
       run: |
-        # TODO(SPARK-36345): Install mlflow>=1.0 and sklearn in Python 3.9 of the base image
-        python3.9 -m pip install 'mlflow>=1.0' sklearn
         # TODO(SPARK-36361): Install coverage in Python 3.9 and PyPy 3 in the base image
         python3.9 -m pip install coverage
         pypy3 -m pip install coverage
@@ -416,7 +414,7 @@ jobs:
       run: |
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
         Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
-        Rscript -e "devtools::install_github('jimhester/lintr@v2.0.1')"
+        Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
         ./R/install-dev.sh
     - name: Instll JavaScript linter dependencies
       run: |

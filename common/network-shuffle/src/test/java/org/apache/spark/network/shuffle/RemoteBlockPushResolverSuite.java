@@ -1234,6 +1234,25 @@ public class RemoteBlockPushResolverSuite {
     pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 3));
     MergedBlockMeta mergedBlockMeta = pushResolver.getMergedBlockMeta(testApp, 0, 3, 0);
     validateChunks(testApp, 0, 3, 0, mergedBlockMeta, new int[]{2}, new int[][]{{0}});
+
+    StreamCallbackWithID stream4 =
+      pushResolver.receiveBlockDataAsStream(
+        new PushBlockStream(testApp, NO_ATTEMPT_ID, 0, 4, 0, 0, 0));
+    closed.acquire();
+    // Do not finalize shuffleMergeId 4 can happen during stage cancellation.
+    stream4.onData(stream4.getID(), ByteBuffer.wrap(new byte[2]));
+    stream4.onComplete(stream4.getID());
+
+    // Check whether the data is cleaned up when higher shuffleMergeId finalize request comes
+    // but no blocks pushed for that shuffleMergeId
+    pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, NO_ATTEMPT_ID, 0, 5));
+    closed.acquire();
+    assertFalse("MergedBlock meta file for shuffle 0 and shuffleMergeId 4 should be cleaned"
+      + " up", appShuffleInfo.getMergedShuffleMetaFile(0, 4, 0).exists());
+    assertFalse("MergedBlock index file for shuffle 0 and shuffleMergeId 4 should be cleaned"
+      + " up", appShuffleInfo.getMergedShuffleIndexFile(0, 4, 0).exists());
+    assertFalse("MergedBlock data file for shuffle 0 and shuffleMergeId 4 should be cleaned"
+      + " up", appShuffleInfo.getMergedShuffleDataFile(0, 4, 0).exists());
   }
 
   private void useTestFiles(boolean useTestIndexFile, boolean useTestMetaFile) throws IOException {
