@@ -1814,6 +1814,23 @@ Specifically for built-in HDFS state store provider, users can check the state s
 it is best if cache missing count is minimized that means Spark won't waste too much time on loading checkpointed state.
 User can increase Spark locality waiting configurations to avoid loading state store providers in different executors across batches.
 
+### RocksDB state store implementation
+
+As of Spark 3.2, we add a new build-in state store implementation, RocksDB state store provider.
+
+The current build-in HDFS state store provider has two major drawbacks:
+
+* The amount of state that can be maintained is limited by the heap size of the executors
+* State expiration by watermark and/or timeouts require full scans over all the data
+
+The RocksDB-based State Store implementation can address these drawbacks:
+
+* RocksDB can serve data from the disk with a configurable amount of non-JVM memory.
+* Sorting keys using the appropriate column should avoid full scans to find the to-be-dropped keys.
+
+To enable the new build-in state store implementation, set `spark.sql.streaming.stateStore.providerClass`
+to `org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider`.
+
 ## Starting Streaming Queries
 Once you have defined the final result DataFrame/Dataset, all that is left is for you to start the streaming computation. To do that, you have to use the `DataStreamWriter`
 ([Scala](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Python](api/python/reference/api/pyspark.sql.streaming.DataStreamWriter.html#pyspark.sql.streaming.DataStreamWriter) docs)
