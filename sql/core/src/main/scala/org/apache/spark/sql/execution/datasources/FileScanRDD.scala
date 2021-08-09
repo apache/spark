@@ -23,9 +23,11 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.{Partition => RDDPartition, SparkUpgradeException, TaskContext}
+import org.apache.spark.{Partition => RDDPartition, SparkEnv, SparkUpgradeException, TaskContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
+import org.apache.spark.scheduler.ExecutorCacheTaskLocation
+import org.apache.spark.softaffinity.SoftAffinityManager
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, UnsafeProjection, UnsafeRow}
@@ -76,6 +78,11 @@ class FileScanRDD(
   private val ignoreMissingFiles = sparkSession.sessionState.conf.ignoreMissingFiles
 
   override def compute(split: RDDPartition, context: TaskContext): Iterator[InternalRow] = {
+    val currTaskLocality = context.getLocalProperty("SAMetrics.taskLocality")
+    val files = split.asInstanceOf[FilePartition].files
+    val currFilePath = if (files.isEmpty) "bucket-read-empty-task" else files.head.filePath
+    logInfo(s"SAMetrics=File ${currFilePath} running in task ${context.taskAttemptId()} " +
+      s"on executor ${SparkEnv.get.executorId} with locality ${currTaskLocality}")
     val iterator = new Iterator[Object] with AutoCloseable {
       private val inputMetrics = context.taskMetrics().inputMetrics
       private val existingBytesRead = inputMetrics.bytesRead
@@ -307,6 +314,30 @@ class FileScanRDD(
   override protected def getPartitions: Array[RDDPartition] = filePartitions.toArray
 
   override protected def getPreferredLocations(split: RDDPartition): Seq[String] = {
-    split.asInstanceOf[FilePartition].preferredLocations()
+    val filePartition = split.asInstanceOf[FilePartition]
+    val expectedTargets = filePartition.preferredLocations()
+    val files = filePartition.files
+
+    // logInfo(s"The expected target hosts are ${expectedTargets.mkString(",")}, " +
+    //   s"calculated by file ${files.mkString(",")}")
+    if (!files.isEmpty && SoftAffinityManager.usingSoftAffinity()
+      && !SoftAffinityManager.checkTargetHosts(expectedTargets)) {
+      // if there is no host in the node list which are executors running on,
+      // using SoftAffinityManager to generate target executors.
+      // Only using the first file to calculate the target executors
+      val expectedExecutors = SoftAffinityManager.askExecutors(files.head.filePath)
+        .map( target => {
+          ExecutorCacheTaskLocation(target._2, target._1).toString
+        })
+      if (expectedExecutors.isEmpty) {
+        expectedTargets
+      } else {
+        logInfo(s"SAMetrics=File ${files.head.filePath} - " +
+          s"the expected executors are ${expectedExecutors.mkString("_")}")
+        expectedExecutors
+      }
+    } else {
+      expectedTargets
+    }
   }
 }

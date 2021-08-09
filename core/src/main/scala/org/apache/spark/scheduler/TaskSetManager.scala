@@ -541,11 +541,12 @@ private[spark] class TaskSetManager(
     // a good proxy to task serialization time.
     // val timeTaken = clock.getTime() - startTime
     val tName = taskName(taskId)
-    logInfo(s"Starting $tName ($host, executor ${info.executorId}, " +
-      s"partition ${task.partitionId}, $taskLocality, ${serializedTask.limit()} bytes) " +
+    logInfo(s"Starting $tName (TID $taskId , $host, executor ${info.executorId} , " +
+      s"partition ${task.partitionId}, $taskLocality , ${serializedTask.limit()} bytes) " +
       s"taskResourceAssignments ${taskResourceAssignments}")
 
     sched.dagScheduler.taskStarted(task, info)
+    task.localProperties.setProperty("SAMetrics.taskLocality", s"${taskLocality}")
     new TaskDescription(
       taskId,
       attemptNum,
@@ -826,8 +827,10 @@ private[spark] class TaskSetManager(
     }
     if (!successful(index)) {
       tasksSuccessful += 1
-      logInfo(s"Finished ${taskName(info.taskId)} in ${info.duration} ms " +
-        s"on ${info.host} (executor ${info.executorId}) ($tasksSuccessful/$numTasks)")
+      logInfo(s"SAMetrics=Finished ${taskName(info.taskId)} ( TID ${info.taskId} ) " +
+        s"in ${info.duration} ms " +
+        s"on ${info.host} (executor ${info.executorId} ) with locality ${info.taskLocality} ) " +
+        s"($tasksSuccessful/$numTasks)")
       // Mark successful and stop if all the tasks have succeeded.
       successful(index) = true
       numFailures(index) = 0
