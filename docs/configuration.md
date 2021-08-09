@@ -3168,8 +3168,7 @@ Push based shuffle helps improve the reliability and performance of spark shuffl
 <tr>
   <td><code>spark.shuffle.push.server.mergedShuffleFileManagerImpl</code></td>
   <td>
-    <code>org.apache.spark.network.shuffle.
-          ExternalBlockHandler$NoOpMergedShuffleFileManager</code>
+    <code>org.apache.spark.network.shuffle.<br />ExternalBlockHandler$NoOpMergedShuffleFileManager</code>
   </td>
   <td>
     Class name of the implementation of MergedShuffleFileManager that manages push-based shuffle. This acts as a server side config to disable or enable push-based shuffle. By default, push-based shuffle is disabled at the server side. <p> To enable push-based shuffle on the server side, set the config <code>spark.shuffle.push.server.mergedShuffleFileManagerImpl</code> to <code>org.apache.spark.network.shuffle.RemoteBlockPushResolver</code></p>
