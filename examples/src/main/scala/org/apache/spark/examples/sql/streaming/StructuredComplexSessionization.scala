@@ -33,19 +33,16 @@ import org.apache.spark.sql.types.{StringType, StructType, TimestampType}
  * Each line composes an event, and the line should match to the json format.
  *
  * The schema of the event is following:
- *
  * - user_id: String
  * - event_type: String
  * - timestamp: Long
  *
  * The supported types are following:
- *
  * - NEW_EVENT
  * - CLOSE_SESSION
  *
  * This example focuses to demonstrate the complex sessionization which uses two conditions
  * on closing session; conditions are following:
- *
  * - No further event is provided for the user ID within 5 seconds
  * - An event having CLOSE_SESSION as event_type is provided for the user ID
  *
@@ -89,7 +86,6 @@ import org.apache.spark.sql.types.{StringType, StructType, TimestampType}
  * event of CLOSE_SESSION.
  *
  * Also note that the implementation is simplified one. This example doesn't address
- *
  * - UPDATE MODE (the semantic is not clear for session window with event time processing)
  * - partial merge (events in session which are earlier than watermark can be aggregated)
  * - other possible optimizations
