@@ -655,10 +655,9 @@ struct<make_timestamp(1, 1, 1, 1, 1, 60):timestamp>
 -- !query
 SELECT make_timestamp(1, 1, 1, 1, 1, 61)
 -- !query schema
-struct<>
+struct<make_timestamp(1, 1, 1, 1, 1, 61):timestamp>
 -- !query output
-java.time.DateTimeException
-Invalid value for SecondOfMinute (valid values 0 - 59): 61
+NULL
 
 
 -- !query
