@@ -20,7 +20,6 @@ A wrapper for GroupedData to behave similar to pandas GroupBy.
 """
 
 from abc import ABCMeta, abstractmethod
-import builtins
 import sys
 import inspect
 from collections import OrderedDict, namedtuple
@@ -44,9 +43,13 @@ from typing import (
     TYPE_CHECKING,
 )
 
-import numpy as np
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
+try:
+    from pandas.core.base import SelectionMixin
+    _builtin_table = SelectionMixin._builtin_table
+except AttributeError:
+    from pandas.core.common import _builtin_table
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (  # noqa: F401
@@ -96,12 +99,6 @@ if TYPE_CHECKING:
 
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
-
-_builtin_table = {
-    builtins.sum: np.sum,
-    builtins.max: np.max,
-    builtins.min: np.min,
-}  # type: Dict[Callable, Callable]
 
 
 class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
