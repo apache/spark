@@ -2292,9 +2292,7 @@ class Index(IndexOpsMixin):
 
         sdf_self = self._internal.spark_frame.select(self._internal.index_spark_columns)
         sdf_other = other_idx._internal.spark_frame.select(other_idx._internal.index_spark_columns)
-        sdf = sdf_self.union(sdf_other.subtract(sdf_self))
-        if isinstance(self, MultiIndex):
-            sdf = sdf.drop_duplicates()
+        sdf = sdf_self.unionAll(sdf_other).exceptAll(sdf_self.intersectAll(sdf_other))
         if sort:
             sdf = sdf.sort(*self._internal.index_spark_column_names)
 

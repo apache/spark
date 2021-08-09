@@ -242,10 +242,16 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         handleResult(PushResult(blockId, exception))
       }
     }
+    // In addition to randomizing the order of the push requests, further randomize the order
+    // of blocks within the push request to further reduce the likelihood of shuffle server side
+    // collision of pushed blocks. This does not increase the cost of reading unmerged shuffle
+    // files on the executor side, because we are still reading MB-size chunks and only randomize
+    // the in-memory sliced buffers post reading.
+    val (blockPushIds, blockPushBuffers) = Utils.randomize(blockIds.zip(
+      sliceReqBufferIntoBlockBuffers(request.reqBuffer, request.blocks.map(_._2)))).unzip
     SparkEnv.get.blockManager.blockStoreClient.pushBlocks(
-      address.host, address.port, blockIds.toArray,
-      sliceReqBufferIntoBlockBuffers(request.reqBuffer, request.blocks.map(_._2)),
-      blockPushListener)
+      address.host, address.port, blockPushIds.toArray,
+      blockPushBuffers.toArray, blockPushListener)
   }
 
   /**
