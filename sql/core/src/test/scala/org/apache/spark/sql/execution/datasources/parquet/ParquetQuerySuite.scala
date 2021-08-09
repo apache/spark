@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.datasources.{SchemaColumnConvertNotSupportedException, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT.{NestedStruct, NestedStructUDT, SingleElement}
-import org.apache.spark.sql.execution.datasources.v2.MicroBatchScanExec
+import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -953,8 +953,8 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
 
         // do not return batch - whole stage codegen is disabled for wide table (>200 columns)
         val df2 = spark.read.parquet(path)
-        val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[MicroBatchScanExec]).get
-        val parquetScan2 = fileScan2.asInstanceOf[MicroBatchScanExec].scan.asInstanceOf[ParquetScan]
+        val fileScan2 = df2.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
+        val parquetScan2 = fileScan2.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]
         // The method `supportColumnarReads` in Parquet doesn't depends on the input partition.
         // Here we can pass null input partition to the method for testing propose.
         assert(!parquetScan2.createReaderFactory().supportColumnarReads(null))
@@ -963,8 +963,8 @@ class ParquetV2QuerySuite extends ParquetQuerySuite {
         // return batch
         val columns = Seq.tabulate(9) {i => s"c$i"}
         val df3 = df2.selectExpr(columns : _*)
-        val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[MicroBatchScanExec]).get
-        val parquetScan3 = fileScan3.asInstanceOf[MicroBatchScanExec].scan.asInstanceOf[ParquetScan]
+        val fileScan3 = df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchScanExec]).get
+        val parquetScan3 = fileScan3.asInstanceOf[BatchScanExec].scan.asInstanceOf[ParquetScan]
         assert(parquetScan3.createReaderFactory().supportColumnarReads(null))
         checkAnswer(df3, df.selectExpr(columns : _*))
       }
