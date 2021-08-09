@@ -97,7 +97,7 @@ object InterpretedOrdering {
 object RowOrdering extends CodeGeneratorWithInterpretedFallback[Seq[SortOrder], BaseOrdering] {
 
   /**
-   * Returns true if the data type can be ordered (i.e. can be sorted).
+   * Returns true iff the data type can be ordered (i.e. can be sorted).
    */
   def isOrderable(dataType: DataType,
      isGroupingExpr: Boolean = false): Boolean = dataType match {
