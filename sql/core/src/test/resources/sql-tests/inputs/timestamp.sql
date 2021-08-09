@@ -19,6 +19,8 @@ SELECT make_timestamp(2021, 07, 11, 6, 30, 45.678);
 SELECT make_timestamp(2021, 07, 11, 6, 30, 45.678, 'CET');
 SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007);
 SELECT make_timestamp(1, 1, 1, 1, 1, 1);
+SELECT make_timestamp(1, 1, 1, 1, 1, 60);
+SELECT make_timestamp(1, 1, 1, 1, 1, 61);
 
 -- [SPARK-31710] TIMESTAMP_SECONDS, TIMESTAMP_MILLISECONDS and TIMESTAMP_MICROSECONDS that always create timestamp_ltz
 select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null);
