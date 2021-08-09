@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
-import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
+import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, DeduplicateRightSideOfLeftSemiAntiJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity, PlanHelper}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
@@ -38,6 +38,8 @@ class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
       AQEPropagateEmptyRelation,
       ConvertToLocalRelation,
       UpdateAttributeNullability),
+    Batch("Deduplicate Right Side of LeftSemiAnti Join", Once,
+      DeduplicateRightSideOfLeftSemiAntiJoin),
     Batch("Dynamic Join Selection", Once, DynamicJoinSelection)
   )
 

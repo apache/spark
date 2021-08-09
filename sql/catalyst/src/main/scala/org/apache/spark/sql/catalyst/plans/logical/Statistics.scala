@@ -49,12 +49,15 @@ object Statistics {
  * @param attributeStats Statistics for Attributes.
  * @param isRuntime Whether the statistics is inferred from query stage runtime statistics during
  *                  adaptive query execution.
+ * @param isRuntime Whether the statistics is inferred from query stage runtime statistics during
+ *                  adaptive query execution.
  */
 case class Statistics(
     sizeInBytes: BigInt,
     rowCount: Option[BigInt] = None,
     attributeStats: AttributeMap[ColumnStat] = AttributeMap(Nil),
-    isRuntime: Boolean = false) {
+    isRuntime: Boolean = false,
+    shuffleBytes: Option[BigInt] = None) {
 
   override def toString: String = "Statistics(" + simpleString + ")"
 

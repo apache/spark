@@ -424,7 +424,7 @@ trait JoinSelectionHelper {
    * that is much smaller than other one. Since we does not have the statistic for number of rows,
    * use the size of bytes here as estimation.
    */
-  def muchSmaller(a: LogicalPlan, b: LogicalPlan): Boolean = {
+  private def muchSmaller(a: LogicalPlan, b: LogicalPlan): Boolean = {
     a.stats.sizeInBytes * 3 <= b.stats.sizeInBytes
   }
 

@@ -28,6 +28,7 @@ import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.execution.{CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -1989,6 +1990,21 @@ class AdaptiveQueryExecSuite
             assert(findTopLevelSort(adaptive).size == 1)
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-36245: Deduplicate right side of left semi/anti join") {
+    withSQLConf(
+      SQLConf.CBO_ENABLED.key -> "false",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      withTable("t_duplicate") {
+        sql("create table t_duplicate using parquet as select 1 as id from range(200)")
+        val query = "select * from testData left semi join t_duplicate on key = id"
+        val (plan, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+
+        assert(collect(plan) { case h: HashAggregateExec => h }.isEmpty)
+        assert(collect(adaptivePlan) { case h: HashAggregateExec => h }.size === 2)
       }
     }
   }
