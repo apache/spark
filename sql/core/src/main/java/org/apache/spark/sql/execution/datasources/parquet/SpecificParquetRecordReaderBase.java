@@ -95,8 +95,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
       readFooterByRange(configuration, split.getStart(), split.getStart() + split.getLength());
     this.fileSchema = footer.getFileMetaData().getSchema();
     FilterCompat.Filter filter = ParquetInputFormat.getFilter(configuration);
-    List<BlockMetaData> blocks = RowGroupFilter.filterRowGroups(filter, footer.getBlocks(), fileSchema);
-
+    List<BlockMetaData> blocks =
+      RowGroupFilter.filterRowGroups(filter, footer.getBlocks(), fileSchema);
     Map<String, String> fileMetadata = footer.getFileMetaData().getKeyValueMetaData();
     ReadSupport<T> readSupport = getReadSupportInstance(getReadSupportClass(configuration));
     ReadSupport.ReadContext readContext = readSupport.init(new InitContext(
