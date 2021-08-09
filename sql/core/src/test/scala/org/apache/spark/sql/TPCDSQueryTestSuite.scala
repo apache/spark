@@ -136,7 +136,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
       val expectSorted = expectedOutput.split("\n").sorted.map(_.trim)
         .mkString("\n").replaceAll("\\s+$", "")
       val outputSorted = output.sorted.map(_.trim).mkString("\n").replaceAll("\\s+$", "")
-      assertResult(expectSorted, s"Result did not match") { outputSorted }
+      assertResult(expectSorted, s"Result did not match\n$queryString") { outputSorted }
     } else {
       assertResult(expectedOutput, s"Result did not match\n$queryString") { outputString }
     }
