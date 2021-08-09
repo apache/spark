@@ -45,8 +45,10 @@ from typing import (
 
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
+
 try:
     from pandas.core.base import SelectionMixin
+
     _builtin_table = SelectionMixin._builtin_table
 except AttributeError:
     from pandas.core.common import _builtin_table
