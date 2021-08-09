@@ -228,6 +228,10 @@ class ParquetFileFormat
       SQLConf.PARQUET_INT96_AS_TIMESTAMP.key,
       sparkSession.sessionState.conf.isParquetINT96AsTimestamp)
 
+    hadoopConf.setBoolean(
+      SQLConf.FILE_META_CACHE_PARQUET_ENABLED.key,
+      sparkSession.sessionState.conf.fileMetaCacheParquetEnabled)
+
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
@@ -263,9 +267,15 @@ class ParquetFileFormat
       val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
 
       val sharedConf = broadcastedHadoopConf.value.value
+      val metaCacheEnabled =
+        sharedConf.getBoolean(SQLConf.FILE_META_CACHE_PARQUET_ENABLED.key, false)
 
-      lazy val footerFileMetaData =
+      lazy val footerFileMetaData = if (metaCacheEnabled) {
+        FileMetaCacheManager.get(ParquetFileMetaKey(filePath, sharedConf))
+          .asInstanceOf[ParquetFileMeta].footer.getFileMetaData
+      } else {
         ParquetFooterReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
+      }
       val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
         footerFileMetaData.getKeyValueMetaData.get,
         datetimeRebaseModeInRead)
@@ -327,6 +337,13 @@ class ParquetFileFormat
           int96RebaseMode.toString,
           enableOffHeapColumnVector && taskContext.isDefined,
           capacity)
+        // Set footer before initialize.
+        if (metaCacheEnabled) {
+          val fileMeta = FileMetaCacheManager
+            .get(ParquetFileMetaKey(filePath, sharedConf))
+            .asInstanceOf[ParquetFileMeta]
+          vectorizedReader.setCachedFooter(fileMeta.footer)
+        }
         val iter = new RecordReaderIterator(vectorizedReader)
         // SPARK-23457 Register a task completion listener before `initialization`.
         taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))

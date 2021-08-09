@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileMetaCacheManager, PartitionedFile, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
@@ -77,6 +77,7 @@ case class ParquetPartitionReaderFactory(
   private val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
   private val pushDownStringStartWith = sqlConf.parquetFilterPushDownStringStartWith
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
+  private val parquetMetaCacheEnabled = sqlConf.fileMetaCacheParquetEnabled
   private val datetimeRebaseModeInRead = parquetOptions.datetimeRebaseModeInRead
   private val int96RebaseModeInRead = parquetOptions.int96RebaseModeInRead
 
@@ -131,8 +132,12 @@ case class ParquetPartitionReaderFactory(
     val filePath = new Path(new URI(file.filePath))
     val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
 
-    lazy val footerFileMetaData =
+    lazy val footerFileMetaData = if (parquetMetaCacheEnabled) {
+      FileMetaCacheManager.get(ParquetFileMetaKey(filePath, conf))
+        .asInstanceOf[ParquetFileMeta].footer.getFileMetaData
+    } else {
       ParquetFooterReader.readFooter(conf, filePath, SKIP_ROW_GROUPS).getFileMetaData
+    }
     val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
       footerFileMetaData.getKeyValueMetaData.get,
       datetimeRebaseModeInRead)
@@ -249,6 +254,13 @@ case class ParquetPartitionReaderFactory(
       int96RebaseMode.toString,
       enableOffHeapColumnVector && taskContext.isDefined,
       capacity)
+    // Set footer before initialize.
+    if (parquetMetaCacheEnabled) {
+      val fileMeta = FileMetaCacheManager
+        .get(ParquetFileMetaKey(split.getPath, hadoopAttemptContext.getConfiguration))
+        .asInstanceOf[ParquetFileMeta]
+      vectorizedReader.setCachedFooter(fileMeta.footer)
+    }
     val iter = new RecordReaderIterator(vectorizedReader)
     // SPARK-23457 Register a task completion listener before `initialization`.
     taskContext.foreach(_.addTaskCompletionListener[Unit](_ => iter.close()))
