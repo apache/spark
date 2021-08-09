@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.concurrent.TimeUnit
 
-import com.google.common.cache.{CacheBuilder, CacheLoader, CacheStats}
+import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine}
+import com.github.benmanes.caffeine.cache.stats.CacheStats
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -49,7 +50,7 @@ private[sql] object FileMetaCacheManager extends Logging {
   private lazy val ttlTime =
     SparkEnv.get.conf.get(SQLConf.FILE_META_CACHE_TTL_SINCE_LAST_ACCESS)
 
-  private lazy val cache = CacheBuilder
+  private lazy val cache = Caffeine
     .newBuilder()
     .expireAfterAccess(ttlTime, TimeUnit.SECONDS)
     .recordStats()
