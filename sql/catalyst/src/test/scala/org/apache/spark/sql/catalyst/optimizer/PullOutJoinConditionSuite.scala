@@ -70,16 +70,6 @@ class PullOutJoinConditionSuite extends PlanTest {
     }
   }
 
-  test("Negative case: Non broadcast hash join") {
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "10000000") {
-      val joinType = Inner
-      val udf = Upper("y.d".attr)
-      val originalQuery = x.join(y, joinType, Option("x.a".attr === udf))
-
-      comparePlans(Optimize.execute(originalQuery.analyze), originalQuery.analyze)
-    }
-  }
-
   test("Negative case: all children are Attributes") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
       val condition = Option("x.a".attr === "y.d".attr)
