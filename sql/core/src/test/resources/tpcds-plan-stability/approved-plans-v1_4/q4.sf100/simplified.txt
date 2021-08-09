@@ -1,7 +1,7 @@
 TakeOrderedAndProject [customer_id,customer_first_name,customer_last_name,customer_preferred_cust_flag,customer_birth_country,customer_login,customer_email_address]
   WholeStageCodegen (53)
     Project [customer_id,customer_first_name,customer_last_name,customer_preferred_cust_flag,customer_birth_country,customer_login,customer_email_address]
-      SortMergeJoin [customer_id,customer_id,CASE WHEN (t_c_firstyear.year_total > 0.000000BD) THEN (t_c_secyear.year_total / t_c_firstyear.year_total) ELSE CAST(NULL AS DECIMAL(38,14)) END,year_total,year_total]
+      SortMergeJoin [customer_id,customer_id,year_total,year_total,year_total,year_total]
         InputAdapter
           WholeStageCodegen (44)
             Project [customer_id,customer_id,customer_first_name,customer_last_name,customer_preferred_cust_flag,customer_birth_country,customer_login,customer_email_address,year_total,year_total,year_total]
@@ -9,10 +9,10 @@ TakeOrderedAndProject [customer_id,customer_first_name,customer_last_name,custom
                 InputAdapter
                   WholeStageCodegen (35)
                     Project [customer_id,customer_id,customer_first_name,customer_last_name,customer_preferred_cust_flag,customer_birth_country,customer_login,customer_email_address,year_total,year_total]
-                      SortMergeJoin [customer_id,customer_id,year_total,year_total,CASE WHEN (t_s_firstyear.year_total > 0.000000BD) THEN (t_s_secyear.year_total / t_s_firstyear.year_total) ELSE CAST(NULL AS DECIMAL(38,14)) END]
+                      SortMergeJoin [customer_id,customer_id,year_total,year_total,year_total,year_total]
                         InputAdapter
                           WholeStageCodegen (26)
-                            Project [customer_id,customer_id,customer_first_name,customer_last_name,customer_preferred_cust_flag,customer_birth_country,customer_login,customer_email_address,year_total,year_total,year_total]
+                            Project [customer_id,year_total,customer_id,customer_first_name,customer_last_name,customer_preferred_cust_flag,customer_birth_country,customer_login,customer_email_address,year_total,year_total]
                               SortMergeJoin [customer_id,customer_id]
                                 InputAdapter
                                   WholeStageCodegen (17)

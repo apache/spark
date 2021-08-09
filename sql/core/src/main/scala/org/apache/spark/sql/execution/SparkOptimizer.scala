@@ -42,16 +42,12 @@ class SparkOptimizer(
   override def defaultBatches: Seq[Batch] = (preOptimizationBatches ++ super.defaultBatches :+
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)) :+
     Batch("PartitionPruning", Once,
-      PartitionPruning,
-      OptimizeSubqueries) :+
+      PartitionPruning) :+
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates) :+
     Batch("Cleanup filters that cannot be pushed down", Once,
       CleanupDynamicPruningFilters,
-      PruneFilters) :+
-    Batch("Pull out join condition", Once,
-      PullOutJoinCondition,
-      CollapseProject)) ++
+      PruneFilters)) ++
     postHocOptimizationBatches :+
     Batch("Extract Python UDFs", Once,
       ExtractPythonUDFFromJoinCondition,

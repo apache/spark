@@ -278,14 +278,14 @@ Condition : (isnotnull(paid#46) AND (cast(paid#46 as decimal(33,8)) > cast(Subqu
 ===== Subqueries =====
 
 Subquery:1 Hosting operator id = 49 Hosting Expression = Subquery scalar-subquery#47, [id=#48]
-* HashAggregate (97)
-+- Exchange (96)
-   +- * HashAggregate (95)
-      +- * HashAggregate (94)
-         +- Exchange (93)
-            +- * HashAggregate (92)
-               +- * Project (91)
-                  +- * SortMergeJoin Inner (90)
+* HashAggregate (96)
++- Exchange (95)
+   +- * HashAggregate (94)
+      +- * HashAggregate (93)
+         +- Exchange (92)
+            +- * HashAggregate (91)
+               +- * Project (90)
+                  +- * SortMergeJoin Inner (89)
                      :- * Sort (83)
                      :  +- Exchange (82)
                      :     +- * Project (81)
@@ -320,12 +320,11 @@ Subquery:1 Hosting operator id = 49 Hosting Expression = Subquery scalar-subquer
                      :           :              +- ReusedExchange (72)
                      :           +- * Sort (79)
                      :              +- ReusedExchange (78)
-                     +- * Sort (89)
-                        +- Exchange (88)
-                           +- * Project (87)
-                              +- * Filter (86)
-                                 +- * ColumnarToRow (85)
-                                    +- Scan parquet default.customer_address (84)
+                     +- * Sort (88)
+                        +- Exchange (87)
+                           +- * Filter (86)
+                              +- * ColumnarToRow (85)
+                                 +- Scan parquet default.customer_address (84)
 
 
 (50) Scan parquet default.store_sales
@@ -484,63 +483,59 @@ Input [3]: [ca_state#78, ca_zip#79, ca_country#80]
 
 (86) Filter [codegen id : 16]
 Input [3]: [ca_state#78, ca_zip#79, ca_country#80]
-Condition : ((isnotnull(ca_country#80) AND isnotnull(ca_zip#79)) AND isnotnull(upper(ca_country#80)))
+Condition : (isnotnull(ca_country#80) AND isnotnull(ca_zip#79))
 
-(87) Project [codegen id : 16]
-Output [3]: [ca_state#78, ca_zip#79, upper(ca_country#80) AS upper(spark_catalog.default.customer_address.ca_country)#81]
+(87) Exchange
 Input [3]: [ca_state#78, ca_zip#79, ca_country#80]
+Arguments: hashpartitioning(upper(ca_country#80), ca_zip#79, 5), ENSURE_REQUIREMENTS, [id=#81]
 
-(88) Exchange
-Input [3]: [ca_state#78, ca_zip#79, upper(spark_catalog.default.customer_address.ca_country)#81]
-Arguments: hashpartitioning(upper(spark_catalog.default.customer_address.ca_country)#81, ca_zip#79, 5), ENSURE_REQUIREMENTS, [id=#82]
+(88) Sort [codegen id : 17]
+Input [3]: [ca_state#78, ca_zip#79, ca_country#80]
+Arguments: [upper(ca_country#80) ASC NULLS FIRST, ca_zip#79 ASC NULLS FIRST], false, 0
 
-(89) Sort [codegen id : 17]
-Input [3]: [ca_state#78, ca_zip#79, upper(spark_catalog.default.customer_address.ca_country)#81]
-Arguments: [upper(spark_catalog.default.customer_address.ca_country)#81 ASC NULLS FIRST, ca_zip#79 ASC NULLS FIRST], false, 0
-
-(90) SortMergeJoin [codegen id : 18]
+(89) SortMergeJoin [codegen id : 18]
 Left keys [2]: [c_birth_country#73, s_zip#59]
-Right keys [2]: [upper(spark_catalog.default.customer_address.ca_country)#81, ca_zip#79]
+Right keys [2]: [upper(ca_country#80), ca_zip#79]
 Join condition: None
 
-(91) Project [codegen id : 18]
+(90) Project [codegen id : 18]
 Output [11]: [ss_net_paid#53, s_store_name#56, s_state#58, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67, c_first_name#71, c_last_name#72, ca_state#78]
-Input [15]: [ss_net_paid#53, s_store_name#56, s_state#58, s_zip#59, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67, c_first_name#71, c_last_name#72, c_birth_country#73, ca_state#78, ca_zip#79, upper(spark_catalog.default.customer_address.ca_country)#81]
+Input [15]: [ss_net_paid#53, s_store_name#56, s_state#58, s_zip#59, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67, c_first_name#71, c_last_name#72, c_birth_country#73, ca_state#78, ca_zip#79, ca_country#80]
 
-(92) HashAggregate [codegen id : 18]
+(91) HashAggregate [codegen id : 18]
 Input [11]: [ss_net_paid#53, s_store_name#56, s_state#58, i_current_price#63, i_size#64, i_color#65, i_units#66, i_manager_id#67, c_first_name#71, c_last_name#72, ca_state#78]
 Keys [10]: [c_last_name#72, c_first_name#71, s_store_name#56, ca_state#78, s_state#58, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64]
 Functions [1]: [partial_sum(UnscaledValue(ss_net_paid#53))]
-Aggregate Attributes [1]: [sum#83]
-Results [11]: [c_last_name#72, c_first_name#71, s_store_name#56, ca_state#78, s_state#58, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64, sum#84]
+Aggregate Attributes [1]: [sum#82]
+Results [11]: [c_last_name#72, c_first_name#71, s_store_name#56, ca_state#78, s_state#58, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64, sum#83]
 
-(93) Exchange
-Input [11]: [c_last_name#72, c_first_name#71, s_store_name#56, ca_state#78, s_state#58, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64, sum#84]
-Arguments: hashpartitioning(c_last_name#72, c_first_name#71, s_store_name#56, ca_state#78, s_state#58, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64, 5), ENSURE_REQUIREMENTS, [id=#85]
+(92) Exchange
+Input [11]: [c_last_name#72, c_first_name#71, s_store_name#56, ca_state#78, s_state#58, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64, sum#83]
+Arguments: hashpartitioning(c_last_name#72, c_first_name#71, s_store_name#56, ca_state#78, s_state#58, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64, 5), ENSURE_REQUIREMENTS, [id=#84]
 
-(94) HashAggregate [codegen id : 19]
-Input [11]: [c_last_name#72, c_first_name#71, s_store_name#56, ca_state#78, s_state#58, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64, sum#84]
+(93) HashAggregate [codegen id : 19]
+Input [11]: [c_last_name#72, c_first_name#71, s_store_name#56, ca_state#78, s_state#58, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64, sum#83]
 Keys [10]: [c_last_name#72, c_first_name#71, s_store_name#56, ca_state#78, s_state#58, i_color#65, i_current_price#63, i_manager_id#67, i_units#66, i_size#64]
 Functions [1]: [sum(UnscaledValue(ss_net_paid#53))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#53))#86]
-Results [1]: [MakeDecimal(sum(UnscaledValue(ss_net_paid#53))#86,17,2) AS netpaid#39]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#53))#85]
+Results [1]: [MakeDecimal(sum(UnscaledValue(ss_net_paid#53))#85,17,2) AS netpaid#39]
 
-(95) HashAggregate [codegen id : 19]
+(94) HashAggregate [codegen id : 19]
 Input [1]: [netpaid#39]
 Keys: []
 Functions [1]: [partial_avg(netpaid#39)]
-Aggregate Attributes [2]: [sum#87, count#88]
-Results [2]: [sum#89, count#90]
+Aggregate Attributes [2]: [sum#86, count#87]
+Results [2]: [sum#88, count#89]
 
-(96) Exchange
-Input [2]: [sum#89, count#90]
-Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#91]
+(95) Exchange
+Input [2]: [sum#88, count#89]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#90]
 
-(97) HashAggregate [codegen id : 20]
-Input [2]: [sum#89, count#90]
+(96) HashAggregate [codegen id : 20]
+Input [2]: [sum#88, count#89]
 Keys: []
 Functions [1]: [avg(netpaid#39)]
-Aggregate Attributes [1]: [avg(netpaid#39)#92]
-Results [1]: [CheckOverflow((0.050000 * promote_precision(avg(netpaid#39)#92)), DecimalType(24,8), true) AS (0.05 * avg(netpaid))#93]
+Aggregate Attributes [1]: [avg(netpaid#39)#91]
+Results [1]: [CheckOverflow((0.050000 * promote_precision(avg(netpaid#39)#91)), DecimalType(24,8), true) AS (0.05 * avg(netpaid))#92]
 
 

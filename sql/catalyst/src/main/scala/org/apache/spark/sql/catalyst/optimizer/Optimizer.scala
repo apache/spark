@@ -151,6 +151,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       ReplaceExpressions,
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
+      PullOutJoinCondition,
       ComputeCurrentTime,
       ReplaceCurrentLike(catalogManager)) ::
     //////////////////////////////////////////////////////////////////////////////////////////
