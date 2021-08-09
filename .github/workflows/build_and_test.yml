@@ -220,7 +220,7 @@ jobs:
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
-      METASPACE_SIZE: 128m
+      METASPACE_SIZE: 1g
     steps:
     - name: Checkout Spark repository
       uses: actions/checkout@v2
@@ -414,7 +414,7 @@ jobs:
       run: |
         apt-get install -y libcurl4-openssl-dev libgit2-dev libssl-dev libxml2-dev
         Rscript -e "install.packages(c('devtools'), repos='https://cloud.r-project.org/')"
-        Rscript -e "devtools::install_github('jimhester/lintr@v2.0.1')"
+        Rscript -e "devtools::install_version('lintr', version='2.0.1', repos='https://cloud.r-project.org')"
         ./R/install-dev.sh
     - name: Instll JavaScript linter dependencies
       run: |
