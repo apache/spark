@@ -63,7 +63,7 @@ object PushDownUtils extends PredicateHelper {
     val (partitionFilter, dataFilterExpression) = scanBuilder match {
       case f: FileScanBuilder =>
         f.separateFilters(translatedFilters.toArray, translatedFilterToExpr)
-      case _ => (Array.empty[sources.Filter], filters)
+      case _ => (Array.empty[sources.Filter], (filters.toSet -- untranslatableExprs.toSet).toSeq)
     }
     val dataFilter = (translatedFilters.toSet -- partitionFilter.toSet).toArray
 
@@ -77,7 +77,7 @@ object PushDownUtils extends PredicateHelper {
         }
         (r.pushedFilters(), (untranslatableExprs ++ postScanFilters).toSeq)
       case _ =>
-        (Nil, dataFilterExpression)
+        (Nil, (dataFilterExpression ++ untranslatableExprs).toSeq)
     }
   }
 
