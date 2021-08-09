@@ -70,7 +70,9 @@ import org.apache.spark.sql.types.{StringType, StructType, TimestampType}
  *
  * {"user_id": "user2", "event_type": "NEW_EVENT", "timestamp": 45}
  *
- * and results (the output could be split across micro-batches):
+ * {"user_id": "user1", "event_type": "NEW_EVENT", "timestamp": 65}
+ *
+ * and results (the output can be split across micro-batches):
  *
  * +-----+----------+---------+
  * |   id|durationMs|numEvents|
@@ -78,10 +80,19 @@ import org.apache.spark.sql.types.{StringType, StructType, TimestampType}
  * |user1|      5000|        3|
  * |user1|      7000|        2|
  * |user1|      5000|        1|
+ * |user2|      5000|        1|
  * +-----+----------+---------+
+ * (The last event is not reflected into output due to watermark.)
  *
- * Note that there're two different sessions for user1. All events are occurred within gap duration
- * for nearest events, but they don't compose a single session due to the event of CLOSE_SESSION.
+ * Note that there're two different sessions for 'user1'. All events are occurred within
+ * gap duration for nearest events, but they don't compose a single session due to the
+ * event of CLOSE_SESSION.
+ *
+ * Also note that the implementation is simplified one. This example doesn't address
+ *
+ * - UPDATE MODE (the semantic is not clear for session window with event time processing)
+ * - partial merge (events in session which are earlier than watermark can be aggregated)
+ * - other possible optimizations
  */
 object StructuredComplexSessionization {
 
@@ -134,15 +145,10 @@ object StructuredComplexSessionization {
             state: GroupState[List[SessionAcc]]) =>
 
           def handleEvict(sessions: List[SessionAcc]): Iterator[Session] = {
-            println(s"DEBUG: sessions to check eviction - $sessions")
-
             // we sorted sessions by timestamp
             val (evicted, kept) = sessions.span {
               s => s.endTime.getTime < state.getCurrentWatermarkMs()
             }
-
-            println(s"DEBUG: sessions to evict - $evicted")
-            println(s"DEBUG: sessions to keep - $kept")
 
             if (kept.isEmpty) {
               state.remove()
@@ -153,26 +159,18 @@ object StructuredComplexSessionization {
             }
 
             evicted.map { sessionAcc =>
-              println(s"DEBUG: converting session $sessionAcc / " +
-                s"startTime: ${sessionAcc.startTime} / " +
-                s"endTime: ${sessionAcc.endTime} / " +
-                s"length: ${sessionAcc.events.length}")
               Session(userId, sessionAcc.endTime.getTime - sessionAcc.startTime.getTime,
                 sessionAcc.events.length)
             }.iterator
           }
 
           def mergeSessions(sessions: List[SessionAcc]): Unit = {
-            println(s"DEBUG: sessions to merge - $sessions")
-
             // we sorted sessions by timestamp
             val updatedSessions = new mutable.ArrayBuffer[SessionAcc]()
             updatedSessions ++= sessions
 
             var curIdx = 0
             while (curIdx < updatedSessions.length - 1) {
-              println(s"DEBUG: current idx: $curIdx / updatedSessions $updatedSessions")
-
               val curSession = updatedSessions(curIdx)
               val nextSession = updatedSessions(curIdx + 1)
 
@@ -209,8 +207,6 @@ object StructuredComplexSessionization {
               }
             }
 
-            println(s"DEBUG: final updatedSessions $updatedSessions")
-
             // update state
             state.update(updatedSessions.toList)
           }
@@ -229,9 +225,6 @@ object StructuredComplexSessionization {
               } else {
                 List.empty
               }
-
-              println(s"DEBUG: sessions from state - $sessionsFromState")
-              println(s"DEBUG: sessions from events - $sessionsFromEvents")
 
               // sort sessions via start timestamp, and merge
               mergeSessions((sessionsFromEvents ++ sessionsFromState).sortBy(_.startTime.getTime))
