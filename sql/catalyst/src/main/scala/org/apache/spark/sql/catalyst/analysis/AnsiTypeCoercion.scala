@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercion.numericPrecedence
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types._
 
 /**
@@ -122,13 +121,9 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       Some(TimestampType)
 
     case (t1: DayTimeIntervalType, t2: DayTimeIntervalType) =>
-      Some(DayTimeIntervalType(
-        IntervalUtils.minAnsiIntervalField(t1.startField, t2.startField),
-        IntervalUtils.maxAnsiIntervalField(t1.endField, t2.endField)))
+      Some(DayTimeIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
     case (t1: YearMonthIntervalType, t2: YearMonthIntervalType) =>
-      Some(YearMonthIntervalType(
-        IntervalUtils.minAnsiIntervalField(t1.startField, t2.startField),
-        IntervalUtils.maxAnsiIntervalField(t1.endField, t2.endField)))
+      Some(YearMonthIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
 
     case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
