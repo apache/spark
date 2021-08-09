@@ -661,17 +661,4 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         }
     }
   }
-
-  test("SPARK-36431: Support comparison of ANSI intervals with different fields") {
-    checkEvaluation(EqualTo(
-      Literal.create(10,
-        YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH)),
-      Literal.create(10,
-        YearMonthIntervalType(YearMonthIntervalType.MONTH, YearMonthIntervalType.MONTH))), true)
-    checkEvaluation(GreaterThan(
-      Literal.create(13,
-        YearMonthIntervalType(YearMonthIntervalType.YEAR, YearMonthIntervalType.MONTH)),
-      Literal.create(12,
-        YearMonthIntervalType(YearMonthIntervalType.MONTH, YearMonthIntervalType.MONTH))), true)
-  }
 }

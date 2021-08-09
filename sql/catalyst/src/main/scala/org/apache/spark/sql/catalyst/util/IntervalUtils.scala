@@ -95,6 +95,22 @@ object IntervalUtils {
     result
   }
 
+  def maxAnsiIntervalField(field1: Byte, field2: Byte): Byte = {
+    if (field1 >= field2) {
+      field1
+    } else {
+      field2
+    }
+  }
+
+  def minAnsiIntervalField(field1: Byte, field2: Byte): Byte = {
+    if (field1 <= field2) {
+      field1
+    } else {
+      field2
+    }
+  }
+
   private val yearMonthPatternString = "([+|-])?(\\d+)-(\\d+)"
   private val yearMonthRegex = (s"^$yearMonthPatternString$$").r
   private val yearMonthLiteralRegex =

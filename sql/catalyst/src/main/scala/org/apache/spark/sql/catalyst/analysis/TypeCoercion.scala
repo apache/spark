@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -656,8 +657,6 @@ abstract class TypeCoercionBase {
       (leftType, rightType) match {
         case (_: DecimalType, NullType) => true
         case (NullType, _: DecimalType) => true
-        case (_: DayTimeIntervalType, _: DayTimeIntervalType) => true
-        case (_: YearMonthIntervalType, _: YearMonthIntervalType) => true
         case _ =>
           // If DecimalType operands are involved except for the two cases above,
           // DecimalPrecision will handle it.
@@ -869,8 +868,14 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
         Some(TimestampType)
 
-      case (_: DayTimeIntervalType, _: DayTimeIntervalType) => Some(DayTimeIntervalType())
-      case (_: YearMonthIntervalType, _: YearMonthIntervalType) => Some(YearMonthIntervalType())
+      case (t1: DayTimeIntervalType, t2: DayTimeIntervalType) =>
+        Some(DayTimeIntervalType(
+          IntervalUtils.minAnsiIntervalField(t1.startField, t2.startField),
+          IntervalUtils.maxAnsiIntervalField(t1.endField, t2.endField)))
+      case (t1: YearMonthIntervalType, t2: YearMonthIntervalType) =>
+        Some(YearMonthIntervalType(
+          IntervalUtils.minAnsiIntervalField(t1.startField, t2.startField),
+          IntervalUtils.maxAnsiIntervalField(t1.endField, t2.endField)))
 
       case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
         Some(TimestampNTZType)
