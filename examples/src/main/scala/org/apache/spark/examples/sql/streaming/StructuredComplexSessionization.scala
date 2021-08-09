@@ -20,10 +20,12 @@ package org.apache.spark.examples.sql.streaming
 
 import java.sql.Timestamp
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.streaming._
-import org.apache.spark.sql.types.{LongType, StringType, StructType}
+import org.apache.spark.sql.types.{StringType, StructType, TimestampType}
 
 
 /**
@@ -44,7 +46,7 @@ import org.apache.spark.sql.types.{LongType, StringType, StructType}
  * This example focuses to demonstrate the complex sessionization which uses two conditions
  * on closing session; conditions are following:
  *
- * - No further event is provided for the user ID within 10 seconds
+ * - No further event is provided for the user ID within 5 seconds
  * - An event having CLOSE_SESSION as event_type is provided for the user ID
  *
  * Usage: StructuredComplexSessionization <hostname> <port>
@@ -56,6 +58,30 @@ import org.apache.spark.sql.types.{LongType, StringType, StructType}
  * and then run the example
  * `$ bin/run-example sql.streaming.StructuredComplexSessionization
  * localhost 9999`
+ *
+ * Here's a set of events for example:
+ *
+ * {"user_id": "user1", "event_type": "NEW_EVENT", "timestamp": 13}
+ * {"user_id": "user1", "event_type": "NEW_EVENT", "timestamp": 10}
+ * {"user_id": "user1", "event_type": "CLOSE_SESSION", "timestamp": 15}
+ * {"user_id": "user1", "event_type": "NEW_EVENT", "timestamp": 17}
+ * {"user_id": "user1", "event_type": "NEW_EVENT", "timestamp": 19}
+ * {"user_id": "user1", "event_type": "NEW_EVENT", "timestamp": 29}
+ *
+ * {"user_id": "user2", "event_type": "NEW_EVENT", "timestamp": 45}
+ *
+ * and results (the output could be split across micro-batches):
+ *
+ * +-----+----------+---------+
+ * |   id|durationMs|numEvents|
+ * +-----+----------+---------+
+ * |user1|      5000|        3|
+ * |user1|      7000|        2|
+ * |user1|      5000|        1|
+ * +-----+----------+---------+
+ *
+ * Note that there're two different sessions for user1. All events are occurred within gap duration
+ * for nearest events, but they don't compose a single session due to the event of CLOSE_SESSION.
  */
 object StructuredComplexSessionization {
 
@@ -85,103 +111,142 @@ object StructuredComplexSessionization {
     val jsonSchema = new StructType()
       .add("user_id", StringType, nullable = false)
       .add("event_type", StringType, nullable = false)
-      .add("timestamp", LongType, nullable = false)
+      .add("timestamp", TimestampType, nullable = false)
 
-    val gapDuration = 1000 * 60 * 5 // 5 mins
+    val gapDuration: Long = 5 * 1000 // 5 seconds
 
     // Parse the line into event, as described in classdoc.
     val events = lines
       .select(from_json(col("value"), jsonSchema).as("event"))
-      .selectExpr("event.user_id", "event.event_type", "event.timestamp")
-      .as[(String, String, Long)]
-      .map { case (userId, eventType, timestamp) =>
-        SessionEvent(userId, EventTypes.withName(eventType), timestamp, gapDuration)
-      }
+      .selectExpr("event.user_id AS user_id", "event.event_type AS event_type",
+        "event.timestamp AS timestamp")
+      .withWatermark("timestamp", "10 seconds")
+      .as[(String, String, Timestamp)]
 
     // Sessionize the events. Track number of events, start and end timestamps of session,
     // and report session when session is closed.
-    // FIXME: ...implement from here...
     val sessionUpdates = events
-      .groupByKey(event => event.userId)
-      .mapGroupsWithState[List[SessionAcc], Session](GroupStateTimeout.EventTimeTimeout) {
-        case (userId: String, events: Iterator[SessionEvent],
+      .groupByKey(event => event._1)
+      .flatMapGroupsWithState[List[SessionAcc], Session](OutputMode.Append(),
+        GroupStateTimeout.EventTimeTimeout) {
+
+        case (userId: String, events: Iterator[(String, String, Timestamp)],
             state: GroupState[List[SessionAcc]]) =>
 
-          def handleEvict(): Iterator[Session] = {
-            state.getOption match {
-              case Some(lst) =>
-                // we sort sessions by timestamp
-                val (evicted, kept) = lst.span {
-                  s => s.endTime < state.getCurrentWatermarkMs()
-                }
+          def handleEvict(sessions: List[SessionAcc]): Iterator[Session] = {
+            println(s"DEBUG: sessions to check eviction - $sessions")
 
-                if (kept.isEmpty) {
-                  state.remove()
-                } else {
-                  state.update(kept)
-                  state.setTimeoutTimestamp(kept.head.endTime)
-                }
-
-                evicted.map { session =>
-                  Session(userId, session.endTime - session.startTime, session.events.length)
-                }.iterator
-
-              case None =>
-                state.remove()
-                Seq.empty[Session].iterator
+            // we sorted sessions by timestamp
+            val (evicted, kept) = sessions.span {
+              s => s.endTime.getTime < state.getCurrentWatermarkMs()
             }
-          }
 
-          def handleEvent(event: SessionEvent): Unit = {
-            state.getOption match {
-              case Some(lst) =>
-                var idx = 0
+            println(s"DEBUG: sessions to evict - $evicted")
+            println(s"DEBUG: sessions to keep - $kept")
 
-
-              case None =>
-
-            }
-          }
-      }
-
-
-    // the timestamp is added by Spark, hence technically it's working as "processing time"
-    val sessionUpdates = events
-      .groupByKey(event => event.sessionId)
-      .mapGroupsWithState[Events, SessionUpdate](GroupStateTimeout.ProcessingTimeTimeout) {
-        case (sessionId: String, events: Iterator[Event], state: GroupState[Events]) =>
-
-
-          // If timed out, then remove session and send final update
-          if (state.hasTimedOut) {
-            val finalUpdate =
-              SessionUpdate(sessionId, state.get.durationMs, state.get.numEvents, expired = true)
-            state.remove()
-            finalUpdate
-          } else {
-            // Update start and end timestamps in session
-            val timestamps = events.map(_.timestamp.getTime).toSeq
-            val updatedSession = if (state.exists) {
-              val oldSession = state.get
-              SessionInfo(
-                oldSession.numEvents + timestamps.size,
-                oldSession.startTimestampMs,
-                math.max(oldSession.endTimestampMs, timestamps.max))
+            if (kept.isEmpty) {
+              state.remove()
             } else {
-              SessionInfo(timestamps.size, timestamps.min, timestamps.max)
+              state.update(kept)
+              // trigger timeout at the end time of the first session
+              state.setTimeoutTimestamp(kept.head.endTime.getTime)
             }
-            state.update(updatedSession)
 
-            // Set timeout such that the session will be expired if no data received for 10 seconds
-            state.setTimeoutDuration("10 seconds")
-            Session(sessionId, state.get.durationMs, state.get.numEvents, expired = false)
+            evicted.map { sessionAcc =>
+              println(s"DEBUG: converting session $sessionAcc / " +
+                s"startTime: ${sessionAcc.startTime} / " +
+                s"endTime: ${sessionAcc.endTime} / " +
+                s"length: ${sessionAcc.events.length}")
+              Session(userId, sessionAcc.endTime.getTime - sessionAcc.startTime.getTime,
+                sessionAcc.events.length)
+            }.iterator
+          }
+
+          def mergeSessions(sessions: List[SessionAcc]): Unit = {
+            println(s"DEBUG: sessions to merge - $sessions")
+
+            // we sorted sessions by timestamp
+            val updatedSessions = new mutable.ArrayBuffer[SessionAcc]()
+            updatedSessions ++= sessions
+
+            var curIdx = 0
+            while (curIdx < updatedSessions.length - 1) {
+              println(s"DEBUG: current idx: $curIdx / updatedSessions $updatedSessions")
+
+              val curSession = updatedSessions(curIdx)
+              val nextSession = updatedSessions(curIdx + 1)
+
+              // Current session and next session can be merged
+              if (curSession.endTime.getTime > nextSession.startTime.getTime) {
+                val accumulatedEvents =
+                  (curSession.events ++ nextSession.events).sortBy(_.startTimestamp.getTime)
+
+                val newSessions = new mutable.ArrayBuffer[SessionAcc]()
+                var eventsForCurSession = new mutable.ArrayBuffer[SessionEvent]()
+                accumulatedEvents.foreach { event =>
+                  eventsForCurSession += event
+                  if (event.eventType == EventTypes.CLOSE_SESSION) {
+                    newSessions += SessionAcc(eventsForCurSession.toList)
+                    eventsForCurSession = new mutable.ArrayBuffer[SessionEvent]()
+                  }
+                }
+                if (eventsForCurSession.nonEmpty) {
+                  newSessions += SessionAcc(eventsForCurSession.toList)
+                }
+
+                // replace current session and next session with new session(s)
+                updatedSessions.remove(curIdx + 1)
+                updatedSessions(curIdx) = newSessions.head
+                if (newSessions.length > 1) {
+                  updatedSessions.insertAll(curIdx + 1, newSessions.tail)
+                }
+
+                // move the cursor to the last new session(s)
+                curIdx += newSessions.length - 1
+              } else {
+                // move to the next session
+                curIdx += 1
+              }
+            }
+
+            println(s"DEBUG: final updatedSessions $updatedSessions")
+
+            // update state
+            state.update(updatedSessions.toList)
+          }
+
+          if (state.hasTimedOut && state.exists) {
+            handleEvict(state.get.sortBy(_.startTime.getTime))
+          } else {
+            // convert each event as individual session
+            val sessionsFromEvents = events.map { case (userId, eventType, timestamp) =>
+              val e = SessionEvent(userId, eventType, timestamp, gapDuration)
+              SessionAcc(List(e))
+            }.toList
+            if (sessionsFromEvents.nonEmpty) {
+              val sessionsFromState = if (state.exists) {
+                state.get
+              } else {
+                List.empty
+              }
+
+              println(s"DEBUG: sessions from state - $sessionsFromState")
+              println(s"DEBUG: sessions from events - $sessionsFromEvents")
+
+              // sort sessions via start timestamp, and merge
+              mergeSessions((sessionsFromEvents ++ sessionsFromState).sortBy(_.startTime.getTime))
+              // we still need to handle eviction here
+              handleEvict(state.get.sortBy(_.startTime.getTime))
+            } else {
+              Iterator.empty
+            }
           }
       }
 
     // Start running the query that prints the session updates to the console
     val query = sessionUpdates
       .writeStream
-      .outputMode("update")
+      .outputMode("append")
       .format("console")
       .start()
 
@@ -197,29 +262,39 @@ object EventTypes extends Enumeration {
 case class SessionEvent(
     userId: String,
     eventType: EventTypes.Value,
-    startTimestamp: Long,
-    endTimestamp: Long)
+    startTimestamp: Timestamp,
+    endTimestamp: Timestamp)
 
 object SessionEvent {
   def apply(
       userId: String,
       eventTypeStr: String,
-      timestamp: Long,
+      timestamp: Timestamp,
       gapDuration: Long): SessionEvent = {
     val eventType = EventTypes.withName(eventTypeStr)
     val endTime = if (eventType == EventTypes.CLOSE_SESSION)  {
       timestamp
     } else {
-      timestamp + gapDuration
+      new Timestamp(timestamp.getTime + gapDuration)
     }
     SessionEvent(userId, eventType, timestamp, endTime)
   }
 }
 
 case class SessionAcc(events: List[SessionEvent]) {
-  private val sortedEvents: List[SessionEvent] = events.sortBy(_.startTimestamp)
-  def startTime: Long = sortedEvents.head.startTimestamp
-  def endTime: Long = sortedEvents.last.endTimestamp
+  private val sortedEvents: List[SessionEvent] = events.sortBy(_.startTimestamp.getTime)
+
+  require(!sortedEvents.dropRight(1).exists(_.eventType == EventTypes.CLOSE_SESSION),
+    "CLOSE_SESSION event cannot be placed except the last event!")
+
+  def eventsAsSorted: List[SessionEvent] = sortedEvents
+  def startTime: Timestamp = sortedEvents.head.startTimestamp
+  def endTime: Timestamp = sortedEvents.last.endTimestamp
+
+  override def toString: String = {
+    s"SessionAcc(events: $events / sorted: $sortedEvents / " +
+      s"start time: $startTime / endTime: $endTime)"
+  }
 }
 
 /**
