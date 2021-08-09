@@ -707,15 +707,14 @@ class RollingGroupby(RollingLike[FrameLike]):
             agg_columns = groupby._agg_columns
         else:
             # pandas doesn't keep the groupkey as a column from 1.3 for DataFrameGroupBy
+            column_labels_to_exclude = groupby._column_labels_to_exclude.copy()
             if isinstance(groupby, DataFrameGroupBy):
                 for groupkey in groupby._groupkeys:  # type: ignore
-                    groupby._column_labels_to_exclude.add(  # type: ignore
-                        groupkey._internal.column_labels[0]
-                    )
+                    column_labels_to_exclude.add(groupkey._internal.column_labels[0])
             agg_columns = [
                 psdf._psser_for(label)
                 for label in psdf._internal.column_labels
-                if label not in groupby._column_labels_to_exclude
+                if label not in column_labels_to_exclude
             ]
 
         applied = []
