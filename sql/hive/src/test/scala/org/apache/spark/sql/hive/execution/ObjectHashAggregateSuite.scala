@@ -242,7 +242,7 @@ class ObjectHashAggregateSuite
     val typed = percentile_approx($"c0", 0.5)
 
     // A ImperativeAggregate function
-    val imper_agg = approx_count_distinct($"c0")
+    val imperAgg = approx_count_distinct($"c0")
 
     // A Spark SQL native aggregate function with partial aggregation support that can be executed
     // by the Tungsten `HashAggregateExec`
@@ -257,7 +257,7 @@ class ObjectHashAggregateSuite
 
     val allAggs = Seq(
       "typed" -> typed,
-      "imper_agg" -> imper_agg,
+      "imperAgg" -> imperAgg,
       "with partial + unsafe" -> withPartialUnsafe,
       "with partial + safe" -> withPartialSafe,
       "with distinct" -> withDistinct
