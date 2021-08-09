@@ -532,6 +532,7 @@ def main(infile, outfile):
         taskContext._partitionId = read_int(infile)
         taskContext._attemptNumber = read_int(infile)
         taskContext._taskAttemptId = read_long(infile)
+        taskContext._cpus = read_int(infile)
         taskContext._resources = {}
         for r in range(read_int(infile)):
             key = utf8_deserializer.loads(infile)

@@ -36,6 +36,7 @@ object TreePattern extends Enumeration  {
   val BOOL_AGG: Value = Value
   val CASE_WHEN: Value = Value
   val CAST: Value = Value
+  val COALESCE: Value = Value
   val CONCAT: Value = Value
   val COUNT: Value = Value
   val COUNT_IF: Value = Value

@@ -1014,7 +1014,7 @@ object SQLConf {
            "This includes both datasource and converted Hive tables. When partition management " +
            "is enabled, datasource tables store partition in the Hive metastore, and use the " +
            s"metastore to prune partitions during query planning when " +
-           s"$HIVE_METASTORE_PARTITION_PRUNING is set to true.")
+           s"${HIVE_METASTORE_PARTITION_PRUNING.key} is set to true.")
       .version("2.1.1")
       .booleanConf
       .createWithDefault(true)
