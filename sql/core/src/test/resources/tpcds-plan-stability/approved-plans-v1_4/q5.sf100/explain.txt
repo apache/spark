@@ -186,14 +186,14 @@ Results [5]: [s_store_id#25, sum#31, sum#32, sum#33, sum#34]
 
 (24) Exchange
 Input [5]: [s_store_id#25, sum#31, sum#32, sum#33, sum#34]
-Arguments: hashpartitioning(s_store_id#25, 5), true, [id=#35]
+Arguments: hashpartitioning(s_store_id#25, 5), ENSURE_REQUIREMENTS, [id=#35]
 
 (25) HashAggregate [codegen id : 6]
 Input [5]: [s_store_id#25, sum#31, sum#32, sum#33, sum#34]
 Keys [1]: [s_store_id#25]
 Functions [4]: [sum(UnscaledValue(sales_price#7)), sum(UnscaledValue(return_amt#9)), sum(UnscaledValue(profit#8)), sum(UnscaledValue(net_loss#10))]
 Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#7))#36, sum(UnscaledValue(return_amt#9))#37, sum(UnscaledValue(profit#8))#38, sum(UnscaledValue(net_loss#10))#39]
-Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#7))#36,17,2) AS sales#40, MakeDecimal(sum(UnscaledValue(return_amt#9))#37,17,2) AS RETURNS#41, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#8))#38,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#10))#39,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#42, store channel AS channel#43, concat(store, s_store_id#25) AS id#44]
+Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#7))#36,17,2) AS sales#40, MakeDecimal(sum(UnscaledValue(return_amt#9))#37,17,2) AS returns#41, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#8))#38,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#10))#39,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#42, store channel AS channel#43, concat(store, s_store_id#25) AS id#44]
 
 (26) Scan parquet default.catalog_sales
 Output [4]: [cs_sold_date_sk#45, cs_catalog_page_sk#46, cs_ext_sales_price#47, cs_net_profit#48]
@@ -281,14 +281,14 @@ Results [5]: [cp_catalog_page_id#66, sum#72, sum#73, sum#74, sum#75]
 
 (45) Exchange
 Input [5]: [cp_catalog_page_id#66, sum#72, sum#73, sum#74, sum#75]
-Arguments: hashpartitioning(cp_catalog_page_id#66, 5), true, [id=#76]
+Arguments: hashpartitioning(cp_catalog_page_id#66, 5), ENSURE_REQUIREMENTS, [id=#76]
 
 (46) HashAggregate [codegen id : 12]
 Input [5]: [cp_catalog_page_id#66, sum#72, sum#73, sum#74, sum#75]
 Keys [1]: [cp_catalog_page_id#66]
 Functions [4]: [sum(UnscaledValue(sales_price#51)), sum(UnscaledValue(return_amt#53)), sum(UnscaledValue(profit#52)), sum(UnscaledValue(net_loss#54))]
 Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#51))#77, sum(UnscaledValue(return_amt#53))#78, sum(UnscaledValue(profit#52))#79, sum(UnscaledValue(net_loss#54))#80]
-Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#51))#77,17,2) AS sales#81, MakeDecimal(sum(UnscaledValue(return_amt#53))#78,17,2) AS RETURNS#82, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#52))#79,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#54))#80,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#83, catalog channel AS channel#84, concat(catalog_page, cp_catalog_page_id#66) AS id#85]
+Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#51))#77,17,2) AS sales#81, MakeDecimal(sum(UnscaledValue(return_amt#53))#78,17,2) AS returns#82, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#52))#79,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#54))#80,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#83, catalog channel AS channel#84, concat(catalog_page, cp_catalog_page_id#66) AS id#85]
 
 (47) Scan parquet default.web_sales
 Output [4]: [ws_sold_date_sk#86, ws_web_site_sk#87, ws_ext_sales_price#88, ws_net_profit#89]
@@ -324,7 +324,7 @@ Condition : isnotnull(wr_returned_date_sk#96)
 
 (54) Exchange
 Input [5]: [wr_returned_date_sk#96, wr_item_sk#97, wr_order_number#98, wr_return_amt#99, wr_net_loss#100]
-Arguments: hashpartitioning(wr_item_sk#97, wr_order_number#98, 5), true, [id=#101]
+Arguments: hashpartitioning(wr_item_sk#97, wr_order_number#98, 5), ENSURE_REQUIREMENTS, [id=#101]
 
 (55) Sort [codegen id : 15]
 Input [5]: [wr_returned_date_sk#96, wr_item_sk#97, wr_order_number#98, wr_return_amt#99, wr_net_loss#100]
@@ -346,7 +346,7 @@ Condition : ((isnotnull(ws_item_sk#102) AND isnotnull(ws_order_number#103)) AND 
 
 (59) Exchange
 Input [3]: [ws_item_sk#102, ws_web_site_sk#87, ws_order_number#103]
-Arguments: hashpartitioning(cast(ws_item_sk#102 as bigint), cast(ws_order_number#103 as bigint), 5), true, [id=#104]
+Arguments: hashpartitioning(cast(ws_item_sk#102 as bigint), cast(ws_order_number#103 as bigint), 5), ENSURE_REQUIREMENTS, [id=#104]
 
 (60) Sort [codegen id : 17]
 Input [3]: [ws_item_sk#102, ws_web_site_sk#87, ws_order_number#103]
@@ -411,19 +411,19 @@ Results [5]: [web_site_id#112, sum#118, sum#119, sum#120, sum#121]
 
 (74) Exchange
 Input [5]: [web_site_id#112, sum#118, sum#119, sum#120, sum#121]
-Arguments: hashpartitioning(web_site_id#112, 5), true, [id=#122]
+Arguments: hashpartitioning(web_site_id#112, 5), ENSURE_REQUIREMENTS, [id=#122]
 
 (75) HashAggregate [codegen id : 22]
 Input [5]: [web_site_id#112, sum#118, sum#119, sum#120, sum#121]
 Keys [1]: [web_site_id#112]
 Functions [4]: [sum(UnscaledValue(sales_price#92)), sum(UnscaledValue(return_amt#94)), sum(UnscaledValue(profit#93)), sum(UnscaledValue(net_loss#95))]
 Aggregate Attributes [4]: [sum(UnscaledValue(sales_price#92))#123, sum(UnscaledValue(return_amt#94))#124, sum(UnscaledValue(profit#93))#125, sum(UnscaledValue(net_loss#95))#126]
-Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#92))#123,17,2) AS sales#127, MakeDecimal(sum(UnscaledValue(return_amt#94))#124,17,2) AS RETURNS#128, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#93))#125,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#95))#126,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#129, web channel AS channel#130, concat(web_site, web_site_id#112) AS id#131]
+Results [5]: [MakeDecimal(sum(UnscaledValue(sales_price#92))#123,17,2) AS sales#127, MakeDecimal(sum(UnscaledValue(return_amt#94))#124,17,2) AS returns#128, CheckOverflow((promote_precision(cast(MakeDecimal(sum(UnscaledValue(profit#93))#125,17,2) as decimal(18,2))) - promote_precision(cast(MakeDecimal(sum(UnscaledValue(net_loss#95))#126,17,2) as decimal(18,2)))), DecimalType(18,2), true) AS profit#129, web channel AS channel#130, concat(web_site, web_site_id#112) AS id#131]
 
 (76) Union
 
 (77) Expand [codegen id : 23]
-Input [5]: [sales#40, RETURNS#41, profit#42, channel#43, id#44]
+Input [5]: [sales#40, returns#41, profit#42, channel#43, id#44]
 Arguments: [List(sales#40, returns#41, profit#42, channel#43, id#44, 0), List(sales#40, returns#41, profit#42, channel#43, null, 1), List(sales#40, returns#41, profit#42, null, null, 3)], [sales#40, returns#41, profit#42, channel#132, id#133, spark_grouping_id#134]
 
 (78) HashAggregate [codegen id : 23]
@@ -435,7 +435,7 @@ Results [9]: [channel#132, id#133, spark_grouping_id#134, sum#141, isEmpty#142, 
 
 (79) Exchange
 Input [9]: [channel#132, id#133, spark_grouping_id#134, sum#141, isEmpty#142, sum#143, isEmpty#144, sum#145, isEmpty#146]
-Arguments: hashpartitioning(channel#132, id#133, spark_grouping_id#134, 5), true, [id=#147]
+Arguments: hashpartitioning(channel#132, id#133, spark_grouping_id#134, 5), ENSURE_REQUIREMENTS, [id=#147]
 
 (80) HashAggregate [codegen id : 24]
 Input [9]: [channel#132, id#133, spark_grouping_id#134, sum#141, isEmpty#142, sum#143, isEmpty#144, sum#145, isEmpty#146]

@@ -180,6 +180,14 @@ case class Alias(child: Expression, name: String)(
     }
   }
 
+  def withName(newName: String): NamedExpression = {
+    Alias(child, newName)(
+      exprId = exprId,
+      qualifier = qualifier,
+      explicitMetadata = explicitMetadata,
+      nonInheritableMetadataKeys = nonInheritableMetadataKeys)
+  }
+
   def newInstance(): NamedExpression =
     Alias(child, name)(
       qualifier = qualifier,
