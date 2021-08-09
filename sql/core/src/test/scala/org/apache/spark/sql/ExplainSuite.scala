@@ -235,8 +235,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     val df = sql("select ifnull(id, 'x'), nullif(id, 'x'), nvl(id, 'x'), nvl2(id, 'x', 'y') " +
       "from range(2)")
     checkKeywordsExistsInExplain(df,
-      "Project [coalesce(cast(id#xL as string), x) AS ifnull(id, x)#x, " +
-        "id#xL AS nullif(id, x)#xL, coalesce(cast(id#xL as string), x) AS nvl(id, x)#x, " +
+      "Project [cast(id#xL as string) AS ifnull(id, x)#x, " +
+        "id#xL AS nullif(id, x)#xL, cast(id#xL as string) AS nvl(id, x)#x, " +
         "x AS nvl2(id, x, y)#x]")
   }
 

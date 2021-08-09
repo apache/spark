@@ -379,6 +379,10 @@ trait JoinSelectionHelper {
     hint.rightHint.exists(_.strategy.contains(PREFER_SHUFFLE_HASH))
   }
 
+  def hintToShuffleHashJoin(hint: JoinHint): Boolean = {
+    hintToShuffleHashJoinLeft(hint) || hintToShuffleHashJoinRight(hint)
+  }
+
   def hintToSortMergeJoin(hint: JoinHint): Boolean = {
     hint.leftHint.exists(_.strategy.contains(SHUFFLE_MERGE)) ||
       hint.rightHint.exists(_.strategy.contains(SHUFFLE_MERGE))

@@ -37,6 +37,7 @@ import com.codahale.metrics.{MetricRegistry, MetricSet}
 import com.github.benmanes.caffeine.cache.Caffeine
 
 import org.apache.spark._
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config
@@ -270,7 +271,7 @@ private[spark] class BlockManager(
     // Don't reject broadcast blocks since they may be stored during task exec and
     // don't need to be migrated.
     if (isDecommissioning() && !blockId.isBroadcast) {
-        throw new BlockSavedOnDecommissionedBlockManagerException(blockId)
+      throw SparkCoreErrors.cannotSaveBlockOnDecommissionedExecutorError(blockId)
     }
   }
 
@@ -413,8 +414,7 @@ private[spark] class BlockManager(
           try {
             ThreadUtils.awaitReady(replicationFuture, Duration.Inf)
           } catch {
-            case NonFatal(t) =>
-              throw new SparkException("Error occurred while waiting for replication to finish", t)
+            case NonFatal(t) => throw SparkCoreErrors.waitingForReplicationToFinishError(t)
           }
         }
         if (blockWasSuccessfullyStored) {
@@ -585,9 +585,7 @@ private[spark] class BlockManager(
           logError(s"Failed to connect to external shuffle server, will retry ${MAX_ATTEMPTS - i}"
             + s" more times after waiting $SLEEP_TIME_SECS seconds...", e)
           Thread.sleep(SLEEP_TIME_SECS * 1000L)
-        case NonFatal(e) =>
-          throw new SparkException("Unable to register with external shuffle server due to : " +
-            e.getMessage, e)
+        case NonFatal(e) => throw SparkCoreErrors.unableToRegisterWithExternalShuffleServerError(e)
       }
     }
   }
@@ -655,7 +653,7 @@ private[spark] class BlockManager(
         ThreadUtils.awaitReady(task, Duration.Inf)
       } catch {
         case NonFatal(t) =>
-          throw new Exception("Error occurred while waiting for async. reregistration", t)
+          throw SparkCoreErrors.waitingForAsyncReregistrationError(t)
       }
     }
   }
@@ -692,7 +690,7 @@ private[spark] class BlockManager(
           // likely that the master has outdated block statuses for this block. Therefore, we send
           // an RPC so that this block is marked as being unavailable from this block manager.
           reportBlockStatus(blockId, BlockStatus.empty)
-          throw new BlockNotFoundException(blockId.toString)
+          throw SparkCoreErrors.blockNotFoundError(blockId)
       }
     }
   }
@@ -723,9 +721,9 @@ private[spark] class BlockManager(
       try {
         return migratableResolver.putShuffleBlockAsStream(blockId, serializerManager)
       } catch {
-        case e: ClassCastException => throw new SparkException(
-          s"Unexpected shuffle block ${blockId} with unsupported shuffle " +
-          s"resolver ${shuffleManager.shuffleBlockResolver}")
+        case e: ClassCastException =>
+          throw SparkCoreErrors.unexpectedShuffleBlockWithUnsupportedResolverError(shuffleManager,
+            blockId)
       }
     }
     logDebug(s"Putting regular block ${blockId}")
@@ -753,7 +751,7 @@ private[spark] class BlockManager(
         val blockStored = TempFileBasedBlockStoreUpdater(
           blockId, level, classTag, tmpFile, blockSize).save()
         if (!blockStored) {
-          throw new Exception(s"Failure while trying to store block $blockId on $blockManagerId.")
+          throw SparkCoreErrors.failToStoreBlockOnBlockManagerError(blockManagerId, blockId)
         }
       }
 
@@ -895,7 +893,7 @@ private[spark] class BlockManager(
     releaseLock(blockId)
     // Remove the missing block so that its unavailability is reported to the driver
     removeBlock(blockId)
-    throw new SparkException(s"Block $blockId was not found even though it's read-locked")
+    throw SparkCoreErrors.readLockedBlockNotFoundError(blockId)
   }
 
   /**
@@ -1300,7 +1298,7 @@ private[spark] class BlockManager(
           // Since we held a read lock between the doPut() and get() calls, the block should not
           // have been evicted, so get() not returning the block indicates some internal error.
           releaseLock(blockId)
-          throw new SparkException(s"get() failed for block $blockId even though we held a lock")
+          throw SparkCoreErrors.failToGetBlockWithLockError(blockId)
         }
         // We already hold a read lock on the block from the doPut() call and getLocalValues()
         // acquires the lock again, so we need to call releaseLock() here so that the net number
