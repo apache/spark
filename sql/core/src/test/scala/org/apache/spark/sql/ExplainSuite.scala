@@ -460,7 +460,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
           "parquet" ->
             "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "orc" ->
-            "|PushedFilters: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]",
+            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "csv" ->
             "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "json" ->
