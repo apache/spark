@@ -49,8 +49,8 @@ object Statistics {
  * @param attributeStats Statistics for Attributes.
  * @param isRuntime Whether the statistics is inferred from query stage runtime statistics during
  *                  adaptive query execution.
- * @param isRuntime Whether the statistics is inferred from query stage runtime statistics during
- *                  adaptive query execution.
+ * @param shuffleBytes The shuffle bytes from shuffle query stage runtime statistics during
+ *                     adaptive query execution.
  */
 case class Statistics(
     sizeInBytes: BigInt,
