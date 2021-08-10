@@ -18,10 +18,11 @@
 package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.analysis.UpdateAttributeNullability
-import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, DeduplicateRightSideOfLeftSemiAntiJoin}
+import org.apache.spark.sql.catalyst.optimizer.{ConvertToLocalRelation, DeduplicateRightSideOfLeftSemiAntiJoin, EliminateLimits}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LogicalPlanIntegrity, PlanHelper}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
 
 /**
@@ -40,7 +41,8 @@ class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
       UpdateAttributeNullability),
     Batch("Deduplicate Right Side of LeftSemiAnti Join", Once,
       DeduplicateRightSideOfLeftSemiAntiJoin),
-    Batch("Dynamic Join Selection", Once, DynamicJoinSelection)
+    Batch("Dynamic Join Selection", Once, DynamicJoinSelection),
+    Batch("Eliminate Limits", Once, EliminateLimits)
   )
 
   final override protected def batches: Seq[Batch] = {
@@ -66,9 +68,12 @@ class AQEOptimizer(conf: SQLConf) extends RuleExecutor[LogicalPlan] {
     }
   }
 
-  override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
-    !Utils.isTesting || (plan.resolved &&
-      plan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
-      LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(plan))
+  override protected def isPlanIntegral(
+      previousPlan: LogicalPlan,
+      currentPlan: LogicalPlan): Boolean = {
+    !Utils.isTesting || (currentPlan.resolved &&
+      currentPlan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
+      LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
+      DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema))
   }
 }

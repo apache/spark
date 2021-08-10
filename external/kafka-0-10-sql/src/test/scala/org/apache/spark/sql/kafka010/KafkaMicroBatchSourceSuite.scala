@@ -2429,8 +2429,9 @@ class KafkaSourceStressSuite extends KafkaSourceTest {
       (d, running) => {
         Random.nextInt(5) match {
           case 0 => // Add a new topic
-            topics = topics ++ Seq(newStressTopic)
-            AddKafkaData(topics.toSet, d: _*)(message = s"Add topic $newStressTopic",
+            val newTopic = newStressTopic
+            topics = topics ++ Seq(newTopic)
+            AddKafkaData(topics.toSet, d: _*)(message = s"Add topic $newTopic",
               topicAction = (topic, partition) => {
                 if (partition.isEmpty) {
                   testUtils.createTopic(topic, partitions = nextInt(1, 6))

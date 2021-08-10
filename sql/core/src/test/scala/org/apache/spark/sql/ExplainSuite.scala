@@ -235,8 +235,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     val df = sql("select ifnull(id, 'x'), nullif(id, 'x'), nvl(id, 'x'), nvl2(id, 'x', 'y') " +
       "from range(2)")
     checkKeywordsExistsInExplain(df,
-      "Project [coalesce(cast(id#xL as string), x) AS ifnull(id, x)#x, " +
-        "id#xL AS nullif(id, x)#xL, coalesce(cast(id#xL as string), x) AS nvl(id, x)#x, " +
+      "Project [cast(id#xL as string) AS ifnull(id, x)#x, " +
+        "id#xL AS nullif(id, x)#xL, cast(id#xL as string) AS nvl(id, x)#x, " +
         "x AS nvl2(id, x, y)#x]")
   }
 
@@ -460,7 +460,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
           "parquet" ->
             "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "orc" ->
-            "|PushedFilters: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]",
+            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "csv" ->
             "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "json" ->
@@ -536,7 +536,7 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
     // AdaptiveSparkPlan (21)
     // +- == Final Plan ==
     //    * HashAggregate (12)
-    //    +- CustomShuffleReader (11)
+    //    +- AQEShuffleRead (11)
     //       +- ShuffleQueryStage (10)
     //          +- Exchange (9)
     //             +- * HashAggregate (8)
@@ -570,8 +570,9 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
         |Output [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
         |Arguments: 1""".stripMargin,
       """
-        |(11) CustomShuffleReader
+        |(11) AQEShuffleRead
         |Input [5]: [k#x, count#xL, sum#xL, sum#x, count#xL]
+        |Arguments: coalesced
         |""".stripMargin,
       """
         |(16) BroadcastHashJoin

@@ -20,6 +20,7 @@ A wrapper for GroupedData to behave similar to pandas GroupBy.
 """
 
 from abc import ABCMeta, abstractmethod
+import builtins
 import sys
 import inspect
 from collections import OrderedDict, namedtuple
@@ -43,6 +44,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
+import numpy as np
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
 
@@ -95,6 +97,12 @@ if TYPE_CHECKING:
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
 
+_builtin_table = {
+    builtins.sum: np.sum,
+    builtins.max: np.max,
+    builtins.min: np.min,
+}  # type: Dict[Callable, Callable]
+
 
 class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
     """
@@ -110,7 +118,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         groupkeys: List[Series],
         as_index: bool,
         dropna: bool,
-        column_labels_to_exlcude: Set[Label],
+        column_labels_to_exclude: Set[Label],
         agg_columns_selected: bool,
         agg_columns: List[Series],
     ):
@@ -118,7 +126,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         self._groupkeys = groupkeys
         self._as_index = as_index
         self._dropna = dropna
-        self._column_labels_to_exlcude = column_labels_to_exlcude
+        self._column_labels_to_exclude = column_labels_to_exclude
         self._agg_columns_selected = agg_columns_selected
         self._agg_columns = agg_columns
 
@@ -1143,8 +1151,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         1    52
         Name: B, dtype: int64
         """
-        from pandas.core.base import SelectionMixin
-
         if not isinstance(func, Callable):  # type: ignore
             raise TypeError("%s object is not callable" % type(func).__name__)
 
@@ -1162,7 +1168,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             agg_columns = [
                 psdf._psser_for(label)
                 for label in psdf._internal.column_labels
-                if label not in self._column_labels_to_exlcude
+                if label not in self._column_labels_to_exclude
             ]
 
         psdf, groupkey_labels, groupkey_names = GroupBy._prepare_group_map_apply(
@@ -1171,9 +1177,9 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
 
         if is_series_groupby:
             name = psdf.columns[-1]
-            pandas_apply = SelectionMixin._builtin_table.get(func, func)
+            pandas_apply = _builtin_table.get(func, func)
         else:
-            f = SelectionMixin._builtin_table.get(func, func)
+            f = _builtin_table.get(func, func)
 
             def pandas_apply(pdf: pd.DataFrame, *a: Any, **k: Any) -> Any:
                 return f(pdf.drop(groupkey_names, axis=1), *a, **k)
@@ -1346,8 +1352,6 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         5    6
         Name: B, dtype: int64
         """
-        from pandas.core.base import SelectionMixin
-
         if not isinstance(func, Callable):  # type: ignore
             raise TypeError("%s object is not callable" % type(func).__name__)
 
@@ -1361,7 +1365,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             agg_columns = [
                 psdf._psser_for(label)
                 for label in psdf._internal.column_labels
-                if label not in self._column_labels_to_exlcude
+                if label not in self._column_labels_to_exclude
             ]
 
         data_schema = (
@@ -1378,7 +1382,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 return pd.DataFrame(pdf.groupby(groupkey_names)[pdf.columns[-1]].filter(func))
 
         else:
-            f = SelectionMixin._builtin_table.get(func, func)
+            f = _builtin_table.get(func, func)
 
             def wrapped_func(pdf: pd.DataFrame) -> pd.DataFrame:
                 return f(pdf.drop(groupkey_names, axis=1))
@@ -1573,13 +1577,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         index = self._psdf._internal.index_spark_column_names[0]
 
         stat_exprs = []
-        for psser, c in zip(self._agg_columns, self._agg_columns_scols):
+        for psser, scol in zip(self._agg_columns, self._agg_columns_scols):
             name = psser._internal.data_spark_column_names[0]
 
             if skipna:
-                order_column = Column(c._jc.desc_nulls_last())
+                order_column = scol.desc_nulls_last()
             else:
-                order_column = Column(c._jc.desc_nulls_first())
+                order_column = scol.desc_nulls_first()
+
             window = Window.partitionBy(*groupkey_names).orderBy(
                 order_column, NATURAL_ORDER_COLUMN_NAME
             )
@@ -1655,13 +1660,14 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         index = self._psdf._internal.index_spark_column_names[0]
 
         stat_exprs = []
-        for psser, c in zip(self._agg_columns, self._agg_columns_scols):
+        for psser, scol in zip(self._agg_columns, self._agg_columns_scols):
             name = psser._internal.data_spark_column_names[0]
 
             if skipna:
-                order_column = Column(c._jc.asc_nulls_last())
+                order_column = scol.asc_nulls_last()
             else:
-                order_column = Column(c._jc.asc_nulls_first())
+                order_column = scol.asc_nulls_first()
+
             window = Window.partitionBy(*groupkey_names).orderBy(
                 order_column, NATURAL_ORDER_COLUMN_NAME
             )
@@ -1877,7 +1883,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             agg_columns = [
                 psdf._psser_for(label)
                 for label in psdf._internal.column_labels
-                if label not in self._column_labels_to_exlcude
+                if label not in self._column_labels_to_exclude
             ]
 
         psdf, groupkey_labels, _ = GroupBy._prepare_group_map_apply(
@@ -2524,38 +2530,18 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
     def _reduce_for_stat_function(
         self, sfun: Callable[[Column], Column], only_numeric: bool
     ) -> FrameLike:
-        agg_columns = self._agg_columns
-        agg_columns_scols = self._agg_columns_scols
-
         groupkey_names = [SPARK_INDEX_NAME_FORMAT(i) for i in range(len(self._groupkeys))]
         groupkey_scols = [s.alias(name) for s, name in zip(self._groupkeys_scols, groupkey_names)]
 
-        sdf = self._psdf._internal.spark_frame.select(groupkey_scols + agg_columns_scols)
+        agg_columns = [
+            psser
+            for psser in self._agg_columns
+            if isinstance(psser.spark.data_type, NumericType) or not only_numeric
+        ]
 
-        data_columns = []
-        column_labels = []
-        if len(agg_columns) > 0:
-            stat_exprs = []
-            for psser in agg_columns:
-                spark_type = psser.spark.data_type
-                name = psser._internal.data_spark_column_names[0]
-                label = psser._column_label
-                scol = scol_for(sdf, name)
-                # TODO: we should have a function that takes dataframes and converts the numeric
-                # types. Converting the NaNs is used in a few places, it should be in utils.
-                # Special handle floating point types because Spark's count treats nan as a valid
-                # value, whereas pandas count doesn't include nan.
-                if isinstance(spark_type, DoubleType) or isinstance(spark_type, FloatType):
-                    stat_exprs.append(sfun(F.nanvl(scol, SF.lit(None))).alias(name))
-                    data_columns.append(name)
-                    column_labels.append(label)
-                elif isinstance(spark_type, NumericType) or not only_numeric:
-                    stat_exprs.append(sfun(scol).alias(name))
-                    data_columns.append(name)
-                    column_labels.append(label)
-            sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
-        else:
-            sdf = sdf.select(*groupkey_names).distinct()
+        sdf = self._psdf._internal.spark_frame.select(
+            *groupkey_scols, *[psser.spark.column for psser in agg_columns]
+        )
 
         internal = InternalFrame(
             spark_frame=sdf,
@@ -2565,11 +2551,35 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
                 psser._internal.data_fields[0].copy(name=name)
                 for psser, name in zip(self._groupkeys, groupkey_names)
             ],
-            column_labels=column_labels,
-            data_spark_columns=[scol_for(sdf, col) for col in data_columns],
+            data_spark_columns=[
+                scol_for(sdf, psser._internal.data_spark_column_names[0]) for psser in agg_columns
+            ],
+            column_labels=[psser._column_label for psser in agg_columns],
+            data_fields=[psser._internal.data_fields[0] for psser in agg_columns],
             column_label_names=self._psdf._internal.column_label_names,
         )
         psdf = DataFrame(internal)  # type: DataFrame
+
+        if len(psdf._internal.column_labels) > 0:
+            stat_exprs = []
+            for label in psdf._internal.column_labels:
+                psser = psdf._psser_for(label)
+                stat_exprs.append(
+                    sfun(psser._dtype_op.nan_to_null(psser).spark.column).alias(
+                        psser._internal.data_spark_column_names[0]
+                    )
+                )
+            sdf = sdf.groupby(*groupkey_names).agg(*stat_exprs)
+        else:
+            sdf = sdf.select(*groupkey_names).distinct()
+
+        internal = internal.copy(
+            spark_frame=sdf,
+            index_spark_columns=[scol_for(sdf, col) for col in groupkey_names],
+            data_spark_columns=[scol_for(sdf, col) for col in internal.data_spark_column_names],
+            data_fields=None,
+        )
+        psdf = DataFrame(internal)
 
         if self._dropna:
             psdf = DataFrame(
@@ -2691,17 +2701,17 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
             (
                 psdf,
                 new_by_series,
-                column_labels_to_exlcude,
+                column_labels_to_exclude,
             ) = GroupBy._resolve_grouping_from_diff_dataframes(psdf, by)
         else:
             new_by_series = GroupBy._resolve_grouping(psdf, by)
-            column_labels_to_exlcude = set()
+            column_labels_to_exclude = set()
         return DataFrameGroupBy(
             psdf,
             new_by_series,
             as_index=as_index,
             dropna=dropna,
-            column_labels_to_exlcude=column_labels_to_exlcude,
+            column_labels_to_exclude=column_labels_to_exclude,
         )
 
     def __init__(
@@ -2710,20 +2720,20 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         by: List[Series],
         as_index: bool,
         dropna: bool,
-        column_labels_to_exlcude: Set[Label],
+        column_labels_to_exclude: Set[Label],
         agg_columns: List[Label] = None,
     ):
         agg_columns_selected = agg_columns is not None
         if agg_columns_selected:
             for label in agg_columns:
-                if label in column_labels_to_exlcude:
+                if label in column_labels_to_exclude:
                     raise KeyError(label)
         else:
             agg_columns = [
                 label
                 for label in psdf._internal.column_labels
                 if not any(label == key._column_label and key._psdf is psdf for key in by)
-                and label not in column_labels_to_exlcude
+                and label not in column_labels_to_exclude
             ]
 
         super().__init__(
@@ -2731,7 +2741,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
             groupkeys=by,
             as_index=as_index,
             dropna=dropna,
-            column_labels_to_exlcude=column_labels_to_exlcude,
+            column_labels_to_exclude=column_labels_to_exclude,
             agg_columns_selected=agg_columns_selected,
             agg_columns=[psdf[label] for label in agg_columns],
         )
@@ -2771,7 +2781,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
                 self._groupkeys,
                 as_index=self._as_index,
                 dropna=self._dropna,
-                column_labels_to_exlcude=self._column_labels_to_exlcude,
+                column_labels_to_exclude=self._column_labels_to_exclude,
                 agg_columns=item,
             )
 
@@ -2915,7 +2925,7 @@ class SeriesGroupBy(GroupBy[Series]):
             groupkeys=by,
             as_index=True,
             dropna=dropna,
-            column_labels_to_exlcude=set(),
+            column_labels_to_exclude=set(),
             agg_columns_selected=True,
             agg_columns=[psser],
         )
@@ -2943,7 +2953,7 @@ class SeriesGroupBy(GroupBy[Series]):
             internal = psser._internal.resolved_copy
             return first_series(DataFrame(internal))
         else:
-            return psser
+            return psser.copy()
 
     def _cleanup_and_return(self, pdf: pd.DataFrame) -> Series:
         return first_series(pdf).rename().rename(self._psser.name)

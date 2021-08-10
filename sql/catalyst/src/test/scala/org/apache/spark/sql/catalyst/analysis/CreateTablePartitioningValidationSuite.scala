@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util
+
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTableAsSelect, LeafNode}
-import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, TableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTableCatalog, Table, TableCapability, TableCatalog}
 import org.apache.spark.sql.connector.expressions.Expressions
 import org.apache.spark.sql.types.{DoubleType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -151,3 +153,8 @@ private[sql] case object TestRelation2 extends LeafNode with NamedRelation {
     CreateTablePartitioningValidationSuite.schema.toAttributes
 }
 
+private[sql] case object TestTable2 extends Table {
+  override def name: String = "table_name"
+  override def schema: StructType = CreateTablePartitioningValidationSuite.schema
+  override def capabilities: util.Set[TableCapability] = new util.HashSet[TableCapability]()
+}

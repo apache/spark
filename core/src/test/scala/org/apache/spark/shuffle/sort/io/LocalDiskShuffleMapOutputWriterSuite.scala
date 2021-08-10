@@ -74,11 +74,11 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
       .set("spark.app.id", "example.spark.app")
       .set("spark.shuffle.unsafe.file.output.buffer", "16k")
     when(blockResolver.getDataFile(anyInt, anyLong)).thenReturn(mergedOutputFile)
-    when(blockResolver.writeIndexFileAndCommit(
-      anyInt, anyLong, any(classOf[Array[Long]]), any(classOf[File])))
+    when(blockResolver.writeMetadataFileAndCommit(
+      anyInt, anyLong, any(classOf[Array[Long]]), any(classOf[Array[Long]]), any(classOf[File])))
       .thenAnswer { invocationOnMock =>
         partitionSizesInMergedFile = invocationOnMock.getArguments()(2).asInstanceOf[Array[Long]]
-        val tmp: File = invocationOnMock.getArguments()(3).asInstanceOf[File]
+        val tmp: File = invocationOnMock.getArguments()(4).asInstanceOf[File]
         if (tmp != null) {
           mergedOutputFile.delete()
           tmp.renameTo(mergedOutputFile)
@@ -136,7 +136,8 @@ class LocalDiskShuffleMapOutputWriterSuite extends SparkFunSuite with BeforeAndA
   }
 
   private def verifyWrittenRecords(): Unit = {
-    val committedLengths = mapOutputWriter.commitAllPartitions().getPartitionLengths
+    val committedLengths =
+      mapOutputWriter.commitAllPartitions(Array.empty[Long]).getPartitionLengths
     assert(partitionSizesInMergedFile === partitionLengths)
     assert(committedLengths === partitionLengths)
     assert(mergedOutputFile.length() === partitionLengths.sum)

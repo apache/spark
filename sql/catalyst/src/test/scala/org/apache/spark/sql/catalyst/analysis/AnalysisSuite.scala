@@ -1115,4 +1115,30 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       Seq("grouping_id() can only be used with GroupingSets/Cube/Rollup"),
       false)
   }
+
+  test("SPARK-36275: Resolve aggregate functions should work with nested fields") {
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT c.x, SUM(c.y)
+        |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
+        |GROUP BY c.x
+        |HAVING c.x > 1
+        |""".stripMargin))
+
+    assertAnalysisSuccess(parsePlan(
+      """
+        |SELECT c.x, SUM(c.y)
+        |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
+        |GROUP BY c.x
+        |ORDER BY c.x
+        |""".stripMargin))
+
+    assertAnalysisError(parsePlan(
+     """
+        |SELECT c.x
+        |FROM VALUES NAMED_STRUCT('x', 'A', 'y', 1), NAMED_STRUCT('x', 'A', 'y', 2) AS t(c)
+        |GROUP BY c.x
+        |ORDER BY c.x + c.y
+        |""".stripMargin), "cannot resolve 'c.y' given input columns: [x]" :: Nil)
+  }
 }

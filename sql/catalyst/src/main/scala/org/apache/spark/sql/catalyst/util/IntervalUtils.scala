@@ -25,12 +25,15 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.millisToMicros
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.{ANSI_STYLE, HIVE_STYLE, IntervalStyle}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, DayTimeIntervalType => DT, Decimal, YearMonthIntervalType => YM}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.{DayTimeIntervalType => DT, Decimal, YearMonthIntervalType => YM}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 
 // The style of textual representation of intervals
@@ -123,25 +126,6 @@ object IntervalUtils {
         s"when cast to $typeName: ${input.toString}" +
         s"${fallBackNotice.map(s => s", $s").getOrElse("")}")
   }
-
-  private def checkIntervalStringDataType(
-      input: UTF8String,
-      targetStartField: Byte,
-      targetEndField: Byte,
-      inputIntervalType: DataType,
-      fallBackNotice: Option[String] = None): Unit = {
-    val (intervalStr, typeName, inputStartField, inputEndField) = inputIntervalType match {
-      case DT(startField, endField) =>
-        ("day-time", DT(targetStartField, targetEndField).typeName, startField, endField)
-      case YM(startField, endField) =>
-        ("year-month", YM(targetStartField, targetEndField).typeName, startField, endField)
-    }
-    if (targetStartField != inputStartField || targetEndField != inputEndField) {
-      throwIllegalIntervalFormatException(
-        input, targetStartField, targetEndField, intervalStr, typeName, fallBackNotice)
-    }
-  }
-
 
   val supportedFormat = Map(
     (YM.YEAR, YM.MONTH) -> Seq("[+|-]y-m", "INTERVAL [+|-]'[+|-]y-m' YEAR TO MONTH"),
@@ -450,6 +434,24 @@ object IntervalUtils {
     } else {
       castDayTimeStringToInterval(input, from, to)
     }
+  }
+
+  /**
+   * Parse all kinds of interval literals including unit-to-unit form and unit list form
+   */
+  def fromIntervalString(input: String): CalendarInterval = try {
+    if (input.toLowerCase(Locale.ROOT).trim.startsWith("interval")) {
+      CatalystSqlParser.parseExpression(input) match {
+        case Literal(months: Int, _: YearMonthIntervalType) => new CalendarInterval(months, 0, 0)
+        case Literal(micros: Long, _: DayTimeIntervalType) => new CalendarInterval(0, 0, micros)
+        case Literal(cal: CalendarInterval, CalendarIntervalType) => cal
+      }
+    } else {
+      stringToInterval(UTF8String.fromString(input))
+    }
+  } catch {
+    case NonFatal(e) =>
+      throw QueryCompilationErrors.cannotParseIntervalError(input, e)
   }
 
   private val dayTimePatternLegacy =

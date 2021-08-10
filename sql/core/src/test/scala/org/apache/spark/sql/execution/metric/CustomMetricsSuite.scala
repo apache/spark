@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.metric
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.connector.metric.{CustomAvgMetric, CustomSumMetric}
+import org.apache.spark.sql.connector.metric.{CustomAvgMetric, CustomSumMetric, CustomTaskMetric}
 
 class CustomMetricsSuite extends SparkFunSuite {
 
@@ -51,6 +51,14 @@ class CustomMetricsSuite extends SparkFunSuite {
 
     val metricValues2 = Array.empty[Long]
     assert(metric.aggregateTaskMetrics(metricValues2) == "0")
+  }
+
+  test("Report unsupported metrics should be non-op") {
+    val taskMetric = new CustomTaskMetric {
+      override def name(): String = "custom_metric"
+      override def value(): Long = 1L
+    }
+    CustomMetrics.updateMetrics(Seq(taskMetric), Map.empty)
   }
 }
 

@@ -576,4 +576,8 @@ class CastSuite extends CastSuiteBase {
       checkEvaluation(cast(invalidInput, TimestampNTZType), null)
     }
   }
+
+  test("SPARK-36286: invalid string cast to timestamp") {
+    checkEvaluation(cast(Literal("2015-03-18T"), TimestampType), null)
+  }
 }

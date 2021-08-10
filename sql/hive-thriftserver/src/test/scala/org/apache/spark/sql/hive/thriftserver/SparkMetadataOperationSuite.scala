@@ -24,6 +24,7 @@ import org.apache.hive.service.cli.HiveSQLException
 
 import org.apache.spark.SPARK_VERSION
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.VersionUtils
 
@@ -355,6 +356,7 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
     val ddl = s"CREATE GLOBAL TEMP VIEW $viewName as select interval 1 day as i"
 
     withJdbcStatement(viewName) { statement =>
+      statement.execute(s"SET ${SQLConf.LEGACY_INTERVAL_ENABLED.key}=true")
       statement.execute(ddl)
       val data = statement.getConnection.getMetaData
       val rowSet = data.getColumns("", "global_temp", viewName, null)
@@ -656,6 +658,31 @@ class SparkMetadataOperationSuite extends HiveThriftServer2TestBase {
       assert(metaData.getSQLStateType === DatabaseMetaData.sqlStateSQL)
       assert(metaData.getMaxLogicalLobSize === 0)
       assert(!metaData.supportsRefCursors)
+    }
+  }
+
+  test("SPARK-36179: get column operation support TIMESTAMP_[N|L]TZ") {
+    val t = "t_ltz_ntz"
+    // TODO(SPARK-36180): add hive table here too
+    val ddl = s"CREATE GLOBAL TEMP VIEW $t as SELECT TIMESTAMP_LTZ '2018-11-17 13:33:33.000'" +
+      " as c0, TIMESTAMP_NTZ '2018-11-17 13:33:33.000' as c1"
+    withJdbcStatement(t) { statement =>
+      statement.execute(ddl)
+      val md = statement.getConnection.getMetaData
+      val rowSet = md.getColumns(null, "global_temp", t, "%")
+
+      var idx = 0
+      while (rowSet.next()) {
+        assert(rowSet.getString("COLUMN_NAME") === "c" + idx)
+        assert(rowSet.getInt("DATA_TYPE") === java.sql.Types.TIMESTAMP)
+        assert(rowSet.getString("TYPE_NAME") === "TIMESTAMP" + ("_NTZ" * idx))
+        assert(rowSet.getInt("COLUMN_SIZE") === 8)
+        assert(rowSet.getInt("DECIMAL_DIGITS") === 6)
+        assert(rowSet.getInt("NUM_PREC_RADIX") === 0)
+        assert(rowSet.getInt("NULLABLE") === 0)
+        assert(rowSet.getInt("ORDINAL_POSITION") === idx)
+        idx += 1
+      }
     }
   }
 }

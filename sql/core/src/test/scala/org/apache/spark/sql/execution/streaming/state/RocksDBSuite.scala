@@ -337,69 +337,6 @@ class RocksDBSuite extends SparkFunSuite {
     }
   }
 
-  ignore("ensure that concurrent update and cleanup consistent versions") {
-    quietly {
-      val numThreads = 20
-      val numUpdatesInEachThread = 20
-      val remoteDir = Utils.createTempDir().toString
-      @volatile var exception: Exception = null
-      val updatingThreads = Array.fill(numThreads) {
-        new Thread() {
-          override def run(): Unit = {
-            try {
-              for (version <- 0 to numUpdatesInEachThread) {
-                withDB(
-                  remoteDir,
-                  version = version) { db =>
-                  val prevValue = Option(toStr(db.get("a"))).getOrElse("0").toInt
-                  db.put("a", (prevValue + 1).toString)
-                  db.commit()
-                }
-              }
-            } catch {
-              case e: Exception =>
-                val newException = new Exception(s"ThreadId ${this.getId} failed", e)
-                if (exception != null) {
-                  exception = newException
-                }
-                throw e
-            }
-          }
-        }
-      }
-      val cleaningThread = new Thread() {
-        override def run(): Unit = {
-          try {
-            withDB(remoteDir, conf = RocksDBConf().copy(compactOnCommit = true)) { db =>
-              while (!this.isInterrupted) {
-                db.cleanup()
-                Thread.sleep(1)
-              }
-            }
-          } catch {
-            case e: Exception =>
-              val newException = new Exception(s"ThreadId ${this.getId} failed", e)
-              if (exception != null) {
-                exception = newException
-              }
-              throw e
-          }
-        }
-      }
-      updatingThreads.foreach(_.start())
-      cleaningThread.start()
-      updatingThreads.foreach(_.join())
-      cleaningThread.interrupt()
-      cleaningThread.join()
-      if (exception != null) {
-        fail(exception)
-      }
-      withDB(remoteDir, numUpdatesInEachThread) { db =>
-        assert(toStr(db.get("a")) === numUpdatesInEachThread.toString)
-      }
-    }
-  }
-
   test("checkpoint metadata serde roundtrip") {
     def checkJsonRoundtrip(metadata: RocksDBCheckpointMetadata, json: String): Unit = {
       assert(metadata.json == json)
@@ -427,6 +364,93 @@ class RocksDBSuite extends SparkFunSuite {
       RocksDBCheckpointMetadata(sstFiles, logFiles, 12345678901234L),
       """{"sstFiles":[{"localFileName":"00001.sst","dfsSstFileName":"00001-uuid.sst","sizeBytes":12345678901234}],"logFiles":[{"localFileName":"00001.log","dfsLogFileName":"00001-uuid.log","sizeBytes":12345678901234}],"numKeys":12345678901234}""")
     // scalastyle:on line.size.limit
+  }
+
+  test("SPARK-36236: reset RocksDB metrics whenever a new version is loaded") {
+    def verifyMetrics(putCount: Long, getCount: Long, iterCountPositive: Boolean = false,
+                      metrics: RocksDBMetrics): Unit = {
+      assert(metrics.nativeOpsHistograms("put").count === putCount, "invalid put count")
+      assert(metrics.nativeOpsHistograms("get").count === getCount, "invalid get count")
+      if (iterCountPositive) {
+        assert(metrics.nativeOpsMetrics("totalBytesReadThroughIterator") > 0)
+      } else {
+        assert(metrics.nativeOpsMetrics("totalBytesReadThroughIterator") === 0)
+      }
+
+      // most of the time get reads from WriteBatch which is not counted in this metric
+      assert(metrics.nativeOpsMetrics("totalBytesRead") >= 0)
+      assert(metrics.nativeOpsMetrics("totalBytesWritten") >= putCount * 1)
+
+      assert(metrics.nativeOpsHistograms("compaction") != null)
+      assert(metrics.nativeOpsMetrics("readBlockCacheMissCount") >= 0)
+      assert(metrics.nativeOpsMetrics("readBlockCacheHitCount") >= 0)
+
+      assert(metrics.nativeOpsMetrics("writerStallDuration") >= 0)
+      assert(metrics.nativeOpsMetrics("totalBytesReadByCompaction") >= 0)
+      assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") >=0)
+    }
+
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir) { db =>
+        verifyMetrics(putCount = 0, getCount = 0, metrics = db.metrics)
+        db.load(0)
+        db.put("a", "1") // put also triggers a db get
+        db.get("a") // this is found in-memory writebatch - no get triggered in db
+        db.get("b") // key doesn't exists - triggers db get
+        db.commit()
+        verifyMetrics(putCount = 1, getCount = 2, metrics = db.metrics)
+
+        db.load(1)
+        db.put("b", "2") // put also triggers a db get
+        db.get("a") // not found in-memory writebatch, so triggers a db get
+        db.get("c") // key doesn't exists - triggers db get
+        assert(iterator(db).toSet === Set(("a", "1"), ("b", "2")))
+        db.commit()
+        verifyMetrics(putCount = 1, getCount = 3, iterCountPositive = true, db.metrics)
+      }
+    }
+
+    // disable resetting stats
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = RocksDBConf().copy(resetStatsOnLoad = false)) { db =>
+        verifyMetrics(putCount = 0, getCount = 0, metrics = db.metrics)
+        db.load(0)
+        db.put("a", "1") // put also triggers a db get
+        db.commit()
+        // put and get counts are cumulative
+        verifyMetrics(putCount = 1, getCount = 1, metrics = db.metrics)
+
+        db.load(1)
+        db.put("b", "2") // put also triggers a db get
+        db.get("a")
+        db.commit()
+        // put and get counts are cumulative: existing get=1, put=1: new get=2, put=1
+        verifyMetrics(putCount = 2, getCount = 3, metrics = db.metrics)
+      }
+    }
+
+    // force compaction and check the compaction metrics
+    withTempDir { dir =>
+      val remoteDir = dir.getCanonicalPath
+      withDB(remoteDir, conf = RocksDBConf().copy(compactOnCommit = true)) { db =>
+        db.load(0)
+        db.put("a", "5")
+        db.put("b", "5")
+        db.commit()
+
+        db.load(1)
+        db.put("a", "10")
+        db.put("b", "25")
+        db.commit()
+
+        val metrics = db.metrics
+        assert(metrics.nativeOpsHistograms("compaction").count > 0)
+        assert(metrics.nativeOpsMetrics("totalBytesReadByCompaction") > 0)
+        assert(metrics.nativeOpsMetrics("totalBytesWrittenByCompaction") > 0)
+      }
+    }
   }
 
   def withDB[T](

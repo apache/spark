@@ -497,9 +497,13 @@ case class RowToColumnarExec(child: SparkPlan) extends RowToColumnarTransition {
 /**
  * Apply any user defined [[ColumnarRule]]s and find the correct place to insert transitions
  * to/from columnar formatted data.
+ *
+ * @param columnarRules custom columnar rules
+ * @param outputsColumnar whether or not the produced plan should output columnar format.
  */
 case class ApplyColumnarRulesAndInsertTransitions(
-    columnarRules: Seq[ColumnarRule])
+    columnarRules: Seq[ColumnarRule],
+    outputsColumnar: Boolean)
   extends Rule[SparkPlan] {
 
   /**
@@ -509,7 +513,7 @@ case class ApplyColumnarRulesAndInsertTransitions(
     if (!plan.supportsColumnar) {
       // The tree feels kind of backwards
       // Columnar Processing will start here, so transition from row to columnar
-      RowToColumnarExec(insertTransitions(plan))
+      RowToColumnarExec(insertTransitions(plan, outputsColumnar = false))
     } else if (!plan.isInstanceOf[RowToColumnarTransition]) {
       plan.withNewChildren(plan.children.map(insertRowToColumnar))
     } else {
@@ -520,13 +524,15 @@ case class ApplyColumnarRulesAndInsertTransitions(
   /**
    * Inserts RowToColumnarExecs and ColumnarToRowExecs where needed.
    */
-  private def insertTransitions(plan: SparkPlan): SparkPlan = {
-    if (plan.supportsColumnar) {
-      // The tree feels kind of backwards
-      // This is the end of the columnar processing so go back to rows
+  private def insertTransitions(plan: SparkPlan, outputsColumnar: Boolean): SparkPlan = {
+    if (outputsColumnar) {
+      insertRowToColumnar(plan)
+    } else if (plan.supportsColumnar) {
+      // `outputsColumnar` is false but the plan outputs columnar format, so add a
+      // to-row transition here.
       ColumnarToRowExec(insertRowToColumnar(plan))
     } else if (!plan.isInstanceOf[ColumnarToRowTransition]) {
-      plan.withNewChildren(plan.children.map(insertTransitions))
+      plan.withNewChildren(plan.children.map(insertTransitions(_, outputsColumnar = false)))
     } else {
       plan
     }
@@ -536,7 +542,7 @@ case class ApplyColumnarRulesAndInsertTransitions(
     var preInsertPlan: SparkPlan = plan
     columnarRules.foreach((r : ColumnarRule) =>
       preInsertPlan = r.preColumnarTransitions(preInsertPlan))
-    var postInsertPlan = insertTransitions(preInsertPlan)
+    var postInsertPlan = insertTransitions(preInsertPlan, outputsColumnar)
     columnarRules.reverse.foreach((r : ColumnarRule) =>
       postInsertPlan = r.postColumnarTransitions(postInsertPlan))
     postInsertPlan

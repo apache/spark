@@ -58,6 +58,12 @@ case class PartialMapperPartitionSpec(
     startReducerIndex: Int,
     endReducerIndex: Int) extends ShufflePartitionSpec
 
+// TODO(SPARK-36234): Consider mapper location and shuffle block size when coalescing mappers
+case class CoalescedMapperPartitionSpec(
+    startMapIndex: Int,
+    endMapIndex: Int,
+    numReducers: Int) extends ShufflePartitionSpec
+
 /**
  * The [[Partition]] used by [[ShuffledRowRDD]].
  */
@@ -181,6 +187,9 @@ class ShuffledRowRDD(
 
       case PartialMapperPartitionSpec(mapIndex, _, _) =>
         tracker.getMapLocation(dependency, mapIndex, mapIndex + 1)
+
+      case CoalescedMapperPartitionSpec(startMapIndex, endMapIndex, numReducers) =>
+        tracker.getMapLocation(dependency, startMapIndex, endMapIndex)
     }
   }
 
@@ -215,6 +224,16 @@ class ShuffledRowRDD(
           mapIndex + 1,
           startReducerIndex,
           endReducerIndex,
+          context,
+          sqlMetricsReporter)
+
+      case CoalescedMapperPartitionSpec(startMapIndex, endMapIndex, numReducers) =>
+        SparkEnv.get.shuffleManager.getReader(
+          dependency.shuffleHandle,
+          startMapIndex,
+          endMapIndex,
+          0,
+          numReducers,
           context,
           sqlMetricsReporter)
     }

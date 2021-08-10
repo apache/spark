@@ -1284,6 +1284,12 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
       assertCanGetProcessingTime { state.getCurrentProcessingTimeMs() >= 0 }
       assertCannotGetWatermark { state.getCurrentWatermarkMs() }
       assert(!state.hasTimedOut)
+      if (key.contains("EventTime")) {
+        state.setTimeoutTimestamp(0, "1 hour")
+      }
+      if (key.contains("ProcessingTime")) {
+        state.setTimeoutDuration("1  hour")
+      }
       val count = state.getOption.map(_.count).getOrElse(0L) + valList.size
       // We need to check if not explicitly calling update will still save the init state or not
       if (!key.contains("NoUpdate")) {
@@ -1411,6 +1417,52 @@ class FlatMapGroupsWithStateSuite extends StateStoreMetricsTest {
           "multiple rows(state) with the same key"))
       }
     )
+  }
+
+  Seq(NoTimeout(), EventTimeTimeout(), ProcessingTimeTimeout()).foreach { timeout =>
+    test(s"flatMapGroupsWithState - initial state - batch mode - timeout ${timeout}") {
+      // We will test them on different shuffle partition configuration to make sure the
+      // grouping by key will still work. On higher number of shuffle partitions its possible
+      // that all keys end up on different partitions.
+      val initialState = Seq(
+        (s"keyInStateAndData-1-$timeout", new RunningCount(1)),
+        ("keyInStateAndData-2", new RunningCount(2)),
+        ("keyNoUpdate", new RunningCount(2)), // state.update will not be called
+        ("keyOnlyInState-1", new RunningCount(1))
+      ).toDS().groupByKey(x => x._1).mapValues(_._2)
+
+      val inputData = Seq(
+        ("keyOnlyInData"), ("keyInStateAndData-2")
+      )
+      val result = inputData.toDS().groupByKey(x => x)
+        .flatMapGroupsWithState(
+          Update, timeout, initialState)(flatMapGroupsWithStateFunc)
+
+      val expected = Seq(
+        ("keyOnlyInState-1", Seq[String](), "1"),
+        ("keyNoUpdate", Seq[String](), "2"), // update will not be called
+        ("keyInStateAndData-2", Seq[String]("keyInStateAndData-2"), "3"), // inc by 1
+        (s"keyInStateAndData-1-$timeout", Seq[String](), "1"),
+        ("keyOnlyInData", Seq[String]("keyOnlyInData"), "1") // inc by 1
+      ).toDF()
+      checkAnswer(result.toDF(), expected)
+    }
+  }
+
+  testQuietly("flatMapGroupsWithState - initial state - batch mode - duplicate state") {
+    val initialState = Seq(
+      ("a", new RunningCount(1)),
+      ("a", new RunningCount(2))
+    ).toDS().groupByKey(x => x._1).mapValues(_._2)
+
+    val e = intercept[SparkException] {
+      Seq("a", "b").toDS().groupByKey(x => x)
+        .flatMapGroupsWithState(Update, NoTimeout(), initialState)(flatMapGroupsWithStateFunc)
+        .show()
+    }
+    assert(e.getMessage.contains(
+      "The initial state provided contained multiple rows(state) with the same key." +
+        " Make sure to de-duplicate the initial state before passing it."))
   }
 
   testQuietly("flatMapGroupsWithState - initial state - streaming initial state") {
