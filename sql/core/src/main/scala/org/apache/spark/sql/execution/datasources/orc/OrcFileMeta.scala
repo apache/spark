@@ -22,7 +22,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.orc.OrcFile
 import org.apache.orc.impl.{OrcTail, ReaderImpl}
 
-import org.apache.spark.sql.execution.datasources.{FileMeta, FileMetaKey}
+import org.apache.spark.sql.execution.datasources.{FileMeta, FileMetaCacheManager, FileMetaKey}
 import org.apache.spark.util.Utils
 
 private[sql] case class OrcFileMetaKey(path: Path, configuration: Configuration)
@@ -40,6 +40,12 @@ private[sql] object OrcFileMeta {
       new OrcFileMeta(fileReader.getOrcTail)
     }
   }
+
+  def readTailFromCache(path: Path, conf: Configuration): OrcTail =
+    readTailFromCache(OrcFileMetaKey(path, conf))
+
+  def readTailFromCache(key: OrcFileMetaKey): OrcTail =
+    FileMetaCacheManager.get(key).asInstanceOf[OrcFileMeta].tail
 }
 
 private[sql] class ForTailCacheReader(path: Path, options: OrcFile.ReaderOptions)

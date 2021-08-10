@@ -34,7 +34,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, FileMetaCacheManager, PartitionedFile, RecordReaderIterator}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitionedFile, RecordReaderIterator}
 import org.apache.spark.sql.execution.datasources.parquet._
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
@@ -133,8 +133,7 @@ case class ParquetPartitionReaderFactory(
     val split = new FileSplit(filePath, file.start, file.length, Array.empty[String])
 
     lazy val footerFileMetaData = if (parquetMetaCacheEnabled) {
-      FileMetaCacheManager.get(ParquetFileMetaKey(filePath, conf))
-        .asInstanceOf[ParquetFileMeta].footer.getFileMetaData
+      ParquetFileMeta.readFooterFromCache(filePath, conf).getFileMetaData
     } else {
       ParquetFooterReader.readFooter(conf, filePath, SKIP_ROW_GROUPS).getFileMetaData
     }
@@ -256,10 +255,9 @@ case class ParquetPartitionReaderFactory(
       capacity)
     // Set footer before initialize.
     if (parquetMetaCacheEnabled) {
-      val fileMeta = FileMetaCacheManager
-        .get(ParquetFileMetaKey(split.getPath, hadoopAttemptContext.getConfiguration))
-        .asInstanceOf[ParquetFileMeta]
-      vectorizedReader.setCachedFooter(fileMeta.footer)
+      val fileMeta =
+        ParquetFileMeta.readFooterFromCache(split.getPath, hadoopAttemptContext.getConfiguration)
+      vectorizedReader.setCachedFooter(fileMeta)
     }
     val iter = new RecordReaderIterator(vectorizedReader)
     // SPARK-23457 Register a task completion listener before `initialization`.

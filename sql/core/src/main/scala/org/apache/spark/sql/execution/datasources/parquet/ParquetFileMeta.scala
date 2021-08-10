@@ -23,7 +23,7 @@ import org.apache.parquet.format.converter.ParquetMetadataConverter.NO_FILTER
 import org.apache.parquet.hadoop.ParquetFileReader
 import org.apache.parquet.hadoop.metadata.ParquetMetadata
 
-import org.apache.spark.sql.execution.datasources.{FileMeta, FileMetaKey}
+import org.apache.spark.sql.execution.datasources.{FileMeta, FileMetaCacheManager, FileMetaKey}
 
 private[sql] case class ParquetFileMetaKey(path: Path, configuration: Configuration)
     extends FileMetaKey {
@@ -36,4 +36,10 @@ private[sql] object ParquetFileMeta {
   def apply(path: Path, conf: Configuration): ParquetFileMeta = {
     new ParquetFileMeta(ParquetFileReader.readFooter(conf, path, NO_FILTER))
   }
+
+  def readFooterFromCache(path: Path, conf: Configuration): ParquetMetadata =
+    readFooterFromCache(ParquetFileMetaKey(path, conf))
+
+  def readFooterFromCache(key: ParquetFileMetaKey): ParquetMetadata =
+    FileMetaCacheManager.get(key).asInstanceOf[ParquetFileMeta].footer
 }

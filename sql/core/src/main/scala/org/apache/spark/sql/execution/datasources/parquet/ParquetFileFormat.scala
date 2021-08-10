@@ -271,8 +271,7 @@ class ParquetFileFormat
         sharedConf.getBoolean(SQLConf.FILE_META_CACHE_PARQUET_ENABLED.key, false)
 
       lazy val footerFileMetaData = if (metaCacheEnabled) {
-        FileMetaCacheManager.get(ParquetFileMetaKey(filePath, sharedConf))
-          .asInstanceOf[ParquetFileMeta].footer.getFileMetaData
+        ParquetFileMeta.readFooterFromCache(filePath, sharedConf).getFileMetaData
       } else {
         ParquetFooterReader.readFooter(sharedConf, filePath, SKIP_ROW_GROUPS).getFileMetaData
       }
@@ -339,10 +338,8 @@ class ParquetFileFormat
           capacity)
         // Set footer before initialize.
         if (metaCacheEnabled) {
-          val fileMeta = FileMetaCacheManager
-            .get(ParquetFileMetaKey(filePath, sharedConf))
-            .asInstanceOf[ParquetFileMeta]
-          vectorizedReader.setCachedFooter(fileMeta.footer)
+          val footer = ParquetFileMeta.readFooterFromCache(filePath, sharedConf)
+          vectorizedReader.setCachedFooter(footer)
         }
         val iter = new RecordReaderIterator(vectorizedReader)
         // SPARK-23457 Register a task completion listener before `initialization`.

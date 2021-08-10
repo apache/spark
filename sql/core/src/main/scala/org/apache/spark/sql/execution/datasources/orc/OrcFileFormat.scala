@@ -162,8 +162,7 @@ class OrcFileFormat
 
       val fs = filePath.getFileSystem(conf)
       val readerOptions = if (metaCacheEnabled) {
-        val tail = FileMetaCacheManager.get(OrcFileMetaKey(filePath, conf))
-          .asInstanceOf[OrcFileMeta].tail
+        val tail = OrcFileMeta.readTailFromCache(filePath, conf)
         OrcFile.readerOptions(conf).filesystem(fs).orcTail(tail)
       } else {
         OrcFile.readerOptions(conf).filesystem(fs)
@@ -210,8 +209,7 @@ class OrcFileFormat
           val requestedPartitionColIds =
             Array.fill(requiredSchema.length)(-1) ++ Range(0, partitionSchema.length)
           if (metaCacheEnabled) {
-            val tail = FileMetaCacheManager.get(OrcFileMetaKey(filePath, conf))
-              .asInstanceOf[OrcFileMeta].tail
+            val tail = OrcFileMeta.readTailFromCache(filePath, conf)
             batchReader.setCachedTail(tail)
           }
           batchReader.initialize(fileSplit, taskAttemptContext)

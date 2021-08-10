@@ -30,8 +30,8 @@ import org.apache.orc.mapreduce.OrcInputFormat
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
-import org.apache.spark.sql.execution.datasources.{FileMetaCacheManager, PartitionedFile}
-import org.apache.spark.sql.execution.datasources.orc.{OrcColumnarBatchReader, OrcDeserializer, OrcFileMeta, OrcFileMetaKey, OrcFilters, OrcUtils}
+import org.apache.spark.sql.execution.datasources.PartitionedFile
+import org.apache.spark.sql.execution.datasources.orc.{OrcColumnarBatchReader, OrcDeserializer, OrcFileMeta, OrcFilters, OrcUtils}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
@@ -90,8 +90,7 @@ case class OrcPartitionReaderFactory(
 
     val fs = filePath.getFileSystem(conf)
     val readerOptions = if (orcMetaCacheEnabled) {
-      val tail = FileMetaCacheManager.get(OrcFileMetaKey(filePath, conf))
-        .asInstanceOf[OrcFileMeta].tail
+      val tail = OrcFileMeta.readTailFromCache(filePath, conf)
       OrcFile.readerOptions(conf).filesystem(fs).orcTail(tail)
     } else {
       OrcFile.readerOptions(conf).filesystem(fs)
@@ -143,8 +142,7 @@ case class OrcPartitionReaderFactory(
 
     val fs = filePath.getFileSystem(conf)
     val readerOptions = if (orcMetaCacheEnabled) {
-      val tail = FileMetaCacheManager.get(OrcFileMetaKey(filePath, conf))
-        .asInstanceOf[OrcFileMeta].tail
+      val tail = OrcFileMeta.readTailFromCache(filePath, conf)
       OrcFile.readerOptions(conf).filesystem(fs).orcTail(tail)
     } else {
       OrcFile.readerOptions(conf).filesystem(fs)
@@ -172,8 +170,7 @@ case class OrcPartitionReaderFactory(
 
       val batchReader = new OrcColumnarBatchReader(capacity)
       if (orcMetaCacheEnabled) {
-        val tail = FileMetaCacheManager.get(OrcFileMetaKey(filePath, conf))
-          .asInstanceOf[OrcFileMeta].tail
+        val tail = OrcFileMeta.readTailFromCache(filePath, conf)
         batchReader.setCachedTail(tail)
       }
       batchReader.initialize(fileSplit, taskAttemptContext)
