@@ -218,7 +218,7 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
           public void onSuccess(int numChunks, ManagedBuffer buffer) {
             logger.trace("Successfully got merged block meta for shuffleId {} shuffleMergeId {}"
               + " reduceId {}", shuffleId, shuffleMergeId, reduceId);
-            listener.onSuccess(shuffleId, reduceId, shuffleMergeId,
+            listener.onSuccess(shuffleId, shuffleMergeId, reduceId,
               new MergedBlockMeta(numChunks, buffer));
           }
 

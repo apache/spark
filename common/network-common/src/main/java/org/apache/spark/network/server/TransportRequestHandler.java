@@ -213,7 +213,15 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         public void onComplete(String streamId) throws IOException {
            try {
              streamHandler.onComplete(streamId);
-             callback.onSuccess(ByteBuffer.allocate(0));
+             callback.onSuccess(streamHandler.getCompletionResponse());
+           } catch (BlockPushNonFatalFailure ex) {
+             // Respond an RPC message with the error code to client instead of using exceptions
+             // encoded in the RPCFailure. This type of exceptions gets thrown more frequently
+             // than a regular exception on the shuffle server side due to the best-effort nature
+             // of push-based shuffle and requires special handling on the client side. Using a
+             // proper RPCResponse is more efficient.
+             callback.onSuccess(ex.getResponse());
+             streamHandler.onFailure(streamId, ex);
            } catch (Exception ex) {
              IOException ioExc = new IOException("Failure post-processing complete stream;" +
                " failing this rpc and leaving channel active", ex);

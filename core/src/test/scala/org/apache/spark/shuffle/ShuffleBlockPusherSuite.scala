@@ -33,8 +33,9 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark._
 import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.network.server.BlockPushNonFatalFailure
+import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode
 import org.apache.spark.network.shuffle.{BlockPushingListener, BlockStoreClient}
-import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.shuffle.ShuffleBlockPusher.PushRequest
@@ -219,13 +220,15 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val pusher = new ShuffleBlockPusher(conf)
     val errorHandler = pusher.createErrorHandler()
     assert(
-      !errorHandler.shouldRetryError(new RuntimeException(
-        new IllegalArgumentException(
-          BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))))
+      !errorHandler.shouldRetryError(new BlockPushNonFatalFailure(
+        ReturnCode.TOO_LATE_BLOCK_PUSH, "")))
+    assert(
+      !errorHandler.shouldRetryError(new BlockPushNonFatalFailure(
+        ReturnCode.STALE_BLOCK_PUSH, "")))
     assert(errorHandler.shouldRetryError(new RuntimeException(new ConnectException())))
     assert(
-      errorHandler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
-        BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))))
+      errorHandler.shouldRetryError(new BlockPushNonFatalFailure(
+        ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, "")))
     assert (errorHandler.shouldRetryError(new Throwable()))
   }
 
@@ -233,12 +236,13 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     val pusher = new ShuffleBlockPusher(conf)
     val errorHandler = pusher.createErrorHandler()
     assert(
-      !errorHandler.shouldLogError(new RuntimeException(
-        new IllegalArgumentException(
-          BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX))))
-    assert(!errorHandler.shouldLogError(new RuntimeException(
-      new IllegalArgumentException(
-        BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))))
+      !errorHandler.shouldLogError(new BlockPushNonFatalFailure(
+        ReturnCode.TOO_LATE_BLOCK_PUSH, "")))
+    assert(
+      !errorHandler.shouldLogError(new BlockPushNonFatalFailure(
+        ReturnCode.STALE_BLOCK_PUSH, "")))
+    assert(!errorHandler.shouldLogError(new BlockPushNonFatalFailure(
+      ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, "")))
     assert(errorHandler.shouldLogError(new Throwable()))
   }
 
@@ -255,9 +259,8 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
           if (failBlock) {
             failBlock = false
             // Fail the first block with the collision exception.
-            blockPushListener.onBlockPushFailure(blockId, new RuntimeException(
-              new IllegalArgumentException(
-                BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX)))
+            blockPushListener.onBlockPushFailure(blockId, new BlockPushNonFatalFailure(
+              ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, ""))
           } else {
             pushedBlocks += blockId
             blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))
@@ -285,9 +288,8 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
           if (failBlock) {
             failBlock = false
             // Fail the first block with the too late exception.
-            blockPushListener.onBlockPushFailure(blockId, new RuntimeException(
-              new IllegalArgumentException(
-                BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX)))
+            blockPushListener.onBlockPushFailure(blockId, new BlockPushNonFatalFailure(
+              ReturnCode.TOO_LATE_BLOCK_PUSH, ""))
           } else {
             pushedBlocks += blockId
             blockPushListener.onBlockPushSuccess(blockId, mock(classOf[ManagedBuffer]))
