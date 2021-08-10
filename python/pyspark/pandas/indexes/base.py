@@ -538,6 +538,20 @@ class Index(IndexOpsMixin):
         -------
         applied : Index, inferred
             The output of the mapping function applied to the index.
+
+        Examples
+        --------
+        >>> psidx = ps.Index([1, 2, 3])
+
+        >>> psidx.map({1: "one", 2: "two", 3: "three"})
+        Index(['one', 'two', 'three'], dtype='object')
+
+        >>> psidx.map(lambda id: "{id} + 1".format(id=id))
+        Index(['1 + 1', '2 + 1', '3 + 1'], dtype='object')
+
+        >>> pser = pd.Series(["one", "two", "three"], index=[1, 2, 3])
+        >>> psidx.map(pser)
+        Index(['one', 'two', 'three'], dtype='object')
         """
         from pyspark.pandas.indexes.extension import MapExtension
 
