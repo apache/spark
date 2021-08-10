@@ -79,7 +79,7 @@ class MapExtension:
         return_type = self._mapper_return_type(mapper)
 
         @pandas_udf(return_type)
-        def pyspark_mapper(col):
+        def pyspark_mapper(col: pd.Index) -> pd.Index:
             return col.apply(lambda i: mapper.get(i, np.nan))  # type: ignore
 
         return self._index._with_new_scol(pyspark_mapper(SPARK_DEFAULT_INDEX_NAME))
@@ -106,7 +106,7 @@ class MapExtension:
                 return None
 
         @pandas_udf(return_type)
-        def pyspark_mapper(col):
+        def pyspark_mapper(col: pd.Index) -> pd.Index:
             return col.apply(lambda i: getOrElse(mapper, i))
 
         return self._index._with_new_scol(pyspark_mapper(SPARK_DEFAULT_INDEX_NAME))
@@ -127,7 +127,7 @@ class MapExtension:
         return_type = self._mapper_return_type(mapper)
 
         @pandas_udf(return_type)
-        def pyspark_mapper(col):
+        def pyspark_mapper(col: pd.Index) -> pd.Index:
             return col.apply(mapper)
 
         return self._index._with_new_scol(scol=pyspark_mapper(SPARK_DEFAULT_INDEX_NAME))
