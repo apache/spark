@@ -26,6 +26,7 @@ from collections import OrderedDict, namedtuple
 from distutils.version import LooseVersion
 from functools import partial
 from itertools import product
+from packaging import version
 from typing import (
     Any,
     Callable,
@@ -46,12 +47,11 @@ from typing import (
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
 
-try:
-    from pandas.core.base import SelectionMixin
-
-    _builtin_table = SelectionMixin._builtin_table
-except AttributeError:
+if version.parse(pd.__version__) >= version.parse("1.3.0"):
     from pandas.core.common import _builtin_table
+else:
+    from pandas.core.base import SelectionMixin
+    _builtin_table = SelectionMixin._builtin_table
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (  # noqa: F401
