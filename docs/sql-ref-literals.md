@@ -523,6 +523,8 @@ INTERVAL 'interval_value interval_unit [ interval_value interval_unit ... ]' |
       YEAR[S] | MONTH[S] | WEEK[S] | DAY[S] | HOUR[S] | MINUTE[S] | SECOND[S] |
       MILLISECOND[S] | MICROSECOND[S]
 
+      Mix of the YEAR[S] or MONTH[S] interval units with other units is not allowed.
+
 ##### Examples
 
 ```sql
