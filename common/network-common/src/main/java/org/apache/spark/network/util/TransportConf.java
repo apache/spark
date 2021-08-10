@@ -378,13 +378,13 @@ public class TransportConf {
    * Class name of the implementation of MergedShuffleFileManager that merges the blocks
    * pushed to it when push-based shuffle is enabled. By default, push-based shuffle is disabled at
    * a cluster level because this configuration is set to
-   * 'org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager'.
+   * 'org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager'.
    * To turn on push-based shuffle at a cluster level, set the configuration to
    * 'org.apache.spark.network.shuffle.RemoteBlockPushResolver'.
    */
   public String mergedShuffleFileManagerImpl() {
     return conf.get("spark.shuffle.server.mergedShuffleFileManagerImpl",
-      "org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager");
+      "org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager");
   }
 
   /**
