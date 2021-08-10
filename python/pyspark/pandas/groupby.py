@@ -51,6 +51,7 @@ if version.parse(pd.__version__) >= version.parse("1.3.0"):
     from pandas.core.common import _builtin_table
 else:
     from pandas.core.base import SelectionMixin
+
     _builtin_table = SelectionMixin._builtin_table
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
