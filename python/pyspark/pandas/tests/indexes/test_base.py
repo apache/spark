@@ -2383,6 +2383,11 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             pidx.map(pser),
             psidx.map(pser),
         )
+        pser = pd.Series([1, 2, 3])
+        self.assert_eq(
+            pidx.map(pser),
+            psidx.map(pser),
+        )
 
 
 if __name__ == "__main__":
