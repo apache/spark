@@ -593,10 +593,9 @@ cannot resolve '1 + (- INTERVAL '02' SECOND)' due to data type mismatch: argumen
 -- !query
 select '2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10'
 -- !query schema
-struct<>
+struct<(2011-11-11 11:11:11 - TIMESTAMP '2011-11-11 11:11:10'):interval day to second>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve '('2011-11-11 11:11:11' - TIMESTAMP '2011-11-11 11:11:10')' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, ''2011-11-11 11:11:11'' is of string type.; line 1 pos 7
+0 00:00:01.000000000
 
 
 -- !query
