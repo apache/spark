@@ -119,7 +119,7 @@ struct<make_timestamp(1, 1, 1, 1, 1, 60):timestamp_ntz>
 -- !query
 SELECT make_timestamp(1, 1, 1, 1, 1, 61)
 -- !query schema
-struct<make_timestamp(1, 1, 1, 1, 1, 61):timestamp>
+struct<make_timestamp(1, 1, 1, 1, 1, 61):timestamp_ntz>
 -- !query output
 NULL
 
