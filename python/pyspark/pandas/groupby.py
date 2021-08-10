@@ -26,7 +26,7 @@ from collections import OrderedDict, namedtuple
 from distutils.version import LooseVersion
 from functools import partial
 from itertools import product
-from pkg_resources import parse_version
+from pkg_resources import parse_version  # type: ignore
 from typing import (
     Any,
     Callable,
