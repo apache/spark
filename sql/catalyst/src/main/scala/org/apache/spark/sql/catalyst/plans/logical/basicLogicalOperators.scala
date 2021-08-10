@@ -599,7 +599,7 @@ object View {
         "spark.sql.hive.convertMetastoreOrc",
         "spark.sql.hive.convertInsertingPartitionedTable",
         "spark.sql.hive.convertMetastoreCtas"
-      ).contains(key))
+      ).contains(key) || key.startsWith("spark.sql.catalog."))
     for ((k, v) <- configs ++ retainedConfigs) {
       sqlConf.settings.put(k, v)
     }
