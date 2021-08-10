@@ -793,8 +793,8 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
      * shuffle is already finalized. Therefore the block push is too late.
      */
     private boolean isTooLate(
-      AppShuffleMergePartitionsInfo appShuffleMergePartitionsInfo,
-      int reduceId) {
+        AppShuffleMergePartitionsInfo appShuffleMergePartitionsInfo,
+        int reduceId) {
       return null == appShuffleMergePartitionsInfo ||
         INDETERMINATE_SHUFFLE_FINALIZED == appShuffleMergePartitionsInfo.shuffleMergePartitions ||
         !appShuffleMergePartitionsInfo.shuffleMergePartitions.containsKey(reduceId);
