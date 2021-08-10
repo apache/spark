@@ -43,6 +43,7 @@ import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.server.api.*;
 import org.apache.spark.network.shuffle.MergedShuffleFileManager;
+import org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager;
 import org.apache.spark.network.util.LevelDBProvider;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
@@ -284,7 +285,7 @@ public class YarnShuffleService extends AuxiliaryService {
       return mergeManagerSubClazz.getConstructor(TransportConf.class).newInstance(conf);
     } catch (Exception e) {
       logger.error("Unable to create an instance of {}", mergeManagerImplClassName);
-      return new ExternalBlockHandler.NoOpMergedShuffleFileManager(conf);
+      return new NoOpMergedShuffleFileManager(conf);
     }
   }
 

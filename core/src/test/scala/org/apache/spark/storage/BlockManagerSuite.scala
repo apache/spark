@@ -2084,7 +2084,10 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     makeBlockManager(100, "execE",
       transferService = Some(new MockBlockTransferService(10, "hostA")))
     assert(master.getShufflePushMergerLocations(5, Set.empty).size == 4)
-
+    assert(master.getExecutorEndpointRef(SparkContext.DRIVER_IDENTIFIER).isEmpty)
+    makeBlockManager(100, SparkContext.DRIVER_IDENTIFIER,
+      transferService = Some(new MockBlockTransferService(10, "host-driver")))
+    assert(master.getExecutorEndpointRef(SparkContext.DRIVER_IDENTIFIER).isDefined)
     master.removeExecutor("execA")
     master.removeExecutor("execE")
 
@@ -2093,6 +2096,9 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       Seq("hostC", "hostB", "hostD").sorted)
     assert(master.getShufflePushMergerLocations(4, Set.empty).map(_.host).sorted ===
       Seq("hostB", "hostA", "hostC", "hostD").sorted)
+    master.removeShufflePushMergerLocation("hostA")
+    assert(master.getShufflePushMergerLocations(4, Set.empty).map(_.host).sorted ===
+      Seq("hostB", "hostC", "hostD").sorted)
   }
 
   test("SPARK-33387 Support ordered shuffle block migration") {

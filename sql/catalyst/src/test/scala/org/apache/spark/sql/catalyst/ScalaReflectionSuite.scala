@@ -156,8 +156,19 @@ object TraitProductWithNoConstructorCompanion {}
 
 trait TraitProductWithNoConstructorCompanion extends Product1[Int] {}
 
+object TestingValueClass {
+  case class IntWrapper(val i: Int) extends AnyVal
+  case class StrWrapper(s: String) extends AnyVal
+
+  case class ValueClassData(intField: Int,
+                            wrappedInt: IntWrapper, // an int column
+                            strField: String,
+                            wrappedStr: StrWrapper) // a string column
+}
+
 class ScalaReflectionSuite extends SparkFunSuite {
   import org.apache.spark.sql.catalyst.ScalaReflection._
+  import TestingValueClass._
 
   // A helper method used to test `ScalaReflection.serializerForType`.
   private def serializerFor[T: TypeTag]: Expression =
@@ -450,5 +461,88 @@ class ScalaReflectionSuite extends SparkFunSuite {
       StructField("i", IntegerType, false),
       StructField("e", StringType, true))))
     assert(deserializerFor[FooClassWithEnum].dataType == ObjectType(classOf[FooClassWithEnum]))
+  }
+
+  test("schema for case class that is a value class") {
+    val schema = schemaFor[IntWrapper]
+    assert(
+      schema === Schema(StructType(Seq(StructField("i", IntegerType, false))), nullable = true))
+  }
+
+  test("SPARK-20384: schema for case class that contains value class fields") {
+    val schema = schemaFor[ValueClassData]
+    assert(
+      schema === Schema(
+        StructType(Seq(
+          StructField("intField", IntegerType, nullable = false),
+          StructField("wrappedInt", IntegerType, nullable = false),
+          StructField("strField", StringType),
+          StructField("wrappedStr", StringType)
+        )),
+        nullable = true))
+  }
+
+  test("SPARK-20384: schema for array of value class") {
+    val schema = schemaFor[Array[IntWrapper]]
+    assert(
+      schema === Schema(
+        ArrayType(StructType(Seq(StructField("i", IntegerType, false))), containsNull = true),
+        nullable = true))
+  }
+
+  test("SPARK-20384: schema for map of value class") {
+    val schema = schemaFor[Map[IntWrapper, StrWrapper]]
+    assert(
+      schema === Schema(
+        MapType(
+          StructType(Seq(StructField("i", IntegerType, false))),
+          StructType(Seq(StructField("s", StringType))),
+          valueContainsNull = true),
+        nullable = true))
+  }
+
+  test("SPARK-20384: schema for tuple_2 of value class") {
+    val schema = schemaFor[(IntWrapper, StrWrapper)]
+    assert(
+      schema === Schema(
+        StructType(
+          Seq(
+            StructField("_1", StructType(Seq(StructField("i", IntegerType, false)))),
+            StructField("_2", StructType(Seq(StructField("s", StringType))))
+          )
+        ),
+        nullable = true))
+  }
+
+  test("SPARK-20384: schema for tuple_3 of value class") {
+    val schema = schemaFor[(IntWrapper, StrWrapper, StrWrapper)]
+    assert(
+      schema === Schema(
+        StructType(
+          Seq(
+            StructField("_1", StructType(Seq(StructField("i", IntegerType, false)))),
+            StructField("_2", StructType(Seq(StructField("s", StringType)))),
+            StructField("_3", StructType(Seq(StructField("s", StringType))))
+          )
+        ),
+        nullable = true))
+  }
+
+  test("SPARK-20384: schema for nested tuple of value class") {
+    val schema = schemaFor[(IntWrapper, (StrWrapper, StrWrapper))]
+    assert(
+      schema === Schema(
+        StructType(
+          Seq(
+            StructField("_1", StructType(Seq(StructField("i", IntegerType, false)))),
+            StructField("_2", StructType(
+              Seq(
+                StructField("_1", StructType(Seq(StructField("s", StringType)))),
+                StructField("_2", StructType(Seq(StructField("s", StringType)))))
+              )
+            )
+          )
+        ),
+        nullable = true))
   }
 }

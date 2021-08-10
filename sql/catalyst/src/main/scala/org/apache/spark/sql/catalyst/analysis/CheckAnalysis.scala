@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionM
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
@@ -131,13 +132,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
         write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
-
-      case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case u: UnresolvedV2Relation =>
-        u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
       case command: V2PartitionCommand =>
         command.table match {
@@ -441,8 +435,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
-          case alter: AlterTableColumnCommand if alter.table.resolved =>
-            checkAlterTableColumnCommand(alter)
+          case alter: AlterTableCommand =>
+            checkAlterTableCommand(alter)
 
           case _ => // Falls back to the following checks
         }
@@ -938,24 +932,29 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
   /**
    * Validates the options used for alter table commands after table and columns are resolved.
    */
-  private def checkAlterTableColumnCommand(alter: AlterTableColumnCommand): Unit = {
-    def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
-      if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
+  private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
+    def checkColumnNotExists(
+      op: String, fieldNames: Seq[String], struct: StructType, r: Resolver): Unit = {
+      if (struct.findNestedField(fieldNames, includeCollections = true, r).isDefined) {
         alter.failAnalysis(s"Cannot $op column, because ${fieldNames.quoted} " +
           s"already exists in ${struct.treeString}")
       }
     }
 
     alter match {
-      case AlterTableAddColumns(table: ResolvedTable, colsToAdd) =>
+      case AddColumns(table: ResolvedTable, colsToAdd) =>
         colsToAdd.foreach { colToAdd =>
-          checkColumnNotExists("add", colToAdd.name, table.schema)
+          checkColumnNotExists("add", colToAdd.name, table.schema, alter.conf.resolver)
         }
+        SchemaUtils.checkColumnNameDuplication(
+          colsToAdd.map(_.name.quoted),
+          "in the user specified columns",
+          alter.conf.resolver)
 
-      case AlterTableRenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
-        checkColumnNotExists("rename", col.path :+ newName, table.schema)
+      case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
+        checkColumnNotExists("rename", col.path :+ newName, table.schema, alter.conf.resolver)
 
-      case a @ AlterTableAlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
+      case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
         val fieldName = col.name.quoted
         if (a.dataType.isDefined) {
           val field = CharVarcharUtils.getRawType(col.field.metadata)

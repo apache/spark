@@ -135,13 +135,14 @@ public class OneForOneBlockPusher {
       assert buffers.containsKey(blockIds[i]) : "Could not find the block buffer for block "
         + blockIds[i];
       String[] blockIdParts = blockIds[i].split("_");
-      if (blockIdParts.length != 4 || !blockIdParts[0].equals(SHUFFLE_PUSH_BLOCK_PREFIX)) {
+      if (blockIdParts.length != 5 || !blockIdParts[0].equals(SHUFFLE_PUSH_BLOCK_PREFIX)) {
         throw new IllegalArgumentException(
           "Unexpected shuffle push block id format: " + blockIds[i]);
       }
       ByteBuffer header =
         new PushBlockStream(appId, appAttemptId, Integer.parseInt(blockIdParts[1]),
-          Integer.parseInt(blockIdParts[2]), Integer.parseInt(blockIdParts[3]) , i).toByteBuffer();
+          Integer.parseInt(blockIdParts[2]), Integer.parseInt(blockIdParts[3]),
+            Integer.parseInt(blockIdParts[4]), i).toByteBuffer();
       client.uploadStream(new NioManagedBuffer(header), buffers.get(blockIds[i]),
         new BlockPushCallback(i, blockIds[i]));
     }

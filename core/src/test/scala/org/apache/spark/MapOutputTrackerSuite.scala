@@ -31,7 +31,7 @@ import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus, MergeStatus}
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
+import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 
 class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
   private val conf = new SparkConf
@@ -347,9 +347,9 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     bitmap.add(0)
     bitmap.add(1)
 
-    tracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000),
+    tracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000), 0,
       bitmap, 1000L))
-    tracker.registerMergeResult(10, 1, MergeStatus(BlockManagerId("b", "hostB", 1000),
+    tracker.registerMergeResult(10, 1, MergeStatus(BlockManagerId("b", "hostB", 1000), 0,
       bitmap, 1000L))
     assert(tracker.getNumAvailableMergeResults(10) == 2)
     tracker.unregisterMergeResult(10, 0, BlockManagerId("a", "hostA", 1000))
@@ -386,12 +386,12 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     masterTracker.registerMapOutput(10, 2, MapStatus(blockMgrId, Array(1000L), 2))
     masterTracker.registerMapOutput(10, 3, MapStatus(blockMgrId, Array(1000L), 3))
 
-    masterTracker.registerMergeResult(10, 0, MergeStatus(blockMgrId,
+    masterTracker.registerMergeResult(10, 0, MergeStatus(blockMgrId, 0,
       bitmap, 3000L))
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
     assert(slaveTracker.getMapSizesByExecutorId(10, 0).toSeq ===
-      Seq((blockMgrId, ArrayBuffer((ShuffleBlockId(10, -1, 0), 3000, -1),
+      Seq((blockMgrId, ArrayBuffer((ShuffleMergedBlockId(10, 0, 0), 3000, -1),
         (ShuffleBlockId(10, 2, 0), size1000, 2)))))
 
     masterTracker.stop()
@@ -431,7 +431,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     masterTracker.registerMapOutput(10, 2, MapStatus(blockMgrId, Array(1000L), 2))
     masterTracker.registerMapOutput(10, 3, MapStatus(blockMgrId, Array(1000L), 3))
 
-    masterTracker.registerMergeResult(10, 0, MergeStatus(blockMgrId,
+    masterTracker.registerMergeResult(10, 0, MergeStatus(blockMgrId, 0,
       bitmap, 4000L))
     slaveTracker.updateEpoch(masterTracker.getEpoch)
     val size1000 = MapStatus.decompressSize(MapStatus.compressSize(1000L))
@@ -523,7 +523,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     bitmap80.add(2)
     bitmap80.add(3)
     bitmap80.add(4)
-    tracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000),
+    tracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000), 0,
       bitmap80, 11))
 
     val preferredLocs1 = tracker.getPreferredLocationsForShuffle(mockShuffleDep, 0)
@@ -535,7 +535,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     // Prepare another MergeStatus that merges only 1 out of 5 blocks
     val bitmap20 = new RoaringBitmap()
     bitmap20.add(0)
-    tracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000),
+    tracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000), 0,
       bitmap20, 2))
 
     val preferredLocs2 = tracker.getPreferredLocationsForShuffle(mockShuffleDep, 0)
@@ -612,7 +612,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
         masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
           BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0), 5))
       }
-      masterTracker.registerMergeResult(20, 0, MergeStatus(BlockManagerId("999", "mps", 1000),
+      masterTracker.registerMergeResult(20, 0, MergeStatus(BlockManagerId("999", "mps", 1000), 0,
         bitmap1, 1000L))
 
       val mapWorkerRpcEnv = createRpcEnv("spark-worker", "localhost", 0, new SecurityManager(conf))
@@ -646,13 +646,13 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     val bitmap1 = new RoaringBitmap()
     bitmap1.add(0)
     bitmap1.add(1)
-    tracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000),
+    tracker.registerMergeResult(10, 0, MergeStatus(BlockManagerId("a", "hostA", 1000), 0,
       bitmap1, 1000L))
 
     val bitmap2 = new RoaringBitmap()
     bitmap2.add(5)
     bitmap2.add(6)
-    tracker.registerMergeResult(10, 1, MergeStatus(BlockManagerId("b", "hostB", 1000),
+    tracker.registerMergeResult(10, 1, MergeStatus(BlockManagerId("b", "hostB", 1000), 0,
       bitmap2, 1000L))
     assert(tracker.getNumAvailableMergeResults(10) == 2)
     tracker.unregisterMergeResult(10, 0, BlockManagerId("a", "hostA", 1000), Option(0))

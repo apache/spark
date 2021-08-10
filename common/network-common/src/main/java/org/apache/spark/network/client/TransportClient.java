@@ -206,12 +206,15 @@ public class TransportClient implements Closeable {
    *
    * @param appId applicationId.
    * @param shuffleId shuffle id.
+   * @param shuffleMergeId shuffleMergeId is used to uniquely identify merging process
+   *                       of shuffle by an indeterminate stage attempt.
    * @param reduceId reduce id.
    * @param callback callback the handle the reply.
    */
   public void sendMergedBlockMetaReq(
       String appId,
       int shuffleId,
+      int shuffleMergeId,
       int reduceId,
       MergedBlockMetaResponseCallback callback) {
     long requestId = requestId();
@@ -222,7 +225,8 @@ public class TransportClient implements Closeable {
     handler.addRpcRequest(requestId, callback);
     RpcChannelListener listener = new RpcChannelListener(requestId, callback);
     channel.writeAndFlush(
-      new MergedBlockMetaRequest(requestId, appId, shuffleId, reduceId)).addListener(listener);
+      new MergedBlockMetaRequest(requestId, appId, shuffleId, shuffleMergeId,
+        reduceId)).addListener(listener);
   }
 
   /**
