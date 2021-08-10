@@ -933,26 +933,33 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates the options used for alter table commands after table and columns are resolved.
    */
   private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
-    def checkColumnNotExists(
-      op: String, fieldNames: Seq[String], struct: StructType, r: Resolver): Unit = {
-      if (struct.findNestedField(fieldNames, includeCollections = true, r).isDefined) {
+    def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
+      if (struct.findNestedField(
+          fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
         alter.failAnalysis(s"Cannot $op column, because ${fieldNames.quoted} " +
           s"already exists in ${struct.treeString}")
       }
     }
 
+    def checkColumnNameDuplication(colsToAdd: Seq[QualifiedColType]): Unit = {
+      SchemaUtils.checkColumnNameDuplication(
+        colsToAdd.map(_.name.quoted),
+        "in the user specified columns",
+        alter.conf.resolver)
+    }
+
     alter match {
       case AddColumns(table: ResolvedTable, colsToAdd) =>
         colsToAdd.foreach { colToAdd =>
-          checkColumnNotExists("add", colToAdd.name, table.schema, alter.conf.resolver)
+          checkColumnNotExists("add", colToAdd.name, table.schema)
         }
-        SchemaUtils.checkColumnNameDuplication(
-          colsToAdd.map(_.name.quoted),
-          "in the user specified columns",
-          alter.conf.resolver)
+        checkColumnNameDuplication(colsToAdd)
+
+      case ReplaceColumns(_: ResolvedTable, colsToAdd) =>
+        checkColumnNameDuplication(colsToAdd)
 
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
-        checkColumnNotExists("rename", col.path :+ newName, table.schema, alter.conf.resolver)
+        checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
       case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
         val fieldName = col.name.quoted
