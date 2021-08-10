@@ -21,11 +21,11 @@ import pandas as pd
 import numpy as np
 
 from pyspark.sql.functions import pandas_udf
+from pyspark.sql.types import DataType
 
-from pyspark.pandas._typing import Scalar
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.internal import SPARK_DEFAULT_INDEX_NAME
-from pyspark.pandas.typedef.typehints import as_spark_type, Dtype, infer_pd_series_spark_type
+from pyspark.pandas.typedef.typehints import as_spark_type, infer_pd_series_spark_type
 
 
 # TODO: Implement na_action similar functionality to pandas
@@ -88,8 +88,6 @@ class MapExtension:
         """
         Helper method that maps Index values when mapper is in pd.Series type.
 
-        .. note:: Default return value for missing elements is np.nan
-
         Parameters
         ----------
         mapper: pandas.Series
@@ -99,15 +97,13 @@ class MapExtension:
         -------
         Index
         """
-        from pyspark.pandas.spark import functions as SF
-
         return_type = self._mapper_return_type(mapper)
 
         def getOrElse(input: pd.Series, pos):
             try:
                 return input.loc[pos]
             except:
-                return SF.lit(None).cast(return_type)
+                return None
 
         @pandas_udf(return_type)
         def pyspark_mapper(col):
@@ -136,9 +132,7 @@ class MapExtension:
 
         return self._index._with_new_scol(scol=pyspark_mapper(SPARK_DEFAULT_INDEX_NAME))
 
-    def _mapper_return_type(
-        self, mapper: Union[dict, Callable[[Any], Any], pd.Series]
-    ) -> Union[Scalar, Dtype]:
+    def _mapper_return_type(self, mapper: Union[dict, Callable[[Any], Any], pd.Series]) -> DataType:
         """
         Helper method to get the mapper's return type. The return type is required for
         the pandas_udf.
@@ -149,7 +143,7 @@ class MapExtension:
 
         Returns
         -------
-        Scalar or Dtype
+        Spark DataType
         """
         if isinstance(mapper, dict):
             return as_spark_type(type(list(mapper.values())[0]))
