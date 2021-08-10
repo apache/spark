@@ -26,7 +26,9 @@ import org.apache.spark.unsafe.types.UTF8String
  *
  * @param timeColumn the start time of session window
  * @param gapDuration the duration of session gap, meaning the session will close if there is
- *                    no new element appeared within "the last element in session + gap".
+ *                    no new element appeared within "the last element in session + gap". Besides
+ *                    a static gap duration value, users can also provide an expression to specify
+ *                    gap duration dynamically based on the input row.
  */
 case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extends Expression
   with ImplicitCastInputTypes
