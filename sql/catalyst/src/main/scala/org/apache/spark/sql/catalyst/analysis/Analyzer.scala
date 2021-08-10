@@ -3975,7 +3975,14 @@ object SessionWindowing extends Rule[LogicalPlan] {
           SESSION_COL_NAME, session.dataType, metadata = newMetadata)()
 
         val sessionStart = PreciseTimestampConversion(session.timeColumn, TimestampType, LongType)
-        val sessionEnd = sessionStart + session.gapDuration
+        val gapDuration = session.gapDuration match {
+          case expr if Cast.canCast(expr.dataType, CalendarIntervalType) =>
+            Cast(expr, CalendarIntervalType)
+          case other =>
+            throw QueryCompilationErrors.sessionWindowGapDurationDataTypeError(other.dataType)
+        }
+        val sessionEnd = PreciseTimestampConversion(session.timeColumn + gapDuration,
+          TimestampType, LongType)
 
         val literalSessionStruct = CreateNamedStruct(
           Literal(SESSION_START) ::
