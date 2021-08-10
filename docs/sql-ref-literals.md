@@ -439,23 +439,82 @@ SELECT TIMESTAMP '1997-01' AS col;
 
 An interval literal is used to specify a fixed period of time.
 
+#### ANSI style
+
+The ANSI SQL standard defines interval literals in the form:
+```sql
+INTERVAL [ <sign> ] <interval string> <interval qualifier>
+```
+where `<interval qualifier>` can be a single field or in the field-to-field form:
+```sql
+<interval qualifier> ::= <start field> TO <end field> | <single field>
+```
+An interval literal can have either year-month or day-time interval type. The interval sub-type defines format of `<interval string>`:
+```sql
+<interval string> ::= <quote> [ <sign> ] { <year-month literal> | <day-time literal> } <quote>
+<year-month literal> ::= <years value> [ <minus sign> <months value> ] | <months value>
+<day-time literal> ::= <day-time interval> | <time interval>
+<day-time interval> ::= <days value> [ <space> <hours value> [ <colon> <minutes value> [ <colon> <seconds value> ] ] ]
+<time interval> ::= <hours value> [ <colon> <minutes value> [ <colon> <seconds value> ] ]
+  | <minutes value> [ <colon> <seconds value> ]
+  | <seconds value>
+```
+
+Supported year-month interval literals and theirs formats:
+
+|`<interval qualifier>`|Interval string pattern|An instance of the literal|
+|---------|-------|------------|
+|INTERVAL YEAR|`[+|-]'[+|-]y'`|`INTERVAL -'2021' YEAR`|
+|INTERVAL YEAR TO MONTH|`[+|-]'[+|-]y-m'`|`INTERVAL '-2021-07' YEAR TO MONTH`|
+|INTERVAL MONTH|`[+|-]'[+|-]m'`|`interval '10' month`|
+
+Formats of supported day-time interval literals:
+
+|`<interval qualifier>`|Interval string pattern|An instance of the literal|
+|---------|----|-------------------|
+|INTERVAL DAY|`[+|-]'[+|-]d'`|`INTERVAL -'100' DAY`|
+|INTERVAL DAY TO HOUR|`[+|-]'[+|-]d h'`|`INTERVAL '-100 10' DAY TO HOUR`|
+|INTERVAL DAY TO MINUTE|`[+|-]'[+|-]d h:m'`|`INTERVAL '100 10:30' DAY TO MINUTE`|
+|INTERVAL DAY TO SECOND|`[+|-]'[+|-]d h:m:s.n'`|`INTERVAL '100 10:30:40.999999' DAY TO SECOND`|
+|INTERVAL HOUR|`[+|-]'[+|-]h'`|`INTERVAL '123' HOUR`|
+|INTERVAL HOUR TO MINUTE|`[+|-]'[+|-]h:m'`|`INTERVAL -'-123:10' HOUR TO MINUTE`|
+|INTERVAL HOUR TO SECOND|`[+|-]'[+|-]h:m:s.n'`|`INTERVAL '123:10:59' HOUR TO SECOND`|
+|INTERVAL MINUTE|`[+|-]'[+|-]m'`|`interval '1000' minute`|
+|INTERVAL MINUTE TO SECOND|`[+|-]'[+|-]m:s.n'`|`INTERVAL '1000:01.001' MINUTE TO SECOND`|
+|INTERVAL SECOND|`[+|-]'[+|-]s.n'`|`INTERVAL '1000.000001' SECOND`|
+
+##### Examples
+
+```sql
+SELECT INTERVAL '2-3' YEAR TO MONTH AS col;
++----------------------------+
+|col                         |
++----------------------------+
+|INTERVAL '2-3' YEAR TO MONTH|
++----------------------------+
+
+SELECT INTERVAL -'20 15:40:32.99899999' DAY TO SECOND AS col;
++--------------------------------------------+
+|col                                         |
++--------------------------------------------+
+|INTERVAL '-20 15:40:32.998999' DAY TO SECOND|
++--------------------------------------------+
+```
+
+#### Multi-units style
+
 ```sql
 INTERVAL interval_value interval_unit [ interval_value interval_unit ... ] |
 INTERVAL 'interval_value interval_unit [ interval_value interval_unit ... ]' |
-INTERVAL interval_string_value interval_unit TO interval_unit
 ```
 
-#### Parameters
+##### Parameters
 
 * **interval_value**
 
     **Syntax:**
 
       [ + | - ] number_value | '[ + | - ] number_value'
-
-* **interval_string_value**
-
-     year-month/day-time interval string.
 
 * **interval_unit**
 
@@ -464,7 +523,7 @@ INTERVAL interval_string_value interval_unit TO interval_unit
       YEAR[S] | MONTH[S] | WEEK[S] | DAY[S] | HOUR[S] | MINUTE[S] | SECOND[S] |
       MILLISECOND[S] | MICROSECOND[S]
 
-#### Examples
+##### Examples
 
 ```sql
 SELECT INTERVAL 3 YEAR AS col;
@@ -495,18 +554,4 @@ SELECT INTERVAL 1 YEARS 2 MONTH 3 WEEK 4 DAYS 5 HOUR 6 MINUTES 7 SECOND 8
 +-----------------------------------------------------------+
 |1 years 2 months 25 days 5 hours 6 minutes 7.008009 seconds|
 +-----------------------------------------------------------+
-
-SELECT INTERVAL '2-3' YEAR TO MONTH AS col;
-+----------------+
-|             col|
-+----------------+
-|2 years 3 months|
-+----------------+
-
-SELECT INTERVAL '20 15:40:32.99899999' DAY TO SECOND AS col;
-+---------------------------------------------+
-|                                          col|
-+---------------------------------------------+
-|20 days 15 hours 40 minutes 32.998999 seconds|
-+---------------------------------------------+
 ```
