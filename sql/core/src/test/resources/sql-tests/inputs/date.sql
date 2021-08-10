@@ -111,6 +111,7 @@ select '2011-11-11' - interval '2' day;
 select null - date '2019-10-06';
 select date '2001-10-01' - date '2001-09-28';
 select '2011-11-11 11:11:11' - date'2011-11-11';
+select str - date'2011-11-11' from v2;
 
 -- Unsupported narrow text style
 select to_date('26/October/2015', 'dd/MMMMM/yyyy');
