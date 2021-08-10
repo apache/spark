@@ -3168,7 +3168,7 @@ Push based shuffle helps improve the reliability and performance of spark shuffl
 <tr>
   <td><code>spark.shuffle.push.server.mergedShuffleFileManagerImpl</code></td>
   <td>
-    <code>org.apache.spark.network.shuffle.<br />ExternalBlockHandler$NoOpMergedShuffleFileManager</code>
+    <code>org.apache.spark.network.shuffle.<br />NoOpMergedShuffleFileManager</code>
   </td>
   <td>
     Class name of the implementation of MergedShuffleFileManager that manages push-based shuffle. This acts as a server side config to disable or enable push-based shuffle. By default, push-based shuffle is disabled at the server side. <p> To enable push-based shuffle on the server side, set the config <code>spark.shuffle.push.server.mergedShuffleFileManagerImpl</code> to <code>org.apache.spark.network.shuffle.RemoteBlockPushResolver</code></p>
@@ -3252,7 +3252,7 @@ Push based shuffle helps improve the reliability and performance of spark shuffl
   <td><code>1m</code></td>
   <td>
     <p> The max size of an individual block to push to the remote shuffle services. Blocks larger than this threshold are not pushed to be merged remotely. These shuffle blocks will be fetched by the executors in the original manner. </p>
-    <p> Setting this too high would result in more blocks to be pushed to remote shuffle services but those are already efficiently fetched with the existing mechanisms resulting in additional overhead of pushing the large blocks to remote shuffle services. </p>
+    <p> Setting this too high would result in more blocks to be pushed to remote shuffle services but those are already efficiently fetched with the existing mechanisms resulting in additional overhead of pushing the large blocks to remote shuffle services. It is recommended to set <code>spark.shuffle.push.maxBlockSizeToPush</code> lesser than <code>spark.shuffle.push.maxBlockBatchSize</code> config's value. </p>
     <p> Setting this too low would result in lesser number of blocks getting merged and directly fetched from mapper external shuffle service results in higher small random reads affecting overall disk I/O performance. </p>
   </td>
   <td>3.2.0</td>
