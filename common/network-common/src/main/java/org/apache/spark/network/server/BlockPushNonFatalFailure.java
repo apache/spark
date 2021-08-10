@@ -107,30 +107,34 @@ public class BlockPushNonFatalFailure extends RuntimeException {
     /**
      * Indicate the case of a successful merge of a pushed block.
      */
-    SUCCESS(0),
+    SUCCESS(0, ""),
     /**
      * Indicate a block to be merged arrives too late on the server side, i.e. after the
      * corresponding shuffle has been merge finalized. When the client gets this code, it
      * will not retry pushing the block.
      */
-    TOO_LATE_BLOCK_PUSH(1),
+    TOO_LATE_BLOCK_PUSH(1, TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX),
     /**
      * Indicating the server couldn't append a block after all available attempts due to
      * collision with other blocks belonging to the same shuffle partition.
      */
-    BLOCK_APPEND_COLLISION_DETECTED(2),
+    BLOCK_APPEND_COLLISION_DETECTED(2, BLOCK_APPEND_COLLISION_MSG_SUFFIX),
     /**
      * Indicate a block received on the server side is a stale block push in the case of
      * indeterminate stage retries. When the client receives this code, it will not retry
      * pushing the block.
      */
-    STALE_BLOCK_PUSH(3);
+    STALE_BLOCK_PUSH(3, STALE_BLOCK_PUSH_MESSAGE_SUFFIX);
 
     private final byte id;
+    // Error message suffix used to generate an error message for a given ReturnCode and
+    // a given block ID
+    private final String errorMsgSuffix;
 
-    ReturnCode(int id) {
+    ReturnCode(int id, String errorMsgSuffix) {
       assert id < 128 : "Cannot have more than 128 block push return code";
       this.id = (byte) id;
+      this.errorMsgSuffix = errorMsgSuffix;
     }
 
     public byte id() { return id; }
@@ -148,15 +152,6 @@ public class BlockPushNonFatalFailure extends RuntimeException {
 
   public static String getErrorMsg(String blockId, ReturnCode errorCode) {
     Preconditions.checkArgument(errorCode != ReturnCode.SUCCESS);
-    switch (errorCode) {
-      case STALE_BLOCK_PUSH:
-        return "Block " + blockId + STALE_BLOCK_PUSH_MESSAGE_SUFFIX;
-      case TOO_LATE_BLOCK_PUSH:
-        return "Block " + blockId + TOO_LATE_BLOCK_PUSH_MESSAGE_SUFFIX;
-      case BLOCK_APPEND_COLLISION_DETECTED:
-        return "Block " + blockId + BLOCK_APPEND_COLLISION_MSG_SUFFIX;
-      default:
-        throw new IllegalArgumentException("Unknown block push error code: " + errorCode);
-    }
+    return "Block " + blockId + errorCode.errorMsgSuffix;
   }
 }
