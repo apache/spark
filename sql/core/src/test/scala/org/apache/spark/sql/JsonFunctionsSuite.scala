@@ -390,11 +390,15 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-24027: from_json of a map with unsupported key type") {
     val schema = MapType(StructType(StructField("f", IntegerType) :: Nil), StringType)
-
-    checkAnswer(Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema)),
-      Row(null))
-    checkAnswer(Seq("""{"{"f": 1}": "a"}""").toDS().select(from_json($"value", schema)),
-      Row(null))
+    val startMsg = "cannot resolve 'entries' due to data type mismatch:"
+    val exception1 = intercept[AnalysisException] {
+      Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema))
+    }.getMessage
+    assert(exception1.contains(startMsg))
+    val exception2 = intercept[AnalysisException] {
+      Seq("""{{"f": 1}: "a"}""").toDS().select(from_json($"value", schema))
+    }.getMessage
+    assert(exception2.contains(startMsg))
   }
 
   test("SPARK-24709: infers schemas of json strings and pass them to from_json") {
@@ -592,6 +596,31 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
       assert(exception2.contains(
         "from_json() doesn't support the DROPMALFORMED mode. " +
           "Acceptable modes are PERMISSIVE and FAILFAST."))
+    }
+  }
+
+  test("SPARK-36069: from_json invalid json schema - check field name and field value") {
+    withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
+      val schema = new StructType()
+        .add("a", IntegerType)
+        .add("b", IntegerType)
+        .add("_unparsed", StringType)
+      val badRec = """{"a": "1", "b": 11}"""
+      val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
+
+      checkAnswer(
+        df.select(from_json($"value", schema, Map("mode" -> "PERMISSIVE"))),
+        Row(Row(null, 11, badRec)) :: Row(Row(2, 12, null)) :: Nil)
+
+      val errMsg = intercept[SparkException] {
+        df.select(from_json($"value", schema, Map("mode" -> "FAILFAST"))).collect()
+      }.getMessage
+
+      assert(errMsg.contains(
+        "Malformed records are detected in record parsing. Parse Mode: FAILFAST."))
+      assert(errMsg.contains(
+        "Failed to parse field name a, field value 1, " +
+          "[VALUE_STRING] to target spark data type [IntegerType]."))
     }
   }
 

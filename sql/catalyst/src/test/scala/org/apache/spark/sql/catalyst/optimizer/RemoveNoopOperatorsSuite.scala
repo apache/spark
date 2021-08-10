@@ -54,4 +54,16 @@ class RemoveNoopOperatorsSuite extends PlanTest {
 
     comparePlans(optimized, testRelation)
   }
+
+  test("SPARK-36353: RemoveNoopOperators should keep output schema") {
+    val query = testRelation
+      .select(('a + 'b).as("c"))
+      .analyze
+    val originalQuery = Project(Seq(query.output.head.withName("C")), query)
+    val optimized = Optimize.execute(originalQuery.analyze)
+    val result = testRelation
+      .select(('a + 'b).as("C"))
+      .analyze
+    comparePlans(optimized, result)
+  }
 }

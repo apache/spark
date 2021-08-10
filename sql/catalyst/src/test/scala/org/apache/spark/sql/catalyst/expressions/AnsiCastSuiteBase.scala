@@ -392,8 +392,6 @@ abstract class AnsiCastSuiteBase extends CastSuiteBase {
           s"Cannot cast $str to DateType.")
       }
 
-      checkCastWithParseError("12345")
-      checkCastWithParseError("12345-12-18")
       checkCastWithParseError("2015-13-18")
       checkCastWithParseError("2015-03-128")
       checkCastWithParseError("2015/03/18")

@@ -21,7 +21,7 @@ import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CurrentBatchTimestamp, CurrentDate, CurrentTimestamp, LocalTimestamp}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStream}
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
@@ -137,11 +137,11 @@ class MicroBatchExecution(
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
     sink match {
       case s: SupportsWrite =>
-        val streamingWrite = createStreamingWrite(s, extraOptions, _logicalPlan)
+        val (streamingWrite, customMetrics) = createStreamingWrite(s, extraOptions, _logicalPlan)
         val relationOpt = plan.catalogAndIdent.map {
           case (catalog, ident) => DataSourceV2Relation.create(s, Some(catalog), Some(ident))
         }
-        WriteToMicroBatchDataSource(relationOpt, streamingWrite, _logicalPlan)
+        WriteToMicroBatchDataSource(relationOpt, streamingWrite, _logicalPlan, customMetrics)
 
       case _ => _logicalPlan
     }
@@ -558,6 +558,9 @@ class MicroBatchExecution(
         // dummy string to prevent UnresolvedException and to prevent to be used in the future.
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           ct.dataType, Some("Dummy TimeZoneId"))
+      case lt: LocalTimestamp =>
+        CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
+          lt.dataType, lt.timeZoneId)
       case cd: CurrentDate =>
         CurrentBatchTimestamp(offsetSeqMetadata.batchTimestampMs,
           cd.dataType, cd.timeZoneId)

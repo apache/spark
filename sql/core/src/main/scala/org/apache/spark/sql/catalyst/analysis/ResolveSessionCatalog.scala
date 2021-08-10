@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, TableChange, V1Table}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, CatalogV2Util, Identifier, LookupCatalog, SupportsNamespaces, V1Table}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command._
@@ -46,55 +46,19 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case AlterTableAddColumnsStatement(
-         nameParts @ SessionCatalogAndTable(catalog, tbl), cols) =>
-      cols.foreach(c => failNullType(c.dataType))
-      loadTable(catalog, tbl.asIdentifier).collect {
-        case v1Table: V1Table =>
-          cols.foreach { c =>
-            assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
-            if (!c.nullable) {
-              throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
-            }
-          }
-          AlterTableAddColumnsCommand(tbl.asTableIdentifier, cols.map(convertToStructField))
-      }.getOrElse {
-        val changes = cols.map { col =>
-          TableChange.addColumn(
-            col.name.toArray,
-            col.dataType,
-            col.nullable,
-            col.comment.orNull,
-            col.position.orNull)
+    case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
+      cols.foreach { c =>
+        assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
+        if (!c.nullable) {
+          throw QueryCompilationErrors.addColumnWithV1TableCannotSpecifyNotNullError
         }
-        createAlterTable(nameParts, catalog, tbl, changes)
       }
+      AlterTableAddColumnsCommand(ident.asTableIdentifier, cols.map(convertToStructField))
 
-    case AlterTableReplaceColumnsStatement(
-        nameParts @ SessionCatalogAndTable(catalog, tbl), cols) =>
-      cols.foreach(c => failNullType(c.dataType))
-      val changes: Seq[TableChange] = loadTable(catalog, tbl.asIdentifier) match {
-        case Some(_: V1Table) =>
-          throw QueryCompilationErrors.replaceColumnsOnlySupportedWithV2TableError
-        case Some(table) =>
-          // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
-          val deleteChanges = table.schema.fieldNames.map { name =>
-            TableChange.deleteColumn(Array(name))
-          }
-          val addChanges = cols.map { col =>
-            TableChange.addColumn(
-              col.name.toArray,
-              col.dataType,
-              col.nullable,
-              col.comment.orNull,
-              col.position.orNull)
-          }
-          deleteChanges ++ addChanges
-        case None => Seq() // Unresolved table will be handled in CheckAnalysis.
-      }
-      createAlterTable(nameParts, catalog, tbl, changes)
+    case ReplaceColumns(ResolvedV1TableIdentifier(_), _) =>
+      throw QueryCompilationErrors.replaceColumnsOnlySupportedWithV2TableError
 
-    case a @ AlterTableAlterColumn(ResolvedV1TableAndIdentifier(table, ident), _, _, _, _, _) =>
+    case a @ AlterColumn(ResolvedV1TableAndIdentifier(table, ident), _, _, _, _, _) =>
       if (a.column.name.length > 1) {
         throw QueryCompilationErrors.alterQualifiedColumnOnlySupportedWithV2TableError
       }
@@ -123,10 +87,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         builder.build())
       AlterTableChangeColumnCommand(ident.asTableIdentifier, colName, newColumn)
 
-    case AlterTableRenameColumn(ResolvedV1TableIdentifier(_), _, _) =>
+    case RenameColumn(ResolvedV1TableIdentifier(_), _, _) =>
       throw QueryCompilationErrors.renameColumnOnlySupportedWithV2TableError
 
-    case AlterTableDropColumns(ResolvedV1TableIdentifier(_), _) =>
+    case DropColumns(ResolvedV1TableIdentifier(_), _) =>
       throw QueryCompilationErrors.dropColumnOnlySupportedWithV2TableError
 
     case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>
@@ -196,7 +160,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // session catalog and the table provider is not v2.
     case c @ CreateTableStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      assertNoNullTypeInSchema(c.tableSchema)
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.provider, c.options, c.location, c.serde, ctas = false)
       if (!isV2Provider(provider)) {
@@ -218,9 +181,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case c @ CreateTableAsSelectStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _, _) =>
-      if (c.asSelect.resolved) {
-        assertNoNullTypeInSchema(c.asSelect.schema)
-      }
       val (storageFormat, provider) = getStorageFormatAndProvider(
         c.provider, c.options, c.location, c.serde, ctas = true)
       if (!isV2Provider(provider)) {
@@ -251,7 +211,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
     // session catalog and the table provider is not v2.
     case c @ ReplaceTableStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _) =>
-      assertNoNullTypeInSchema(c.tableSchema)
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.replaceTableOnlySupportedWithV2TableError
@@ -268,9 +227,6 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
 
     case c @ ReplaceTableAsSelectStatement(
          SessionCatalogAndTable(catalog, tbl), _, _, _, _, _, _, _, _, _, _, _) =>
-      if (c.asSelect.resolved) {
-        assertNoNullTypeInSchema(c.asSelect.schema)
-      }
       val provider = c.provider.getOrElse(conf.defaultDataSourceName)
       if (!isV2Provider(provider)) {
         throw QueryCompilationErrors.replaceTableAsSelectOnlySupportedWithV2TableError

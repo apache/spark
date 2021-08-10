@@ -288,7 +288,7 @@ public class SparkSaslSuite {
       verify(callback, never()).onFailure(anyInt(), any(Throwable.class));
 
       byte[] received = ByteStreams.toByteArray(response.get().createInputStream());
-      assertTrue(Arrays.equals(data, received));
+      assertArrayEquals(data, received);
     } finally {
       file.delete();
       if (ctx != null) {

@@ -173,4 +173,25 @@ class BinaryComparisonSimplificationSuite extends PlanTest with PredicateHelper 
       }
     }
   }
+
+  test("SPARK-36359: Coalesce drop all expressions after the first non nullable expression") {
+    val testRelation = LocalRelation(
+      'a.int.withNullability(false),
+      'b.int.withNullability(true),
+      'c.int.withNullability(false),
+      'd.int.withNullability(true))
+
+    comparePlans(
+      Optimize.execute(testRelation.select(Coalesce(Seq('a, 'b, 'c, 'd)).as("out")).analyze),
+      testRelation.select('a.as("out")).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.select(Coalesce(Seq('a, 'c)).as("out")).analyze),
+      testRelation.select('a.as("out")).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.select(Coalesce(Seq('b, 'c, 'd)).as("out")).analyze),
+      testRelation.select(Coalesce(Seq('b, 'c)).as("out")).analyze)
+    comparePlans(
+      Optimize.execute(testRelation.select(Coalesce(Seq('b, 'd)).as("out")).analyze),
+      testRelation.select(Coalesce(Seq('b, 'd)).as("out")).analyze)
+  }
 }

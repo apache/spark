@@ -261,6 +261,7 @@ trait InsertIntoSQLOnlyTests
         assert(exc.getMessage.contains(
           "PARTITION clause cannot contain a non-partition column name"))
         assert(exc.getMessage.contains("id"))
+        assert(exc.getErrorClass == "NON_PARTITION_COLUMN")
       }
     }
 
@@ -277,6 +278,23 @@ trait InsertIntoSQLOnlyTests
         assert(exc.getMessage.contains(
           "PARTITION clause cannot contain a non-partition column name"))
         assert(exc.getMessage.contains("data"))
+        assert(exc.getErrorClass == "NON_PARTITION_COLUMN")
+      }
+    }
+
+    test("InsertInto: IF PARTITION NOT EXISTS not supported") {
+      val t1 = s"${catalogAndNamespace}tbl"
+      withTableAndData(t1) { view =>
+        sql(s"CREATE TABLE $t1 (id bigint, data string) USING $v2Format PARTITIONED BY (id)")
+
+        val exc = intercept[AnalysisException] {
+          sql(s"INSERT OVERWRITE TABLE $t1 PARTITION (id = 1) IF NOT EXISTS SELECT * FROM $view")
+        }
+
+        verifyTable(t1, spark.emptyDataFrame)
+        assert(exc.getMessage.contains("Cannot write, IF NOT EXISTS is not supported for table"))
+        assert(exc.getMessage.contains(t1))
+        assert(exc.getErrorClass == "IF_PARTITION_NOT_EXISTS_UNSUPPORTED")
       }
     }
 

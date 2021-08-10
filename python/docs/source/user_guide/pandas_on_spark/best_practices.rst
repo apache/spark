@@ -34,7 +34,7 @@ it can be set into Spark session as below:
 
    from pyspark.sql import SparkSession
    builder = SparkSession.builder.appName("pandas-on-spark")
-   builder = builder.config("spark.sql.execution.arrow.enabled", "true")
+   builder = builder.config("spark.sql.execution.arrow.pyspark.enabled", "true")
    # Pandas API on Spark automatically uses this Spark session with the configurations set.
    builder.getOrCreate()
 

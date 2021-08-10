@@ -32,6 +32,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils._
 import org.apache.spark.util.Utils
 
 /**
@@ -46,10 +47,14 @@ abstract class Optimizer(catalogManager: CatalogManager)
   // - is still resolved
   // - only host special expressions in supported operators
   // - has globally-unique attribute IDs
-  override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
-    !Utils.isTesting || (plan.resolved &&
-      plan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
-      LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(plan))
+  // - optimized plan have same schema with previous plan.
+  override protected def isPlanIntegral(
+      previousPlan: LogicalPlan,
+      currentPlan: LogicalPlan): Boolean = {
+    !Utils.isTesting || (currentPlan.resolved &&
+      currentPlan.find(PlanHelper.specialExpressionsInUnsupportedOperator(_).nonEmpty).isEmpty &&
+      LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan) &&
+      DataType.equalsIgnoreNullability(previousPlan.schema, currentPlan.schema))
   }
 
   override protected val excludedOnceBatches: Set[String] =
@@ -179,6 +184,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       // non-nullable when an empty relation child of a Union is removed
       UpdateAttributeNullability) ::
     Batch("Pullup Correlated Expressions", Once,
+      OptimizeOneRowRelationSubquery,
       PullupCorrelatedPredicates) ::
     // Subquery batch applies the optimizer rules recursively. Therefore, it makes no sense
     // to enforce idempotence on it and we change this batch from Once to FixedPoint(1).
@@ -233,6 +239,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewritePredicateSubquery,
       ColumnPruning,
       CollapseProject,
+      RemoveRedundantAliases,
       RemoveNoopOperators) :+
     // This batch must be executed after the `RewriteSubquery` batch, which creates joins.
     Batch("NormalizeFloatingNumbers", Once, NormalizeFloatingNumbers) :+
@@ -501,7 +508,7 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
         // Transform the expressions.
         newNode.mapExpressions { expr =>
           clean(expr.transform {
-            case a: Attribute => mapping.getOrElse(a, a)
+            case a: Attribute => mapping.get(a).map(_.withName(a.name)).getOrElse(a)
           })
         }
     }
@@ -514,10 +521,25 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  * Remove no-op operators from the query plan that do not make any modifications.
  */
 object RemoveNoopOperators extends Rule[LogicalPlan] {
+
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithPruning(
     _.containsAnyPattern(PROJECT, WINDOW), ruleId) {
     // Eliminate no-op Projects
-    case p @ Project(_, child) if child.sameOutput(p) => child
+    case p @ Project(projectList, child) if child.sameOutput(p) =>
+      val newChild = child match {
+        case p: Project =>
+          p.copy(projectList = restoreOriginalOutputNames(p.projectList, projectList.map(_.name)))
+        case agg: Aggregate =>
+          agg.copy(aggregateExpressions =
+            restoreOriginalOutputNames(agg.aggregateExpressions, projectList.map(_.name)))
+        case _ =>
+          child
+      }
+      if (newChild.output.zip(projectList).forall { case (a1, a2) => a1.name == a2.name }) {
+        newChild
+      } else {
+        p
+      }
 
     // Eliminate no-op Window
     case w: Window if w.windowExpressions.isEmpty => w.child
@@ -647,6 +669,11 @@ object LimitPushDown extends Rule[LogicalPlan] {
     // There is a Project between LocalLimit and Join if they do not have the same output.
     case LocalLimit(exp, project @ Project(_, join: Join)) =>
       LocalLimit(exp, project.copy(child = pushLocalLimitThroughJoin(exp, join)))
+    // Push down limit 1 through Aggregate and turn Aggregate into Project if it is group only.
+    case Limit(le @ IntegerLiteral(1), a: Aggregate) if a.groupOnly =>
+      Limit(le, Project(a.output, LocalLimit(le, a.child)))
+    case Limit(le @ IntegerLiteral(1), p @ Project(_, a: Aggregate)) if a.groupOnly =>
+      Limit(le, p.copy(child = Project(a.output, LocalLimit(le, a.child))))
   }
 }
 
@@ -1627,7 +1654,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 }
 
 /**
- * This rule optimizes Limit operators by:
+ * This rule is applied by both normal and AQE Optimizer, and optimizes Limit operators by:
  * 1. Eliminate [[Limit]]/[[GlobalLimit]] operators if it's child max row <= limit.
  * 2. Combines two adjacent [[Limit]] operators into one, merging the
  *    expressions into one single expression.
@@ -1645,11 +1672,11 @@ object EliminateLimits extends Rule[LogicalPlan] {
       child
 
     case GlobalLimit(le, GlobalLimit(ne, grandChild)) =>
-      GlobalLimit(Least(Seq(ne, le)), grandChild)
+      GlobalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
     case LocalLimit(le, LocalLimit(ne, grandChild)) =>
-      LocalLimit(Least(Seq(ne, le)), grandChild)
+      LocalLimit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
     case Limit(le, Limit(ne, grandChild)) =>
-      Limit(Least(Seq(ne, le)), grandChild)
+      Limit(Literal(Least(Seq(ne, le)).eval().asInstanceOf[Int]), grandChild)
   }
 }
 

@@ -194,9 +194,11 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // before epoch
     checkHiveHashForDateType("1800-01-01", -62091)
 
+    // negative year
+    checkHiveHashForDateType("-1212-01-01", -1162202)
+
     // Invalid input: bad date string. Hive returns 0 for such cases
     intercept[NoSuchElementException](checkHiveHashForDateType("0-0-0", 0))
-    intercept[NoSuchElementException](checkHiveHashForDateType("-1212-01-01", 0))
     intercept[NoSuchElementException](checkHiveHashForDateType("2016-99-99", 0))
 
     // Invalid input: Empty string. Hive returns 0 for this case

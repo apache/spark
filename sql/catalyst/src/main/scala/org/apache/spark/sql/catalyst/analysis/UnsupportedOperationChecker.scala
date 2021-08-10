@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestamp, GroupingSets, MonotonicallyIncreasingID, Now}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, CurrentDate, CurrentTimestampLike, GroupingSets, LocalTimestamp, MonotonicallyIncreasingID}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -36,12 +36,6 @@ object UnsupportedOperationChecker extends Logging {
     plan.foreachUp {
       case p if p.isStreaming =>
         throwError("Queries with streaming sources must be executed with writeStream.start()")(p)
-
-      case f: FlatMapGroupsWithState =>
-        if (f.hasInitialState) {
-          throwError("Initial state is not supported in [flatMap|map]GroupsWithState" +
-            " operation on a batch DataFrame/Dataset")(f)
-        }
 
       case _ =>
     }
@@ -417,7 +411,7 @@ object UnsupportedOperationChecker extends Logging {
 
       subPlan.expressions.foreach { e =>
         if (e.collectLeaves().exists {
-          case (_: CurrentTimestamp | _: Now | _: CurrentDate) => true
+          case (_: CurrentTimestampLike | _: CurrentDate | _: LocalTimestamp) => true
           case _ => false
         }) {
           throwError(s"Continuous processing does not support current time operations.")
