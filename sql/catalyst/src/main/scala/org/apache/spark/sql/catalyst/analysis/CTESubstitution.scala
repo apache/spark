@@ -66,13 +66,13 @@ object CTESubstitution extends Rule[LogicalPlan] {
     if (cteDefs.isEmpty) {
       substituted
     } else if (substituted eq lastSubstituted.get) {
-      WithCTE(substituted, cteDefs)
+      WithCTE(substituted, cteDefs.toSeq)
     } else {
       var done = false
       substituted.resolveOperators {
         case p if !done && (p eq lastSubstituted.get) =>
           done = true
-          WithCTE(p, cteDefs)
+          WithCTE(p, cteDefs.toSeq)
       }
     }
   }
