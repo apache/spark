@@ -464,24 +464,24 @@ Supported year-month interval literals and theirs formats:
 
 |`<interval qualifier>`|Interval string pattern|An instance of the literal|
 |---------|-------|------------|
-|INTERVAL YEAR|`[+|-]'[+|-]y'`|`INTERVAL -'2021' YEAR`|
-|INTERVAL YEAR TO MONTH|`[+|-]'[+|-]y-m'`|`INTERVAL '-2021-07' YEAR TO MONTH`|
-|INTERVAL MONTH|`[+|-]'[+|-]m'`|`interval '10' month`|
+|YEAR|`[+|-]'[+|-]y'`|`INTERVAL -'2021' YEAR`|
+|YEAR TO MONTH|`[+|-]'[+|-]y-m'`|`INTERVAL '-2021-07' YEAR TO MONTH`|
+|MONTH|`[+|-]'[+|-]m'`|`interval '10' month`|
 
 Formats of supported day-time interval literals:
 
 |`<interval qualifier>`|Interval string pattern|An instance of the literal|
 |---------|----|-------------------|
-|INTERVAL DAY|`[+|-]'[+|-]d'`|`INTERVAL -'100' DAY`|
-|INTERVAL DAY TO HOUR|`[+|-]'[+|-]d h'`|`INTERVAL '-100 10' DAY TO HOUR`|
-|INTERVAL DAY TO MINUTE|`[+|-]'[+|-]d h:m'`|`INTERVAL '100 10:30' DAY TO MINUTE`|
-|INTERVAL DAY TO SECOND|`[+|-]'[+|-]d h:m:s.n'`|`INTERVAL '100 10:30:40.999999' DAY TO SECOND`|
-|INTERVAL HOUR|`[+|-]'[+|-]h'`|`INTERVAL '123' HOUR`|
-|INTERVAL HOUR TO MINUTE|`[+|-]'[+|-]h:m'`|`INTERVAL -'-123:10' HOUR TO MINUTE`|
-|INTERVAL HOUR TO SECOND|`[+|-]'[+|-]h:m:s.n'`|`INTERVAL '123:10:59' HOUR TO SECOND`|
-|INTERVAL MINUTE|`[+|-]'[+|-]m'`|`interval '1000' minute`|
-|INTERVAL MINUTE TO SECOND|`[+|-]'[+|-]m:s.n'`|`INTERVAL '1000:01.001' MINUTE TO SECOND`|
-|INTERVAL SECOND|`[+|-]'[+|-]s.n'`|`INTERVAL '1000.000001' SECOND`|
+|DAY|`[+|-]'[+|-]d'`|`INTERVAL -'100' DAY`|
+|DAY TO HOUR|`[+|-]'[+|-]d h'`|`INTERVAL '-100 10' DAY TO HOUR`|
+|DAY TO MINUTE|`[+|-]'[+|-]d h:m'`|`INTERVAL '100 10:30' DAY TO MINUTE`|
+|DAY TO SECOND|`[+|-]'[+|-]d h:m:s.n'`|`INTERVAL '100 10:30:40.999999' DAY TO SECOND`|
+|HOUR|`[+|-]'[+|-]h'`|`INTERVAL '123' HOUR`|
+|HOUR TO MINUTE|`[+|-]'[+|-]h:m'`|`INTERVAL -'-123:10' HOUR TO MINUTE`|
+|HOUR TO SECOND|`[+|-]'[+|-]h:m:s.n'`|`INTERVAL '123:10:59' HOUR TO SECOND`|
+|MINUTE|`[+|-]'[+|-]m'`|`interval '1000' minute`|
+|MINUTE TO SECOND|`[+|-]'[+|-]m:s.n'`|`INTERVAL '1000:01.001' MINUTE TO SECOND`|
+|SECOND|`[+|-]'[+|-]s.n'`|`INTERVAL '1000.000001' SECOND`|
 
 ##### Examples
 
