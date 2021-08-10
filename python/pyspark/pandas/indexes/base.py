@@ -16,7 +16,7 @@
 #
 
 from functools import partial
-from typing import Any, Iterator, List, Optional, Tuple, Union, cast, no_type_check
+from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
 import warnings
 
 import pandas as pd
@@ -520,6 +520,31 @@ class Index(IndexOpsMixin):
         if copy:
             result = result.copy()
         return result
+
+    def map(
+        self, mapper: Union[dict, Callable[[Any], Any], pd.Series], na_action: Optional[str] = None
+    ) -> "Index":
+        """
+        Map values using input correspondence (a dict, Series, or function).
+
+        Parameters
+        ----------
+        mapper : function, dict, or pd.Series
+            Mapping correspondence.
+        na_action : {None, 'ignore'}
+            If ‘ignore’, propagate NA values, without passing them to the mapping correspondence.
+
+        Returns
+        -------
+        applied : Index, inferred
+            The output of the mapping function applied to the index.
+        """
+        from pyspark.pandas.indexes.extension import MapExtension
+
+        if isinstance(mapper, dict):
+            if len(set(type(k) for k in mapper.values())) > 1:
+                raise TypeError("Values of the mapper dict should be of the same type.")
+        return MapExtension(index=self, na_action=na_action).map(mapper)
 
     @property
     def values(self) -> np.ndarray:
