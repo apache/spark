@@ -765,7 +765,7 @@ object CollapseProject extends Rule[LogicalPlan] {
     // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
     // Use transformUp to prevent infinite recursion.
     val rewrittenUpper = upper.map(_.transformUp {
-      case a: Attribute => aliases.getOrElse(a, a)
+      case a: Attribute => aliases.get(a).map(_.withName(a.name)).getOrElse(a)
     })
     // collapse upper and lower Projects may introduce unnecessary Aliases, trim them here.
     rewrittenUpper.map { p =>
