@@ -315,4 +315,41 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
         "CalendarIntervalType, but got DecimalType(2,1)"))
     }
   }
+
+  test("SPARK-36465: time window in SQL with UDF as gap duration") {
+    withTempTable { table =>
+
+      spark.udf.register("gapDuration",
+        (i: java.lang.Integer) => s"${i * 10} seconds")
+
+      checkAnswer(
+        spark.sql(s"""select session_window(time, gapDuration(value)), value from $table""")
+          .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
+            $"value"),
+        Seq(
+          Row("2016-03-27 19:39:27", "2016-03-27 19:40:07", 4),
+          Row("2016-03-27 19:39:34", "2016-03-27 19:39:44", 1),
+          Row("2016-03-27 19:39:56", "2016-03-27 19:40:16", 2)
+        )
+      )
+    }
+  }
+
+  test("SPARK-36465: time window in SQL with conditional expression as gap duration") {
+    withTempTable { table =>
+
+      checkAnswer(
+        spark.sql("select session_window(time, " +
+          """case when value = 1 then "2 seconds" when value = 2 then "10 seconds" """ +
+          s"""else "20 seconds" end), value from $table""")
+          .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
+            $"value"),
+        Seq(
+          Row("2016-03-27 19:39:27", "2016-03-27 19:39:47", 4),
+          Row("2016-03-27 19:39:34", "2016-03-27 19:39:36", 1),
+          Row("2016-03-27 19:39:56", "2016-03-27 19:40:06", 2)
+        )
+      )
+    }
+  }
 }
