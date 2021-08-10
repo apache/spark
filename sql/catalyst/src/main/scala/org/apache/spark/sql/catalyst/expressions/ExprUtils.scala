@@ -102,12 +102,12 @@ object ExprUtils {
    *  None if the schema is valid
    *  Some(msg) with the error message if the schema is not valid
    */
-  def checkJsonSchema(schema: DataType): Option[String] =
+  def checkJsonSchema(schema: DataType): Option[Throwable] =
     if (schema.existsRecursively {
       case MapType(keyType, _, _) if keyType != StringType => true
       case _ => false
     }) {
-      Some(s"Input schema $schema can only contain StringType as a key type for a MapType.")
+      Some(QueryCompilationErrors.invalidJsonSchema(schema))
     } else {
       None
     }

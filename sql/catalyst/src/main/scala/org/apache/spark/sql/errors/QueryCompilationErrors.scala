@@ -2366,4 +2366,10 @@ private[spark] object QueryCompilationErrors {
       messageParameters = Array(fieldName.quoted, path.quoted),
       origin = context)
   }
+
+  def invalidJsonSchema(schema: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
+      messageParameters = Array(schema.toString))
+  }
 }
