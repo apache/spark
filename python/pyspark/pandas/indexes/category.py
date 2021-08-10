@@ -642,6 +642,11 @@ class CategoricalIndex(Index):
                 return partial(property_or_func, self)
         raise AttributeError("'CategoricalIndex' object has no attribute '{}'".format(item))
 
+    def map(
+        self, mapper: Union[dict, Callable[[Any], Any], pd.Series], na_action: Optional[str] = None
+    ) -> "Index":
+        return MissingPandasLikeCategoricalIndex.map(self, mapper, na_action)
+
 
 def _test() -> None:
     import os

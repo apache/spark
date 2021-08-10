@@ -58,7 +58,6 @@ class MissingPandasLikeIndex(object):
     is_ = _unsupported_function("is_")
     is_lexsorted_for_tuple = _unsupported_function("is_lexsorted_for_tuple")
     join = _unsupported_function("join")
-    map = _unsupported_function("map")
     putmask = _unsupported_function("putmask")
     ravel = _unsupported_function("ravel")
     reindex = _unsupported_function("reindex")
