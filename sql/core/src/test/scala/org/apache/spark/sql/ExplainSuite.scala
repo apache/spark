@@ -235,8 +235,8 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
     val df = sql("select ifnull(id, 'x'), nullif(id, 'x'), nvl(id, 'x'), nvl2(id, 'x', 'y') " +
       "from range(2)")
     checkKeywordsExistsInExplain(df,
-      "Project [coalesce(cast(id#xL as string), x) AS ifnull(id, x)#x, " +
-        "id#xL AS nullif(id, x)#xL, coalesce(cast(id#xL as string), x) AS nvl(id, x)#x, " +
+      "Project [cast(id#xL as string) AS ifnull(id, x)#x, " +
+        "id#xL AS nullif(id, x)#xL, cast(id#xL as string) AS nvl(id, x)#x, " +
         "x AS nvl2(id, x, y)#x]")
   }
 
@@ -460,7 +460,7 @@ class ExplainSuite extends ExplainSuiteHelper with DisableAdaptiveExecutionSuite
           "parquet" ->
             "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "orc" ->
-            "|PushedFilters: \\[.*\\(id\\), .*\\(value\\), .*\\(id,1\\), .*\\(value,2\\)\\]",
+            "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "csv" ->
             "|PushedFilters: \\[IsNotNull\\(value\\), GreaterThan\\(value,2\\)\\]",
           "json" ->
