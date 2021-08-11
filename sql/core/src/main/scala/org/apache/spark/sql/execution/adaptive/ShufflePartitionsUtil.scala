@@ -251,8 +251,12 @@ object ShufflePartitionsUtil extends Logging {
 
     while (i < end) {
       // We calculate the total size of i-th shuffle partitions from all shuffles.
-      val totalSizeOfCurrentPartition = mapOutputStatistics.map(_.bytesByPartitionId(i)).sum
-
+      var totalSizeOfCurrentPartition = 0L
+      var j = 0
+      while (j < mapOutputStatistics.length) {
+        totalSizeOfCurrentPartition += mapOutputStatistics(j).bytesByPartitionId(i)
+        j += 1
+      }
       // If including the `totalSizeOfCurrentPartition` would exceed the target size and the
       // current size has reached the `minPartitionSize`, then start a new coalesced partition.
       if (i > latestSplitPoint && coalescedSize + totalSizeOfCurrentPartition > targetSize) {

@@ -59,6 +59,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
       ignoreCorruptFiles: Boolean): StructType = {
     val parseMode = options.parseMode
     val columnNameOfCorruptRecord = options.columnNameOfCorruptRecord
+
     // In each RDD partition, perform schema inference on each row and merge afterwards.
     val typeMerger = JsonInferSchema.compatibleRootType(columnNameOfCorruptRecord, parseMode)
     val mergedTypesFromPartitions = json.mapPartitions { iter =>
