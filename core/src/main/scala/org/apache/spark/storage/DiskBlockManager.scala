@@ -27,6 +27,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 
 import org.apache.spark.SparkConf
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.network.shuffle.ExecutorDiskUtils
@@ -251,9 +252,7 @@ private[spark] class DiskBlockManager(conf: SparkConf, var deleteFilesOnStop: Bo
     while (created == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw new IOException(
-          s"Failed to create directory ${dirToCreate.getAbsolutePath} with permission " +
-            s"770 after $maxAttempts attempts!")
+        throw SparkCoreErrors.failToCreateDirectoryError(dirToCreate.getAbsolutePath, maxAttempts)
       }
       try {
         val builder = new ProcessBuilder().command(
