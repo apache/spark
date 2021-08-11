@@ -414,7 +414,8 @@ object QueryExecution {
       // number of partitions when instantiating PartitioningCollection.
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan,
-      ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.columnarRules),
+      ApplyColumnarRulesAndInsertTransitions(
+        sparkSession.sessionState.columnarRules, outputsColumnar = false),
       CollapseCodegenStages()) ++
       (if (subquery) {
         Nil
