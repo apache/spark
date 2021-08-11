@@ -85,7 +85,6 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
                 None
               case FailFastMode =>
                 throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
-
           }
         }
       }.reduceOption(typeMerger).toIterator
