@@ -200,6 +200,7 @@
     <maven-antrun.version>1.8</maven-antrun.version>
     <commons-crypto.version>1.1.0</commons-crypto.version>
     <commons-cli.version>1.2</commons-cli.version>
+    <tink.version>1.6.0</tink.version>
     <!--
     If you are changing Arrow version specification, please check
     ./python/pyspark/sql/pandas/utils.py, and ./python/setup.py too.
@@ -2322,6 +2323,11 @@
             <artifactId>jna</artifactId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.google.crypto.tink</groupId>
+        <artifactId>tink</artifactId>
+        <version>${tink.version}</version>
       </dependency>
       <dependency>
         <groupId>com.thoughtworks.paranamer</groupId>
