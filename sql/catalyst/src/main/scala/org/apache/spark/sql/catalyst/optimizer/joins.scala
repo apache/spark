@@ -129,6 +129,8 @@ object ReorderJoin extends Rule[LogicalPlan] with PredicateHelper {
  * 2. Removes outer join if it only has distinct on streamed side
  * {{{
  *   SELECT DISTINCT f1 FROM t1 LEFT JOIN t2 ON t1.id = t2.id  ==>  SELECT DISTINCT f1 FROM t1
+ *   SELECT f1, max(f2) FROM t1 LEFT JOIN t2 ON t1.id = t2.id GROUP BY f1
+ *                                                             ==>  SELECT f1, max(f2) FROM t1
  * }}}
  *
  * This rule should be executed before pushing down the Filter
@@ -172,17 +174,17 @@ object EliminateOuterJoin extends Rule[LogicalPlan] with PredicateHelper {
       val newJoinType = buildNewJoinType(f, j)
       if (j.joinType == newJoinType) f else Filter(condition, j.copy(joinType = newJoinType))
 
-    case a @ Aggregate(_, _, Join(left, _, LeftOuter, _, _))
-        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
+    case a @ Aggregate(groupings, aggregates, Join(left, _, LeftOuter, _, _))
+      if AttributeSet(groupings ++ aggregates).subsetOf(AttributeSet(left.output)) =>
       a.copy(child = left)
-    case a @ Aggregate(_, _, Join(_, right, RightOuter, _, _))
-        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
+    case a @ Aggregate(groupings, aggregates, Join(_, right, RightOuter, _, _))
+      if AttributeSet(groupings ++ aggregates).subsetOf(AttributeSet(right.output)) =>
       a.copy(child = right)
-    case a @ Aggregate(_, _, p @ Project(_, Join(left, _, LeftOuter, _, _)))
-        if a.groupOnly && a.references.subsetOf(AttributeSet(left.output)) =>
+    case a @ Aggregate(groupings, aggExprs, p @ Project(_, Join(left, _, LeftOuter, _, _)))
+      if AttributeSet(groupings ++ aggExprs).subsetOf(AttributeSet(left.output)) =>
       a.copy(child = p.copy(child = left))
-    case a @ Aggregate(_, _, p @ Project(_, Join(_, right, RightOuter, _, _)))
-        if a.groupOnly && a.references.subsetOf(AttributeSet(right.output)) =>
+    case a @ Aggregate(groupings, aggregates, p @ Project(_, Join(_, right, RightOuter, _, _)))
+      if AttributeSet(groupings ++ aggregates).subsetOf(AttributeSet(right.output)) =>
       a.copy(child = p.copy(child = right))
   }
 }
