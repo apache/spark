@@ -262,25 +262,25 @@ abstract class DisableUnnecessaryBucketedScanSuite
   test("Aggregates with no groupby over tables having 1 BUCKET, return multiple rows") {
     withTable("t1") {
       withSQLConf(SQLConf.AUTO_BUCKETED_SCAN_ENABLED.key -> "true") {
-        spark.sql(
+        sql(
           """
-            | CREATE TABLE t1 (
-            |     `id` BIGINT,
-            |     `event_date` DATE)
-            |     USING PARQUET
-            |     CLUSTERED BY (id)
-            |     INTO 1 BUCKETS
+            |CREATE TABLE t1 (`id` BIGINT, `event_date` DATE)
+            |USING PARQUET
+            |CLUSTERED BY (id)
+            |INTO 1 BUCKETS
             |""".stripMargin)
-        spark.sql(
+        sql(
           """
             |INSERT INTO TABLE t1 VALUES(1.23, cast("2021-07-07" as date))
             |""".stripMargin)
-        spark.sql(
+        sql(
           """
             |INSERT INTO TABLE t1 VALUES(2.28, cast("2021-08-08" as date))
             |""".stripMargin)
-        val result = spark.sql("select sum(id) from t1").count()
-        assert(result == 1)
+        val df = spark.sql("select sum(id) from t1 where id is not null")
+        assert(df.count == 1)
+        checkDisableBucketedScan(query = "SELECT SUM(id) FROM t1 WHERE id is not null",
+          expectedNumScanWithAutoScanEnabled = 1, expectedNumScanWithAutoScanDisabled = 1)
       }
     }
   }
