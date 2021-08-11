@@ -147,11 +147,11 @@ private[spark] object Config extends Logging {
   val CLIENT_CERT_FILE_CONF_SUFFIX = "clientCertFile"
   val CA_CERT_FILE_CONF_SUFFIX = "caCertFile"
 
-
   val KUBERNETES_CLIENT_OAUTH_TOKEN_PROVIDER =
     ConfigBuilder("spark.kubernetes.client.oauth.token.provider.class")
       .doc("A class that implements OAuthTokenProvider interface to " +
-        "provide a token refresh for long running jobs.")
+        "provide a OAuth refresh mechanism for long running jobs. " +
+        "The class must be in a driver's classpath")
       .version("3.3.0")
       .stringConf
       .createOptional
