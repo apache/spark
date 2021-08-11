@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.json
 
+import java.io.IOException
 import java.util.Comparator
 
 import scala.util.control.Exception.allCatch
 
 import com.fasterxml.jackson.core._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -34,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
+private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
@@ -53,10 +55,10 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
    */
   def infer[T](
       json: RDD[T],
-      createParser: (JsonFactory, T) => JsonParser): StructType = {
+      createParser: (JsonFactory, T) => JsonParser,
+      ignoreCorruptFiles: Boolean): StructType = {
     val parseMode = options.parseMode
     val columnNameOfCorruptRecord = options.columnNameOfCorruptRecord
-
     // In each RDD partition, perform schema inference on each row and merge afterwards.
     val typeMerger = JsonInferSchema.compatibleRootType(columnNameOfCorruptRecord, parseMode)
     val mergedTypesFromPartitions = json.mapPartitions { iter =>
@@ -68,13 +70,19 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
             Some(inferField(parser))
           }
         } catch {
-          case  e @ (_: RuntimeException | _: JsonProcessingException) => parseMode match {
-            case PermissiveMode =>
-              Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
-            case DropMalformedMode =>
+          case e @ (_: RuntimeException | _: JsonProcessingException | _: IOException) =>
+            if (ignoreCorruptFiles) {
+              logWarning(s"Skipped the corrupted file: $row", e)
               None
-            case FailFastMode =>
-              throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
+            } else {
+              parseMode match {
+                case PermissiveMode =>
+                  Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
+                case DropMalformedMode =>
+                  None
+                case FailFastMode =>
+                  throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
+            }
           }
         }
       }.reduceOption(typeMerger).toIterator

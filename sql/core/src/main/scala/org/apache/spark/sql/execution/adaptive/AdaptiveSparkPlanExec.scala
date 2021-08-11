@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import java.util
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.JavaConverters._
@@ -26,7 +25,9 @@ import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 import scala.util.control.NonFatal
 
+import java.util
 import org.apache.spark.broadcast
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow

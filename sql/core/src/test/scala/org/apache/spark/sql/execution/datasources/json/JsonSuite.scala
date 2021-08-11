@@ -1384,7 +1384,7 @@ abstract class JsonSuite
     val options = new JSONOptions(Map.empty[String, String], "UTC")
     val emptySchema = new JsonInferSchema(options).infer(
       empty.rdd,
-      CreateJacksonParser.string)
+      CreateJacksonParser.string, ignoreCorruptFiles = false)
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1411,7 +1411,7 @@ abstract class JsonSuite
     val options = new JSONOptions(Map.empty[String, String], "UTC")
     val emptySchema = new JsonInferSchema(options).infer(
       emptyRecords.rdd,
-      CreateJacksonParser.string)
+      CreateJacksonParser.string, ignoreCorruptFiles = false)
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -2432,6 +2432,17 @@ abstract class JsonSuite
         .option("encoding", "UTF-8")
         .schema(schema).load(path)
       checkAnswer(df, Row(null, expected))
+    }
+  }
+
+  test(s"infer json schema respect") {
+    withSQLConf((SQLConf.IGNORE_CORRUPT_FILES.key, "true")) {
+      withTempPath { tempDir =>
+        val path = tempDir.getAbsolutePath
+        Seq(badJson + """{"a":1}""").toDS().write.text(path)
+        val df = spark.read.format("json").load(path)
+        assert(df.schema.isEmpty)
+      }
     }
   }
 

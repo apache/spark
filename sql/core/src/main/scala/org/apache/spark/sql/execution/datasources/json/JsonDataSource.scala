@@ -106,8 +106,10 @@ object TextInputJsonDataSource extends JsonDataSource {
       CreateJacksonParser.internalRow(enc, _: JsonFactory, _: InternalRow)
     }.getOrElse(CreateJacksonParser.internalRow(_: JsonFactory, _: InternalRow))
 
-    SQLExecution.withSQLConfPropagated(json.sparkSession) {
-      new JsonInferSchema(parsedOptions).infer(rdd, rowParser)
+    val session = json.sparkSession
+    val ignoreCorruptFiles = session.sessionState.conf.ignoreCorruptFiles
+    SQLExecution.withSQLConfPropagated(session) {
+      new JsonInferSchema(parsedOptions).infer(rdd, rowParser, ignoreCorruptFiles)
     }
   }
 
@@ -164,8 +166,10 @@ object MultiLineJsonDataSource extends JsonDataSource {
       .map(enc => createParser(enc, _: JsonFactory, _: PortableDataStream))
       .getOrElse(createParser(_: JsonFactory, _: PortableDataStream))
 
+    val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
     SQLExecution.withSQLConfPropagated(sparkSession) {
-      new JsonInferSchema(parsedOptions).infer[PortableDataStream](sampled, parser)
+      new JsonInferSchema(parsedOptions)
+        .infer[PortableDataStream](sampled, parser, ignoreCorruptFiles)
     }
   }
 

@@ -2642,5 +2642,26 @@ class SQLQuerySuite extends SQLQuerySuiteBase with DisableAdaptiveExecutionSuite
   }
 }
 @SlowHiveTest
-class SQLQuerySuiteAE extends SQLQuerySuiteBase with EnableAdaptiveExecutionSuite
+class SQLQuerySuiteAE extends SQLQuerySuiteBase with EnableAdaptiveExecutionSuite {
+
+  test("t") {
+    withTable("t") {
+      sql("set spark.sql.autoBroadcastJoinThreshold=200")
+      sql("set spark.sql.shuffle.partitions=20")
+      val df = sql(
+        """
+          | SELECT
+          |  l.id % 12345 k,
+          |  sum(l.id) sum,
+          |  count(l.id) cnt,
+          |  avg(l.id) avg,
+          |  min(l.id) min,
+          |  max(l.id) max
+          |from (select id % 3 id from range(0, 1000, 1, 100)) l
+          |  left join (SELECT max(id) as id, id % 2 gid FROM range(0, 1000, 2, 100) group by gid) r ON l.id = r.id
+          |GROUP BY 1""".stripMargin)
+      checkAnswer(df, Row())
+    }
+  }
+}
 
