@@ -3171,7 +3171,7 @@ Push based shuffle helps improve the reliability and performance of spark shuffl
     <code>org.apache.spark.network.shuffle.<br />NoOpMergedShuffleFileManager</code>
   </td>
   <td>
-    Class name of the implementation of MergedShuffleFileManager that manages push-based shuffle. This acts as a server side config to disable or enable push-based shuffle. By default, push-based shuffle is disabled at the server side. <p> To enable push-based shuffle on the server side, set the config <code>spark.shuffle.push.server.mergedShuffleFileManagerImpl</code> to <code>org.apache.spark.network.shuffle.RemoteBlockPushResolver</code></p>
+    Class name of the implementation of MergedShuffleFileManager that manages push-based shuffle. This acts as a server side config to disable or enable push-based shuffle. By default, push-based shuffle is disabled at the server side. <p> To enable push-based shuffle on the server side, set this config to <code>org.apache.spark.network.shuffle.RemoteBlockPushResolver</code></p>
   </td>
   <td>3.2.0</td>
 </tr>
@@ -3179,7 +3179,7 @@ Push based shuffle helps improve the reliability and performance of spark shuffl
   <td><code>spark.shuffle.push.server.minChunkSizeInMergedShuffleFile</code></td>
   <td><code>2m</code></td>
   <td>
-    <p> The minimum size of a chunk when dividing a merged shuffle file into multiple chunks during push-based shuffle. A merged shuffle file consists of multiple small shuffle blocks. Fetching the complete merged shuffle file in a single disk I/O increases the memory requirements for both the clients and the external shuffle service. Instead, the shuffle service serves the merged file in <code>MB-sized chunks</code>. This configuration controls how big a chunk can get. A corresponding index file for each merged shuffle file will be generated indicating chunk boundaries. </p>
+    <p> The minimum size of a chunk when dividing a merged shuffle file into multiple chunks during push-based shuffle. A merged shuffle file consists of multiple small shuffle blocks. Fetching the complete merged shuffle file in a single disk I/O increases the memory requirements for both the clients and the external shuffle service. Instead, the shuffle service serves the merged file in <code>MB-sized chunks</code>.<br /> This configuration controls how big a chunk can get. A corresponding index file for each merged shuffle file will be generated indicating chunk boundaries. </p>
     <p> Setting this too high would increase the memory requirements on both the clients and the external shuffle service. </p>
     <p> Setting this too low would increase the overall number of RPC requests to external shuffle service unnecessarily.</p>
   </td>
@@ -3190,14 +3190,6 @@ Push based shuffle helps improve the reliability and performance of spark shuffl
   <td><code>100m</code></td>
   <td>
     The size of cache in memory which is used in push-based shuffle for storing merged index files. This cache is in addition to the one configured via <code>spark.shuffle.service.index.cache.size</code>.
-  </td>
-  <td>3.2.0</td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.push.server.ioExceptionsThresholdDuringMerge</code></td>
-  <td><code>4</code></td>
-  <td>
-    The threshold for number of IOExceptions while merging shuffle blocks to a shuffle partition. When the number of IOExceptions while writing to the merged shuffle data/index/meta files exceed this threshold then the shuffle server will stop merging shuffle blocks for this shuffle partition.
   </td>
   <td>3.2.0</td>
 </tr>
@@ -3219,7 +3211,7 @@ Push based shuffle helps improve the reliability and performance of spark shuffl
   <td><code>spark.shuffle.push.merge.finalize.timeout</code></td>
   <td><code>10s</code></td>
   <td>
-    The amount of time driver waits, after all mappers have finished for a given shuffle map stage, before it sends merge finalize requests to remote shuffle services. This allows the shuffle services extra time to merge blocks.
+    The amount of time driver waits in seconds, after all mappers have finished for a given shuffle map stage, before it sends merge finalize requests to remote shuffle services. This allows the shuffle services extra time to merge blocks.
   </td>
  <td>3.2.0</td>
 </tr>
