@@ -27,9 +27,9 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.util.Utils
 
 
 /**
@@ -147,7 +147,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](sparkSession: SparkSession, path: 
           throw new IllegalStateException(
             s"Failed to read log file $batchMetadataFile. ${ise.getMessage}", ise)
       } finally {
-        Utils.closeQuietly(input)
+        JavaUtils.closeQuietly(input)
       }
     } else {
       throw QueryExecutionErrors.batchMetadataFileNotFoundError(batchMetadataFile)

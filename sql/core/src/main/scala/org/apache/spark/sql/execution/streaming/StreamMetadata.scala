@@ -28,9 +28,9 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.streaming.CheckpointFileManager.CancellableFSDataOutputStream
-import org.apache.spark.util.Utils
 
 /**
  * Contains metadata associated with a [[org.apache.spark.sql.streaming.StreamingQuery]].
@@ -63,7 +63,7 @@ object StreamMetadata extends Logging {
           logError(s"Error reading stream metadata from $metadataFile", e)
           throw e
       } finally {
-        Utils.closeQuietly(input)
+        JavaUtils.closeQuietly(input)
       }
     } else None
   }
