@@ -2357,6 +2357,10 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             pidx.map({1: 10, 2: 20}),
             psidx.map({1: 10, 2: 20}),
         )
+        self.assert_eq(
+            (pidx + 1).map({1: 10, 2: 20}),
+            (psidx + 1).map({1: 10, 2: 20}),
+        )
 
         # Apply lambda
         self.assert_eq(
@@ -2370,6 +2374,10 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(
             pidx.map(lambda id: "{id} + 1".format(id=id)),
             psidx.map(lambda id: "{id} + 1".format(id=id)),
+        )
+        self.assert_eq(
+            (pidx + 1).map(lambda id: "{id} + 1".format(id=id)),
+            (psidx + 1).map(lambda id: "{id} + 1".format(id=id)),
         )
 
         # Apply series
@@ -2387,6 +2395,10 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(
             pidx.map(pser),
             psidx.map(pser),
+        )
+        self.assert_eq(
+            (pidx + 1).map(pser),
+            (psidx + 1).map(pser),
         )
 
 

@@ -24,7 +24,6 @@ from pyspark.sql.functions import pandas_udf
 from pyspark.sql.types import DataType
 
 from pyspark.pandas.indexes.base import Index
-from pyspark.pandas.internal import SPARK_DEFAULT_INDEX_NAME
 from pyspark.pandas.typedef.typehints import as_spark_type, infer_pd_series_spark_type
 
 
@@ -82,7 +81,7 @@ class MapExtension:
         def pyspark_mapper(col: pd.Series) -> pd.Series:
             return col.apply(lambda i: mapper.get(i, np.nan))  # type: ignore
 
-        return self._index._with_new_scol(pyspark_mapper(SPARK_DEFAULT_INDEX_NAME))
+        return self._index._with_new_scol(pyspark_mapper(self._index.spark.column))
 
     def _map_series(self, mapper: pd.Series) -> Index:
         """
@@ -109,7 +108,7 @@ class MapExtension:
         def pyspark_mapper(col: pd.Series) -> pd.Series:
             return col.apply(lambda i: getOrElse(mapper, i))
 
-        return self._index._with_new_scol(pyspark_mapper(SPARK_DEFAULT_INDEX_NAME))
+        return self._index._with_new_scol(pyspark_mapper(self._index.spark.column))
 
     def _map_lambda(self, mapper: Callable[[Any], Any]) -> Index:
         """
@@ -130,7 +129,7 @@ class MapExtension:
         def pyspark_mapper(col: pd.Series) -> pd.Series:
             return col.apply(mapper)
 
-        return self._index._with_new_scol(scol=pyspark_mapper(SPARK_DEFAULT_INDEX_NAME))
+        return self._index._with_new_scol(scol=pyspark_mapper(self._index.spark.column))
 
     def _mapper_return_type(self, mapper: Union[dict, Callable[[Any], Any], pd.Series]) -> DataType:
         """
