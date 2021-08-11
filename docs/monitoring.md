@@ -913,6 +913,14 @@ A list of the available metrics, with a short description:
     <td>Peak off heap memory (execution and storage).</td>
   </tr>
   <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.OnHeapUnUnifiedMemory</td>
+    <td>Peak on heap un-unified memory (except execution and storage).</td>
+  </tr>
+  <tr>
+    <td>&nbsp;&nbsp;&nbsp;&nbsp;.OffHeapUnUnifiedMemory</td>
+    <td>Peak off heap un-unified memory (execution and storage).</td>
+  </tr>
+  <tr>
     <td>&nbsp;&nbsp;&nbsp;&nbsp;.DirectPoolMemory</td>
     <td>Peak memory that the JVM is using for direct buffer pool (<code>java.lang.management.BufferPoolMXBean</code>)</td>
   </tr>
@@ -1271,9 +1279,11 @@ These metrics are exposed by Spark executors.
   - OnHeapExecutionMemory
   - OnHeapStorageMemory
   - OnHeapUnifiedMemory
+  - OnHeapUnUnifiedMemory
   - OffHeapExecutionMemory
   - OffHeapStorageMemory
   - OffHeapUnifiedMemory
+  - OffHeapUnUnifiedMemory
   - DirectPoolMemory
   - MappedPoolMemory
   - MinorGCCount

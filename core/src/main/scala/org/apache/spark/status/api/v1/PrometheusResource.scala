@@ -85,6 +85,8 @@ private[v1] class PrometheusResource extends ApiRequestContext {
           "OffHeapStorageMemory",
           "OnHeapUnifiedMemory",
           "OffHeapUnifiedMemory",
+          "OnHeapUnUnifiedMemory",
+          "OffHeapUnUnifiedMemory",
           "DirectPoolMemory",
           "MappedPoolMemory",
           "ProcessTreeJVMVMemory",
