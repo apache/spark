@@ -1134,6 +1134,73 @@ sessionizedCounts = events \
 </div>
 </div>
 
+Instead of static value, we can also provide an expression to specify gap duration dynamically
+based on the input row. Note that the rows with negative or zero gap duration will be filtered
+out from the aggregation.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+import spark.implicits._
+
+val events = ... // streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+val sessionWindow = SessionWindow($"timestamp".expr, when($"userId" === "user1", "5 seconds")
+  .when($"userId" === "user2", "20 seconds")
+  .otherwise("5 minutes")
+
+// Group the data by session window and userId, and compute the count of each group
+val sessionizedCounts = events
+    .withWatermark("timestamp", "10 minutes")
+    .groupBy(
+        Column(sessionWindow),
+        $"userId")
+    .count()
+{% endhighlight %}
+
+</div>
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+Dataset<Row> events = ... // streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+SessionWindow sessionWindow = new SessionWindow(col("timestamp").expr, when(col("userId").equalTo("user1"), "5 seconds")
+  .when(col("userId").equalTo("user2"), "20 seconds")
+  .otherwise("5 minutes"))
+
+// Group the data by session window and userId, and compute the count of each group
+Dataset<Row> sessionizedCounts = events
+    .withWatermark("timestamp", "10 minutes")
+    .groupBy(
+        new Column(sessionWindow),
+        col("userId"))
+    .count();
+{% endhighlight %}
+
+</div>
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+from pyspark.sql import functions as F
+
+events = ...  # streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+session_window = session_window(events.timestamp, \
+    F.when(events.userId == "user1", "5 seconds") \
+    .when(events.userId == "user2", "20 seconds").otherwise("5 minutes"))
+
+# Group the data by session window and userId, and compute the count of each group
+sessionizedCounts = events \
+    .withWatermark("timestamp", "10 minutes") \
+    .groupBy(
+        session_window,
+        events.userId) \
+    .count()
+{% endhighlight %}
+
+</div>
+</div>
+
 Note that there are some restrictions when you use session window in streaming query, like below:
 
 - "Update mode" as output mode is not supported.

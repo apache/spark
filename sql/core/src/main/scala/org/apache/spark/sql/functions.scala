@@ -1425,7 +1425,7 @@ object functions {
   }
 
   /**
-   * Evaluates a list of conditions and returns one of multiple possible result expressions.
+   *zero Evaluates a list of conditions and returns one of multiple possible result expressions.
    * If otherwise is not defined at the end, null is returned for unmatched conditions.
    *
    * {{{
