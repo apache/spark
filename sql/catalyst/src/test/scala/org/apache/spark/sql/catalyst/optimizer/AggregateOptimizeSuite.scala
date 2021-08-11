@@ -78,33 +78,19 @@ class AggregateOptimizeSuite extends AnalysisTest {
   test("SPARK-34808: Remove left join if it only has distinct on left side") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
-    comparePlans(
-      Optimize.execute(
-        Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
-          .select("x.b".attr)).analyze),
-      x.select("x.b".attr).groupBy("x.b".attr)("x.b".attr).analyze)
+    val query = Distinct(x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr)).select("x.b".attr))
+    val correctAnswer = x.select("x.b".attr).groupBy("x.b".attr)("x.b".attr)
 
-    comparePlans(
-      Optimize.execute(
-        x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
-          .groupBy("x.b".attr)("x.b".attr, max("x.c".attr).as("max_c")).analyze),
-      x.groupBy("x.b".attr)("x.b".attr, max("x.c".attr).as("max_c")).analyze)
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
 
   test("SPARK-34808: Remove right join if it only has distinct on right side") {
     val x = testRelation.subquery('x)
     val y = testRelation.subquery('y)
-    comparePlans(
-      Optimize.execute(
-        Distinct(x.join(y, RightOuter, Some("x.a".attr === "y.a".attr))
-          .select("y.b".attr)).analyze),
-      y.select("y.b".attr).groupBy("y.b".attr)("y.b".attr).analyze)
+    val query = Distinct(x.join(y, RightOuter, Some("x.a".attr === "y.a".attr)).select("y.b".attr))
+    val correctAnswer = y.select("y.b".attr).groupBy("y.b".attr)("y.b".attr)
 
-    comparePlans(
-      Optimize.execute(
-        x.join(y, RightOuter, Some("x.a".attr === "y.a".attr))
-          .groupBy("y.b".attr)("y.b".attr, max("y.c".attr).as("max_c")).analyze),
-      y.groupBy("y.b".attr)("y.b".attr, max("y.c".attr).as("max_c")).analyze)
+    comparePlans(Optimize.execute(query.analyze), correctAnswer.analyze)
   }
 
   test("SPARK-34808: Should not remove left join if select 2 join sides") {
@@ -137,5 +123,21 @@ class AggregateOptimizeSuite extends AnalysisTest {
         x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
           .groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze),
       x.groupBy("x.a".attr)("x.a".attr, Literal(1)).analyze)
+  }
+
+  test("SPARK-36478: Removes outer join if all aggregate expressions are from one side") {
+    val x = testRelation.subquery('x)
+    val y = testRelation.subquery('y)
+    comparePlans(
+      Optimize.execute(
+        x.join(y, LeftOuter, Some("x.a".attr === "y.a".attr))
+          .groupBy("x.b".attr)("x.b".attr, max("x.c".attr).as("max_c")).analyze),
+      x.groupBy("x.b".attr)("x.b".attr, max("x.c".attr).as("max_c")).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        x.join(y, RightOuter, Some("x.a".attr === "y.a".attr))
+          .groupBy("y.b".attr)("y.b".attr, max("y.c".attr).as("max_c")).analyze),
+      y.groupBy("y.b".attr)("y.b".attr, max("y.c".attr).as("max_c")).analyze)
   }
 }
