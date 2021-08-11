@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils._
 import org.apache.spark.util.Utils
 
 /**
