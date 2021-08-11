@@ -1001,7 +1001,11 @@ public class RemoteBlockPushResolverSuite {
       pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(testApp, 1, 0, 0, 1, 0, 0));
     } catch (BlockPushNonFatalFailure re) {
-      assertEquals(re.getMessage(), "Attempt " + ATTEMPT_ID_1 + " is a too old app attempt");
+      BlockPushReturnCode errorCode =
+        (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(re.getResponse());
+      assertEquals(BlockPushNonFatalFailure.ReturnCode.TOO_OLD_ATTEMPT_PUSH.id(),
+        errorCode.returnCode);
+      assertEquals(re.getMessage(), "App Attempt " + ATTEMPT_ID_1 + " is a too old app attempt");
       throw re;
     }
   }
@@ -1031,7 +1035,9 @@ public class RemoteBlockPushResolverSuite {
     try {
       pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, ATTEMPT_ID_1, 0, 0));
     } catch (BlockPushNonFatalFailure e) {
-      assertEquals(e.getMessage(), "Attempt " + ATTEMPT_ID_1 + " is a too old app attempt");
+      // FinalizeShuffleMerge use TOO_OLD_ATTEMPT_PUSH return code
+      assertEquals(e.getReturnCode(), BlockPushNonFatalFailure.ReturnCode.TOO_OLD_ATTEMPT_PUSH);
+      assertEquals(e.getMessage(), "App Attempt " + ATTEMPT_ID_1 + " is a too old app attempt");
       throw e;
     }
   }

@@ -37,6 +37,7 @@ import org.apache.spark.network.client.TransportClient;
 import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.crypto.AuthClientBootstrap;
 import org.apache.spark.network.sasl.SecretKeyHolder;
+import org.apache.spark.network.server.BlockPushNonFatalFailure;
 import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.shuffle.protocol.*;
 import org.apache.spark.network.util.TransportConf;
@@ -193,8 +194,14 @@ public class ExternalBlockStoreClient extends BlockStoreClient {
         }
       });
     } catch (Exception e) {
-      logger.error("Exception while sending finalizeShuffleMerge request to {}:{}",
-        host, port, e);
+      if (e instanceof BlockPushNonFatalFailure) {
+        // It means when we finalizeShuffleMerge, the app attempt is too old.
+        logger.debug("Send too old app attempt finalizeShuffleMerge request to {}:{}",
+          host, port, e);
+      } else {
+        logger.error("Exception while sending finalizeShuffleMerge request to {}:{}",
+          host, port, e);
+      }
       listener.onShuffleMergeFailure(e);
     }
   }

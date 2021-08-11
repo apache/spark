@@ -40,8 +40,8 @@ public class BlockPushNonFatalFailure extends RuntimeException {
     " is received after merged shuffle is finalized";
 
   /**
-   * String constant used for generating exception messages indicating the attempt is not the
-   * latest attempt on the server side. When we get a block push failure because of the too
+   * String constant used for generating exception messages indicating the application attempt is
+   * not the latest attempt on the server side. When we get a block push failure because of the too
    * old attempt, we will not retry pushing the block nor log the exception on the client side.
    */
   public static final String TOO_OLD_ATTEMPT_SUFFIX =
@@ -134,8 +134,8 @@ public class BlockPushNonFatalFailure extends RuntimeException {
      */
     STALE_BLOCK_PUSH(3, STALE_BLOCK_PUSH_MESSAGE_SUFFIX),
     /**
-     * Indicate the attempt is not the latest attempt on the server side. When the client
-     * gets this code, it will not retry pushing the block.
+     * Indicate the application attempt is not the latest attempt on the server side.
+     * When the client gets this code, it will not retry pushing the block.
      */
     TOO_OLD_ATTEMPT_PUSH(4, TOO_OLD_ATTEMPT_SUFFIX);
 
@@ -164,6 +164,12 @@ public class BlockPushNonFatalFailure extends RuntimeException {
     }
   }
 
+  public static boolean shouldNotRetryErrorCode(ReturnCode returnCode) {
+    return returnCode == ReturnCode.TOO_LATE_BLOCK_PUSH ||
+      returnCode == ReturnCode.STALE_BLOCK_PUSH ||
+      returnCode == ReturnCode.TOO_OLD_ATTEMPT_PUSH;
+  }
+
   public static String getErrorMsg(String blockId, ReturnCode errorCode) {
     Preconditions.checkArgument(errorCode != ReturnCode.SUCCESS);
     return "Block " + blockId + errorCode.errorMsgSuffix;
@@ -171,6 +177,6 @@ public class BlockPushNonFatalFailure extends RuntimeException {
 
   public static String getErrorMsg(int attemptId, ReturnCode errorCode) {
     Preconditions.checkArgument(errorCode != ReturnCode.SUCCESS);
-    return "Attempt " + attemptId + errorCode.errorMsgSuffix;
+    return "App Attempt " + attemptId + errorCode.errorMsgSuffix;
   }
 }

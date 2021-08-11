@@ -402,7 +402,7 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     if (appShuffleInfo.attemptId != msg.appAttemptId) {
       // If this Block belongs to a former application attempt, it is considered late,
       // as only the blocks from the current application attempt will be merged
-      throw new BlockPushNonFatalFailure(new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id(),
+      throw new BlockPushNonFatalFailure(new BlockPushReturnCode(ReturnCode.TOO_OLD_ATTEMPT_PUSH.id(),
         streamId).toByteBuffer(),
         BlockPushNonFatalFailure.getErrorMsg(msg.appAttemptId, ReturnCode.TOO_OLD_ATTEMPT_PUSH));
     }
