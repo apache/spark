@@ -742,7 +742,9 @@ class DatetimeIndex(Index):
         return ps.Index(first_series(psdf).rename(self.name))
 
     def map(
-        self, mapper: Union[dict, Callable[[Any], Any], pd.Series], na_action: Optional[str] = None
+        self,
+        mapper: Union[dict, Callable[[Any], Any], pd.Series] = None,
+        na_action: Optional[str] = None,
     ) -> "Index":
         return MissingPandasLikeDatetimeIndex.map(self, mapper, na_action)
 
