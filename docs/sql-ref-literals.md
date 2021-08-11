@@ -449,6 +449,8 @@ where `<interval qualifier>` can be a single field or in the field-to-field form
 ```sql
 <interval qualifier> ::= <start field> TO <end field> | <single field>
 ```
+The field name is case-insensitive, and can be one of `YEAR`, `MONTH`, `DAY`, `HOUR`, `MINUTE` and `SECOND`.
+
 An interval literal can have either year-month or day-time interval type. The interval sub-type defines format of `<interval string>`:
 ```sql
 <interval string> ::= <quote> [ <sign> ] { <year-month literal> | <day-time literal> } <quote>
