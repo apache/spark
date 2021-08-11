@@ -5726,6 +5726,32 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
         for value_psdf, value_pdf in zip(psdf, pdf):
             self.assert_eq(value_psdf, value_pdf)
 
+    def test_combine_first(self):
+        pdf1 = pd.DataFrame({"A": [None, 0], "B": [4, None]})
+        psdf1 = ps.from_pandas(pdf1)
+        pdf2 = pd.DataFrame({"C": [3, 3], "B": [1, 1]})
+        psdf2 = ps.from_pandas(pdf2)
+
+        with option_context("compute.ops_on_diff_frames", True):
+            if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
+                self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2))
+            else:
+                # pandas < 1.2.0 returns unexpected dtypes,
+                # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
+                expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
+                self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
+
+        pdf1.columns = pd.MultiIndex.from_tuples([("A", "willow"), ("B", "pine")])
+        psdf1 = ps.from_pandas(pdf1)
+        pdf2.columns = pd.MultiIndex.from_tuples([("B", "pine"), ("C", "oak")])
+        psdf2 = ps.from_pandas(pdf2)
+
+        with option_context("compute.ops_on_diff_frames", True):
+            psdf1.combine_first(psdf2)
+            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2))
+
+        self.assertRaises(TypeError, psdf1.combine_first(ps.Series([1, 2])))
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_dataframe import *  # noqa: F401
