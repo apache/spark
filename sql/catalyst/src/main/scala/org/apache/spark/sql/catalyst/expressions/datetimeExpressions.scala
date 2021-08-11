@@ -2495,7 +2495,9 @@ case class MakeTimestampLTZ(
       * hour - the hour-of-day to represent, from 0 to 23
       * min - the minute-of-hour to represent, from 0 to 59
       * sec - the second-of-minute and its micro-fraction to represent, from
-              0 to 60. If the sec argument equals to 60, the seconds field is set
+              0 to 60. The sec argument can be either decimal(8, 6) or int.
+              If the specified sec is an int, this value represents seconds.
+              If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
       * timezone - the time zone identifier. For example, CET, UTC and etc.
   """,
@@ -2515,9 +2517,6 @@ case class MakeTimestampLTZ(
        NULL
   """,
   group = "datetime_funcs",
-  note = """
-    If the specified sec is an int, this value represents seconds.
-  """,
   since = "3.0.0")
 // scalastyle:on line.size.limit
 case class MakeTimestamp(
