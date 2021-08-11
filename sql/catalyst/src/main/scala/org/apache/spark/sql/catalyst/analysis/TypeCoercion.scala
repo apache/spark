@@ -158,7 +158,7 @@ abstract class TypeCoercionBase {
     }
   }
 
-  private def castIfNotSameType(expr: Expression, dt: DataType): Expression = {
+  protected def castIfNotSameType(expr: Expression, dt: DataType): Expression = {
     if (!expr.dataType.sameType(dt)) {
       Cast(expr, dt)
     } else {
@@ -621,29 +621,6 @@ abstract class TypeCoercionBase {
           children.tail
         }
         c.copy(children = newIndex +: newInputs)
-    }
-  }
-
-  object DateTimeOperations extends TypeCoercionRule {
-    override val transform: PartialFunction[Expression, Expression] = {
-      // Skip nodes who's children have not been resolved yet.
-      case e if !e.childrenResolved => e
-      case d @ DateAdd(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateAdd(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-
-      case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
-        s.copy(left = Cast(s.left, s.right.dataType))
-      case s @ SubtractTimestamps(AnyTimestampType(), DateType(), _, _) =>
-        s.copy(right = Cast(s.right, s.left.dataType))
-      case s @ SubtractTimestamps(AnyTimestampType(), AnyTimestampType(), _, _)
-        if s.left.dataType != s.right.dataType =>
-        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
-        val newRight = castIfNotSameType(s.right, TimestampNTZType)
-        s.copy(left = newLeft, right = newRight)
-
-      case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
     }
   }
 
@@ -1161,6 +1138,30 @@ object TypeCoercion extends TypeCoercionBase {
         EqualNullSafe(left, Cast(right, left.dataType))
     }
   }
+
+  object DateTimeOperations extends TypeCoercionRule {
+    override val transform: PartialFunction[Expression, Expression] = {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+      case d @ DateAdd(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(TimestampType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(StringType(), _) => d.copy(startDate = Cast(d.startDate, DateType))
+
+      case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
+        s.copy(left = Cast(s.left, s.right.dataType))
+      case s @ SubtractTimestamps(AnyTimestampType(), DateType(), _, _) =>
+        s.copy(right = Cast(s.right, s.left.dataType))
+      case s @ SubtractTimestamps(AnyTimestampType(), AnyTimestampType(), _, _)
+        if s.left.dataType != s.right.dataType =>
+        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
+        val newRight = castIfNotSameType(s.right, TimestampNTZType)
+        s.copy(left = newLeft, right = newRight)
+
+      case t @ TimeAdd(StringType(), _, _) => t.copy(start = Cast(t.start, TimestampType))
+    }
+  }
+
 }
 
 trait TypeCoercionRule extends Rule[LogicalPlan] with Logging {

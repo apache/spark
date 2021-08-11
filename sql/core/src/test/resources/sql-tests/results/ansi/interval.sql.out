@@ -1232,9 +1232,10 @@ select
   interval '99 11:22:33.123456789' day to second + strval
 from interval_arithmetic
 -- !query schema
-struct<strval:string,strval - INTERVAL '99 11:22:33.123456' DAY TO SECOND:string,strval - INTERVAL '-99 11:22:33.123456' DAY TO SECOND:string,strval + INTERVAL '99 11:22:33.123456' DAY TO SECOND:string,strval + INTERVAL '-99 11:22:33.123456' DAY TO SECOND:string,strval + (- INTERVAL '99 11:22:33.123456' DAY TO SECOND):string,strval + INTERVAL '99 11:22:33.123456' DAY TO SECOND:string>
+struct<>
 -- !query output
-2012-01-01	2011-09-23 12:37:26.876544	2012-04-09 11:22:33.123456	2012-04-09 11:22:33.123456	2011-09-23 12:37:26.876544	2011-09-23 12:37:26.876544	2012-04-09 11:22:33.123456
+org.apache.spark.sql.AnalysisException
+cannot resolve 'interval_arithmetic.strval + (- INTERVAL '99 11:22:33.123456' DAY TO SECOND)' due to data type mismatch: argument 1 requires (timestamp or timestamp without time zone) type, however, 'interval_arithmetic.strval' is of string type.; line 3 pos 2
 
 
 -- !query
