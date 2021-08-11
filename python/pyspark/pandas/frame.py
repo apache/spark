@@ -7916,7 +7916,6 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         if not isinstance(other, DataFrame):
             raise TypeError("`combine_first` only allows `DataFrame` for parameter `other`")
-
         combined_df = self if same_anchor(self, other) else combine_frames(self, other)
         combined_sdf = combined_df._internal.spark_frame
         combined_column_labels = combined_df._internal.column_labels
@@ -7924,17 +7923,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         intersect_column_labels = set(self._internal.column_labels).intersection(
             set(other._internal.column_labels)
         )
-        final_column_names = []
+        final_column_names, final_column_labels = [], []
+
         for column_label in combined_column_labels:
             if column_label[1:] in intersect_column_labels:
                 if column_label[0] == "this":
-                    # column_label is like ('this', column_label_before_combined)
                     column_name = self._internal.spark_column_name_for(column_label[1:])
                     old_col = scol_for(combined_sdf, "__this_" + column_name)
                     new_col = scol_for(combined_sdf, ("__that_" + column_name))
                     cond = F.when(old_col.isNull(), new_col).otherwise(old_col).alias(column_name)
                     combined_sdf = combined_sdf.select(*(combined_sdf.columns), cond)
                     final_column_names.append(column_name)
+                    final_column_labels.append(column_label[1:])
             else:
                 if column_label[0] == "this":
                     column_name = self._internal.spark_column_name_for(column_label[1:])
@@ -7944,17 +7944,18 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                     col = scol_for(combined_sdf, "__that_" + column_name)
                 combined_sdf = combined_sdf.select(*(combined_sdf.columns), col.alias(column_name))
                 final_column_names.append(column_name)
+                final_column_labels.append(column_label[1:])
         index_scols = combined_df._internal.index_spark_columns
         combined_sdf = combined_sdf.select(*index_scols, *final_column_names)
 
         internal = InternalFrame(
             spark_frame=combined_sdf,
             index_spark_columns=index_scols,
-            column_labels=[(column_name,) for column_name in final_column_names],
+            column_labels=final_column_labels,
             data_spark_columns=[scol_for(combined_sdf, col) for col in final_column_names],
         )
-
-        return DataFrame(internal)
+        df = DataFrame(internal)
+        return df
 
     def append(
         self,
