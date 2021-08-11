@@ -688,20 +688,20 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
         checkKeywordsExistsInExplain(
           df1.join(df2, df1("i") === df2("i")),
-          "Bucketed: true" :: Nil: _*)
+          "Bucketed: true")
       }
 
       withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
         checkKeywordsExistsInExplain(
           df1.join(df2, df1("i") === df2("i")),
-          "Bucketed: false (disabled by configuration)" :: Nil: _*)
+          "Bucketed: false (disabled by configuration)")
       }
 
-      checkKeywordsExistsInExplain(df1, "Bucketed: false (disabled by query planner)" :: Nil: _*)
+      checkKeywordsExistsInExplain(df1, "Bucketed: false (disabled by query planner)" )
 
       checkKeywordsExistsInExplain(
         df1.select("j"),
-        "Bucketed: false (bucket column(s) not read)" :: Nil: _*)
+        "Bucketed: false (bucket column(s) not read)")
     }
   }
 }
