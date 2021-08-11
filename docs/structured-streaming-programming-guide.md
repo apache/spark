@@ -1134,6 +1134,13 @@ sessionizedCounts = events \
 </div>
 </div>
 
+Note that there are some restrictions when you use session window in streaming query, like below:
+
+- "Update mode" as output mode is not supported.
+- There should be at least one column in addition to `session_window` in grouping key.
+
+For batch query, global window (only having `session_window` in grouping key) is supported.
+
 ##### Conditions for watermarking to clean aggregation state
 {:.no_toc}
 
