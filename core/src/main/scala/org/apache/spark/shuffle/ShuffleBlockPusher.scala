@@ -78,10 +78,13 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         if (t.getCause != null && t.getCause.isInstanceOf[FileNotFoundException]) {
           return false
         }
-        // If the block is too late or the invalid block push, there is no need to retry it
+        // If the block is too late or the invalid block push or the attempt is not the latest one,
+        // there is no need to retry it
         !(t.isInstanceOf[BlockPushNonFatalFailure] &&
           (t.asInstanceOf[BlockPushNonFatalFailure].getReturnCode
             == ReturnCode.TOO_LATE_BLOCK_PUSH ||
+            t.asInstanceOf[BlockPushNonFatalFailure].getReturnCode
+              == ReturnCode.TOO_OLD_ATTEMPT_PUSH ||
             t.asInstanceOf[BlockPushNonFatalFailure].getReturnCode
             == ReturnCode.STALE_BLOCK_PUSH))
       }

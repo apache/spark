@@ -395,19 +395,17 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
   @Override
   public StreamCallbackWithID receiveBlockDataAsStream(PushBlockStream msg) {
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(msg.appId);
-    if (appShuffleInfo.attemptId != msg.appAttemptId) {
-      // If this Block belongs to a former application attempt, it is considered late,
-      // as only the blocks from the current application attempt will be merged
-      // TODO: [SPARK-35548] Client should be updated to handle this error.
-      throw new IllegalArgumentException(
-        String.format("The attempt id %s in this PushBlockStream message does not match "
-          + "with the current attempt id %s stored in shuffle service for application %s",
-          msg.appAttemptId, appShuffleInfo.attemptId, msg.appId));
-    }
     // Use string concatenation here to avoid the overhead with String.format on every
     // pushed block.
     final String streamId = OneForOneBlockPusher.SHUFFLE_PUSH_BLOCK_PREFIX + "_"
       + msg.shuffleId + "_" + msg.shuffleMergeId + "_" + msg.mapIndex + "_" + msg.reduceId;
+    if (appShuffleInfo.attemptId != msg.appAttemptId) {
+      // If this Block belongs to a former application attempt, it is considered late,
+      // as only the blocks from the current application attempt will be merged
+      throw new BlockPushNonFatalFailure(new BlockPushReturnCode(ReturnCode.STALE_BLOCK_PUSH.id(),
+        streamId).toByteBuffer(),
+        BlockPushNonFatalFailure.getErrorMsg(msg.appAttemptId, ReturnCode.TOO_OLD_ATTEMPT_PUSH));
+    }
     // Retrieve merged shuffle file metadata
     AppShufflePartitionInfo partitionInfoBeforeCheck;
     BlockPushNonFatalFailure failure = null;
@@ -514,12 +512,12 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(msg.appId);
     if (appShuffleInfo.attemptId != msg.appAttemptId) {
       // If this Block belongs to a former application attempt, it is considered late,
-      // as only the blocks from the current application attempt will be merged
-      // TODO: [SPARK-35548] Client should be updated to handle this error.
-      throw new IllegalArgumentException(
-        String.format("The attempt id %s in this FinalizeShuffleMerge message does not match "
-          + "with the current attempt id %s stored in shuffle service for application %s",
-          msg.appAttemptId, appShuffleInfo.attemptId, msg.appId));
+      // as only the blocks from the current application attempt will be merged.
+      // No need use callback to return to client now, because the finalizeShuffleMerge
+      // in DAGScheduler has no retry policy.
+      throw new BlockPushNonFatalFailure(ReturnCode.TOO_OLD_ATTEMPT_PUSH,
+        BlockPushNonFatalFailure.
+          getErrorMsg(msg.appAttemptId, ReturnCode.TOO_OLD_ATTEMPT_PUSH));
     }
     AtomicReference<Map<Integer, AppShufflePartitionInfo>> shuffleMergePartitionsRef =
       new AtomicReference<>(null);

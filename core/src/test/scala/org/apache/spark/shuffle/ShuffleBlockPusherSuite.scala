@@ -224,6 +224,9 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
         ReturnCode.TOO_LATE_BLOCK_PUSH, "")))
     assert(
       !errorHandler.shouldRetryError(new BlockPushNonFatalFailure(
+        ReturnCode.TOO_OLD_ATTEMPT_PUSH, "")))
+    assert(
+      !errorHandler.shouldRetryError(new BlockPushNonFatalFailure(
         ReturnCode.STALE_BLOCK_PUSH, "")))
     assert(errorHandler.shouldRetryError(new RuntimeException(new ConnectException())))
     assert(
@@ -238,6 +241,9 @@ class ShuffleBlockPusherSuite extends SparkFunSuite with BeforeAndAfterEach {
     assert(
       !errorHandler.shouldLogError(new BlockPushNonFatalFailure(
         ReturnCode.TOO_LATE_BLOCK_PUSH, "")))
+    assert(
+      !errorHandler.shouldLogError(new BlockPushNonFatalFailure(
+        ReturnCode.TOO_OLD_ATTEMPT_PUSH, "")))
     assert(
       !errorHandler.shouldLogError(new BlockPushNonFatalFailure(
         ReturnCode.STALE_BLOCK_PUSH, "")))
