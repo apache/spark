@@ -1004,7 +1004,7 @@ private[hive] object HiveClientImpl extends Logging {
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 
-  def toHiveCompatibleTypeStr(dt: DataType): DataType = dt match {
+  private def toHiveCompatibleTypeStr(dt: DataType): DataType = dt match {
     case ArrayType(et, nullable) =>
       ArrayType(toHiveCompatibleTypeStr(et), nullable)
     case MapType(kt, vt, nullable) =>
