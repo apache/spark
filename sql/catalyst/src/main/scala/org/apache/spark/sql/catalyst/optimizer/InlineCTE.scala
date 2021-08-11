@@ -132,8 +132,7 @@ object InlineCTE extends Rule[LogicalPlan] {
           .withNewChildren(plan.children.map(child => inlineCTE(child, cteMap, forceInline)))
           .transformExpressionsWithPruning(_.containsAllPatterns(PLAN_EXPRESSION, CTE)) {
             case e: SubqueryExpression =>
-              val forceInline =
-                e.plan.find(_.expressions.exists(_.isInstanceOf[OuterReference])).nonEmpty
+              val forceInline = e.outerAttrs.nonEmpty
               e.withNewPlan(inlineCTE(e.plan, cteMap, forceInline))
           }
         (newPlan, Seq.empty)

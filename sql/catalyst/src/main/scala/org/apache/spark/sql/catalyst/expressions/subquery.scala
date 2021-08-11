@@ -68,7 +68,7 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
  */
 abstract class SubqueryExpression(
     plan: LogicalPlan,
-    outerAttrs: Seq[Expression],
+    val outerAttrs: Seq[Expression],
     exprId: ExprId,
     joinCond: Seq[Expression] = Nil) extends PlanExpression[LogicalPlan] {
   override lazy val resolved: Boolean = childrenResolved && plan.resolved
@@ -248,7 +248,7 @@ object SubExprUtils extends PredicateHelper {
  */
 case class ScalarSubquery(
     plan: LogicalPlan,
-    outerAttrs: Seq[Expression] = Seq.empty,
+    override val outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Unevaluable {
@@ -293,7 +293,7 @@ object ScalarSubquery {
  */
 case class LateralSubquery(
     plan: LogicalPlan,
-    outerAttrs: Seq[Expression] = Seq.empty,
+    override val outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Unevaluable {
@@ -332,7 +332,7 @@ case class LateralSubquery(
  */
 case class ListQuery(
     plan: LogicalPlan,
-    outerAttrs: Seq[Expression] = Seq.empty,
+    override val outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     childOutputs: Seq[Attribute] = Seq.empty,
     joinCond: Seq[Expression] = Seq.empty)
@@ -391,7 +391,7 @@ case class ListQuery(
  */
 case class Exists(
     plan: LogicalPlan,
-    outerAttrs: Seq[Expression] = Seq.empty,
+    override val outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Predicate with Unevaluable {
