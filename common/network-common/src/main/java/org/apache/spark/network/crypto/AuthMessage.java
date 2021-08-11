@@ -21,81 +21,55 @@ import java.nio.ByteBuffer;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-
 import org.apache.spark.network.protocol.Encodable;
 import org.apache.spark.network.protocol.Encoders;
 
 /**
- * The client challenge message, used to initiate authentication.
+ * A message sent in the forward secure authentication protocol, containing an app ID, a salt for
+ * key derivation, and an encrypted payload.
  *
  * Please see crypto/README.md for more details of implementation.
  */
-public class ClientChallenge implements Encodable {
+class AuthMessage implements Encodable {
   /** Serialization tag used to catch incorrect payloads. */
-  private static final byte TAG_BYTE = (byte) 0xFA;
+  private static final byte TAG_BYTE = (byte) 0xFB;
 
   public final String appId;
-  public final String kdf;
-  public final int iterations;
-  public final String cipher;
-  public final int keyLength;
-  public final byte[] nonce;
-  public final byte[] challenge;
+  public final byte[] salt;
+  public final byte[] ciphertext;
 
-  public ClientChallenge(
-      String appId,
-      String kdf,
-      int iterations,
-      String cipher,
-      int keyLength,
-      byte[] nonce,
-      byte[] challenge) {
+  AuthMessage(String appId, byte[] salt, byte[] ciphertext) {
     this.appId = appId;
-    this.kdf = kdf;
-    this.iterations = iterations;
-    this.cipher = cipher;
-    this.keyLength = keyLength;
-    this.nonce = nonce;
-    this.challenge = challenge;
+    this.salt = salt;
+    this.ciphertext = ciphertext;
   }
 
   @Override
   public int encodedLength() {
-    return 1 + 4 + 4 +
+    return 1 +
       Encoders.Strings.encodedLength(appId) +
-      Encoders.Strings.encodedLength(kdf) +
-      Encoders.Strings.encodedLength(cipher) +
-      Encoders.ByteArrays.encodedLength(nonce) +
-      Encoders.ByteArrays.encodedLength(challenge);
+      Encoders.ByteArrays.encodedLength(salt) +
+      Encoders.ByteArrays.encodedLength(ciphertext);
   }
 
   @Override
   public void encode(ByteBuf buf) {
     buf.writeByte(TAG_BYTE);
     Encoders.Strings.encode(buf, appId);
-    Encoders.Strings.encode(buf, kdf);
-    buf.writeInt(iterations);
-    Encoders.Strings.encode(buf, cipher);
-    buf.writeInt(keyLength);
-    Encoders.ByteArrays.encode(buf, nonce);
-    Encoders.ByteArrays.encode(buf, challenge);
+    Encoders.ByteArrays.encode(buf, salt);
+    Encoders.ByteArrays.encode(buf, ciphertext);
   }
 
-  public static ClientChallenge decodeMessage(ByteBuffer buffer) {
+  public static AuthMessage decodeMessage(ByteBuffer buffer) {
     ByteBuf buf = Unpooled.wrappedBuffer(buffer);
 
     if (buf.readByte() != TAG_BYTE) {
       throw new IllegalArgumentException("Expected ClientChallenge, received something else.");
     }
 
-    return new ClientChallenge(
-      Encoders.Strings.decode(buf),
-      Encoders.Strings.decode(buf),
-      buf.readInt(),
-      Encoders.Strings.decode(buf),
-      buf.readInt(),
-      Encoders.ByteArrays.decode(buf),
-      Encoders.ByteArrays.decode(buf));
+    return new AuthMessage(
+      Encoders.Strings.decode(buf),  // AppID
+      Encoders.ByteArrays.decode(buf),  // Salt
+      Encoders.ByteArrays.decode(buf));  // Ciphertext
   }
-
 }

@@ -17,15 +17,11 @@
 
 package org.apache.spark.network.crypto;
 
-import java.nio.ByteBuffer;
-import java.util.Arrays;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertArrayEquals;
 import org.junit.Test;
-import static org.junit.Assert.*;
-
-import org.apache.spark.network.protocol.Encodable;
 
 public class AuthMessagesSuite {
 
@@ -42,39 +38,15 @@ public class AuthMessagesSuite {
     } return bytes;
   }
 
-  private static int integer() {
-    return COUNTER++;
-  }
-
   @Test
-  public void testClientChallenge() {
-    ClientChallenge msg = new ClientChallenge(string(), string(), integer(), string(), integer(),
-      byteArray(), byteArray());
-    ClientChallenge decoded = ClientChallenge.decodeMessage(encode(msg));
-
-    assertEquals(msg.appId, decoded.appId);
-    assertEquals(msg.kdf, decoded.kdf);
-    assertEquals(msg.iterations, decoded.iterations);
-    assertEquals(msg.cipher, decoded.cipher);
-    assertEquals(msg.keyLength, decoded.keyLength);
-    assertTrue(Arrays.equals(msg.nonce, decoded.nonce));
-    assertTrue(Arrays.equals(msg.challenge, decoded.challenge));
-  }
-
-  @Test
-  public void testServerResponse() {
-    ServerResponse msg = new ServerResponse(byteArray(), byteArray(), byteArray(), byteArray());
-    ServerResponse decoded = ServerResponse.decodeMessage(encode(msg));
-    assertTrue(Arrays.equals(msg.response, decoded.response));
-    assertTrue(Arrays.equals(msg.nonce, decoded.nonce));
-    assertTrue(Arrays.equals(msg.inputIv, decoded.inputIv));
-    assertTrue(Arrays.equals(msg.outputIv, decoded.outputIv));
-  }
-
-  private ByteBuffer encode(Encodable msg) {
+  public void testPublicKeyEncodeDecode() {
+    AuthMessage msg = new AuthMessage(string(), byteArray(), byteArray());
     ByteBuf buf = Unpooled.buffer();
     msg.encode(buf);
-    return buf.nioBuffer();
-  }
+    AuthMessage decoded = AuthMessage.decodeMessage(buf.nioBuffer());
 
+    assertEquals(msg.appId, decoded.appId);
+    assertArrayEquals(msg.salt, decoded.salt);
+    assertArrayEquals(msg.ciphertext, decoded.ciphertext);
+  }
 }
