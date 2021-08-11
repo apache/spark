@@ -177,6 +177,16 @@ case object OnHeapUnifiedMemory extends MemoryManagerExecutorMetricType(
 case object OffHeapUnifiedMemory extends MemoryManagerExecutorMetricType(
   (m => m.offHeapExecutionMemoryUsed + m.offHeapStorageMemoryUsed))
 
+case object OnHeapUnUnifiedMemory extends MemoryManagerExecutorMetricType(
+  (m => ManagementFactory.getMemoryMXBean.getHeapMemoryUsage().getUsed()
+    - m.onHeapExecutionMemoryUsed - m.onHeapStorageMemoryUsed)
+)
+
+case object OffHeapUnUnifiedMemory extends MemoryManagerExecutorMetricType(
+  (m => ManagementFactory.getMemoryMXBean.getNonHeapMemoryUsage().getUsed()
+    - m.offHeapExecutionMemoryUsed - m.offHeapStorageMemoryUsed)
+)
+
 case object DirectPoolMemory extends MBeanExecutorMetricType(
   "java.nio:type=BufferPool,name=direct")
 
@@ -195,6 +205,8 @@ private[spark] object ExecutorMetricType {
     OffHeapStorageMemory,
     OnHeapUnifiedMemory,
     OffHeapUnifiedMemory,
+    OnHeapUnUnifiedMemory,
+    OffHeapUnUnifiedMemory,
     DirectPoolMemory,
     MappedPoolMemory,
     ProcessTreeMetrics,
