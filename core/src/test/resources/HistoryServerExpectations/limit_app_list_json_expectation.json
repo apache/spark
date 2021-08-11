@@ -1,16 +1,16 @@
 [ {
-  "id" : "application_1625351839633_843287",
+  "id" : "application_1628109047826_1317105",
   "name" : "Spark shell",
   "attempts" : [ {
-    "startTime" : "2021-07-08T20:51:31.674GMT",
-    "endTime" : "2021-07-08T20:53:16.790GMT",
+    "startTime" : "2021-08-10T23:24:55.333GMT",
+    "endTime" : "2021-08-10T23:29:30.208GMT",
     "lastUpdated" : "",
-    "duration" : 105116,
+    "duration" : 274875,
     "sparkUser" : "vsowrira",
     "completed" : true,
-    "appSparkVersion" : "3.3.0-SNAPSHOT",
-    "startTimeEpoch" : 1625777491674,
-    "endTimeEpoch" : 1625777596790,
+    "appSparkVersion" : "3.1.1.119",
+    "startTimeEpoch" : 1628637895333,
+    "endTimeEpoch" : 1628638170208,
     "lastUpdatedEpoch" : 0
   } ]
 }, {
