@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -72,19 +73,19 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
             Some(inferField(parser))
           }
         } catch {
+          case e @ (_: JsonProcessingException | _: IOException) if ignoreCorruptFiles =>
+            logWarning("Skipped inferring json schema from the corrupted data: " +
+              s"${row.asInstanceOf[InternalRow].getString(0)}", e)
+            None
           case e @ (_: RuntimeException | _: JsonProcessingException | _: IOException) =>
-            if (ignoreCorruptFiles) {
-              logWarning(s"Skipped the corrupted file: $row", e)
-              None
-            } else {
-              parseMode match {
-                case PermissiveMode =>
-                  Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
-                case DropMalformedMode =>
-                  None
-                case FailFastMode =>
-                  throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
-            }
+            parseMode match {
+              case PermissiveMode =>
+                Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
+              case DropMalformedMode =>
+                None
+              case FailFastMode =>
+                throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
+
           }
         }
       }.reduceOption(typeMerger).toIterator

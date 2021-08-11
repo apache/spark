@@ -28,8 +28,8 @@ import com.fasterxml.jackson.core.JsonFactory
 import org.apache.hadoop.fs.{Path, PathFilter}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
-
 import org.apache.spark.{SparkConf, SparkException, TestUtils}
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
@@ -2435,13 +2435,19 @@ abstract class JsonSuite
     }
   }
 
-  test(s"SPARK-36477: infer json schema respect ${SQLConf.IGNORE_CORRUPT_FILES.key}") {
+  test(s"SPARK-36477: infer json schema respect spark.sql.files.ignoreCorruptFiles") {
     withSQLConf((SQLConf.IGNORE_CORRUPT_FILES.key, "true")) {
       withTempPath { tempDir =>
         val path = tempDir.getAbsolutePath
-        Seq(badJson + """{"a":1}""").toDS().write.text(path)
-        val df = spark.read.format("json").load(path)
-        assert(df.schema.isEmpty)
+        val logAppender = new LogAppender(path)
+        val jsonData = badJson + """{"a":1}"""
+        withLogAppender(logAppender) {
+          Seq(jsonData).toDS().write.text(path)
+          val df = spark.read.format("json").load(path)
+          assert(df.schema.isEmpty)
+        }
+        val msg = s"Skipped inferring json schema from the corrupted data: $jsonData"
+        assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
       }
     }
   }
