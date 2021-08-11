@@ -51,17 +51,17 @@ class JsonProtocolSuite extends SparkFunSuite {
     val taskEnd = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
-        321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)),
+        321L, 111L, 123135L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false, hasOutput = false))
     val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
-        321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)),
+        321L, 111L, 123135L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = false))
     val taskEndWithOutput = SparkListenerTaskEnd(1, 0, "ResultTask", Success,
       makeTaskInfo(123L, 234, 67, 345L, false),
       new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
-        321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)),
+        321L, 111L, 123135L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L)),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true))
     val jobStart = {
       val stageIds = Seq[Int](1, 2, 3, 4)
@@ -113,8 +113,8 @@ class JsonProtocolSuite extends SparkFunSuite {
           .accumulators().map(AccumulatorSuite.makeInfo)
           .zipWithIndex.map { case (a, i) => a.copy(id = i) }
       val executorUpdates = new ExecutorMetrics(
-        Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
-          321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L))
+        Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L, 321L, 111L, 123135L,
+          654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L))
       SparkListenerExecutorMetricsUpdate("exec3", Seq((1L, 2, 3, accumUpdates)),
         Map((0, 0) -> executorUpdates))
     }
@@ -124,7 +124,8 @@ class JsonProtocolSuite extends SparkFunSuite {
     val stageExecutorMetrics =
       SparkListenerStageExecutorMetrics("1", 2, 3,
         new ExecutorMetrics(Array(543L, 123456L, 12345L, 1234L, 123L, 12L, 432L,
-          321L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L, 15182L, 10L, 90L, 2L, 20L)))
+          321L, 111L, 123135L, 654L, 765L, 256912L, 123456L, 123456L, 61728L, 30364L,
+          15182L, 10L, 90L, 2L, 20L)))
     val rprofBuilder = new ResourceProfileBuilder()
     val taskReq = new TaskResourceRequests().cpus(1).resource("gpu", 1)
     val execReq =
@@ -502,12 +503,12 @@ class JsonProtocolSuite extends SparkFunSuite {
   test("executorMetricsFromJson backward compatibility: handle missing metrics") {
     // any missing metrics should be set to 0
     val executorMetrics = new ExecutorMetrics(Array(12L, 23L, 45L, 67L, 78L, 89L,
-      90L, 123L, 456L, 789L, 40L, 20L, 20L, 10L, 20L, 10L))
+      90L, 123L, 10L, 100L, 456L, 789L, 40L, 20L, 20L, 10L, 20L, 10L))
     val oldExecutorMetricsJson =
       JsonProtocol.executorMetricsToJson(executorMetrics)
         .removeField( _._1 == "MappedPoolMemory")
     val expectedExecutorMetrics = new ExecutorMetrics(Array(12L, 23L, 45L, 67L,
-      78L, 89L, 90L, 123L, 456L, 0L, 40L, 20L, 20L, 10L, 20L, 10L))
+      78L, 89L, 90L, 123L, 10L, 100L, 456L, 0L, 40L, 20L, 20L, 10L, 20L, 10L))
     assertEquals(expectedExecutorMetrics,
       JsonProtocol.executorMetricsFromJson(oldExecutorMetricsJson))
   }
@@ -1366,6 +1367,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "OffHeapStorageMemory" : 12,
       |    "OnHeapUnifiedMemory" : 432,
       |    "OffHeapUnifiedMemory" : 321,
+      |    "OnHeapUnUnifiedMemory" : 111,
+      |    "OffHeapUnUnifiedMemory" : 123135,
       |    "DirectPoolMemory" : 654,
       |    "MappedPoolMemory" : 765,
       |    "ProcessTreeJVMVMemory": 256912,
@@ -1490,6 +1493,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "OffHeapStorageMemory" : 12,
       |    "OnHeapUnifiedMemory" : 432,
       |    "OffHeapUnifiedMemory" : 321,
+      |    "OnHeapUnUnifiedMemory" : 111,
+      |    "OffHeapUnUnifiedMemory" : 123135,
       |    "DirectPoolMemory" : 654,
       |    "MappedPoolMemory" : 765,
       |    "ProcessTreeJVMVMemory": 256912,
@@ -1614,6 +1619,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "OffHeapStorageMemory" : 12,
       |    "OnHeapUnifiedMemory" : 432,
       |    "OffHeapUnifiedMemory" : 321,
+      |    "OnHeapUnUnifiedMemory" : 111,
+      |    "OffHeapUnUnifiedMemory" : 123135,
       |    "DirectPoolMemory" : 654,
       |    "MappedPoolMemory" : 765,
       |    "ProcessTreeJVMVMemory": 256912,
@@ -2367,6 +2374,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |        "OffHeapStorageMemory" : 12,
       |        "OnHeapUnifiedMemory" : 432,
       |        "OffHeapUnifiedMemory" : 321,
+      |        "OnHeapUnUnifiedMemory" : 111,
+      |        "OffHeapUnUnifiedMemory" : 123135,
       |        "DirectPoolMemory" : 654,
       |        "MappedPoolMemory" : 765,
       |        "ProcessTreeJVMVMemory": 256912,
@@ -2401,6 +2410,8 @@ private[spark] object JsonProtocolSuite extends Assertions {
       |    "OffHeapStorageMemory" : 12,
       |    "OnHeapUnifiedMemory" : 432,
       |    "OffHeapUnifiedMemory" : 321,
+      |    "OnHeapUnUnifiedMemory" : 111,
+      |    "OffHeapUnUnifiedMemory" : 123135,
       |    "DirectPoolMemory" : 654,
       |    "MappedPoolMemory" : 765,
       |    "ProcessTreeJVMVMemory": 256912,
