@@ -528,6 +528,11 @@ case class SessionWindowStateStoreRestoreExec(
     child: SparkPlan)
   extends UnaryExecNode with StateStoreReader with WatermarkSupport {
 
+  override lazy val metrics = Map(
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
+    "numDroppedRows" -> SQLMetrics.createMetric(sparkContext,
+      "number of dropped rows with invalid gap duration"))
+
   override def keyExpressions: Seq[Attribute] = keyWithoutSessionExpressions
 
   assert(keyExpressions.nonEmpty, "Grouping key must be specified when using sessionWindow")
@@ -537,6 +542,7 @@ case class SessionWindowStateStoreRestoreExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
+    val numDroppedRows = longMetric("numDroppedRows")
 
     child.execute().mapPartitionsWithReadStateStore(
       getStateInfo,
@@ -547,9 +553,24 @@ case class SessionWindowStateStoreRestoreExec(
       Some(session.streams.stateStoreCoordinator)) { case (store, iter) =>
 
       // We need to filter out outdated inputs
-      val filteredIterator = watermarkPredicateForData match {
+      val watermarkedIterator = watermarkPredicateForData match {
         case Some(predicate) => iter.filter((row: InternalRow) => !predicate.eval(row))
         case None => iter
+      }
+
+      val sessionProjection: UnsafeProjection =
+        GenerateUnsafeProjection.generate(Seq(sessionExpression), child.output)
+
+      // We need to filter out negative/zero gap duration inputs
+      val filteredIterator = watermarkedIterator.filter { row: InternalRow =>
+        val session = sessionProjection(row)
+        val sessionRow = session.getStruct(0, 2)
+        if (sessionRow.getLong(1) > sessionRow.getLong(0)) {
+          true
+        } else {
+          numDroppedRows += 1
+          false
+        }
       }
 
       new MergingSortWithSessionWindowStateIterator(

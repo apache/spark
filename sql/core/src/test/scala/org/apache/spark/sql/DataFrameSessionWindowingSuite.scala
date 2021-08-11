@@ -352,4 +352,29 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
       )
     }
   }
+
+  test("SPARK-36465: filter out events with negative/zero gap duration") {
+    withTempTable { table =>
+
+      spark.udf.register("gapDuration",
+        (i: java.lang.Integer) => {
+          if (i == 1) {
+            "0 seconds"
+          } else if (i == 2) {
+            "-10 seconds"
+          } else {
+            "5 seconds"
+          }
+        })
+
+      checkAnswer(
+        spark.sql(s"""select session_window(time, gapDuration(value)), value from $table""")
+          .groupBy($"session_window")
+          .agg(count("*").as("counts"))
+          .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
+            $"counts"),
+        Seq(Row("2016-03-27 19:39:27", "2016-03-27 19:39:32", 1))
+      )
+    }
+  }
 }
