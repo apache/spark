@@ -102,6 +102,12 @@ select timestamp'2011-11-11 11:11:11' - interval '2' second;
 select '2011-11-11 11:11:11' - interval '2' second;
 select '1' - interval '2' second;
 select 1 - interval '2' second;
+select '2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10';
+-- non-literal string column subtract interval
+create temporary view v3 as select '2011-11-11 11:11:11' str;
+select str - interval '2' second from v3;
+select str - date'2011-11-11' from v3;
+select str - timestamp'2011-11-11 11:11:10' from v3;
 -- analyzer will cast date to timestamp automatically
 select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678';
 select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01';
