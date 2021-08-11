@@ -257,6 +257,7 @@ object ShufflePartitionsUtil extends Logging {
         totalSizeOfCurrentPartition += mapOutputStatistics(j).bytesByPartitionId(i)
         j += 1
       }
+
       // If including the `totalSizeOfCurrentPartition` would exceed the target size and the
       // current size has reached the `minPartitionSize`, then start a new coalesced partition.
       if (i > latestSplitPoint && coalescedSize + totalSizeOfCurrentPartition > targetSize) {

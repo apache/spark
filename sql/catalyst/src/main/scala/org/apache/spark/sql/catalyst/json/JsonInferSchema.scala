@@ -55,10 +55,11 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
    */
   def infer[T](
       json: RDD[T],
-      createParser: (JsonFactory, T) => JsonParser,
-      ignoreCorruptFiles: Boolean): StructType = {
+      createParser: (JsonFactory, T) => JsonParser): StructType = {
     val parseMode = options.parseMode
     val columnNameOfCorruptRecord = options.columnNameOfCorruptRecord
+    val existingConf = SQLConf.get
+    val ignoreCorruptFiles = existingConf.ignoreCorruptFiles
 
     // In each RDD partition, perform schema inference on each row and merge afterwards.
     val typeMerger = JsonInferSchema.compatibleRootType(columnNameOfCorruptRecord, parseMode)
@@ -91,7 +92,6 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
 
     // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
     // the fold functions in the scheduler event loop thread.
-    val existingConf = SQLConf.get
     var rootType: DataType = StructType(Nil)
     val foldPartition = (iter: Iterator[DataType]) => iter.fold(StructType(Nil))(typeMerger)
     val mergeResult = (index: Int, taskResult: DataType) => {

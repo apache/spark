@@ -1384,7 +1384,7 @@ abstract class JsonSuite
     val options = new JSONOptions(Map.empty[String, String], "UTC")
     val emptySchema = new JsonInferSchema(options).infer(
       empty.rdd,
-      CreateJacksonParser.string, ignoreCorruptFiles = false)
+      CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -1411,7 +1411,7 @@ abstract class JsonSuite
     val options = new JSONOptions(Map.empty[String, String], "UTC")
     val emptySchema = new JsonInferSchema(options).infer(
       emptyRecords.rdd,
-      CreateJacksonParser.string, ignoreCorruptFiles = false)
+      CreateJacksonParser.string)
     assert(StructType(Seq()) === emptySchema)
   }
 
@@ -2435,7 +2435,7 @@ abstract class JsonSuite
     }
   }
 
-  test(s"infer json schema respect") {
+  test(s"SPARK-36477: infer json schema respect ${SQLConf.IGNORE_CORRUPT_FILES.key}") {
     withSQLConf((SQLConf.IGNORE_CORRUPT_FILES.key, "true")) {
       withTempPath { tempDir =>
         val path = tempDir.getAbsolutePath
