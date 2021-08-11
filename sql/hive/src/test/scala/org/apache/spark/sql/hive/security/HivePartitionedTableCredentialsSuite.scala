@@ -17,7 +17,13 @@
 
 package org.apache.spark.sql.hive.security
 
-import org.apache.hadoop.security.UserGroupInformation
+import scala.collection.JavaConverters._
+
+import org.apache.hadoop.io.Text
+import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.mockito.ArgumentMatchers.anyString
+import org.mockito.Mockito
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -28,6 +34,19 @@ object HivePartitionedTableCredentialsSuite extends QueryTest
   test("SPARK-36328: Reuse the FileSystem delegation token" +
     " while querying partitioned hive table.") {
     // The suite is based on the repro provided in SPARK-36328
+    // mock
+    val mockStatic = Mockito.mockStatic(classOf[UserGroupInformation])
+    Mockito.doNothing().when(
+      UserGroupInformation.loginUserFromKeytabAndReturnUGI(anyString(), anyString()))
+    val aliasSet = Set("secret1", "secret2", "secret3", "secret4")
+    val credentials = new Credentials()
+    aliasSet.foreach(alias => credentials.addToken(new Text(alias), new Token[TokenIdentifier]))
+    Mockito.when(UserGroupInformation.getCurrentUser.getCredentials).thenReturn(credentials)
+    // scalastyle:off hadoopconfiguration
+    spark.sparkContext.hadoopConfiguration.set("hadoop.security.authorization", "true")
+    spark.sparkContext.hadoopConfiguration.set("hadoop.security.authentication", "kerberos")
+    spark.sparkContext.hadoopConfiguration.set("dfs.block.access.token.enable", "true")
+    // scalastyle:on hadoopconfiguration
     withTable("parttable") {
       // create partitioned table
       sql("create table parttable (key char(1), value int) partitioned by (p int);")
@@ -35,10 +54,13 @@ object HivePartitionedTableCredentialsSuite extends QueryTest
       sql("insert into table parttable partition(p=200) values ('d', 1), ('e', 2), ('f', 3);")
       sql("insert into table parttable partition(p=300) values ('d', 1), ('e', 2), ('f', 3);")
       // execute query
-      checkAnswer(sql("select value, count(*) from parttable group by value."),
+      checkAnswer(sql("select value, count(*) from parttable group by value;"),
         Seq[Row](Row(1, 3), Row(2, 3), Row(3, 3)))
-      // Only one token cached.
-      assert(UserGroupInformation.getCurrentUser.getCredentials.getAllTokens.size() == 1)
+      // check
+      assert(UserGroupInformation.isSecurityEnabled)
+      val tokenMap = UserGroupInformation.getCurrentUser.getCredentials.getTokenMap
+      assert(tokenMap.keySet().asScala.map(text => Text.decode(text.getBytes)).equals(aliasSet))
     }
+    mockStatic.close()
   }
 }
