@@ -125,14 +125,18 @@ case class AdaptiveSparkPlanExec(
     OptimizeShuffleWithLocalRead
   )
 
-  @transient private val staticPostStageCreationRules: Seq[Rule[SparkPlan]] =
-    CollapseCodegenStages() +: context.session.sessionState.postStageCreationRules
+  // This rule is stateful as it maintains the codegen stage ID. We can't create a fresh one every
+  // time and need to keep it in a variable.
+  @transient private val collapseCodegenStagesRule: Rule[SparkPlan] =
+    CollapseCodegenStages()
 
   // A list of physical optimizer rules to be applied right after a new stage is created. The input
   // plan to these rules has exchange as its root node.
-  private def postStageCreationRules(outputsColumnar: Boolean) =
+  private def postStageCreationRules(outputsColumnar: Boolean) = Seq(
     ApplyColumnarRulesAndInsertTransitions(
-      context.session.sessionState.columnarRules, outputsColumnar) +: staticPostStageCreationRules
+      context.session.sessionState.columnarRules, outputsColumnar),
+    collapseCodegenStagesRule
+  )
 
   private def optimizeQueryStage(plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
     val optimized = queryStageOptimizerRules.foldLeft(plan) { case (latestPlan, rule) =>
@@ -522,7 +526,7 @@ case class AdaptiveSparkPlanExec(
       case s: ShuffleExchangeLike =>
         val newShuffle = applyPhysicalRules(
           s.withNewChildren(Seq(optimizedPlan)),
-          postStageCreationRules(outputsColumnar = false),
+          postStageCreationRules(outputsColumnar = s.supportsColumnar),
           Some((planChangeLogger, "AQE Post Stage Creation")))
         if (!newShuffle.isInstanceOf[ShuffleExchangeLike]) {
           throw new IllegalStateException(
@@ -532,7 +536,7 @@ case class AdaptiveSparkPlanExec(
       case b: BroadcastExchangeLike =>
         val newBroadcast = applyPhysicalRules(
           b.withNewChildren(Seq(optimizedPlan)),
-          postStageCreationRules(outputsColumnar = false),
+          postStageCreationRules(outputsColumnar = b.supportsColumnar),
           Some((planChangeLogger, "AQE Post Stage Creation")))
         if (!newBroadcast.isInstanceOf[BroadcastExchangeLike]) {
           throw new IllegalStateException(
