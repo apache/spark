@@ -390,12 +390,18 @@ public class TransportConf {
   /**
    * The minimum size of a chunk when dividing a merged shuffle file into multiple chunks during
    * push-based shuffle.
-   * A merged shuffle file consists of multiple small shuffle blocks. Fetching the
-   * complete merged shuffle file in a single response increases the memory requirements for the
-   * clients. Instead of serving the entire merged file, the shuffle service serves the
-   * merged file in `chunks`. A `chunk` constitutes few shuffle blocks in entirety and this
-   * configuration controls how big a chunk can get. A corresponding index file for each merged
-   * shuffle file will be generated indicating chunk boundaries.
+   * A merged shuffle file consists of multiple small shuffle blocks. Fetching the complete
+   * merged shuffle file in a single disk I/O increases the memory requirements for both the
+   * clients and the external shuffle service. Instead, the external shuffle service serves
+   * the merged file in MB-sized chunks. This configuration controls how big a chunk can get.
+   * A corresponding index file for each merged shuffle file will be generated indicating chunk
+   * boundaries.
+   *
+   * Setting this too high would increase the memory requirements on both the clients and the
+   * external shuffle service.
+   *
+   * Setting this too low would increase the overall number of RPC requests to external shuffle
+   * service unnecessarily.
    */
   public int minChunkSizeInMergedShuffleFile() {
     return Ints.checkedCast(JavaUtils.byteStringAsBytes(
@@ -403,7 +409,8 @@ public class TransportConf {
   }
 
   /**
-   * The size of cache in memory which is used in push-based shuffle for storing merged index files.
+   * The maximum size of cache in memory which is used in push-based shuffle for storing merged index files.
+   * This cache is in addition to the one configured via spark.shuffle.service.index.cache.size.
    */
   public long mergedIndexCacheSize() {
     return JavaUtils.byteStringAsBytes(
