@@ -321,9 +321,10 @@ cannot resolve 'date_add(CAST('2011-11-11' AS DATE), 10.0D)' due to data type mi
 -- !query
 select date_add('2011-11-11', '1')
 -- !query schema
-struct<date_add(2011-11-11, 1):date>
+struct<>
 -- !query output
-2011-11-12
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_add(CAST('2011-11-11' AS DATE), '1')' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, ''1'' is of string type.; line 1 pos 7
 
 
 -- !query
@@ -331,8 +332,8 @@ select date_add('2011-11-11', '1.2')
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
-invalid input syntax for type numeric: 1.2
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_add(CAST('2011-11-11' AS DATE), '1.2')' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, ''1.2'' is of string type.; line 1 pos 7
 
 
 -- !query
@@ -431,9 +432,10 @@ cannot resolve 'date_sub(CAST('2011-11-11' AS DATE), 10.0D)' due to data type mi
 -- !query
 select date_sub(date'2011-11-11', '1')
 -- !query schema
-struct<date_sub(DATE '2011-11-11', 1):date>
+struct<>
 -- !query output
-2011-11-10
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_sub(DATE '2011-11-11', '1')' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, ''1'' is of string type.; line 1 pos 7
 
 
 -- !query
@@ -441,8 +443,8 @@ select date_sub(date'2011-11-11', '1.2')
 -- !query schema
 struct<>
 -- !query output
-java.lang.NumberFormatException
-invalid input syntax for type numeric: 1.2
+org.apache.spark.sql.AnalysisException
+cannot resolve 'date_sub(DATE '2011-11-11', '1.2')' due to data type mismatch: argument 2 requires (int or smallint or tinyint) type, however, ''1.2'' is of string type.; line 1 pos 7
 
 
 -- !query
