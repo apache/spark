@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.feature
 
-import scala.util.Random
-
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{IntParam, ParamValidators}
