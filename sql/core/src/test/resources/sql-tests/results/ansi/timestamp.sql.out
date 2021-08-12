@@ -135,9 +135,10 @@ Invalid value for SecondOfMinute (valid values 0 - 59): 61
 -- !query
 SELECT make_timestamp(1, 1, 1, 1, 1, null)
 -- !query schema
-struct<make_timestamp(1, 1, 1, 1, 1, NULL):timestamp>
+struct<>
 -- !query output
-NULL
+org.apache.spark.sql.AnalysisException
+cannot resolve 'make_timestamp(1, 1, 1, 1, 1, NULL)' due to data type mismatch: argument 6 requires (decimal(8,6) or int) type, however, 'NULL' is of void type.; line 1 pos 7
 
 
 -- !query
