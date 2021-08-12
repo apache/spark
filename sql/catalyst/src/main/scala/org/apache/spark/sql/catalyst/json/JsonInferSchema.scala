@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.json
 
-import java.io.IOException
+import java.io.CharConversionException
 import java.util.Comparator
 
 import scala.util.control.Exception.allCatch
@@ -73,11 +73,13 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
             Some(inferField(parser))
           }
         } catch {
-          case e @ (_: JsonProcessingException | _: IOException) if ignoreCorruptFiles =>
+          case e @ (_: JsonProcessingException | _: CharConversionException)
+              if ignoreCorruptFiles =>
             logWarning("Skipped inferring json schema from the corrupted data: " +
               s"${row.asInstanceOf[InternalRow].getString(0)}", e)
             None
-          case e @ (_: RuntimeException | _: JsonProcessingException | _: IOException) =>
+          case e @ (_: RuntimeException | _: JsonProcessingException |
+                    _: CharConversionException) =>
             parseMode match {
               case PermissiveMode =>
                 Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
