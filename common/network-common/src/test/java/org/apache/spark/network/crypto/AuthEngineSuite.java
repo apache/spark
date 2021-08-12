@@ -155,8 +155,8 @@ public class AuthEngineSuite {
     try (AuthEngine server = new AuthEngine("appId", "secret", conf)) {
       AuthMessage clientChallenge =
               AuthMessage.decodeMessage(ByteBuffer.wrap(Hex.decode(clientChallengeHex)));
-      // This tests that the server will accept an old challenge as expected. However, it will generate a fresh
-      // ephemeral keypair, so we can't replay an old session.
+      // This tests that the server will accept an old challenge as expected. However,
+      // it will generate a fresh ephemeral keypair, so we can't replay an old session.
       AuthMessage freshServerResponse = server.response(clientChallenge);
     }
   }
