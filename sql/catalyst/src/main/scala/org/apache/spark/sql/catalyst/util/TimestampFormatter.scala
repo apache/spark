@@ -161,6 +161,16 @@ class Iso8601TimestampFormatter(
   }
 }
 
+/**
+ * The formatter for timestamps which doesn't require users to specify a pattern. While formatting,
+ * it uses the default pattern [[TimestampFormatter.defaultPattern()]]. In parsing, it follows
+ * the CAST logic in conversion of strings to Catalyst's TimestampType.
+ *
+ * @param zoneId The time zone ID in which timestamps should be formatted or parsed.
+ * @param locale The locale overrides the system locale and is used in formatting.
+ * @param legacyFormat Defines the formatter used for legacy timestamps.
+ * @param isParsing Whether the formatter is used for parsing (`true`) or for formatting (`false`).
+ */
 class DefaultTimestampFormatter(
     zoneId: ZoneId,
     locale: Locale,
