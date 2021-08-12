@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.encoders.{ExamplePointUDT, RowEncoder}
-import org.apache.spark.sql.catalyst.expressions.{SafeProjection, UnsafeArrayData, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{SafeProjection, UnsafeProjection}
 import org.apache.spark.sql.types._
 
 class ArrayDataIndexedSeqSuite extends SparkFunSuite {
