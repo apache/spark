@@ -2823,7 +2823,7 @@ private[spark] object Utils extends Logging {
             klass.getConstructor().newInstance()
         }
 
-        Some(ext.asInstanceOf[T])
+        Some(ext)
       } catch {
         case _: NoSuchMethodException =>
           throw new SparkException(

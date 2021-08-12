@@ -807,7 +807,7 @@ class BasicOperationsSuite extends TestSuiteBase {
         cleanupTestInput.size,
         numExpectedOutput,
         () => assertCleanup(operatedStream))
-      val clock = ssc.scheduler.clock.asInstanceOf[Clock]
+      val clock = ssc.scheduler.clock
       assert(clock.getTimeMillis() === Seconds(10).milliseconds)
       assert(output.size === numExpectedOutput)
       operatedStream

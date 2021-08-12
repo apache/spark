@@ -352,7 +352,7 @@ class HadoopTableReader(
       initializeJobConfFunc: JobConf => Unit): RDD[Writable] = {
     val rdd = new HadoopRDD(
       sparkSession.sparkContext,
-      _broadcastedHadoopConf.asInstanceOf[Broadcast[SerializableConfiguration]],
+      _broadcastedHadoopConf
       Some(initializeJobConfFunc),
       inputFormatClass,
       classOf[Writable],

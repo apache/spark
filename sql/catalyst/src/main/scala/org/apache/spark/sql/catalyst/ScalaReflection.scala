@@ -809,7 +809,7 @@ object ScalaReflection extends ScalaReflection {
    */
   def findConstructor[T](cls: Class[T], paramTypes: Seq[Class[_]]): Option[Seq[AnyRef] => T] = {
     Option(ConstructorUtils.getMatchingAccessibleConstructor(cls, paramTypes: _*)) match {
-      case Some(c) => Some(x => c.newInstance(x: _*).asInstanceOf[T])
+      case Some(c) => Some(x => c.newInstance(x: _*))
       case None =>
         val companion = mirror.staticClass(cls.getName).companion
         val moduleMirror = mirror.reflectModule(companion.asModule)

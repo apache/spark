@@ -233,7 +233,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]]
   : this.type = {
     transformWithPruning(cond, ruleId) {
       case q: QueryPlan[_] =>
-        q.transformExpressionsWithPruning(cond, ruleId)(rule).asInstanceOf[PlanType]
+        q.transformExpressionsWithPruning(cond, ruleId)(rule)
     }.asInstanceOf[this.type]
   }
 

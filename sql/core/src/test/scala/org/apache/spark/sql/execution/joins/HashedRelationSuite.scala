@@ -94,7 +94,7 @@ class HashedRelationSuite extends SharedSparkSession {
 
     val os2 = new ByteArrayOutputStream()
     val out2 = new ObjectOutputStream(os2)
-    hashed2.asInstanceOf[UnsafeHashedRelation].writeExternal(out2)
+    hashed2.writeExternal(out2)
     out2.flush()
     // This depends on that the order of items in BytesToBytesMap.iterator() is exactly the same
     // as they are inserted

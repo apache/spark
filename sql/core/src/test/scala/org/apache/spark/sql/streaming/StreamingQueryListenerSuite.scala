@@ -64,7 +64,7 @@ class StreamingQueryListenerSuite extends StreamTest with BeforeAndAfter {
       extends AssertOnQuery(q => {
         eventually(Timeout(streamingTimeout)) {
           if (q.exception.isEmpty) {
-            assert(clock.asInstanceOf[StreamManualClock].isStreamWaitingAt(clock.getTimeMillis))
+            assert(clock.isStreamWaitingAt(clock.getTimeMillis))
           }
         }
         if (q.exception.isDefined) {

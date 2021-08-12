@@ -310,7 +310,7 @@ class StreamSuite extends StreamTest {
     // For each batch, we would log the state change during the execution
     // This checks whether the key of the state change log is the expected batch id
     def CheckIncrementalExecutionCurrentBatchId(expectedId: Int): AssertOnQuery =
-      AssertOnQuery(_.lastExecution.asInstanceOf[IncrementalExecution].currentBatchId == expectedId,
+      AssertOnQuery(_.lastExecution.currentBatchId == expectedId,
         s"lastExecution's currentBatchId should be $expectedId")
 
     // For each batch, we would log the sink change after the execution

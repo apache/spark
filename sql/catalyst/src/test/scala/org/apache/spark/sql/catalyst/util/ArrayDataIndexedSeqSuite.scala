@@ -83,7 +83,7 @@ class ArrayDataIndexedSeqSuite extends SparkFunSuite {
       val safeRow = safeRowConverter(unsafeRow)
 
       val genericArrayData = safeRow.getArray(0).asInstanceOf[GenericArrayData]
-      val unsafeArrayData = unsafeRow.getArray(0).asInstanceOf[UnsafeArrayData]
+      val unsafeArrayData = unsafeRow.getArray(0)
 
       val elementType = dt.elementType
       test("ArrayDataIndexedSeq - UnsafeArrayData - " + dt.toString) {

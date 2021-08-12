@@ -597,7 +597,7 @@ case class IntegralDivide(
       if (res == null) {
         null
       } else {
-        integral.asInstanceOf[Integral[Any]].toLong(res)
+        integral.toLong(res)
       }
     }
   }

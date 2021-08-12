@@ -238,7 +238,7 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
   test("aggregate") {
     val pairs = sc.makeRDD(Seq(("a", 1), ("b", 2), ("a", 2), ("c", 5), ("a", 3)))
     type StringMap = scala.collection.mutable.Map[String, Int]
-    val emptyMap = HashMap[String, Int]().withDefaultValue(0).asInstanceOf[StringMap]
+    val emptyMap = HashMap[String, Int]().withDefaultValue(0)
     val mergeElement: (StringMap, (String, Int)) => StringMap = (map, pair) => {
       map(pair._1) += pair._2
       map

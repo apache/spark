@@ -335,7 +335,7 @@ class ContinuousExecution(
         val offset =
           sources(0).deserializeOffset(offsetLog.get(epoch).get.offsets(0).get.json)
         committedOffsets ++= Seq(sources(0) -> offset)
-        sources(0).commit(offset.asInstanceOf[OffsetV2])
+        sources(0).commit(offset)
       } else {
         return
       }
