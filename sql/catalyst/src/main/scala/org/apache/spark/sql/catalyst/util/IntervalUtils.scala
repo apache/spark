@@ -181,8 +181,35 @@ object IntervalUtils {
               "year-month", YM(startField, endField).typeName)
           }
         }
-      case _ => throwIllegalIntervalFormatException(input, startField, endField,
-        "year-month", YM(startField, endField).typeName)
+      case _ =>
+        try {
+          val calendar = stringToInterval(input)
+          val units = input.toString
+            .split("\\s")
+            .map(_.toLowerCase(Locale.ROOT).stripSuffix("s"))
+            .filter(s => s != "interval" && s.matches("[a-z]+"))
+          var yearMonthFields = Set.empty[Byte]
+          for (unit <- units) {
+            if (YearMonthIntervalType.stringToField.contains(unit)) {
+              val field = YearMonthIntervalType.stringToField(unit)
+              if (field >= startField && field <= endField) {
+                yearMonthFields += YearMonthIntervalType.stringToField(unit)
+              }
+            }
+          }
+          if (yearMonthFields.nonEmpty) {
+            (yearMonthFields.min, yearMonthFields.max) match {
+              case (YM.YEAR, YM.YEAR) => (calendar.months / MONTHS_PER_YEAR) * MONTHS_PER_YEAR
+              case (_, YM.MONTH) => calendar.months
+            }
+          } else {
+            0
+          }
+        } catch {
+          case _: Exception =>
+            throwIllegalIntervalFormatException(input, startField, endField,
+              "year-month", YM(startField, endField).typeName)
+        }
     }
   }
 

@@ -84,3 +84,12 @@ select cast('1中文' as bigint);
 select cast('\t\t true \n\r ' as boolean);
 select cast('\t\n false \t\r' as boolean);
 select cast('\t\n xyz \t\r' as boolean);
+
+
+SELECT CAST('1 year 2 month' AS INTERVAL YEAR TO MONTH);
+SELECT CAST('1 year 2 month 3 day' AS INTERVAL YEAR TO MONTH);
+SELECT CAST('1 year 2 month' AS INTERVAL YEAR);
+SELECT CAST('1 year 2 month' AS INTERVAL MONTH);
+SELECT CAST('10 year -2 month' AS INTERVAL MONTH);
+SELECT CAST('10 year 2 month' AS INTERVAL YEAR);
+SELECT CAST('10 year -2 month' AS INTERVAL YEAR);
