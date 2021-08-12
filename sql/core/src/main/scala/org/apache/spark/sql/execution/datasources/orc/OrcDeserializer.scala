@@ -138,14 +138,33 @@ class OrcDeserializer(
         updater.set(ordinal, v)
 
       case st: StructType =>
-        val result = new SpecificInternalRow(st)
-        val fieldUpdater = new RowUpdater(result)
-        val fieldConverters = st.map(_.dataType).map { dt =>
-          newWriter(dt, fieldUpdater)
-        }.toArray
+        val containedByStruct = if (updater.isInstanceOf[RowUpdater]) {
+          true
+        } else {
+          false
+        }
+        var result: SpecificInternalRow = null
+        var fieldUpdater: RowUpdater = null
+        var fieldConverters: Array[(Int, WritableComparable[_]) => Unit] = null
+        if (containedByStruct) {
+          result = new SpecificInternalRow(st)
+          fieldUpdater = new RowUpdater(result)
+          fieldConverters = st.map(_.dataType).map { dt =>
+            newWriter(dt, fieldUpdater)
+          }.toArray
+        }
         (ordinal, value) =>
           val orcStruct = value.asInstanceOf[OrcStruct]
 
+          if (!containedByStruct) {
+            // if parent container is a Map or an Array, we need to get a new instance of
+            // of the below for each value that needs conversion
+            result = new SpecificInternalRow(st)
+            fieldUpdater = new RowUpdater(result)
+            fieldConverters = st.map(_.dataType).map { dt =>
+              newWriter(dt, fieldUpdater)
+            }.toArray
+          }
           var i = 0
           while (i < st.length) {
             val value = orcStruct.getFieldValue(i)
