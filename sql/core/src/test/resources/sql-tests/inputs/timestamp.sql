@@ -108,9 +108,11 @@ create temporary view ts_view as select '2011-11-11 11:11:11' str;
 select str - timestamp'2011-11-11 11:11:11' from ts_view;
 select timestamp'2011-11-11 11:11:11' - str from ts_view;
 
--- invalid: timestamp + string/null literal
+-- invalid: timestamp + string literal
 select timestamp'2011-11-11 11:11:11' + '1';
 select '1' + timestamp'2011-11-11 11:11:11';
+
+-- null result: timestamp + null
 select timestamp'2011-11-11 11:11:11' + null;
 select null + timestamp'2011-11-11 11:11:11';
 
