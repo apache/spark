@@ -33,28 +33,6 @@ class RemoveNoopOperatorsSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
-  test("Remove all redundant projections in one iteration") {
-    val originalQuery = testRelation
-      .select('a, 'b, 'c)
-      .select('a, 'b, 'c)
-      .analyze
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-
-    comparePlans(optimized, testRelation)
-  }
-
-  test("Remove all redundant windows in one iteration") {
-    val originalQuery = testRelation
-      .window(Nil, Nil, Nil)
-      .window(Nil, Nil, Nil)
-      .analyze
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-
-    comparePlans(optimized, testRelation)
-  }
-
   test("SPARK-36353: RemoveNoopOperators should keep output schema") {
     val query = testRelation
       .select(('a + 'b).as("c"))
