@@ -9,6 +9,7 @@ struct<>
 -- !query output
 
 
+
 -- !query
 select date '2019-01-01\t'
 -- !query schema
