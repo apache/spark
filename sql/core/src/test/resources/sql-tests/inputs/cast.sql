@@ -84,3 +84,18 @@ select cast('1中文' as bigint);
 select cast('\t\t true \n\r ' as boolean);
 select cast('\t\n false \t\r' as boolean);
 select cast('\t\n xyz \t\r' as boolean);
+
+SELECT CAST('1 year 2 month 3 day 4 hour 5 minute 6.111 second' AS INTERVAL DAY);
+SELECT CAST('1 year 2 month 3 day 4 hour 5 minute 6.111 second' AS INTERVAL DAY TO HOUR);
+SELECT CAST('1 year 2 month 3 day 4 hour 5 minute 6.111 second' AS INTERVAL DAY TO MINUTE);
+SELECT CAST('1 year 2 month 3 day 4 hour 5 minute 6.111 second' AS INTERVAL DAY TO SECOND);
+SELECT CAST('1 year 2 month 3 day 4 hour 5 minute 6.111 second' AS INTERVAL HOUR);
+SELECT CAST('1 year 2 month 3 day 4 hour 5 minute 6.111 second' AS INTERVAL HOUR TO MINUTE);
+SELECT CAST('1 year 2 month 3 day 4 hour 5 minute 6.111 second' AS INTERVAL HOUR TO SECOND);
+SELECT CAST('1 year 2 month 3 day 4 hour 5 minute 6.111 second' AS INTERVAL MINUTE);
+SELECT CAST('1 year 2 month 3 day 4 hour 5 minute 6.111 second' AS INTERVAL MINUTE TO SECOND);
+SELECT CAST('1 year 2 month 3 day 4 hour 5 minute 6.111 second' AS INTERVAL SECOND);
+SELECT CAST('3 day -4 hour 5 minute 6.111 second' AS INTERVAL DAY);
+SELECT CAST('3 day 4 hour -5 minute 6.111 second' AS INTERVAL DAY TO HOUR);
+SELECT CAST('-3 day -4 hour 5 minute 6.111 second' AS INTERVAL DAY);
+SELECT CAST('3 day 4 hour 5 minute 6.111 second' AS INTERVAL DAY TO SECOND);

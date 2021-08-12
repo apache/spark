@@ -366,8 +366,57 @@ object IntervalUtils {
               "day-time", DT(startField, endField).typeName, Some(fallbackNotice))
           }
         }
-      case _ => throwIllegalIntervalFormatException(input, startField, endField,
-        "day-time", DT(startField, endField).typeName, Some(fallbackNotice))
+      case _ =>
+        try {
+          val calendar = stringToInterval(input)
+          val units = input.toString
+            .split("\\s")
+            .map(_.toLowerCase(Locale.ROOT).stripSuffix("s"))
+            .filter(s => s != "interval" && s.matches("[a-z]+"))
+          var dayTimeFields = Set.empty[Byte]
+          for (unit <- units) {
+            if (DT.stringToField.contains(unit)) {
+              val field = DT.stringToField(unit)
+              if (field >= startField && field <= endField) {
+                dayTimeFields += DT.stringToField(unit)
+              }
+            }
+          }
+          if (dayTimeFields.nonEmpty) {
+            val micros = Math.addExact(calendar.microseconds,
+              Math.multiplyExact(calendar.days, MICROS_PER_DAY))
+            (dayTimeFields.min, dayTimeFields.max) match {
+              case (DT.DAY, DT.DAY) => (micros / MICROS_PER_DAY) * MICROS_PER_DAY
+              case (DT.DAY, DT.HOUR) => (micros / MICROS_PER_HOUR) * MICROS_PER_HOUR
+              case (DT.DAY, DT.MINUTE) => (micros / MICROS_PER_MINUTE) * MICROS_PER_MINUTE
+              case (DT.DAY, DT.SECOND) => micros
+              case (DT.HOUR, DT.HOUR) =>
+                Math.subtractExact((micros / MICROS_PER_HOUR) * MICROS_PER_HOUR,
+                  (micros / MICROS_PER_DAY) * MICROS_PER_DAY)
+              case (DT.HOUR, DT.MINUTE) =>
+                Math.subtractExact((micros / MICROS_PER_MINUTE) * MICROS_PER_MINUTE,
+                  (micros / MICROS_PER_DAY) * MICROS_PER_DAY)
+              case (DT.HOUR, DT.SECOND) =>
+                Math.subtractExact(micros,
+                (micros / MICROS_PER_DAY) * MICROS_PER_DAY)
+              case (DT.MINUTE, DT.MINUTE) =>
+                Math.subtractExact((micros / MICROS_PER_MINUTE) * MICROS_PER_MINUTE,
+                  (micros / MICROS_PER_HOUR) * MICROS_PER_HOUR)
+              case (DT.MINUTE, DT.SECOND) =>
+                Math.subtractExact(micros,
+                  (micros / MICROS_PER_HOUR) * MICROS_PER_HOUR)
+              case (DT.SECOND, DT.SECOND) =>
+                Math.subtractExact(micros,
+                  (micros / MICROS_PER_MINUTE) * MICROS_PER_MINUTE)
+            }
+          } else {
+            0
+          }
+        } catch {
+          case _: Exception =>
+            throwIllegalIntervalFormatException(input, startField, endField,
+              "day-time", DT(startField, endField).typeName, Some(fallbackNotice))
+        }
     }
   }
 
