@@ -196,9 +196,8 @@ class JDBCOptions(
   val keytab = {
     val keytabParam = parameters.getOrElse(JDBC_KEYTAB, null)
     if (keytabParam != null && FilenameUtils.getPath(keytabParam).isEmpty) {
-      val result = SparkFiles.get(keytabParam)
-      logDebug(s"Keytab path not found, assuming --files, file name used on executor: $result")
-      result
+      logDebug(s"Keytab path not found, assuming --files, file name used on executor: $keytabParam")
+      keytabParam
     } else {
       logDebug("Keytab path found, assuming manual upload")
       keytabParam
