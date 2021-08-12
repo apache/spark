@@ -2358,6 +2358,10 @@ def session_window(timeColumn, gapDuration):
     >>> w.select(w.session_window.start.cast("string").alias("start"),
     ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
     [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
+    >>> w = df.groupBy(session_window("date", lit("5 seconds"))).agg(sum("val").alias("sum"))
+    >>> w.select(w.session_window.start.cast("string").alias("start"),
+    ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
+    [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
     """
     def check_field(field, fieldName):
         if not field or not isinstance(field, (str, Column)):
@@ -2367,9 +2371,9 @@ def session_window(timeColumn, gapDuration):
     time_col = _to_java_column(timeColumn)
     check_field(gapDuration, "gapDuration")
     gap_duration = (
-       gapDuration
-       if isinstance(gapDuration, str)
-       else _to_java_column(gapDuration)
+        gapDuration
+        if isinstance(gapDuration, str)
+        else _to_java_column(gapDuration)
     )
     res = sc._jvm.functions.session_window(time_col, gap_duration)
     return Column(res)
