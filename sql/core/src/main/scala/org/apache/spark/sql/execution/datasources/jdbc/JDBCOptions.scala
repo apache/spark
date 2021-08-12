@@ -22,7 +22,6 @@ import java.util.{Locale, Properties}
 
 import org.apache.commons.io.FilenameUtils
 
-import org.apache.spark.SparkFiles
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
