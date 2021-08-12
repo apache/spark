@@ -475,6 +475,30 @@ abstract class ParquetAggregatePushDownSuite
       }
     }
   }
+
+  test("aggregate push down - column name case sensitivity") {
+    val enableVectorizedReader = Seq("false", "true")
+    for (testVectorizedReader <- enableVectorizedReader) {
+      withSQLConf(SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key -> "true",
+        vectorizedReaderEnabledKey -> testVectorizedReader) {
+        withTempPath { dir =>
+          spark.range(10).selectExpr("id", "id % 3 as p")
+            .write.partitionBy("p").parquet(dir.getCanonicalPath)
+          withTempView("tmp") {
+            spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
+            val selectAgg = sql("SELECT max(iD), min(Id) FROM tmp")
+            selectAgg.queryExecution.optimizedPlan.collect {
+              case _: DataSourceV2ScanRelation =>
+                val expected_plan_fragment =
+                  "PushedAggregation: [MAX(iD), MIN(Id)]"
+                checkKeywordsExistsInExplain(selectAgg, expected_plan_fragment)
+            }
+            checkAnswer(selectAgg, Seq(Row(9, 0)))
+          }
+        }
+      }
+    }
+  }
 }
 
 class ParquetV1AggregatePushDownSuite extends ParquetAggregatePushDownSuite {

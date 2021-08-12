@@ -147,10 +147,10 @@ object ParquetUtils {
   }
 
   /**
-   * When the partial Aggregates (Max/Min/Count) are pushed down to parquet, we don't need to
-   * createRowBaseReader to read data from parquet and aggregate at spark layer. Instead we want
-   * to get the partial Aggregates (Max/Min/Count) result using the statistics information
-   * from parquet footer file, and then construct an InternalRow from these Aggregate results.
+   * When the partial aggregates (Max/Min/Count) are pushed down to Parquet, we don't need to
+   * createRowBaseReader to read data from Parquet and aggregate at Spark layer. Instead we want
+   * to get the partial aggregates (Max/Min/Count) result using the statistics information
+   * from Parquet footer file, and then construct an InternalRow from these aggregate results.
    *
    * @return Aggregate results in the format of InternalRow
    */
@@ -235,11 +235,11 @@ object ParquetUtils {
   }
 
   /**
-   * When the Aggregates (Max/Min/Count) are pushed down to parquet, in the case of
+   * When the aggregates (Max/Min/Count) are pushed down to Parquet, in the case of
    * PARQUET_VECTORIZED_READER_ENABLED sets to true, we don't need buildColumnarReader
-   * to read data from parquet and aggregate at spark layer. Instead we want
-   * to get the Aggregates (Max/Min/Count) result using the statistics information
-   * from parquet footer file, and then construct a ColumnarBatch from these Aggregate results.
+   * to read data from Parquet and aggregate at Spark layer. Instead we want
+   * to get the aggregates (Max/Min/Count) result using the statistics information
+   * from Parquet footer file, and then construct a ColumnarBatch from these aggregate results.
    *
    * @return Aggregate results in the format of ColumnarBatch
    */
@@ -301,11 +301,11 @@ object ParquetUtils {
   }
 
   /**
-   * Calculate the pushed down Aggregates (Max/Min/Count) result using the statistics
-   * information from parquet footer file.
+   * Calculate the pushed down aggregates (Max/Min/Count) result using the statistics
+   * information from Parquet footer file.
    *
    * @return A tuple of `Array[PrimitiveType.PrimitiveTypeName]` and Array[Any].
-   *         The first element is the PrimitiveTypeName of the Aggregate column,
+   *         The first element is the PrimitiveTypeName of the aggregate column,
    *         and the second element is the aggregated value.
    */
   private[sql] def getPushedDownAggResult(
@@ -330,29 +330,34 @@ object ParquetUtils {
         val blockMetaData = block.getColumns()
         agg match {
           case max: Max =>
-            index = dataSchema.fieldNames.toList.indexOf(max.column.fieldNames.head)
+            val colName = PartitioningUtils.getColName(max.column.fieldNames.head, isCaseSensitive)
+            index = dataSchema.fields.map(PartitioningUtils
+              .getColName(_, isCaseSensitive)).toList.indexOf(colName)
             val currentMax = getCurrentBlockMaxOrMin(blockMetaData, index, true)
-            if (currentMax != None &&
-              (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0)) {
+            if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
               value = currentMax
             }
           case min: Min =>
-            index = dataSchema.fieldNames.toList.indexOf(min.column.fieldNames.head)
+            val colName = PartitioningUtils.getColName(min.column.fieldNames.head, isCaseSensitive)
+            index = dataSchema.fields.map(PartitioningUtils
+              .getColName(_, isCaseSensitive)).toList.indexOf(colName)
             val currentMin = getCurrentBlockMaxOrMin(blockMetaData, index, false)
-            if (currentMin != None &&
-              (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0)) {
+            if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
               value = currentMin
             }
           case count: Count =>
             rowCount += block.getRowCount
-            var isPartitionCol = false;
+            var isPartitionCol = false
+            val colName =
+              PartitioningUtils.getColName(count.column.fieldNames.head, isCaseSensitive)
             if (partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive))
-              .toSet.contains(count.column().fieldNames.head)) {
+              .toSet.contains(colName)) {
               isPartitionCol = true
             }
             isCount = true
             if(!isPartitionCol) {
-              index = dataSchema.fieldNames.toList.indexOf(count.column.fieldNames.head)
+              index = dataSchema.fields.map(PartitioningUtils
+                .getColName(_, isCaseSensitive)).toList.indexOf(colName)
               // Count(*) includes the null values, but Count (colName) doesn't.
               rowCount -= getNumNulls(blockMetaData, index)
             }
@@ -384,7 +389,7 @@ object ParquetUtils {
       isMax: Boolean): Any = {
     val statistics = columnChunkMetaData.get(i).getStatistics()
     if (!statistics.hasNonNullValue) {
-      throw new UnsupportedOperationException("No min/max found for parquet file, Set SQLConf" +
+      throw new UnsupportedOperationException("No min/max found for Parquet file, Set SQLConf" +
         s" ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute again")
     } else {
       if (isMax) statistics.genericGetMax() else statistics.genericGetMin()
@@ -396,7 +401,7 @@ object ParquetUtils {
       i: Int): Long = {
     val statistics = columnChunkMetaData.get(i).getStatistics()
     if (!statistics.isNumNullsSet()) {
-      throw new UnsupportedOperationException("Number of nulls not set for parquet file." +
+      throw new UnsupportedOperationException("Number of nulls not set for Parquet file." +
         s" Set SQLConf ${PARQUET_AGGREGATE_PUSHDOWN_ENABLED.key} to false and execute again")
     }
     statistics.getNumNulls();

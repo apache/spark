@@ -118,18 +118,18 @@ case class ParquetPartitionReaderFactory(
       }
     } else {
       new PartitionReader[InternalRow] {
-        var count = 0
+        var hasNext = true
 
-        override def next(): Boolean = if (count == 0) true else false
+        override def next(): Boolean = hasNext
 
         override def get(): InternalRow = {
-          count += 1
+          hasNext = false
           val footer = getFooter(file)
           ParquetUtils.createAggInternalRowFromFooter(footer, dataSchema, partitionSchema,
             aggregation.get, readDataSchema, datetimeRebaseModeInRead, isCaseSensitive)
         }
 
-        override def close(): Unit = return
+        override def close(): Unit = {}
       }
     }
 
@@ -152,19 +152,19 @@ case class ParquetPartitionReaderFactory(
       }
     } else {
       new PartitionReader[ColumnarBatch] {
-        var count = 0
+        var hasNext = true
 
-        override def next(): Boolean = if (count == 0) true else false
+        override def next(): Boolean = hasNext
 
         override def get(): ColumnarBatch = {
-          count += 1
+          hasNext = false
           val footer = getFooter(file)
           ParquetUtils.createAggColumnarBatchFromFooter(footer, dataSchema, partitionSchema,
             aggregation.get, readDataSchema, enableOffHeapColumnVector, datetimeRebaseModeInRead,
             isCaseSensitive)
         }
 
-        override def close(): Unit = return
+        override def close(): Unit = {}
       }
     }
     fileReader
