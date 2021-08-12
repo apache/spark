@@ -82,9 +82,9 @@ class Iso8601DateFormatter(
 }
 
 /**
- * The formatter for dates. While formatting, it uses the default pattern
- * [[DateFormatter.defaultPattern]]. In parsing, it follows the CAST logic in conversion of strings
- * to Catalyst's DateType.
+ * The formatter for dates which doesn't require users to specify a pattern. While formatting,
+ * it uses the default pattern [[DateFormatter.defaultPattern]]. In parsing, it follows the CAST
+ * logic in conversion of strings to Catalyst's DateType.
  *
  * @param locale The locale overrides the system locale and is used in formatting.
  * @param legacyFormat Defines the formatter used for legacy dates.
