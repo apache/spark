@@ -76,22 +76,27 @@ object TableOutputResolver {
       val matched = inputCols.filter(col => conf.resolver(col.name, expectedCol.name))
       val newColPath = colPath :+ expectedCol.name
       if (matched.isEmpty) {
-        addError(s"Cannot find data for output column ${newColPath.quoted}")
+        addError(s"Cannot find data for output column '${newColPath.quoted}'")
         None
       } else if (matched.length > 1) {
-        addError(s"Ambiguous column name in the input data: ${newColPath.quoted}")
+        addError(s"Ambiguous column name in the input data: '${newColPath.quoted}'")
         None
       } else {
-        (matched.head.dataType, expectedCol.dataType) match {
+        val matchedCol = matched.head match {
+          case a: Attribute => a.withName(expectedCol.name)
+          case a: Alias => a.withName(expectedCol.name)
+          case other => other
+        }
+        (matchedCol.dataType, expectedCol.dataType) match {
           case (input: StructType, expected: StructType) =>
             val fields = input.zipWithIndex.map { case (f, i) =>
-              Alias(GetStructField(matched.head, i), f.name)()
+              Alias(GetStructField(matchedCol, i, Some(f.name)), f.name)()
             }
             val reordered = reorderColumnsByName(
               fields, expected.toAttributes, conf, addError, newColPath)
             Some(Alias(CreateStruct(reordered), expectedCol.name)())
           case _ =>
-            checkField(expectedCol, matched.head, byName = true, conf, addError)
+            checkField(expectedCol, matchedCol, byName = true, conf, addError)
         }
       }
     }

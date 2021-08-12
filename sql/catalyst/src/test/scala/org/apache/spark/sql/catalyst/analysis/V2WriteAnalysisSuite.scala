@@ -603,8 +603,8 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       assertNotResolved(parsedPlan)
       assertAnalysisError(parsedPlan, Seq(
         "Cannot write incompatible data to table", "'table-name'",
-        "Struct 'col' 0-th field name does not match", "expected 'a', found 'x'",
-        "Struct 'col' 1-th field name does not match", "expected 'b', found 'y'"))
+        "Cannot find data for output column 'col.a'",
+        "Cannot find data for output column 'col.b'"))
     }
 
     withClue("byPosition") {
@@ -688,13 +688,18 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertAnalysisError(parsedPlan2, Seq("cannot resolve", "a", "given input columns", "x, y"))
   }
 
-  test("byName: reorder inner fields") {
+  test("SPARK-36498: reorder inner fields in byName mode") {
     val table = TestRelation(Seq('a.int, 'b.struct('x.int, 'y.int)))
     val query = TestRelation(Seq('b.struct('y.int, 'x.byte), 'a.int))
 
     val writePlan = byName(table, query)
     val expectedPlan = byName(table, query.select(
-      
-    ))
+      "a".attr,
+      namedStruct(
+        "x".expr, "b".attr.getField("x").as("x").cast(IntegerType),
+        "y".expr, "b".attr.getField("y").as("y")
+      ).as("b")
+    )).analyze
+    checkAnalysis(writePlan, expectedPlan)
   }
 }
