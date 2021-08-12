@@ -1005,12 +1005,12 @@ public class RemoteBlockPushResolverSuite {
         (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(re.getResponse());
       assertEquals(BlockPushNonFatalFailure.ReturnCode.TOO_OLD_ATTEMPT_PUSH.id(),
         errorCode.returnCode);
-      assertEquals(re.getMessage(), "App Attempt " + ATTEMPT_ID_1 + " is a too old app attempt");
+      assertEquals(errorCode.failureBlockId, stream2.getID());
       throw re;
     }
   }
 
-  @Test(expected = BlockPushNonFatalFailure.class)
+  @Test(expected = IllegalArgumentException.class)
   public void testFinalizeShuffleMergeFromPreviousAttemptIsAborted()
     throws IOException, InterruptedException {
     String testApp = "testFinalizeShuffleMergeFromPreviousAttemptIsAborted";
@@ -1034,10 +1034,11 @@ public class RemoteBlockPushResolverSuite {
       MERGE_DIRECTORY_META_2);
     try {
       pushResolver.finalizeShuffleMerge(new FinalizeShuffleMerge(testApp, ATTEMPT_ID_1, 0, 0));
-    } catch (BlockPushNonFatalFailure e) {
-      // FinalizeShuffleMerge use TOO_OLD_ATTEMPT_PUSH return code
-      assertEquals(e.getReturnCode(), BlockPushNonFatalFailure.ReturnCode.TOO_OLD_ATTEMPT_PUSH);
-      assertEquals(e.getMessage(), "App Attempt " + ATTEMPT_ID_1 + " is a too old app attempt");
+    } catch (IllegalArgumentException e) {
+      assertEquals(e.getMessage(),
+        String.format("The attempt id %s in this FinalizeShuffleMerge message does not " +
+            "match with the current attempt id %s stored in shuffle service for application %s",
+          ATTEMPT_ID_1, ATTEMPT_ID_2, testApp));
       throw e;
     }
   }

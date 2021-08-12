@@ -45,7 +45,7 @@ public class BlockPushNonFatalFailure extends RuntimeException {
    * old attempt, we will not retry pushing the block nor log the exception on the client side.
    */
   public static final String TOO_OLD_ATTEMPT_SUFFIX =
-    " is a too old app attempt";
+    " is from an older app attempt";
 
   /**
    * String constant used for generating exception messages indicating a block to be merged
@@ -173,10 +173,5 @@ public class BlockPushNonFatalFailure extends RuntimeException {
   public static String getErrorMsg(String blockId, ReturnCode errorCode) {
     Preconditions.checkArgument(errorCode != ReturnCode.SUCCESS);
     return "Block " + blockId + errorCode.errorMsgSuffix;
-  }
-
-  public static String getErrorMsg(int attemptId, ReturnCode errorCode) {
-    Preconditions.checkArgument(errorCode != ReturnCode.SUCCESS);
-    return "App Attempt " + attemptId + errorCode.errorMsgSuffix;
   }
 }

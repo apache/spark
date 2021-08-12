@@ -402,9 +402,9 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
     if (appShuffleInfo.attemptId != msg.appAttemptId) {
       // If this Block belongs to a former application attempt, it is considered late,
       // as only the blocks from the current application attempt will be merged
-      throw new BlockPushNonFatalFailure(new BlockPushReturnCode(ReturnCode.TOO_OLD_ATTEMPT_PUSH.id(),
-        streamId).toByteBuffer(),
-        BlockPushNonFatalFailure.getErrorMsg(msg.appAttemptId, ReturnCode.TOO_OLD_ATTEMPT_PUSH));
+      throw new BlockPushNonFatalFailure(new BlockPushReturnCode(ReturnCode
+        .TOO_OLD_ATTEMPT_PUSH.id(), streamId).toByteBuffer(),
+        BlockPushNonFatalFailure.getErrorMsg(streamId, ReturnCode.TOO_OLD_ATTEMPT_PUSH));
     }
     // Retrieve merged shuffle file metadata
     AppShufflePartitionInfo partitionInfoBeforeCheck;
@@ -511,13 +511,19 @@ public class RemoteBlockPushResolver implements MergedShuffleFileManager {
       msg.shuffleId, msg.shuffleMergeId, msg.appId, msg.appAttemptId);
     AppShuffleInfo appShuffleInfo = validateAndGetAppShuffleInfo(msg.appId);
     if (appShuffleInfo.attemptId != msg.appAttemptId) {
-      // If this Block belongs to a former application attempt, it is considered late,
-      // as only the blocks from the current application attempt will be merged.
-      // No need use callback to return to client now, because the finalizeShuffleMerge
-      // in DAGScheduler has no retry policy.
-      throw new BlockPushNonFatalFailure(ReturnCode.TOO_OLD_ATTEMPT_PUSH,
-        BlockPushNonFatalFailure.
-          getErrorMsg(msg.appAttemptId, ReturnCode.TOO_OLD_ATTEMPT_PUSH));
+      // If finalizeShuffleMerge from a former application attempt, it is considered late,
+      // as only the finalizeShuffleMerge request from the current application attempt
+      // will be merged. Too old app attempt only being seen by an already failed
+      // app attempt, and no need use callback to return to client now, because
+      // the finalizeShuffleMerge in DAGScheduler has no retry policy, and don't
+      // use the BlockPushNonFatalFailure because it's the finalizeShuffleMerge
+      // related case, not the block push case, just throw it in server side now.
+      // TODO we may use a new exception class to include the finalizeShuffleMerge
+      // related case just as the BlockPushNonFatalFailure contains the block push cases.
+      throw new IllegalArgumentException(
+        String.format("The attempt id %s in this FinalizeShuffleMerge message does not match "
+            + "with the current attempt id %s stored in shuffle service for application %s",
+          msg.appAttemptId, appShuffleInfo.attemptId, msg.appId));
     }
     AtomicReference<Map<Integer, AppShufflePartitionInfo>> shuffleMergePartitionsRef =
       new AtomicReference<>(null);
