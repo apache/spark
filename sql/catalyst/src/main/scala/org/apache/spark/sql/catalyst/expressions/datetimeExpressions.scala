@@ -2494,8 +2494,8 @@ case class MakeTimestampLTZ(
       * day - the day-of-month to represent, from 1 to 31
       * hour - the hour-of-day to represent, from 0 to 23
       * min - the minute-of-hour to represent, from 0 to 59
-      * sec - the second-of-minute and its micro-fraction to represent, from
-              0 to 60. The sec argument can be either decimal(8, 6) or int.
+      * sec - the second-of-minute and its micro-fraction to represent, from 0 to 60.
+              The value can be either an integer like 13 , or a fraction like 13.123.
               If the specified sec is an int, this value represents seconds.
               If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
@@ -2561,7 +2561,7 @@ case class MakeTimestamp(
   // them to the fractional part of `sec`.
   override def inputTypes: Seq[AbstractDataType] =
     Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType,
-      TypeCollection(DecimalType(8, 6), IntegerType)) ++ timezone.map(_ => StringType)
+      TypeCollection(DecimalType(8, 6), IntegerType, NullType)) ++ timezone.map(_ => StringType)
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -2655,7 +2655,7 @@ case class MakeTimestamp(
           s"""
              |org.apache.spark.sql.types.Decimal $decimalValue =
              |$d$$.MODULE$$.apply(new java.math.BigDecimal($secAndNanos), 8, 6);
-           """.stripMargin
+             |""".stripMargin
       }
       s"""
       try {
