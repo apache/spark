@@ -72,14 +72,13 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
           }
         } catch {
           case e @ (_: RuntimeException | _: JsonProcessingException |
-                    _: CharConversionException | _: MalformedInputException) =>
-            parseMode match {
-              case PermissiveMode =>
-                Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
-              case DropMalformedMode =>
-                None
-              case FailFastMode =>
-                throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
+                    _: CharConversionException | _: MalformedInputException) => parseMode match {
+            case PermissiveMode =>
+              Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
+            case DropMalformedMode =>
+              None
+            case FailFastMode =>
+              throw QueryExecutionErrors.malformedRecordsDetectedInSchemaInferenceError(e)
           }
         }
       }.reduceOption(typeMerger).toIterator
