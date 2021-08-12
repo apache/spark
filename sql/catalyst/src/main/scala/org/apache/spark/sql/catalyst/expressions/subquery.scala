@@ -68,7 +68,7 @@ abstract class PlanExpression[T <: QueryPlan[_]] extends Expression {
  */
 abstract class SubqueryExpression(
     plan: LogicalPlan,
-    val outerAttrs: Seq[Expression],
+    outerAttrs: Seq[Expression],
     exprId: ExprId,
     joinCond: Seq[Expression] = Nil) extends PlanExpression[LogicalPlan] {
   override lazy val resolved: Boolean = childrenResolved && plan.resolved
@@ -76,6 +76,7 @@ abstract class SubqueryExpression(
     AttributeSet.fromAttributeSets(outerAttrs.map(_.references))
   override def children: Seq[Expression] = outerAttrs ++ joinCond
   override def withNewPlan(plan: LogicalPlan): SubqueryExpression
+  def isCorrelated: Boolean = outerAttrs.nonEmpty
 }
 
 object SubqueryExpression {
@@ -86,7 +87,7 @@ object SubqueryExpression {
   def hasInOrCorrelatedExistsSubquery(e: Expression): Boolean = {
     e.find {
       case _: ListQuery => true
-      case _: Exists if e.children.nonEmpty => true
+      case ex: Exists => ex.isCorrelated
       case _ => false
     }.isDefined
   }
@@ -98,7 +99,7 @@ object SubqueryExpression {
    */
   def hasCorrelatedSubquery(e: Expression): Boolean = {
     e.find {
-      case s: SubqueryExpression => s.children.nonEmpty
+      case s: SubqueryExpression => s.isCorrelated
       case _ => false
     }.isDefined
   }
@@ -248,7 +249,7 @@ object SubExprUtils extends PredicateHelper {
  */
 case class ScalarSubquery(
     plan: LogicalPlan,
-    override val outerAttrs: Seq[Expression] = Seq.empty,
+    outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Unevaluable {
@@ -279,7 +280,7 @@ case class ScalarSubquery(
 object ScalarSubquery {
   def hasCorrelatedScalarSubquery(e: Expression): Boolean = {
     e.find {
-      case s: ScalarSubquery => s.children.nonEmpty
+      case s: ScalarSubquery => s.isCorrelated
       case _ => false
     }.isDefined
   }
@@ -293,7 +294,7 @@ object ScalarSubquery {
  */
 case class LateralSubquery(
     plan: LogicalPlan,
-    override val outerAttrs: Seq[Expression] = Seq.empty,
+    outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Unevaluable {
@@ -332,7 +333,7 @@ case class LateralSubquery(
  */
 case class ListQuery(
     plan: LogicalPlan,
-    override val outerAttrs: Seq[Expression] = Seq.empty,
+    outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     childOutputs: Seq[Attribute] = Seq.empty,
     joinCond: Seq[Expression] = Seq.empty)
@@ -391,7 +392,7 @@ case class ListQuery(
  */
 case class Exists(
     plan: LogicalPlan,
-    override val outerAttrs: Seq[Expression] = Seq.empty,
+    outerAttrs: Seq[Expression] = Seq.empty,
     exprId: ExprId = NamedExpression.newExprId,
     joinCond: Seq[Expression] = Seq.empty)
   extends SubqueryExpression(plan, outerAttrs, exprId, joinCond) with Predicate with Unevaluable {
