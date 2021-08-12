@@ -2364,7 +2364,7 @@ def session_window(timeColumn, gapDuration):
     [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
     """
     def check_field(field, fieldName):
-        if not field or not isinstance(field, (str, Column)):
+        if field is None or not isinstance(field, (str, Column)):
             raise TypeError("%s should be provided as a string or Column" % fieldName)
 
     sc = SparkContext._active_spark_context
