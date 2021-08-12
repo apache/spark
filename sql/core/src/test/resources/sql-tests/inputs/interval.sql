@@ -170,6 +170,21 @@ select
   null - interval '2' year,
   null + interval '2' hour,
   null - interval '2' hour;
+select
+  interval '2' year * null,
+  interval '2' hour * null,
+  null * interval '2' year,
+  null * interval '2' hour;
+select
+  interval '2' year / null,
+  interval '2' hour / null;
+
+-- invalid: divide by interval
+select 2 / interval '2' year;
+select 2 / interval '2' hour;
+select null / interval '2' year;
+select null / interval '2' hour;
+
 -- invalid: malformed interval string
 select interval '2' year + '3-3';
 select interval '2' year - '4';
