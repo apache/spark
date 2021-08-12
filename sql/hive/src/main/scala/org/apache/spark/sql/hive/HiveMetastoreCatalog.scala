@@ -166,6 +166,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val lazyPruningEnabled = sparkSession.sqlContext.conf.manageFilesourcePartitions
     val tablePath = new Path(relation.tableMeta.location)
     val fileFormat = fileFormatClass.getConstructor().newInstance()
+    val bucketSpec = relation.tableMeta.bucketSpec
 
     val result = if (relation.isPartitioned) {
       val partitionSchema = relation.tableMeta.partitionSchema
@@ -216,7 +217,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             location = fileIndex,
             partitionSchema = partitionSchema,
             dataSchema = updatedTable.dataSchema,
-            bucketSpec = None,
+            bucketSpec = bucketSpec,
             fileFormat = fileFormat,
             options = enableDynamicPartition)(sparkSession = sparkSession)
           val created = LogicalRelation(fsRelation, updatedTable)
@@ -243,7 +244,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
                 sparkSession = sparkSession,
                 paths = rootPath.toString :: Nil,
                 userSpecifiedSchema = Option(updatedTable.dataSchema),
-                bucketSpec = None,
+                bucketSpec = bucketSpec,
                 // Do not interpret the 'path' option at all when tables are read using the Hive
                 // source, since the URIs will already have been read from the table's LOCATION.
                 options = options.filter { case (k, _) => !k.equalsIgnoreCase("path") },
