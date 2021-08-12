@@ -220,7 +220,8 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
           daemonPort = in.readInt()
         } catch {
           case _: EOFException if daemon.isAlive =>
-            throw SparkCoreErrors.eofExceptionWhileReadPortNumberFromAliveDaemonError(daemonModule)
+            throw SparkCoreErrors.eofExceptionWhileReadingPortNumberFromDaemonOutputError(
+              daemonModule)
           case _: EOFException =>
             throw SparkCoreErrors.
               eofExceptionWhileReadPortNumberError(daemonModule, daemon.exitValue)

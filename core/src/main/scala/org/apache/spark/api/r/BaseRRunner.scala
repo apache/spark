@@ -137,7 +137,7 @@ private[spark] abstract class BaseRRunner[IN, OUT](
 
     protected val handleException: PartialFunction[Throwable, OUT] = {
       case e: Exception =>
-        throw SparkCoreErrors.RUnexpectedlyExitedError(errThread.getLines(), e)
+        throw SparkCoreErrors.RWorkerExitedError(errThread.getLines(), e)
     }
   }
 

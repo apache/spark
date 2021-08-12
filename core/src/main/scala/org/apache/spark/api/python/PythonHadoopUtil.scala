@@ -138,7 +138,7 @@ private[python] class JavaToWritableConverter extends Converter[Any, Writable] {
         val arrayWriteable = new ArrayWritable(classOf[Writable])
         arrayWriteable.set(array.map(convertToWritable(_)))
         arrayWriteable
-      case other => throw SparkCoreErrors.cannotBeUsedDataOfTypeError(other.getClass.getName)
+      case other => throw SparkCoreErrors.dataOfTypeCannotBeUsedError(other.getClass.getName)
     }
   }
 

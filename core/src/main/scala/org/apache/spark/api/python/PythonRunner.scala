@@ -585,7 +585,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         throw new SparkException(s"Python worker exited unexpectedly (crashed): $error", eof)
 
       case eof: EOFException =>
-        throw SparkCoreErrors.crashedUnexpectedlyPythonWorkerError(eof)
+        throw SparkCoreErrors.pythonWorkerCrashedError(eof)
     }
   }
 

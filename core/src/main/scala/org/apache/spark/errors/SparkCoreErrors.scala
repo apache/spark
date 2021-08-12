@@ -33,7 +33,7 @@ import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException
  * Object for grouping error messages from (most) exceptions thrown during query execution.
  */
 object SparkCoreErrors {
-  def juRemoveError(): Throwable = {
+  def removeUnsupportedError(): Throwable = {
     new UnsupportedOperationException("remove")
   }
 
@@ -41,7 +41,7 @@ object SparkCoreErrors {
     new RuntimeException(s"Unexpected Py4J server ${other.getClass}")
   }
 
-  def cannotBeUsedDataOfTypeError(className: String): Throwable = {
+  def dataOfTypeCannotBeUsedError(className: String): Throwable = {
     new SparkException(s"Data of type $className cannot be used")
   }
 
@@ -61,7 +61,7 @@ object SparkCoreErrors {
     new TaskKilledException(reason)
   }
 
-  def crashedUnexpectedlyPythonWorkerError(eof: EOFException): Throwable = {
+  def pythonWorkerCrashedError(eof: EOFException): Throwable = {
     new SparkException("Python worker exited unexpectedly (crashed)", eof)
   }
 
@@ -92,7 +92,7 @@ object SparkCoreErrors {
     new SparkException("Python worker failed to connect back.", e)
   }
 
-  def eofExceptionWhileReadPortNumberFromAliveDaemonError(daemonModule: String): Throwable = {
+  def eofExceptionWhileReadingPortNumberFromDaemonOutputError(daemonModule: String): Throwable = {
     new SparkException("EOFException occurred while reading the port number " +
       s"from $daemonModule's stdout")
   }
@@ -105,7 +105,7 @@ object SparkCoreErrors {
         s" stdout and terminated with code: $daemonExitValue.")
   }
 
-  def cannotBeUsedRDDElementError(otherName: String): Throwable = {
+  def RDDElementOfTypeCannotBeUsedError(otherName: String): Throwable = {
     new SparkException(s"RDD element of type $otherName cannot be used")
   }
 
@@ -113,7 +113,7 @@ object SparkCoreErrors {
     new SparkException(s"Data of type $other is not supported")
   }
 
-  def RUnexpectedlyExitedError(errorLine: String, e: Exception): Throwable = {
+  def RWorkerExitedError(errorLine: String, e: Exception): Throwable = {
     var msg = "R unexpectedly exited."
     if (errorLine.trim().nonEmpty) {
       msg += s"\nR worker produced errors: $errorLine\n"
