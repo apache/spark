@@ -17,134 +17,216 @@
 
 package org.apache.spark.network.crypto;
 
+import javax.crypto.spec.SecretKeySpec;
 import java.io.Closeable;
-import java.io.IOException;
-import java.math.BigInteger;
 import java.security.GeneralSecurityException;
 import java.util.Arrays;
 import java.util.Properties;
-import javax.crypto.Cipher;
-import javax.crypto.SecretKey;
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.ShortBufferException;
-import javax.crypto.spec.IvParameterSpec;
-import javax.crypto.spec.PBEKeySpec;
-import javax.crypto.spec.SecretKeySpec;
-import static java.nio.charset.StandardCharsets.UTF_8;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.primitives.Bytes;
-import org.apache.commons.crypto.cipher.CryptoCipher;
-import org.apache.commons.crypto.cipher.CryptoCipherFactory;
-import org.apache.commons.crypto.random.CryptoRandom;
-import org.apache.commons.crypto.random.CryptoRandomFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import com.google.crypto.tink.subtle.AesGcmJce;
+import com.google.crypto.tink.subtle.Hkdf;
+import com.google.crypto.tink.subtle.Random;
+import com.google.crypto.tink.subtle.X25519;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import static java.nio.charset.StandardCharsets.UTF_8;
 import org.apache.spark.network.util.TransportConf;
 
 /**
- * A helper class for abstracting authentication and key negotiation details. This is used by
- * both client and server sides, since the operations are basically the same.
+ * A helper class for abstracting authentication and key negotiation details.
+ * This supports a forward-secure authentication protocol based on X25519 Diffie-Hellman Key
+ * Exchange, using a pre-shared key to derive an AES-GCM key encrypting key.
  */
 class AuthEngine implements Closeable {
+  public static final byte[] INPUT_IV_INFO = "inputIv".getBytes(UTF_8);
+  public static final byte[] OUTPUT_IV_INFO = "outputIv".getBytes(UTF_8);
+  private static final String MAC_ALGORITHM = "HMACSHA256";
+  private static final int AES_GCM_KEY_SIZE_BYTES = 16;
+  private static final byte[] EMPTY_TRANSCRIPT = new byte[0];
 
-  private static final Logger LOG = LoggerFactory.getLogger(AuthEngine.class);
-  private static final BigInteger ONE = new BigInteger(new byte[] { 0x1 });
-
-  private final byte[] appId;
-  private final char[] secret;
+  private final String appId;
+  private final byte[] preSharedSecret;
   private final TransportConf conf;
   private final Properties cryptoConf;
-  private final CryptoRandom random;
 
-  private byte[] authNonce;
-
-  @VisibleForTesting
-  byte[] challenge;
-
+  private byte[] clientPrivateKey;
   private TransportCipher sessionCipher;
-  private CryptoCipher encryptor;
-  private CryptoCipher decryptor;
 
-  AuthEngine(String appId, String secret, TransportConf conf) throws GeneralSecurityException {
-    this.appId = appId.getBytes(UTF_8);
+  AuthEngine(String appId, String preSharedSecret, TransportConf conf) {
+    Preconditions.checkNotNull(appId);
+    Preconditions.checkNotNull(preSharedSecret);
+    this.appId = appId;
+    this.preSharedSecret = preSharedSecret.getBytes(UTF_8);
     this.conf = conf;
     this.cryptoConf = conf.cryptoConf();
-    this.secret = secret.toCharArray();
-    this.random = CryptoRandomFactory.getCryptoRandom(cryptoConf);
+  }
+
+  @VisibleForTesting
+  void setClientPrivateKey(byte[] privateKey) {
+    this.clientPrivateKey = privateKey;
   }
 
   /**
-   * Create the client challenge.
+   * This method will derive a key from a pre-shared secret, a random salt, and an arbitrary
+   * transcript. It will then use that derived key to AES-GCM encrypt an ephemeral X25519 public
+   * key.
    *
-   * @return A challenge to be sent the remote side.
+   * @param ephemeralX25519PublicKey Ephemeral X25519 Public Key to encrypt under a derived key.
+   * @param transcript               Optional byte array representing a protocol transcript, which
+   *                                 is mixed into the key derivation and included as AES-GCM
+   *                                 associated authenticated data (AAD).
+   * @return An encrypted ephemeral X25519 public key.
+   * @throws GeneralSecurityException If HKDF key deriviation or AES-GCM encryption fails.
    */
-  ClientChallenge challenge() throws GeneralSecurityException {
-    this.authNonce = randomBytes(conf.encryptionKeyLength() / Byte.SIZE);
-    SecretKeySpec authKey = generateKey(conf.keyFactoryAlgorithm(), conf.keyFactoryIterations(),
-      authNonce, conf.encryptionKeyLength());
-    initializeForAuth(conf.cipherTransformation(), authNonce, authKey);
-
-    this.challenge = randomBytes(conf.encryptionKeyLength() / Byte.SIZE);
-    return new ClientChallenge(new String(appId, UTF_8),
-      conf.keyFactoryAlgorithm(),
-      conf.keyFactoryIterations(),
-      conf.cipherTransformation(),
-      conf.encryptionKeyLength(),
-      authNonce,
-      challenge(appId, authNonce, challenge));
+  private AuthMessage encryptEphemeralPublicKey(
+      byte[] ephemeralX25519PublicKey,
+      byte[] transcript) throws GeneralSecurityException {
+    // This non-secret salt is used in the HKDF key derivations and will be sent in plaintext as
+    // part of the AES-GCM encrypted X25519 public key. It will be included as additional
+    // associated data (AAD).
+    byte[] nonSecretSalt = Random.randBytes(AES_GCM_KEY_SIZE_BYTES);
+    // Mix in the app ID, salt, and transcript into HKDF and use it as AES-GCM AAD
+    byte[] aadState = Bytes.concat(appId.getBytes(UTF_8), nonSecretSalt, transcript);
+    // Use HKDF to derive an AES_GCM key from the pre-shared key, non-secret salt, and AAD state
+    byte[] derivedKeyEncryptingKey = Hkdf.computeHkdf(
+        MAC_ALGORITHM,
+        preSharedSecret,
+        nonSecretSalt,
+        aadState,
+        AES_GCM_KEY_SIZE_BYTES);
+    // AES-GCM encrypt the X25519 public key and include the app ID, salt, and transcript as AAD
+    byte[] aesGcmCiphertext = new AesGcmJce(derivedKeyEncryptingKey)
+        .encrypt(ephemeralX25519PublicKey, aadState);
+    return new AuthMessage(appId, nonSecretSalt, aesGcmCiphertext);
   }
 
   /**
-   * Validates the client challenge, and create the encryption backend for the channel from the
-   * parameters sent by the client.
+   * This method will derive a key from a pre-shared secret, a random salt, and an arbitrary
+   * transcript. It will then use that derived key to AES-GCM encrypt an ephemeral X25519
+   * public key.
    *
-   * @param clientChallenge The challenge from the client.
-   * @return A response to be sent to the client.
+   * @param encryptedPublicKey An X25519 public key to decrypt with a derived key
+   * @param transcript         Optional byte array representing a protocol transcript, which is
+   *                           mixed into the key derivation and included as AES-GCM associated
+   *                           authenticated data (AAD).
+   * @return A decrypted ephemeral public key
+   * @throws GeneralSecurityException If decryption fails, notably if authenticated checks fails.
    */
-  ServerResponse respond(ClientChallenge clientChallenge)
-    throws GeneralSecurityException {
+  private byte[] decryptEphemeralPublicKey(
+      AuthMessage encryptedPublicKey,
+      byte[] transcript) throws GeneralSecurityException {
+    Preconditions.checkArgument(appId.equals(encryptedPublicKey.appId));
+    // Mix in the app ID, salt, and transcript into HKDF and use it as AES-GCM AAD
+    byte[] aadState = Bytes.concat(appId.getBytes(UTF_8), encryptedPublicKey.salt, transcript);
+    // Use HKDF to derive an AES_GCM key from the pre-shared key, non-secret salt, and AAD state
+    byte[] derivedKeyEncryptingKey = Hkdf.computeHkdf(
+        MAC_ALGORITHM,
+        preSharedSecret,
+        encryptedPublicKey.salt,
+        aadState,
+        AES_GCM_KEY_SIZE_BYTES);
+    // If the AES-GCM payload is modified at all or if the AAD state does not match, decryption
+    // will throw a GeneralSecurityException.
+    return new AesGcmJce(derivedKeyEncryptingKey)
+        .decrypt(encryptedPublicKey.ciphertext, aadState);
+  }
 
-    SecretKeySpec authKey = generateKey(clientChallenge.kdf, clientChallenge.iterations,
-      clientChallenge.nonce, clientChallenge.keyLength);
-    initializeForAuth(clientChallenge.cipher, clientChallenge.nonce, authKey);
+  /**
+   * Encrypt an ephemeral X25519 public key to be sent to the server as a challenge.
+   *
+   * @return An encrypted client ephemeral public key to be sent to the server.
+   */
+  AuthMessage challenge() throws GeneralSecurityException {
+    setClientPrivateKey(X25519.generatePrivateKey());
+    return encryptEphemeralPublicKey(
+        X25519.publicFromPrivate(clientPrivateKey),
+        EMPTY_TRANSCRIPT);
+  }
 
-    byte[] challenge = validateChallenge(clientChallenge.nonce, clientChallenge.challenge);
-    byte[] response = challenge(appId, clientChallenge.nonce, rawResponse(challenge));
-    byte[] sessionNonce = randomBytes(conf.encryptionKeyLength() / Byte.SIZE);
-    byte[] inputIv = randomBytes(conf.ivLength());
-    byte[] outputIv = randomBytes(conf.ivLength());
-
-    SecretKeySpec sessionKey = generateKey(clientChallenge.kdf, clientChallenge.iterations,
-      sessionNonce, clientChallenge.keyLength);
-    this.sessionCipher = new TransportCipher(cryptoConf, clientChallenge.cipher, sessionKey,
-      inputIv, outputIv);
-
-    // Note the IVs are swapped in the response.
-    return new ServerResponse(response, encrypt(sessionNonce), encrypt(outputIv), encrypt(inputIv));
+  /**
+   * Validates the client challenge by decrypting the ephemeral X25519 public key, computing a
+   * shared secret from it, then encrypting a server ephemeral X25519 public key for the client.
+   *
+   * @param encryptedClientPublicKey The encrypted public key from the client to be decrypted.
+   * @return An encrypted server ephemeral public key to be sent to the client.
+   */
+  AuthMessage response(AuthMessage encryptedClientPublicKey) throws GeneralSecurityException {
+    Preconditions.checkArgument(appId.equals(encryptedClientPublicKey.appId));
+    // Compute a shared secret given the client public key and the server private key
+    byte[] clientPublicKey =
+        decryptEphemeralPublicKey(encryptedClientPublicKey, EMPTY_TRANSCRIPT);
+    // Generate an ephemeral X25519 private key.
+    byte[] serverEphemeralPrivateKey = X25519.generatePrivateKey();
+    // Encrypt the X25519 public key with a key derived from the preSharedSecret and transcript
+    AuthMessage ephemeralServerPublicKey = encryptEphemeralPublicKey(
+        X25519.publicFromPrivate(serverEphemeralPrivateKey),
+        getTranscript(encryptedClientPublicKey));
+    // Compute a shared secret given the client public key and the server private key
+    byte[] sharedSecret =
+        X25519.computeSharedSecret(serverEphemeralPrivateKey, clientPublicKey);
+    byte[] challengeResponseTranscript =
+        getTranscript(encryptedClientPublicKey, ephemeralServerPublicKey);
+    this.sessionCipher =
+        generateTransportCipher(sharedSecret, false, challengeResponseTranscript);
+    return ephemeralServerPublicKey;
   }
 
   /**
    * Validates the server response and initializes the cipher to use for the session.
    *
-   * @param serverResponse The response from the server.
+   * @param encryptedClientPublicKey The encrypted ephemeral public key from the client.
+   * @param encryptedServerPublicKey The encrypted ephemeral public key from the server.
    */
-  void validate(ServerResponse serverResponse) throws GeneralSecurityException {
-    byte[] response = validateChallenge(authNonce, serverResponse.response);
+  void deriveSessionCipher(AuthMessage encryptedClientPublicKey,
+                           AuthMessage encryptedServerPublicKey) throws GeneralSecurityException {
+    Preconditions.checkArgument(appId.equals(encryptedClientPublicKey.appId));
+    Preconditions.checkArgument(appId.equals(encryptedServerPublicKey.appId));
+    // Compute a shared secret given the server public key and the client private key,
+    // mixing in the protocol transcript.
+    byte[] serverPublicKey = decryptEphemeralPublicKey(
+        encryptedServerPublicKey,
+        getTranscript(encryptedClientPublicKey));
+    // Compute a shared secret given the client public key and the server private key
+    byte[] sharedSecret = X25519.computeSharedSecret(clientPrivateKey, serverPublicKey);
+    byte[] challengeResponseTranscript =
+        getTranscript(encryptedClientPublicKey, encryptedServerPublicKey);
+    this.sessionCipher =
+        generateTransportCipher(sharedSecret, true, challengeResponseTranscript);
+  }
 
-    byte[] expected = rawResponse(challenge);
-    Preconditions.checkArgument(Arrays.equals(expected, response));
+  private TransportCipher generateTransportCipher(
+      byte[] sharedSecret,
+      boolean isClient,
+      byte[] transcript) throws GeneralSecurityException {
+    byte[] clientIv = Hkdf.computeHkdf(
+        MAC_ALGORITHM,
+        sharedSecret,
+        transcript,  // Passing this as the HKDF salt
+        INPUT_IV_INFO,  // This is the HKDF info field used to differentiate IV values
+        AES_GCM_KEY_SIZE_BYTES);
+    byte[] serverIv = Hkdf.computeHkdf(
+        MAC_ALGORITHM,
+        sharedSecret,
+        transcript,  // Passing this as the HKDF salt
+        OUTPUT_IV_INFO,  // This is the HKDF info field used to differentiate IV values
+        AES_GCM_KEY_SIZE_BYTES);
+    SecretKeySpec sessionKey = new SecretKeySpec(sharedSecret, "RAW");
+    return new TransportCipher(
+        cryptoConf,
+        conf.cipherTransformation(),
+        sessionKey,
+        isClient ? clientIv : serverIv,  // If it's the client, use the client IV first
+        isClient ? serverIv : clientIv);
+  }
 
-    byte[] nonce = decrypt(serverResponse.nonce);
-    byte[] inputIv = decrypt(serverResponse.inputIv);
-    byte[] outputIv = decrypt(serverResponse.outputIv);
-
-    SecretKeySpec sessionKey = generateKey(conf.keyFactoryAlgorithm(), conf.keyFactoryIterations(),
-      nonce, conf.encryptionKeyLength());
-    this.sessionCipher = new TransportCipher(cryptoConf, conf.cipherTransformation(), sessionKey,
-      inputIv, outputIv);
+  private byte[] getTranscript(AuthMessage... encryptedPublicKeys) {
+    ByteBuf transcript = Unpooled.buffer(
+        Arrays.stream(encryptedPublicKeys).mapToInt(k -> k.encodedLength()).sum());
+    Arrays.stream(encryptedPublicKeys).forEachOrdered(k -> k.encode(transcript));
+    return transcript.array();
   }
 
   TransportCipher sessionCipher() {
@@ -153,163 +235,7 @@ class AuthEngine implements Closeable {
   }
 
   @Override
-  public void close() throws IOException {
-    // Close ciphers (by calling "doFinal()" with dummy data) and the random instance so that
-    // internal state is cleaned up. Error handling here is just for paranoia, and not meant to
-    // accurately report the errors when they happen.
-    RuntimeException error = null;
-    byte[] dummy = new byte[8];
-    if (encryptor != null) {
-      try {
-        doCipherOp(Cipher.ENCRYPT_MODE, dummy, true);
-      } catch (Exception e) {
-        error = new RuntimeException(e);
-      }
-      encryptor = null;
-    }
-    if (decryptor != null) {
-      try {
-        doCipherOp(Cipher.DECRYPT_MODE, dummy, true);
-      } catch (Exception e) {
-        error = new RuntimeException(e);
-      }
-      decryptor = null;
-    }
-    random.close();
+  public void close() {
 
-    if (error != null) {
-      throw error;
-    }
   }
-
-  @VisibleForTesting
-  byte[] challenge(byte[] appId, byte[] nonce, byte[] challenge) throws GeneralSecurityException {
-    return encrypt(Bytes.concat(appId, nonce, challenge));
-  }
-
-  @VisibleForTesting
-  byte[] rawResponse(byte[] challenge) {
-    BigInteger orig = new BigInteger(challenge);
-    BigInteger response = orig.add(ONE);
-    return response.toByteArray();
-  }
-
-  private byte[] decrypt(byte[] in) throws GeneralSecurityException {
-    return doCipherOp(Cipher.DECRYPT_MODE, in, false);
-  }
-
-  private byte[] encrypt(byte[] in) throws GeneralSecurityException {
-    return doCipherOp(Cipher.ENCRYPT_MODE, in, false);
-  }
-
-  private void initializeForAuth(String cipher, byte[] nonce, SecretKeySpec key)
-    throws GeneralSecurityException {
-
-    // commons-crypto currently only supports ciphers that require an initial vector; so
-    // create a dummy vector so that we can initialize the ciphers. In the future, if
-    // different ciphers are supported, this will have to be configurable somehow.
-    byte[] iv = new byte[conf.ivLength()];
-    System.arraycopy(nonce, 0, iv, 0, Math.min(nonce.length, iv.length));
-
-    CryptoCipher _encryptor = CryptoCipherFactory.getCryptoCipher(cipher, cryptoConf);
-    _encryptor.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
-    this.encryptor = _encryptor;
-
-    CryptoCipher _decryptor = CryptoCipherFactory.getCryptoCipher(cipher, cryptoConf);
-    _decryptor.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
-    this.decryptor = _decryptor;
-  }
-
-  /**
-   * Validates an encrypted challenge as defined in the protocol, and returns the byte array
-   * that corresponds to the actual challenge data.
-   */
-  private byte[] validateChallenge(byte[] nonce, byte[] encryptedChallenge)
-    throws GeneralSecurityException {
-
-    byte[] challenge = decrypt(encryptedChallenge);
-    checkSubArray(appId, challenge, 0);
-    checkSubArray(nonce, challenge, appId.length);
-    return Arrays.copyOfRange(challenge, appId.length + nonce.length, challenge.length);
-  }
-
-  private SecretKeySpec generateKey(String kdf, int iterations, byte[] salt, int keyLength)
-    throws GeneralSecurityException {
-
-    SecretKeyFactory factory = SecretKeyFactory.getInstance(kdf);
-    PBEKeySpec spec = new PBEKeySpec(secret, salt, iterations, keyLength);
-
-    long start = System.nanoTime();
-    SecretKey key = factory.generateSecret(spec);
-    long end = System.nanoTime();
-
-    LOG.debug("Generated key with {} iterations in {} us.", conf.keyFactoryIterations(),
-      (end - start) / 1000);
-
-    return new SecretKeySpec(key.getEncoded(), conf.keyAlgorithm());
-  }
-
-  private byte[] doCipherOp(int mode, byte[] in, boolean isFinal)
-    throws GeneralSecurityException {
-
-    CryptoCipher cipher;
-    switch (mode) {
-      case Cipher.ENCRYPT_MODE:
-        cipher = encryptor;
-        break;
-      case Cipher.DECRYPT_MODE:
-        cipher = decryptor;
-        break;
-      default:
-        throw new IllegalArgumentException(String.valueOf(mode));
-    }
-
-    Preconditions.checkState(cipher != null, "Cipher is invalid because of previous error.");
-
-    try {
-      int scale = 1;
-      while (true) {
-        int size = in.length * scale;
-        byte[] buffer = new byte[size];
-        try {
-          int outSize = isFinal ? cipher.doFinal(in, 0, in.length, buffer, 0)
-            : cipher.update(in, 0, in.length, buffer, 0);
-          if (outSize != buffer.length) {
-            byte[] output = new byte[outSize];
-            System.arraycopy(buffer, 0, output, 0, output.length);
-            return output;
-          } else {
-            return buffer;
-          }
-        } catch (ShortBufferException e) {
-          // Try again with a bigger buffer.
-          scale *= 2;
-        }
-      }
-    } catch (InternalError ie) {
-      // SPARK-25535. The commons-crypto library will throw InternalError if something goes wrong,
-      // and leave bad state behind in the Java wrappers, so it's not safe to use them afterwards.
-      if (mode == Cipher.ENCRYPT_MODE) {
-        this.encryptor = null;
-      } else {
-        this.decryptor = null;
-      }
-      throw ie;
-    }
-  }
-
-  private byte[] randomBytes(int count) {
-    byte[] bytes = new byte[count];
-    random.nextBytes(bytes);
-    return bytes;
-  }
-
-  /** Checks that the "test" array is in the data array starting at the given offset. */
-  private void checkSubArray(byte[] test, byte[] data, int offset) {
-    Preconditions.checkArgument(data.length >= test.length + offset);
-    for (int i = 0; i < test.length; i++) {
-      Preconditions.checkArgument(test[i] == data[i + offset]);
-    }
-  }
-
 }

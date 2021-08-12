@@ -29,6 +29,7 @@ from pyspark.sql.dataframe import (  # noqa: F401
     DataFrameStatFunctions as DataFrameStatFunctions,
 )
 from pyspark.sql.group import GroupedData as GroupedData  # noqa: F401
+from pyspark.sql.observation import Observation  # noqa: F401
 from pyspark.sql.pandas.group_ops import (  # noqa: F401
     PandasCogroupedOps as PandasCogroupedOps,
 )

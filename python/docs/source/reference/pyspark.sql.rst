@@ -32,6 +32,7 @@ Core Classes
     Catalog
     DataFrame
     Column
+    Observation
     Row
     GroupedData
     PandasCogroupedOps
@@ -177,6 +178,7 @@ DataFrame APIs
     DataFrame.localCheckpoint
     DataFrame.mapInPandas
     DataFrame.na
+    DataFrame.observe
     DataFrame.orderBy
     DataFrame.persist
     DataFrame.printSchema
@@ -297,6 +299,17 @@ Data Types
     StructField
     StructType
     TimestampType
+
+
+Observation
+-----------
+
+.. currentmodule:: pyspark.sql
+
+.. autosummary::
+    :toctree: api/
+
+    Observation.get
 
 
 Row

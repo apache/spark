@@ -56,7 +56,7 @@ private[spark] abstract class WebUI(
   protected var serverInfo: Option[ServerInfo] = None
   protected val publicHostName = Option(conf.getenv("SPARK_PUBLIC_DNS")).getOrElse(
     conf.get(DRIVER_HOST_ADDRESS))
-  private val className = Utils.getFormattedClassName(this)
+  protected val className = Utils.getFormattedClassName(this)
 
   def getBasePath: String = basePath
   def getTabs: Seq[WebUITab] = tabs.toSeq
@@ -139,15 +139,20 @@ private[spark] abstract class WebUI(
   /** A hook to initialize components of the UI */
   def initialize(): Unit
 
+  def initServer(): ServerInfo = {
+    val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
+    val server = startJettyServer(host, port, sslOptions, conf, name, poolSize)
+    logInfo(s"Bound $className to $host, and started at $webUrl")
+    server
+  }
+
   /** Binds to the HTTP server behind this web interface. */
   def bind(): Unit = {
     assert(serverInfo.isEmpty, s"Attempted to bind $className more than once!")
     try {
-      val host = Option(conf.getenv("SPARK_LOCAL_IP")).getOrElse("0.0.0.0")
-      val server = startJettyServer(host, port, sslOptions, conf, name, poolSize)
+      val server = initServer()
       handlers.foreach(server.addHandler(_, securityManager))
       serverInfo = Some(server)
-      logInfo(s"Bound $className to $host, and started at $webUrl")
     } catch {
       case e: Exception =>
         logError(s"Failed to bind $className", e)

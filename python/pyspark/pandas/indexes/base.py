@@ -1270,7 +1270,7 @@ class Index(IndexOpsMixin):
         >>> df.index.copy(name='snake')
         Index(['cobra', 'viper', 'sidewinder'], dtype='object', name='snake')
         """
-        result = self._psdf.copy().index
+        result = self._psdf[[]].index
         if name:
             result.name = name
         return result
@@ -1692,9 +1692,7 @@ class Index(IndexOpsMixin):
         ]
         sdf = sdf.select(index_value_columns)
 
-        sdf, force_nullable = InternalFrame.attach_default_index(
-            sdf, default_index_type="distributed-sequence"
-        )
+        sdf = InternalFrame.attach_default_index(sdf, default_index_type="distributed-sequence")
         # sdf here looks as below
         # +-----------------+-----------------+-----------------+-----------------+
         # |__index_level_0__|__index_value_0__|__index_value_1__|__index_value_2__|
@@ -1727,11 +1725,7 @@ class Index(IndexOpsMixin):
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
-            index_fields=(
-                [field.copy(nullable=True) for field in self._internal.index_fields]
-                if force_nullable
-                else self._internal.index_fields
-            ),
+            index_fields=self._internal.index_fields,
         )
 
         return DataFrame(internal).index
@@ -1829,7 +1823,7 @@ class Index(IndexOpsMixin):
         """
         sdf = self._internal.spark_frame.select(self.spark.column)
         sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf, _ = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
+        sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
         # spark_frame here looks like below
         # +-----------------+---------------+
         # |__index_level_0__|__index_value__|
@@ -1877,7 +1871,7 @@ class Index(IndexOpsMixin):
         """
         sdf = self._internal.spark_frame.select(self.spark.column)
         sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf, _ = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
+        sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
 
         return (
             sdf.orderBy(
@@ -2298,9 +2292,7 @@ class Index(IndexOpsMixin):
 
         sdf_self = self._internal.spark_frame.select(self._internal.index_spark_columns)
         sdf_other = other_idx._internal.spark_frame.select(other_idx._internal.index_spark_columns)
-        sdf = sdf_self.union(sdf_other.subtract(sdf_self))
-        if isinstance(self, MultiIndex):
-            sdf = sdf.drop_duplicates()
+        sdf = sdf_self.unionAll(sdf_other).exceptAll(sdf_self.intersectAll(sdf_other))
         if sort:
             sdf = sdf.sort(*self._internal.index_spark_column_names)
 
@@ -2475,7 +2467,7 @@ class Index(IndexOpsMixin):
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
-            index_fields=[field.copy(nullable=True) for field in self._internal.index_fields],
+            index_fields=[InternalField(field.dtype) for field in self._internal.index_fields],
         )
         return DataFrame(internal).index
 

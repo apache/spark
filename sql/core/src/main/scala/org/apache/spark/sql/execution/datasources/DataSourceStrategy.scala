@@ -464,7 +464,7 @@ object DataSourceStrategy
    */
   protected[sql] def normalizeExprs(
       exprs: Seq[Expression],
-      attributes: Seq[AttributeReference]): Seq[Expression] = {
+      attributes: Seq[Attribute]): Seq[Expression] = {
     exprs.map { e =>
       e transform {
         case a: AttributeReference =>
@@ -714,8 +714,7 @@ object DataSourceStrategy
             case _ => None
           }
         case sum @ aggregate.Sum(PushableColumnWithoutNestedColumn(name), _) =>
-          Some(new Sum(FieldReference(name).asInstanceOf[FieldReference],
-            sum.dataType, aggregates.isDistinct))
+          Some(new Sum(FieldReference(name).asInstanceOf[FieldReference], aggregates.isDistinct))
         case _ => None
       }
     } else {

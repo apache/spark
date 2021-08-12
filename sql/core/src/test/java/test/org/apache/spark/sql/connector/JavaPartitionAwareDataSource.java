@@ -34,7 +34,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 public class JavaPartitionAwareDataSource implements TestingV2Source {
 
-  class MyScanBuilder extends JavaSimpleScanBuilder implements SupportsReportPartitioning {
+  static class MyScanBuilder extends JavaSimpleScanBuilder implements SupportsReportPartitioning {
 
     @Override
     public InputPartition[] planInputPartitions() {

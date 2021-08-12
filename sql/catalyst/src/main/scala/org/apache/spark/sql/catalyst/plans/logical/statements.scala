@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.ViewType
+import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, ViewType}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.trees.{LeafLike, UnaryLike}
-import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -226,25 +225,19 @@ case class ReplaceTableAsSelectStatement(
 
 
 /**
- * Column data as parsed by ALTER TABLE ... ADD COLUMNS.
+ * Column data as parsed by ALTER TABLE ... (ADD|REPLACE) COLUMNS.
  */
 case class QualifiedColType(
-    name: Seq[String],
+    path: Option[FieldName],
+    colName: String,
     dataType: DataType,
     nullable: Boolean,
     comment: Option[String],
-    position: Option[ColumnPosition])
+    position: Option[FieldPosition]) {
+  def name: Seq[String] = path.map(_.name).getOrElse(Nil) :+ colName
 
-/**
- * ALTER TABLE ... ADD COLUMNS command, as parsed from SQL.
- */
-case class AlterTableAddColumnsStatement(
-    tableName: Seq[String],
-    columnsToAdd: Seq[QualifiedColType]) extends LeafParsedStatement
-
-case class AlterTableReplaceColumnsStatement(
-    tableName: Seq[String],
-    columnsToAdd: Seq[QualifiedColType]) extends LeafParsedStatement
+  def resolved: Boolean = path.forall(_.resolved) && position.forall(_.resolved)
+}
 
 /**
  * An INSERT INTO statement, as parsed from SQL.

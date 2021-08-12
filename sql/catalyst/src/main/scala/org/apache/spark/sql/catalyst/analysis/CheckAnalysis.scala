@@ -27,10 +27,10 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{LookupCatalog, SupportsPartitionManagement}
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, After, ColumnPosition, DeleteColumn}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.SchemaUtils
 
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
@@ -132,20 +132,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
       case write: V2WriteCommand if write.table.isInstanceOf[UnresolvedRelation] =>
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
         write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
-
-      case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case u: UnresolvedV2Relation =>
-        u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
-
-      case AlterTable(_, _, u: UnresolvedV2Relation, _) if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case AlterTable(_, _, u: UnresolvedV2Relation, _) =>
-        failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
 
       case command: V2PartitionCommand =>
         command.table match {
@@ -449,87 +435,8 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
           case write: V2WriteCommand if write.resolved =>
             write.query.schema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
 
-          case alter: AlterTableCommand if alter.table.resolved =>
+          case alter: AlterTableCommand =>
             checkAlterTableCommand(alter)
-
-          case alter: AlterTable if alter.table.resolved =>
-            val table = alter.table
-            def findField(operation: String, fieldName: Array[String]): StructField = {
-              // include collections because structs nested in maps and arrays may be altered
-              val field = table.schema.findNestedField(fieldName, includeCollections = true)
-              if (field.isEmpty) {
-                alter.failAnalysis(
-                  s"Cannot $operation missing field ${fieldName.quoted} in ${table.name} schema: " +
-                  table.schema.treeString)
-              }
-              field.get._2
-            }
-            def positionArgumentExists(
-                position: ColumnPosition,
-                struct: StructType,
-                fieldsAdded: Seq[String]): Unit = {
-              position match {
-                case after: After =>
-                  val allFields = struct.fieldNames ++ fieldsAdded
-                  if (!allFields.contains(after.column())) {
-                    alter.failAnalysis(s"Couldn't resolve positional argument $position amongst " +
-                      s"${allFields.mkString("[", ", ", "]")}")
-                  }
-                case _ =>
-              }
-            }
-            def findParentStruct(operation: String, fieldNames: Array[String]): StructType = {
-              val parent = fieldNames.init
-              val field = if (parent.nonEmpty) {
-                findField(operation, parent).dataType
-              } else {
-                table.schema
-              }
-              field match {
-                case s: StructType => s
-                case o => alter.failAnalysis(s"Cannot $operation ${fieldNames.quoted}, because " +
-                  s"its parent is not a StructType. Found $o")
-              }
-            }
-            def checkColumnNotExists(
-                operation: String,
-                fieldNames: Array[String],
-                struct: StructType): Unit = {
-              if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
-                alter.failAnalysis(s"Cannot $operation column, because ${fieldNames.quoted} " +
-                  s"already exists in ${struct.treeString}")
-              }
-            }
-
-            val colsToDelete = mutable.Set.empty[Seq[String]]
-            // 'colsToAdd' keeps track of new columns being added. It stores a mapping from a parent
-            // name of fields to field names that belong to the parent. For example, if we add
-            // columns "a.b.c", "a.b.d", and "a.c", 'colsToAdd' will become
-            // Map(Seq("a", "b") -> Seq("c", "d"), Seq("a") -> Seq("c")).
-            val colsToAdd = mutable.Map.empty[Seq[String], Seq[String]]
-
-            alter.changes.foreach {
-              case add: AddColumn =>
-                // If a column to add is a part of columns to delete, we don't need to check
-                // if column already exists - applies to REPLACE COLUMNS scenario.
-                if (!colsToDelete.contains(add.fieldNames())) {
-                  checkColumnNotExists("add", add.fieldNames(), table.schema)
-                }
-                val parent = findParentStruct("add", add.fieldNames())
-                val parentName = add.fieldNames().init
-                val fieldsAdded = colsToAdd.getOrElse(parentName, Nil)
-                positionArgumentExists(add.position(), parent, fieldsAdded)
-                TypeUtils.failWithIntervalType(add.dataType())
-                colsToAdd(parentName) = fieldsAdded :+ add.fieldNames().last
-              case delete: DeleteColumn =>
-                findField("delete", delete.fieldNames)
-                // REPLACE COLUMNS has deletes followed by adds. Remember the deleted columns
-                // so that add operations do not fail when the columns to add exist and they
-                // are to be deleted.
-                colsToDelete += delete.fieldNames
-              case _ =>
-              // no validation needed for set and remove property
-            }
 
           case _ => // Falls back to the following checks
         }
@@ -1026,17 +933,35 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates the options used for alter table commands after table and columns are resolved.
    */
   private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
-    def checkColumnNotExists(fieldNames: Seq[String], struct: StructType): Unit = {
-      if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
-        alter.failAnalysis(s"Cannot ${alter.operation} column, because ${fieldNames.quoted} " +
+    def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
+      if (struct.findNestedField(
+          fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
+        alter.failAnalysis(s"Cannot $op column, because ${fieldNames.quoted} " +
           s"already exists in ${struct.treeString}")
       }
     }
 
+    def checkColumnNameDuplication(colsToAdd: Seq[QualifiedColType]): Unit = {
+      SchemaUtils.checkColumnNameDuplication(
+        colsToAdd.map(_.name.quoted),
+        "in the user specified columns",
+        alter.conf.resolver)
+    }
+
     alter match {
-      case AlterTableRenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
-        checkColumnNotExists(col.path :+ newName, table.schema)
-      case a @ AlterTableAlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
+      case AddColumns(table: ResolvedTable, colsToAdd) =>
+        colsToAdd.foreach { colToAdd =>
+          checkColumnNotExists("add", colToAdd.name, table.schema)
+        }
+        checkColumnNameDuplication(colsToAdd)
+
+      case ReplaceColumns(_: ResolvedTable, colsToAdd) =>
+        checkColumnNameDuplication(colsToAdd)
+
+      case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
+        checkColumnNotExists("rename", col.path :+ newName, table.schema)
+
+      case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
         val fieldName = col.name.quoted
         if (a.dataType.isDefined) {
           val field = CharVarcharUtils.getRawType(col.field.metadata)

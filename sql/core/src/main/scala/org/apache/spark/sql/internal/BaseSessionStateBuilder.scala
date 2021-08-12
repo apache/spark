@@ -307,6 +307,10 @@ abstract class BaseSessionStateBuilder(
     extensions.buildQueryStagePrepRules(session)
   }
 
+  protected def postStageCreationRules: Seq[Rule[SparkPlan]] = {
+    extensions.buildPostStageCreationRules(session)
+  }
+
   /**
    * Create a query execution object.
    */
@@ -360,7 +364,8 @@ abstract class BaseSessionStateBuilder(
       createQueryExecution,
       createClone,
       columnarRules,
-      queryStagePrepRules)
+      queryStagePrepRules,
+      postStageCreationRules)
   }
 }
 

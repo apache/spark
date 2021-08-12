@@ -49,6 +49,44 @@ Spark SQL and DataFrames support the following data types:
   absolute point in time.
   - `DateType`: Represents values comprising values of fields year, month and day, without a
   time-zone.
+* Interval types
+  - `YearMonthIntervalType(startField, endField)`: Represents a year-month interval which is made up of a contiguous subset of the following fields:
+    - MONTH, months within years `[0..11]`,
+    - YEAR, years in the range `[0..178956970]`.
+
+    Individual interval fields are non-negative, but an interval itself can have a sign, and be negative.
+
+    `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0(MONTH) and 1(YEAR). Supported year-month interval types are:
+    
+    |Year-Month Interval Type|SQL type|An instance of the type|
+    |---------|----|-------------------|
+    |`YearMonthIntervalType(YEAR, YEAR)` or `YearMonthIntervalType(YEAR)`|INTERVAL YEAR|`INTERVAL '2021' YEAR`|
+    |`YearMonthIntervalType(YEAR, MONTH)`|INTERVAL YEAR TO MONTH|`INTERVAL '2021-07' YEAR TO MONTH`|
+    |`YearMonthIntervalType(MONTH, MONTH)` or `YearMonthIntervalType(MONTH)`|INTERVAL MONTH|`INTERVAL '10' MONTH`|
+
+  - `DayTimeIntervalType(startField, endField)`: Represents a day-time interval which is made up of a contiguous subset of the following fields:
+    - SECOND, seconds within minutes and possibly fractions of a second `[0..59.999999]`,
+    - MINUTE, minutes within hours `[0..59]`,
+    - HOUR, hours within days `[0..23]`,
+    - DAY, days in the range `[0..106751991]`.
+
+    Individual interval fields are non-negative, but an interval itself can have a sign, and be negative.
+
+    `startField` is the leftmost field, and `endField` is the rightmost field of the type. Valid values of `startField` and `endField` are 0 (DAY), 1 (HOUR), 2 (MINUTE), 3 (SECOND). Supported day-time interval types are:
+
+    |Day-Time Interval Type|SQL type|An instance of the type|
+    |---------|----|-------------------|
+    |`DayTimeIntervalType(DAY, DAY)` or `DayTimeIntervalType(DAY)`|INTERVAL DAY|`INTERVAL '100' DAY`|
+    |`DayTimeIntervalType(DAY, HOUR)`|INTERVAL DAY TO HOUR|`INTERVAL '100 10' DAY TO HOUR`|
+    |`DayTimeIntervalType(DAY, MINUTE)`|INTERVAL DAY TO MINUTE|`INTERVAL '100 10:30' DAY TO MINUTE`|
+    |`DayTimeIntervalType(DAY, SECOND)`|INTERVAL DAY TO SECOND|`INTERVAL '100 10:30:40.999999' DAY TO SECOND`|
+    |`DayTimeIntervalType(HOUR, HOUR)` or `DayTimeIntervalType(HOUR)`|INTERVAL HOUR|`INTERVAL '123' HOUR`|
+    |`DayTimeIntervalType(HOUR, MINUTE)`|INTERVAL HOUR TO MINUTE|`INTERVAL '123:10' HOUR TO MINUTE`|
+    |`DayTimeIntervalType(HOUR, SECOND)`|INTERVAL HOUR TO SECOND|`INTERVAL '123:10:59' HOUR TO SECOND`|
+    |`DayTimeIntervalType(MINUTE, MINUTE)` or `DayTimeIntervalType(MINUTE)`|INTERVAL MINUTE|`INTERVAL '1000' MINUTE`|
+    |`DayTimeIntervalType(MINUTE, SECOND)`|INTERVAL MINUTE TO SECOND|`INTERVAL '1000:01.001' MINUTE TO SECOND`|
+    |`DayTimeIntervalType(SECOND, SECOND)` or `DayTimeIntervalType(SECOND)`|INTERVAL SECOND|`INTERVAL '1000.000001' SECOND`|
+
 * Complex types
   - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
   elements with the type of `elementType`. `containsNull` is used to indicate if
@@ -87,6 +125,8 @@ You can access them by doing
 |**BooleanType**|Boolean|BooleanType|
 |**TimestampType**|java.sql.Timestamp|TimestampType|
 |**DateType**|java.sql.Date|DateType|
+|**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
+|**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
 |**ArrayType**|scala.collection.Seq|ArrayType(*elementType*, [*containsNull]*)<br/>**Note:** The default value of *containsNull* is true.|
 |**MapType**|scala.collection.Map|MapType(*keyType*, *valueType*, [*valueContainsNull]*)<br/>**Note:** The default value of *valueContainsNull* is true.|
 |**StructType**|org.apache.spark.sql.Row|StructType(*fields*)<br/>**Note:** *fields* is a Seq of StructFields. Also, two fields with the same name are not allowed.|
@@ -115,6 +155,8 @@ please use factory methods provided in
 |**BooleanType**|boolean or Boolean|DataTypes.BooleanType|
 |**TimestampType**|java.sql.Timestamp|DataTypes.TimestampType|
 |**DateType**|java.sql.Date|DataTypes.DateType|
+|**YearMonthIntervalType**|java.time.Period|YearMonthIntervalType|
+|**DayTimeIntervalType**|java.time.Duration|DayTimeIntervalType|
 |**ArrayType**|java.util.List|DataTypes.createArrayType(*elementType*)<br/>**Note:** The value of *containsNull* will be true.<br/>DataTypes.createArrayType(*elementType*, *containsNull*).|
 |**MapType**|java.util.Map|DataTypes.createMapType(*keyType*, *valueType*)<br/>**Note:** The value of *valueContainsNull* will be true.<br/>DataTypes.createMapType(*keyType*, *valueType*, *valueContainsNull*)|
 |**StructType**|org.apache.spark.sql.Row|DataTypes.createStructType(*fields*)<br/>**Note:** *fields* is a List or an array of StructFields.Also, two fields with the same name are not allowed.|
@@ -192,7 +234,8 @@ The following table shows the type names as well as aliases used in Spark SQL pa
 |**StringType**|STRING|
 |**BinaryType**|BINARY|
 |**DecimalType**|DECIMAL, DEC, NUMERIC|
-|**CalendarIntervalType**|INTERVAL|
+|**YearMonthIntervalType**|INTERVAL YEAR, INTERVAL YEAR TO MONTH, INTERVAL MONTH|
+|**DayTimeIntervalType**|INTERVAL DAY, INTERVAL DAY TO HOUR, INTERVAL DAY TO MINUTE, INTERVAL DAY TO SECOND, INTERVAL HOUR, INTERVAL HOUR TO MINUTE, INTERVAL HOUR TO SECOND, INTERVAL MINUTE, INTERVAL MINUTE TO SECOND, INTERVAL SECOND|
 |**ArrayType**|ARRAY\<element_type>|
 |**StructType**|STRUCT<field1_name: field1_type, field2_name: field2_type, ...><br/> **Note:** ':' is optional.|
 |**MapType**|MAP<key_type, value_type>|

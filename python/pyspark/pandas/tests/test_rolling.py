@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from distutils.version import LooseVersion
 
 import numpy as np
 import pandas as pd
@@ -110,18 +111,35 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
 
         pdf = pd.DataFrame({"a": [1.0, 2.0, 3.0, 2.0], "b": [4.0, 2.0, 3.0, 1.0]})
         psdf = ps.from_pandas(pdf)
-        self.assert_eq(
-            getattr(psdf.groupby(psdf.a).rolling(2), f)().sort_index(),
-            getattr(pdf.groupby(pdf.a).rolling(2), f)().sort_index(),
-        )
-        self.assert_eq(
-            getattr(psdf.groupby(psdf.a).rolling(2), f)().sum(),
-            getattr(pdf.groupby(pdf.a).rolling(2), f)().sum(),
-        )
-        self.assert_eq(
-            getattr(psdf.groupby(psdf.a + 1).rolling(2), f)().sort_index(),
-            getattr(pdf.groupby(pdf.a + 1).rolling(2), f)().sort_index(),
-        )
+
+        # The behavior of GroupBy.rolling is changed from pandas 1.3.
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            self.assert_eq(
+                getattr(psdf.groupby(psdf.a).rolling(2), f)().sort_index(),
+                getattr(pdf.groupby(pdf.a).rolling(2), f)().sort_index(),
+            )
+            self.assert_eq(
+                getattr(psdf.groupby(psdf.a).rolling(2), f)().sum(),
+                getattr(pdf.groupby(pdf.a).rolling(2), f)().sum(),
+            )
+            self.assert_eq(
+                getattr(psdf.groupby(psdf.a + 1).rolling(2), f)().sort_index(),
+                getattr(pdf.groupby(pdf.a + 1).rolling(2), f)().sort_index(),
+            )
+        else:
+            self.assert_eq(
+                getattr(psdf.groupby(psdf.a).rolling(2), f)().sort_index(),
+                getattr(pdf.groupby(pdf.a).rolling(2), f)().drop("a", axis=1).sort_index(),
+            )
+            self.assert_eq(
+                getattr(psdf.groupby(psdf.a).rolling(2), f)().sum(),
+                getattr(pdf.groupby(pdf.a).rolling(2), f)().sum().drop("a"),
+            )
+            self.assert_eq(
+                getattr(psdf.groupby(psdf.a + 1).rolling(2), f)().sort_index(),
+                getattr(pdf.groupby(pdf.a + 1).rolling(2), f)().drop("a", axis=1).sort_index(),
+            )
+
         self.assert_eq(
             getattr(psdf.b.groupby(psdf.a).rolling(2), f)().sort_index(),
             getattr(pdf.b.groupby(pdf.a).rolling(2), f)().sort_index(),
@@ -139,15 +157,32 @@ class RollingTest(PandasOnSparkTestCase, TestUtils):
         columns = pd.MultiIndex.from_tuples([("a", "x"), ("a", "y")])
         pdf.columns = columns
         psdf.columns = columns
-        self.assert_eq(
-            getattr(psdf.groupby(("a", "x")).rolling(2), f)().sort_index(),
-            getattr(pdf.groupby(("a", "x")).rolling(2), f)().sort_index(),
-        )
 
-        self.assert_eq(
-            getattr(psdf.groupby([("a", "x"), ("a", "y")]).rolling(2), f)().sort_index(),
-            getattr(pdf.groupby([("a", "x"), ("a", "y")]).rolling(2), f)().sort_index(),
-        )
+        # The behavior of GroupBy.rolling is changed from pandas 1.3.
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
+            self.assert_eq(
+                getattr(psdf.groupby(("a", "x")).rolling(2), f)().sort_index(),
+                getattr(pdf.groupby(("a", "x")).rolling(2), f)().sort_index(),
+            )
+
+            self.assert_eq(
+                getattr(psdf.groupby([("a", "x"), ("a", "y")]).rolling(2), f)().sort_index(),
+                getattr(pdf.groupby([("a", "x"), ("a", "y")]).rolling(2), f)().sort_index(),
+            )
+        else:
+            self.assert_eq(
+                getattr(psdf.groupby(("a", "x")).rolling(2), f)().sort_index(),
+                getattr(pdf.groupby(("a", "x")).rolling(2), f)()
+                .drop(("a", "x"), axis=1)
+                .sort_index(),
+            )
+
+            self.assert_eq(
+                getattr(psdf.groupby([("a", "x"), ("a", "y")]).rolling(2), f)().sort_index(),
+                getattr(pdf.groupby([("a", "x"), ("a", "y")]).rolling(2), f)()
+                .drop([("a", "x"), ("a", "y")], axis=1)
+                .sort_index(),
+            )
 
     def test_groupby_rolling_count(self):
         self._test_groupby_rolling_func("count")
