@@ -98,20 +98,13 @@ object CatalystTypeConverters {
      * Converts a Scala type to its Catalyst equivalent while automatically handling nulls
      * and Options.
      */
-    final def toCatalyst(@Nullable maybeScalaValue: Any): CatalystType = {
-      if (maybeScalaValue == null) {
-        null.asInstanceOf[CatalystType]
-      } else if (maybeScalaValue.isInstanceOf[Option[ScalaInputType]]) {
-        val opt = maybeScalaValue.asInstanceOf[Option[ScalaInputType]]
-        if (opt.isDefined) {
-          toCatalystImpl(opt.get)
-        } else {
-          null.asInstanceOf[CatalystType]
-        }
-      } else {
-        toCatalystImpl(maybeScalaValue.asInstanceOf[ScalaInputType])
+    final def toCatalyst(@Nullable maybeScalaValue: Any): CatalystType =
+      maybeScalaValue match {
+        case null | None => null.asInstanceOf[CatalystType]
+        case opt: Some[ScalaInputType] => toCatalystImpl(opt.get)
+        case other => toCatalystImpl(other.asInstanceOf[ScalaInputType])
       }
-    }
+
 
     /**
      * Given a Catalyst row, convert the value at column `column` to its Scala equivalent.
@@ -473,10 +466,9 @@ object CatalystTypeConverters {
       // a measurable performance impact. Note that this optimization will be unnecessary if we
       // use code generation to construct Scala Row -> Catalyst Row converters.
       def convert(maybeScalaValue: Any): Any = {
-        if (maybeScalaValue.isInstanceOf[Option[Any]]) {
-          maybeScalaValue.asInstanceOf[Option[Any]].orNull
-        } else {
-          maybeScalaValue
+        maybeScalaValue match {
+          case opt: Option[Any] => opt.orNull
+          case _ => maybeScalaValue
         }
       }
       convert
