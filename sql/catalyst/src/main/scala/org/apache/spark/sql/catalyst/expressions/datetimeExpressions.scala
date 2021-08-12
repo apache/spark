@@ -2644,7 +2644,7 @@ case class MakeTimestamp(
         s"""
            |java.time.Instant instant = ldt.atZone($zoneId).toInstant();
            |${ev.value} = $dtu.instantToMicros(instant);
-         """.stripMargin
+           |""".stripMargin
       } else {
         s"${ev.value} = $dtu.localDateTimeToMicros(ldt);"
       }
