@@ -279,7 +279,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         if (code == 0) {
           logInfo(message)
         } else {
-        logError(message)
+          logError(message)
         }
       }
 
