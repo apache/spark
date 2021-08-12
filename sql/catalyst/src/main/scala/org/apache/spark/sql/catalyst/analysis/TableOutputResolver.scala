@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.analysis
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, Attribute, Cast, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, Attribute, Cast, CreateStruct, GetStructField, NamedExpression}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{DataType, StructType}
 
 object TableOutputResolver {
   def resolveOutputColumns(
@@ -41,16 +42,7 @@ object TableOutputResolver {
 
     val errors = new mutable.ArrayBuffer[String]()
     val resolved: Seq[NamedExpression] = if (byName) {
-      expected.flatMap { tableAttr =>
-        query.resolve(Seq(tableAttr.name), conf.resolver) match {
-          case Some(queryExpr) =>
-            checkField(tableAttr, queryExpr, byName, conf, err => errors += err)
-          case None =>
-            errors += s"Cannot find data for output column '${tableAttr.name}'"
-            None
-        }
-      }
-
+      reorderColumnsByName(query.output, expected, conf, errors += _)
     } else {
       if (expected.size > query.output.size) {
         throw QueryCompilationErrors.cannotWriteNotEnoughColumnsToTableError(
@@ -71,6 +63,37 @@ object TableOutputResolver {
       query
     } else {
       Project(resolved, query)
+    }
+  }
+
+  private def reorderColumnsByName(
+      inputCols: Seq[NamedExpression],
+      expectedCols: Seq[Attribute],
+      conf: SQLConf,
+      addError: String => Unit,
+      colPath: Seq[String] = Nil): Seq[NamedExpression] = {
+    expectedCols.flatMap { expectedCol =>
+      val matched = inputCols.filter(col => conf.resolver(col.name, expectedCol.name))
+      val newColPath = colPath :+ expectedCol.name
+      if (matched.isEmpty) {
+        addError(s"Cannot find data for output column ${newColPath.quoted}")
+        None
+      } else if (matched.length > 1) {
+        addError(s"Ambiguous column name in the input data: ${newColPath.quoted}")
+        None
+      } else {
+        (matched.head.dataType, expectedCol.dataType) match {
+          case (input: StructType, expected: StructType) =>
+            val fields = input.zipWithIndex.map { case (f, i) =>
+              Alias(GetStructField(matched.head, i), f.name)()
+            }
+            val reordered = reorderColumnsByName(
+              fields, expected.toAttributes, conf, addError, newColPath)
+            Some(Alias(CreateStruct(reordered), expectedCol.name)())
+          case _ =>
+            checkField(expectedCol, matched.head, byName = true, conf, addError)
+        }
+      }
     }
   }
 
