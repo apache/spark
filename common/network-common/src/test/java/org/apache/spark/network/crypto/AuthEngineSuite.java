@@ -19,29 +19,41 @@ package org.apache.spark.network.crypto;
 
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.security.GeneralSecurityException;
 import java.util.Map;
-import java.security.InvalidKeyException;
 import java.util.Random;
 
-import static java.nio.charset.StandardCharsets.UTF_8;
-
 import com.google.common.collect.ImmutableMap;
+import com.google.crypto.tink.subtle.Hex;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.FileRegion;
-import org.junit.BeforeClass;
-import org.junit.Test;
-import org.mockito.invocation.InvocationOnMock;
-import org.mockito.stubbing.Answer;
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
-
 import org.apache.spark.network.util.ByteArrayWritableChannel;
 import org.apache.spark.network.util.MapConfigProvider;
 import org.apache.spark.network.util.TransportConf;
+import static org.junit.Assert.*;
+import org.junit.BeforeClass;
+import org.junit.Test;
+import static org.mockito.Mockito.*;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 public class AuthEngineSuite {
 
+  private static final String clientPrivate =
+      "efe6b68b3fce92158e3637f6ef9d937e75558928dd4b401de04b43d300a73186";
+  private static final String clientChallengeHex =
+      "fb00000005617070496400000010890b6e960f48e998777267a7e4e623220000003c48ad7dc7ec9466da9" +
+      "3bda9f11488dc9404050e02c661d87d67c782444944c6e369b27e0a416c30845a2d9e64271511ca98b41d" +
+      "65f8c426e18ff380f6";
+  private static final String serverResponseHex =
+      "fb00000005617070496400000010708451c9dd2792c97c1ca66e6df449ef0000003c64fe899ecdaf458d4" +
+      "e25e9d5c5a380b8e6d1a184692fac065ed84f8592c18e9629f9c636809dca2ffc041f20346eb53db78738" +
+      "08ecad08b46b5ee3ff";
+  private static final String sharedKey =
+      "31963f15a320d5c90333f7ecf5cf3a31c7eaf151de07fef8494663a9f47cfd31";
+  private static final String inputIv = "fc6a5dc8b90a9dad8f54f08b51a59ed2";
+  private static final String outputIv = "a72709baf00785cad6329ce09f631f71";
   private static TransportConf conf;
 
   @BeforeClass
@@ -54,9 +66,9 @@ public class AuthEngineSuite {
 
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
-      ClientChallenge clientChallenge = client.challenge();
-      ServerResponse serverResponse = server.respond(clientChallenge);
-      client.validate(serverResponse);
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
 
       TransportCipher serverCipher = server.sessionCipher();
       TransportCipher clientCipher = client.sessionCipher();
@@ -67,53 +79,116 @@ public class AuthEngineSuite {
     }
   }
 
-  @Test
-  public void testMismatchedSecret() throws Exception {
-    AuthEngine client = new AuthEngine("appId", "secret", conf);
-    AuthEngine server = new AuthEngine("appId", "different_secret", conf);
+  @Test(expected = IllegalArgumentException.class)
+  public void testCorruptChallengeAppId() throws Exception {
 
-    ClientChallenge clientChallenge = client.challenge();
-    try {
-      server.respond(clientChallenge);
-      fail("Should have failed to validate response.");
-    } catch (IllegalArgumentException e) {
-      // Expected.
+    try (AuthEngine client = new AuthEngine("appId", "secret", conf);
+         AuthEngine server = new AuthEngine("appId", "secret", conf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage corruptChallenge =
+              new AuthMessage("junk", clientChallenge.salt, clientChallenge.ciphertext);
+      AuthMessage serverResponse = server.response(corruptChallenge);
+    }
+  }
+
+  @Test(expected = GeneralSecurityException.class)
+  public void testCorruptChallengeSalt() throws Exception {
+
+    try (AuthEngine client = new AuthEngine("appId", "secret", conf);
+         AuthEngine server = new AuthEngine("appId", "secret", conf)) {
+      AuthMessage clientChallenge = client.challenge();
+      clientChallenge.salt[0] ^= 1;
+      AuthMessage serverResponse = server.response(clientChallenge);
+    }
+  }
+
+  @Test(expected = GeneralSecurityException.class)
+  public void testCorruptChallengeCiphertext() throws Exception {
+
+    try (AuthEngine client = new AuthEngine("appId", "secret", conf);
+         AuthEngine server = new AuthEngine("appId", "secret", conf)) {
+      AuthMessage clientChallenge = client.challenge();
+      clientChallenge.ciphertext[0] ^= 1;
+      AuthMessage serverResponse = server.response(clientChallenge);
     }
   }
 
   @Test(expected = IllegalArgumentException.class)
-  public void testWrongAppId() throws Exception {
-    AuthEngine engine = new AuthEngine("appId", "secret", conf);
-    ClientChallenge challenge = engine.challenge();
+  public void testCorruptResponseAppId() throws Exception {
 
-    byte[] badChallenge = engine.challenge(new byte[] { 0x00 }, challenge.nonce,
-      engine.rawResponse(engine.challenge));
-    engine.respond(new ClientChallenge(challenge.appId, challenge.kdf, challenge.iterations,
-      challenge.cipher, challenge.keyLength, challenge.nonce, badChallenge));
+    try (AuthEngine client = new AuthEngine("appId", "secret", conf);
+         AuthEngine server = new AuthEngine("appId", "secret", conf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      AuthMessage corruptResponse =
+              new AuthMessage("junk", serverResponse.salt, serverResponse.ciphertext);
+      client.deriveSessionCipher(clientChallenge, corruptResponse);
+    }
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void testWrongNonce() throws Exception {
-    AuthEngine engine = new AuthEngine("appId", "secret", conf);
-    ClientChallenge challenge = engine.challenge();
+  @Test(expected = GeneralSecurityException.class)
+  public void testCorruptResponseSalt() throws Exception {
 
-    byte[] badChallenge = engine.challenge(challenge.appId.getBytes(UTF_8), new byte[] { 0x00 },
-      engine.rawResponse(engine.challenge));
-    engine.respond(new ClientChallenge(challenge.appId, challenge.kdf, challenge.iterations,
-      challenge.cipher, challenge.keyLength, challenge.nonce, badChallenge));
+    try (AuthEngine client = new AuthEngine("appId", "secret", conf);
+         AuthEngine server = new AuthEngine("appId", "secret", conf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      serverResponse.salt[0] ^= 1;
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+    }
   }
 
-  @Test(expected = IllegalArgumentException.class)
-  public void testBadChallenge() throws Exception {
-    AuthEngine engine = new AuthEngine("appId", "secret", conf);
-    ClientChallenge challenge = engine.challenge();
+  @Test(expected = GeneralSecurityException.class)
+  public void testCorruptServerCiphertext() throws Exception {
 
-    byte[] badChallenge = new byte[challenge.challenge.length];
-    engine.respond(new ClientChallenge(challenge.appId, challenge.kdf, challenge.iterations,
-      challenge.cipher, challenge.keyLength, challenge.nonce, badChallenge));
+    try (AuthEngine client = new AuthEngine("appId", "secret", conf);
+         AuthEngine server = new AuthEngine("appId", "secret", conf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      serverResponse.ciphertext[0] ^= 1;
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+    }
   }
 
-  @Test(expected = InvalidKeyException.class)
+  @Test
+  public void testFixedChallenge() throws Exception {
+    try (AuthEngine server = new AuthEngine("appId", "secret", conf)) {
+      AuthMessage clientChallenge =
+              AuthMessage.decodeMessage(ByteBuffer.wrap(Hex.decode(clientChallengeHex)));
+      // This tests that the server will accept an old challenge as expected. However,
+      // it will generate a fresh ephemeral keypair, so we can't replay an old session.
+      AuthMessage freshServerResponse = server.response(clientChallenge);
+    }
+  }
+
+  @Test
+  public void testFixedChallengeResponse() throws Exception {
+    try (AuthEngine client = new AuthEngine("appId", "secret", conf)) {
+      byte[] clientPrivateKey = Hex.decode(clientPrivate);
+      client.setClientPrivateKey(clientPrivateKey);
+      AuthMessage clientChallenge =
+              AuthMessage.decodeMessage(ByteBuffer.wrap(Hex.decode(clientChallengeHex)));
+      AuthMessage serverResponse =
+              AuthMessage.decodeMessage(ByteBuffer.wrap(Hex.decode(serverResponseHex)));
+      // Verify that the client will accept an old transcript.
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      TransportCipher clientCipher = client.sessionCipher();
+      assertEquals(Hex.encode(clientCipher.getKey().getEncoded()), sharedKey);
+      assertEquals(Hex.encode(clientCipher.getInputIv()), inputIv);
+      assertEquals(Hex.encode(clientCipher.getOutputIv()), outputIv);
+    }
+  }
+
+  @Test(expected = GeneralSecurityException.class)
+  public void testMismatchedSecret() throws Exception {
+    try (AuthEngine client = new AuthEngine("appId", "secret", conf);
+         AuthEngine server = new AuthEngine("appId", "different_secret", conf)) {
+      AuthMessage clientChallenge = client.challenge();
+      server.response(clientChallenge);
+    }
+  }
+
+  @Test(expected = AssertionError.class)
   public void testBadKeySize() throws Exception {
     Map<String, String> mconf = ImmutableMap.of("spark.network.crypto.keyLength", "42");
     TransportConf conf = new TransportConf("rpc", new MapConfigProvider(mconf));
@@ -121,7 +196,6 @@ public class AuthEngineSuite {
     try (AuthEngine engine = new AuthEngine("appId", "secret", conf)) {
       engine.challenge();
       fail("Should have failed to create challenge message.");
-
       // Call close explicitly to make sure it's idempotent.
       engine.close();
     }
@@ -131,9 +205,9 @@ public class AuthEngineSuite {
   public void testEncryptedMessage() throws Exception {
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
-      ClientChallenge clientChallenge = client.challenge();
-      ServerResponse serverResponse = server.respond(clientChallenge);
-      client.validate(serverResponse);
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
 
       TransportCipher cipher = server.sessionCipher();
       TransportCipher.EncryptionHandler handler = new TransportCipher.EncryptionHandler(cipher);
@@ -155,9 +229,9 @@ public class AuthEngineSuite {
   public void testEncryptedMessageWhenTransferringZeroBytes() throws Exception {
     try (AuthEngine client = new AuthEngine("appId", "secret", conf);
          AuthEngine server = new AuthEngine("appId", "secret", conf)) {
-      ClientChallenge clientChallenge = client.challenge();
-      ServerResponse serverResponse = server.respond(clientChallenge);
-      client.validate(serverResponse);
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
 
       TransportCipher cipher = server.sessionCipher();
       TransportCipher.EncryptionHandler handler = new TransportCipher.EncryptionHandler(cipher);
