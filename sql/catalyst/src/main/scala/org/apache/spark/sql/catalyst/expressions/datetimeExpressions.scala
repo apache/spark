@@ -2561,7 +2561,7 @@ case class MakeTimestamp(
   // them to the fractional part of `sec`.
   override def inputTypes: Seq[AbstractDataType] =
     Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType,
-      TypeCollection(DecimalType(8, 6), IntegerType, NullType)) ++ timezone.map(_ => StringType)
+      TypeCollection(DecimalType(8, 6), IntegerType)) ++ timezone.map(_ => StringType)
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
@@ -2655,7 +2655,7 @@ case class MakeTimestamp(
           s"""
              |org.apache.spark.sql.types.Decimal $decimalValue =
              |$d$$.MODULE$$.apply(new java.math.BigDecimal($secAndNanos), 8, 6);
-             |""".stripMargin
+           """.stripMargin
       }
       s"""
       try {
