@@ -2993,6 +2993,20 @@ class DataFrameSuite extends QueryTest
       .withSequenceColumn("default_index").collect().map(_.getLong(0))
     assert(ids.toSet === Range(0, 10).toSet)
   }
+
+  test("SPARK-36496: Remove literals from grouping expressions") {
+    val df1 = spark.range(100)
+      .withColumn("a", lit(null).cast(DataTypes.StringType))
+      .groupBy("id", "a")
+      .count()
+
+    val df2 = spark.range(100)
+      .groupBy(col("id"), lit(null).cast(DataTypes.StringType).alias("a"))
+      .count()
+
+    checkAnswer(df1, df2)
+    comparePlans(df1.queryExecution.optimizedPlan, df2.queryExecution.optimizedPlan)
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
