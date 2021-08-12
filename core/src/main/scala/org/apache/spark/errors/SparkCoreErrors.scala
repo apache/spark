@@ -65,12 +65,27 @@ object SparkCoreErrors {
     new SparkException("Python worker exited unexpectedly (crashed)", eof)
   }
 
-  def serverSocketFailedError(message: String): Throwable = {
-    new SparkException(message)
+  def serverSocketFailedError(): Throwable = {
+    new SparkException("ServerSocket failed to bind to Java side.")
   }
 
-  def invalidPortNumberError(exceptionMessage: String): Throwable = {
-    new SparkException(exceptionMessage)
+  def invalidPortNumberError(
+      daemonModule: String,
+      daemonPort: Int,
+      command: String,
+      pythonPath: String): Throwable = {
+    new SparkException(
+      f"""
+         |Bad data in $daemonModule's standard output. Invalid port number:
+         |  $daemonPort (0x$daemonPort%08x)
+         |Python command to execute the daemon was:
+         |  $command
+         |Check that you don't have any unexpected modules or libraries in
+         |your PYTHONPATH:
+         |  $pythonPath
+         |Also, check if you have a sitecustomize.py module in your python path,
+         |or in your python installation, that is printing to standard output""".stripMargin
+    )
   }
 
   def failedToConnectBackPythonWorkerError(e: Exception): Throwable = {
@@ -98,7 +113,11 @@ object SparkCoreErrors {
     new SparkException(s"Data of type $other is not supported")
   }
 
-  def workerProducedError(msg: String, e: Exception): Throwable = {
+  def RUnexpectedlyExitedError(errorLine: String, e: Exception): Throwable = {
+    var msg = "R unexpectedly exited."
+    if (errorLine.trim().nonEmpty) {
+      msg += s"\nR worker produced errors: $errorLine\n"
+    }
     new SparkException(msg, e)
   }
 
@@ -176,10 +195,6 @@ object SparkCoreErrors {
 
   def reduceByKeyLocallyNotSupportArrayKeysError(): Throwable = {
     new SparkException("reduceByKeyLocally() does not support array keys")
-  }
-
-  def noSuchElementException(): Throwable = {
-    new NoSuchElementException()
   }
 
   def rddLacksSparkContextError(): Throwable = {
@@ -297,12 +312,12 @@ object SparkCoreErrors {
     new SparkException(s"Unrecognized $schedulerModeProperty: $schedulingModeConf")
   }
 
-  def failResourceOffersForBarrierStageError(errorMsg: String): Throwable = {
+  def sparkError(errorMsg: String): Throwable = {
     new SparkException(errorMsg)
   }
 
-  def markExecutorAsFailedError(errorMsg: String): Throwable = {
-    new SparkException(errorMsg)
+  def markExecutorAsFailedError(): Throwable = {
+    new SparkException("taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)")
   }
 
   def clusterSchedulerError(message: String): Throwable = {

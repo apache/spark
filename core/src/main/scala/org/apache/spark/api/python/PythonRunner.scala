@@ -328,7 +328,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         if (boundPort == -1) {
           val message = "ServerSocket failed to bind to Java side."
           logError(message)
-          throw SparkCoreErrors.serverSocketFailedError(message)
+          throw SparkCoreErrors.serverSocketFailedError()
         } else if (isBarrier) {
           logDebug(s"Started ServerSocket on port $boundPort.")
         }

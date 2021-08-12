@@ -185,7 +185,7 @@ private[spark] class PipedRDD[T: ClassTag](
     new Iterator[String] {
       def next(): String = {
         if (!hasNext()) {
-          throw SparkCoreErrors.noSuchElementException()
+          throw SparkCoreErrors.noSuchElementError()
         }
         lines.next()
       }

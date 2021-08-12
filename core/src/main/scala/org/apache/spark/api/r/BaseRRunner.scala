@@ -137,12 +137,7 @@ private[spark] abstract class BaseRRunner[IN, OUT](
 
     protected val handleException: PartialFunction[Throwable, OUT] = {
       case e: Exception =>
-        var msg = "R unexpectedly exited."
-        val lines = errThread.getLines()
-        if (lines.trim().nonEmpty) {
-          msg += s"\nR worker produced errors: $lines\n"
-        }
-        throw SparkCoreErrors.workerProducedError(msg, e)
+        throw SparkCoreErrors.RUnexpectedlyExitedError(errThread.getLines(), e)
     }
   }
 
