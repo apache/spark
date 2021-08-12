@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.json
 
 import java.io.CharConversionException
+import java.nio.charset.MalformedInputException
 import java.util.Comparator
 
 import scala.util.control.Exception.allCatch
@@ -26,7 +27,6 @@ import com.fasterxml.jackson.core._
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
 import org.apache.spark.sql.catalyst.json.JacksonUtils.nextUntil
@@ -59,8 +59,6 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
       createParser: (JsonFactory, T) => JsonParser): StructType = {
     val parseMode = options.parseMode
     val columnNameOfCorruptRecord = options.columnNameOfCorruptRecord
-    val existingConf = SQLConf.get
-    val ignoreCorruptFiles = existingConf.ignoreCorruptFiles
 
     // In each RDD partition, perform schema inference on each row and merge afterwards.
     val typeMerger = JsonInferSchema.compatibleRootType(columnNameOfCorruptRecord, parseMode)
@@ -73,13 +71,8 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
             Some(inferField(parser))
           }
         } catch {
-          case e @ (_: JsonProcessingException | _: CharConversionException)
-              if ignoreCorruptFiles =>
-            logWarning("Skipped inferring json schema from the corrupted data: " +
-              s"${row.asInstanceOf[InternalRow].getString(0)}", e)
-            None
           case e @ (_: RuntimeException | _: JsonProcessingException |
-                    _: CharConversionException) =>
+                    _: CharConversionException | _: MalformedInputException) =>
             parseMode match {
               case PermissiveMode =>
                 Some(StructType(Seq(StructField(columnNameOfCorruptRecord, StringType))))
@@ -94,6 +87,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable wi
 
     // Here we manually submit a fold-like Spark job, so that we can set the SQLConf when running
     // the fold functions in the scheduler event loop thread.
+    val existingConf = SQLConf.get
     var rootType: DataType = StructType(Nil)
     val foldPartition = (iter: Iterator[DataType]) => iter.fold(StructType(Nil))(typeMerger)
     val mergeResult = (index: Int, taskResult: DataType) => {

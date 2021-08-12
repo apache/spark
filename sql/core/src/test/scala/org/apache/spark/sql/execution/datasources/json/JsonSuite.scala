@@ -2440,14 +2440,15 @@ abstract class JsonSuite
       withTempPath { tempDir =>
         val path = tempDir.getAbsolutePath
         val logAppender = new LogAppender(path)
-        val jsonData = badJson + """{"a":1}"""
-        withLogAppender(logAppender) {
-          Seq(jsonData).toDS().write.text(path)
-          val df = spark.read.format("json").load(path)
-          assert(df.schema.isEmpty)
-        }
-        val msg = s"Skipped inferring json schema from the corrupted data: $jsonData"
-        assert(logAppender.loggingEvents.exists(_.getRenderedMessage.contains(msg)))
+        val wrongData = badJson + """{"a":1}"""
+        val goodData = """{"a":1}"""
+        Seq(wrongData).toDS().write.text(path)
+        Seq(goodData).toDS().write.mode(SaveMode.Append).text(path)
+        val schema = new StructType().add("a", IntegerType)
+        checkAnswer(spark.read.schema(schema).json(path), Seq(Row(null), Row(1)))
+        checkAnswer(spark.read.json(path), Seq(Row(wrongData, null), Row(null, 1)))
+        checkAnswer(sql(s"select * from `json`.`$path`"), Seq(Row(wrongData, null), Row(null, 1)))
+        checkAnswer(sql(s"select a from `json`.`$path`"), Seq(Row(null), Row(1)))
       }
     }
   }
