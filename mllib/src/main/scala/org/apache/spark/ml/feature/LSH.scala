@@ -280,7 +280,7 @@ private[ml] abstract class LSHModel[T <: LSHModel[T]]
     val explodedB = if (datasetA != datasetB) {
       processDataset(datasetB, rightColName, explodeCols)
     } else {
-      val recreatedB = recreateCol(datasetB, $(inputCol), s"${$(inputCol)}#${Random.nextString(5)}")
+      val recreatedB = recreateCol(datasetB, $(inputCol), Identifiable.randomUID(inputCol.name))
       processDataset(recreatedB, rightColName, explodeCols)
     }
 
