@@ -1080,8 +1080,8 @@ Tumbling and sliding window use `window` function, which has been described on a
 
 Session windows have different characteristic compared to the previous two types. Session window has a dynamic size
 of the window length, depending on the inputs. A session window starts with an input, and expands itself
-if following input has been received within gap duration. A session window closes when there's no input
-received within gap duration after receiving the latest input.
+if following input has been received within gap duration. For static gap duration, a session window closes when
+there's no input received within gap duration after receiving the latest input.
 
 Session window uses `session_window` function. The usage of the function is similar to the `window` function.
 
@@ -1138,6 +1138,10 @@ Instead of static value, we can also provide an expression to specify gap durati
 based on the input row. Note that the rows with negative or zero gap duration will be filtered
 out from the aggregation.
 
+With dynamic gap duration, the closing of a session window does not depend on the latest input
+anymore. A session window's range is the union of all events' ranges which are determined by
+event start time and evaluated gap duration during the query execution.
+
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
@@ -1146,9 +1150,9 @@ import spark.implicits._
 
 val events = ... // streaming DataFrame of schema { timestamp: Timestamp, userId: String }
 
-val sessionWindow = SessionWindow($"timestamp".expr, when($"userId" === "user1", "5 seconds")
+val sessionWindow = session_window($"timestamp", when($"userId" === "user1", "5 seconds")
   .when($"userId" === "user2", "20 seconds")
-  .otherwise("5 minutes")
+  .otherwise("5 minutes"))
 
 // Group the data by session window and userId, and compute the count of each group
 val sessionizedCounts = events
@@ -1165,7 +1169,7 @@ val sessionizedCounts = events
 {% highlight java %}
 Dataset<Row> events = ... // streaming DataFrame of schema { timestamp: Timestamp, userId: String }
 
-SessionWindow sessionWindow = new SessionWindow(col("timestamp").expr, when(col("userId").equalTo("user1"), "5 seconds")
+SessionWindow sessionWindow = session_window(col("timestamp"), when(col("userId").equalTo("user1"), "5 seconds")
   .when(col("userId").equalTo("user2"), "20 seconds")
   .otherwise("5 minutes"))
 

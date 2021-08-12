@@ -19,9 +19,8 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, MutableProjection, NamedExpression, SortOrder, UnsafeProjection, UnsafeRow}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, MutableProjection, NamedExpression, SortOrder, UnsafeRow}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -54,9 +53,7 @@ case class MergingSessionsExec(
   private val keyWithoutSessionExpressions = groupingExpressions.diff(Seq(sessionExpression))
 
   override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
-    "numDroppedRows" -> SQLMetrics.createMetric(sparkContext,
-      "number of dropped rows with invalid gap duration"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = child.output
 
@@ -79,8 +76,6 @@ case class MergingSessionsExec(
 
   override protected def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
-    val numDroppedRows = longMetric("numDroppedRows")
-
     child.execute().mapPartitionsWithIndexInternal { (partIndex, iter) =>
       // Because the constructor of an aggregation iterator will read at least the first row,
       // we need to get the value of iter.hasNext first.
@@ -90,27 +85,12 @@ case class MergingSessionsExec(
         // so return an empty iterator.
         Iterator[UnsafeRow]()
       } else {
-        val sessionProjection: UnsafeProjection =
-          GenerateUnsafeProjection.generate(Seq(sessionExpression), child.output)
-
-        // We need to filter out negative/zero gap duration inputs
-        val filteredIterator = iter.filter { row: InternalRow =>
-          val session = sessionProjection(row)
-          val sessionRow = session.getStruct(0, 2)
-          if (sessionRow.getLong(1) > sessionRow.getLong(0)) {
-            true
-          } else {
-            numDroppedRows += 1
-            false
-          }
-        }
-
         val outputIter = new MergingSessionsIterator(
           partIndex,
           groupingExpressions,
           sessionExpression,
           child.output,
-          filteredIterator,
+          iter,
           aggregateExpressions,
           aggregateAttributes,
           initialInputBufferOffset,

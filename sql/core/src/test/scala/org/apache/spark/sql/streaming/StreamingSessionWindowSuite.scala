@@ -24,7 +24,6 @@ import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
-import org.apache.spark.sql.catalyst.expressions.SessionWindow
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.{count, session_window, sum}
@@ -275,7 +274,7 @@ class StreamingSessionWindowSuite extends StreamTest
     })
 
     val sessionUpdates = sessionWindowQuery(inputData,
-      Column(SessionWindow($"eventTime".expr, udf($"sessionId").expr)))
+      session_window($"eventTime", udf($"sessionId")))
 
     testStream(sessionUpdates, OutputMode.Append())(
       AddData(inputData,
