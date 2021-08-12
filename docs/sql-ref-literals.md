@@ -36,7 +36,7 @@ A string literal is used to specify a character string value.
 #### Syntax
 
 ```sql
-[ R ] { 'char [ ... ]' | "char [ ... ]" }
+[ r ] { 'char [ ... ]' | "char [ ... ]" }
 ```
 
 #### Parameters
@@ -47,9 +47,9 @@ A string literal is used to specify a character string value.
     To represent unicode characters, use 16-bit or 32-bit unicode escape of the form `\uxxxx` or `\Uxxxxxxxx`,
     where xxxx and xxxxxxxx are 16-bit and 32-bit code points in hexadecimal respectively (e.g., `\u3042` for `あ` and `\U0001F44D` for `👍`).
 
-* **R**
+* **r**
 
-    Case insensitive, indicates `RAW`. If a string literal starts with `R` prefix, neither special characters nor unicode characters are escaped by `\`.
+    Case insensitive, indicates `RAW`. If a string literal starts with `r` prefix, neither special characters nor unicode characters are escaped by `\`.
 
 #### Examples
 
