@@ -135,7 +135,7 @@ Invalid value for SecondOfMinute (valid values 0 - 59): 61
 -- !query
 SELECT make_timestamp(1, 1, 1, 1, 1, null)
 -- !query schema
-struct<make_timestamp(1, 1, 1, 1, 1, NULL):timestamp>
+struct<make_timestamp(1, 1, 1, 1, 1, NULL):timestamp_ntz>
 -- !query output
 NULL
 
