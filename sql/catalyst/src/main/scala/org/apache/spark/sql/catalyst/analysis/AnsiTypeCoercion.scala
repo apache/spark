@@ -296,8 +296,12 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
       case d @ DateAdd(left @ StringType(), _) if left.foldable =>
         d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(_, right @ StringType()) if right.foldable =>
+        d.copy(days = Cast(right, IntegerType))
       case d @ DateSub(left @ StringType(), _) if left.foldable =>
         d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(_, right @ StringType()) if right.foldable =>
+        d.copy(days = Cast(right, IntegerType))
 
       case s @ SubtractDates(left @ StringType(), _, _) if left.foldable =>
         s.copy(left = Cast(s.left, DateType))
