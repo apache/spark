@@ -370,21 +370,26 @@ case class FileSourceScanExec(
         "DataFilters" -> seqToString(dataFilters),
         "Location" -> locationDesc)
 
-    // TODO(SPARK-32986): Add bucketed scan info in explain output of FileSourceScanExec
-    if (bucketedScan) {
-      relation.bucketSpec.map { spec =>
+    relation.bucketSpec.map { spec =>
+      val bucketedKey = "Bucketed"
+      if (bucketedScan) {
         val numSelectedBuckets = optionalBucketSet.map { b =>
           b.cardinality()
         } getOrElse {
           spec.numBuckets
         }
-        metadata + ("SelectedBucketsCount" ->
-          (s"$numSelectedBuckets out of ${spec.numBuckets}" +
+        metadata ++ Map(
+          bucketedKey -> "true",
+          "SelectedBucketsCount" -> (s"$numSelectedBuckets out of ${spec.numBuckets}" +
             optionalNumCoalescedBuckets.map { b => s" (Coalesced to $b)"}.getOrElse("")))
-      } getOrElse {
-        metadata
+      } else if (!relation.sparkSession.sessionState.conf.bucketingEnabled) {
+        metadata + (bucketedKey -> "false (disabled by configuration)")
+      } else if (disableBucketedScan) {
+        metadata + (bucketedKey -> "false (disabled by query planner)")
+      } else {
+        metadata + (bucketedKey -> "false (bucket column(s) not read)")
       }
-    } else {
+    } getOrElse {
       metadata
     }
   }

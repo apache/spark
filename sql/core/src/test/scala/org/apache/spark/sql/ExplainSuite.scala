@@ -677,6 +677,33 @@ class ExplainSuiteAE extends ExplainSuiteHelper with EnableAdaptiveExecutionSuit
       }
     }
   }
+
+  test("SPARK-32986: Bucketed scan info should be a part of explain string") {
+    withTable("t1", "t2") {
+      Seq((1, 2), (2, 3)).toDF("i", "j").write.bucketBy(8, "i").saveAsTable("t1")
+      Seq(2, 3).toDF("i").write.bucketBy(8, "i").saveAsTable("t2")
+      val df1 = spark.table("t1")
+      val df2 = spark.table("t2")
+
+      withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "0") {
+        checkKeywordsExistsInExplain(
+          df1.join(df2, df1("i") === df2("i")),
+          "Bucketed: true")
+      }
+
+      withSQLConf(SQLConf.BUCKETING_ENABLED.key -> "false") {
+        checkKeywordsExistsInExplain(
+          df1.join(df2, df1("i") === df2("i")),
+          "Bucketed: false (disabled by configuration)")
+      }
+
+      checkKeywordsExistsInExplain(df1, "Bucketed: false (disabled by query planner)" )
+
+      checkKeywordsExistsInExplain(
+        df1.select("j"),
+        "Bucketed: false (bucket column(s) not read)")
+    }
+  }
 }
 
 case class ExplainSingleData(id: Int)
