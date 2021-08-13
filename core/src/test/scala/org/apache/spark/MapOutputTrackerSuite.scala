@@ -573,8 +573,8 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
         mapWorkerRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
       val fetchedBytes = mapWorkerTracker.trackerEndpoint
-        .askSync[Array[Array[Byte]]](GetMapOutputStatuses(20))
-      assert(fetchedBytes(0)(0) == 1)
+        .askSync[Array[Byte]](GetMapOutputStatuses(20))
+      assert(fetchedBytes(0) == 1)
 
       // Normally `unregisterMapOutput` triggers the destroy of broadcasted value.
       // But the timing of destroying broadcasted value is indeterminate, we manually destroy
@@ -621,7 +621,7 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
         mapWorkerRpcEnv.setupEndpointRef(rpcEnv.address, MapOutputTracker.ENDPOINT_NAME)
 
       val fetchedBytes = mapWorkerTracker.trackerEndpoint
-        .askSync[(Array[Array[Byte]], Array[Array[Byte]])](GetMapAndMergeResultStatuses(20))
+        .askSync[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(20))
       assert(masterTracker.getNumAvailableMergeResults(20) == 1)
       assert(masterTracker.getNumAvailableOutputs(20) == 100)
 

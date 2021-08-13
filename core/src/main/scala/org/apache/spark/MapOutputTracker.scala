@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.{InputStream, IOException, ObjectInputStream, ObjectOutputStream}
+import java.io.{ByteArrayInputStream, InputStream, IOException, ObjectInputStream, ObjectOutputStream}
 import java.nio.ByteBuffer
 import java.util.concurrent.{ConcurrentHashMap, LinkedBlockingQueue, ThreadPoolExecutor, TimeUnit}
 import java.util.concurrent.locks.ReentrantReadWriteLock
@@ -29,6 +29,7 @@ import scala.concurrent.duration.Duration
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
+import org.apache.commons.io.output.{ByteArrayOutputStream => ApacheByteArrayOutputStream}
 import org.roaringbitmap.RoaringBitmap
 
 import org.apache.spark.broadcast.{Broadcast, BroadcastManager}
@@ -112,7 +113,7 @@ private class ShuffleStatus(
    * The cached result of serializing the map statuses array. This cache is lazily populated when
    * [[serializedMapStatus]] is called. The cache is invalidated when map outputs are removed.
    */
-  private[this] var cachedSerializedMapStatus: Array[Array[Byte]] = _
+  private[this] var cachedSerializedMapStatus: Array[Byte] = _
 
   /**
    * Broadcast variable holding serialized map output statuses array. When [[serializedMapStatus]]
@@ -127,7 +128,7 @@ private class ShuffleStatus(
   /**
    * Similar to cachedSerializedMapStatus and cachedSerializedBroadcast, but for MergeStatus.
    */
-  private[this] var cachedSerializedMergeStatus: Array[Array[Byte]] = _
+  private[this] var cachedSerializedMergeStatus: Array[Byte] = _
 
   private[this] var cachedSerializedBroadcastMergeStatus: Broadcast[Array[Array[Byte]]] = _
 
@@ -311,8 +312,8 @@ private class ShuffleStatus(
       broadcastManager: BroadcastManager,
       isLocal: Boolean,
       minBroadcastSize: Int,
-      conf: SparkConf): Array[Array[Byte]] = {
-    var result: Array[Array[Byte]] = null
+      conf: SparkConf): Array[Byte] = {
+    var result: Array[Byte] = null
     withReadLock {
       if (cachedSerializedMapStatus != null) {
         result = cachedSerializedMapStatus
@@ -347,10 +348,10 @@ private class ShuffleStatus(
       broadcastManager: BroadcastManager,
       isLocal: Boolean,
       minBroadcastSize: Int,
-      conf: SparkConf): (Array[Array[Byte]], Array[Array[Byte]]) = {
-    val mapStatusesBytes: Array[Array[Byte]] =
+      conf: SparkConf): (Array[Byte], Array[Byte]) = {
+    val mapStatusesBytes: Array[Byte] =
       serializedMapStatus(broadcastManager, isLocal, minBroadcastSize, conf)
-    var mergeStatusesBytes: Array[Array[Byte]] = null
+    var mergeStatusesBytes: Array[Byte] = null
 
     withReadLock {
       if (cachedSerializedMergeStatus != null) {
@@ -1224,8 +1225,8 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
           var fetchedMergeStatuses = mergeStatuses.get(shuffleId).orNull
           if (fetchedMapStatuses == null || fetchedMergeStatuses == null) {
             logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
-            val fetchedBytes = askTracker[(Array[Array[Byte]], Array[Array[Byte]])](
-              GetMapAndMergeResultStatuses(shuffleId))
+            val fetchedBytes =
+              askTracker[(Array[Byte], Array[Byte])](GetMapAndMergeResultStatuses(shuffleId))
             try {
               fetchedMapStatuses =
                 MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes._1, conf)
@@ -1257,7 +1258,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
           var fetchedStatuses = mapStatuses.get(shuffleId).orNull
           if (fetchedStatuses == null) {
             logInfo("Doing the fetch; tracker endpoint = " + trackerEndpoint)
-            val fetchedBytes = askTracker[Array[Array[Byte]]](GetMapOutputStatuses(shuffleId))
+            val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
             try {
               fetchedStatuses =
                 MapOutputTracker.deserializeOutputStatuses[MapStatus](fetchedBytes, conf)
@@ -1319,10 +1320,10 @@ private[spark] object MapOutputTracker extends Logging {
       broadcastManager: BroadcastManager,
       isLocal: Boolean,
       minBroadcastSize: Int,
-      conf: SparkConf): (Array[Array[Byte]], Broadcast[Array[Array[Byte]]]) = {
+      conf: SparkConf): (Array[Byte], Broadcast[Array[Array[Byte]]]) = {
     val chunkSize = conf.get(MAP_STATUS_OUTPUT_CHUNK_SIZE)
     // ByteArrayOutputStream has the 2GB limit so use ChunkedByteBufferOutputStream instead
-    val out = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate _)
+    val out = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate)
     out.write(DIRECT)
     val codec = CompressionCodec.createCodec(conf, conf.get(MAP_STATUS_COMPRESSION_CODEC))
     val objOut = new ObjectOutputStream(codec.compressedOutputStream(out))
@@ -1334,14 +1335,19 @@ private[spark] object MapOutputTracker extends Logging {
     } {
       objOut.close()
     }
-    // create a nested Array so that it can handle over 2GB serialized data
-    val arr = out.toChunkedByteBuffer.getChunks().map(_.array())
+    val chunkedByteBuf = out.toChunkedByteBuffer
     val arrSize = out.size
     if (arrSize >= minBroadcastSize) {
       // Use broadcast instead.
       // Important arr(0) is the tag == DIRECT, ignore that while deserializing !
+      // arr is a nested Array so that it can handle over 2GB serialized data
+      val arr = chunkedByteBuf.getChunks().map(_.array())
       val bcast = broadcastManager.newBroadcast(arr, isLocal)
-      val out = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate _)
+      // Using `org.apache.commons.io.output.ByteArrayOutputStream` instead of the standard one
+      // This implementation doesn't reallocate the whole memory block but allocates
+      // additional buffers. This way no buffers need to be garbage collected and
+      // the contents don't have to be copied to the new buffer.
+      val out = new ApacheByteArrayOutputStream()
       out.write(BROADCAST)
       val oos = new ObjectOutputStream(codec.compressedOutputStream(out))
       Utils.tryWithSafeFinally {
@@ -1349,18 +1355,18 @@ private[spark] object MapOutputTracker extends Logging {
       } {
         oos.close()
       }
-      val outArr = out.toChunkedByteBuffer.getChunks().map(_.array())
-      logInfo("Broadcast outputstatuses size = " + out.size + ", actual size = " + arrSize)
+      val outArr = out.toByteArray
+      logInfo("Broadcast outputstatuses size = " + outArr.length + ", actual size = " + arrSize)
       (outArr, bcast)
     } else {
-      (arr, null)
+      (chunkedByteBuf.toArray, null)
     }
   }
 
   // Opposite of serializeOutputStatuses.
   def deserializeOutputStatuses[T <: ShuffleOutputStatus](
-      bytes: Array[Array[Byte]], conf: SparkConf): Array[T] = {
-    assert (bytes.length > 0 && bytes(0).length > 0)
+      bytes: Array[Byte], conf: SparkConf): Array[T] = {
+    assert (bytes.length > 0)
 
     def deserializeObject(in: InputStream): AnyRef = {
       val codec = CompressionCodec.createCodec(conf, conf.get(MAP_STATUS_COMPRESSION_CODEC))
@@ -1375,16 +1381,15 @@ private[spark] object MapOutputTracker extends Logging {
       }
     }
 
-    val in = new ChunkedByteBuffer(bytes.map(ByteBuffer.wrap)).toInputStream()
-    val tag = in.read()
-    tag match {
+    val in = new ByteArrayInputStream(bytes, 1, bytes.length - 1)
+    bytes(0) match {
       case DIRECT =>
         deserializeObject(in).asInstanceOf[Array[T]]
       case BROADCAST =>
         try {
           // deserialize the Broadcast, pull .value array out of it, and then deserialize that
           val bcast = deserializeObject(in).asInstanceOf[Broadcast[Array[Array[Byte]]]]
-          logInfo("Broadcast outputstatuses size = " + bytes.foldLeft(0L)(_ + _.length) +
+          logInfo("Broadcast outputstatuses size = " + bytes.length +
             ", actual size = " + bcast.value.foldLeft(0L)(_ + _.length))
           val bcastIn = new ChunkedByteBuffer(bcast.value.map(ByteBuffer.wrap)).toInputStream()
           // Important - ignore the DIRECT tag ! Start from offset 1
@@ -1397,7 +1402,7 @@ private[spark] object MapOutputTracker extends Logging {
             throw new SparkException("Unable to deserialize broadcasted" +
               " output statuses", e)
         }
-      case _ => throw new IllegalArgumentException("Unexpected byte tag = " + tag)
+      case _ => throw new IllegalArgumentException("Unexpected byte tag = " + bytes(0))
     }
   }
 
