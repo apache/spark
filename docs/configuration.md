@@ -660,6 +660,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>2.1.2</td>
 </tr>
 <tr>
+  <td><code>spark.redaction.string.regex</code></td>
+  <td>(none)</td>
+  <td>
+    Regex to decide which parts of strings produced by Spark contain sensitive
+    information. When this regex matches a string part, that string part is replaced by a
+    dummy value. This is currently used to redact the output of SQL explain commands.
+  </td>
+  <td>2.2.0</td>
+</tr>
+<tr>
   <td><code>spark.python.profile</code></td>
   <td>false</td>
   <td>
