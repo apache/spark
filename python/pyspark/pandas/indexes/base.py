@@ -555,8 +555,9 @@ class Index(IndexOpsMixin):
         """
         if isinstance(mapper, dict):
             if len(set(type(k) for k in mapper.values())) > 1:
-                # If mapper is a dictionary and its values are of different types
-                return Index(self.to_series().map(mapper)).rename(self.name)
+                raise TypeError(
+                    "If the mapper is a dictionary, its values must be of the same type"
+                )
 
         return Index(
             self.to_series().pandas_on_spark.transform_batch(
