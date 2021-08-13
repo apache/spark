@@ -569,7 +569,9 @@ private[spark] object KubernetesSuite {
   val pvTestTag = Tag("persistentVolume")
   val rTestTag = Tag("r")
   val MinikubeTag = Tag("minikube")
-  val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPiWithoutAppName"
+  val SPARK_PI_MAIN_CLASS: String = "org.apache.spark.examples.SparkPi"
+  val SPARK_PI_MAIN_CLASS_WITHOUT_APP_NAME: String =
+    "org.apache.spark.examples.SparkPiWithoutAppName"
   val SPARK_DFS_READ_WRITE_TEST = "org.apache.spark.examples.DFSReadWriteTest"
   val SPARK_REMOTE_MAIN_CLASS: String = "org.apache.spark.examples.SparkRemoteFileTest"
   val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"

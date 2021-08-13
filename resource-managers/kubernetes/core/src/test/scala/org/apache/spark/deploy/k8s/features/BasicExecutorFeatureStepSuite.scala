@@ -194,7 +194,7 @@ class BasicExecutorFeatureStepSuite extends SparkFunSuite with BeforeAndAfter {
       val step = new BasicExecutorFeatureStep(newExecutorConf(), new SecurityManager(baseConf),
         defaultProfile)
       assert(step.configurePod(SparkPod.initialPod()).pod.getSpec.getHostname.length ===
-        KUBERNETES_DNSNAME_MAX_LENGTH)
+        KUBERNETES_DNSNAME_MAX_LENGTH - Int.MaxValue.toString.length + 1)
     }
   }
 

@@ -94,7 +94,8 @@ private[spark] class BasicExecutorFeatureStep(
   }
 
   override def configurePod(pod: SparkPod): SparkPod = {
-    val name = s"$executorPodNamePrefix-exec-${kubernetesConf.executorId}"
+    val suffix = s"-exec-${kubernetesConf.executorId}"
+    val name = s"$executorPodNamePrefix$suffix"
     val configMapName = KubernetesClientUtils.configMapNameExecutor
     val confFilesMap = KubernetesClientUtils
       .buildSparkConfDirFilesMap(configMapName, kubernetesConf.sparkConf, Map.empty)
@@ -104,11 +105,14 @@ private[spark] class BasicExecutorFeatureStep(
     // hostname must be no longer than `KUBERNETES_DNSNAME_MAX_LENGTH`(63) characters,
     // so take the last 63 characters of the pod name as the hostname.
     // This preserves uniqueness since the end of name contains executorId
-    val hostname = name.substring(Math.max(0, name.length - KUBERNETES_DNSNAME_MAX_LENGTH))
-      // Remove non-word characters from the start of the hostname
-      .replaceAll("^[^\\w]+", "")
-      // Replace dangerous characters in the remaining string with a safe alternative.
-      .replaceAll("[^\\w-]+", "_")
+    val hostname = if (executorPodNamePrefix.length > KUBERNETES_POD_NAME_PREFIX_MAX_LENGTH) {
+      val mamePrefix = KubernetesConf.getResourceNamePrefix(
+        kubernetesConf.sparkConf.get("spark.app.name"), KUBERNETES_POD_NAME_PREFIX_MAX_LENGTH)
+        .replaceAll("[^\\w-]+", "_")
+      mamePrefix + suffix
+    } else {
+      name
+    }
 
     val executorMemoryQuantity = new Quantity(s"${execResources.totalMemMiB}Mi")
     val executorCpuQuantity = new Quantity(executorCoresRequest)

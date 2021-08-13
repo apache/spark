@@ -70,19 +70,16 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
     // If/when feature steps are executed in client mode, they should instead take care of this,
     // and this code should be removed.
     if (!sc.conf.contains(KUBERNETES_EXECUTOR_POD_NAME_PREFIX)) {
-      val podNamePrefix = KubernetesConf.getResourceNamePrefix(sc.conf.get("spark.app.name"))
-      if (KubernetesUtils.isValidExecutorPodNamePrefix(podNamePrefix)) {
-        sc.conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, podNamePrefix)
-      } else {
-        // `KubernetesConf.getResourceNamePrefix` has already formatted the name,
-        //  so here name can only be over the length.
-        val shortPrefix = podNamePrefix.substring(
-          Math.max(0, podNamePrefix.length - KUBERNETES_POD_NAME_PREFIX_MAX_LENGTH))
+      def warnFunc(shortPrefix: String): Unit = {
         logWarning(s"Use $shortPrefix as the executor pod's name prefix due to " +
           s"spark.app.name is too long. Please set '${KUBERNETES_EXECUTOR_POD_NAME_PREFIX.key}' " +
           s"if you need a custom executor pod's name prefix.")
-        sc.conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, shortPrefix)
       }
+      val appName = sc.conf.get("spark.app.name")
+      val podNamePrefix = KubernetesConf.getResourceNamePrefix(
+        appName, KUBERNETES_POD_NAME_PREFIX_MAX_LENGTH, warnFunc)
+      assert(KubernetesUtils.isValidExecutorPodNamePrefix(podNamePrefix))
+      sc.conf.set(KUBERNETES_EXECUTOR_POD_NAME_PREFIX, podNamePrefix)
     }
 
     val kubernetesClient = SparkKubernetesClientFactory.createKubernetesClient(

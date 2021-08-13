@@ -107,6 +107,26 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
       runSparkRemoteCheckAndVerifyCompletion(appArgs = Array(REMOTE_PAGE_RANK_FILE_NAME))
     }
   }
+
+  test("SPARK-36321: Do not fail application in kubernetes if name is too long") {
+    def executorPodCheck(executorPod: Pod): Unit = {
+      assert(executorPod.getMetadata.getName.length == 63)
+      assert(executorPod.getMetadata.getName.startsWith("abbbbb"))
+      assert(executorPod.getSpec.getHostname.length == 63)
+      assert(executorPod.getSpec.getHostname.startsWith("abbbbb"))
+    }
+
+    sparkAppConf.set("spark.app.name", "a" + "b" * 100)
+    runSparkApplicationAndVerifyCompletion(
+      appResource = containerLocalSparkDistroExamplesJar,
+      mainClass = KubernetesSuite.SPARK_PI_MAIN_CLASS_WITHOUT_APP_NAME,
+      expectedDriverLogOnCompletion = Seq("Pi is roughly 3",
+        "Please set 'spark.kubernetes.executor.podNamePrefix' if you need a custom executor"),
+      driverPodChecker = doBasicDriverPodCheck,
+      executorPodChecker = executorPodCheck,
+      appArgs = Array.empty[String],
+      isJVM = true)
+  }
 }
 
 private[spark] object BasicTestsSuite {

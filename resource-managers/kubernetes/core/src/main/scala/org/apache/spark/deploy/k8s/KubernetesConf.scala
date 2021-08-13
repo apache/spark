@@ -234,13 +234,25 @@ private[spark] object KubernetesConf {
   def getKubernetesAppId(): String =
     s"spark-${UUID.randomUUID().toString.replaceAll("-", "")}"
 
-  def getResourceNamePrefix(appName: String): String = {
-    val id = KubernetesUtils.uniqueID()
-    s"$appName-$id"
-      .trim
-      .toLowerCase(Locale.ROOT)
-      .replaceAll("[^a-z0-9\\-]", "-")
-      .replaceAll("-+", "-")
+  def getResourceNamePrefix(
+      appName: String,
+      maxLength: Int = Int.MaxValue,
+      overLengthFunc: String => Unit = _ => {}): String = {
+    val id = "-" + KubernetesUtils.uniqueID()
+    val cleanedName =
+      s"$appName"
+        .trim
+        .toLowerCase(Locale.ROOT)
+        .replaceAll("[^a-z0-9\\-]", "-")
+        .replaceAll("-+", "-")
+
+    if (cleanedName.length > maxLength - id.length) {
+      val shortPrefix = cleanedName.substring(0, maxLength - id.length) + id
+      overLengthFunc(shortPrefix)
+      shortPrefix
+    } else {
+      cleanedName + id
+    }
   }
 
   /**

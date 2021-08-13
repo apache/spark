@@ -198,4 +198,13 @@ class KubernetesConfSuite extends SparkFunSuite {
     assert(driverConf.nodeSelector === CUSTOM_NODE_SELECTOR)
     assert(driverConf.driverNodeSelector === CUSTOM_DRIVER_NODE_SELECTOR)
   }
+
+  test("resourceName prefix") {
+    val name = "a" + "b" * 100 + "c"
+    assert(KubernetesConf.getResourceNamePrefix(name).startsWith(name + "-"))
+
+    val expected = "a" + "b" * (KUBERNETES_POD_NAME_PREFIX_MAX_LENGTH - 1 - 1 - 16)
+    assert(KubernetesConf.getResourceNamePrefix(name, KUBERNETES_POD_NAME_PREFIX_MAX_LENGTH)
+      .startsWith(expected + "-"))
+  }
 }
