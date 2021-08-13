@@ -1222,6 +1222,14 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             checkEvaluation(makeTimestampExpr, expectedAnswer("2019-08-12 00:00:58.000001"))
           }
         }
+
+        Seq(true, false).foreach { ansi =>
+          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+            val makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12),
+              Literal(0), Literal(0), Literal(1))
+            checkEvaluation(makeTimestampExpr, expectedAnswer("2019-08-12 00:00:01"))
+          }
+        }
       }
     }
   }
