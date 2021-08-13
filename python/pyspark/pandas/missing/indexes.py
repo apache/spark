@@ -117,6 +117,7 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
     to_pydatetime = _unsupported_function("to_pydatetime", cls="DatetimeIndex")
     mean = _unsupported_function("mean", cls="DatetimeIndex")
     std = _unsupported_function("std", cls="DatetimeIndex")
+    map = _unsupported_function("map", cls="DatetimeIndex")
 
 
 class MissingPandasLikeCategoricalIndex(MissingPandasLikeIndex):
