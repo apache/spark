@@ -18,7 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, CreateTablePartitioningValidationSuite, ResolvedTable, TestRelation2, TestTable2, UnresolvedFieldName, UnresolvedFieldPosition}
-import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceTableAsSelect}
+import org.apache.spark.sql.catalyst.plans.logical.{AddColumns, AlterColumn, AlterTableCommand, CreateTableAsSelect, DropColumns, LogicalPlan, QualifiedColType, RenameColumn, ReplaceColumns, ReplaceTableAsSelect}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnPosition
@@ -249,6 +249,28 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
       expectErrorOnCaseSensitive = false)
   }
 
+  test("SPARK-36381: Check column name exist case sensitive and insensitive when add column") {
+    alterTableTest(
+      AddColumns(
+        table,
+        Seq(QualifiedColType(
+          None,
+          "ID",
+          LongType,
+          true,
+          None,
+          Some(UnresolvedFieldPosition(ColumnPosition.after("id")))))),
+      Seq("Cannot add column, because ID already exists in root"),
+      expectErrorOnCaseSensitive = false)
+  }
+
+  test("SPARK-36381: Check column name exist case sensitive and insensitive when rename column") {
+    alterTableTest(
+      RenameColumn(table, UnresolvedFieldName(Array("id")), "DATA"),
+      Seq("Cannot rename column, because DATA already exists in root"),
+      expectErrorOnCaseSensitive = false)
+  }
+
   test("AlterTable: drop column resolution") {
     Seq(Array("ID"), Array("point", "X"), Array("POINT", "X"), Array("POINT", "x")).foreach { ref =>
       alterTableTest(
@@ -294,8 +316,18 @@ class V2CommandsCaseSensitivitySuite extends SharedSparkSession with AnalysisTes
     }
   }
 
+  test("SPARK-36449: Replacing columns with duplicate name should not be allowed") {
+    alterTableTest(
+      ReplaceColumns(
+        table,
+        Seq(QualifiedColType(None, "f", LongType, true, None, None),
+          QualifiedColType(None, "F", LongType, true, None, None))),
+      Seq("Found duplicate column(s) in the user specified columns: `f`"),
+      expectErrorOnCaseSensitive = false)
+  }
+
   private def alterTableTest(
-      alter: AlterTableCommand,
+      alter: => AlterTableCommand,
       error: Seq[String],
       expectErrorOnCaseSensitive: Boolean = true): Unit = {
     Seq(true, false).foreach { caseSensitive =>

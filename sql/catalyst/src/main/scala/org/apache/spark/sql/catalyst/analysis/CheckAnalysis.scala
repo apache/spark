@@ -133,13 +133,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
         write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
 
-      case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case u: UnresolvedV2Relation =>
-        u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
-
       case command: V2PartitionCommand =>
         command.table match {
           case r @ ResolvedTable(_, _, table, _) => table match {
@@ -941,10 +934,18 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    */
   private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
     def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
-      if (struct.findNestedField(fieldNames, includeCollections = true).isDefined) {
+      if (struct.findNestedField(
+          fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
         alter.failAnalysis(s"Cannot $op column, because ${fieldNames.quoted} " +
           s"already exists in ${struct.treeString}")
       }
+    }
+
+    def checkColumnNameDuplication(colsToAdd: Seq[QualifiedColType]): Unit = {
+      SchemaUtils.checkColumnNameDuplication(
+        colsToAdd.map(_.name.quoted),
+        "in the user specified columns",
+        alter.conf.resolver)
     }
 
     alter match {
@@ -952,10 +953,10 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         colsToAdd.foreach { colToAdd =>
           checkColumnNotExists("add", colToAdd.name, table.schema)
         }
-        SchemaUtils.checkColumnNameDuplication(
-          colsToAdd.map(_.name.quoted),
-          "in the user specified columns",
-          alter.conf.resolver)
+        checkColumnNameDuplication(colsToAdd)
+
+      case ReplaceColumns(_: ResolvedTable, colsToAdd) =>
+        checkColumnNameDuplication(colsToAdd)
 
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
         checkColumnNotExists("rename", col.path :+ newName, table.schema)

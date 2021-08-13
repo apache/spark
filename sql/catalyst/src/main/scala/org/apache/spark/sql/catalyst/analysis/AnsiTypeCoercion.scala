@@ -91,7 +91,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      StringLiteralCoercion ::
       GetDateFieldOperations:: Nil) :: Nil
 
   val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
@@ -119,6 +118,11 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
     case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
       Some(TimestampType)
+
+    case (t1: DayTimeIntervalType, t2: DayTimeIntervalType) =>
+      Some(DayTimeIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
+    case (t1: YearMonthIntervalType, t2: YearMonthIntervalType) =>
+      Some(YearMonthIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
 
     case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
@@ -255,7 +259,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   override def canCast(from: DataType, to: DataType): Boolean = AnsiCast.canCast(from, to)
 
   /**
-   * Promotes string literals that appear in arithmetic and comparison expressions.
+   * Promotes string literals that appear in arithmetic, comparison, and datetime expressions.
    */
   object PromoteStringLiterals extends TypeCoercionRule {
     private def castExpr(expr: Expression, targetType: DataType): Expression = {
@@ -289,6 +293,26 @@ object AnsiTypeCoercion extends TypeCoercionBase {
           case other => other
         }
         p.makeCopy(Array(a, newList))
+
+      case d @ DateAdd(left @ StringType(), _) if left.foldable =>
+        d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(_, right @ StringType()) if right.foldable =>
+        d.copy(days = Cast(right, IntegerType))
+      case d @ DateSub(left @ StringType(), _) if left.foldable =>
+        d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(_, right @ StringType()) if right.foldable =>
+        d.copy(days = Cast(right, IntegerType))
+
+      case s @ SubtractDates(left @ StringType(), _, _) if left.foldable =>
+        s.copy(left = Cast(s.left, DateType))
+      case s @ SubtractDates(_, right @ StringType(), _) if right.foldable =>
+        s.copy(right = Cast(s.right, DateType))
+      case t @ TimeAdd(left @ StringType(), _, _) if left.foldable =>
+        t.copy(start = Cast(t.start, TimestampType))
+      case t @ SubtractTimestamps(left @ StringType(), _, _, _) if left.foldable =>
+        t.copy(left = Cast(t.left, t.right.dataType))
+      case t @ SubtractTimestamps(_, right @ StringType(), _, _) if right.foldable =>
+        t.copy(right = Cast(right, t.left.dataType))
     }
   }
 
@@ -304,6 +328,23 @@ object AnsiTypeCoercion extends TypeCoercionBase {
     override def transform: PartialFunction[Expression, Expression] = {
       case g: GetDateField if AnyTimestampType.unapply(g.child) =>
         g.withNewChildren(Seq(Cast(g.child, DateType)))
+    }
+  }
+
+  object DateTimeOperations extends TypeCoercionRule {
+    override val transform: PartialFunction[Expression, Expression] = {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      case s @ SubtractTimestamps(DateType(), AnyTimestampType(), _, _) =>
+        s.copy(left = Cast(s.left, s.right.dataType))
+      case s @ SubtractTimestamps(AnyTimestampType(), DateType(), _, _) =>
+        s.copy(right = Cast(s.right, s.left.dataType))
+      case s @ SubtractTimestamps(AnyTimestampType(), AnyTimestampType(), _, _)
+        if s.left.dataType != s.right.dataType =>
+        val newLeft = castIfNotSameType(s.left, TimestampNTZType)
+        val newRight = castIfNotSameType(s.right, TimestampNTZType)
+        s.copy(left = newLeft, right = newRight)
     }
   }
 }
