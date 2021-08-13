@@ -98,13 +98,13 @@ object CatalystTypeConverters {
      * Converts a Scala type to its Catalyst equivalent while automatically handling nulls
      * and Options.
      */
-    final def toCatalyst(@Nullable maybeScalaValue: Any): CatalystType =
+    final def toCatalyst(@Nullable maybeScalaValue: Any): CatalystType = {
       maybeScalaValue match {
         case null | None => null.asInstanceOf[CatalystType]
         case opt: Some[ScalaInputType] => toCatalystImpl(opt.get)
         case other => toCatalystImpl(other.asInstanceOf[ScalaInputType])
       }
-
+    }
 
     /**
      * Given a Catalyst row, convert the value at column `column` to its Scala equivalent.
