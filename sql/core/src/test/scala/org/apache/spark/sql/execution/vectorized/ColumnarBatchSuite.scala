@@ -24,7 +24,9 @@ import java.nio.charset.StandardCharsets
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
+
 import org.apache.arrow.vector.IntVector
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
