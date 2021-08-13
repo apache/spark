@@ -20,6 +20,16 @@ select interval 2 second * 'a';
 select interval 2 second / 'a';
 select interval 2 year * 'a';
 select interval 2 year / 'a';
+
+select '2' * interval 2 second;
+select '2' * interval 2 year;
+select 'a' * interval 2 second;
+select 'a' * interval 2 year;
+
+-- invalid: string literal / interval
+select '2' / interval 2 second;
+select '2' / interval 2 year;
+
 -- interval operation with null and zero case
 select interval '2 seconds' / 0;
 select interval '2 seconds' / null;
