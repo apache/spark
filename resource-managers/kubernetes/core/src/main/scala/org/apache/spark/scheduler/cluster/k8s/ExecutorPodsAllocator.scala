@@ -483,5 +483,4 @@ private[spark] object ExecutorPodsAllocator {
     val r = slots % consumers.size
     consumers.take(r).map((_, d + 1)) ++ consumers.takeRight(consumers.size - r).map((_, d))
   }
-
 }
