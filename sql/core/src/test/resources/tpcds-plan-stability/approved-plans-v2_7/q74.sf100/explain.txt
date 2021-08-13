@@ -242,201 +242,201 @@ Arguments: hashpartitioning(c_customer_id#28, c_first_name#29, c_last_name#30, d
 Input [5]: [c_customer_id#28, c_first_name#29, c_last_name#30, d_year#25, sum#32]
 Keys [4]: [c_customer_id#28, c_first_name#29, c_last_name#30, d_year#25]
 Functions [1]: [sum(UnscaledValue(ss_net_paid#21))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#21))#34]
-Results [4]: [c_customer_id#28 AS customer_id#35, c_first_name#29 AS customer_first_name#36, c_last_name#30 AS customer_last_name#37, MakeDecimal(sum(UnscaledValue(ss_net_paid#21))#34,17,2) AS year_total#38]
+Aggregate Attributes [1]: [sum(UnscaledValue(ss_net_paid#21))#16]
+Results [4]: [c_customer_id#28 AS customer_id#34, c_first_name#29 AS customer_first_name#35, c_last_name#30 AS customer_last_name#36, MakeDecimal(sum(UnscaledValue(ss_net_paid#21))#16,17,2) AS year_total#37]
 
 (37) Exchange
-Input [4]: [customer_id#35, customer_first_name#36, customer_last_name#37, year_total#38]
-Arguments: hashpartitioning(customer_id#35, 5), ENSURE_REQUIREMENTS, [id=#39]
+Input [4]: [customer_id#34, customer_first_name#35, customer_last_name#36, year_total#37]
+Arguments: hashpartitioning(customer_id#34, 5), ENSURE_REQUIREMENTS, [id=#38]
 
 (38) Sort [codegen id : 16]
-Input [4]: [customer_id#35, customer_first_name#36, customer_last_name#37, year_total#38]
-Arguments: [customer_id#35 ASC NULLS FIRST], false, 0
+Input [4]: [customer_id#34, customer_first_name#35, customer_last_name#36, year_total#37]
+Arguments: [customer_id#34 ASC NULLS FIRST], false, 0
 
 (39) SortMergeJoin [codegen id : 17]
 Left keys [1]: [customer_id#17]
-Right keys [1]: [customer_id#35]
+Right keys [1]: [customer_id#34]
 Join condition: None
 
 (40) Scan parquet default.web_sales
-Output [3]: [ws_bill_customer_sk#40, ws_net_paid#41, ws_sold_date_sk#42]
+Output [3]: [ws_bill_customer_sk#39, ws_net_paid#40, ws_sold_date_sk#41]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(ws_sold_date_sk#42), dynamicpruningexpression(ws_sold_date_sk#42 IN dynamicpruning#4)]
+PartitionFilters: [isnotnull(ws_sold_date_sk#41), dynamicpruningexpression(ws_sold_date_sk#41 IN dynamicpruning#4)]
 PushedFilters: [IsNotNull(ws_bill_customer_sk)]
 ReadSchema: struct<ws_bill_customer_sk:int,ws_net_paid:decimal(7,2)>
 
 (41) ColumnarToRow [codegen id : 19]
-Input [3]: [ws_bill_customer_sk#40, ws_net_paid#41, ws_sold_date_sk#42]
+Input [3]: [ws_bill_customer_sk#39, ws_net_paid#40, ws_sold_date_sk#41]
 
 (42) Filter [codegen id : 19]
-Input [3]: [ws_bill_customer_sk#40, ws_net_paid#41, ws_sold_date_sk#42]
-Condition : isnotnull(ws_bill_customer_sk#40)
+Input [3]: [ws_bill_customer_sk#39, ws_net_paid#40, ws_sold_date_sk#41]
+Condition : isnotnull(ws_bill_customer_sk#39)
 
 (43) ReusedExchange [Reuses operator id: 83]
-Output [2]: [d_date_sk#43, d_year#44]
+Output [2]: [d_date_sk#42, d_year#43]
 
 (44) BroadcastHashJoin [codegen id : 19]
-Left keys [1]: [ws_sold_date_sk#42]
-Right keys [1]: [d_date_sk#43]
+Left keys [1]: [ws_sold_date_sk#41]
+Right keys [1]: [d_date_sk#42]
 Join condition: None
 
 (45) Project [codegen id : 19]
-Output [3]: [ws_bill_customer_sk#40, ws_net_paid#41, d_year#44]
-Input [5]: [ws_bill_customer_sk#40, ws_net_paid#41, ws_sold_date_sk#42, d_date_sk#43, d_year#44]
+Output [3]: [ws_bill_customer_sk#39, ws_net_paid#40, d_year#43]
+Input [5]: [ws_bill_customer_sk#39, ws_net_paid#40, ws_sold_date_sk#41, d_date_sk#42, d_year#43]
 
 (46) Exchange
-Input [3]: [ws_bill_customer_sk#40, ws_net_paid#41, d_year#44]
-Arguments: hashpartitioning(ws_bill_customer_sk#40, 5), ENSURE_REQUIREMENTS, [id=#45]
+Input [3]: [ws_bill_customer_sk#39, ws_net_paid#40, d_year#43]
+Arguments: hashpartitioning(ws_bill_customer_sk#39, 5), ENSURE_REQUIREMENTS, [id=#44]
 
 (47) Sort [codegen id : 20]
-Input [3]: [ws_bill_customer_sk#40, ws_net_paid#41, d_year#44]
-Arguments: [ws_bill_customer_sk#40 ASC NULLS FIRST], false, 0
+Input [3]: [ws_bill_customer_sk#39, ws_net_paid#40, d_year#43]
+Arguments: [ws_bill_customer_sk#39 ASC NULLS FIRST], false, 0
 
 (48) ReusedExchange [Reuses operator id: 12]
-Output [4]: [c_customer_sk#46, c_customer_id#47, c_first_name#48, c_last_name#49]
+Output [4]: [c_customer_sk#45, c_customer_id#46, c_first_name#47, c_last_name#48]
 
 (49) Sort [codegen id : 22]
-Input [4]: [c_customer_sk#46, c_customer_id#47, c_first_name#48, c_last_name#49]
-Arguments: [c_customer_sk#46 ASC NULLS FIRST], false, 0
+Input [4]: [c_customer_sk#45, c_customer_id#46, c_first_name#47, c_last_name#48]
+Arguments: [c_customer_sk#45 ASC NULLS FIRST], false, 0
 
 (50) SortMergeJoin [codegen id : 23]
-Left keys [1]: [ws_bill_customer_sk#40]
-Right keys [1]: [c_customer_sk#46]
+Left keys [1]: [ws_bill_customer_sk#39]
+Right keys [1]: [c_customer_sk#45]
 Join condition: None
 
 (51) Project [codegen id : 23]
-Output [5]: [c_customer_id#47, c_first_name#48, c_last_name#49, ws_net_paid#41, d_year#44]
-Input [7]: [ws_bill_customer_sk#40, ws_net_paid#41, d_year#44, c_customer_sk#46, c_customer_id#47, c_first_name#48, c_last_name#49]
+Output [5]: [c_customer_id#46, c_first_name#47, c_last_name#48, ws_net_paid#40, d_year#43]
+Input [7]: [ws_bill_customer_sk#39, ws_net_paid#40, d_year#43, c_customer_sk#45, c_customer_id#46, c_first_name#47, c_last_name#48]
 
 (52) HashAggregate [codegen id : 23]
-Input [5]: [c_customer_id#47, c_first_name#48, c_last_name#49, ws_net_paid#41, d_year#44]
-Keys [4]: [c_customer_id#47, c_first_name#48, c_last_name#49, d_year#44]
-Functions [1]: [partial_sum(UnscaledValue(ws_net_paid#41))]
-Aggregate Attributes [1]: [sum#50]
-Results [5]: [c_customer_id#47, c_first_name#48, c_last_name#49, d_year#44, sum#51]
+Input [5]: [c_customer_id#46, c_first_name#47, c_last_name#48, ws_net_paid#40, d_year#43]
+Keys [4]: [c_customer_id#46, c_first_name#47, c_last_name#48, d_year#43]
+Functions [1]: [partial_sum(UnscaledValue(ws_net_paid#40))]
+Aggregate Attributes [1]: [sum#49]
+Results [5]: [c_customer_id#46, c_first_name#47, c_last_name#48, d_year#43, sum#50]
 
 (53) Exchange
-Input [5]: [c_customer_id#47, c_first_name#48, c_last_name#49, d_year#44, sum#51]
-Arguments: hashpartitioning(c_customer_id#47, c_first_name#48, c_last_name#49, d_year#44, 5), ENSURE_REQUIREMENTS, [id=#52]
+Input [5]: [c_customer_id#46, c_first_name#47, c_last_name#48, d_year#43, sum#50]
+Arguments: hashpartitioning(c_customer_id#46, c_first_name#47, c_last_name#48, d_year#43, 5), ENSURE_REQUIREMENTS, [id=#51]
 
 (54) HashAggregate [codegen id : 24]
-Input [5]: [c_customer_id#47, c_first_name#48, c_last_name#49, d_year#44, sum#51]
-Keys [4]: [c_customer_id#47, c_first_name#48, c_last_name#49, d_year#44]
-Functions [1]: [sum(UnscaledValue(ws_net_paid#41))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#41))#53]
-Results [2]: [c_customer_id#47 AS customer_id#54, MakeDecimal(sum(UnscaledValue(ws_net_paid#41))#53,17,2) AS year_total#55]
+Input [5]: [c_customer_id#46, c_first_name#47, c_last_name#48, d_year#43, sum#50]
+Keys [4]: [c_customer_id#46, c_first_name#47, c_last_name#48, d_year#43]
+Functions [1]: [sum(UnscaledValue(ws_net_paid#40))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#40))#52]
+Results [2]: [c_customer_id#46 AS customer_id#53, MakeDecimal(sum(UnscaledValue(ws_net_paid#40))#52,17,2) AS year_total#54]
 
 (55) Filter [codegen id : 24]
-Input [2]: [customer_id#54, year_total#55]
-Condition : (isnotnull(year_total#55) AND (year_total#55 > 0.00))
+Input [2]: [customer_id#53, year_total#54]
+Condition : (isnotnull(year_total#54) AND (year_total#54 > 0.00))
 
 (56) Exchange
-Input [2]: [customer_id#54, year_total#55]
-Arguments: hashpartitioning(customer_id#54, 5), ENSURE_REQUIREMENTS, [id=#56]
+Input [2]: [customer_id#53, year_total#54]
+Arguments: hashpartitioning(customer_id#53, 5), ENSURE_REQUIREMENTS, [id=#55]
 
 (57) Sort [codegen id : 25]
-Input [2]: [customer_id#54, year_total#55]
-Arguments: [customer_id#54 ASC NULLS FIRST], false, 0
+Input [2]: [customer_id#53, year_total#54]
+Arguments: [customer_id#53 ASC NULLS FIRST], false, 0
 
 (58) SortMergeJoin [codegen id : 26]
 Left keys [1]: [customer_id#17]
-Right keys [1]: [customer_id#54]
+Right keys [1]: [customer_id#53]
 Join condition: None
 
 (59) Project [codegen id : 26]
-Output [7]: [customer_id#17, year_total#18, customer_id#35, customer_first_name#36, customer_last_name#37, year_total#38, year_total#55]
-Input [8]: [customer_id#17, year_total#18, customer_id#35, customer_first_name#36, customer_last_name#37, year_total#38, customer_id#54, year_total#55]
+Output [7]: [customer_id#17, year_total#18, customer_id#34, customer_first_name#35, customer_last_name#36, year_total#37, year_total#54]
+Input [8]: [customer_id#17, year_total#18, customer_id#34, customer_first_name#35, customer_last_name#36, year_total#37, customer_id#53, year_total#54]
 
 (60) Scan parquet default.web_sales
-Output [3]: [ws_bill_customer_sk#57, ws_net_paid#58, ws_sold_date_sk#59]
+Output [3]: [ws_bill_customer_sk#56, ws_net_paid#57, ws_sold_date_sk#58]
 Batched: true
 Location: InMemoryFileIndex []
-PartitionFilters: [isnotnull(ws_sold_date_sk#59), dynamicpruningexpression(ws_sold_date_sk#59 IN dynamicpruning#23)]
+PartitionFilters: [isnotnull(ws_sold_date_sk#58), dynamicpruningexpression(ws_sold_date_sk#58 IN dynamicpruning#23)]
 PushedFilters: [IsNotNull(ws_bill_customer_sk)]
 ReadSchema: struct<ws_bill_customer_sk:int,ws_net_paid:decimal(7,2)>
 
 (61) ColumnarToRow [codegen id : 28]
-Input [3]: [ws_bill_customer_sk#57, ws_net_paid#58, ws_sold_date_sk#59]
+Input [3]: [ws_bill_customer_sk#56, ws_net_paid#57, ws_sold_date_sk#58]
 
 (62) Filter [codegen id : 28]
-Input [3]: [ws_bill_customer_sk#57, ws_net_paid#58, ws_sold_date_sk#59]
-Condition : isnotnull(ws_bill_customer_sk#57)
+Input [3]: [ws_bill_customer_sk#56, ws_net_paid#57, ws_sold_date_sk#58]
+Condition : isnotnull(ws_bill_customer_sk#56)
 
 (63) ReusedExchange [Reuses operator id: 87]
-Output [2]: [d_date_sk#60, d_year#61]
+Output [2]: [d_date_sk#59, d_year#60]
 
 (64) BroadcastHashJoin [codegen id : 28]
-Left keys [1]: [ws_sold_date_sk#59]
-Right keys [1]: [d_date_sk#60]
+Left keys [1]: [ws_sold_date_sk#58]
+Right keys [1]: [d_date_sk#59]
 Join condition: None
 
 (65) Project [codegen id : 28]
-Output [3]: [ws_bill_customer_sk#57, ws_net_paid#58, d_year#61]
-Input [5]: [ws_bill_customer_sk#57, ws_net_paid#58, ws_sold_date_sk#59, d_date_sk#60, d_year#61]
+Output [3]: [ws_bill_customer_sk#56, ws_net_paid#57, d_year#60]
+Input [5]: [ws_bill_customer_sk#56, ws_net_paid#57, ws_sold_date_sk#58, d_date_sk#59, d_year#60]
 
 (66) Exchange
-Input [3]: [ws_bill_customer_sk#57, ws_net_paid#58, d_year#61]
-Arguments: hashpartitioning(ws_bill_customer_sk#57, 5), ENSURE_REQUIREMENTS, [id=#62]
+Input [3]: [ws_bill_customer_sk#56, ws_net_paid#57, d_year#60]
+Arguments: hashpartitioning(ws_bill_customer_sk#56, 5), ENSURE_REQUIREMENTS, [id=#61]
 
 (67) Sort [codegen id : 29]
-Input [3]: [ws_bill_customer_sk#57, ws_net_paid#58, d_year#61]
-Arguments: [ws_bill_customer_sk#57 ASC NULLS FIRST], false, 0
+Input [3]: [ws_bill_customer_sk#56, ws_net_paid#57, d_year#60]
+Arguments: [ws_bill_customer_sk#56 ASC NULLS FIRST], false, 0
 
 (68) ReusedExchange [Reuses operator id: 12]
-Output [4]: [c_customer_sk#63, c_customer_id#64, c_first_name#65, c_last_name#66]
+Output [4]: [c_customer_sk#62, c_customer_id#63, c_first_name#64, c_last_name#65]
 
 (69) Sort [codegen id : 31]
-Input [4]: [c_customer_sk#63, c_customer_id#64, c_first_name#65, c_last_name#66]
-Arguments: [c_customer_sk#63 ASC NULLS FIRST], false, 0
+Input [4]: [c_customer_sk#62, c_customer_id#63, c_first_name#64, c_last_name#65]
+Arguments: [c_customer_sk#62 ASC NULLS FIRST], false, 0
 
 (70) SortMergeJoin [codegen id : 32]
-Left keys [1]: [ws_bill_customer_sk#57]
-Right keys [1]: [c_customer_sk#63]
+Left keys [1]: [ws_bill_customer_sk#56]
+Right keys [1]: [c_customer_sk#62]
 Join condition: None
 
 (71) Project [codegen id : 32]
-Output [5]: [c_customer_id#64, c_first_name#65, c_last_name#66, ws_net_paid#58, d_year#61]
-Input [7]: [ws_bill_customer_sk#57, ws_net_paid#58, d_year#61, c_customer_sk#63, c_customer_id#64, c_first_name#65, c_last_name#66]
+Output [5]: [c_customer_id#63, c_first_name#64, c_last_name#65, ws_net_paid#57, d_year#60]
+Input [7]: [ws_bill_customer_sk#56, ws_net_paid#57, d_year#60, c_customer_sk#62, c_customer_id#63, c_first_name#64, c_last_name#65]
 
 (72) HashAggregate [codegen id : 32]
-Input [5]: [c_customer_id#64, c_first_name#65, c_last_name#66, ws_net_paid#58, d_year#61]
-Keys [4]: [c_customer_id#64, c_first_name#65, c_last_name#66, d_year#61]
-Functions [1]: [partial_sum(UnscaledValue(ws_net_paid#58))]
-Aggregate Attributes [1]: [sum#67]
-Results [5]: [c_customer_id#64, c_first_name#65, c_last_name#66, d_year#61, sum#68]
+Input [5]: [c_customer_id#63, c_first_name#64, c_last_name#65, ws_net_paid#57, d_year#60]
+Keys [4]: [c_customer_id#63, c_first_name#64, c_last_name#65, d_year#60]
+Functions [1]: [partial_sum(UnscaledValue(ws_net_paid#57))]
+Aggregate Attributes [1]: [sum#66]
+Results [5]: [c_customer_id#63, c_first_name#64, c_last_name#65, d_year#60, sum#67]
 
 (73) Exchange
-Input [5]: [c_customer_id#64, c_first_name#65, c_last_name#66, d_year#61, sum#68]
-Arguments: hashpartitioning(c_customer_id#64, c_first_name#65, c_last_name#66, d_year#61, 5), ENSURE_REQUIREMENTS, [id=#69]
+Input [5]: [c_customer_id#63, c_first_name#64, c_last_name#65, d_year#60, sum#67]
+Arguments: hashpartitioning(c_customer_id#63, c_first_name#64, c_last_name#65, d_year#60, 5), ENSURE_REQUIREMENTS, [id=#68]
 
 (74) HashAggregate [codegen id : 33]
-Input [5]: [c_customer_id#64, c_first_name#65, c_last_name#66, d_year#61, sum#68]
-Keys [4]: [c_customer_id#64, c_first_name#65, c_last_name#66, d_year#61]
-Functions [1]: [sum(UnscaledValue(ws_net_paid#58))]
-Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#58))#70]
-Results [2]: [c_customer_id#64 AS customer_id#71, MakeDecimal(sum(UnscaledValue(ws_net_paid#58))#70,17,2) AS year_total#72]
+Input [5]: [c_customer_id#63, c_first_name#64, c_last_name#65, d_year#60, sum#67]
+Keys [4]: [c_customer_id#63, c_first_name#64, c_last_name#65, d_year#60]
+Functions [1]: [sum(UnscaledValue(ws_net_paid#57))]
+Aggregate Attributes [1]: [sum(UnscaledValue(ws_net_paid#57))#52]
+Results [2]: [c_customer_id#63 AS customer_id#69, MakeDecimal(sum(UnscaledValue(ws_net_paid#57))#52,17,2) AS year_total#70]
 
 (75) Exchange
-Input [2]: [customer_id#71, year_total#72]
-Arguments: hashpartitioning(customer_id#71, 5), ENSURE_REQUIREMENTS, [id=#73]
+Input [2]: [customer_id#69, year_total#70]
+Arguments: hashpartitioning(customer_id#69, 5), ENSURE_REQUIREMENTS, [id=#71]
 
 (76) Sort [codegen id : 34]
-Input [2]: [customer_id#71, year_total#72]
-Arguments: [customer_id#71 ASC NULLS FIRST], false, 0
+Input [2]: [customer_id#69, year_total#70]
+Arguments: [customer_id#69 ASC NULLS FIRST], false, 0
 
 (77) SortMergeJoin [codegen id : 35]
 Left keys [1]: [customer_id#17]
-Right keys [1]: [customer_id#71]
-Join condition: (CASE WHEN (year_total#55 > 0.00) THEN CheckOverflow((promote_precision(year_total#72) / promote_precision(year_total#55)), DecimalType(37,20), true) ELSE null END > CASE WHEN (year_total#18 > 0.00) THEN CheckOverflow((promote_precision(year_total#38) / promote_precision(year_total#18)), DecimalType(37,20), true) ELSE null END)
+Right keys [1]: [customer_id#69]
+Join condition: (CASE WHEN (year_total#54 > 0.00) THEN CheckOverflow((promote_precision(year_total#70) / promote_precision(year_total#54)), DecimalType(37,20), true) ELSE null END > CASE WHEN (year_total#18 > 0.00) THEN CheckOverflow((promote_precision(year_total#37) / promote_precision(year_total#18)), DecimalType(37,20), true) ELSE null END)
 
 (78) Project [codegen id : 35]
-Output [3]: [customer_id#35, customer_first_name#36, customer_last_name#37]
-Input [9]: [customer_id#17, year_total#18, customer_id#35, customer_first_name#36, customer_last_name#37, year_total#38, year_total#55, customer_id#71, year_total#72]
+Output [3]: [customer_id#34, customer_first_name#35, customer_last_name#36]
+Input [9]: [customer_id#17, year_total#18, customer_id#34, customer_first_name#35, customer_last_name#36, year_total#37, year_total#54, customer_id#69, year_total#70]
 
 (79) TakeOrderedAndProject
-Input [3]: [customer_id#35, customer_first_name#36, customer_last_name#37]
-Arguments: 100, [customer_first_name#36 ASC NULLS FIRST, customer_id#35 ASC NULLS FIRST, customer_last_name#37 ASC NULLS FIRST], [customer_id#35, customer_first_name#36, customer_last_name#37]
+Input [3]: [customer_id#34, customer_first_name#35, customer_last_name#36]
+Arguments: 100, [customer_first_name#35 ASC NULLS FIRST, customer_id#34 ASC NULLS FIRST, customer_last_name#36 ASC NULLS FIRST], [customer_id#34, customer_first_name#35, customer_last_name#36]
 
 ===== Subqueries =====
 
@@ -463,7 +463,7 @@ Condition : (((isnotnull(d_year#6) AND (d_year#6 = 2001)) AND d_year#6 IN (2001,
 
 (83) BroadcastExchange
 Input [2]: [d_date_sk#5, d_year#6]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#74]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#72]
 
 Subquery:2 Hosting operator id = 22 Hosting Expression = ss_sold_date_sk#22 IN dynamicpruning#23
 BroadcastExchange (87)
@@ -488,10 +488,10 @@ Condition : (((isnotnull(d_year#25) AND (d_year#25 = 2002)) AND d_year#25 IN (20
 
 (87) BroadcastExchange
 Input [2]: [d_date_sk#24, d_year#25]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#75]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#73]
 
-Subquery:3 Hosting operator id = 40 Hosting Expression = ws_sold_date_sk#42 IN dynamicpruning#4
+Subquery:3 Hosting operator id = 40 Hosting Expression = ws_sold_date_sk#41 IN dynamicpruning#4
 
-Subquery:4 Hosting operator id = 60 Hosting Expression = ws_sold_date_sk#59 IN dynamicpruning#23
+Subquery:4 Hosting operator id = 60 Hosting Expression = ws_sold_date_sk#58 IN dynamicpruning#23
 
 
