@@ -667,7 +667,6 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
 
   test("SPARK-32210: serialize mapStatuses to a nested Array and deserialize them") {
     val newConf = new SparkConf
-    newConf.set(MAP_STATUS_OUTPUT_CHUNK_SIZE, 1) // create many single byte chunks
 
     // needs TorrentBroadcast so need a SparkContext
     withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
@@ -677,19 +676,21 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
       rpcEnv.stop(tracker.trackerEndpoint)
       rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
       val shuffleId = 20
-      val numMaps = 100
+      val numMaps = 1000
 
       tracker.registerShuffle(shuffleId, numMaps, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+      val r = new scala.util.Random(912)
       (0 until numMaps).foreach { i =>
         tracker.registerMapOutput(shuffleId, i, HighlyCompressedMapStatus(
           BlockManagerId(s"node$i", s"node$i.spark.apache.org", 1000),
-          Array.fill[Long](1000)(0), i))
+          Array.fill[Long](1000)((r.nextDouble() * 1024 * 1024 * 1024).toLong), i))
       }
 
       val shuffleStatus = tracker.shuffleStatuses.get(shuffleId).head
       val (serializedMapStatus, serializedBroadcast) = MapOutputTracker.serializeOutputStatuses(
         shuffleStatus.mapStatuses, tracker.broadcastManager, tracker.isLocal, 0, sc.getConf)
-      assert(serializedBroadcast.value.forall(_.length == 1))
+      assert(serializedBroadcast.value.length > 1)
+      assert(serializedBroadcast.value.dropRight(1).forall(_.length == 1024 * 1024))
 
       val result = MapOutputTracker.deserializeOutputStatuses(serializedMapStatus, sc.getConf)
       assert(result.length == numMaps)

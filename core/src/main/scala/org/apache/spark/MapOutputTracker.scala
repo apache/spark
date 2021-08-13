@@ -1321,9 +1321,8 @@ private[spark] object MapOutputTracker extends Logging {
       isLocal: Boolean,
       minBroadcastSize: Int,
       conf: SparkConf): (Array[Byte], Broadcast[Array[Array[Byte]]]) = {
-    val chunkSize = conf.get(MAP_STATUS_OUTPUT_CHUNK_SIZE)
     // ByteArrayOutputStream has the 2GB limit so use ChunkedByteBufferOutputStream instead
-    val out = new ChunkedByteBufferOutputStream(chunkSize, ByteBuffer.allocate)
+    val out = new ChunkedByteBufferOutputStream(1024 * 1024, ByteBuffer.allocate)
     out.write(DIRECT)
     val codec = CompressionCodec.createCodec(conf, conf.get(MAP_STATUS_COMPRESSION_CODEC))
     val objOut = new ObjectOutputStream(codec.compressedOutputStream(out))

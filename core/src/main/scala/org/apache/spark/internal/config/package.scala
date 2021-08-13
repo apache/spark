@@ -1416,17 +1416,6 @@ package object config {
       .stringConf
       .createWithDefault("zstd")
 
-  private[spark] val MAP_STATUS_OUTPUT_CHUNK_SIZE =
-    ConfigBuilder("spark.shuffle.mapStatus.output.chunkSize")
-      .internal()
-      .doc("The chunk size in bytes for writing out the bytes of serialized status output.")
-      .version("3.3.0")
-      .intConf
-      .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
-        "The chunk size must be greater than 0 and less than or equal to " +
-          s"${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
-      .createWithDefault(64 * 1024 * 1024)
-
   private[spark] val SHUFFLE_SPILL_INITIAL_MEM_THRESHOLD =
     ConfigBuilder("spark.shuffle.spill.initialMemoryThreshold")
       .internal()
