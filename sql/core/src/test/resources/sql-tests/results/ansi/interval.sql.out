@@ -1175,10 +1175,9 @@ select
   null + interval '2' hour,
   null - interval '2' hour
 -- !query schema
-struct<>
+struct<(INTERVAL '2' YEAR + NULL):interval year,(INTERVAL '2' YEAR - NULL):interval year,(INTERVAL '02' HOUR + NULL):interval hour,(INTERVAL '02' HOUR - NULL):interval hour,(NULL + INTERVAL '2' YEAR):interval year,(NULL - INTERVAL '2' YEAR):interval year,(NULL + INTERVAL '02' HOUR):interval hour,(NULL - INTERVAL '02' HOUR):interval hour>
 -- !query output
-org.apache.spark.sql.AnalysisException
-cannot resolve 'CAST(CAST(NULL AS TIMESTAMP) + INTERVAL '02' HOUR AS VOID)' due to data type mismatch: cannot cast timestamp to void; line 4 pos 2
+NULL	NULL	NULL	NULL	NULL	NULL	NULL	NULL
 
 
 -- !query
