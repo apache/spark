@@ -2241,7 +2241,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     finalFile
   }
 
-  test("SPARK-35320 Reading JSON with key type different to String in a map should fail") {
+  test("SPARK-35320: Reading JSON with key type different to String in a map should fail") {
     Seq(
       MapType(IntegerType, StringType),
       StructType(Seq(StructField("test", MapType(IntegerType, StringType)))),
