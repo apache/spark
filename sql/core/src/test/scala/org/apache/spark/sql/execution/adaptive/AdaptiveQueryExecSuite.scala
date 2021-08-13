@@ -254,7 +254,7 @@ class AdaptiveQueryExecSuite
       val df2 = spark.range(10).withColumn("b", 'id)
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
         val testDf = df1.where('a > 10).join(df2.where('b > 10), Seq("id"), "left_outer")
-          .groupBy('a).count()
+          .groupBy('a).agg(count('b))
         checkAnswer(testDf, Seq())
         val plan = testDf.queryExecution.executedPlan
         assert(find(plan)(_.isInstanceOf[SortMergeJoinExec]).isDefined)
@@ -267,7 +267,7 @@ class AdaptiveQueryExecSuite
 
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1") {
         val testDf = df1.where('a > 10).join(df2.where('b > 10), Seq("id"), "left_outer")
-          .groupBy('a).count()
+          .groupBy('a).agg(count('b))
         checkAnswer(testDf, Seq())
         val plan = testDf.queryExecution.executedPlan
         assert(find(plan)(_.isInstanceOf[BroadcastHashJoinExec]).isDefined)

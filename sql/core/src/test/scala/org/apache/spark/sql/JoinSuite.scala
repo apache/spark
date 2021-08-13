@@ -1314,7 +1314,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       }
 
       // Test output partitioning is preserved
-      Seq("INNER", "LEFT OUTER", "RIGHT OUTER", "LEFT SEMI", "LEFT ANTI").foreach {
+      Seq("INNER", "LEFT SEMI", "LEFT ANTI").foreach {
         joinType =>
           val selectExpr = if (joinType == "RIGHT OUTER") {
             "/*+ BROADCAST(t1) */ t2.k AS k"
@@ -1328,7 +1328,7 @@ class JoinSuite extends QueryTest with SharedSparkSession with AdaptiveSparkPlan
       }
 
       // Test output partitioning is not preserved
-      Seq("LEFT OUTER", "RIGHT OUTER", "LEFT SEMI", "LEFT ANTI", "FULL OUTER").foreach {
+      Seq("LEFT SEMI", "LEFT ANTI", "FULL OUTER").foreach {
         joinType =>
           val selectExpr = if (joinType == "RIGHT OUTER") {
             "/*+ BROADCAST(t2) */ t1.k AS k"
