@@ -81,7 +81,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
             case _: SupportsPushDownAggregates =>
               val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
               var ordinal = 0
-              var aggregates = resultExpressions.flatMap { expr =>
+              val aggregates = resultExpressions.flatMap { expr =>
                 expr.collect {
                   // Do not push down duplicated aggregate expressions. For example,
                   // `SELECT max(a) + 1, max(a) + 2 FROM ...`, we should only push down one
@@ -93,12 +93,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     agg
                 }
               }
-              aggregates = DataSourceStrategy.normalizeExprs(aggregates, sHolder.relation.output)
-                .asInstanceOf[Seq[AggregateExpression]]
+              val normalizedAggregates = DataSourceStrategy.normalizeExprs(
+                aggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
               val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
                 groupingExpressions, sHolder.relation.output)
-              val pushedAggregates = PushDownUtils
-                .pushAggregates(sHolder.builder, aggregates, normalizedGroupingExpressions)
+              val pushedAggregates = PushDownUtils.pushAggregates(
+                sHolder.builder, normalizedAggregates, normalizedGroupingExpressions)
               if (pushedAggregates.isEmpty) {
                 aggNode // return original plan node
               } else {
