@@ -350,11 +350,3 @@ class TPCHPlanStabilitySuite extends TPCHPlanStabilitySuiteBase {
     }
   }
 }
-
-class TPCHPlanStabilityWithStatsSuite extends TPCHPlanStabilitySuiteBase {
-  tpchQueries.foreach { q =>
-    test(s"check simplified sf100 (tpch/$q)") {
-      testQuery("tpch", q, ".sf100")
-    }
-  }
-}
