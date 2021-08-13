@@ -24,9 +24,7 @@ import java.nio.charset.StandardCharsets
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Random
-
 import org.apache.arrow.vector.IntVector
-
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.memory.MemoryMode
 import org.apache.spark.sql.{RandomDataGenerator, Row}
@@ -1571,8 +1569,8 @@ class ColumnarBatchSuite extends SparkFunSuite {
       assert(columns(14).isNullAt(2))
 
       assert(columns(15).dataType() == BinaryType)
-      assert(columns(15).getBinary(0).deep == "Spark SQL".getBytes.deep)
-      assert(columns(15).getBinary(1).deep == "Parquet".getBytes.deep)
+      assert(new String(columns(15).getBinary(0)) == "Spark SQL")
+      assert(new String(columns(15).getBinary(1)) == "Parquet")
       assert(columns(15).isNullAt(2))
     } finally {
       batch.close()
