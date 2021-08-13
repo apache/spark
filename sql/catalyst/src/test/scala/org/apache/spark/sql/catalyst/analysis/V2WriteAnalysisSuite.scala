@@ -446,6 +446,16 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
       "Data columns: 'x', 'y', 'z'"))
   }
 
+  test("byName: fail extra data fields in struct") {
+    val table = TestRelation(Seq('a.int, 'b.struct('x.int, 'y.int)))
+    val query = TestRelation(Seq('b.struct('y.int, 'x.int, 'z.int), 'a.int))
+
+    val writePlan = byName(table, query)
+    assertAnalysisError(writePlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      "Cannot write extra fields to struct 'b': 'z'"))
+  }
+
   test("byPosition: basic behavior") {
     val query = TestRelation(StructType(Seq(
       StructField("a", FloatType),
@@ -688,18 +698,39 @@ abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
     assertAnalysisError(parsedPlan2, Seq("cannot resolve", "a", "given input columns", "x, y"))
   }
 
-  test("SPARK-36498: reorder inner fields in byName mode") {
+  test("SPARK-36498: reorder inner fields with byName mode") {
     val table = TestRelation(Seq('a.int, 'b.struct('x.int, 'y.int)))
     val query = TestRelation(Seq('b.struct('y.int, 'x.byte), 'a.int))
 
-    val writePlan = byName(table, query)
-    val expectedPlan = byName(table, query.select(
-      "a".attr,
-      namedStruct(
-        "x".expr, "b".attr.getField("x").as("x").cast(IntegerType),
-        "y".expr, "b".attr.getField("y").as("y")
-      ).as("b")
-    )).analyze
-    checkAnalysis(writePlan, expectedPlan)
+    val writePlan = byName(table, query).analyze
+    assert(writePlan.children.head.schema == table.schema)
+  }
+
+  test("SPARK-36498: reorder inner fields in array of struct with byName mode") {
+    val table = TestRelation(Seq(
+      'a.int,
+      'arr.array(new StructType().add("x", "int").add("y", "int"))))
+    val query = TestRelation(Seq(
+      'arr.array(new StructType().add("y", "int").add("x", "byte")),
+      'a.int))
+
+    val writePlan = byName(table, query).analyze
+    assert(writePlan.children.head.schema == table.schema)
+  }
+
+  test("SPARK-36498: reorder inner fields in map of struct with byName mode") {
+    val table = TestRelation(Seq(
+      'a.int,
+      'm.map(
+        new StructType().add("x", "int").add("y", "int"),
+        new StructType().add("x", "int").add("y", "int"))))
+    val query = TestRelation(Seq(
+      'm.map(
+        new StructType().add("y", "int").add("x", "byte"),
+        new StructType().add("y", "int").add("x", "byte")),
+      'a.int))
+
+    val writePlan = byName(table, query).analyze
+    assert(writePlan.children.head.schema == table.schema)
   }
 }
