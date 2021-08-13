@@ -502,6 +502,7 @@ private[spark] class Executor(
             taskAttemptId = taskId,
             attemptNumber = taskDescription.attemptNumber,
             metricsSystem = env.metricsSystem,
+            cpus = taskDescription.cpus,
             resources = taskDescription.resources,
             plugins = plugins)
           threwException = false

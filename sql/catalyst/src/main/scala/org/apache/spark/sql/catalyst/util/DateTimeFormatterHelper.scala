@@ -23,7 +23,7 @@ import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder, ResolverSt
 import java.time.temporal.{ChronoField, TemporalAccessor, TemporalQueries}
 import java.util.{Date, Locale}
 
-import com.google.common.cache.CacheBuilder
+import com.github.benmanes.caffeine.cache.Caffeine
 
 import org.apache.spark.sql.catalyst.util.DateTimeFormatterHelper._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -194,7 +194,7 @@ trait DateTimeFormatterHelper {
 }
 
 private object DateTimeFormatterHelper {
-  val cache = CacheBuilder.newBuilder()
+  val cache = Caffeine.newBuilder()
     .maximumSize(128)
     .build[(String, Locale, Boolean), DateTimeFormatter]()
 

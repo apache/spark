@@ -20,10 +20,7 @@ package org.apache.spark.network.shuffle;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 import org.apache.commons.lang3.builder.ToStringBuilder;
@@ -32,11 +29,10 @@ import org.apache.commons.lang3.tuple.Pair;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.github.benmanes.caffeine.cache.Caffeine;
+import com.github.benmanes.caffeine.cache.LoadingCache;
+import com.github.benmanes.caffeine.cache.Weigher;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.cache.CacheBuilder;
-import com.google.common.cache.CacheLoader;
-import com.google.common.cache.LoadingCache;
-import com.google.common.cache.Weigher;
 import com.google.common.collect.Maps;
 import org.iq80.leveldb.DB;
 import org.iq80.leveldb.DBIterator;
@@ -109,23 +105,13 @@ public class ExternalShuffleBlockResolver {
       Executor directoryCleaner) throws IOException {
     this.conf = conf;
     this.rddFetchEnabled =
-      Boolean.valueOf(conf.get(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "false"));
+      Boolean.parseBoolean(conf.get(Constants.SHUFFLE_SERVICE_FETCH_RDD_ENABLED, "false"));
     this.registeredExecutorFile = registeredExecutorFile;
     String indexCacheSize = conf.get("spark.shuffle.service.index.cache.size", "100m");
-    CacheLoader<File, ShuffleIndexInformation> indexCacheLoader =
-        new CacheLoader<File, ShuffleIndexInformation>() {
-          public ShuffleIndexInformation load(File file) throws IOException {
-            return new ShuffleIndexInformation(file);
-          }
-        };
-    shuffleIndexCache = CacheBuilder.newBuilder()
+    shuffleIndexCache = Caffeine.newBuilder()
       .maximumWeight(JavaUtils.byteStringAsBytes(indexCacheSize))
-      .weigher(new Weigher<File, ShuffleIndexInformation>() {
-        public int weigh(File file, ShuffleIndexInformation indexInfo) {
-          return indexInfo.getSize();
-        }
-      })
-      .build(indexCacheLoader);
+      .weigher((Weigher<File, ShuffleIndexInformation>)(file, indexInfo) -> indexInfo.getSize())
+      .build(ShuffleIndexInformation::new);
     db = LevelDBProvider.initLevelDB(this.registeredExecutorFile, CURRENT_VERSION, mapper);
     if (db != null) {
       executors = reloadRegisteredExecutors(db);
@@ -317,7 +303,7 @@ public class ExternalShuffleBlockResolver {
           "shuffle_" + shuffleId + "_" + mapId + "_0.data"),
         shuffleIndexRecord.getOffset(),
         shuffleIndexRecord.getLength());
-    } catch (ExecutionException e) {
+    } catch (CompletionException e) {
       throw new RuntimeException("Failed to open file: " + indexFile, e);
     }
   }
