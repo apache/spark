@@ -113,7 +113,7 @@ case class AdaptiveSparkPlanExec(
 
   // This list rules are applied between queryStagePreparationRules and estimate physical plan cost
   // so that we can support introduce extra shuffle
-  @transient private val queryStagePreparationWithExtraShuffleRules: Seq[Rule[SparkPlan]] = Seq(
+  @transient private val optimizeSkewedJoinWithExtraShuffleRules: Seq[Rule[SparkPlan]] = Seq(
     // Apply OptimizeSkewedJoin rule at preparation side so that we can compare the cost of
     // skew join and extra shuffle nodes.
     OptimizeSkewedJoin,
@@ -147,27 +147,14 @@ case class AdaptiveSparkPlanExec(
     collapseCodegenStagesRule
   )
 
-  private def optimizeStage(
-      rules: Seq[Rule[SparkPlan]], plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
-    val optimized = rules.foldLeft(plan) { case (latestPlan, rule) =>
+  private def optimizeQueryStage(
+      plan: SparkPlan,
+      isFinalStage: Boolean): SparkPlan = context.qe.withCteMap {
+    val optimized = queryStageOptimizerRules.foldLeft(plan) { case (latestPlan, rule) =>
       val applied = rule.apply(latestPlan)
       val result = rule match {
         case _: AQEShuffleReadRule if !applied.fastEquals(latestPlan) =>
-          val distribution = if (isFinalStage) {
-            // If `requiredDistribution` is None, it means `EnsureRequirements` will not optimize
-            // out the user-specified repartition, thus we don't have a distribution requirement
-            // for the final plan.
-            requiredDistribution.getOrElse(UnspecifiedDistribution)
-          } else {
-            UnspecifiedDistribution
-          }
-          if (ValidateRequirements.validate(applied, distribution)) {
-            applied
-          } else {
-            logDebug(s"Rule ${rule.ruleName} is not applied as it breaks the " +
-              "distribution requirement of the query plan.")
-            latestPlan
-          }
+          checkDistribution(applied, latestPlan, isFinalStage, rule.ruleName)
         case _ => applied
       }
       planChangeLogger.logRule(rule.ruleName, latestPlan, result)
@@ -177,8 +164,26 @@ case class AdaptiveSparkPlanExec(
     optimized
   }
 
-  private def optimizeQueryStage(plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
-    optimizeStage(queryStageOptimizerRules, plan, isFinalStage)
+  private def checkDistribution(
+      newPlan: SparkPlan,
+      originPlan: SparkPlan,
+      isFinalStage: Boolean,
+      ruleName: String): SparkPlan = {
+    val distribution = if (isFinalStage) {
+      // If `requiredDistribution` is None, it means `EnsureRequirements` will not optimize
+      // out the user-specified repartition, thus we don't have a distribution requirement
+      // for the final plan.
+      requiredDistribution.getOrElse(UnspecifiedDistribution)
+    } else {
+      UnspecifiedDistribution
+    }
+    if (ValidateRequirements.validate(newPlan, distribution)) {
+      newPlan
+    } else {
+      logDebug(s"Rule $ruleName is not applied as it breaks the " +
+        "distribution requirement of the query plan.")
+      originPlan
+    }
   }
 
   @transient private val costEvaluator =
@@ -311,7 +316,7 @@ case class AdaptiveSparkPlanExec(
         // are semantically and physically in sync again.
         val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
         val (reOptimizationPhysicalPlan, newLogicalPlan) = reOptimize(logicalPlan)
-        val planWithExtraShuffle = rePlanWithExtraShuffle(reOptimizationPhysicalPlan)
+        val planWithExtraShuffle = optimizeSkewedJoin(reOptimizationPhysicalPlan)
         val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
         val reOptimizationCost = costEvaluator.evaluateCost(reOptimizationPhysicalPlan)
         val extraShuffleCost = costEvaluator.evaluateCost(planWithExtraShuffle)
@@ -706,11 +711,13 @@ case class AdaptiveSparkPlanExec(
     }
   }
 
-  private def rePlanWithExtraShuffle(sparkPlan: SparkPlan): SparkPlan = {
-    optimizeStage(
-      queryStagePreparationWithExtraShuffleRules,
+  private def optimizeSkewedJoin(sparkPlan: SparkPlan): SparkPlan = {
+    val optimized = applyPhysicalRules(
       sparkPlan,
-      isFinalStage(sparkPlan))
+      optimizeSkewedJoinWithExtraShuffleRules,
+      Some((planChangeLogger, "AQE Optimize Skewed Join With Extra Shuffle"))
+    )
+    checkDistribution(optimized, sparkPlan, isFinalStage(optimized), OptimizeSkewedJoin.ruleName)
   }
 
   /**
