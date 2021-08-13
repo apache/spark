@@ -383,6 +383,7 @@ public class RpcIntegrationSuite {
         "closed",
         "Connection reset",
         "java.nio.channels.ClosedChannelException",
+        "io.netty.channel.StacklessClosedChannelException",
         "java.io.IOException: Broken pipe"
     );
     Set<String> containsAndClosed = Sets.newHashSet(expectedError);
