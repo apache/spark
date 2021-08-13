@@ -2108,6 +2108,7 @@ package object config {
 
   private[spark] val PUSH_BASED_SHUFFLE_MERGE_RESULTS_TIMEOUT =
     ConfigBuilder("spark.shuffle.push.results.timeout")
+      .internal()
       .doc("The maximum amount of time driver waits in seconds for the merge results to be" +
         " received from all remote external shuffle services for a given shuffle. Driver" +
         " submits following stages if not all results are received within the timeout. Setting" +
