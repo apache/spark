@@ -2496,7 +2496,6 @@ case class MakeTimestampLTZ(
       * min - the minute-of-hour to represent, from 0 to 59
       * sec - the second-of-minute and its micro-fraction to represent, from 0 to 60.
               The value can be either an integer like 13 , or a fraction like 13.123.
-              If the specified sec is an int, this value represents seconds.
               If the sec argument equals to 60, the seconds field is set
               to 0 and 1 minute is added to the final timestamp.
       * timezone - the time zone identifier. For example, CET, UTC and etc.
