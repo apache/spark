@@ -118,7 +118,7 @@ NULL
 
 
 -- !query
-select interval '2 year' / 0
+select interval '2' year / 0
 -- !query schema
 struct<>
 -- !query output
@@ -127,7 +127,7 @@ java.lang.ArithmeticException
 
 
 -- !query
-select interval '2 year' / null
+select interval '2' year / null
 -- !query schema
 struct<(INTERVAL '2' YEAR / NULL):interval year to month>
 -- !query output
@@ -135,7 +135,7 @@ NULL
 
 
 -- !query
-select interval '2 year' * null
+select interval '2' year * null
 -- !query schema
 struct<(INTERVAL '2' YEAR * NULL):interval year to month>
 -- !query output
@@ -143,7 +143,7 @@ NULL
 
 
 -- !query
-select null * interval '2 year'
+select null * interval '2' year
 -- !query schema
 struct<(INTERVAL '2' YEAR * NULL):interval year to month>
 -- !query output

@@ -16,10 +16,10 @@ select interval '2 seconds' / 0;
 select interval '2 seconds' / null;
 select interval '2 seconds' * null;
 select null * interval '2 seconds';
-select interval '2 year' / 0;
-select interval '2 year' / null;
-select interval '2 year' * null;
-select null * interval '2 year';
+select interval '2' year / 0;
+select interval '2' year / null;
+select interval '2' year * null;
+select null * interval '2' year;
 
 -- invalid: divide by interval
 select 2 / interval '2' year;
