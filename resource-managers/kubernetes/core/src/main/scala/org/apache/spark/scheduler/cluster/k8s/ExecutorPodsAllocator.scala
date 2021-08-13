@@ -97,12 +97,15 @@ class ExecutorPodsAllocator(
 
   private var lastSnapshot = ExecutorPodsSnapshot()
 
+  private var appId: String = _
+
   // Executors that have been deleted by this allocator but not yet detected as deleted in
   // a snapshot from the API server. This is used to deny registration from these executors
   // if they happen to come up before the deletion takes effect.
   @volatile private var deletedExecutorIds = Set.empty[Long]
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
+    appId = applicationId
     driverPod.foreach { pod =>
       // Wait until the driver pod is ready before starting executors, as the headless service won't
       // be resolvable by DNS until the driver pod is ready.
@@ -118,9 +121,7 @@ class ExecutorPodsAllocator(
     }
   }
 
-  def setTotalExpectedExecutors(applicationId: String,
-      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
-
+  def setTotalExpectedExecutors(resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
     resourceProfileToTotalExecs.foreach { case (rp, numExecs) =>
       rpIdToResourceProfile.getOrElseUpdate(rp.id, rp)
       totalExpectedExecutorsPerResourceProfileId.put(rp.id, numExecs)

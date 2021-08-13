@@ -59,7 +59,10 @@ class StatefulsetPodsAllocator(
         s"No pod was found named $name in the cluster in the " +
           s"namespace $namespace (this was supposed to be the driver pod.).")))
 
+  private var appId: String = _
+
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
+    appId = applicationId
     driverPod.foreach { pod =>
       // Wait until the driver pod is ready before starting executors, as the headless service won't
       // be resolvable by DNS until the driver pod is ready.
@@ -72,12 +75,11 @@ class StatefulsetPodsAllocator(
     }
   }
 
-  def setTotalExpectedExecutors(applicationId: String,
-      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
+  def setTotalExpectedExecutors(resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
 
     resourceProfileToTotalExecs.foreach { case (rp, numExecs) =>
       rpIdToResourceProfile.getOrElseUpdate(rp.id, rp)
-      setTargetExecutorsReplicaset(numExecs, applicationId, rp.id)
+      setTargetExecutorsReplicaset(numExecs, appId, rp.id)
     }
   }
 

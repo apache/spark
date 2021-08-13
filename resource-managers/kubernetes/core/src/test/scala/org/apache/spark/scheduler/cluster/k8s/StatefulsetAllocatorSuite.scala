@@ -124,7 +124,7 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
       new ExecutorResourceRequests().resource("gpu", 2, "myscript", "nvidia")
     rprof.require(taskReq).require(execReq)
     val immrprof = new ResourceProfile(rprof.executorResources, rprof.taskResources)
-    podsAllocatorUnderTest.setTotalExpectedExecutors(appId,
+    podsAllocatorUnderTest.setTotalExpectedExecutors(
       Map(defaultProfile -> (10),
           immrprof -> (420)))
     val captor = ArgumentCaptor.forClass(classOf[StatefulSet])
@@ -134,7 +134,7 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("Validate statefulSet scale up") {
-    podsAllocatorUnderTest.setTotalExpectedExecutors(appId,
+    podsAllocatorUnderTest.setTotalExpectedExecutors(
       Map(defaultProfile -> (10)))
     val captor = ArgumentCaptor.forClass(classOf[StatefulSet])
     verify(statefulSetOperations, times(1)).create(captor.capture())
@@ -146,7 +146,7 @@ class StatefulSetAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     assert(spec.getReplicas() === 10)
     assert(spec.getPodManagementPolicy() === "Parallel")
     verify(podOperations, never()).create(any())
-    podsAllocatorUnderTest.setTotalExpectedExecutors(appId,
+    podsAllocatorUnderTest.setTotalExpectedExecutors(
       Map(defaultProfile -> (20)))
     verify(editableSet, times(1)).scale(any(), any())
   }

@@ -39,8 +39,7 @@ abstract class AbstractPodsAllocator {
   /*
    * Set the total expected executors for an application
    */
-  def setTotalExpectedExecutors(applicationId: String,
-      resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit
+  def setTotalExpectedExecutors(resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit
   /*
    * Reference to driver pod.
    */
