@@ -409,8 +409,9 @@ public class TransportConf {
   }
 
   /**
-   * The maximum size of cache in memory which is used in push-based shuffle for storing merged index files.
-   * This cache is in addition to the one configured via spark.shuffle.service.index.cache.size.
+   * The maximum size of cache in memory which is used in push-based shuffle for storing merged
+   * index files. This cache is in addition to the one configured via
+   * spark.shuffle.service.index.cache.size.
    */
   public long mergedIndexCacheSize() {
     return JavaUtils.byteStringAsBytes(
