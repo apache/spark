@@ -2345,12 +2345,12 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             psidx.map({1: "one", 2: "two", 3: "three"}),
         )
         self.assert_eq(
-            pidx.map({1: 1, 2: 2.0, 3: "three"}),
-            pidx.map({1: 1, 2: 2.0, 3: "three"}),
-        )
-        self.assert_eq(
             pidx.map({1: "one", 2: "two"}),
             psidx.map({1: "one", 2: "two"}),
+        )
+        self.assert_eq(
+            pidx.map({1: "one", 2: "two"}, na_action="ignore"),
+            psidx.map({1: "one", 2: "two"}, na_action="ignore"),
         )
         self.assert_eq(
             pidx.map({1: 10, 2: 20}),
@@ -2390,6 +2390,10 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             pidx.map(pser),
             psidx.map(pser),
         )
+        self.assert_eq(
+            pidx.map(pser, na_action="ignore"),
+            psidx.map(pser, na_action="ignore"),
+        )
         pser = pd.Series([1, 2, 3])
         self.assert_eq(
             pidx.map(pser),
@@ -2398,6 +2402,11 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
         self.assert_eq(
             (pidx + 1).map(pser),
             (psidx + 1).map(pser),
+        )
+
+        self.assertRaises(
+            TypeError,
+            lambda: psidx.map({1: 1, 2: 2.0, 3: "three"}),
         )
 
 
