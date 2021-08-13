@@ -320,7 +320,7 @@ class StreamingSessionWindowSuite extends StreamTest
       // current sessions
       // ("spark", 25, 50, 25, 3),
       // ("streaming", 25, 51, 26, 4),
-      // ("hello", 40, 51, 11, 2),
+      // ("hello", 40, 42, 2, 2),
       CheckNewAnswer(
       ),
 

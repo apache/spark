@@ -3665,10 +3665,17 @@ object functions {
    * Generates session window given a timestamp specifying column.
    *
    * Session window is one of dynamic windows, which means the length of window is varying
-   * according to the given inputs. The length of session window is defined as "the timestamp
-   * of latest input of the session + gap duration", so when the new inputs are bound to the
-   * current session window, the end time of session window can be expanded according to the new
-   * inputs.
+   * according to the given inputs. For static gap duration, the length of session window
+   * is defined as "the timestamp of latest input of the session + gap duration", so when
+   * the new inputs are bound to the current session window, the end time of session window
+   * can be expanded according to the new inputs.
+   *
+   * Besides a static gap duration value, users can also provide an expression to specify
+   * gap duration dynamically based on the input row. With dynamic gap duration, the closing
+   * of a session window does not depend on the latest input anymore. A session window's range
+   * is the union of all events' ranges which are determined by event start time and evaluated
+   * gap duration during the query execution. Note that the rows with negative or zero gap
+   * duration will be filtered out from the aggregation.
    *
    * Windows can support microsecond precision. gapDuration in the order of months are not
    * supported.
