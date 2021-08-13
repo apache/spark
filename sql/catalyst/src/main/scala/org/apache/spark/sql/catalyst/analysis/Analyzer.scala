@@ -307,6 +307,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveBinaryArithmetic ::
       ResolveUnion ::
       typeCoercionRules ++
+      Seq(ResolveWithCTE) ++
       extendedResolutionRules : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Apply Char Padding", Once,

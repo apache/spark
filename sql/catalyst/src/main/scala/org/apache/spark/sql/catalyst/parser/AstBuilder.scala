@@ -138,7 +138,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       throw QueryParsingErrors.duplicateCteDefinitionNamesError(
         duplicates.mkString("'", "', '", "'"), ctx)
     }
-    With(plan, ctes.toSeq)
+    UnresolvedWith(plan, ctes.toSeq)
   }
 
   /**
