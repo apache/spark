@@ -25,7 +25,6 @@ import scala.util.control.Exception.allCatch
 
 import com.fasterxml.jackson.core._
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions.ExprUtils
@@ -37,7 +36,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable with Logging {
+private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
 
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
