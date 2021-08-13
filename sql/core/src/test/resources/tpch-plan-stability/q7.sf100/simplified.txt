@@ -1,0 +1,54 @@
+WholeStageCodegen (8)
+  Sort [supp_nation,cust_nation,l_year]
+    InputAdapter
+      Exchange [supp_nation,cust_nation,l_year] #1
+        WholeStageCodegen (7)
+          HashAggregate [supp_nation,cust_nation,l_year,sum,isEmpty] [sum(volume),revenue,sum,isEmpty]
+            InputAdapter
+              Exchange [supp_nation,cust_nation,l_year] #2
+                WholeStageCodegen (6)
+                  HashAggregate [supp_nation,cust_nation,l_year,volume] [sum,isEmpty,sum,isEmpty]
+                    Project [n_name,n_name,l_shipdate,l_extendedprice,l_discount]
+                      BroadcastHashJoin [c_nationkey,n_nationkey,n_name,n_name]
+                        Project [l_extendedprice,l_discount,l_shipdate,c_nationkey,n_name]
+                          BroadcastHashJoin [s_nationkey,n_nationkey]
+                            Project [s_nationkey,l_extendedprice,l_discount,l_shipdate,c_nationkey]
+                              BroadcastHashJoin [o_custkey,c_custkey]
+                                Project [s_nationkey,l_extendedprice,l_discount,l_shipdate,o_custkey]
+                                  BroadcastHashJoin [l_orderkey,o_orderkey]
+                                    Project [s_nationkey,l_orderkey,l_extendedprice,l_discount,l_shipdate]
+                                      BroadcastHashJoin [s_suppkey,l_suppkey]
+                                        Filter [s_suppkey,s_nationkey]
+                                          ColumnarToRow
+                                            InputAdapter
+                                              Scan parquet default.supplier [s_suppkey,s_nationkey]
+                                        InputAdapter
+                                          BroadcastExchange #3
+                                            WholeStageCodegen (1)
+                                              Filter [l_shipdate,l_suppkey,l_orderkey]
+                                                ColumnarToRow
+                                                  InputAdapter
+                                                    Scan parquet default.lineitem [l_orderkey,l_suppkey,l_extendedprice,l_discount,l_shipdate]
+                                    InputAdapter
+                                      BroadcastExchange #4
+                                        WholeStageCodegen (2)
+                                          Filter [o_orderkey,o_custkey]
+                                            ColumnarToRow
+                                              InputAdapter
+                                                Scan parquet default.orders [o_orderkey,o_custkey]
+                                InputAdapter
+                                  BroadcastExchange #5
+                                    WholeStageCodegen (3)
+                                      Filter [c_custkey,c_nationkey]
+                                        ColumnarToRow
+                                          InputAdapter
+                                            Scan parquet default.customer [c_custkey,c_nationkey]
+                            InputAdapter
+                              BroadcastExchange #6
+                                WholeStageCodegen (4)
+                                  Filter [n_nationkey,n_name]
+                                    ColumnarToRow
+                                      InputAdapter
+                                        Scan parquet default.nation [n_nationkey,n_name]
+                        InputAdapter
+                          ReusedExchange [n_nationkey,n_name] #6

@@ -66,7 +66,7 @@ import org.apache.spark.sql.internal.SQLConf
  * }}}
  */
 // scalastyle:on line.size.limit
-trait PlanStabilitySuite extends TPCDSBase with DisableAdaptiveExecutionSuite {
+trait PlanStabilitySuite extends TPCDSBase with TPCHBase with DisableAdaptiveExecutionSuite {
 
   private val originalMaxToStringFields = conf.maxToStringFields
 
@@ -328,6 +328,33 @@ class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite {
   modifiedTPCDSQueries.foreach { q =>
     test(s"check simplified sf100 (tpcds-modifiedQueries/$q)") {
       testQuery("tpcds-modifiedQueries", q, ".sf100")
+    }
+  }
+}
+
+abstract class TPCHPlanStabilitySuiteBase extends PlanStabilitySuite {
+  override def createTables(): Unit = {
+    tpchCreateTable.foreach { sql =>
+      spark.sql(sql)
+    }
+  }
+
+  override def goldenFilePath: String = getWorkspaceFilePath(
+    "sql", "core", "src", "test", "resources", "tpch-plan-stability").toFile.getAbsolutePath
+}
+
+class TPCHPlanStabilitySuite extends TPCHPlanStabilitySuiteBase {
+  tpchQueries.foreach { q =>
+    test(s"check simplified (tpch/$q)") {
+      testQuery("tpch", q)
+    }
+  }
+}
+
+class TPCHPlanStabilityWithStatsSuite extends TPCHPlanStabilitySuiteBase {
+  tpchQueries.foreach { q =>
+    test(s"check simplified sf100 (tpch/$q)") {
+      testQuery("tpch", q, ".sf100")
     }
   }
 }

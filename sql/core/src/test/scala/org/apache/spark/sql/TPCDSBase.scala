@@ -79,6 +79,17 @@ trait TPCDSBase extends SharedSparkSession with TPCDSSchema {
        """.stripMargin)
   }
 
+  def createTables(): Unit = {
+    tableNames.foreach { tableName =>
+      createTable(spark, tableName)
+      if (injectStats) {
+        // To simulate plan generation on actual TPC-DS data, injects data stats here
+        spark.sessionState.catalog.alterTableStats(
+          TableIdentifier(tableName), Some(TPCDSTableStats.sf100TableStats(tableName)))
+      }
+    }
+  }
+
   private val originalCBCEnabled = conf.cboEnabled
   private val originalPlanStatsEnabled = conf.planStatsEnabled
   private val originalJoinReorderEnabled = conf.joinReorderEnabled
@@ -92,14 +103,7 @@ trait TPCDSBase extends SharedSparkSession with TPCDSSchema {
       conf.setConf(SQLConf.PLAN_STATS_ENABLED, true)
       conf.setConf(SQLConf.JOIN_REORDER_ENABLED, true)
     }
-    tableNames.foreach { tableName =>
-      createTable(spark, tableName)
-      if (injectStats) {
-        // To simulate plan generation on actual TPC-DS data, injects data stats here
-        spark.sessionState.catalog.alterTableStats(
-          TableIdentifier(tableName), Some(TPCDSTableStats.sf100TableStats(tableName)))
-      }
-    }
+    createTables()
   }
 
   override def afterAll(): Unit = {
