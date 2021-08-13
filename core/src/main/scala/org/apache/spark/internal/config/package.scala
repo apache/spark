@@ -315,7 +315,8 @@ package object config {
     .bytesConf(ByteUnit.MiB)
     .createOptional
 
-  private[spark] val ENABLE_EXECUTOR_TREE_AGGREGATE = ConfigBuilder("spark.executor.treeAggregate")
+  // Since SPARK-36419
+  private[spark] val ENABLE_FINAL_AGGREGATE_ON_EXECUTOR = ConfigBuilder("spark.rdd.treeAggregate.finalAggregateOnExecutor")
       .doc("If true, last fold operation in the treeAggregate would be computed as a spark " +
         "task on the executors.")
       .booleanConf

@@ -1233,7 +1233,7 @@ abstract class RDD[T: ClassTag](
           (i, iter) => iter.map((i % curNumPartitions, _))
         }.foldByKey(zeroValue, new HashPartitioner(curNumPartitions))(cleanCombOp).values
       }
-      if (conf.get(ENABLE_EXECUTOR_TREE_AGGREGATE) && partiallyAggregated.partitions.length > 1) {
+      if (conf.get(ENABLE_FINAL_AGGREGATE_ON_EXECUTOR) && partiallyAggregated.partitions.length > 1) {
         // define a new partitioner that results in only 1 partition
         val constantPartitioner = new Partitioner {
           override def numPartitions: Int = 1
