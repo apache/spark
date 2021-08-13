@@ -553,12 +553,16 @@ class Index(IndexOpsMixin):
         >>> psidx.map(pser)
         Index(['one', 'two', 'three'], dtype='object')
         """
-        from pyspark.pandas.indexes.extension import MapExtension
-
         if isinstance(mapper, dict):
             if len(set(type(k) for k in mapper.values())) > 1:
-                raise TypeError("Values of the mapper dict should be of the same type.")
-        return MapExtension(index=self, na_action=na_action).map(mapper)
+                # If mapper is a dictionary and its values are of different types
+                return Index(self.to_series().map(mapper)).rename(self.name)
+
+        return Index(
+            self.to_series().pandas_on_spark.transform_batch(
+                lambda pser: pser.map(mapper, na_action)
+            )
+        ).rename(self.name)
 
     @property
     def values(self) -> np.ndarray:
