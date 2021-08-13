@@ -91,7 +91,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       ImplicitTypeCasts ::
       DateTimeOperations ::
       WindowFrameCoercion ::
-      StringLiteralCoercion ::
       GetDateFieldOperations:: Nil) :: Nil
 
   val findTightestCommonType: (DataType, DataType) => Option[DataType] = {
@@ -297,12 +296,23 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
       case d @ DateAdd(left @ StringType(), _) if left.foldable =>
         d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateAdd(_, right @ StringType()) if right.foldable =>
+        d.copy(days = Cast(right, IntegerType))
       case d @ DateSub(left @ StringType(), _) if left.foldable =>
         d.copy(startDate = Cast(d.startDate, DateType))
+      case d @ DateSub(_, right @ StringType()) if right.foldable =>
+        d.copy(days = Cast(right, IntegerType))
+
+      case s @ SubtractDates(left @ StringType(), _, _) if left.foldable =>
+        s.copy(left = Cast(s.left, DateType))
+      case s @ SubtractDates(_, right @ StringType(), _) if right.foldable =>
+        s.copy(right = Cast(s.right, DateType))
       case t @ TimeAdd(left @ StringType(), _, _) if left.foldable =>
         t.copy(start = Cast(t.start, TimestampType))
       case t @ SubtractTimestamps(left @ StringType(), _, _, _) if left.foldable =>
-        t.copy(left = Cast(t.left, TimestampType))
+        t.copy(left = Cast(t.left, t.right.dataType))
+      case t @ SubtractTimestamps(_, right @ StringType(), _, _) if right.foldable =>
+        t.copy(right = Cast(right, t.left.dataType))
     }
   }
 
