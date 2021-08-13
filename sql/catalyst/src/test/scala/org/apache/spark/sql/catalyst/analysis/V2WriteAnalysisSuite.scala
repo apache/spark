@@ -188,7 +188,6 @@ abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
       "Cannot find data for output column", "'y'"))
   }
 
-
   test("byPosition: fail canWrite check") {
     val widerTable = TestRelation(StructType(Seq(
       StructField("a", DoubleType),

@@ -82,9 +82,6 @@ object TableOutputResolver {
       } else if (matched.length > 1) {
         addError(s"Ambiguous column name in the input data: '${newColPath.quoted}'")
         None
-      } else if (matched.head.nullable && !expectedCol.nullable) {
-        addError(s"Cannot write nullable values to non-null column '${newColPath.quoted}'")
-        None
       } else {
         matchedCols += matched.head.name
         val expectedName = expectedCol.name
@@ -96,12 +93,15 @@ object TableOutputResolver {
         }
         (matchedCol.dataType, expectedCol.dataType) match {
           case (matchedType: StructType, expectedType: StructType) =>
+            checkNullability(matchedCol, expectedCol, conf, addError, newColPath)
             resolveStructType(
               matchedCol, matchedType, expectedType, expectedName, conf, addError, newColPath)
           case (matchedType: ArrayType, expectedType: ArrayType) =>
+            checkNullability(matchedCol, expectedCol, conf, addError, newColPath)
             resolveArrayType(
               matchedCol, matchedType, expectedType, expectedName, conf, addError, newColPath)
           case (matchedType: MapType, expectedType: MapType) =>
+            checkNullability(matchedCol, expectedCol, conf, addError, newColPath)
             resolveMapType(
               matchedCol, matchedType, expectedType, expectedName, conf, addError, newColPath)
           case _ =>
@@ -121,6 +121,18 @@ object TableOutputResolver {
       }
     } else {
       Nil
+    }
+  }
+
+  private def checkNullability(
+      input: Expression,
+      expected: Attribute,
+      conf: SQLConf,
+      addError: String => Unit,
+      colPath: Seq[String]): Unit = {
+    if (input.nullable && !expected.nullable &&
+      conf.storeAssignmentPolicy != StoreAssignmentPolicy.LEGACY) {
+      addError(s"Cannot write nullable values to non-null column '${colPath.quoted}'")
     }
   }
 
