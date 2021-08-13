@@ -1229,8 +1229,8 @@ select
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Interval string does not match year-month format of `[+|-]d`, `INTERVAL [+|-]'[+|-]d' DAY` when cast to interval year: 3-3 year to month
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '2' YEAR + '3-3 year to month')' due to data type mismatch: differing types in '(INTERVAL '2' YEAR + '3-3 year to month')' (interval year and string).; line 2 pos 2
 
 
 -- !query
@@ -1254,16 +1254,17 @@ select interval '2' year + '3-3'
 -- !query schema
 struct<>
 -- !query output
-java.lang.IllegalArgumentException
-Interval string does not match year-month format of `[+|-]d`, `INTERVAL [+|-]'[+|-]d' DAY` when cast to interval year: 3-3
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '2' YEAR + '3-3')' due to data type mismatch: differing types in '(INTERVAL '2' YEAR + '3-3')' (interval year and string).; line 1 pos 7
 
 
 -- !query
 select interval '2' year - '4'
 -- !query schema
-struct<(INTERVAL '2' YEAR - 4):interval year>
+struct<>
 -- !query output
--2-0
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '2' YEAR - '4')' due to data type mismatch: differing types in '(INTERVAL '2' YEAR - '4')' (interval year and string).; line 1 pos 7
 
 
 -- !query
