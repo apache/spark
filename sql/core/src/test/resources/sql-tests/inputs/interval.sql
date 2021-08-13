@@ -11,6 +11,15 @@ select interval 2147483647 month / 0.5;
 select interval 2147483647 day * 2;
 select interval 2147483647 day / 0.5;
 
+-- multiply and divide an interval by a string literal
+select interval 2 second * '2';
+select interval 2 second / '2';
+select interval 2 year * '2';
+select interval 2 year / '2';
+select interval 2 second * 'a';
+select interval 2 second / 'a';
+select interval 2 year * 'a';
+select interval 2 year / 'a';
 -- interval operation with null and zero case
 select interval '2 seconds' / 0;
 select interval '2 seconds' / null;

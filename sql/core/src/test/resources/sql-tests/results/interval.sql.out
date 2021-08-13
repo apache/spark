@@ -85,6 +85,70 @@ long overflow
 
 
 -- !query
+select interval 2 second * '2'
+-- !query schema
+struct<(INTERVAL '02' SECOND * 2):interval day to second>
+-- !query output
+0 00:00:04.000000000
+
+
+-- !query
+select interval 2 second / '2'
+-- !query schema
+struct<(INTERVAL '02' SECOND / 2):interval day to second>
+-- !query output
+0 00:00:01.000000000
+
+
+-- !query
+select interval 2 year * '2'
+-- !query schema
+struct<(INTERVAL '2' YEAR * 2):interval year to month>
+-- !query output
+4-0
+
+
+-- !query
+select interval 2 year / '2'
+-- !query schema
+struct<(INTERVAL '2' YEAR / 2):interval year to month>
+-- !query output
+1-0
+
+
+-- !query
+select interval 2 second * 'a'
+-- !query schema
+struct<(INTERVAL '02' SECOND * a):interval day to second>
+-- !query output
+NULL
+
+
+-- !query
+select interval 2 second / 'a'
+-- !query schema
+struct<(INTERVAL '02' SECOND / a):interval day to second>
+-- !query output
+NULL
+
+
+-- !query
+select interval 2 year * 'a'
+-- !query schema
+struct<(INTERVAL '2' YEAR * a):interval year to month>
+-- !query output
+NULL
+
+
+-- !query
+select interval 2 year / 'a'
+-- !query schema
+struct<(INTERVAL '2' YEAR / a):interval year to month>
+-- !query output
+NULL
+
+
+-- !query
 select interval '2 seconds' / 0
 -- !query schema
 struct<>
