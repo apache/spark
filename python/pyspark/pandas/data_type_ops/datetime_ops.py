@@ -33,6 +33,7 @@ from pyspark.pandas.data_type_ops.base import (
     _as_bool_type,
     _as_categorical_type,
     _as_other_type,
+    _as_string_type,
     _sanitize_list_like,
 )
 from pyspark.pandas.spark import functions as SF
@@ -135,9 +136,7 @@ class DatetimeOps(DataTypeOps):
         elif isinstance(spark_type, StringType):
             if isinstance(dtype, extension_dtypes):
                 # seems like a pandas' bug?
-                scol = F.when(index_ops.spark.column.isNull(), str(pd.NaT)).otherwise(
-                    index_ops.spark.column.cast(spark_type)
-                )
+                return _as_string_type(index_ops, dtype)
             else:
                 null_str = str(pd.NaT)
                 casted = index_ops.spark.column.cast(spark_type)
