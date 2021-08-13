@@ -754,7 +754,6 @@ Unsupported type: timestamp_ntz
 -- !query
 select from_csv('26/October/2015', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
-struct<>
+struct<from_csv(26/October/2015):struct<t:timestamp_ntz>>
 -- !query output
-java.lang.Exception
-Unsupported type: timestamp_ntz
+{"t":null}
