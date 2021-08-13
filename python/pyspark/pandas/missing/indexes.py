@@ -121,9 +121,7 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
 
 
 class MissingPandasLikeCategoricalIndex(MissingPandasLikeIndex):
-
-    # Functions
-    map = _unsupported_function("map", cls="CategoricalIndex")
+    pass
 
 
 class MissingPandasLikeMultiIndex(object):
