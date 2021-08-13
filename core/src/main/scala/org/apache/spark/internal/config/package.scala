@@ -316,7 +316,8 @@ package object config {
     .createOptional
 
   // Since SPARK-36419
-  private[spark] val ENABLE_FINAL_AGGREGATE_ON_EXECUTOR = ConfigBuilder("spark.rdd.treeAggregate.finalAggregateOnExecutor")
+  private[spark] val ENABLE_FINAL_AGGREGATE_ON_EXECUTOR =
+    ConfigBuilder("spark.rdd.treeAggregate.finalAggregateOnExecutor")
       .doc("If true, last fold operation in the treeAggregate would be computed as a spark " +
         "task on the executors.")
       .booleanConf
@@ -332,8 +333,7 @@ package object config {
     .intConf
     .createOptional
 
-  private[spark] val MEMORY_OFFHEAP_ENABLED =
-    ConfigBuilder("spark.memory.offHeap.enabled")
+  private[spark] val MEMORY_OFFHEAP_ENABLED = ConfigBuilder("spark.memory.offHeap.enabled")
     .doc("If true, Spark will attempt to use off-heap memory for certain operations. " +
       "If off-heap memory use is enabled, then spark.memory.offHeap.size must be positive.")
     .version("1.6.0")
