@@ -108,11 +108,9 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
     }
   }
 
-  test("SPARK-36321: Do not fail application in kubernetes if name is too long") {
+  test("SPARK-36321: Do not fail application in kubernetes if name is too long", k8sTestTag) {
     def executorPodCheck(executorPod: Pod): Unit = {
-      assert(executorPod.getMetadata.getName.length == 63)
       assert(executorPod.getMetadata.getName.startsWith("abbbbb"))
-      assert(executorPod.getSpec.getHostname.length == 63)
       assert(executorPod.getSpec.getHostname.startsWith("abbbbb"))
     }
 
