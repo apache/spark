@@ -40,7 +40,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.DisableUnnecessaryBucketedScan
 import org.apache.spark.sql.execution.exchange._
-import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
+import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SQLPlanMetric, SparkListenerSQLAdaptiveSQLMetricUpdates}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.ThreadUtils
@@ -118,7 +118,7 @@ case class AdaptiveSparkPlanExec(
     OptimizeSkewedJoin,
     // Add the EnsureRequirements rule here and don't optimize out repartition so that we can
     // ensure the output partitioning of OptimizeSkewedJoin is always expected.
-    EnsureRequirements(false)
+    EnsureRequirements(optimizeOutRepartition = requiredDistribution.isDefined)
   )
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
@@ -140,8 +140,9 @@ case class AdaptiveSparkPlanExec(
     CollapseCodegenStages()
   ) ++ context.session.sessionState.postStageCreationRules
 
-  private def optimizeQueryStage(plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
-    val optimized = queryStageOptimizerRules.foldLeft(plan) { case (latestPlan, rule) =>
+  private def optimizeStage(
+      rules: Seq[Rule[SparkPlan]], plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
+    val optimized = rules.foldLeft(plan) { case (latestPlan, rule) =>
       val applied = rule.apply(latestPlan)
       val result = rule match {
         case _: AQEShuffleReadRule if !applied.fastEquals(latestPlan) =>
@@ -167,6 +168,10 @@ case class AdaptiveSparkPlanExec(
     }
     planChangeLogger.logBatch("AQE Query Stage Optimization", plan, optimized)
     optimized
+  }
+
+  private def optimizeQueryStage(plan: SparkPlan, isFinalStage: Boolean): SparkPlan = {
+    optimizeStage(queryStageOptimizerRules, plan, isFinalStage)
   }
 
   @transient private val costEvaluator =
@@ -696,11 +701,30 @@ case class AdaptiveSparkPlanExec(
     (finalPlan, optimized)
   }
 
+  private def isFinalStage(sparkPlan: SparkPlan): Boolean = {
+    sparkPlan match {
+      // avoid top level node is Exchange
+      case _: Exchange => false
+      case plan =>
+        // Plan is regarded as a final plan iff all shuffle nodes are wrapped inside query stage
+        // and all query stages are materialized.
+        plan.find {
+          case p if p.children.exists(
+            child => child.isInstanceOf[Exchange] || child.isInstanceOf[ReusedExchangeExec]) =>
+            p match {
+              case stage: QueryStageExec if stage.isMaterialized => false
+              case _ => true
+            }
+          case _ => false
+        }.isEmpty
+    }
+  }
+
   private def rePlanWithExtraShuffle(sparkPlan: SparkPlan): SparkPlan = {
-    applyPhysicalRules(
-      sparkPlan,
+    optimizeStage(
       queryStagePreparationWithExtraShuffleRules,
-      Some((planChangeLogger, "AQE Replanning")))
+      sparkPlan,
+      isFinalStage(sparkPlan))
   }
 
   /**
