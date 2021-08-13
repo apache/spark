@@ -21,7 +21,6 @@ import scala.collection.mutable
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.execution.datasources.{PartitioningAwareFileIndex, PartitioningUtils}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PartitioningAwareFileIndex, PartitioningUtils}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
@@ -36,6 +35,10 @@ abstract class FileScanBuilder(
   protected var requiredSchema = StructType(dataSchema.fields ++ partitionSchema.fields)
   protected var partitionFilters = Seq.empty[Expression]
   protected var dataFilters = Seq.empty[Expression]
+  private var _translatedFilterToExprMap = mutable.HashMap.empty[Filter, Expression]
+
+  def translatedFilterToExprMap(map: mutable.HashMap[Filter, Expression]): Unit =
+    _translatedFilterToExprMap = map
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // [SPARK-30107] While `requiredSchema` might have pruned nested columns,
@@ -64,21 +67,19 @@ abstract class FileScanBuilder(
     StructType(fields)
   }
 
-  def separateFilters(
-      filters: Array[Filter],
-      map: mutable.HashMap[Filter, Expression]): (Array[Filter], Seq[Expression]) = {
+  protected def separateFilters(filters: Array[Filter]): Array[Filter] = {
     val partitionColNames =
       partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive)).toSet
     val (partitionfilters, datafilters) = filters.partition(f =>
       f.references.toSet.subsetOf(partitionColNames)
     )
     partitionFilters = partitionfilters.map { filter =>
-      DataSourceStrategy.rebuildExpressionFromFilter(filter, map)
+      DataSourceStrategy.rebuildExpressionFromFilter(filter, _translatedFilterToExprMap)
     }
     dataFilters = datafilters.map { filter =>
-      DataSourceStrategy.rebuildExpressionFromFilter(filter, map)
+      DataSourceStrategy.rebuildExpressionFromFilter(filter, _translatedFilterToExprMap)
     }
-    (partitionfilters, dataFilters)
+    partitionfilters
   }
 
   private def createRequiredNameSet(): Set[String] =
