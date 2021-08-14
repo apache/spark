@@ -325,6 +325,13 @@ class ScalaReflectionSuite extends SparkFunSuite {
     assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
   }
 
+  test("convert None to catalyst") {
+    val data = OptionalData(None, None, None, None, None, None, None, None, None)
+    val dataType = schemaFor[OptionalData].dataType
+    val convertedData = InternalRow(null, null, null, null, null, null, null, null, null)
+    assert(CatalystTypeConverters.createToCatalystConverter(dataType)(data) === convertedData)
+  }
+
   test("infer schema from case class with multiple constructors") {
     val dataType = schemaFor[MultipleConstructorsData].dataType
     dataType match {

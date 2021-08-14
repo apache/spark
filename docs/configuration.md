@@ -1050,6 +1050,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
   <td>3.2.0</td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.service.fetch.rdd.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to use the ExternalShuffleService for fetching disk persisted RDD blocks.
+    In case of dynamic allocation if this feature is enabled executors having only disk
+    persisted blocks are considered idle after 
+    <code>spark.dynamicAllocation.executorIdleTimeout</code> and will be released accordingly.
+  </td>
+  <td>3.0.0</td>
+</tr>
 </table>
 
 ### Spark UI

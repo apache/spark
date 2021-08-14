@@ -11,11 +11,40 @@ select interval 2147483647 month / 0.5;
 select interval 2147483647 day * 2;
 select interval 2147483647 day / 0.5;
 
+-- multiply and divide an interval by a string literal
+select interval 2 second * '2';
+select interval 2 second / '2';
+select interval 2 year * '2';
+select interval 2 year / '2';
+select interval 2 second * 'a';
+select interval 2 second / 'a';
+select interval 2 year * 'a';
+select interval 2 year / 'a';
+
+select '2' * interval 2 second;
+select '2' * interval 2 year;
+select 'a' * interval 2 second;
+select 'a' * interval 2 year;
+
+-- invalid: string literal / interval
+select '2' / interval 2 second;
+select '2' / interval 2 year;
+
 -- interval operation with null and zero case
 select interval '2 seconds' / 0;
 select interval '2 seconds' / null;
 select interval '2 seconds' * null;
 select null * interval '2 seconds';
+select interval '2' year / 0;
+select interval '2' year / null;
+select interval '2' year * null;
+select null * interval '2' year;
+
+-- invalid: divide by interval
+select 2 / interval '2' year;
+select 2 / interval '2' hour;
+select null / interval '2' year;
+select null / interval '2' hour;
 
 -- interval with a positive/negative sign
 select -interval '-1 month 1 day -1 second';
@@ -145,75 +174,55 @@ SELECT INTERVAL '178956970-8' YEAR TO MONTH;
 SELECT INTERVAL '-178956970-8' YEAR TO MONTH;
 SELECT INTERVAL -'178956970-8' YEAR TO MONTH;
 
--- Interval year-month arithmetic
-
-create temporary view interval_arithmetic as
-  select CAST(dateval AS date), CAST(tsval AS timestamp), dateval as strval from values
-    ('2012-01-01', '2012-01-01')
-    as interval_arithmetic(dateval, tsval);
-
+-- interval +/- interval
 select
-  dateval,
-  dateval - interval '2-2' year to month,
-  dateval - interval '-2-2' year to month,
-  dateval + interval '2-2' year to month,
-  dateval + interval '-2-2' year to month,
-  - interval '2-2' year to month + dateval,
-  interval '2-2' year to month + dateval
-from interval_arithmetic;
-
+  interval '2-2' year to month + interval '3' month,
+  interval '2' year - interval '3-3' year to month,
+  interval '99 11:22:33.123456789' day to second + interval '10 9:8' day to minute,
+  interval '22:33.123456789' minute to second - interval '10' day;
+-- if one side is string/null literal, promote it to interval type.
 select
-  tsval,
-  tsval - interval '2-2' year to month,
-  tsval - interval '-2-2' year to month,
-  tsval + interval '2-2' year to month,
-  tsval + interval '-2-2' year to month,
-  - interval '2-2' year to month + tsval,
-  interval '2-2' year to month + tsval
-from interval_arithmetic;
-
+  interval '2' year + '3-3 year to month',
+  interval '2' year - '3 month',
+  '3-2 year to month' + interval '2-2' year to month,
+  '3 year' - interval '2-2' year to month,
+  interval '99 11:22:33.123456789' day to second + '12:12 hour to second',
+  interval '99 11:22:33.123456789' day to second - '12 hour',
+  '4 day' + interval '10' day,
+  '4 22 day to hour' - interval '10' day;
 select
-  interval '2-2' year to month + interval '3-3' year to month,
-  interval '2-2' year to month - interval '3-3' year to month
-from interval_arithmetic;
+  interval '2' year + null,
+  interval '2' year - null,
+  interval '2' hour + null,
+  interval '2' hour - null,
+  null + interval '2' year,
+  null - interval '2' year,
+  null + interval '2' hour,
+  null - interval '2' hour;
 
--- Interval day-time arithmetic
+-- invalid: malformed interval string
+select interval '2' year + '3-3';
+select interval '2' year - '4';
+select '4 11:11' - interval '4 22:12' day to minute;
+select '4 12:12:12' + interval '4 22:12' day to minute;
+-- invalid: non-literal string column
+create temporary view interval_view as select '1' str;
+select interval '2' year + str from interval_view;
+select interval '2' year - str from interval_view;
+select str - interval '4 22:12' day to minute from interval_view;
+select str + interval '4 22:12' day to minute from interval_view;
 
-select
-  dateval,
-  dateval - interval '99 11:22:33.123456789' day to second,
-  dateval - interval '-99 11:22:33.123456789' day to second,
-  dateval + interval '99 11:22:33.123456789' day to second,
-  dateval + interval '-99 11:22:33.123456789' day to second,
-  -interval '99 11:22:33.123456789' day to second + dateval,
-  interval '99 11:22:33.123456789' day to second + dateval
-from interval_arithmetic;
+-- invalid: mixed year-month and day-time interval
+select interval '2-2' year to month + interval '3' day;
+select interval '3' day + interval '2-2' year to month;
+select interval '2-2' year to month - interval '3' day;
+select interval '3' day - interval '2-2' year to month;
 
-select
-  tsval,
-  tsval - interval '99 11:22:33.123456789' day to second,
-  tsval - interval '-99 11:22:33.123456789' day to second,
-  tsval + interval '99 11:22:33.123456789' day to second,
-  tsval + interval '-99 11:22:33.123456789' day to second,
-  -interval '99 11:22:33.123456789' day to second + tsval,
-  interval '99 11:22:33.123456789' day to second + tsval
-from interval_arithmetic;
-
--- datetimes(in string representation) + intervals
-select
-  strval,
-  strval - interval '99 11:22:33.123456789' day to second,
-  strval - interval '-99 11:22:33.123456789' day to second,
-  strval + interval '99 11:22:33.123456789' day to second,
-  strval + interval '-99 11:22:33.123456789' day to second,
-  -interval '99 11:22:33.123456789' day to second + strval,
-  interval '99 11:22:33.123456789' day to second + strval
-from interval_arithmetic;
-
-select
-  interval '99 11:22:33.123456789' day to second + interval '10 9:8:7.123456789' day to second,
-  interval '99 11:22:33.123456789' day to second - interval '10 9:8:7.123456789' day to second
-from interval_arithmetic;
+-- invalid: number +/- interval
+select 1 - interval '2' second;
+select 1 + interval '2' month;
+select interval '2' second + 1;
+select interval '2' month - 1;
 
 -- control characters as white spaces
 select interval '\t interval 1 day';
@@ -229,8 +238,7 @@ select interval '中文 interval 1 day';
 select interval 'interval中文 1 day';
 select interval 'interval 1中文day';
 
-
--- interval overflow if (ansi) exception else NULL
+-- interval overflow: if (ansi) exception else NULL
 select -(a) from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
 select a - b from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
 select b + interval '1 month' from values (interval '-2147483648 months', interval '2147483647 months') t(a, b);
@@ -328,6 +336,14 @@ SELECT INTERVAL '1 02' DAY TO HOUR = INTERVAL '02:10:55' HOUR TO SECOND;
 SELECT INTERVAL '1' YEAR < INTERVAL '1' MONTH;
 SELECT INTERVAL '-1-1' YEAR TO MONTH = INTERVAL '-13' MONTH;
 SELECT INTERVAL 1 MONTH > INTERVAL 20 DAYS;
+
+-- compare interval with string
+SELECT INTERVAL '1' DAY < '1';
+SELECT INTERVAL '1' DAY = '1';
+SELECT INTERVAL '1' DAY > '1';
+SELECT INTERVAL '1' YEAR < '1';
+SELECT INTERVAL '1' YEAR = '1';
+SELECT INTERVAL '1' YEAR > '1';
 
 SELECT array(INTERVAL '1' YEAR, INTERVAL '1' MONTH);
 SELECT array(INTERVAL '1' DAY, INTERVAL '01:01' HOUR TO MINUTE);
