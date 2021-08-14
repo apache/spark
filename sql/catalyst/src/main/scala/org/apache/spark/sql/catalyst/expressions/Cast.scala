@@ -1736,7 +1736,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           try {
             $evPrim = Float.valueOf($floatStr);
           } catch (java.lang.NumberFormatException e) {
-            final Float f = (Float) Cast.processFloatingPointSpecialLiterals($floatStr, true);
+            final Float f = (Float) ExprUtils.processFloatingPointSpecialLiterals($floatStr, true);
             if (f == null) {
               $handleNull
             } else {
@@ -1772,7 +1772,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
           try {
             $evPrim = Double.valueOf($doubleStr);
           } catch (java.lang.NumberFormatException e) {
-            final Double d = (Double) Cast.processFloatingPointSpecialLiterals($doubleStr, false);
+            final Double d = (Double) ExprUtils.processFloatingPointSpecialLiterals($doubleStr, false);
             if (d == null) {
               $handleNull
             } else {
