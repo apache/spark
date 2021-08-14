@@ -19,7 +19,7 @@ package org.apache.parquet.io;
 
 /**
  * This is a workaround since both methods below are not public in {@link ColumnIO}.
- * We should remove this once PARQUET-2050 is released with Parquet 1.13
+ * TODO(SPARK-36511): we should remove this once PARQUET-2050 is released with Parquet 1.13.
  */
 public class ColumnIOUtil {
   private ColumnIOUtil() {}

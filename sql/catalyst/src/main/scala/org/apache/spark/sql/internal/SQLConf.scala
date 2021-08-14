@@ -891,7 +891,7 @@ object SQLConf {
       .doc("Enables vectorized Parquet decoding for nested columns (e.g., struct, list, map).")
       .version("3.3.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val PARQUET_RECORD_FILTER_ENABLED = buildConf("spark.sql.parquet.recordLevelFilter.enabled")
     .doc("If true, enables Parquet's native record-level filtering using the pushed down " +

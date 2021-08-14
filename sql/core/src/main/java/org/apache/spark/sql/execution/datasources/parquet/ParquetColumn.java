@@ -57,7 +57,8 @@ final class ParquetColumn {
       WritableColumnVector vector,
       int capacity,
       MemoryMode memoryMode) {
-    if (!columnInfo.sparkType().sameType(vector.dataType())) {
+    DataType sparkType = columnInfo.sparkType();
+    if (!sparkType.sameType(vector.dataType())) {
       throw new IllegalArgumentException("Spark type: " + columnInfo.sparkType() +
         " doesn't match the type: " + vector.dataType() + " in column vector");
     }
@@ -70,15 +71,14 @@ final class ParquetColumn {
       repetitionLevels = allocateLevelsVector(capacity, memoryMode);
       definitionLevels = allocateLevelsVector(capacity, memoryMode);
     } else {
-      DataType type = columnInfo.sparkType();
       ParquetGroupTypeInfo groupInfo = (ParquetGroupTypeInfo) columnInfo;
-      if (type instanceof ArrayType) {
+      if (sparkType instanceof ArrayType) {
         ParquetColumn childState = new ParquetColumn(groupInfo.children().apply(0),
           vector.getChild(0), capacity, memoryMode);
         this.repetitionLevels = childState.repetitionLevels;
         this.definitionLevels = childState.definitionLevels;
         children.add(childState);
-      } else if (type instanceof MapType) {
+      } else if (sparkType instanceof MapType) {
         ParquetColumn childState = new ParquetColumn(groupInfo.children().apply(0),
           vector.getChild(0), capacity, memoryMode);
         this.repetitionLevels = childState.repetitionLevels;
@@ -86,7 +86,7 @@ final class ParquetColumn {
         children.add(childState);
         children.add(new ParquetColumn(groupInfo.children().apply(1), vector.getChild(1),
           capacity, memoryMode));
-      } else if (type instanceof StructType) {
+      } else if (sparkType instanceof StructType) {
         for (int i = 0; i < groupInfo.children().length(); i++) {
           ParquetColumn childState = new ParquetColumn(groupInfo.children().apply(i),
             vector.getChild(i), capacity, memoryMode);
