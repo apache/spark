@@ -2039,22 +2039,6 @@ abstract class JsonSuite
         assert(check(ds.first()))
       }
     }
-
-    // negative cases
-    Seq(FloatType, DoubleType).foreach { dt =>
-      val lowerCasedJsons = jsons.map(_.toLowerCase(Locale.ROOT))
-      // The special floats are case-sensitive so these cases below throw exceptions.
-      lowerCasedJsons.foreach { lowerCasedJson =>
-        val e = intercept[SparkException] {
-          spark.read
-            .option("mode", "FAILFAST")
-            .schema(StructType(Seq(StructField("a", dt))))
-            .json(Seq(lowerCasedJson).toDS())
-            .collect()
-        }
-        assert(e.getMessage.contains("Cannot parse"))
-      }
-    }
   }
 
   test("SPARK-21610: Corrupt records are not handled properly when creating a dataframe " +
