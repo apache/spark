@@ -57,7 +57,7 @@ class JacksonParserSuite extends SparkFunSuite {
       expected = Seq(InternalRow(1, 3.14)))
   }
 
-  test("SPARK-36453 Jackson parser should work with all floating point special literals") {
+  test("SPARK-36453: Jackson parser should work with all floating point special literals") {
     val schema = StructType.fromDDL("d DOUBLE")
     Seq("inf", "Inf", "+Inf", "infinity", "+Infinity").foreach(v =>
       check(s"""{"d": "$v"}""", schema, Seq(), Seq(InternalRow(Double.PositiveInfinity))))
