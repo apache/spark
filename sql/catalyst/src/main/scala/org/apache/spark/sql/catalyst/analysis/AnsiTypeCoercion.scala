@@ -270,14 +270,26 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       }
     }
 
+    // Return whether a string literal can be promoted as the give data type in a binary operation.
+    private def canPromoteAsInBinaryOperation(dt: DataType) = dt match {
+      // If a binary operation contains interval type and string literal, we can't decide which
+      // interval type the string literal should be promoted as. There are many possible interval
+      // types, such as year interval, month interval, day interval, hour interval, etc.
+      case _: YearMonthIntervalType | _: DayTimeIntervalType => false
+      case _: AtomicType => true
+      case _ => false
+    }
+
     override def transform: PartialFunction[Expression, Expression] = {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case b @ BinaryOperator(left @ StringType(), right @ AtomicType()) if left.foldable =>
+      case b @ BinaryOperator(left @ StringType(), right)
+        if left.foldable && canPromoteAsInBinaryOperation(right.dataType) =>
         b.makeCopy(Array(castExpr(left, right.dataType), right))
 
-      case b @ BinaryOperator(left @ AtomicType(), right @ StringType()) if right.foldable =>
+      case b @ BinaryOperator(left, right @ StringType())
+        if right.foldable && canPromoteAsInBinaryOperation(left.dataType) =>
         b.makeCopy(Array(left, castExpr(right, left.dataType)))
 
       case Abs(e @ StringType(), failOnError) if e.foldable => Abs(Cast(e, DoubleType), failOnError)
