@@ -409,12 +409,13 @@ object QueryExecution {
       PlanDynamicPruningFilters(sparkSession),
       PlanSubqueries(sparkSession),
       RemoveRedundantProjects,
-      EnsureRequirements,
+      EnsureRequirements(),
       // `RemoveRedundantSorts` needs to be added after `EnsureRequirements` to guarantee the same
       // number of partitions when instantiating PartitioningCollection.
       RemoveRedundantSorts,
       DisableUnnecessaryBucketedScan,
-      ApplyColumnarRulesAndInsertTransitions(sparkSession.sessionState.columnarRules),
+      ApplyColumnarRulesAndInsertTransitions(
+        sparkSession.sessionState.columnarRules, outputsColumnar = false),
       CollapseCodegenStages()) ++
       (if (subquery) {
         Nil

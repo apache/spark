@@ -1402,8 +1402,7 @@ abstract class AvroSuite
         val e = intercept[SparkException] {
           df.write.option("avroSchema", avroSchema).format("avro").save(s"$tempDir/save2")
         }
-        assertExceptionMsg[IncompatibleSchemaException](e,
-          "Cannot find field 'FOO' (at position 0) in Avro schema at top-level record")
+        assertExceptionMsg[IncompatibleSchemaException](e, "Cannot find field 'FOO' in Avro schema")
       }
     }
   }
@@ -2158,6 +2157,36 @@ abstract class AvroSuite
       }
     }
   }
+
+  test("SPARK-33865: CREATE TABLE DDL with avro should check col name") {
+    withTable("test_ddl") {
+      withView("v") {
+        spark.range(1).createTempView("v")
+        withTempDir { dir =>
+          val e = intercept[AnalysisException] {
+            sql(
+              s"""
+                 |CREATE TABLE test_ddl USING AVRO
+                 |LOCATION '${dir}'
+                 |AS SELECT ID, IF(ID=1,1,0) FROM v""".stripMargin)
+          }.getMessage
+          assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
+        }
+
+        withTempDir { dir =>
+          spark.sql(
+            s"""
+               |CREATE TABLE test_ddl USING AVRO
+               |LOCATION '${dir}'
+               |AS SELECT ID, IF(ID=1,ID,0) AS A, ABS(ID) AS B
+               |FROM v""".stripMargin)
+          val expectedSchema = StructType(Seq(StructField("ID", LongType, true),
+            StructField("A", LongType, true), StructField("B", LongType, true)))
+          assert(spark.table("test_ddl").schema == expectedSchema)
+        }
+      }
+    }
+  }
 }
 
 class AvroV1Suite extends AvroSuite {
@@ -2165,6 +2194,28 @@ class AvroV1Suite extends AvroSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "avro")
+
+  test("SPARK-36271: V1 insert should check schema field name too") {
+    withView("v") {
+      spark.range(1).createTempView("v")
+      withTempDir { dir =>
+        val e = intercept[AnalysisException] {
+          sql("SELECT ID, IF(ID=1,1,0) FROM v").write.mode(SaveMode.Overwrite)
+            .format("avro").save(dir.getCanonicalPath)
+        }.getMessage
+        assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
+      }
+
+      withTempDir { dir =>
+        val e = intercept[AnalysisException] {
+          sql("SELECT NAMED_STRUCT('(IF((ID = 1), 1, 0))', IF(ID=1,ID,0)) AS col1 FROM v")
+            .write.mode(SaveMode.Overwrite)
+            .format("avro").save(dir.getCanonicalPath)
+        }.getMessage
+        assert(e.contains("Column name \"(IF((ID = 1), 1, 0))\" contains invalid character(s)."))
+      }
+    }
+  }
 }
 
 class AvroV2Suite extends AvroSuite with ExplainSuiteHelper {

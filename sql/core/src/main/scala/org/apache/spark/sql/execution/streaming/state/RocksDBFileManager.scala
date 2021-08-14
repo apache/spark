@@ -29,6 +29,7 @@ import scala.collection.mutable
 
 import com.fasterxml.jackson.annotation.JsonInclude.Include
 import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper}
 import org.apache.commons.io.{FilenameUtils, IOUtils}
 import org.apache.hadoop.conf.Configuration
@@ -133,6 +134,22 @@ class RocksDBFileManager(
   private val onlyZipFiles = new PathFilter {
     override def accept(path: Path): Boolean = path.toString.endsWith(".zip")
   }
+
+  /**
+   * Metrics for loading checkpoint from DFS. Every loadCheckpointFromDFS call will update this
+   * metrics, so this effectively records the latest metrics.
+   */
+  @volatile private var loadCheckpointMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
+
+  /**
+   * Metrics for saving checkpoint to DFS. Every saveCheckpointToDFS call will update this
+   * metrics, so this effectively records the latest metrics.
+   */
+  @volatile private var saveCheckpointMetrics = RocksDBFileManagerMetrics.EMPTY_METRICS
+
+  def latestLoadCheckpointMetrics: RocksDBFileManagerMetrics = loadCheckpointMetrics
+
+  def latestSaveCheckpointMetrics: RocksDBFileManagerMetrics = saveCheckpointMetrics
 
   /** Save all the files in given local checkpoint directory as a committed version in DFS */
   def saveCheckpointToDfs(checkpointDir: File, version: Long, numKeys: Long): Unit = {
@@ -336,6 +353,11 @@ class RocksDBFileManager(
       s" DFS for version $version. $filesReused files reused without copying.")
     versionToRocksDBFiles.put(version, immutableFiles)
 
+    saveCheckpointMetrics = RocksDBFileManagerMetrics(
+      bytesCopied = bytesCopied,
+      filesCopied = filesCopied,
+      filesReused = filesReused)
+
     immutableFiles
   }
 
@@ -387,6 +409,11 @@ class RocksDBFileManager(
     }
     logInfo(s"Copied $filesCopied files ($bytesCopied bytes) from DFS to local with " +
       s"$filesReused files reused.")
+
+    loadCheckpointMetrics = RocksDBFileManagerMetrics(
+      bytesCopied = bytesCopied,
+      filesCopied = filesCopied,
+      filesReused = filesReused)
   }
 
   /** Get the SST files required for a version from the version zip file in DFS */
@@ -420,6 +447,9 @@ class RocksDBFileManager(
       }
       zout.close()  // so that any error in closing also cancels the output stream
       logInfo(s"Zipped $totalBytes bytes (before compression) to $filesStr")
+      // The other fields saveCheckpointMetrics should have been filled
+      saveCheckpointMetrics =
+        saveCheckpointMetrics.copy(zipFileBytesUncompressed = Some(totalBytes))
     } catch {
       case e: Exception =>
         // Cancel the actual output stream first, so that zout.close() does not write the file
@@ -484,6 +514,23 @@ class RocksDBFileManager(
     val (topLevelSstFiles, topLevelOtherFiles) = topLevelFiles.partition(f => isSstFile(f.getName))
     (topLevelSstFiles ++ archivedLogFiles, topLevelOtherFiles)
   }
+}
+
+/**
+ * Metrics regarding RocksDB file sync between local and DFS.
+ */
+case class RocksDBFileManagerMetrics(
+    filesCopied: Long,
+    bytesCopied: Long,
+    filesReused: Long,
+    @JsonDeserialize(contentAs = classOf[java.lang.Long])
+    zipFileBytesUncompressed: Option[Long] = None)
+
+/**
+ * Metrics to return when requested but no operation has been performed.
+ */
+object RocksDBFileManagerMetrics {
+  val EMPTY_METRICS = RocksDBFileManagerMetrics(0L, 0L, 0L, None)
 }
 
 /**

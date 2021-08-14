@@ -257,7 +257,7 @@ case class HashAggregateExec(
       aggNames: Seq[String],
       aggBufferUpdatingExprs: Seq[Seq[Expression]],
       aggCodeBlocks: Seq[Block],
-      subExprs: Map[Expression, SubExprEliminationState]): Option[Seq[String]] = {
+      subExprs: Map[ExpressionEquals, SubExprEliminationState]): Option[Seq[String]] = {
     val exprValsInSubExprs = subExprs.flatMap { case (_, s) =>
       s.eval.value :: s.eval.isNull :: Nil
     }

@@ -216,7 +216,7 @@ public class ParquetVectorUpdaterFactory {
     }
   }
 
-  private static class IntegerUpdater implements ParquetVectorUpdater {
+  static class IntegerUpdater implements ParquetVectorUpdater {
     @Override
     public void readValues(
         int total,

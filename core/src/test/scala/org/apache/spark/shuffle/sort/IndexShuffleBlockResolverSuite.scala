@@ -27,7 +27,8 @@ import org.mockito.invocation.InvocationOnMock
 import org.roaringbitmap.RoaringBitmap
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.{MapOutputTracker, SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config
 import org.apache.spark.shuffle.{IndexShuffleBlockResolver, ShuffleBlockInfo}
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
@@ -48,6 +49,8 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
 
     when(blockManager.diskBlockManager).thenReturn(diskBlockManager)
     when(diskBlockManager.getFile(any[BlockId])).thenAnswer(
+      (invocation: InvocationOnMock) => new File(tempDir, invocation.getArguments.head.toString))
+    when(diskBlockManager.getFile(any[String])).thenAnswer(
       (invocation: InvocationOnMock) => new File(tempDir, invocation.getArguments.head.toString))
     when(diskBlockManager.getMergedShuffleFile(
       any[BlockId], any[Option[Array[String]]])).thenAnswer(
@@ -77,7 +80,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths, dataTmp)
+    resolver.writeMetadataFileAndCommit(shuffleId, mapId, lengths, Array.empty, dataTmp)
 
     val indexFile = new File(tempDir.getAbsolutePath, idxName)
     val dataFile = resolver.getDataFile(shuffleId, mapId)
@@ -97,7 +100,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out2.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths2, dataTmp2)
+    resolver.writeMetadataFileAndCommit(shuffleId, mapId, lengths2, Array.empty, dataTmp2)
 
     assert(indexFile.length() === (lengths.length + 1) * 8)
     assert(lengths2.toSeq === lengths.toSeq)
@@ -136,7 +139,7 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out3.close()
     }
-    resolver.writeIndexFileAndCommit(shuffleId, mapId, lengths3, dataTmp3)
+    resolver.writeMetadataFileAndCommit(shuffleId, mapId, lengths3, Array.empty, dataTmp3)
     assert(indexFile.length() === (lengths3.length + 1) * 8)
     assert(lengths3.toSeq != lengths.toSeq)
     assert(dataFile.exists())
@@ -169,8 +172,9 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
 
   test("getMergedBlockData should return expected FileSegmentManagedBuffer list") {
     val shuffleId = 1
+    val shuffleMergeId = 0
     val reduceId = 1
-    val dataFileName = s"shuffleMerged_${appId}_${shuffleId}_$reduceId.data"
+    val dataFileName = s"shuffleMerged_${appId}_${shuffleId}_${shuffleMergeId}_$reduceId.data"
     val dataFile = new File(tempDir.getAbsolutePath, dataFileName)
     val out = new FileOutputStream(dataFile)
     Utils.tryWithSafeFinally {
@@ -178,12 +182,13 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       out.close()
     }
-    val indexFileName = s"shuffleMerged_${appId}_${shuffleId}_$reduceId.index"
+    val indexFileName = s"shuffleMerged_${appId}_${shuffleId}_${shuffleMergeId}_$reduceId.index"
     generateMergedShuffleIndexFile(indexFileName)
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
     val dirs = Some(Array[String](tempDir.getAbsolutePath))
     val managedBufferList =
-      resolver.getMergedBlockData(ShuffleBlockId(shuffleId, -1, reduceId), dirs)
+      resolver.getMergedBlockData(ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId),
+        dirs)
     assert(managedBufferList.size === 3)
     assert(managedBufferList(0).size === 10)
     assert(managedBufferList(1).size === 0)
@@ -192,8 +197,9 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
 
   test("getMergedBlockMeta should return expected MergedBlockMeta") {
     val shuffleId = 1
+    val shuffleMergeId = 0
     val reduceId = 1
-    val metaFileName = s"shuffleMerged_${appId}_${shuffleId}_$reduceId.meta"
+    val metaFileName = s"shuffleMerged_${appId}_${shuffleId}_${shuffleMergeId}_$reduceId.meta"
     val metaFile = new File(tempDir.getAbsolutePath, metaFileName)
     val chunkTracker = new RoaringBitmap()
     val metaFileOutputStream = new FileOutputStream(metaFile)
@@ -213,13 +219,14 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     }{
       outMeta.close()
     }
-    val indexFileName = s"shuffleMerged_${appId}_${shuffleId}_$reduceId.index"
+    val indexFileName = s"shuffleMerged_${appId}_${shuffleId}_${shuffleMergeId}_$reduceId.index"
     generateMergedShuffleIndexFile(indexFileName)
     val resolver = new IndexShuffleBlockResolver(conf, blockManager)
     val dirs = Some(Array[String](tempDir.getAbsolutePath))
     val mergedBlockMeta =
       resolver.getMergedBlockMeta(
-        ShuffleBlockId(shuffleId, MapOutputTracker.SHUFFLE_PUSH_MAP_ID, reduceId), dirs)
+        ShuffleMergedBlockId(shuffleId, shuffleMergeId, reduceId),
+        dirs)
     assert(mergedBlockMeta.getNumChunks === 3)
     assert(mergedBlockMeta.readChunkBitmaps().size === 3)
     assert(mergedBlockMeta.readChunkBitmaps()(0).contains(1))
@@ -247,5 +254,20 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite with BeforeAndAfterEa
     } {
       outIndex.close()
     }
+  }
+
+  test("write checksum file") {
+    val resolver = new IndexShuffleBlockResolver(conf, blockManager)
+    val dataTmp = File.createTempFile("shuffle", null, tempDir)
+    val indexInMemory = Array[Long](0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+    val checksumsInMemory = Array[Long](0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
+    resolver.writeMetadataFileAndCommit(0, 0, indexInMemory, checksumsInMemory, dataTmp)
+    val checksumFile = resolver.getChecksumFile(0, 0, conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
+    assert(checksumFile.exists())
+    val checksumFileName = checksumFile.toString
+    val checksumAlgo = checksumFileName.substring(checksumFileName.lastIndexOf(".") + 1)
+    assert(checksumAlgo === conf.get(config.SHUFFLE_CHECKSUM_ALGORITHM))
+    val checksumsFromFile = resolver.getChecksums(checksumFile, 10)
+    assert(checksumsInMemory === checksumsFromFile)
   }
 }

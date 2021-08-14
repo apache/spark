@@ -21,6 +21,9 @@ import java.net.ConnectException;
 
 import org.junit.Test;
 
+import org.apache.spark.network.server.BlockPushNonFatalFailure;
+import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode;
+
 import static org.junit.Assert.*;
 
 /**
@@ -29,23 +32,35 @@ import static org.junit.Assert.*;
 public class ErrorHandlerSuite {
 
   @Test
-  public void testPushErrorRetry() {
-    ErrorHandler.BlockPushErrorHandler handler = new ErrorHandler.BlockPushErrorHandler();
-    assertFalse(handler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))));
-    assertFalse(handler.shouldRetryError(new RuntimeException(new ConnectException())));
-    assertTrue(handler.shouldRetryError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))));
-    assertTrue(handler.shouldRetryError(new Throwable()));
+  public void testErrorRetry() {
+    ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
+    assertFalse(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
+      ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
+    assertFalse(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
+      ReturnCode.STALE_BLOCK_PUSH, "")));
+    assertFalse(pushHandler.shouldRetryError(new RuntimeException(new ConnectException())));
+    assertTrue(pushHandler.shouldRetryError(new BlockPushNonFatalFailure(
+      ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, "")));
+    assertTrue(pushHandler.shouldRetryError(new Throwable()));
+
+    ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();
+    assertFalse(fetchHandler.shouldRetryError(new RuntimeException(
+      ErrorHandler.BlockFetchErrorHandler.STALE_SHUFFLE_BLOCK_FETCH)));
   }
 
   @Test
-  public void testPushErrorLogging() {
-    ErrorHandler.BlockPushErrorHandler handler = new ErrorHandler.BlockPushErrorHandler();
-    assertFalse(handler.shouldLogError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.TOO_LATE_MESSAGE_SUFFIX))));
-    assertFalse(handler.shouldLogError(new RuntimeException(new IllegalArgumentException(
-      ErrorHandler.BlockPushErrorHandler.BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX))));
-    assertTrue(handler.shouldLogError(new Throwable()));
+  public void testErrorLogging() {
+    ErrorHandler.BlockPushErrorHandler pushHandler = new ErrorHandler.BlockPushErrorHandler();
+    assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
+      ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
+    assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
+      ReturnCode.STALE_BLOCK_PUSH, "")));
+    assertFalse(pushHandler.shouldLogError(new BlockPushNonFatalFailure(
+      ReturnCode.BLOCK_APPEND_COLLISION_DETECTED, "")));
+    assertTrue(pushHandler.shouldLogError(new Throwable()));
+
+    ErrorHandler.BlockFetchErrorHandler fetchHandler = new ErrorHandler.BlockFetchErrorHandler();
+    assertFalse(fetchHandler.shouldLogError(new RuntimeException(
+      ErrorHandler.BlockFetchErrorHandler.STALE_SHUFFLE_BLOCK_FETCH)));
   }
 }

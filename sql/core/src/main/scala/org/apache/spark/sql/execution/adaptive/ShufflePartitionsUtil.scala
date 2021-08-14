@@ -56,13 +56,9 @@ object ShufflePartitionsUtil extends Logging {
     // If `minNumPartitions` is very large, it is possible that we need to use a value less than
     // `advisoryTargetSize` as the target size of a coalesced task.
     val totalPostShuffleInputSize = mapOutputStatistics.flatMap(_.map(_.bytesByPartitionId.sum)).sum
-    // The max at here is to make sure that when we have an empty table, we only have a single
-    // coalesced partition.
-    // There is no particular reason that we pick 16. We just need a number to prevent
-    // `maxTargetSize` from being set to 0.
-    val maxTargetSize = math.max(
-      math.ceil(totalPostShuffleInputSize / minNumPartitions.toDouble).toLong, 16)
-    val targetSize = math.min(maxTargetSize, advisoryTargetSize)
+    val maxTargetSize = math.ceil(totalPostShuffleInputSize / minNumPartitions.toDouble).toLong
+    // It's meaningless to make target size smaller than minPartitionSize.
+    val targetSize = maxTargetSize.min(advisoryTargetSize).max(minPartitionSize)
 
     val shuffleIds = mapOutputStatistics.flatMap(_.map(_.shuffleId)).mkString(", ")
     logInfo(s"For shuffle($shuffleIds), advisory target size: $advisoryTargetSize, " +
@@ -86,7 +82,7 @@ object ShufflePartitionsUtil extends Logging {
     // we should skip it when calculating the `partitionStartIndices`.
     val validMetrics = mapOutputStatistics.flatten
     val numShuffles = mapOutputStatistics.length
-    // If all input RDDs have 0 partition, we create an empty partition for every shuffle reader.
+    // If all input RDDs have 0 partition, we create an empty partition for every shuffle read.
     if (validMetrics.isEmpty) {
       return Seq.fill(numShuffles)(Seq(CoalescedPartitionSpec(0, 0, 0)))
     }
@@ -362,11 +358,15 @@ object ShufflePartitionsUtil extends Logging {
   }
 
   /**
-   * Get the map size of the specific reduce shuffle Id.
+   * Get the map size of the specific shuffle and reduce ID. Note that, some map outputs can be
+   * missing due to issues like executor lost. The size will be -1 for missing map outputs and the
+   * caller side should take care of it.
    */
   private def getMapSizesForReduceId(shuffleId: Int, partitionId: Int): Array[Long] = {
     val mapOutputTracker = SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-    mapOutputTracker.shuffleStatuses(shuffleId).mapStatuses.map{_.getSizeForBlock(partitionId)}
+    mapOutputTracker.shuffleStatuses(shuffleId).withMapStatuses(_.map { stat =>
+      if (stat == null) -1 else stat.getSizeForBlock(partitionId)
+    })
   }
 
   /**
@@ -378,6 +378,7 @@ object ShufflePartitionsUtil extends Logging {
       reducerId: Int,
       targetSize: Long): Option[Seq[PartialReducerPartitionSpec]] = {
     val mapPartitionSizes = getMapSizesForReduceId(shuffleId, reducerId)
+    if (mapPartitionSizes.exists(_ < 0)) return None
     val mapStartIndices = splitSizeListByTargetSize(mapPartitionSizes, targetSize)
     if (mapStartIndices.length > 1) {
       Some(mapStartIndices.indices.map { i =>

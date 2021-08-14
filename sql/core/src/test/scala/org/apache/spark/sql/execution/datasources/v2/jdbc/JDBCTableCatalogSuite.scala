@@ -240,7 +240,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName DROP COLUMN bad_column")
       }.getMessage
-      assert(msg.contains("Cannot delete missing field bad_column in h2.test.alt_table schema"))
+      assert(msg.contains("Missing field bad_column in table h2.test.alt_table"))
     }
     // Drop a column to not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
@@ -266,7 +266,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val msg1 = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column TYPE DOUBLE")
       }.getMessage
-      assert(msg1.contains("Cannot update missing field bad_column in h2.test.alt_table schema"))
+      assert(msg1.contains("Missing field bad_column in table h2.test.alt_table"))
       // Update column to wrong type
       val msg2 = intercept[ParseException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN id TYPE bad_type")
@@ -297,7 +297,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column DROP NOT NULL")
       }.getMessage
-      assert(msg.contains("Cannot update missing field bad_column in h2.test.alt_table"))
+      assert(msg.contains("Missing field bad_column in table h2.test.alt_table"))
     }
     // Update column nullability in not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
@@ -321,7 +321,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
       val msg = intercept[AnalysisException] {
         sql(s"ALTER TABLE $tableName ALTER COLUMN bad_column COMMENT 'test'")
       }.getMessage
-      assert(msg.contains("Cannot update missing field bad_column in h2.test.alt_table"))
+      assert(msg.contains("Missing field bad_column in table h2.test.alt_table"))
     }
     // Update column comments in not existing table and namespace
     Seq("h2.test.not_existing_table", "h2.bad_test.not_existing_table").foreach { table =>
@@ -346,7 +346,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         val msg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName RENAME COLUMN C2 TO c3")
         }.getMessage
-        assert(msg.contains("Cannot rename missing field C2 in h2.test.alt_table schema"))
+        assert(msg.contains("Missing field C2 in table h2.test.alt_table"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -362,7 +362,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         val msg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName DROP COLUMN C3")
         }.getMessage
-        assert(msg.contains("Cannot delete missing field C3 in h2.test.alt_table schema"))
+        assert(msg.contains("Missing field C3 in table h2.test.alt_table"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -376,7 +376,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         val msg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName ALTER COLUMN C1 TYPE DOUBLE")
         }.getMessage
-        assert(msg.contains("Cannot update missing field C1 in h2.test.alt_table schema"))
+        assert(msg.contains("Missing field C1 in table h2.test.alt_table"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
@@ -390,7 +390,7 @@ class JDBCTableCatalogSuite extends QueryTest with SharedSparkSession {
         val msg = intercept[AnalysisException] {
           sql(s"ALTER TABLE $tableName ALTER COLUMN C1 DROP NOT NULL")
         }.getMessage
-        assert(msg.contains("Cannot update missing field C1 in h2.test.alt_table schema"))
+        assert(msg.contains("Missing field C1 in table h2.test.alt_table"))
       }
 
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {

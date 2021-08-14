@@ -35,6 +35,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.ExecutorMetrics
 import org.apache.spark.internal.config
+import org.apache.spark.internal.config.Tests
 import org.apache.spark.rdd.{DeterministicLevel, RDD}
 import org.apache.spark.resource.{ExecutorResourceRequests, ResourceProfile, ResourceProfileBuilder, TaskResourceRequests}
 import org.apache.spark.resource.ResourceUtils.{FPGA, GPU}
@@ -314,7 +315,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         shuffleMapStage: ShuffleMapStage): Unit = {
       if (shuffleMergeRegister) {
         for (part <- 0 until shuffleMapStage.shuffleDep.partitioner.numPartitions) {
-          val mergeStatuses = Seq((part, makeMergeStatus("")))
+          val mergeStatuses = Seq((part, makeMergeStatus("",
+            shuffleMapStage.shuffleDep.shuffleMergeId)))
           handleRegisterMergeStatuses(shuffleMapStage, mergeStatuses)
         }
         if (shuffleMergeFinalize) {
@@ -3427,6 +3429,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     conf.set(config.SHUFFLE_SERVICE_ENABLED, true)
     conf.set(config.PUSH_BASED_SHUFFLE_ENABLED, true)
     conf.set("spark.master", "pushbasedshuffleclustermanager")
+    // Needed to run push-based shuffle tests in ad-hoc manner through IDE
+    conf.set(Tests.IS_TESTING, true)
   }
 
   test("SPARK-32920: shuffle merge finalization") {
@@ -3723,9 +3727,11 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         (Success, makeMapStatus("hostA", parts))
     }.toSeq)
     val shuffleMapStage = scheduler.stageIdToStage(0).asInstanceOf[ShuffleMapStage]
-    scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((0, makeMergeStatus("hostA"))))
+    scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((0, makeMergeStatus("hostA",
+      shuffleDep.shuffleMergeId))))
     scheduler.handleShuffleMergeFinalized(shuffleMapStage)
-    scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((1, makeMergeStatus("hostA"))))
+    scheduler.handleRegisterMergeStatuses(shuffleMapStage, Seq((1, makeMergeStatus("hostA",
+      shuffleDep.shuffleMergeId))))
     assert(mapOutputTracker.getNumAvailableMergeResults(shuffleDep.shuffleId) == 1)
   }
 
@@ -3774,6 +3780,71 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     runEvent(makeCompletionEvent(
       taskSets(1).tasks(1), metadataFetchFailedEx.toTaskFailedReason, null))
     assert(mapOutputTracker.getNumAvailableOutputs(shuffleDep.shuffleId) == parts)
+  }
+
+  test("SPARK-32923: handle stage failure for indeterminate map stage with push-based shuffle") {
+    initPushBasedShuffleConfs(conf)
+    DAGSchedulerSuite.clearMergerLocs
+    DAGSchedulerSuite.addMergerLocs(Seq("host1", "host2", "host3", "host4", "host5"))
+    val (shuffleId1, shuffleId2) = constructIndeterminateStageFetchFailed()
+
+    // Check status for all failedStages
+    val failedStages = scheduler.failedStages.toSeq
+    assert(failedStages.map(_.id) == Seq(1, 2))
+    // Shuffle blocks of "hostC" is lost, so first task of the `shuffleMapRdd2` needs to retry.
+    assert(failedStages.collect {
+      case stage: ShuffleMapStage if stage.shuffleDep.shuffleId == shuffleId2 => stage
+    }.head.findMissingPartitions() == Seq(0))
+    // The result stage is still waiting for its 2 tasks to complete
+    assert(failedStages.collect {
+      case stage: ResultStage => stage
+    }.head.findMissingPartitions() == Seq(0, 1))
+    // shuffleMergeId for indeterminate stages would start from 1
+    assert(failedStages.collect {
+      case stage: ShuffleMapStage => stage.shuffleDep.shuffleMergeId
+    }.forall(x => x == 1))
+    scheduler.resubmitFailedStages()
+
+    // The first task of the `shuffleMapRdd2` failed with fetch failure
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(0),
+      FetchFailed(makeBlockManagerId("hostA"), shuffleId1, 0L, 0, 0, "ignored"),
+      null))
+
+    val newFailedStages = scheduler.failedStages.toSeq
+    assert(newFailedStages.map(_.id) == Seq(0, 1))
+    // shuffleMergeId for indeterminate failed stages should be 2
+    assert(failedStages.collect {
+      case stage: ShuffleMapStage => stage.shuffleDep.shuffleMergeId
+    }.forall(x => x == 2))
+    scheduler.resubmitFailedStages()
+
+    // First shuffle map stage resubmitted and reran all tasks.
+    assert(taskSets(4).stageId == 0)
+    assert(taskSets(4).stageAttemptId == 1)
+    assert(taskSets(4).tasks.length == 2)
+
+    // Finish all stage.
+    completeShuffleMapStageSuccessfully(0, 1, 2)
+    assert(mapOutputTracker.findMissingPartitions(shuffleId1) === Some(Seq.empty))
+    // shuffleMergeId should be 2 for the attempt number 1 for stage 0
+    assert(mapOutputTracker.shuffleStatuses.get(shuffleId1).forall(
+      _.mergeStatuses.forall(x => x.shuffleMergeId == 2)))
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleId1) == 2)
+
+    completeShuffleMapStageSuccessfully(1, 2, 2, Seq("hostC", "hostD"))
+    assert(mapOutputTracker.findMissingPartitions(shuffleId2) === Some(Seq.empty))
+    // shuffleMergeId should be 2 for the attempt number 2 for stage 1
+    assert(mapOutputTracker.shuffleStatuses.get(shuffleId2).forall(
+      _.mergeStatuses.forall(x => x.shuffleMergeId == 3)))
+    assert(mapOutputTracker.getNumAvailableMergeResults(shuffleId2) == 2)
+
+    complete(taskSets(6), Seq((Success, 11), (Success, 12)))
+
+    // Job successful ended.
+    assert(results === Map(0 -> 11, 1 -> 12))
+    results.clear()
+    assertDataStructuresEmpty()
   }
 
   /**
@@ -3840,8 +3911,8 @@ object DAGSchedulerSuite {
     BlockManagerId(host + "-exec", host, 12345)
   }
 
-  def makeMergeStatus(host: String, size: Long = 1000): MergeStatus =
-    MergeStatus(makeBlockManagerId(host), mock(classOf[RoaringBitmap]), size)
+  def makeMergeStatus(host: String, shuffleMergeId: Int, size: Long = 1000): MergeStatus =
+    MergeStatus(makeBlockManagerId(host), shuffleMergeId, mock(classOf[RoaringBitmap]), size)
 
   def addMergerLocs(locs: Seq[String]): Unit = {
     locs.foreach { loc => mergerLocs.append(makeBlockManagerId(loc)) }

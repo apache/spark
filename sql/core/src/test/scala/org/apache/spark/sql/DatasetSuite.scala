@@ -701,6 +701,57 @@ class DatasetSuite extends QueryTest
       1 -> "a", 2 -> "bc", 3 -> "d")
   }
 
+  test("SPARK-34806: observation on datasets") {
+    val namedObservation = Observation("named")
+    val unnamedObservation = Observation()
+
+    val df = spark.range(100)
+    val observed_df = df
+      .observe(
+        namedObservation,
+        min($"id").as("min_val"),
+        max($"id").as("max_val"),
+        sum($"id").as("sum_val"),
+        count(when($"id" % 2 === 0, 1)).as("num_even")
+      )
+      .observe(
+        unnamedObservation,
+        avg($"id").cast("int").as("avg_val")
+      )
+
+    def checkMetrics(namedMetric: Observation, unnamedMetric: Observation): Unit = {
+      assert(namedMetric.get === Map(
+        "min_val" -> 0L, "max_val" -> 99L, "sum_val" -> 4950L, "num_even" -> 50L)
+      )
+      assert(unnamedMetric.get === Map("avg_val" -> 49))
+    }
+
+    observed_df.collect()
+    // we can get the result multiple times
+    checkMetrics(namedObservation, unnamedObservation)
+    checkMetrics(namedObservation, unnamedObservation)
+
+    // an observation can be used only once
+    val err = intercept[IllegalArgumentException] {
+      df.observe(namedObservation, sum($"id").as("sum_val"))
+    }
+    assert(err.getMessage.contains("An Observation can be used with a Dataset only once"))
+
+    // streaming datasets are not supported
+    val streamDf = new MemoryStream[Int](0, sqlContext).toDF()
+    val streamObservation = Observation("stream")
+    val streamErr = intercept[IllegalArgumentException] {
+      streamDf.observe(streamObservation, avg($"value").cast("int").as("avg_val"))
+    }
+    assert(streamErr.getMessage.contains("Observation does not support streaming Datasets"))
+
+    // an observation cannot have an empty name
+    val err2 = intercept[IllegalArgumentException] {
+      Observation("")
+    }
+    assert(err2.getMessage.contains("Name must not be empty"))
+  }
+
   test("sample with replacement") {
     val n = 100
     val data = sparkContext.parallelize(1 to n, 2).toDS()
@@ -2039,6 +2090,23 @@ class DatasetSuite extends QueryTest
     checkDataset(
       joined,
       (1, 1), (2, 2), (3, 3))
+  }
+
+  test("SPARK-36210: withColumns preserve insertion ordering") {
+    val df = Seq(1, 2, 3).toDS()
+
+    val colNames = (1 to 10).map(i => s"value${i}")
+    val cols = (1 to 10).map(i => col("value") + i)
+
+    val inserted = df.withColumns(colNames, cols)
+
+    assert(inserted.columns === "value" +: colNames)
+
+    checkDataset(
+      inserted.as[(Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int)],
+      (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11),
+      (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12),
+      (3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13))
   }
 }
 

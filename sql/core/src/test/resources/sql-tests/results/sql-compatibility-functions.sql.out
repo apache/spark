@@ -5,7 +5,7 @@
 -- !query
 SELECT ifnull(null, 'x'), ifnull('y', 'x'), ifnull(null, null)
 -- !query schema
-struct<ifnull(NULL, x):string,ifnull(y, x):string,ifnull(NULL, NULL):null>
+struct<ifnull(NULL, x):string,ifnull(y, x):string,ifnull(NULL, NULL):void>
 -- !query output
 x	y	NULL
 
@@ -21,7 +21,7 @@ NULL	x
 -- !query
 SELECT nvl(null, 'x'), nvl('y', 'x'), nvl(null, null)
 -- !query schema
-struct<nvl(NULL, x):string,nvl(y, x):string,nvl(NULL, NULL):null>
+struct<nvl(NULL, x):string,nvl(y, x):string,nvl(NULL, NULL):void>
 -- !query output
 x	y	NULL
 
@@ -29,7 +29,7 @@ x	y	NULL
 -- !query
 SELECT nvl2(null, 'x', 'y'), nvl2('n', 'x', 'y'), nvl2(null, null, null)
 -- !query schema
-struct<nvl2(NULL, x, y):string,nvl2(n, x, y):string,nvl2(NULL, NULL, NULL):null>
+struct<nvl2(NULL, x, y):string,nvl2(n, x, y):string,nvl2(NULL, NULL, NULL):void>
 -- !query output
 y	x	NULL
 

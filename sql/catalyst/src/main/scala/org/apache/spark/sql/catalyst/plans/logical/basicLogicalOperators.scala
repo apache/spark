@@ -599,7 +599,7 @@ object View {
         "spark.sql.hive.convertMetastoreOrc",
         "spark.sql.hive.convertInsertingPartitionedTable",
         "spark.sql.hive.convertMetastoreCtas"
-      ).contains(key))
+      ).contains(key) || key.startsWith("spark.sql.catalog."))
     for ((k, v) <- configs ++ retainedConfigs) {
       sqlConf.settings.put(k, v)
     }
@@ -1449,9 +1449,21 @@ case class CollectMetrics(
  * A placeholder for domain join that can be added when decorrelating subqueries.
  * It should be rewritten during the optimization phase.
  */
-case class DomainJoin(domainAttrs: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output ++ domainAttrs
+case class DomainJoin(
+    domainAttrs: Seq[Attribute],
+    child: LogicalPlan,
+    joinType: JoinType = Inner,
+    condition: Option[Expression] = None) extends UnaryNode {
+
+  require(Seq(Inner, LeftOuter).contains(joinType), s"Unsupported domain join type $joinType")
+
+  override def output: Seq[Attribute] = joinType match {
+    case LeftOuter => domainAttrs ++ child.output.map(_.withNullability(true))
+    case _ => domainAttrs ++ child.output
+  }
+
   override def producedAttributes: AttributeSet = AttributeSet(domainAttrs)
+
   override protected def withNewChildInternal(newChild: LogicalPlan): DomainJoin =
     copy(child = newChild)
 }

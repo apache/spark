@@ -47,10 +47,13 @@ NULL
 #'               \item \code{to_date} and \code{to_timestamp}: it is the string to use to parse
 #'                    Column \code{x} to DateType or TimestampType.
 #'               \item \code{trunc}: it is the string to use to specify the truncation method.
-#'                    For example, "year", "yyyy", "yy" for truncate by year, or "month", "mon",
-#'                    "mm" for truncate by month.
+#'                    'year', 'yyyy', 'yy' to truncate by year,
+#'                    or 'month', 'mon', 'mm' to truncate by month
+#'                    Other options are: 'week', 'quarter'
 #'               \item \code{date_trunc}: it is similar with \code{trunc}'s but additionally
-#'                    supports "day", "dd", "second", "minute", "hour", "week" and "quarter".
+#'                    supports
+#'                    'day', 'dd' to truncate by day,
+#'                    'microsecond', 'millisecond', 'second', 'minute' and 'hour'
 #'               }
 #' @param ... additional argument(s).
 #' @name column_datetime_functions
@@ -1011,6 +1014,7 @@ setMethod("dayofmonth",
 #' @details
 #' \code{dayofweek}: Extracts the day of the week as an integer from a
 #' given date/timestamp/string.
+#' Ranges from 1 for a Sunday through to 7 for a Saturday
 #'
 #' @rdname column_datetime_functions
 #' @aliases dayofweek dayofweek,Column-method
@@ -2333,6 +2337,8 @@ setMethod("var_samp",
 
 #' @details
 #' \code{weekofyear}: Extracts the week number as an integer from a given date/timestamp/string.
+#' A week is considered to start on a Monday and week 1 is the first week with more than 3 days,
+#' as defined by ISO 8601
 #'
 #' @rdname column_datetime_functions
 #' @aliases weekofyear weekofyear,Column-method

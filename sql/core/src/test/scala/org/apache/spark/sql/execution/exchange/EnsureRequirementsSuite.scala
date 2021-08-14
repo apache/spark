@@ -30,6 +30,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprB = Literal(2)
   private val exprC = Literal(3)
 
+  private val EnsureRequirements = new EnsureRequirements()
+
   test("reorder should handle PartitioningCollection") {
     val plan1 = DummySparkPlan(
       outputPartitioning = PartitioningCollection(Seq(

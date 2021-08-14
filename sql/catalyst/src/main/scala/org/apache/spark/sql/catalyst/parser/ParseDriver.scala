@@ -21,7 +21,7 @@ import org.antlr.v4.runtime.atn.PredictionMode
 import org.antlr.v4.runtime.misc.{Interval, ParseCancellationException}
 import org.antlr.v4.runtime.tree.TerminalNodeImpl
 
-import org.apache.spark.SparkError
+import org.apache.spark.SparkThrowableHelper
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, SQLConfHelper, TableIdentifier}
@@ -126,8 +126,8 @@ abstract class AbstractSqlParser extends ParserInterface with SQLConfHelper with
         throw e.withCommand(command)
       case e: AnalysisException =>
         val position = Origin(e.line, e.startPosition)
-        throw new ParseException(
-          Option(command), e.message, position, position, e.errorClass, e.messageParameters)
+        throw new ParseException(Option(command), e.message, position, position,
+          e.errorClass, e.messageParameters)
     }
   }
 }
@@ -215,7 +215,7 @@ class ParseException(
     val start: Origin,
     val stop: Origin,
     errorClass: Option[String] = None,
-    messageParameters: Seq[String] = Seq.empty)
+    messageParameters: Array[String] = Array.empty)
   extends AnalysisException(
     message,
     start.line,
@@ -232,9 +232,9 @@ class ParseException(
       ParserUtils.position(ctx.getStop))
   }
 
-  def this(errorClass: String, messageParameters: Seq[String], ctx: ParserRuleContext) =
+  def this(errorClass: String, messageParameters: Array[String], ctx: ParserRuleContext) =
     this(Option(ParserUtils.command(ctx)),
-      SparkError.getMessage(errorClass, messageParameters),
+      SparkThrowableHelper.getMessage(errorClass, messageParameters),
       ParserUtils.position(ctx.getStart),
       ParserUtils.position(ctx.getStop),
       Some(errorClass),

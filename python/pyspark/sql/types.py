@@ -107,7 +107,9 @@ class NullType(DataType, metaclass=DataTypeSingleton):
 
     The data type representing None, used for the types that cannot be inferred.
     """
-    pass
+    @classmethod
+    def typeName(cls):
+        return 'void'
 
 
 class AtomicType(DataType):
@@ -398,9 +400,9 @@ class StructField(DataType):
         name of the field.
     dataType : :class:`DataType`
         :class:`DataType` of the field.
-    nullable : bool
+    nullable : bool, optional
         whether the field can be null (None) or not.
-    metadata : dict
+    metadata : dict, optional
         a dict from string to simple type that can be toInternald to JSON automatically
 
     Examples
@@ -498,20 +500,20 @@ class StructType(DataType):
 
     def add(self, field, data_type=None, nullable=True, metadata=None):
         """
-        Construct a StructType by adding new elements to it, to define the schema.
+        Construct a :class:`StructType` by adding new elements to it, to define the schema.
         The method accepts either:
 
-            a) A single parameter which is a StructField object.
+            a) A single parameter which is a :class:`StructField` object.
             b) Between 2 and 4 parameters as (name, data_type, nullable (optional),
                metadata(optional). The data_type parameter may be either a String or a
-               DataType object.
+               :class:`DataType` object.
 
         Parameters
         ----------
         field : str or :class:`StructField`
-            Either the name of the field or a StructField object
+            Either the name of the field or a :class:`StructField` object
         data_type : :class:`DataType`, optional
-            If present, the DataType of the StructField to create
+            If present, the DataType of the :class:`StructField` to create
         nullable : bool, optional
             Whether the field to add should be nullable (default True)
         metadata : dict, optional
@@ -1003,7 +1005,7 @@ if sys.version_info[0] < 4:
     _array_type_mappings['u'] = StringType
 
 
-def _infer_type(obj):
+def _infer_type(obj, infer_dict_as_struct=False):
     """Infer the DataType from obj
     """
     if obj is None:
@@ -1020,14 +1022,22 @@ def _infer_type(obj):
         return dataType()
 
     if isinstance(obj, dict):
-        for key, value in obj.items():
-            if key is not None and value is not None:
-                return MapType(_infer_type(key), _infer_type(value), True)
-        return MapType(NullType(), NullType(), True)
+        if infer_dict_as_struct:
+            struct = StructType()
+            for key, value in obj.items():
+                if key is not None and value is not None:
+                    struct.add(key, _infer_type(value, infer_dict_as_struct), True)
+            return struct
+        else:
+            for key, value in obj.items():
+                if key is not None and value is not None:
+                    return MapType(_infer_type(key, infer_dict_as_struct),
+                                   _infer_type(value, infer_dict_as_struct), True)
+            return MapType(NullType(), NullType(), True)
     elif isinstance(obj, list):
         for v in obj:
             if v is not None:
-                return ArrayType(_infer_type(obj[0]), True)
+                return ArrayType(_infer_type(obj[0], infer_dict_as_struct), True)
         return ArrayType(NullType(), True)
     elif isinstance(obj, array):
         if obj.typecode in _array_type_mappings:
@@ -1036,12 +1046,12 @@ def _infer_type(obj):
             raise TypeError("not supported type: array(%s)" % obj.typecode)
     else:
         try:
-            return _infer_schema(obj)
+            return _infer_schema(obj, infer_dict_as_struct=infer_dict_as_struct)
         except TypeError:
             raise TypeError("not supported type: %s" % type(obj))
 
 
-def _infer_schema(row, names=None):
+def _infer_schema(row, names=None, infer_dict_as_struct=False):
     """Infer the schema from dict/namedtuple/object"""
     if isinstance(row, dict):
         items = sorted(row.items())
@@ -1067,7 +1077,7 @@ def _infer_schema(row, names=None):
     fields = []
     for k, v in items:
         try:
-            fields.append(StructField(k, _infer_type(v), True))
+            fields.append(StructField(k, _infer_type(v, infer_dict_as_struct), True))
         except TypeError as e:
             raise TypeError("Unable to infer the type of the field {}.".format(k)) from e
     return StructType(fields)

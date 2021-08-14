@@ -27,11 +27,7 @@ import numpy as np
 import pandas as pd  # noqa: F401
 from pandas.api.types import is_list_like, CategoricalDtype
 from pyspark.sql import functions as F, Column, Window
-from pyspark.sql.types import (
-    DoubleType,
-    FloatType,
-    LongType,
-)
+from pyspark.sql.types import LongType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
@@ -317,7 +313,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
 
     # arithmetic operators
     def __neg__(self: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, column_op(Column.__neg__)(self))
+        return self._dtype_op.neg(self)
 
     def __add__(self, other: Any) -> SeriesOrIndex:
         return self._dtype_op.add(self, other)
@@ -394,22 +390,29 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         return self._dtype_op.rpow(self, other)
 
     def __abs__(self: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, column_op(F.abs)(self))
+        return self._dtype_op.abs(self)
 
     # comparison operators
     def __eq__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
-        return column_op(Column.__eq__)(self, other)
+        return self._dtype_op.eq(self, other)
 
     def __ne__(self, other: Any) -> SeriesOrIndex:  # type: ignore[override]
-        return column_op(Column.__ne__)(self, other)
+        return self._dtype_op.ne(self, other)
 
-    __lt__ = column_op(Column.__lt__)
-    __le__ = column_op(Column.__le__)
-    __ge__ = column_op(Column.__ge__)
-    __gt__ = column_op(Column.__gt__)
+    def __lt__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.lt(self, other)
+
+    def __le__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.le(self, other)
+
+    def __ge__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.ge(self, other)
+
+    def __gt__(self, other: Any) -> SeriesOrIndex:
+        return self._dtype_op.gt(self, other)
 
     def __invert__(self: IndexOpsLike) -> IndexOpsLike:
-        return cast(IndexOpsLike, column_op(Column.__invert__)(self))
+        return self._dtype_op.invert(self)
 
     # `and`, `or`, `not` cannot be overloaded in Python,
     # so use bitwise operators as boolean operators
@@ -515,13 +518,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         >>> ps.Series([1, 2, 3]).rename("a").to_frame().set_index("a").index.hasnans
         False
         """
-        sdf = self._internal.spark_frame
-        scol = self.spark.column
-
-        if isinstance(self.spark.data_type, (DoubleType, FloatType)):
-            return sdf.select(F.max(scol.isNull() | F.isnan(scol))).collect()[0][0]
-        else:
-            return sdf.select(F.max(scol.isNull())).collect()[0][0]
+        return self.isnull().any()
 
     @property
     def is_monotonic(self) -> bool:
@@ -1573,7 +1570,7 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
                     )
                 )
                 map_scol = F.create_map(*kvs)
-                scol = map_scol.getItem(self.spark.column)
+                scol = map_scol[self.spark.column]
             codes, uniques = self._with_new_scol(
                 scol.alias(self._internal.data_spark_column_names[0])
             ).factorize(na_sentinel=na_sentinel)
@@ -1621,15 +1618,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         if len(kvs) == 0:  # uniques are all missing values
             new_scol = SF.lit(na_sentinel_code)
         else:
-            scol = self.spark.column
-            if isinstance(self.spark.data_type, (FloatType, DoubleType)):
-                cond = scol.isNull() | F.isnan(scol)
-            else:
-                cond = scol.isNull()
             map_scol = F.create_map(*kvs)
-
-            null_scol = F.when(cond, SF.lit(na_sentinel_code))
-            new_scol = null_scol.otherwise(map_scol.getItem(scol))
+            null_scol = F.when(self.isnull().spark.column, SF.lit(na_sentinel_code))
+            new_scol = null_scol.otherwise(map_scol[self.spark.column])
 
         codes = self._with_new_scol(new_scol.alias(self._internal.data_spark_column_names[0]))
 

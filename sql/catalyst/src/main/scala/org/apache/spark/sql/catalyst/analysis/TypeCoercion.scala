@@ -421,8 +421,8 @@ abstract class TypeCoercionBase {
         m.copy(newKeys.zip(newValues).flatMap { case (k, v) => Seq(k, v) })
 
       // Hive lets you do aggregation of timestamps... for some reason
-      case Sum(e @ TimestampType()) => Sum(Cast(e, DoubleType))
-      case Average(e @ TimestampType()) => Average(Cast(e, DoubleType))
+      case Sum(e @ TimestampType(), _) => Sum(Cast(e, DoubleType))
+      case Average(e @ TimestampType(), _) => Average(Cast(e, DoubleType))
 
       // Coalesce should return the first non-null value, which could be any column
       // from the list. So we need to make sure the return type is deterministic and
@@ -867,6 +867,14 @@ object TypeCoercion extends TypeCoercionBase {
       case (_: TimestampType, _: DateType) | (_: DateType, _: TimestampType) =>
         Some(TimestampType)
 
+      case (t1: DayTimeIntervalType, t2: DayTimeIntervalType) =>
+        Some(DayTimeIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
+      case (t1: YearMonthIntervalType, t2: YearMonthIntervalType) =>
+        Some(YearMonthIntervalType(t1.startField.min(t2.startField), t1.endField.max(t2.endField)))
+
+      case (_: TimestampNTZType, _: DateType) | (_: DateType, _: TimestampNTZType) =>
+        Some(TimestampNTZType)
+
       case (t1, t2) => findTypeForComplex(t1, t2, findTightestCommonType)
   }
 
@@ -1091,8 +1099,8 @@ object TypeCoercion extends TypeCoercionBase {
         p.makeCopy(Array(castExpr(left, commonType), castExpr(right, commonType)))
 
       case Abs(e @ StringType(), failOnError) => Abs(Cast(e, DoubleType), failOnError)
-      case Sum(e @ StringType()) => Sum(Cast(e, DoubleType))
-      case Average(e @ StringType()) => Average(Cast(e, DoubleType))
+      case Sum(e @ StringType(), _) => Sum(Cast(e, DoubleType))
+      case Average(e @ StringType(), _) => Average(Cast(e, DoubleType))
       case s @ StddevPop(e @ StringType(), _) =>
         s.withNewChildren(Seq(Cast(e, DoubleType)))
       case s @ StddevSamp(e @ StringType(), _) =>

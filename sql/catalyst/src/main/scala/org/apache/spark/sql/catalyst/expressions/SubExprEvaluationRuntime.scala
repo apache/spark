@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.IdentityHashMap
 
-import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
+import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -38,14 +38,17 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
   // won't be use by multi-threads so we don't need to consider concurrency here.
   private var proxyExpressionCurrentId = 0
 
-  private[sql] val cache: LoadingCache[ExpressionProxy, ResultProxy] = CacheBuilder.newBuilder()
-    .maximumSize(cacheMaxEntries)
-    .build(
-      new CacheLoader[ExpressionProxy, ResultProxy]() {
-        override def load(expr: ExpressionProxy): ResultProxy = {
-          ResultProxy(expr.proxyEval(currentInput))
-        }
-      })
+  private[sql] val cache: LoadingCache[ExpressionProxy, ResultProxy] =
+    Caffeine.newBuilder().maximumSize(cacheMaxEntries)
+      // SPARK-34309: Use custom Executor to compatible with
+      // the data eviction behavior of Guava cache
+      .executor((command: Runnable) => command.run())
+      .build[ExpressionProxy, ResultProxy](
+        new CacheLoader[ExpressionProxy, ResultProxy]() {
+          override def load(expr: ExpressionProxy): ResultProxy = {
+            ResultProxy(expr.proxyEval(currentInput))
+          }
+        })
 
   private var currentInput: InternalRow = null
 
@@ -73,11 +76,11 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
    */
   private def replaceWithProxy(
       expr: Expression,
+      equivalentExpressions: EquivalentExpressions,
       proxyMap: IdentityHashMap[Expression, ExpressionProxy]): Expression = {
-    if (proxyMap.containsKey(expr)) {
-      proxyMap.get(expr)
-    } else {
-      expr.mapChildren(replaceWithProxy(_, proxyMap))
+    equivalentExpressions.getExprState(expr) match {
+      case Some(stats) if proxyMap.containsKey(stats.expr) => proxyMap.get(stats.expr)
+      case _ => expr.mapChildren(replaceWithProxy(_, equivalentExpressions, proxyMap))
     }
   }
 
@@ -91,9 +94,8 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
 
     val proxyMap = new IdentityHashMap[Expression, ExpressionProxy]
 
-    val commonExprs = equivalentExpressions.getAllEquivalentExprs(1)
-    commonExprs.foreach { e =>
-      val expr = e.head
+    val commonExprs = equivalentExpressions.getCommonSubexpressions
+    commonExprs.foreach { expr =>
       val proxy = ExpressionProxy(expr, proxyExpressionCurrentId, this)
       proxyExpressionCurrentId += 1
 
@@ -102,12 +104,12 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
       // common expr2, ..., common expr n), we will insert into `proxyMap` some key/value
       // pairs like Map(common expr 1 -> proxy(common expr 1), ...,
       // common expr n -> proxy(common expr 1)).
-      e.map(proxyMap.put(_, proxy))
+      proxyMap.put(expr, proxy)
     }
 
     // Only adding proxy if we find subexpressions.
     if (!proxyMap.isEmpty) {
-      expressions.map(replaceWithProxy(_, proxyMap))
+      expressions.map(replaceWithProxy(_, equivalentExpressions, proxyMap))
     } else {
       expressions
     }
