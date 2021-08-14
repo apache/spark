@@ -2944,7 +2944,7 @@ class DataFrameSuite extends QueryTest
     assert(ids.toSet === Range(0, 10).toSet)
   }
 
-  test("SPARK-36453 json processing should work with all floating point special literals") {
+  test("SPARK-36453: json processing should work with all floating point special literals") {
     val inf = Seq("inf", "Inf", "+Inf", "infinity", "+Infinity")
     val infNeg = Seq("-inf", "-Inf", "-infinity", "-Infinity")
     val nan = Seq("NaN", "nan")
