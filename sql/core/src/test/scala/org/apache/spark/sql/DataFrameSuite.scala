@@ -3032,7 +3032,7 @@ class DataFrameSuite extends QueryTest
     nan.map((_, Double.NaN, "DOUBLE")) ++
     inf.map((_, Float.PositiveInfinity, "FLOAT")) ++
     infNeg.map((_, Float.NegativeInfinity, "FLOAT")) ++
-    nan.map((_, Float.NaN, "FLOAT"))).foreach{
+    nan.map((_, Float.NaN, "FLOAT"))).foreach {
       case (stringRep, value, schemaType) =>
         val jsonSchema = StructType.fromDDL(s"$structKeyName $schemaType")
         withTempDir { dir =>
