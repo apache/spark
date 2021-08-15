@@ -123,7 +123,7 @@ private[spark] object HiveUtils extends Logging {
       "meta conf in HiveConf")
     .version("3.3.0")
     .stringConf
-    .createWithDefaultString("hive.metaconf.prefix.")
+    .createWithDefaultString("hive.metastore.metaconf.prefix.")
 
   val CONVERT_METASTORE_PARQUET = buildConf("spark.sql.hive.convertMetastoreParquet")
     .doc("When set to true, the built-in Parquet reader and writer are used to process " +
