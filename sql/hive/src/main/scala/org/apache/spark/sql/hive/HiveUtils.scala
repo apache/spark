@@ -118,6 +118,13 @@ private[spark] object HiveUtils extends Logging {
     .toSequence
     .createWithDefault(Nil)
 
+  val HIVE_METASTORE_METACONF_PREFIX = buildStaticConf("spark.sql.hive.metastore.metaconf.prefix")
+    .doc("the prefix of the meta conf in HiveMetastoreClient, which is used to extract " +
+      "meta conf in HiveConf")
+    .version("3.3.0")
+    .stringConf
+    .createWithDefaultString("hive.metaconf.prefix.")
+
   val CONVERT_METASTORE_PARQUET = buildConf("spark.sql.hive.convertMetastoreParquet")
     .doc("When set to true, the built-in Parquet reader and writer are used to process " +
       "parquet tables created by using the HiveQL syntax, instead of Hive serde.")

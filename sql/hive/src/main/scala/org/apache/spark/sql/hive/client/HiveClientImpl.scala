@@ -265,6 +265,10 @@ private[hive] class HiveClientImpl(
       clientLoader.cachedHive.asInstanceOf[Hive]
     } else {
       val c = getHive(conf)
+      val metaConfPrefix = SQLConf.get.getConf(HiveUtils.HIVE_METASTORE_METACONF_PREFIX)
+      conf.getAllProperties.asScala
+        .filterKeys(_.startsWith(metaConfPrefix))
+        .foreach{ case(key, value) => c.setMetaConf(key.substring(metaConfPrefix.length), value)}
       clientLoader.cachedHive = c
       c
     }
