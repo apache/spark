@@ -602,10 +602,13 @@ object PartitioningUtils {
     (fullSchema, overlappedPartCols.toMap)
   }
 
-  def getColName(f: StructField, caseSensitive: Boolean): String = getColName(f.name, caseSensitive)
-
-  def getColName(s: String, caseSensitive: Boolean): String =
-    if (caseSensitive) s else s.toLowerCase(Locale.ROOT)
+  def getColName(f: StructField, caseSensitive: Boolean): String = {
+    if (caseSensitive) {
+      f.name
+    } else {
+      f.name.toLowerCase(Locale.ROOT)
+    }
+  }
 
   private def columnNameEquality(caseSensitive: Boolean): (String, String) => Boolean = {
     if (caseSensitive) {

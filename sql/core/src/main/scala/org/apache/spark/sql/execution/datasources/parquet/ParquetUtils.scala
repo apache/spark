@@ -33,6 +33,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.connector.expressions.{Aggregation, Count, CountStar, Max, Min}
+import org.apache.spark.sql.execution.RowToColumnConverter
 import org.apache.spark.sql.execution.datasources.{DataSourceUtils, PartitioningUtils}
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.SQLConf.PARQUET_AGGREGATE_PUSHDOWN_ENABLED
@@ -252,51 +253,21 @@ object ParquetUtils {
       offHeap: Boolean,
       datetimeRebaseModeInRead: String,
       isCaseSensitive: Boolean): ColumnarBatch = {
-    val (parquetTypes, values) =
-      getPushedDownAggResult(footer, dataSchema, partitionSchema, aggregation, isCaseSensitive)
-    val capacity = 4 * 1024
-    val footerFileMetaData = footer.getFileMetaData
-    val datetimeRebaseMode = DataSourceUtils.datetimeRebaseMode(
-      footerFileMetaData.getKeyValueMetaData.get, datetimeRebaseModeInRead)
+    val row = createAggInternalRowFromFooter(
+      footer,
+      dataSchema,
+      partitionSchema,
+      aggregation,
+      aggSchema,
+      datetimeRebaseModeInRead,
+      isCaseSensitive)
+    val converter = new RowToColumnConverter(aggSchema)
     val columnVectors = if (offHeap) {
-      OffHeapColumnVector.allocateColumns(capacity, aggSchema)
+      OffHeapColumnVector.allocateColumns(4 * 1024, aggSchema)
     } else {
-      OnHeapColumnVector.allocateColumns(capacity, aggSchema)
+      OnHeapColumnVector.allocateColumns(4 * 1024, aggSchema)
     }
-
-    parquetTypes.zipWithIndex.foreach {
-      case (PrimitiveType.PrimitiveTypeName.INT32, i) =>
-        aggSchema.fields(i).dataType match {
-          case ByteType =>
-            columnVectors(i).appendByte(values(i).asInstanceOf[Integer].toByte)
-          case ShortType =>
-            columnVectors(i).appendShort(values(i).asInstanceOf[Integer].toShort)
-          case IntegerType =>
-            columnVectors(i).appendInt(values(i).asInstanceOf[Integer])
-          case DateType =>
-            val dateRebaseFunc = DataSourceUtils.creteDateRebaseFuncInRead(
-              datetimeRebaseMode, "Parquet")
-            columnVectors(i).appendInt(dateRebaseFunc(values(i).asInstanceOf[Integer]))
-          case _ => throw new SparkException(s"Unexpected type ${aggSchema.fields(i).dataType}" +
-            s" for INT32")
-        }
-      case (PrimitiveType.PrimitiveTypeName.INT64, i) =>
-        columnVectors(i).appendLong(values(i).asInstanceOf[Long])
-      case (PrimitiveType.PrimitiveTypeName.FLOAT, i) =>
-        columnVectors(i).appendFloat(values(i).asInstanceOf[Float])
-      case (PrimitiveType.PrimitiveTypeName.DOUBLE, i) =>
-        columnVectors(i).appendDouble(values(i).asInstanceOf[Double])
-      case (PrimitiveType.PrimitiveTypeName.BINARY, i) =>
-        val bytes = values(i).asInstanceOf[Binary].getBytes
-        columnVectors(i).putByteArray(0, bytes, 0, bytes.length)
-      case (PrimitiveType.PrimitiveTypeName.FIXED_LEN_BYTE_ARRAY, i) =>
-        val bytes = values(i).asInstanceOf[Binary].getBytes
-        columnVectors(i).putByteArray(0, bytes, 0, bytes.length)
-      case (PrimitiveType.PrimitiveTypeName.BOOLEAN, i) =>
-        columnVectors(i).appendBoolean(values(i).asInstanceOf[Boolean])
-      case _ =>
-        throw new SparkException("Unexpected parquet type name")
-    }
+    converter.convert(row, columnVectors.toArray)
     new ColumnarBatch(columnVectors.asInstanceOf[Array[ColumnVector]], 1)
   }
 
@@ -330,17 +301,13 @@ object ParquetUtils {
         val blockMetaData = block.getColumns()
         agg match {
           case max: Max =>
-            val colName = PartitioningUtils.getColName(max.column.fieldNames.head, isCaseSensitive)
-            index = dataSchema.fields.map(PartitioningUtils
-              .getColName(_, isCaseSensitive)).toList.indexOf(colName)
+            index = dataSchema.fieldNames.toList.indexOf(max.column.fieldNames.head)
             val currentMax = getCurrentBlockMaxOrMin(blockMetaData, index, true)
             if (value == None || currentMax.asInstanceOf[Comparable[Any]].compareTo(value) > 0) {
               value = currentMax
             }
           case min: Min =>
-            val colName = PartitioningUtils.getColName(min.column.fieldNames.head, isCaseSensitive)
-            index = dataSchema.fields.map(PartitioningUtils
-              .getColName(_, isCaseSensitive)).toList.indexOf(colName)
+            index = dataSchema.fieldNames.toList.indexOf(min.column.fieldNames.head)
             val currentMin = getCurrentBlockMaxOrMin(blockMetaData, index, false)
             if (value == None || currentMin.asInstanceOf[Comparable[Any]].compareTo(value) < 0) {
               value = currentMin
@@ -348,16 +315,13 @@ object ParquetUtils {
           case count: Count =>
             rowCount += block.getRowCount
             var isPartitionCol = false
-            val colName =
-              PartitioningUtils.getColName(count.column.fieldNames.head, isCaseSensitive)
             if (partitionSchema.fields.map(PartitioningUtils.getColName(_, isCaseSensitive))
-              .toSet.contains(colName)) {
+              .toSet.contains(count.column().fieldNames.head)) {
               isPartitionCol = true
             }
             isCount = true
             if(!isPartitionCol) {
-              index = dataSchema.fields.map(PartitioningUtils
-                .getColName(_, isCaseSensitive)).toList.indexOf(colName)
+              index = dataSchema.fieldNames.toList.indexOf(count.column.fieldNames.head)
               // Count(*) includes the null values, but Count (colName) doesn't.
               rowCount -= getNumNulls(blockMetaData, index)
             }
