@@ -174,8 +174,10 @@ class Analyzer(override val catalogManager: CatalogManager)
 
   private val v1SessionCatalog: SessionCatalog = catalogManager.v1SessionCatalog
 
-  override protected def isPlanIntegral(plan: LogicalPlan): Boolean = {
-    !Utils.isTesting || LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(plan)
+  override protected def isPlanIntegral(
+      previousPlan: LogicalPlan,
+      currentPlan: LogicalPlan): Boolean = {
+    !Utils.isTesting || LogicalPlanIntegrity.checkIfExprIdsAreGloballyUnique(currentPlan)
   }
 
   override def isView(nameParts: Seq[String]): Boolean = v1SessionCatalog.isView(nameParts)
@@ -305,6 +307,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       ResolveBinaryArithmetic ::
       ResolveUnion ::
       typeCoercionRules ++
+      Seq(ResolveWithCTE) ++
       extendedResolutionRules : _*),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Apply Char Padding", Once,
@@ -374,6 +377,10 @@ class Analyzer(override val catalogManager: CatalogManager)
             TimestampAddYMInterval(r, l)
           case (CalendarIntervalType, CalendarIntervalType) |
                (_: DayTimeIntervalType, _: DayTimeIntervalType) => a
+          case (_: NullType, _: DayTimeIntervalType | _: YearMonthIntervalType) =>
+            a.copy(left = Cast(a.left, a.right.dataType))
+          case (_: DayTimeIntervalType | _: YearMonthIntervalType, _: NullType) =>
+            a.copy(right = Cast(a.right, a.left.dataType))
           case (DateType, CalendarIntervalType) => DateAddInterval(l, r, ansiEnabled = f)
           case (_, CalendarIntervalType | _: DayTimeIntervalType) => Cast(TimeAdd(l, r), l.dataType)
           case (CalendarIntervalType, DateType) => DateAddInterval(r, l, ansiEnabled = f)
@@ -393,6 +400,10 @@ class Analyzer(override val catalogManager: CatalogManager)
             DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, f)))
           case (CalendarIntervalType, CalendarIntervalType) |
                (_: DayTimeIntervalType, _: DayTimeIntervalType) => s
+          case (_: NullType, _: DayTimeIntervalType | _: YearMonthIntervalType) =>
+            s.copy(left = Cast(s.left, s.right.dataType))
+          case (_: DayTimeIntervalType | _: YearMonthIntervalType, _: NullType) =>
+            s.copy(right = Cast(s.right, s.left.dataType))
           case (DateType, CalendarIntervalType) =>
             DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r, f), ansiEnabled = f))
           case (_, CalendarIntervalType | _: DayTimeIntervalType) =>
@@ -1080,9 +1091,6 @@ class Analyzer(override val catalogManager: CatalogManager)
             }.getOrElse(write)
           case _ => write
         }
-
-      case u: UnresolvedV2Relation =>
-        CatalogV2Util.loadRelation(u.catalog, u.tableName).getOrElse(u)
     }
 
     /**

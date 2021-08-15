@@ -18,10 +18,12 @@
 package org.apache.spark.errors
 
 import java.io.IOException
+import java.util.concurrent.TimeoutException
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TaskNotSerializableException}
+import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
 
@@ -141,6 +143,75 @@ object SparkCoreErrors {
 
   def mustSpecifyCheckpointDirError(): Throwable = {
     new SparkException("Checkpoint dir must be specified.")
+  }
+
+  def askStandaloneSchedulerToShutDownExecutorsError(e: Exception): Throwable = {
+    new SparkException("Error asking standalone scheduler to shut down executors", e)
+  }
+
+  def stopStandaloneSchedulerDriverEndpointError(e: Exception): Throwable = {
+    new SparkException("Error stopping standalone scheduler's driver endpoint", e)
+  }
+
+  def noExecutorIdleError(id: String): Throwable = {
+    new NoSuchElementException(id)
+  }
+
+  def barrierStageWithRDDChainPatternError(): Throwable = {
+    new BarrierJobUnsupportedRDDChainException
+  }
+
+  def barrierStageWithDynamicAllocationError(): Throwable = {
+    new BarrierJobRunWithDynamicAllocationException
+  }
+
+  def numPartitionsGreaterThanMaxNumConcurrentTasksError(
+      numPartitions: Int,
+      maxNumConcurrentTasks: Int): Throwable = {
+    new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
+  }
+
+  def cannotRunSubmitMapStageOnZeroPartitionRDDError(): Throwable = {
+    new SparkException("Can't run submitMapStage on RDD with 0 partitions")
+  }
+
+  def accessNonExistentAccumulatorError(id: Long): Throwable = {
+    new SparkException(s"attempted to access non-existent accumulator $id")
+  }
+
+  def sendResubmittedTaskStatusForShuffleMapStagesOnlyError(): Throwable = {
+    new SparkException("TaskSetManagers should only send Resubmitted task " +
+      "statuses for tasks in ShuffleMapStages.")
+  }
+
+  def nonEmptyEventQueueAfterTimeoutError(timeoutMillis: Long): Throwable = {
+    new TimeoutException(s"The event queue is not empty after $timeoutMillis ms.")
+  }
+
+  def durationCalledOnUnfinishedTaskError(): Throwable = {
+    new UnsupportedOperationException("duration() called on unfinished task")
+  }
+
+  def unrecognizedSchedulerModePropertyError(
+      schedulerModeProperty: String,
+      schedulingModeConf: String): Throwable = {
+    new SparkException(s"Unrecognized $schedulerModeProperty: $schedulingModeConf")
+  }
+
+  def failResourceOffersForBarrierStageError(errorMsg: String): Throwable = {
+    new SparkException(errorMsg)
+  }
+
+  def markExecutorAsFailedError(errorMsg: String): Throwable = {
+    new SparkException(errorMsg)
+  }
+
+  def clusterSchedulerError(message: String): Throwable = {
+    new SparkException(s"Exiting due to error from cluster scheduler: $message")
+  }
+
+  def failToSerializeTaskError(e: Throwable): Throwable = {
+    new TaskNotSerializableException(e)
   }
 
   def unrecognizedBlockIdError(name: String): Throwable = {

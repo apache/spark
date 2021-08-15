@@ -23,6 +23,9 @@ import java.net.ConnectException;
 import com.google.common.base.Throwables;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.network.server.BlockPushNonFatalFailure;
+
+import static org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode.*;
 
 /**
  * Plugs into {@link RetryingBlockTransferor} to further control when an exception should be retried
@@ -54,27 +57,6 @@ public interface ErrorHandler {
    */
   class BlockPushErrorHandler implements ErrorHandler {
     /**
-     * String constant used for generating exception messages indicating a block to be merged
-     * arrives too late or stale block push in the case of indeterminate stage retries on the
-     * server side, and also for later checking such exceptions on the client side. When we get
-     * a block push failure because of the block push being stale or arrives too late, we will
-     * not retry pushing the block nor log the exception on the client side.
-     */
-    public static final String TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX =
-      "received after merged shuffle is finalized or stale block push as shuffle blocks of a"
-        + " higher shuffleMergeId for the shuffle is being pushed";
-
-    /**
-     * String constant used for generating exception messages indicating the server couldn't
-     * append a block after all available attempts due to collision with other blocks belonging
-     * to the same shuffle partition, and also for later checking such exceptions on the client
-     * side. When we get a block push failure because of the block couldn't be written due to
-     * this reason, we will not log the exception on the client side.
-     */
-    public static final String BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX =
-      "Couldn't find an opportunity to write block";
-
-    /**
      * String constant used for generating exception messages indicating the server encountered
      * IOExceptions multiple times, greater than the configured threshold, while trying to merged
      * shuffle blocks of the same shuffle partition. When the client receives this this response,
@@ -105,16 +87,15 @@ public interface ErrorHandler {
         return false;
       }
 
-      String errorStackTrace = Throwables.getStackTraceAsString(t);
       // If the block is too late or stale block push, there is no need to retry it
-      return !errorStackTrace.contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX);
+      return !(t instanceof BlockPushNonFatalFailure &&
+        (((BlockPushNonFatalFailure) t).getReturnCode() == TOO_LATE_BLOCK_PUSH ||
+          ((BlockPushNonFatalFailure) t).getReturnCode() == STALE_BLOCK_PUSH));
     }
 
     @Override
     public boolean shouldLogError(Throwable t) {
-      String errorStackTrace = Throwables.getStackTraceAsString(t);
-      return !(errorStackTrace.contains(BLOCK_APPEND_COLLISION_DETECTED_MSG_PREFIX) ||
-        errorStackTrace.contains(TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX));
+      return !(t instanceof BlockPushNonFatalFailure);
     }
   }
 

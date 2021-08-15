@@ -1513,7 +1513,7 @@ class DDLParserSuite extends AnalysisTest {
       """.stripMargin,
       MergeIntoTable(
         SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
-        SubqueryAlias("source", With(Project(Seq(UnresolvedStar(None)),
+        SubqueryAlias("source", UnresolvedWith(Project(Seq(UnresolvedStar(None)),
           UnresolvedRelation(Seq("s"))),
           Seq("s" -> SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
             UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl"))))))),

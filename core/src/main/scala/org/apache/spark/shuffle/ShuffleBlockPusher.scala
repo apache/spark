@@ -24,8 +24,6 @@ import java.util.concurrent.ExecutorService
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 
-import com.google.common.base.Throwables
-
 import org.apache.spark.{ShuffleDependency, SparkConf, SparkEnv}
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
@@ -33,6 +31,8 @@ import org.apache.spark.internal.config._
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer, NioManagedBuffer}
 import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.server.BlockPushNonFatalFailure
+import org.apache.spark.network.server.BlockPushNonFatalFailure.ReturnCode
 import org.apache.spark.network.shuffle.BlockPushingListener
 import org.apache.spark.network.shuffle.ErrorHandler.BlockPushErrorHandler
 import org.apache.spark.network.util.TransportConf
@@ -78,10 +78,12 @@ private[spark] class ShuffleBlockPusher(conf: SparkConf) extends Logging {
         if (t.getCause != null && t.getCause.isInstanceOf[FileNotFoundException]) {
           return false
         }
-        val errorStackTraceString = Throwables.getStackTraceAsString(t)
         // If the block is too late or the invalid block push, there is no need to retry it
-        !errorStackTraceString.contains(
-          BlockPushErrorHandler.TOO_LATE_OR_STALE_BLOCK_PUSH_MESSAGE_SUFFIX)
+        !(t.isInstanceOf[BlockPushNonFatalFailure] &&
+          (t.asInstanceOf[BlockPushNonFatalFailure].getReturnCode
+            == ReturnCode.TOO_LATE_BLOCK_PUSH ||
+            t.asInstanceOf[BlockPushNonFatalFailure].getReturnCode
+            == ReturnCode.STALE_BLOCK_PUSH))
       }
     }
   }
