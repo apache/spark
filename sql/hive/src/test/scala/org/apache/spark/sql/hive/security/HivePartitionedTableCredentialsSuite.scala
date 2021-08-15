@@ -17,50 +17,81 @@
 
 package org.apache.spark.sql.hive.security
 
-import scala.collection.JavaConverters._
+import java.io.File
 
-import org.apache.hadoop.io.Text
+import scala.collection.JavaConverters._
+import scala.collection.mutable.ListBuffer
+
+import com.google.common.base.Charsets
+import com.google.common.io.Files
+import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.apache.hadoop.security.token.{Token, TokenIdentifier}
 import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mockito
 
+import org.apache.spark.rdd.HadoopRDD
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
 object HivePartitionedTableCredentialsSuite extends QueryTest
   with SQLTestUtils with TestHiveSingleton {
+
+  private val credentialsTempDirectory = Utils.createTempDir()
+
   test("SPARK-36328: Reuse the FileSystem delegation token" +
     " while querying partitioned hive table.") {
     // The suite is based on the repro provided in SPARK-36328
+    val hadoopKeytabFile = writeCredentials("hadoop.keytab", "hadoop-keytab")
     // mock
     val mockStatic = Mockito.mockStatic(classOf[UserGroupInformation])
     Mockito.doNothing().when(
       UserGroupInformation.loginUserFromKeytabAndReturnUGI(anyString(), anyString()))
-    val aliasSet = Set("secret1", "secret2", "secret3", "secret4")
-    val credentials = new Credentials()
-    aliasSet.foreach(alias => credentials.addToken(new Text(alias), new Token[TokenIdentifier]))
-    Mockito.when(UserGroupInformation.getCurrentUser.getCredentials).thenReturn(credentials)
     // scalastyle:off hadoopconfiguration
     spark.sparkContext.hadoopConfiguration.set("hadoop.security.authorization", "true")
     spark.sparkContext.hadoopConfiguration.set("hadoop.security.authentication", "kerberos")
     spark.sparkContext.hadoopConfiguration.set("dfs.block.access.token.enable", "true")
+    spark.sparkContext.hadoopConfiguration.set(
+      "dfs.namenode.keytab.file", hadoopKeytabFile.getCanonicalPath)
+    spark.sparkContext.hadoopConfiguration.set(
+      "dfs.namenode.kerberos.principal", "HTTP/localhost@LOCALHOST")
     // scalastyle:on hadoopconfiguration
+    // Initialize a buffer to store Credentials during querying partitioned table
+    val credentialsBuffer = ListBuffer[Credentials]()
     withTable("parttable") {
-      // create partitioned table
+      // Create partitioned table
       sql("create table parttable (key char(1), value int) partitioned by (p int);")
       sql("insert into table parttable partition(p=100) values ('d', 1), ('e', 2), ('f', 3);")
       sql("insert into table parttable partition(p=200) values ('d', 1), ('e', 2), ('f', 3);")
       sql("insert into table parttable partition(p=300) values ('d', 1), ('e', 2), ('f', 3);")
-      // execute query
+      // Execute query
       checkAnswer(sql("select value, count(*) from parttable group by value;"),
         Seq[Row](Row(1, 3), Row(2, 3), Row(3, 3)))
-      // check
-      assert(UserGroupInformation.isSecurityEnabled)
-      val tokenMap = UserGroupInformation.getCurrentUser.getCredentials.getTokenMap
-      assert(tokenMap.keySet().asScala.map(text => Text.decode(text.getBytes)).equals(aliasSet))
+      // Get stage data from AppStatusStore and then generate HadoopRDD jobConf cache keys
+      val jobConfCacheKeys = spark.sparkContext.statusStore.stageList(null)
+        .flatMap(stageData => stageData.rddIds.map("rdd_%d_job_conf".format(_)))
+      // Get jobConf from SparkEnv
+      jobConfCacheKeys.foreach(jobConfCacheKey => {
+        val credentials = Option(HadoopRDD.getCachedMetadata(jobConfCacheKey))
+          .map(_.asInstanceOf[JobConf])
+          .map(_.getCredentials).orNull
+        if (credentials != null) credentialsBuffer += credentials
+      })
     }
+    // Release this static mock and avoid impact on subsequent check
     mockStatic.close()
+    // Check
+    assert(UserGroupInformation.isSecurityEnabled)
+    // Token map buffer from SparkEnv's cache
+    val tokenMapBuffer = credentialsBuffer.map(_.getTokenMap.asScala)
+    // The tokens used during operation should be the same
+    tokenMapBuffer.foreach(tokenMap => assert(tokenMap == tokenMapBuffer.head))
+  }
+
+  private def writeCredentials(credentialsFileName: String, credentialsContents: String): File = {
+    val credentialsFile = new File(credentialsTempDirectory, credentialsFileName)
+    Files.write(credentialsContents, credentialsFile, Charsets.UTF_8)
+    credentialsFile
   }
 }
