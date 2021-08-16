@@ -741,13 +741,6 @@ class DatetimeIndex(Index):
             psdf = psdf.pandas_on_spark.apply_batch(pandas_at_time)
         return ps.Index(first_series(psdf).rename(self.name))
 
-    def map(
-        self,
-        mapper: Union[dict, Callable[[Any], Any], pd.Series] = None,
-        na_action: Optional[str] = None,
-    ) -> "Index":
-        return MissingPandasLikeDatetimeIndex.map(self, mapper, na_action)
-
 
 def disallow_nanoseconds(freq: Union[str, DateOffset]) -> None:
     if freq in ["N", "ns"]:
