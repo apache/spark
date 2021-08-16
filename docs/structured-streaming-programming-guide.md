@@ -1814,19 +1814,38 @@ Specifically for built-in HDFS state store provider, users can check the state s
 it is best if cache missing count is minimized that means Spark won't waste too much time on loading checkpointed state.
 User can increase Spark locality waiting configurations to avoid loading state store providers in different executors across batches.
 
+### State Store
+
+State store is a versioned key-value store which provides both read and write operations. In
+structured streaming, we use the state store provider to handle the state store operations crossing
+batches. There are two build-in state store provider implementations. End users can also implement
+their own state store provider by extending StateStoreProvider interface.
+
+#### HDFS state store provider
+
+The HDFS backend state store provider is the default implementation of [[StateStoreProvider]] and
+[[StateStore]] in which all the data is backed by files in an HDFS-compatible file system. All
+updates to the store has to be done in sets transactionally, and each set of updates increments
+the store's version. These versions can be used to re-execute the updates (by retries in RDD
+operations) on the correct version of the store, and regenerate the store version.
+
 ### RocksDB state store implementation
 
 As of Spark 3.2, we add a new build-in state store implementation, RocksDB state store provider.
 
-The current build-in HDFS state store provider has two major drawbacks:
+If you have stateful operations in your streaming query (for example, streaming aggregation,
+streaming dropDuplicates, stream-stream joins, mapGroupsWithState, or flatMapGroupsWithState)
+and you want to maintain millions of keys in the state, then you may face issues related to large
+JVM garbage collection (GC) pauses causing high variations in the micro-batch processing times.
+This occurs because, by default, the state data is maintained in the JVM memory of the executors
+and large number of state objects puts memory pressure on the JVM causing high GC pauses.
 
-* The amount of state that can be maintained is limited by the heap size of the executors
-* State expiration by watermark and/or timeouts require full scans over all the data
-
-The RocksDB-based State Store implementation can address these drawbacks:
-
-* RocksDB can serve data from the disk with a configurable amount of non-JVM memory.
-* Sorting keys using the appropriate column should avoid full scans to find the to-be-dropped keys.
+In such cases, you can choose to use a more optimized state management solution based on
+[RocksDB](https://rocksdb.org/). Rather than keeping the state in the JVM memory, this solution
+uses RocksDB to efficiently manage the state in the native memory and the local disk. Furthermore,
+any changes to this state are automatically saved by Structured Streaming to the checkpoint
+location you have provided, thus providing full fault-tolerance guarantees (the same as default
+state management).
 
 To enable the new build-in state store implementation, set `spark.sql.streaming.stateStore.providerClass`
 to `org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider`.
