@@ -92,13 +92,15 @@ public class VectorizedColumnReader {
 
   public VectorizedColumnReader(
       ColumnDescriptor descriptor,
+      boolean isRequiredColumn,
       PageReadStore pageReadStore,
       ZoneId convertTz,
       String datetimeRebaseMode,
       String int96RebaseMode) throws IOException {
     this.descriptor = descriptor;
     this.pageReader = pageReadStore.getPageReader(descriptor);
-    this.readState = new ParquetReadState(descriptor, pageReadStore.getRowIndexes().orElse(null));
+    this.readState = new ParquetReadState(descriptor, isRequiredColumn,
+      pageReadStore.getRowIndexes().orElse(null));
     this.logicalTypeAnnotation = descriptor.getPrimitiveType().getLogicalTypeAnnotation();
     this.updaterFactory = new ParquetVectorUpdaterFactory(
         logicalTypeAnnotation, convertTz, datetimeRebaseMode, int96RebaseMode);

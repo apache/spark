@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.parquet;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+
+import com.google.common.base.Preconditions;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.execution.vectorized.OffHeapColumnVector;
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector;
@@ -27,14 +32,11 @@ import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.MapType;
 import org.apache.spark.sql.types.StructType;
 
-import java.util.ArrayList;
-import java.util.List;
-
 /**
  * Contains necessary information representing a Parquet column, either of primitive or nested type.
  */
 final class ParquetColumn {
-  private final ParquetTypeInfo columnInfo;
+  private final ParquetType type;
   private final List<ParquetColumn> children;
   private final WritableColumnVector vector;
 
@@ -53,53 +55,61 @@ final class ParquetColumn {
   private VectorizedColumnReader columnReader;
 
   ParquetColumn(
-      ParquetTypeInfo columnInfo,
+      ParquetType type,
       WritableColumnVector vector,
       int capacity,
-      MemoryMode memoryMode) {
-    DataType sparkType = columnInfo.sparkType();
+      MemoryMode memoryMode,
+      Set<ParquetType> missingColumns) {
+    DataType sparkType = type.sparkType();
     if (!sparkType.sameType(vector.dataType())) {
-      throw new IllegalArgumentException("Spark type: " + columnInfo.sparkType() +
+      throw new IllegalArgumentException("Spark type: " + type.sparkType() +
         " doesn't match the type: " + vector.dataType() + " in column vector");
     }
-    this.columnInfo = columnInfo;
+
+    this.type = type;
     this.vector = vector;
     this.children = new ArrayList<>();
-    this.isPrimitive = columnInfo.isPrimitive();
+    this.isPrimitive = type.isPrimitive();
+
+    if (missingColumns.contains(type)) {
+      vector.setAllNull();
+      return;
+    }
 
     if (isPrimitive) {
       repetitionLevels = allocateLevelsVector(capacity, memoryMode);
       definitionLevels = allocateLevelsVector(capacity, memoryMode);
     } else {
-      ParquetGroupTypeInfo groupInfo = (ParquetGroupTypeInfo) columnInfo;
-      if (sparkType instanceof ArrayType) {
-        ParquetColumn childState = new ParquetColumn(groupInfo.children().apply(0),
-          vector.getChild(0), capacity, memoryMode);
-        this.repetitionLevels = childState.repetitionLevels;
-        this.definitionLevels = childState.definitionLevels;
-        children.add(childState);
-      } else if (sparkType instanceof MapType) {
-        ParquetColumn childState = new ParquetColumn(groupInfo.children().apply(0),
-          vector.getChild(0), capacity, memoryMode);
-        this.repetitionLevels = childState.repetitionLevels;
-        this.definitionLevels = childState.definitionLevels;
-        children.add(childState);
-        children.add(new ParquetColumn(groupInfo.children().apply(1), vector.getChild(1),
-          capacity, memoryMode));
-      } else if (sparkType instanceof StructType) {
-        for (int i = 0; i < groupInfo.children().length(); i++) {
-          ParquetColumn childState = new ParquetColumn(groupInfo.children().apply(i),
-            vector.getChild(i), capacity, memoryMode);
-          this.repetitionLevels = childState.repetitionLevels;
-          this.definitionLevels = childState.definitionLevels;
-          children.add(childState);
+      Preconditions.checkArgument(type.children().size() == vector.getNumChildren());
+      for (int i = 0; i < type.children().size(); i++) {
+        ParquetColumn childColumn = new ParquetColumn(type.children().apply(i),
+          vector.getChild(i), capacity, memoryMode, missingColumns);
+        children.add(childColumn);
+
+        // only use levels from non-missing child
+        if (!childColumn.vector.isAllNull()) {
+          this.repetitionLevels = childColumn.repetitionLevels;
+          this.definitionLevels = childColumn.definitionLevels;
         }
+      }
+
+      // this can happen if all the fields of a struct are missing, in which case we should mark
+      // the struct itself as a missing column
+      if (repetitionLevels == null) {
+        vector.setAllNull();
       }
     }
   }
 
   /**
-   * Get all the leaf columns in depth-first order.
+   * Returns all the children of this column.
+   */
+  List<ParquetColumn> getChildren() {
+    return children;
+  }
+
+  /**
+   * Returns all the leaf columns in depth-first order.
    */
   List<ParquetColumn> getLeaves() {
     List<ParquetColumn> result = new ArrayList<>();
@@ -112,7 +122,10 @@ final class ParquetColumn {
    * This is a no-op for primitive columns.
    */
   void assemble() {
-    DataType type = columnInfo.sparkType();
+    // nothing to do if the column itself is missing
+    if (vector.isAllNull()) return;
+
+    DataType type = this.type.sparkType();
     if (type instanceof ArrayType || type instanceof MapType) {
       for (ParquetColumn child : children) {
         child.assemble();
@@ -126,8 +139,20 @@ final class ParquetColumn {
     }
   }
 
-  ParquetTypeInfo getColumnInfo() {
-    return this.columnInfo;
+  void reset() {
+    // nothing to do if the column itself is missing
+    if (vector.isAllNull()) return;
+
+    vector.reset();
+    repetitionLevels.reset();
+    definitionLevels.reset();
+    for (ParquetColumn childColumn : children) {
+      childColumn.reset();
+    }
+  }
+
+  ParquetType getType() {
+    return this.type;
   }
 
   WritableColumnVector getValueVector() {
@@ -157,51 +182,79 @@ final class ParquetColumn {
     if (column.isPrimitive) {
       coll.add(column);
     } else {
-      for (ParquetColumn childCol : column.children) {
-        getLeavesHelper(childCol, coll);
+      for (ParquetColumn child : column.children) {
+        getLeavesHelper(child, coll);
       }
     }
   }
 
   private void calculateCollectionOffsets() {
-    int maxDefinitionLevel = columnInfo.definitionLevel();
-    int maxElementRepetitionLevel = columnInfo.repetitionLevel();
+    int maxDefinitionLevel = type.definitionLevel();
+    int maxElementRepetitionLevel = type.repetitionLevel();
 
+    // There are 4 cases when calculating definition levels:
+    //   1. definitionLevel == maxDefinitionLevel
+    //     ==> value is defined and not null
+    //   2. definitionLevel == maxDefinitionLevel - 1
+    //     ==> value is null
+    //   3. definitionLevel < maxDefinitionLevel - 1
+    //     ==> value doesn't exist since one of its optional parent is null
+    //   4. definitionLevel > maxDefinitionLevel
+    //     ==> value is a nested element within an array or map
+    //
     // `i` is the index over all leaf elements of this array, while `offset` is the index over
     // all top-level elements of this array.
-    for (int i = 0, rowId = 0, offset = 0; i < definitionLevels.getElementsAppended();
-         i = getNextCollectionStart(maxElementRepetitionLevel, i), rowId++) {
+    int rowId = 0;
+    for (int i = 0, offset = 0; i < definitionLevels.getElementsAppended();
+         i = getNextCollectionStart(maxElementRepetitionLevel, i)) {
       vector.reserve(rowId + 1);
       int definitionLevel = definitionLevels.getInt(i);
       if (definitionLevel == maxDefinitionLevel - 1) {
         // the collection is null
-        vector.putNull(rowId);
+        vector.putNull(rowId++);
       } else if (definitionLevel == maxDefinitionLevel) {
         // collection is defined but empty
         vector.putNotNull(rowId);
         vector.putArray(rowId, offset, 0);
-      } else {
+        rowId++;
+      } else if (definitionLevel > maxDefinitionLevel) {
         // collection is defined and non-empty: find out how many top element there is till the
         // start of the next array.
         vector.putNotNull(rowId);
         int length = getCollectionSize(maxElementRepetitionLevel, i + 1);
         vector.putArray(rowId, offset, length);
         offset += length;
+        rowId++;
       }
     }
+    vector.addElementsAppended(rowId);
   }
 
   private void calculateStructOffsets() {
-    int maxDefinitionLevel = columnInfo.definitionLevel();
+    int maxRepetitionLevel = type.repetitionLevel();
+    int maxDefinitionLevel = type.definitionLevel();
+
     vector.reserve(definitionLevels.getElementsAppended());
-    for (int i = 0, rowId = 0; i < definitionLevels.getElementsAppended(); i++, rowId++) {
-      if (definitionLevels.getInt(i) == maxDefinitionLevel - 1) {
-        // the struct is null
-        vector.putNull(rowId);
-      } else {
-        vector.putNotNull(rowId);
+    int rowId = 0;
+    int nonnullRowId = 0;
+    for (int i = 0; i < definitionLevels.getElementsAppended(); i++) {
+      // if repetition level > maxRepetitionLevel, the value is a nested element (e.g., an array
+      // element in struct<array<int>>), and we should skip the definition level since it doesn't
+      // represent with the struct.
+      if (repetitionLevels.getInt(i) <= maxRepetitionLevel) {
+        if (definitionLevels.getInt(i) == maxDefinitionLevel - 1) {
+          // the struct is null
+          vector.putNull(rowId);
+          rowId++;
+        } else if (definitionLevels.getInt(i) >= maxDefinitionLevel) {
+          vector.putNotNull(rowId);
+          vector.putStruct(rowId, nonnullRowId);
+          rowId++;
+          nonnullRowId++;
+        }
       }
     }
+    vector.addElementsAppended(rowId);
   }
 
   private static WritableColumnVector allocateLevelsVector(int capacity, MemoryMode memoryMode) {
@@ -230,7 +283,30 @@ final class ParquetColumn {
     for (; idx < repetitionLevels.getElementsAppended(); idx++) {
       if (repetitionLevels.getInt(idx) <= maxRepetitionLevel) {
         break;
-      } else {
+      } else if (repetitionLevels.getInt(idx) <= maxRepetitionLevel + 1) {
+        // only count elements which belong to the current collection
+        // For instance, suppose we have the following Parquet schema:
+        //
+        // message schema {                        max rl   max dl
+        //   optional group col (LIST) {              0        1
+        //     repeated group list {                  1        2
+        //       optional group element (LIST) {      1        3
+        //         repeated group list {              2        4
+        //           required int32 element;          2        4
+        //         }
+        //       }
+        //     }
+        //   }
+        // }
+        //
+        // For a list such as: [[[0, 1], [2, 3]], [[4, 5], [6, 7]]], the repetition & definition
+        // levels would be:
+        //
+        // repetition levels: [0, 2, 1, 2, 0, 2, 1, 2]
+        // definition levels: [2, 2, 2, 2, 2, 2, 2, 2]
+        //
+        // when calculating collection size for the outer array, we should only count repetition
+        // levels whose value is <= 1 (which is the max repetition level for the inner array)
         size++;
       }
     }

@@ -549,7 +549,7 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
   }
 
   /**
-   * Similar to [[nestedColumnScanBenchmark]] but accessed column is a struct field.
+   * Similar to [[numericScanBenchmark]] but accessed column is a struct field.
    */
   def nestedNumericScanBenchmark(values: Int, dataType: DataType): Unit = {
     val sqlBenchmark = new Benchmark(
@@ -573,7 +573,9 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
         }
 
         sqlBenchmark.addCase("SQL Parquet Vectorized (Disabled Nested Column)") { _ =>
-          spark.sql("select sum(col.f) from parquetTable").noop()
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "false") {
+            spark.sql("select sum(col.f) from parquetTable").noop()
+          }
         }
 
         sqlBenchmark.addCase("SQL Parquet Vectorized (Enabled Nested Column)") { _ =>
@@ -612,7 +614,9 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
         }
 
         benchmark.addCase("SQL ORC Vectorized (Disabled Nested Column)") { _ =>
-          spark.sql("SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM orcTable").noop()
+          withSQLConf(SQLConf.ORC_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "false") {
+            spark.sql("SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM orcTable").noop()
+          }
         }
 
         benchmark.addCase("SQL ORC Vectorized (Enabled Nested Column)") { _ =>
@@ -628,7 +632,9 @@ object DataSourceReadBenchmark extends SqlBasedBenchmark {
         }
 
         benchmark.addCase("SQL Parquet Vectorized (Disabled Nested Column)") { _ =>
-          spark.sql("SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM parquetTable").noop()
+          withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key -> "false") {
+            spark.sql("SELECT SUM(SIZE(col1)), SUM(SIZE(col2)) FROM parquetTable").noop()
+          }
         }
 
         benchmark.addCase("SQL Parquet Vectorized (Enabled Nested Column)") { _ =>

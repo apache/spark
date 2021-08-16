@@ -31,4 +31,8 @@ public class ColumnIOUtil {
   public static int getRepetitionLevel(ColumnIO column) {
     return column.getRepetitionLevel();
   }
+
+  public static String[] getFieldPath(ColumnIO column) {
+    return column.getFieldPath();
+  }
 }

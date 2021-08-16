@@ -45,6 +45,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjectio
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector}
 import org.apache.spark.sql.internal.SQLConf
@@ -169,15 +170,22 @@ class ParquetFileFormat
   override def supportBatch(sparkSession: SparkSession, schema: StructType): Boolean = {
     val conf = sparkSession.sessionState.conf
     conf.parquetVectorizedReaderEnabled && conf.wholeStageEnabled &&
-      schema.length <= conf.wholeStageMaxNumFields &&
-      schema.map(_.dataType).forall(isBatchReadSupported(sparkSession.sessionState.conf, _))
+        isBatchReadSupported(conf, schema) && !WholeStageCodegenExec.isTooManyFields(conf, schema)
   }
 
   private def isBatchReadSupported(sqlConf: SQLConf, dt: DataType): Boolean = dt match {
     case _: AtomicType =>
       true
-    case _: ArrayType | _: MapType | _: StructType =>
-      sqlConf.parquetVectorizedReaderNestedColumnEnabled
+    case at: ArrayType =>
+      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
+          isBatchReadSupported(sqlConf, at.elementType)
+    case mt: MapType =>
+      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
+          isBatchReadSupported(sqlConf, mt.keyType) &&
+          isBatchReadSupported(sqlConf, mt.valueType)
+    case st: StructType =>
+      sqlConf.parquetVectorizedReaderNestedColumnEnabled &&
+          st.fields.forall(f => isBatchReadSupported(sqlConf, f.dataType))
     case _ =>
       false
   }

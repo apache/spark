@@ -29,7 +29,6 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-
 /**
  * This converter class is used to convert Parquet [[MessageType]] to Spark SQL [[StructType]].
  *
@@ -66,11 +65,11 @@ class ParquetToSparkSchemaConverter(
   }
 
   /**
-   * Convert `parquetSchema` into a [[ParquetTypeInfo]] which contains its corresponding Spark
-   * SQL [[StructType]] alongside other information such as its maximum repetition and definition
-   * level, descriptor for primitive types, etc.
+   * Convert `parquetSchema` into a [[ParquetType]] which contains its corresponding Spark
+   * SQL [[StructType]] along with other information such as the maximum repetition and definition
+   * level of each node, column descriptor for the leave nodes, etc.
    *
-   * If `sparkReadSchema` is not empty, when deriving Spark SQL type from a Parquet field it will
+   * If `sparkReadSchema` is not empty, when deriving Spark SQL type from a Parquet field this will
    * check if the same field also exists in the schema. If so, it will use the Spark SQL type.
    * This is necessary since conversion from Parquet to Spark could cause precision loss. For
    * instance, Spark read schema is smallint/tinyint but Parquet only support int.
@@ -78,7 +77,7 @@ class ParquetToSparkSchemaConverter(
   def convertTypeInfo(
       parquetSchema: MessageType,
       sparkReadSchema: Option[StructType] = None,
-      caseSensitive: Boolean = true): ParquetGroupTypeInfo = {
+      caseSensitive: Boolean = true): ParquetType = {
     val column = new ColumnIOFactory().getColumnIO(parquetSchema)
     convertInternal(column, sparkReadSchema, caseSensitive)
   }
@@ -86,37 +85,57 @@ class ParquetToSparkSchemaConverter(
   private def convertInternal(
       groupColumn: GroupColumnIO,
       sparkReadSchema: Option[StructType] = None,
-      caseSensitive: Boolean = true): ParquetGroupTypeInfo = {
+      caseSensitive: Boolean = true): ParquetType = {
     val converted = (0 until groupColumn.getChildrenCount).map { i =>
       val field = groupColumn.getChild(i)
-      val sparkReadType = sparkReadSchema.flatMap { schema =>
+      var fieldReadType = sparkReadSchema.flatMap { schema =>
         schema.find(f => isSameFieldName(f.name, field.getName, caseSensitive)).map(_.dataType)
       }
 
-      var convertedField = convertField(field, sparkReadType)
-      val fieldType = sparkReadType.getOrElse(convertedField.sparkType)
+      // if a field is repeated here then it is neither contained by a `LIST` nor `MAP`
+      // annotated group (these should've been handled in `convertGroupField`), e.g.:
+      //
+      //  message schema {
+      //    repeated int32 int_array;
+      //  }
+      // or
+      //  message schema {
+      //    repeated group struct_array {
+      //      optional int32 field;
+      //    }
+      //  }
+      //
+      // the corresponding Spark read type should be an array and we should pass the element type
+      // to the group or primitive type conversion method.
+      if (field.getType.getRepetition == REPEATED) {
+        fieldReadType = fieldReadType.flatMap {
+          case at: ArrayType => Some(at.elementType)
+          case _ =>
+            throw QueryCompilationErrors.illegalParquetTypeError(groupColumn.toString)
+        }
+      }
 
-      // adjust converted Spark type by checking if the read schema contains the field
-      convertedField = convertedField.withNewType(fieldType)
+      var convertedField = convertField(field, fieldReadType)
 
-      val structField = field.getType.getRepetition match {
-        case OPTIONAL =>
-          StructField(field.getType.getName, fieldType, nullable = true)
-
-        case REQUIRED =>
-          StructField(field.getType.getName, fieldType, nullable = false)
+      field.getType.getRepetition match {
+        case OPTIONAL | REQUIRED =>
+          val nullable = field.getType.getRepetition == OPTIONAL
+          (StructField(field.getType.getName, convertedField.sparkType, nullable = nullable),
+              convertedField)
 
         case REPEATED =>
           // A repeated field that is neither contained by a `LIST`- or `MAP`-annotated group nor
           // annotated by `LIST` or `MAP` should be interpreted as a required list of required
           // elements where the element type is the type of the field.
-          val arrayType = ArrayType(fieldType, containsNull = false)
-          StructField(field.getType.getName, arrayType, nullable = false)
+          val arrayType = ArrayType(convertedField.sparkType, containsNull = false)
+          (StructField(field.getType.getName, arrayType, nullable = false),
+              ParquetType(arrayType, None, convertedField.repetitionLevel - 1,
+                convertedField.definitionLevel - 1, required = true, convertedField.path,
+                Seq(convertedField.copy(required = true))))
       }
-      (structField, convertedField)
     }
 
-    ParquetGroupTypeInfo(StructType(converted.map(_._1)), groupColumn, converted.map(_._2))
+    ParquetType(StructType(converted.map(_._1)), groupColumn, converted.map(_._2))
   }
 
   private def isSameFieldName(left: String, right: String, caseSensitive: Boolean): Boolean =
@@ -128,14 +147,14 @@ class ParquetToSparkSchemaConverter(
    */
   def convertField(
       field: ColumnIO,
-      sparkReadType: Option[DataType] = None): ParquetTypeInfo = field match {
+      sparkReadType: Option[DataType] = None): ParquetType = field match {
     case primitiveColumn: PrimitiveColumnIO => convertPrimitiveField(primitiveColumn, sparkReadType)
     case groupColumn: GroupColumnIO => convertGroupField(groupColumn, sparkReadType)
   }
 
   private def convertPrimitiveField(
       primitiveColumn: PrimitiveColumnIO,
-      sparkReadType: Option[DataType] = None): ParquetPrimitiveTypeInfo = {
+      sparkReadType: Option[DataType] = None): ParquetType = {
     val parquetType = primitiveColumn.getType.asPrimitiveType()
     val typeAnnotation = primitiveColumn.getType.getLogicalTypeAnnotation
     val typeName = primitiveColumn.getPrimitive
@@ -248,16 +267,15 @@ class ParquetToSparkSchemaConverter(
       case _ => illegalType()
     })
 
-    ParquetPrimitiveTypeInfo(sparkType, primitiveColumn)
+    ParquetType(sparkType, primitiveColumn)
   }
 
   private def convertGroupField(
       groupColumn: GroupColumnIO,
-      sparkReadType: Option[DataType] = None): ParquetGroupTypeInfo = {
+      sparkReadType: Option[DataType] = None): ParquetType = {
     val field = groupColumn.getType.asGroupType()
     Option(field.getLogicalTypeAnnotation).fold(
-      convertInternal(groupColumn, sparkReadType.map(_.asInstanceOf[StructType]))
-        .asInstanceOf[ParquetGroupTypeInfo]) {
+      convertInternal(groupColumn, sparkReadType.map(_.asInstanceOf[StructType]))) {
       // A Parquet list is represented as a 3-level structure:
       //
       //   <list-repetition> group <name> (LIST) {
@@ -285,9 +303,17 @@ class ParquetToSparkSchemaConverter(
         val sparkReadElementType = sparkReadType.map(_.asInstanceOf[ArrayType].elementType)
 
         if (isElementType(repeatedType, field.getName)) {
-          val converted = convertField(repeated, sparkReadElementType)
+          var converted = convertField(repeated, sparkReadElementType)
           val convertedType = sparkReadElementType.getOrElse(converted.sparkType)
-          ParquetGroupTypeInfo(ArrayType(convertedType, containsNull = false),
+
+          // legacy format such as:
+          //   optional group my_list (LIST) {
+          //     repeated int32 element;
+          //   }
+          // we should mark the primitive field as required
+          if (repeatedType.isPrimitive) converted = converted.copy(required = true)
+
+          ParquetType(ArrayType(convertedType, containsNull = false),
             groupColumn, Seq(converted))
         } else {
           val element = repeated.asInstanceOf[GroupColumnIO].getChild(0)
@@ -295,7 +321,7 @@ class ParquetToSparkSchemaConverter(
           val optional = elementType.isRepetition(OPTIONAL)
           val converted = convertField(element, sparkReadElementType)
           val convertedType = sparkReadElementType.getOrElse(converted.sparkType)
-          ParquetGroupTypeInfo(ArrayType(convertedType, containsNull = optional),
+          ParquetType(ArrayType(convertedType, containsNull = optional),
             groupColumn, Seq(converted))
         }
 
@@ -327,7 +353,7 @@ class ParquetToSparkSchemaConverter(
         val convertedValue = convertField(value, sparkReadValueType)
         val convertedKeyType = sparkReadKeyType.getOrElse(convertedKey.sparkType)
         val convertedValueType = sparkReadValueType.getOrElse(convertedValue.sparkType)
-        ParquetGroupTypeInfo(
+        ParquetType(
           MapType(convertedKeyType, convertedValueType,
             valueContainsNull = valueOptional),
           groupColumn, Seq(convertedKey, convertedValue))

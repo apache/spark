@@ -64,6 +64,9 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   private long lengthData;
   private long offsetData;
 
+  // Only set if type is Struct
+  private long structOffsetData;
+
   public OffHeapColumnVector(int capacity, DataType type) {
     super(capacity, type);
 
@@ -71,6 +74,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     data = 0;
     lengthData = 0;
     offsetData = 0;
+    structOffsetData = 0;
 
     reserveInternal(capacity);
     reset();
@@ -91,10 +95,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     Platform.freeMemory(data);
     Platform.freeMemory(lengthData);
     Platform.freeMemory(offsetData);
+    Platform.freeMemory(structOffsetData);
     nulls = 0;
     data = 0;
     lengthData = 0;
     offsetData = 0;
+    structOffsetData = 0;
   }
 
   //
@@ -132,7 +138,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public boolean isNullAt(int rowId) {
-    return Platform.getByte(null, nulls + rowId) == 1;
+    return isAllNull || Platform.getByte(null, nulls + rowId) == 1;
   }
 
   //
@@ -527,6 +533,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     return Platform.getInt(null, offsetData + 4L * rowId);
   }
 
+  @Override
+  public int getStructOffset(int rowId) {
+    return Platform.getInt(null, structOffsetData + 4L * rowId);
+  }
+
   // APIs dealing with ByteArrays
   @Override
   public int putByteArray(int rowId, byte[] value, int offset, int length) {
@@ -534,6 +545,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     Platform.putInt(null, lengthData + 4L * rowId, length);
     Platform.putInt(null, offsetData + 4L * rowId, result);
     return result;
+  }
+
+  @Override
+  public void putStruct(int rowId, int offset) {
+    Platform.putInt(null, structOffsetData + 4L * rowId, offset);
   }
 
   // Split out the slow path.
@@ -545,6 +561,9 @@ public final class OffHeapColumnVector extends WritableColumnVector {
           Platform.reallocateMemory(lengthData, oldCapacity * 4L, newCapacity * 4L);
       this.offsetData =
           Platform.reallocateMemory(offsetData, oldCapacity * 4L, newCapacity * 4L);
+    } else if (isStruct()) {
+      this.structOffsetData =
+        Platform.reallocateMemory(structOffsetData, oldCapacity * 4L, newCapacity * 4L);
     } else if (type instanceof ByteType || type instanceof BooleanType) {
       this.data = Platform.reallocateMemory(data, oldCapacity, newCapacity);
     } else if (type instanceof ShortType) {

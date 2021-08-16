@@ -216,7 +216,7 @@ public abstract class ColumnVector implements AutoCloseable {
    * the struct type, and each child vector is responsible to store the data for its corresponding
    * struct field.
    */
-  public final ColumnarRow getStruct(int rowId) {
+  public ColumnarRow getStruct(int rowId) {
     if (isNullAt(rowId)) return null;
     return new ColumnarRow(this, rowId);
   }

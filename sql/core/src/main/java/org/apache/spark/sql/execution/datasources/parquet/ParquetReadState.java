@@ -50,6 +50,9 @@ final class ParquetReadState {
   /** Maximum repetition level for the Parquet column */
   final int maxRepetitionLevel;
 
+  /** Whether this column is required */
+  final boolean isRequired;
+
   /** The current index over all rows within the column chunk. This is used to check if the
    * current row should be skipped by comparing against the row ranges. */
   long rowId;
@@ -79,9 +82,13 @@ final class ParquetReadState {
    * levels. */
   boolean shouldSkip;
 
-  ParquetReadState(ColumnDescriptor descriptor, PrimitiveIterator.OfLong rowIndexes) {
+  ParquetReadState(
+      ColumnDescriptor descriptor,
+      boolean isRequired,
+      PrimitiveIterator.OfLong rowIndexes) {
     this.maxDefinitionLevel = descriptor.getMaxDefinitionLevel();
     this.maxRepetitionLevel = descriptor.getMaxRepetitionLevel();
+    this.isRequired = isRequired;
     this.rowRanges = constructRanges(rowIndexes);
     nextRange();
   }
@@ -151,17 +158,6 @@ final class ParquetReadState {
    */
   long currentRangeEnd() {
     return currentRange.end;
-  }
-
-  /**
-   * Advance the current offset and rowId to the new values.
-   */
-  void advanceOffsetAndRowId(int newOffset, long newRowId) {
-    rowsToReadInBatch -= (newOffset - levelOffset);
-    valuesToReadInPage -= (newRowId - rowId);
-    levelOffset = newOffset;
-    valueOffset = newOffset;
-    rowId = newRowId;
   }
 
   /**
