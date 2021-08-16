@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connector.catalog.index;
 
+import java.util.Map;
+import java.util.Properties;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.IndexAlreadyExistsException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchIndexException;
@@ -24,9 +27,6 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.connector.catalog.CatalogPlugin;
 import org.apache.spark.sql.connector.catalog.Identifier;
 import org.apache.spark.sql.connector.expressions.FieldReference;
-
-import java.util.Map;
-import java.util.Properties;
 
 /**
  * Catalog methods for working with index
@@ -63,7 +63,8 @@ public interface SupportsIndex extends CatalogPlugin {
    * @throws NoSuchIndexException If the index does not exist (optional)
    * @throws UnsupportedOperationException If delete index is not a supported operation
    */
-  default boolean deleteIndex(String indexName) throws UnsupportedOperationException {
+  default boolean deleteIndex(String indexName)
+      throws NoSuchIndexException, UnsupportedOperationException {
     throw new UnsupportedOperationException("Delete index is not supported.");
   }
 

@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.connector.catalog.index;
 
+import java.util.Collections;
+import java.util.Map;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.catalog.Identifier;
 import org.apache.spark.sql.connector.expressions.FieldReference;
-
-import java.util.Collections;
-import java.util.Map;
 
 /**
  * An Index in a table
@@ -32,21 +32,21 @@ import java.util.Map;
 @Evolving
 public class Index {
   private String indexName;
-  private FieldReference[] columns;
-  private Identifier table;
   private String indexType;
+  private Identifier table;
+  private FieldReference[] columns;
   private Map<String, String> properties = Collections.emptyMap();
 
   public Index(
       String indexName,
-      FieldReference[] columns,
-      Identifier table,
       String indexType,
+      Identifier table,
+      FieldReference[] columns,
       Map<String, String> properties) {
     this.indexName = indexName;
-    this.columns = columns;
-    this.table = table;
     this.indexType = indexType;
+    this.table = table;
+    this.columns = columns;
     this.properties = properties;
   }
 
@@ -56,9 +56,9 @@ public class Index {
   String indexName() { return indexName; }
 
   /**
-   * @return the column(s) this Index is on. Could be multi columns (a multi-column index).
+   * @return the indexType of this Index.
    */
-  FieldReference[] columns() { return columns; }
+  String indexType() { return indexType; }
 
   /**
    * @return the table this Index is on.
@@ -66,9 +66,9 @@ public class Index {
   Identifier table() { return table; }
 
   /**
-   * @return the indexType of this Index.
+   * @return the column(s) this Index is on. Could be multi columns (a multi-column index).
    */
-  String indexType() { return indexType; }
+  FieldReference[] columns() { return columns; }
 
   /**
    * Returns the string map of index properties.
