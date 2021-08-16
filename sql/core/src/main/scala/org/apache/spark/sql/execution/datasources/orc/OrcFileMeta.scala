@@ -42,8 +42,5 @@ object OrcFileMeta {
   }
 
   def readTailFromCache(path: Path, conf: Configuration): OrcTail =
-    readTailFromCache(OrcFileMetaKey(path, conf))
-
-  def readTailFromCache(key: OrcFileMetaKey): OrcTail =
-    FileMetaCacheManager.get(key).asInstanceOf[OrcFileMeta].tail
+    FileMetaCacheManager.get(OrcFileMetaKey(path, conf)).asInstanceOf[OrcFileMeta].tail
 }
