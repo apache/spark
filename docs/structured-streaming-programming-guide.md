@@ -1795,14 +1795,14 @@ end-to-end exactly once per query. Ensuring end-to-end exactly once for the last
 ### State Store
 
 State store is a versioned key-value store which provides both read and write operations. In
-structured streaming, we use the state store provider to handle the stateful operations across
+Structured Streaming, we use the state store provider to handle the stateful operations across
 batches. There are two built-in state store provider implementations. End users can also implement
 their own state store provider by extending StateStoreProvider interface.
 
 #### HDFS state store provider
 
 The HDFS backend state store provider is the default implementation of [[StateStoreProvider]] and
-[[StateStore]] in which all the data is stated in memory map in the first stage, and then backed
+[[StateStore]] in which all the data is stored in memory map in the first stage, and then backed
 by files in an HDFS-compatible file system. All updates to the store have to be done in sets
 transactionally, and each set of updates increments the store's version. These versions can be
 used to re-execute the updates (by retries in RDD operations) on the correct version of the store,
@@ -1847,11 +1847,6 @@ Here are the configs regarding to RocksDB instance of the state store provider:
     <td>spark.sql.streaming.stateStore.rocksdb.blockSizeKB</td>
     <td>Approximate size in KB of user data packed per block for a RocksDB BlockBasedTable, which is a RocksDB's default SST file format.</td>
     <td>4</td>
-  </tr>
-  <tr>
-    <td>spark.sql.streaming.stateStore.rocksdb.blockCacheSizeMB</td>
-    <td>The size capacity in MB for a cache of blocks.</td>
-    <td>8</td>
   </tr>
   <tr>
     <td>spark.sql.streaming.stateStore.rocksdb.blockCacheSizeMB</td>
