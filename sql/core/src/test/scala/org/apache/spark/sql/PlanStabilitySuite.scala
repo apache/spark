@@ -161,9 +161,12 @@ trait PlanStabilitySuite extends TPCDSBase with TPCHBase with DisableAdaptiveExe
           |
           |$approvedSimplified
           |
+          |$approvedExplainFile
+          |
           |actual simplified plan: ${actualSimplifiedFile.getAbsolutePath}
           |actual explain plan: ${actualExplainFile.getAbsolutePath}
           |
+          |$actualSimplified
           |$actualSimplified
         """.stripMargin)
     }
