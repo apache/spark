@@ -48,10 +48,10 @@ public interface SupportsIndex extends CatalogPlugin {
    * @throws UnsupportedOperationException If create index is not a supported operation
    */
   void createIndex(String indexName,
-                   String indexType,
-                   Identifier table,
-                   FieldReference[] columns,
-                   Map<String, String> properties)
+      String indexType,
+      Identifier table,
+      FieldReference[] columns,
+      Map<String, String> properties)
       throws IndexAlreadyExistsException, UnsupportedOperationException;
 
   /**
