@@ -24,7 +24,7 @@ from pandas.api.types import is_list_like, CategoricalDtype
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
 from pyspark.pandas.base import column_op, IndexOpsMixin
-from pyspark.pandas.data_type_ops.base import DataTypeOps
+from pyspark.pandas.data_type_ops.base import _sanitize_list_like, DataTypeOps
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql import functions as F
@@ -63,21 +63,27 @@ class CategoricalOps(DataTypeOps):
         return _to_cat(index_ops).astype(dtype)
 
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return _compare(left, right, Column.__eq__, is_equality_comparison=True)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return _compare(left, right, Column.__ne__, is_equality_comparison=True)
 
     def lt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return _compare(left, right, Column.__lt__)
 
     def le(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return _compare(left, right, Column.__le__)
 
     def gt(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return _compare(left, right, Column.__gt__)
 
     def ge(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return _compare(left, right, Column.__ge__)
 
 

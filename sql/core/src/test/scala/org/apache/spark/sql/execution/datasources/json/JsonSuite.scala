@@ -2944,6 +2944,20 @@ abstract class JsonSuite
       }
     }
   }
+
+  test("SPARK-36379: proceed parsing with root nulls in permissive mode") {
+    assert(intercept[SparkException] {
+      spark.read.option("mode", "failfast")
+        .schema("a string").json(Seq("""[{"a": "str"}, null]""").toDS).collect()
+    }.getMessage.contains("Malformed records are detected"))
+
+    // Permissive modes should proceed parsing malformed records (null).
+    // Here, since an array fails to parse in the middle, we will return one row.
+    checkAnswer(
+      spark.read.option("mode", "permissive")
+        .json(Seq("""[{"a": "str"}, null, {"a": "str"}]""").toDS),
+      Row(null) :: Nil)
+  }
 }
 
 class JsonV1Suite extends JsonSuite {

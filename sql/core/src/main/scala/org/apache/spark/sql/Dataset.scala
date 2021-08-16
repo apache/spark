@@ -3537,6 +3537,31 @@ class Dataset[T] private[sql](
   ////////////////////////////////////////////////////////////////////////////
 
   /**
+   * It adds a new long column with the name `name` that increases one by one.
+   * This is for 'distributed-sequence' default index in pandas API on Spark.
+   */
+  private[sql] def withSequenceColumn(name: String) = {
+    val rdd: RDD[InternalRow] =
+      // Checkpoint the DataFrame to fix the partition ID.
+      localCheckpoint(false)
+      .queryExecution.toRdd.zipWithIndex().mapPartitions { iter =>
+      val joinedRow = new JoinedRow
+      val unsafeRowWriter =
+        new org.apache.spark.sql.catalyst.expressions.codegen.UnsafeRowWriter(1)
+
+      iter.map { case (row, id) =>
+        // Writes to an UnsafeRow directly
+        unsafeRowWriter.reset()
+        unsafeRowWriter.write(0, id)
+        joinedRow(unsafeRowWriter.getRow, row)
+      }
+    }
+
+    sparkSession.internalCreateDataFrame(
+      rdd, StructType(StructField(name, LongType, nullable = false) +: schema), isStreaming)
+  }
+
+  /**
    * Converts a JavaRDD to a PythonRDD.
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {

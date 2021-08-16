@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Attribute, DynamicPruning
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.toPrettySQL
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, StagingTableCatalog, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, Table, TableCapability, TableCatalog}
 import org.apache.spark.sql.connector.read.LocalScan
 import org.apache.spark.sql.connector.read.streaming.{ContinuousStream, MicroBatchStream}
 import org.apache.spark.sql.connector.write.V1Write
@@ -314,10 +314,6 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         ns,
         Map(SupportsNamespaces.PROP_COMMENT -> comment)) :: Nil
 
-    case CommentOnTable(ResolvedTable(catalog, identifier, _, _), comment) =>
-      val changes = TableChange.setProperty(TableCatalog.PROP_COMMENT, comment)
-      AlterTableExec(catalog, identifier, Seq(changes)) :: Nil
-
     case CreateNamespace(catalog, namespace, ifNotExists, properties) =>
       CreateNamespaceExec(catalog, namespace, ifNotExists, properties) :: Nil
 
@@ -424,25 +420,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       }
       UncacheTableExec(r.table, cascade = !isTempView(r.table)) :: Nil
 
-    case SetTableLocation(table: ResolvedTable, partitionSpec, location) =>
-      if (partitionSpec.nonEmpty) {
-        throw QueryCompilationErrors.alterV2TableSetLocationWithPartitionNotSupportedError()
-      }
-      val changes = Seq(TableChange.setProperty(TableCatalog.PROP_LOCATION, location))
-      AlterTableExec(table.catalog, table.identifier, changes) :: Nil
-
-    case SetTableProperties(table: ResolvedTable, props) =>
-      val changes = props.map { case (key, value) =>
-        TableChange.setProperty(key, value)
-      }.toSeq
-      AlterTableExec(table.catalog, table.identifier, changes) :: Nil
-
-    // TODO: v2 `UNSET TBLPROPERTIES` should respect the ifExists flag.
-    case UnsetTableProperties(table: ResolvedTable, keys, _) =>
-      val changes = keys.map(key => TableChange.removeProperty(key))
-      AlterTableExec(table.catalog, table.identifier, changes) :: Nil
-
-    case a: AlterTableColumnCommand if a.table.resolved =>
+    case a: AlterTableCommand if a.table.resolved =>
       val table = a.table.asInstanceOf[ResolvedTable]
       AlterTableExec(table.catalog, table.identifier, a.changes) :: Nil
 
