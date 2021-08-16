@@ -1048,16 +1048,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         YearMonthIntervalType()), StringType), ansiInterval)
     }
 
-    if (!isTryCast) {
-      Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
-        .foreach { interval =>
-          val e = intercept[IllegalArgumentException] {
-            cast(Literal.create(interval), YearMonthIntervalType()).eval()
-          }.getMessage
-          assert(e.contains("Error parsing interval year-month string: integer overflow"))
-        }
-    }
-
     Seq(Byte.MaxValue, Short.MaxValue, Int.MaxValue, Int.MinValue + 1, Int.MinValue)
       .foreach { period =>
         val interval = Literal.create(Period.ofMonths(period), YearMonthIntervalType())
@@ -1118,38 +1108,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           checkEvaluation(cast(Literal.create(s"INTERVAL '$str' month"), dataType), value)
         }
       }
-
-    if (!isTryCast) {
-      Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH").foreach { interval =>
-        val dataType = YearMonthIntervalType()
-        val e = intercept[IllegalArgumentException] {
-          cast(Literal.create(interval), dataType).eval()
-        }.getMessage
-        assert(e.contains(s"Interval string does not match year-month format of " +
-          s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
-            .map(format => s"`$format`").mkString(", ")} " +
-          s"when cast to ${dataType.typeName}: $interval"))
-      }
-      Seq(("1", YearMonthIntervalType(YEAR, MONTH)),
-        ("1", YearMonthIntervalType(YEAR, MONTH)),
-        ("1-1", YearMonthIntervalType(YEAR)),
-        ("1-1", YearMonthIntervalType(MONTH)),
-        ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(YEAR)),
-        ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(MONTH)),
-        ("INTERVAL '1' YEAR", YearMonthIntervalType(YEAR, MONTH)),
-        ("INTERVAL '1' YEAR", YearMonthIntervalType(MONTH)),
-        ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR)),
-        ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR, MONTH)))
-        .foreach { case (interval, dataType) =>
-          val e = intercept[IllegalArgumentException] {
-            cast(Literal.create(interval), dataType).eval()
-          }.getMessage
-          assert(e.contains(s"Interval string does not match year-month format of " +
-            s"${IntervalUtils.supportedFormat((dataType.startField, dataType.endField))
-              .map(format => s"`$format`").mkString(", ")} " +
-            s"when cast to ${dataType.typeName}: $interval"))
-        }
-    }
   }
 
   test("SPARK-35735: Take into account day-time interval fields in cast") {

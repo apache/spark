@@ -586,8 +586,10 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
   private[this] def castToYearMonthInterval(
       from: DataType,
       it: YearMonthIntervalType): Any => Any = from match {
+    case StringType if ansiEnabled => buildCast[UTF8String](_, s =>
+      IntervalUtils.castStringToYMIntervalAnsi(s, it.startField, it.endField))
     case StringType => buildCast[UTF8String](_, s =>
-      IntervalUtils.castStringToYMInterval(s, it.startField, it.endField))
+      IntervalUtils.castStringToYMInterval(s, it.startField, it.endField).orNull)
     case _: YearMonthIntervalType => buildCast[Int](_, s =>
       IntervalUtils.periodToMonths(IntervalUtils.monthsToPeriod(s), it.endField))
   }
@@ -959,7 +961,7 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
     case TimestampNTZType => castToTimestampNTZCode(from, ctx)
     case CalendarIntervalType => castToIntervalCode(from)
     case it: DayTimeIntervalType => castToDayTimeIntervalCode(from, it)
-    case it: YearMonthIntervalType => castToYearMonthIntervalCode(from, it)
+    case it: YearMonthIntervalType => castToYearMonthIntervalCode(from, it, ctx)
     case BooleanType => castToBooleanCode(from)
     case ByteType => castToByteCode(from, ctx)
     case ShortType => castToShortCode(from, ctx)
@@ -1490,13 +1492,30 @@ abstract class CastBase extends UnaryExpression with TimeZoneAwareExpression wit
 
   private[this] def castToYearMonthIntervalCode(
       from: DataType,
-      it: YearMonthIntervalType): CastFunction = from match {
-    case StringType =>
+      it: YearMonthIntervalType,
+      ctx: CodegenContext): CastFunction = from match {
+    case StringType if ansiEnabled =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      // scalastyle:off line.size.limit
       (c, evPrim, _) =>
         code"""
-          $evPrim = $util.castStringToYMInterval($c, (byte)${it.startField}, (byte)${it.endField});
+          $evPrim = $util.castStringToYMIntervalAnsi($c, (byte)${it.startField}, (byte)${it.endField});
         """
+      // scalastyle:on line.size.limit
+    case StringType =>
+      val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
+      val intOpt = ctx.freshVariable("intOpt", classOf[Option[Integer]])
+      // scalastyle:off line.size.limit
+      (c, evPrim, evNull) =>
+        code"""
+          scala.Option<Integer> $intOpt = $util.castStringToYMInterval($c, (byte)${it.startField}, (byte)${it.endField});
+          if ($intOpt.isDefined()) {
+            $evPrim = ((Integer) $intOpt.get()).intValue();
+          } else {
+            $evNull = true;
+          }
+        """
+      // scalastyle:on line.size.limit
     case _: YearMonthIntervalType =>
       val util = IntervalUtils.getClass.getCanonicalName.stripSuffix("$")
       (c, evPrim, _) =>

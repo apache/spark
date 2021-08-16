@@ -143,7 +143,9 @@ object IntervalUtils {
     (DT.SECOND, DT.SECOND) -> Seq("[+|-]s.n", "INTERVAL [+|-]'[+|-]s.n' SECOND")
   )
 
-  def castStringToYMInterval(
+  // Cast string input to year-month interval. The method will throw an exception on conversion
+  // error.
+  def castStringToYMIntervalAnsi(
       input: UTF8String,
       startField: Byte,
       endField: Byte): Int = {
@@ -186,6 +188,19 @@ object IntervalUtils {
     }
   }
 
+  // Cast string input to an optional year-month interval. The method will return `None` on
+  // conversion error.
+  def castStringToYMInterval(
+      input: UTF8String,
+      startField: Byte,
+      endField: Byte): Option[Int] = {
+    try {
+      Some(castStringToYMIntervalAnsi(input, startField, endField))
+    } catch {
+      case _: Throwable => None
+    }
+  }
+
   /**
    * Parse year-month interval in form: [+|-]YYYY-MM
    *
@@ -204,7 +219,7 @@ object IntervalUtils {
    */
   def fromYearMonthString(input: String, startField: Byte, endField: Byte): CalendarInterval = {
     require(input != null, "Interval year-month string must be not null")
-    val months = castStringToYMInterval(UTF8String.fromString(input), startField, endField)
+    val months = castStringToYMIntervalAnsi(UTF8String.fromString(input), startField, endField)
     new CalendarInterval(months, 0, 0)
   }
 

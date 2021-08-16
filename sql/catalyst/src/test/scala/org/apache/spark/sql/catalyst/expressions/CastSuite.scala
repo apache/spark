@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.YearMonthIntervalType.{MONTH, YEAR}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -579,5 +580,31 @@ class CastSuite extends CastSuiteBase {
 
   test("SPARK-36286: invalid string cast to timestamp") {
     checkEvaluation(cast(Literal("2015-03-18T"), TimestampType), null)
+  }
+
+  test("SPARK-36522: invalid string cast to year-month interval") {
+    Seq("INTERVAL '-178956970-9' YEAR TO MONTH", "INTERVAL '178956970-8' YEAR TO MONTH")
+      .foreach { interval =>
+        checkEvaluation(cast(Literal.create(interval), YearMonthIntervalType()), null)
+      }
+
+    Seq("INTERVAL '1-1' YEAR", "INTERVAL '1-1' MONTH").foreach { interval =>
+      val dataType = YearMonthIntervalType()
+      checkEvaluation(cast(Literal.create(interval), dataType), null)
+    }
+
+    Seq(("1", YearMonthIntervalType(YEAR, MONTH)),
+      ("1", YearMonthIntervalType(YEAR, MONTH)),
+      ("1-1", YearMonthIntervalType(YEAR)),
+      ("1-1", YearMonthIntervalType(MONTH)),
+      ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(YEAR)),
+      ("INTERVAL '1-1' YEAR TO MONTH", YearMonthIntervalType(MONTH)),
+      ("INTERVAL '1' YEAR", YearMonthIntervalType(YEAR, MONTH)),
+      ("INTERVAL '1' YEAR", YearMonthIntervalType(MONTH)),
+      ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR)),
+      ("INTERVAL '1' MONTH", YearMonthIntervalType(YEAR, MONTH)))
+      .foreach { case (interval, dataType) =>
+        checkEvaluation(cast(Literal.create(interval), dataType), null)
+      }
   }
 }

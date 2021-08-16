@@ -224,9 +224,8 @@ trait BaseScriptTransformationExec extends UnaryExecNode {
         data => IntervalUtils.stringToInterval(UTF8String.fromString(data)),
         converter)
       case YearMonthIntervalType(start, end) => wrapperConvertException(
-        data => IntervalUtils.monthsToPeriod(
-          IntervalUtils.castStringToYMInterval(UTF8String.fromString(data), start, end)),
-        converter)
+        data => IntervalUtils.castStringToYMInterval(UTF8String.fromString(data), start, end)
+          .map(IntervalUtils.monthsToPeriod).orNull, converter)
       case DayTimeIntervalType(start, end) => wrapperConvertException(
         data => IntervalUtils.microsToDuration(
           IntervalUtils.castStringToDTInterval(UTF8String.fromString(data), start, end)),
