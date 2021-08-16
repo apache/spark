@@ -87,10 +87,11 @@ public interface ErrorHandler {
         return false;
       }
 
-      // If the block is too late or stale block push, there is no need to retry it
+      // If the block is too late or the invalid block push or the attempt is not the latest one,
+      // there is no need to retry it
       return !(t instanceof BlockPushNonFatalFailure &&
-        (((BlockPushNonFatalFailure) t).getReturnCode() == TOO_LATE_BLOCK_PUSH ||
-          ((BlockPushNonFatalFailure) t).getReturnCode() == STALE_BLOCK_PUSH));
+        BlockPushNonFatalFailure
+          .shouldNotRetryErrorCode(((BlockPushNonFatalFailure) t).getReturnCode()));
     }
 
     @Override
