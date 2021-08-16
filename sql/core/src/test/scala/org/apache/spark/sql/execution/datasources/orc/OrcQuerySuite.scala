@@ -743,7 +743,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
     }
   }
 
-  test("SPARK-33449: simple select queries with file meta cache") {
+  test("SPARK-36516: simple select queries with file meta cache") {
     withSQLConf(SQLConf.FILE_META_CACHE_ORC_ENABLED.key -> "true") {
       val tableName = "orc_use_meta_cache"
       withTable(tableName) {
