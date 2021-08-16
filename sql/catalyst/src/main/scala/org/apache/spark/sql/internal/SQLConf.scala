@@ -967,6 +967,20 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
+  val FILE_META_CACHE_ORC_ENABLED = buildConf("spark.sql.fileMetaCache.orc.enabled")
+    .doc("To indicate if enable orc file meta cache, it is recommended to enabled " +
+      "this config when multiple queries are performed on the same dataset, default is false.")
+    .version("3.3.0")
+    .booleanConf
+    .createWithDefault(false)
+
+  val FILE_META_CACHE_TTL_SINCE_LAST_ACCESS =
+    buildConf("spark.sql.fileMetaCache.ttlSinceLastAccess")
+      .version("3.3.0")
+      .doc("Time-to-live for file metadata cache entry after last access, the unit is seconds.")
+      .timeConf(TimeUnit.SECONDS)
+      .createWithDefault(3600L)
+
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
          "when reading data stored in HDFS. This configuration will be deprecated in the future " +
@@ -3599,6 +3613,8 @@ class SQLConf extends Serializable with Logging {
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
 
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
+  
+  def fileMetaCacheOrcEnabled: Boolean = getConf(FILE_META_CACHE_ORC_ENABLED)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 
