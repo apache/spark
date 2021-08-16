@@ -35,6 +35,8 @@ trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning 
   def aggregateAttributes: Seq[Attribute]
   def initialInputBufferOffset: Int
   def resultExpressions: Seq[NamedExpression]
+  def isSkew: Boolean = false
+  override def nodeName: String = if (isSkew) super.nodeName + "(skew=true)" else super.nodeName
 
   override def verboseStringWithOperatorId(): String = {
     s"""
@@ -94,6 +96,7 @@ trait BaseAggregateExec extends UnaryExecNode with AliasAwareOutputPartitioning 
 
   override def requiredChildDistribution: List[Distribution] = {
     requiredChildDistributionExpressions match {
+      case _ if isSkew => UnspecifiedDistribution :: Nil
       case Some(exprs) if exprs.isEmpty => AllTuples :: Nil
       case Some(exprs) =>
         if (isStreaming) {

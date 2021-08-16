@@ -115,6 +115,12 @@ class AdaptiveQueryExecSuite
     }
   }
 
+  private def findTopLevelShuffledJoin(plan: SparkPlan): Seq[ShuffledJoin] = {
+    collect(plan) {
+      case j: ShuffledJoin => j
+    }
+  }
+
   private def findTopLevelBaseJoin(plan: SparkPlan): Seq[BaseJoinExec] = {
     collect(plan) {
       case j: BaseJoinExec => j
@@ -841,6 +847,227 @@ class AdaptiveQueryExecSuite
         }
       }
     }
+  }
+
+  test("SPARK-36638: General Skew Join: 3-table join") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.SKEW_JOIN_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "100",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "80",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "80") {
+      withTempView("skewData1", "skewData2", "skewData3") {
+        spark
+          .range(0, 10000, 1, 9)
+          .select(
+            when('id < 2500, 2499)
+              .when('id >= 7500, 10000)
+              .otherwise('id).as("key1"),
+            'id as "value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 100000, 1, 7)
+          .select(
+            when('id < 5000, 4999)
+              .when('id >= 10000, 10001)
+              .otherwise('id).as("key2"),
+            'id as "value2")
+          .createOrReplaceTempView("skewData2")
+        spark
+          .range(0, 10000, 1, 5)
+          .select('id as "key3", 'id as "value3")
+          .repartition(11)
+          .createOrReplaceTempView("skewData3")
+
+        val join =
+          s"""
+             | SELECT value1, value3, row FROM
+             | (SELECT key1, value1, row_number() OVER (PARTITION BY key1 ORDER BY value1 DESC)
+             | AS row FROM skewData1)
+             | JOIN skewData2 ON key1 = key2
+             | LEFT JOIN (SELECT key3, max(value3) AS value3 FROM skewData3 GROUP BY key3)
+             | ON key1 = key3
+             |""".stripMargin
+        val query = s"SELECT value1, max(row) FROM ($join) GROUP BY value1"
+
+        val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+        val joins = findTopLevelShuffledJoin(adaptivePlan)
+        assert(joins.size === 2)
+        assert(joins.forall(_.isSkewJoin))
+      }
+    }
+  }
+
+  test("SPARK-36638: General Skew Join: 3-table join UNION 2-table join") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.SKEW_JOIN_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "100",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "80",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "80") {
+      withTempView("skewData1", "skewData2", "skewData3") {
+        spark
+          .range(0, 10000, 1, 9)
+          .select(
+            when('id < 2500, 2499)
+              .when('id >= 7500, 10000)
+              .otherwise('id).as("key1"),
+            'id as "value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 10000, 1, 7)
+          .select(
+            when('id < 2500, 2499)
+              .otherwise('id).as("key2"),
+            'id as "value2")
+          .createOrReplaceTempView("skewData2")
+        spark
+          .range(0, 10000, 1, 5)
+          .select('id as "key3", 'id as "value3")
+          .createOrReplaceTempView("skewData3")
+
+        Seq("SHUFFLE_MERGE", "SHUFFLE_HASH").foreach { joinHint =>
+          val union =
+            s"""
+               | SELECT value1, value3 FROM
+               | skewData1 JOIN skewData2 ON key1 = key2
+               | LEFT JOIN
+               | (SELECT key3, max(value3) AS value3 FROM skewData3 GROUP BY key3) ON key1 = key3
+               | UNION ALL
+               | SELECT /*+ $joinHint(skewData1) */ value1, value2 FROM skewData1
+               | LEFT JOIN skewData2 ON key1 = key2
+               |""".stripMargin
+          val query = s"SELECT value1, max(value3) FROM ($union) GROUP BY value1"
+
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          val joins = findTopLevelShuffledJoin(adaptivePlan)
+          assert(joins.size === 3)
+          assert(joins.forall(_.isSkewJoin))
+        }
+      }
+    }
+  }
+
+  test("SPARK-36638: General Skew Join: 5-table join") {
+    withSQLConf(
+      SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+      SQLConf.SKEW_JOIN_ENABLED.key -> "true",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+      SQLConf.SHUFFLE_PARTITIONS.key -> "100",
+      SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "80",
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "80") {
+      withTempView("skewData1", "skewData2", "skewData3", "skewData4", "skewData5") {
+        spark
+          .range(0, 10000, 1, 9)
+          .select(
+            when('id < 2500, 2499)
+              .when('id >= 7500, 10000)
+              .otherwise('id).as("key1"),
+            'id as "value1")
+          .createOrReplaceTempView("skewData1")
+        spark
+          .range(0, 10000, 1, 7)
+          .select(
+            when('id < 2500, 2499)
+              .otherwise('id).as("key2"),
+            'id as "value2")
+          .createOrReplaceTempView("skewData2")
+        spark
+          .range(0, 10000, 1, 5)
+          .select('id as "key3", 'id as "value3")
+          .createOrReplaceTempView("skewData3")
+        spark
+          .range(0, 10000, 1, 3)
+          .select(
+            when('id < 2000, 1999)
+              .otherwise('id).as("key4"),
+            'id as "value4")
+          .createOrReplaceTempView("skewData4")
+        spark
+          .range(0, 10000, 1, 11)
+          .select(
+            when('id > 6000, 6000)
+              .otherwise('id).as("key5"),
+            'id as "value5")
+          .createOrReplaceTempView("skewData5")
+
+
+        for (joinType12 <- Seq("LEFT", "RIGHT");
+             joinType123 <- Seq("INNER", "CROSS");
+             joinType45 <- Seq("RIGHT", "INNER")) {
+
+          val join =
+            s"""
+               | SELECT * FROM
+               | skewData1 $joinType12 JOIN skewData2 ON key1 = key2
+               | $joinType123 JOIN skewData3 ON key1 = key3
+               | JOIN
+               | ((SELECT /*+ SHUFFLE_HASH(skewData4) */ key4, max(value4) AS value4
+               | FROM skewData4 GROUP BY key4)
+               | $joinType45 JOIN skewData5 ON key4 = key5)
+               | ON key1 = key5
+               |""".stripMargin
+          val query = s"SELECT value1, max(value3) FROM ($join) GROUP BY value1"
+
+          val (_, adaptivePlan) = runAdaptiveAndVerifyResult(query)
+          val joins = findTopLevelShuffledJoin(adaptivePlan)
+          assert(joins.size === 4)
+          assert(joins.forall(_.isSkewJoin))
+        }
+      }
+    }
+  }
+
+  test("SPARK-36638: General Skew Join: combine splits to handle Combinatorial Explosion") {
+    import OptimizeSkewedJoin.combine
+
+    val array0 = Array(511, 622) // 317,842 splits
+    assert(combine(1, array0) === Array(1, 1)) // 1 split
+    assert(combine(10, array0) === Array(3, 3)) // 9 splits
+    assert(combine(100, array0) === Array(9, 11)) // 99 splits
+    assert(combine(1000, array0) === Array(29, 34)) // 986 splits
+    assert(combine(10000, array0) === Array(90, 110)) // 9,900 splits
+    assert(combine(100000, array0) === Array(286, 349)) // 99,814 splits
+
+    val array1 = Array(1111, 4096, 128, 8) // 364,904,448 splits
+    assert(combine(1, array1) === Array(1, 1, 1, 1)) // 1 split
+    assert(combine(10, array1) === Array(2, 5, 1, 1)) // 10 splits
+    assert(combine(100, array1) === Array(5, 19, 1, 1)) // 95 splits
+    assert(combine(1000, array1) === Array(12, 45, 1, 1)) // 540 splits
+    assert(combine(10000, array1) === Array(29, 105, 3, 1)) // 9,135 splits
+    assert(combine(100000, array1) === Array(61, 226, 7, 1)) // 96,502 splits
+
+    val array2 = Array(77, 99, 77) // 586,971 splits
+    assert(combine(1, array2) === Array(1, 1, 1)) // 1 split
+    assert(combine(10, array2) === Array(2, 2, 2)) // 8 splits
+    assert(combine(100, array2) === Array(4, 5, 4)) // 80 splits
+    assert(combine(1000, array2) === Array(9, 12, 9)) // 972 splits
+    assert(combine(10000, array2) === Array(20, 25, 20)) // 10,000 splits
+    assert(combine(100000, array2) === Array(42, 55, 43)) // 99,330 splits
+
+    val array3 = Array(9999) // 9,999 splits
+    assert(combine(1, array3) === Array(1)) // 1 split
+    assert(combine(10, array3) === Array(10)) // 10 splits
+    assert(combine(100, array3) === Array(100)) // 100 splits
+    assert(combine(1000, array3) === Array(1000)) // 1000 splits
+    assert(combine(10000, array3) === Array(9999)) // 9,999 splits
+
+    val array4 = Array(10, 20, 30, 4, 10, 2, 1, 999, 88) // 42,197,760,000 splits
+    assert(combine(1, array4) === Array(1, 1, 1, 1, 1, 1, 1, 1, 1)) // 1 split
+    assert(combine(10, array4) === Array(1, 1, 1, 1, 1, 1, 1, 10, 1)) // 10 splits
+    assert(combine(100, array4) === Array(1, 1, 1, 1, 1, 1, 1, 33, 3)) // 99 splits
+    assert(combine(1000, array4) === Array(1, 1, 2, 1, 1, 1, 1, 69, 6)) // 828 splits
+    assert(combine(10000, array4) === Array(1, 2, 4, 1, 1, 1, 1, 119, 10)) // 9,520 splits
+    assert(combine(100000, array4) === Array(2, 3, 4, 1, 2, 1, 1, 148, 13)) // 92,352 splits
+
+    val array5 = Array.fill(10)(2) // 1,024 splits
+    assert(combine(1, array5) === Array(1, 1, 1, 1, 1, 1, 1, 1, 1, 1)) // 1 split
+    assert(combine(10, array5) === Array(1, 1, 1, 1, 1, 1, 1, 2, 2, 2)) // 8 splits
+    assert(combine(100, array5) === Array(1, 1, 1, 1, 2, 2, 2, 2, 2, 2)) // 64 splits
+    assert(combine(1000, array5) === Array(1, 2, 2, 2, 2, 2, 2, 2, 2, 2)) // 512 splits
+    assert(combine(10000, array5) === Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2)) // 1,024 splits
   }
 
   test("SPARK-30291: AQE should catch the exceptions when doing materialize") {

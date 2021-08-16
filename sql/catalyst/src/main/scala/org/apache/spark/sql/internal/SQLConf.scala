@@ -704,6 +704,25 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("256MB")
 
+  val SKEW_JOIN_MAX_JOINS =
+    buildConf("spark.sql.adaptive.skewJoin.maxJoins")
+      .doc(s"When '${ADAPTIVE_EXECUTION_ENABLED.key}' and '${SKEW_JOIN_ENABLED.key}' " +
+        s"are true, the max number (inclusive) of shuffled joins in a stage that general " +
+        s"skew algorithm can handle.")
+      .version("3.3.0")
+      .intConf
+      .checkValue(_ > 0, "The max joins must be positive.")
+      .createWithDefault(5)
+
+  val SKEW_JOIN_MAX_SPLITS_PER_PARTITION =
+    buildConf("spark.sql.adaptive.skewJoin.maxSplitsPerPartition")
+      .doc(s"When '${ADAPTIVE_EXECUTION_ENABLED.key}' and '${SKEW_JOIN_ENABLED.key}' " +
+        s"are true, the max number (inclusive) of splits from a partition.")
+      .version("3.3.0")
+      .intConf
+      .checkValue(_ >= 10, "The max splits must be no less than 10.")
+      .createWithDefault(1000)
+
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
       .internal()

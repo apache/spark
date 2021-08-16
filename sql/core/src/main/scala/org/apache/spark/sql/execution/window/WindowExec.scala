@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.window
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{ExternalAppendOnlyUnsafeRowArray, SparkPlan}
 
 /**
@@ -87,8 +88,19 @@ case class WindowExec(
     windowExpression: Seq[NamedExpression],
     partitionSpec: Seq[Expression],
     orderSpec: Seq[SortOrder],
-    child: SparkPlan)
+    child: SparkPlan,
+    isSkew: Boolean = false)
   extends WindowExecBase {
+  override def nodeName: String = if (isSkew) super.nodeName + "(skew=true)" else super.nodeName
+  override def stringArgs: Iterator[Any] = super.stringArgs.toSeq.dropRight(1).iterator
+
+  override def requiredChildDistribution: Seq[Distribution] = {
+    if (isSkew) {
+      UnspecifiedDistribution :: Nil
+    } else {
+      super[WindowExecBase].requiredChildDistribution
+    }
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     // Unwrap the window expressions and window frame factories from the map.
