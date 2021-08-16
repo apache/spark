@@ -3613,7 +3613,7 @@ class SQLConf extends Serializable with Logging {
   def parquetVectorizedReaderEnabled: Boolean = getConf(PARQUET_VECTORIZED_READER_ENABLED)
 
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
-  
+
   def fileMetaCacheOrcEnabled: Boolean = getConf(FILE_META_CACHE_ORC_ENABLED)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)

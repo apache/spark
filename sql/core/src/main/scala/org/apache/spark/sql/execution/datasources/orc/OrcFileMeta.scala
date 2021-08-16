@@ -36,8 +36,8 @@ private[sql] object OrcFileMeta {
   def apply(path: Path, conf: Configuration): OrcFileMeta = {
     val fs = path.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    Utils.tryWithResource(new ForTailCacheReader(path, readerOptions)) { fileReader =>
-      new OrcFileMeta(fileReader.getOrcTail)
+    Utils.tryWithResource(new ReaderImpl(path, readerOptions)) { fileReader =>
+      new OrcFileMeta(new OrcTail(fileReader.getFileTail, fileReader.getSerializedFileFooter))
     }
   }
 
@@ -46,9 +46,4 @@ private[sql] object OrcFileMeta {
 
   def readTailFromCache(key: OrcFileMetaKey): OrcTail =
     FileMetaCacheManager.get(key).asInstanceOf[OrcFileMeta].tail
-}
-
-private[sql] class ForTailCacheReader(path: Path, options: OrcFile.ReaderOptions)
-  extends ReaderImpl(path, options) {
-  def getOrcTail: OrcTail = tail
 }
