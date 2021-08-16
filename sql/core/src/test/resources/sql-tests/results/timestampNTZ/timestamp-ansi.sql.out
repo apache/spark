@@ -745,10 +745,9 @@ You may get a different result due to the upgrading of Spark 3.0: Fail to recogn
 -- !query
 select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query schema
-struct<>
+struct<from_json({"t":"26/October/2015"}):struct<t:timestamp_ntz>>
 -- !query output
-java.lang.Exception
-Unsupported type: timestamp_ntz
+{"t":null}
 
 
 -- !query
