@@ -974,13 +974,6 @@ object SQLConf {
     .booleanConf
     .createWithDefault(false)
 
-  val FILE_META_CACHE_ORC_ENABLED = buildConf("spark.sql.fileMetaCache.orc.enabled")
-    .doc("To indicate if enable orc file meta cache, it is recommended to enabled " +
-      "this config when multiple queries are performed on the same dataset, default is false.")
-    .version("3.3.0")
-    .booleanConf
-    .createWithDefault(false)
-
   val FILE_META_CACHE_TTL_SINCE_LAST_ACCESS =
     buildConf("spark.sql.fileMetaCache.ttlSinceLastAccess")
       .version("3.3.0")
@@ -3622,8 +3615,6 @@ class SQLConf extends Serializable with Logging {
   def parquetVectorizedReaderBatchSize: Int = getConf(PARQUET_VECTORIZED_READER_BATCH_SIZE)
 
   def fileMetaCacheParquetEnabled: Boolean = getConf(FILE_META_CACHE_PARQUET_ENABLED)
-
-  def fileMetaCacheOrcEnabled: Boolean = getConf(FILE_META_CACHE_ORC_ENABLED)
 
   def columnBatchSize: Int = getConf(COLUMN_BATCH_SIZE)
 

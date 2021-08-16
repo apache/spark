@@ -31,7 +31,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.execution.datasources.PartitionedFile
-import org.apache.spark.sql.execution.datasources.orc.{OrcColumnarBatchReader, OrcDeserializer, OrcFileMeta, OrcFilters, OrcUtils}
+import org.apache.spark.sql.execution.datasources.orc.{OrcColumnarBatchReader, OrcDeserializer, OrcFilters, OrcUtils}
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
@@ -60,7 +60,6 @@ case class OrcPartitionReaderFactory(
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
   private val orcFilterPushDown = sqlConf.orcFilterPushDown
   private val ignoreCorruptFiles = sqlConf.ignoreCorruptFiles
-  private val orcMetaCacheEnabled = sqlConf.fileMetaCacheOrcEnabled
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
@@ -89,12 +88,7 @@ case class OrcPartitionReaderFactory(
     pushDownPredicates(filePath, conf)
 
     val fs = filePath.getFileSystem(conf)
-    val readerOptions = if (orcMetaCacheEnabled) {
-      val tail = OrcFileMeta.readTailFromCache(filePath, conf)
-      OrcFile.readerOptions(conf).filesystem(fs).orcTail(tail)
-    } else {
-      OrcFile.readerOptions(conf).filesystem(fs)
-    }
+    val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     val resultedColPruneInfo =
       Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
         OrcUtils.requestedColumnIds(
@@ -141,12 +135,7 @@ case class OrcPartitionReaderFactory(
     pushDownPredicates(filePath, conf)
 
     val fs = filePath.getFileSystem(conf)
-    val readerOptions = if (orcMetaCacheEnabled) {
-      val tail = OrcFileMeta.readTailFromCache(filePath, conf)
-      OrcFile.readerOptions(conf).filesystem(fs).orcTail(tail)
-    } else {
-      OrcFile.readerOptions(conf).filesystem(fs)
-    }
+    val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     val resultedColPruneInfo =
       Utils.tryWithResource(OrcFile.createReader(filePath, readerOptions)) { reader =>
         OrcUtils.requestedColumnIds(
@@ -169,10 +158,6 @@ case class OrcPartitionReaderFactory(
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
       val batchReader = new OrcColumnarBatchReader(capacity)
-      if (orcMetaCacheEnabled) {
-        val tail = OrcFileMeta.readTailFromCache(filePath, conf)
-        batchReader.setCachedTail(tail)
-      }
       batchReader.initialize(fileSplit, taskAttemptContext)
       val requestedPartitionColIds =
         Array.fill(readDataSchema.length)(-1) ++ Range(0, partitionSchema.length)

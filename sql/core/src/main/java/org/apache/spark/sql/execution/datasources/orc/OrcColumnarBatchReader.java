@@ -29,7 +29,6 @@ import org.apache.orc.OrcConf;
 import org.apache.orc.OrcFile;
 import org.apache.orc.Reader;
 import org.apache.orc.TypeDescription;
-import org.apache.orc.impl.OrcTail;
 import org.apache.orc.mapred.OrcInputFormat;
 
 import org.apache.spark.sql.catalyst.InternalRow;
@@ -74,8 +73,6 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
 
   // The wrapped ORC column vectors.
   private org.apache.spark.sql.vectorized.ColumnVector[] orcVectorWrappers;
-
-  private OrcTail cachedTail;
 
   public OrcColumnarBatchReader(int capacity) {
     this.capacity = capacity;
@@ -127,8 +124,7 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       fileSplit.getPath(),
       OrcFile.readerOptions(conf)
         .maxLength(OrcConf.MAX_FILE_LENGTH.getLong(conf))
-        .filesystem(fileSplit.getPath().getFileSystem(conf))
-        .orcTail(cachedTail));
+        .filesystem(fileSplit.getPath().getFileSystem(conf)));
     Reader.Options options =
       OrcInputFormat.buildOptions(conf, reader, fileSplit.getStart(), fileSplit.getLength());
     recordReader = reader.rows(options);
@@ -191,10 +187,6 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
     }
 
     columnarBatch = new ColumnarBatch(orcVectorWrappers);
-  }
-
-  public void setCachedTail(OrcTail cachedTail) {
-    this.cachedTail = cachedTail;
   }
 
   /**
