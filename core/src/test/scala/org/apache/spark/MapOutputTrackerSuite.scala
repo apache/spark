@@ -697,7 +697,6 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
 
       tracker.unregisterShuffle(shuffleId)
       tracker.stop()
-      rpcEnv.shutdown()
     }
   }
 
@@ -733,7 +732,6 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
 
       tracker.unregisterShuffle(shuffleId)
       tracker.stop()
-      rpcEnv.shutdown()
     }
   }
 }
