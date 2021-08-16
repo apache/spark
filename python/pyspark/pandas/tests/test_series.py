@@ -2905,6 +2905,21 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
 
         self.assert_eq(psser1.combine_first(psser2), pser1.combine_first(pser2))
 
+    def test_cov_of_series_in_same_frame(self):
+        pser = pd.DataFrame(
+            {
+                "s1": [0.90010907, 0.13484424, 0.62036035],
+                "s2": [0.12528585, 0.26962463, 0.51111198],
+            },
+            index=[0, 1, 2],
+        )
+
+        pcov = pser["s1"].cov(pser["s2"])
+
+        psser = ps.from_pandas(pser)
+        pscov = psser["s1"].cov(psser["s2"])
+        self.assert_eq(pcov, pscov, almost=True)
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_series import *  # noqa: F401
