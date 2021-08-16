@@ -17,6 +17,9 @@
 
 package org.apache.spark
 
+import java.io.{FileNotFoundException, IOException}
+import java.nio.file.FileAlreadyExistsException
+
 class SparkException(
     message: String,
     cause: Throwable,
@@ -74,6 +77,92 @@ private[spark] class SparkUpgradeException(version: String, message: String, cau
  */
 class SparkArithmeticException(errorClass: String, messageParameters: Array[String])
   extends ArithmeticException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * Class doesn't be found exception thrown from Spark with an error class.
+ */
+class SparkClassNotFoundException(
+      errorClass: String,
+      messageParameters: Array[String],
+      cause: Throwable)
+  extends ClassNotFoundException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * Unsupported Operation exception thrown from Spark with an error class.
+ */
+class SparkUnsupportedOperationException(errorClass: String, messageParameters: Array[String])
+  extends UnsupportedOperationException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * Runtime exception thrown from Spark with an error class.
+ */
+class SparkRuntimeException(errorClass: String, messageParameters: Array[String], cause: Throwable)
+  extends RuntimeException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * File Already exists exception thrown form Spark with an error class.
+ */
+class SparkFileAlreadyExistsException(errorClass: String, messageParameters: Array[String])
+  extends FileAlreadyExistsException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * File doesn't be Found exception thrown from Spark with an error class.
+ */
+class SparkFileNotFoundException(errorClass: String, messageParameters: Array[String])
+  extends FileNotFoundException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * IOException from Spark with an error class.
+ */
+class SparkIOException(errorClass: String, messageParameters: Array[String])
+  extends IOException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * NoSuch element exception thrown from Spark with an error class
+ */
+class SparkNoSuchElementException(errorClass: String, messageParameters: Array[String])
+  extends NoSuchElementException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
     with SparkThrowable {
 
   override def getErrorClass: String = errorClass

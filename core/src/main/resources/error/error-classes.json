@@ -1,15 +1,50 @@
 {
+  "ALTER_TABLE_WITH_DROP_PARTITION_AND_PURGE_UNSUPPORTED_ERROR" : {
+    "message" : [ "ALTER TABLE ... DROP PARTITION ... PURGE" ],
+    "sqlState" : "42000"
+  },
   "AMBIGUOUS_FIELD_NAME" : {
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_FETCH_TABLES_OF_DATABASE_ERROR" : {
+    "message" : [ "Unable to fetch tables of db %s" ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_RECOGNIZE_HIVE_TYPE_ERROR" : {
+    "message" : [ "Cannot recognize hive type string: %s, column: %s" ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_SET_TIMEOUT_DURATION_ERROR" : {
+    "message" : [ "Cannot set timeout duration without enabling processing time timeout in [map|flatMap]GroupsWithState" ],
+    "sqlState" : "42000"
+  },
+  "CONVERT_HIVE_TABLE_TO_CATALOG_TABLE_ERROR" : {
+    "message" : [ "%s, db: %s, table: %s" ],
     "sqlState" : "42000"
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
     "sqlState" : "22012"
   },
+  "DROP_TABLE_WITH_PURGE_UNSUPPORTED_ERROR" : {
+    "message" : [ "DROP TABLE ... PURGE" ],
+    "sqlState" : "42000"
+  },
   "DUPLICATE_KEY" : {
     "message" : [ "Found duplicate keys '%s'" ],
     "sqlState" : "23000"
+  },
+  "FAILED_RENAME_TEMP_FILE_ERROR" : {
+    "message" : [ "Failed to rename temp file %s to %s as rename returned false" ],
+    "sqlState" : "42000"
+  },
+  "GET_PARTITION_METADATA_BY_FILTER_ERROR" : {
+    "message" : [ "Caught Hive MetaException attempting to get partition metadata by filter\nfrom Hive. You can set the Spark configuration setting\n%s to true to work around\nthis problem, however this will result in degraded performance. Please\nreport a bug: https://issues.apache.org/jira/browse/SPARK" ]
+  },
+  "GET_TABLES_BY_TYPE_UNSUPPORTED_BY_HIVE_VERSION_ERROR" : {
+    "message" : [ "Hive 2.2 and lower versions don't support getTablesByType. Please use Hive 2.3 or higher version." ],
+    "sqlState" : "42000"
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
@@ -25,6 +60,9 @@
   "IF_PARTITION_NOT_EXISTS_UNSUPPORTED" : {
     "message" : [ "Cannot write, IF NOT EXISTS is not supported for table: %s" ]
   },
+  "ILLEGAL_LOCATION_CLAUSE_FOR_VIEW_PARTITION_ERROR" : {
+    "message" : [ "LOCATION clause illegal for view partition" ]
+  },
   "INCOMPARABLE_PIVOT_COLUMN" : {
     "message" : [ "Invalid pivot column '%s'. Pivot columns must be comparable." ],
     "sqlState" : "42000"
@@ -35,6 +73,18 @@
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
     "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
+  },
+  "INVALID_PARTITION_FILTER_ERROR" : {
+    "message" : [ "Partition filter cannot have both `\"` and `\\'` characters" ],
+    "sqlState" : "42000"
+  },
+  "LEGACY_METADATA_PATH_EXISTS_ERROR" : {
+    "message" : [ "Error: we detected a possible problem with the location of your \"_spark_metadata\"\ndirectory and you likely need to move it before restarting this query.\n\nEarlier version of Spark incorrectly escaped paths when writing out the\n\"_spark_metadata\" directory for structured streaming. While this was corrected in\nSpark 3.0, it appears that your query was started using an earlier version that\nincorrectly handled the \"_spark_metadata\" path.\n\nCorrect \"_spark_metadata\" Directory: %s\nIncorrect \"_spark_metadata\" Directory: %s\n\nPlease move the data from the incorrect directory to the correct one, delete the\nincorrect directory, and then restart this query. If you believe you are receiving\nthis message in error, you can disable it with the SQL conf\n%s." ],
+    "sqlState" : "42000"
+  },
+  "LOAD_HIVE_CLIENT_CAUSES_NO_CLASS_DEF_FOUND_ERROR" : {
+    "message" : [ "%s when creating Hive client using classpath: %s\nPlease make sure that jars for your version of hive and hadoop are included in the\npaths passed to %s." ],
+    "sqlState" : "42000"
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
@@ -52,16 +102,43 @@
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
   },
+  "PARTITION_COLUMN_NOT_FOUND_IN_SCHEMA_ERROR" : {
+    "message" : [ "Partition column %s not found in schema %s" ],
+    "sqlState" : "42000"
+  },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
+    "sqlState" : "42000"
+  },
+  "RENAME_AS_EXISTS_PATH_ERROR" : {
+    "message" : [ "Failed to rename as %s already exists" ],
+    "sqlState" : "42000"
+  },
+  "RENAME_PATH_AS_EXISTS_PATH_ERROR" : {
+    "message" : [ "Failed to rename %s to %s as destination already exists" ],
+    "sqlState" : "42000"
+  },
+  "RENAME_SRC_PATH_NOT_FOUND_ERROR" : {
+    "message" : [ "Failed to rename as %s was not found" ],
     "sqlState" : "42000"
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
   },
+  "SERDE_INTERFACE_NOT_FOUND_ERROR" : {
+    "message" : [ "The SerDe interface removed since Hive 2.3(HIVE-15167). Please migrate your custom SerDes to Hive 2.3. See HIVE-15167 for more details." ],
+    "sqlState" : "42000"
+  },
+  "STATE_NOT_DEFINED_OR_ALREADY_REMOVED_ERROR" : {
+    "message" : [ "State is either not defined or has already been removed" ],
+    "sqlState" : "42000"
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
+  },
+  "UNSUPPORTED_HIVE_METASTORE_VERSION_ERROR" : {
+    "message" : [ "Unsupported Hive Metastore version (%s). Please set %s with a valid version." ]
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
