@@ -3984,7 +3984,14 @@ object SessionWindowing extends Rule[LogicalPlan] {
           SESSION_COL_NAME, session.dataType, metadata = newMetadata)()
 
         val sessionStart = PreciseTimestampConversion(session.timeColumn, TimestampType, LongType)
-        val sessionEnd = sessionStart + session.gapDuration
+        val gapDuration = session.gapDuration match {
+          case expr if Cast.canCast(expr.dataType, CalendarIntervalType) =>
+            Cast(expr, CalendarIntervalType)
+          case other =>
+            throw QueryCompilationErrors.sessionWindowGapDurationDataTypeError(other.dataType)
+        }
+        val sessionEnd = PreciseTimestampConversion(session.timeColumn + gapDuration,
+          TimestampType, LongType)
 
         val literalSessionStruct = CreateNamedStruct(
           Literal(SESSION_START) ::
@@ -4001,11 +4008,13 @@ object SessionWindowing extends Rule[LogicalPlan] {
         }
 
         // As same as tumbling window, we add a filter to filter out nulls.
-        val filterExpr = IsNotNull(session.timeColumn)
+        // And we also filter out events with negative or zero gap duration.
+        val filterExpr = IsNotNull(session.timeColumn) &&
+          (sessionAttr.getField(SESSION_END) > sessionAttr.getField(SESSION_START))
 
         replacedPlan.withNewChildren(
-          Project(sessionStruct +: child.output,
-            Filter(filterExpr, child)) :: Nil)
+          Filter(filterExpr,
+            Project(sessionStruct +: child.output, child)) :: Nil)
       } else if (numWindowExpr > 1) {
         throw QueryCompilationErrors.multiTimeWindowExpressionsNotSupportedError(p)
       } else {
