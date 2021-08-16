@@ -119,10 +119,14 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault(Nil)
 
   val HIVE_METASTORE_METACONF_PREFIX = buildStaticConf("spark.sql.hive.metastore.metaconf.prefix")
-    .doc("prefix of the meta conf that could be used to set the HiveMetastoreClient.")
+    .doc("the meta conf prefix that used to extract meta conf from HiveConf." +
+      "for example, the original key in `SQLConf` is `spark.hive.metastore.metaconf.user.name`, " +
+      "after processed, the key in `HiveConf` will be `hive.metastore.metaconf.user.name`, " +
+      "then you can use the prefix to extract the final key(user.name) which can be used by " +
+      "`setMetaConf` in `HiveMetastoreClient`")
     .version("3.3.0")
     .stringConf
-    .createWithDefaultString("hive.metastore.metaconf.prefix.")
+    .createWithDefaultString("hive.metastore.metaconf.")
 
   val CONVERT_METASTORE_PARQUET = buildConf("spark.sql.hive.convertMetastoreParquet")
     .doc("When set to true, the built-in Parquet reader and writer are used to process " +
