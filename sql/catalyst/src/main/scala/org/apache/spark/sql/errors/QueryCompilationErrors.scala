@@ -371,6 +371,11 @@ private[spark] object QueryCompilationErrors {
       t.origin.startPosition)
   }
 
+  def sessionWindowGapDurationDataTypeError(dt: DataType): Throwable = {
+    new AnalysisException("Gap duration expression used in session window must be " +
+      s"CalendarIntervalType, but got ${dt}")
+  }
+
   def viewOutputNumberMismatchQueryColumnNamesError(
       output: Seq[Attribute], queryColumnNames: Seq[String]): Throwable = {
     new AnalysisException(

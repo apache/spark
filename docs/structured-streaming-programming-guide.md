@@ -1080,8 +1080,8 @@ Tumbling and sliding window use `window` function, which has been described on a
 
 Session windows have different characteristic compared to the previous two types. Session window has a dynamic size
 of the window length, depending on the inputs. A session window starts with an input, and expands itself
-if following input has been received within gap duration. A session window closes when there's no input
-received within gap duration after receiving the latest input.
+if following input has been received within gap duration. For static gap duration, a session window closes when
+there's no input received within gap duration after receiving the latest input.
 
 Session window uses `session_window` function. The usage of the function is similar to the `window` function.
 
@@ -1127,6 +1127,77 @@ sessionizedCounts = events \
     .withWatermark("timestamp", "10 minutes") \
     .groupBy(
         session_window(events.timestamp, "5 minutes"),
+        events.userId) \
+    .count()
+{% endhighlight %}
+
+</div>
+</div>
+
+Instead of static value, we can also provide an expression to specify gap duration dynamically
+based on the input row. Note that the rows with negative or zero gap duration will be filtered
+out from the aggregation.
+
+With dynamic gap duration, the closing of a session window does not depend on the latest input
+anymore. A session window's range is the union of all events' ranges which are determined by
+event start time and evaluated gap duration during the query execution.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+import spark.implicits._
+
+val events = ... // streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+val sessionWindow = session_window($"timestamp", when($"userId" === "user1", "5 seconds")
+  .when($"userId" === "user2", "20 seconds")
+  .otherwise("5 minutes"))
+
+// Group the data by session window and userId, and compute the count of each group
+val sessionizedCounts = events
+    .withWatermark("timestamp", "10 minutes")
+    .groupBy(
+        Column(sessionWindow),
+        $"userId")
+    .count()
+{% endhighlight %}
+
+</div>
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+Dataset<Row> events = ... // streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+SessionWindow sessionWindow = session_window(col("timestamp"), when(col("userId").equalTo("user1"), "5 seconds")
+  .when(col("userId").equalTo("user2"), "20 seconds")
+  .otherwise("5 minutes"))
+
+// Group the data by session window and userId, and compute the count of each group
+Dataset<Row> sessionizedCounts = events
+    .withWatermark("timestamp", "10 minutes")
+    .groupBy(
+        new Column(sessionWindow),
+        col("userId"))
+    .count();
+{% endhighlight %}
+
+</div>
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+from pyspark.sql import functions as F
+
+events = ...  # streaming DataFrame of schema { timestamp: Timestamp, userId: String }
+
+session_window = session_window(events.timestamp, \
+    F.when(events.userId == "user1", "5 seconds") \
+    .when(events.userId == "user2", "20 seconds").otherwise("5 minutes"))
+
+# Group the data by session window and userId, and compute the count of each group
+sessionizedCounts = events \
+    .withWatermark("timestamp", "10 minutes") \
+    .groupBy(
+        session_window,
         events.userId) \
     .count()
 {% endhighlight %}
