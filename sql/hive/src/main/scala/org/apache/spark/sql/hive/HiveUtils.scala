@@ -119,8 +119,7 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault(Nil)
 
   val HIVE_METASTORE_METACONF_PREFIX = buildStaticConf("spark.sql.hive.metastore.metaconf.prefix")
-    .doc("the prefix of the meta conf in HiveMetastoreClient, which is used to extract " +
-      "meta conf in HiveConf")
+    .doc("prefix of the meta conf that could be used to set the HiveMetastoreClient.")
     .version("3.3.0")
     .stringConf
     .createWithDefaultString("hive.metastore.metaconf.prefix.")
