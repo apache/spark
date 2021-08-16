@@ -62,8 +62,9 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       val testConfs = Seq(
         ("spark.sql.streaming.stateStore.providerClass",
           classOf[RocksDBStateStoreProvider].getName),
-        (RocksDBConf.ROCKSDB_CONF_NAME_PREFIX + ".compactOnCommit", "true"),
-        (RocksDBConf.ROCKSDB_CONF_NAME_PREFIX + ".lockAcquireTimeoutMs", "10")
+        (RocksDBConf.COMPACT_ON_COMMIT_CONF.fullName, "true"),
+        (RocksDBConf.LOCK_ACQUIRE_TIMEOUT_MS_CONF.fullName, "10"),
+        (SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key, "4")
       )
       testConfs.foreach { case (k, v) => spark.conf.set(k, v) }
 
@@ -87,6 +88,7 @@ class RocksDBStateStoreSuite extends StateStoreSuiteBase[RocksDBStateStoreProvid
       // Verify the confs are same as those configured in the session conf
       assert(rocksDBConfInTask.compactOnCommit == true)
       assert(rocksDBConfInTask.lockAcquireTimeoutMs == 10L)
+      assert(rocksDBConfInTask.formatVersion == 4)
     }
   }
 
