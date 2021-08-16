@@ -61,6 +61,9 @@ class InMemoryFileIndex(
   override val rootPaths =
     rootPathsSpecified.filterNot(FileStreamSink.ancestorIsMetadataDirectory(_, hadoopConf))
 
+  val readPartitionWithSubdirectoryEnabled =
+    sparkSession.sessionState.conf.readPartitionWithSubdirectoryEnabled
+
   @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
   @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
   @volatile private var cachedPartitionSpec: PartitionSpec = _
@@ -96,8 +99,23 @@ class InMemoryFileIndex(
     val files = listLeafFiles(rootPaths)
     cachedLeafFiles =
       new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
-    cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
+    cachedLeafDirToChildrenFiles =
+      if (readPartitionWithSubdirectoryEnabled) {
+        files.toArray.groupBy(file => getRootPathsLeafDir(file.getPath.getParent, file.getPath))
+      } else {
+        files.toArray.groupBy(_.getPath.getParent)
+      }
     cachedPartitionSpec = null
+  }
+
+  private def getRootPathsLeafDir(path: Path, child: Path): Path = {
+    if (rootPaths.contains(child)) {
+      path
+    } else if (rootPaths.contains(path)) {
+      path
+    } else {
+      getRootPathsLeafDir(path.getParent, path)
+    }
   }
 
   override def equals(other: Any): Boolean = other match {

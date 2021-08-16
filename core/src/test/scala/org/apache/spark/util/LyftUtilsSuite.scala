@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 
 object TestObjectLyftUtils {

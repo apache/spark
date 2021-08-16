@@ -25,6 +25,7 @@ import com.google.common.util.concurrent.Striped
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkException
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalyst.{QualifiedTableName, TableIdentifier}
@@ -280,7 +281,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             LogicalRelation(
               DataSource(
                 sparkSession = sparkSession,
-                paths = rootPath.toString :: Nil,
+                paths = getDirectoryPathSeq(rootPath),
                 userSpecifiedSchema = Option(updatedTable.dataSchema),
                 bucketSpec = hiveBucketSpec,
                 // Do not interpret the 'path' option at all when tables are read using the Hive
@@ -316,6 +317,18 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       case (a1, a2) => a1.withExprId(a2.exprId)
     }
     result.copy(output = newOutput)
+  }
+
+  private def getDirectoryPathSeq(rootPath: Path): Seq[String] = {
+    val enableSupportSubDirectories =
+      sparkSession.sessionState.conf.readPartitionWithSubdirectoryEnabled
+
+    if (enableSupportSubDirectories) {
+      val fs = rootPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+      SparkHadoopUtil.get.listLeafDirStatuses(fs, rootPath).map(_.getPath.toString)
+    } else {
+      rootPath.toString :: Nil
+    }
   }
 
   private def inferIfNeeded(
