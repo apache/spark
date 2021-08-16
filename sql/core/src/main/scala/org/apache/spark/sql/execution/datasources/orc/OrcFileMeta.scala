@@ -25,14 +25,14 @@ import org.apache.orc.impl.{OrcTail, ReaderImpl}
 import org.apache.spark.sql.execution.datasources.{FileMeta, FileMetaCacheManager, FileMetaKey}
 import org.apache.spark.util.Utils
 
-private[sql] case class OrcFileMetaKey(path: Path, configuration: Configuration)
+case class OrcFileMetaKey(path: Path, configuration: Configuration)
   extends FileMetaKey {
   override def getFileMeta: OrcFileMeta = OrcFileMeta(path, configuration)
 }
 
-private[sql] case class OrcFileMeta(tail: OrcTail) extends FileMeta
+case class OrcFileMeta(tail: OrcTail) extends FileMeta
 
-private[sql] object OrcFileMeta {
+object OrcFileMeta {
   def apply(path: Path, conf: Configuration): OrcFileMeta = {
     val fs = path.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
