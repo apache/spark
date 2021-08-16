@@ -52,7 +52,7 @@ private[sql] object OrcFileFormat {
     case MapType(keyType, valueType, _) =>
       s"map<${getQuotedSchemaString(keyType)},${getQuotedSchemaString(valueType)}>"
     case TimestampNTZType => TypeDescription.Category.TIMESTAMP.getName
-    case _ => // UDT and others
+    case _ =>
       dataType.catalogString
   }
 }

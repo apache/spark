@@ -228,7 +228,11 @@ object OrcUtils extends Logging {
   }
 
   /**
-   * Add Spark metadata.
+   * Add a metadata specifying Spark data types.
+   *
+   * Note: Spark writes Timestamp and TimestampNTZ as timestamp without time zone into ORC.
+   *       In order to be able to distinguish between the two, we write the Spark data types
+   *       into ORC metadata so that it can be read correctly.
    */
   def addSparkTypeMetadata(writer: Writer, structType: StructType): Unit = {
     writer.addUserMetadata(SPARK_DATA_TYPE_METADATA_KEY, UTF_8.encode(structType.json))
