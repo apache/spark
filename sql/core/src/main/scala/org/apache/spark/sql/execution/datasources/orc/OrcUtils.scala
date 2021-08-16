@@ -29,7 +29,7 @@ import org.apache.orc.{OrcConf, OrcFile, Reader, TypeDescription, Writer}
 import org.apache.spark.SPARK_VERSION_SHORT
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{SPARK_VERSION_METADATA_KEY, SparkSession}
+import org.apache.spark.sql.{SPARK_DATA_TYPE_METADATA_KEY, SPARK_VERSION_METADATA_KEY, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.caseSensitiveResolution
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, CharVarcharUtils}
@@ -49,8 +49,6 @@ object OrcUtils extends Logging {
     "LZ4" -> ".lz4",
     "LZO" -> ".lzo")
 
-  val TIMESTAMP_WITH_LOCAL_TIME_ZONE = "timestamp with local time zone"
-
   def listOrcFiles(pathStr: String, conf: Configuration): Seq[Path] = {
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
@@ -63,23 +61,32 @@ object OrcUtils extends Logging {
   }
 
   def readSchema(file: Path, conf: Configuration, ignoreCorruptFiles: Boolean)
-      : Option[TypeDescription] = {
+      : (Option[TypeDescription], Option[StructType]) = {
     val fs = file.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
     try {
-      val schema = Utils.tryWithResource(OrcFile.createReader(file, readerOptions)) { reader =>
-        reader.getSchema
+      val (schema, structTypeOpt) =
+        Utils.tryWithResource(OrcFile.createReader(file, readerOptions)) { reader =>
+        val schema = reader.getSchema
+        val metadataKeys = reader.getMetadataKeys
+        if (metadataKeys.contains(SPARK_DATA_TYPE_METADATA_KEY)) {
+          val dataTypeMetadata =
+            UTF_8.decode(reader.getMetadataValue(SPARK_DATA_TYPE_METADATA_KEY)).toString
+          (schema, Some(DataType.fromJson(dataTypeMetadata).asInstanceOf[StructType]))
+        } else {
+          (schema, None)
+        }
       }
       if (schema.getFieldNames.size == 0) {
-        None
+        (None, structTypeOpt)
       } else {
-        Some(schema)
+        (Some(schema), structTypeOpt)
       }
     } catch {
       case e: org.apache.orc.FileFormatException =>
         if (ignoreCorruptFiles) {
           logWarning(s"Skipped the footer in the corrupted file: $file", e)
-          None
+          (None, None)
         } else {
           throw QueryExecutionErrors.cannotReadFooterForFileError(file, e)
         }
@@ -87,13 +94,10 @@ object OrcUtils extends Logging {
   }
 
   private def toCatalystSchema(schema: TypeDescription): StructType = {
-    // The timestampNTZ type in Spark named "timestamp_ntz", but Orc is not.
-    val schemaStr =
-      schema.toString.replace(TIMESTAMP_WITH_LOCAL_TIME_ZONE, TimestampNTZType.typeName)
     // The Spark query engine has not completely supported CHAR/VARCHAR type yet, and here we
     // replace the orc CHAR/VARCHAR with STRING type.
     CharVarcharUtils.replaceCharVarcharWithStringInSchema(
-      CatalystSqlParser.parseDataType(schemaStr).asInstanceOf[StructType])
+      CatalystSqlParser.parseDataType(schema.toString).asInstanceOf[StructType])
   }
 
   def readSchema(sparkSession: SparkSession, files: Seq[FileStatus], options: Map[String, String])
@@ -101,7 +105,10 @@ object OrcUtils extends Logging {
     val ignoreCorruptFiles = sparkSession.sessionState.conf.ignoreCorruptFiles
     val conf = sparkSession.sessionState.newHadoopConfWithOptions(options)
     files.toIterator.map(file => readSchema(file.getPath, conf, ignoreCorruptFiles)).collectFirst {
-      case Some(schema) =>
+      case (_, Some(structType)) =>
+        logDebug(s"Reading schema from file $files, got Spark schema string: $structType")
+        structType
+      case (Some(schema), None) =>
         logDebug(s"Reading schema from file $files, got Hive schema string: $schema")
         toCatalystSchema(schema)
     }
@@ -112,9 +119,11 @@ object OrcUtils extends Logging {
       conf: Configuration,
       ignoreCorruptFiles: Boolean): Option[StructType] = {
     readSchema(file, conf, ignoreCorruptFiles) match {
-      case Some(schema) => Some(toCatalystSchema(schema))
+      case (_, Some(structType)) => Some(structType)
 
-      case None =>
+      case (Some(schema), None) => Some(toCatalystSchema(schema))
+
+      case (None, None) =>
         // Field names is empty or `FileFormatException` was thrown but ignoreCorruptFiles is true.
         None
     }
@@ -127,7 +136,11 @@ object OrcUtils extends Logging {
   def readOrcSchemasInParallel(
     files: Seq[FileStatus], conf: Configuration, ignoreCorruptFiles: Boolean): Seq[StructType] = {
     ThreadUtils.parmap(files, "readingOrcSchemas", 8) { currentFile =>
-      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles).map(toCatalystSchema)
+      OrcUtils.readSchema(currentFile.getPath, conf, ignoreCorruptFiles) match {
+        case (_, Some(structType)) => Some(structType)
+        case (Some(schema), None) => Some(toCatalystSchema(schema))
+        case (None, None) => None
+      }
     }.flatten
   }
 
@@ -215,6 +228,13 @@ object OrcUtils extends Logging {
   }
 
   /**
+   * Add Spark metadata.
+   */
+  def addSparkTypeMetadata(writer: Writer, structType: StructType): Unit = {
+    writer.addUserMetadata(SPARK_DATA_TYPE_METADATA_KEY, UTF_8.encode(structType.json))
+  }
+
+  /**
    * Add a metadata specifying Spark version.
    */
   def addSparkVersionMetadata(writer: Writer): Unit = {
@@ -235,7 +255,7 @@ object OrcUtils extends Logging {
       s"array<${orcTypeDescriptionString(a.elementType)}>"
     case m: MapType =>
       s"map<${orcTypeDescriptionString(m.keyType)},${orcTypeDescriptionString(m.valueType)}>"
-    case TimestampNTZType => TIMESTAMP_WITH_LOCAL_TIME_ZONE
+    case TimestampNTZType => TypeDescription.Category.TIMESTAMP.getName
     case _ => dt.catalogString
   }
 

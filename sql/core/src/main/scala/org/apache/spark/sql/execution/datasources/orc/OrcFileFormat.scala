@@ -44,8 +44,6 @@ import org.apache.spark.util.{SerializableConfiguration, Utils}
 private[sql] object OrcFileFormat {
 
   def getQuotedSchemaString(dataType: DataType): String = dataType match {
-    case TimestampNTZType => OrcUtils.TIMESTAMP_WITH_LOCAL_TIME_ZONE
-    case _: AtomicType => dataType.catalogString
     case StructType(fields) =>
       fields.map(f => s"`${f.name}`:${getQuotedSchemaString(f.dataType)}")
         .mkString("struct<", ",", ">")
@@ -53,6 +51,7 @@ private[sql] object OrcFileFormat {
       s"array<${getQuotedSchemaString(elementType)}>"
     case MapType(keyType, valueType, _) =>
       s"map<${getQuotedSchemaString(keyType)},${getQuotedSchemaString(valueType)}>"
+    case TimestampNTZType => TypeDescription.Category.TIMESTAMP.getName
     case _ => // UDT and others
       dataType.catalogString
   }

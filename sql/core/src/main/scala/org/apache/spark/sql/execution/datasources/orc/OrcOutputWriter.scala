@@ -47,6 +47,7 @@ private[sql] class OrcOutputWriter(
     val writer = OrcFile.createWriter(filename, options)
     val recordWriter = new OrcMapreduceRecordWriter[OrcStruct](writer)
     OrcUtils.addSparkVersionMetadata(writer)
+    OrcUtils.addSparkTypeMetadata(writer, dataSchema)
     recordWriter
   }
 
