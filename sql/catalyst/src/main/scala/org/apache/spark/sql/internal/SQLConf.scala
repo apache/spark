@@ -981,6 +981,14 @@ object SQLConf {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefault(3600L)
 
+  val FILE_META_CACHE_MAXIMUM_SIZE =
+    buildConf("spark.sql.fileMetaCache.maximumSize")
+      .version("3.3.0")
+      .doc("Maximum number of file meta entries the file meta cache contains.")
+      .intConf
+      .checkValue(_ > 0, "The value of fileMetaCache maximumSize must be positive")
+      .createWithDefault(1000)
+
   val HIVE_VERIFY_PARTITION_PATH = buildConf("spark.sql.hive.verifyPartitionPath")
     .doc("When true, check all the partition paths under the table\'s root directory " +
          "when reading data stored in HDFS. This configuration will be deprecated in the future " +

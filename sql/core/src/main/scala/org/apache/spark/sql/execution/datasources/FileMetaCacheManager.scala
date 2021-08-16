@@ -50,9 +50,13 @@ object FileMetaCacheManager extends Logging {
   private lazy val ttlTime =
     SparkEnv.get.conf.get(SQLConf.FILE_META_CACHE_TTL_SINCE_LAST_ACCESS)
 
+  private lazy val maximumSize =
+    SparkEnv.get.conf.get(SQLConf.FILE_META_CACHE_MAXIMUM_SIZE)
+
   private lazy val cache = Caffeine
     .newBuilder()
     .expireAfterAccess(ttlTime, TimeUnit.SECONDS)
+    .maximumSize(maximumSize)
     .recordStats()
     .build[FileMetaKey, FileMeta](cacheLoader)
 
