@@ -25,14 +25,14 @@ import org.apache.parquet.hadoop.metadata.ParquetMetadata
 
 import org.apache.spark.sql.execution.datasources.{FileMeta, FileMetaCacheManager, FileMetaKey}
 
-private[sql] case class ParquetFileMetaKey(path: Path, configuration: Configuration)
+case class ParquetFileMetaKey(path: Path, configuration: Configuration)
     extends FileMetaKey {
   override def getFileMeta: ParquetFileMeta = ParquetFileMeta(path, configuration)
 }
 
-private[sql] class ParquetFileMeta(val footer: ParquetMetadata) extends FileMeta
+class ParquetFileMeta(val footer: ParquetMetadata) extends FileMeta
 
-private[sql] object ParquetFileMeta {
+object ParquetFileMeta {
   def apply(path: Path, conf: Configuration): ParquetFileMeta = {
     new ParquetFileMeta(ParquetFileReader.readFooter(conf, path, NO_FILTER))
   }

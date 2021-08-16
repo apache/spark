@@ -38,7 +38,7 @@ import org.apache.spark.sql.internal.SQLConf
  * of the `FileMetaKey` and the `getFileMeta` method of `FileMetaKey` is used to return the file
  * meta of the corresponding file format.
  */
-private[sql] object FileMetaCacheManager extends Logging {
+object FileMetaCacheManager extends Logging {
 
   private lazy val cacheLoader = new CacheLoader[FileMetaKey, FileMeta]() {
     override def load(entry: FileMetaKey): FileMeta = {
@@ -56,6 +56,10 @@ private[sql] object FileMetaCacheManager extends Logging {
     .recordStats()
     .build[FileMetaKey, FileMeta](cacheLoader)
 
+  /**
+   * Returns the `FileMeta` associated with the `FileMetaKey` in the `FileMetaCacheManager`,
+   * obtaining that the `FileMeta` from `cacheLoader.load(FileMetaKey)` if necessary.
+   */
   def get(dataFile: FileMetaKey): FileMeta = cache.get(dataFile)
 
   /**
@@ -69,7 +73,7 @@ private[sql] object FileMetaCacheManager extends Logging {
   def cleanUp(): Unit = cache.cleanUp()
 }
 
-private[sql] abstract class FileMetaKey {
+abstract class FileMetaKey {
   def path: Path
   def configuration: Configuration
   def getFileMeta: FileMeta
@@ -80,4 +84,4 @@ private[sql] abstract class FileMetaKey {
   }
 }
 
-private[sql] trait FileMeta
+trait FileMeta
