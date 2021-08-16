@@ -745,15 +745,19 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
 
   test("SPARK-36516: simple select queries with file meta cache") {
     withSQLConf(SQLConf.FILE_META_CACHE_ORC_ENABLED.key -> "true") {
+      import org.scalatest.PrivateMethodTester._
+      import com.github.benmanes.caffeine.cache.stats.CacheStats
+      val cacheStatsMethod = PrivateMethod[CacheStats](Symbol("cacheStats"))
+      val cleanUpMethod = PrivateMethod[Unit](Symbol("cleanUp"))
       val tableName = "orc_use_meta_cache"
       withTable(tableName) {
         (0 until 10).map(i => (i, i.toString)).toDF("id", "value")
           .write.format("orc").saveAsTable(tableName)
         try {
-          val statsBeforeQuery = FileMetaCacheManager.cacheStats
+          val statsBeforeQuery = FileMetaCacheManager.invokePrivate(cacheStatsMethod())
           checkAnswer(sql(s"SELECT id FROM $tableName where id > 5"),
             (6 until 10).map(Row.apply(_)))
-          val statsAfterQuery1 = FileMetaCacheManager.cacheStats
+          val statsAfterQuery1 = FileMetaCacheManager.invokePrivate(cacheStatsMethod())
           // The 1st query triggers 4 times file meta read: 2 times related to
           // push down filter and 2 times related to file read. The 1st query
           // run twice: df.collect() and df.rdd.count(), so it triggers 8 times
@@ -763,14 +767,14 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
           assert(statsAfterQuery1.hitCount() - statsBeforeQuery.hitCount() == 6)
           checkAnswer(sql(s"SELECT id FROM $tableName where id < 5"),
             (0 until 5).map(Row.apply(_)))
-          val statsAfterQuery2 = FileMetaCacheManager.cacheStats
+          val statsAfterQuery2 = FileMetaCacheManager.invokePrivate(cacheStatsMethod())
           // The 2nd query also triggers 8 times file meta read in total and
           // all read from meta cache, so missCount no growth and hitCount
           // increase 8 times.
           assert(statsAfterQuery2.missCount() - statsAfterQuery1.missCount() == 0)
           assert(statsAfterQuery2.hitCount() - statsAfterQuery1.hitCount() == 8)
         } finally {
-          FileMetaCacheManager.cleanUp()
+          FileMetaCacheManager.invokePrivate(cleanUpMethod())
         }
       }
     }

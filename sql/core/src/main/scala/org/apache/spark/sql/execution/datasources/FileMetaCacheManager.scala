@@ -63,14 +63,17 @@ object FileMetaCacheManager extends Logging {
   def get(fileMeteKey: FileMetaKey): FileMeta = cache.get(fileMeteKey)
 
   /**
-   * This is visible for testing.
+   * Return current snapshot of FileMeta Cache's cumulative statistics
+   * include cache hitCount, missCount and so on.
+   * This method is only called when testing now.
    */
-  def cacheStats: CacheStats = cache.stats()
+  private def cacheStats: CacheStats = cache.stats()
 
   /**
-   * This is visible for testing.
+   * Use to cleanUp entries in the FileMeta Cache.
+   * This method is only called when testing now.
    */
-  def cleanUp(): Unit = cache.cleanUp()
+  private def cleanUp(): Unit = cache.cleanUp()
 }
 
 abstract class FileMetaKey {
