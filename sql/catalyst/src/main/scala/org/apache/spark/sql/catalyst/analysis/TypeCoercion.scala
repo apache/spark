@@ -904,7 +904,7 @@ object TypeCoercion extends TypeCoercionBase {
     case (s: StringType, n: DecimalType) => Some(DoubleType)
 
     case (l: StringType, r: AtomicType) if canPromoteAsInBinaryComparison(r) => Some(r)
-    case (l: AtomicType, r: StringType) if canPromoteAsInBinaryComparison(r) => Some(l)
+    case (l: AtomicType, r: StringType) if canPromoteAsInBinaryComparison(l) => Some(l)
     case (l, r) => None
   }
 
