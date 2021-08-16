@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.text.SimpleDateFormat
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
 
 import scala.collection.JavaConverters._
@@ -352,5 +352,20 @@ class CsvFunctionsSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-36490: Make from_csv/to_csv to handle timestamp_ntz type properly") {
+    val localDT = LocalDateTime.parse("2021-08-12T15:16:23")
+    val df = Seq(localDT).toDF
+    val toCsvDF = df.select(to_csv(struct($"value")) as "csv")
+    checkAnswer(toCsvDF, Row("2021-08-12T15:16:23.000"))
+    val fromCsvDF = toCsvDF
+      .select(
+        from_csv(
+          $"csv",
+          StructType(StructField("a", TimestampNTZType) :: Nil),
+          Map.empty[String, String]) as "value")
+      .selectExpr("value.a")
+    checkAnswer(fromCsvDF, Row(localDT))
   }
 }

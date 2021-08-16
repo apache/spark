@@ -30,6 +30,7 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownA
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
@@ -92,8 +93,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                     agg
                 }
               }
-              val pushedAggregates = PushDownUtils
-                .pushAggregates(sHolder.builder, aggregates, groupingExpressions)
+              val normalizedAggregates = DataSourceStrategy.normalizeExprs(
+                aggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
+              val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
+                groupingExpressions, sHolder.relation.output)
+              val pushedAggregates = PushDownUtils.pushAggregates(
+                sHolder.builder, normalizedAggregates, normalizedGroupingExpressions)
               if (pushedAggregates.isEmpty) {
                 aggNode // return original plan node
               } else {
@@ -114,7 +119,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 // scalastyle:on
                 val newOutput = scan.readSchema().toAttributes
                 assert(newOutput.length == groupingExpressions.length + aggregates.length)
-                val groupAttrs = groupingExpressions.zip(newOutput).map {
+                val groupAttrs = normalizedGroupingExpressions.zip(newOutput).map {
                   case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
                   case (_, b) => b
                 }
@@ -207,7 +212,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         val newProjects = normalizedProjects
           .map(projectionFunc)
           .asInstanceOf[Seq[NamedExpression]]
-        Project(newProjects, withFilter)
+        Project(restoreOriginalOutputNames(newProjects, project.map(_.name)), withFilter)
       } else {
         withFilter
       }
