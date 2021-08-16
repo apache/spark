@@ -431,4 +431,29 @@ class TimestampFormatterSuite extends DatetimeFormatterSuite {
     val e2 = intercept[ArithmeticException](formatter.parse("-290308"))
     assert(e2.getMessage === "long overflow")
   }
+
+  test("SPARK-36418: default parsing w/o pattern") {
+    outstandingZoneIds.foreach { zoneId =>
+      val formatter = new DefaultTimestampFormatter(
+        zoneId,
+        locale = DateFormatter.defaultLocale,
+        legacyFormat = LegacyDateFormats.SIMPLE_DATE_FORMAT,
+        isParsing = true)
+      Seq(
+        "-0042-3-4" -> LocalDateTime.of(-42, 3, 4, 0, 0, 0),
+        "1000" -> LocalDateTime.of(1000, 1, 1, 0, 0, 0),
+        "1582-10-4" -> LocalDateTime.of(1582, 10, 4, 0, 0, 0),
+        "1583-1-1 " -> LocalDateTime.of(1583, 1, 1, 0, 0, 0),
+        "1970-01-1 01:02:3" -> LocalDateTime.of(1970, 1, 1, 1, 2, 3),
+        "2021-8-12T18:31:50" -> LocalDateTime.of(2021, 8, 12, 18, 31, 50)
+      ).foreach { case (inputStr, ldt) =>
+        assert(formatter.parse(inputStr) === DateTimeTestUtils.localDateTimeToMicros(ldt, zoneId))
+      }
+
+      val errMsg = intercept[DateTimeException] {
+        formatter.parse("x123")
+      }.getMessage
+      assert(errMsg.contains("Cannot cast x123 to TimestampType"))
+    }
+  }
 }
