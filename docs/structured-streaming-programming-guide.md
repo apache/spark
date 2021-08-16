@@ -1850,6 +1850,46 @@ state management).
 To enable the new build-in state store implementation, set `spark.sql.streaming.stateStore.providerClass`
 to `org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider`.
 
+Here are the configs regarding to RocksDB instance of the state store provider:
+
+<table class="table">
+  <tr>
+    <th>Config Name</th>
+    <th>Description</th>
+    <th>Default Value</th>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.compactOnCommit</td>
+    <td>Whether we perform a range compaction of RocksDB instance for commit operation</td>
+    <td>False</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.blockSizeKB</td>
+    <td>Approximate size in KB of user data packed per block for a RocksDB BlockBasedTable, which is a RocksDB's default SST file format.</td>
+    <td>4</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.blockCacheSizeMB</td>
+    <td>The size capacity in MB for a cache of blocks.</td>
+    <td>8</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.blockCacheSizeMB</td>
+    <td>The size capacity in MB for a cache of blocks.</td>
+    <td>8</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.lockAcquireTimeoutMs</td>
+    <td>The waiting time in millisecond for acquiring lock in the load operation for RocksDB instance.</td>
+    <td>60000</td>
+  </tr>
+  <tr>
+    <td>spark.sql.streaming.stateStore.rocksdb.resetStatsOnLoad</td>
+    <td>Whether we resets all ticker and histogram stats for RocksDB on load.</td>
+    <td>True</td>
+  </tr>
+</table>
+
 ## Starting Streaming Queries
 Once you have defined the final result DataFrame/Dataset, all that is left is for you to start the streaming computation. To do that, you have to use the `DataStreamWriter`
 ([Scala](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Java](api/java/org/apache/spark/sql/streaming/DataStreamWriter.html)/[Python](api/python/reference/api/pyspark.sql.streaming.DataStreamWriter.html#pyspark.sql.streaming.DataStreamWriter) docs)
