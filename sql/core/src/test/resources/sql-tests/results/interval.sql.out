@@ -2292,49 +2292,55 @@ cannot resolve '(INTERVAL '1' MONTH > INTERVAL '20' DAY)' due to data type misma
 -- !query
 SELECT INTERVAL '1' DAY < '1'
 -- !query schema
-struct<(INTERVAL '1' DAY < 1):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '1' DAY < '1')' due to data type mismatch: differing types in '(INTERVAL '1' DAY < '1')' (interval day and string).; line 1 pos 7
 
 
 -- !query
 SELECT INTERVAL '1' DAY = '1'
 -- !query schema
-struct<(INTERVAL '1' DAY = 1):boolean>
+struct<>
 -- !query output
-true
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '1' DAY = '1')' due to data type mismatch: differing types in '(INTERVAL '1' DAY = '1')' (interval day and string).; line 1 pos 7
 
 
 -- !query
 SELECT INTERVAL '1' DAY > '1'
 -- !query schema
-struct<(INTERVAL '1' DAY > 1):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '1' DAY > '1')' due to data type mismatch: differing types in '(INTERVAL '1' DAY > '1')' (interval day and string).; line 1 pos 7
 
 
 -- !query
 SELECT INTERVAL '1' YEAR < '1'
 -- !query schema
-struct<(INTERVAL '1' YEAR < 1):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '1' YEAR < '1')' due to data type mismatch: differing types in '(INTERVAL '1' YEAR < '1')' (interval year and string).; line 1 pos 7
 
 
 -- !query
 SELECT INTERVAL '1' YEAR = '1'
 -- !query schema
-struct<(INTERVAL '1' YEAR = 1):boolean>
+struct<>
 -- !query output
-true
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '1' YEAR = '1')' due to data type mismatch: differing types in '(INTERVAL '1' YEAR = '1')' (interval year and string).; line 1 pos 7
 
 
 -- !query
 SELECT INTERVAL '1' YEAR > '1'
 -- !query schema
-struct<(INTERVAL '1' YEAR > 1):boolean>
+struct<>
 -- !query output
-false
+org.apache.spark.sql.AnalysisException
+cannot resolve '(INTERVAL '1' YEAR > '1')' due to data type mismatch: differing types in '(INTERVAL '1' YEAR > '1')' (interval year and string).; line 1 pos 7
 
 
 -- !query
