@@ -1175,4 +1175,15 @@ trait AlterTableTests extends SharedSparkSession {
         StructField("col3", IntegerType).withComment("c3"))))
     }
   }
+
+  test("SPARK-36449: Replacing columns with duplicate name should not be allowed") {
+    val t = s"${catalogAndNamespace}table_name"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (data string) USING $v2Format")
+      val e = intercept[AnalysisException] {
+        sql(s"ALTER TABLE $t REPLACE COLUMNS (data string, data1 string, data string)")
+      }
+      assert(e.message.contains("Found duplicate column(s) in the user specified columns: `data`"))
+    }
+  }
 }

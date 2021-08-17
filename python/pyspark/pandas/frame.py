@@ -4808,7 +4808,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         .. deprecated:: 3.2.0
             Use :func:`DataFrame.spark.to_spark_io` instead.
         """
-        warnings.warn("Deprecated in 3.2, Use spark.to_spark_io instead.", FutureWarning)
+        warnings.warn("Deprecated in 3.2, Use DataFrame.spark.to_spark_io instead.", FutureWarning)
         return self.spark.to_spark_io(path, format, mode, partition_cols, index_col, **options)
 
     to_spark_io.__doc__ = SparkFrameMethods.to_spark_io.__doc__
