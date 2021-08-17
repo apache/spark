@@ -682,6 +682,12 @@ class CategoricalIndex(Index):
         >>> idx.map(lambda x: x.upper())  # doctest: +NORMALIZE_WHITESPACE
         CategoricalIndex(['A', 'B', 'C'],
                          categories=['A', 'B', 'C'], ordered=False, dtype='category')
+
+        >>> pser = pd.Series([1, 2, 3], index=pd.CategoricalIndex(['a', 'b', 'c'], ordered=True))
+        >>> idx.map(pser)  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex([1, 2, 3],
+                         categories=[1, 2, 3], ordered=True, dtype='category')
+
         >>> idx.map({'a': 'first', 'b': 'second', 'c': 'third'})  # doctest: +NORMALIZE_WHITESPACE
         CategoricalIndex(['first', 'second', 'third'],
                          categories=['first', 'second', 'third'], ordered=False, dtype='category')
