@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.must.Matchers
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, DataFrame}
+import org.apache.spark.sql.{AnalysisException, Column, DataFrame}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.execution.streaming.state.{HDFSBackedStateStoreProvider, RocksDBStateStoreProvider}
 import org.apache.spark.sql.functions.{count, session_window, sum}
@@ -256,6 +256,102 @@ class StreamingSessionWindowSuite extends StreamTest
     )
   }
 
+  testWithAllOptions("SPARK-36465: dynamic gap duration") {
+    val inputData = MemoryStream[(String, Long)]
+
+    val udf = spark.udf.register("gapDuration", (s: String) => {
+      if (s == "hello") {
+        "1 second"
+      } else if (s == "structured") {
+        // zero gap duration will be filtered out from aggregation
+        "0 second"
+      } else if (s == "world") {
+        // negative gap duration will be filtered out from aggregation
+        "-10 seconds"
+      } else {
+        "10 seconds"
+      }
+    })
+
+    val sessionUpdates = sessionWindowQuery(inputData,
+      session_window($"eventTime", udf($"sessionId")))
+
+    testStream(sessionUpdates, OutputMode.Append())(
+      AddData(inputData,
+        ("hello world spark streaming", 40L),
+        ("world hello structured streaming", 41L)
+      ),
+
+      // watermark: 11
+      // current sessions
+      // ("hello", 40, 42, 2, 2),
+      // ("streaming", 40, 51, 11, 2),
+      // ("spark", 40, 50, 10, 1),
+      CheckNewAnswer(
+      ),
+
+      // placing new sessions "before" previous sessions
+      AddData(inputData, ("spark streaming", 25L)),
+      // watermark: 11
+      // current sessions
+      // ("spark", 25, 35, 10, 1),
+      // ("streaming", 25, 35, 10, 1),
+      // ("hello", 40, 42, 2, 2),
+      // ("streaming", 40, 51, 11, 2),
+      // ("spark", 40, 50, 10, 1),
+      CheckNewAnswer(
+      ),
+
+      // late event which session's end 10 would be later than watermark 11: should be dropped
+      AddData(inputData, ("spark streaming", 0L)),
+      // watermark: 11
+      // current sessions
+      // ("spark", 25, 35, 10, 1),
+      // ("streaming", 25, 35, 10, 1),
+      // ("hello", 40, 42, 2, 2),
+      // ("streaming", 40, 51, 11, 2),
+      // ("spark", 40, 50, 10, 1),
+      CheckNewAnswer(
+      ),
+
+      // concatenating multiple previous sessions into one
+      AddData(inputData, ("spark streaming", 30L)),
+      // watermark: 11
+      // current sessions
+      // ("spark", 25, 50, 25, 3),
+      // ("streaming", 25, 51, 26, 4),
+      // ("hello", 40, 42, 2, 2),
+      CheckNewAnswer(
+      ),
+
+      // placing new sessions after previous sessions
+      AddData(inputData, ("hello apache spark", 60L)),
+      // watermark: 30
+      // current sessions
+      // ("spark", 25, 50, 25, 3),
+      // ("streaming", 25, 51, 26, 4),
+      // ("hello", 40, 42, 2, 2),
+      // ("hello", 60, 61, 1, 1),
+      // ("apache", 60, 70, 10, 1),
+      // ("spark", 60, 70, 10, 1)
+      CheckNewAnswer(
+      ),
+
+      AddData(inputData, ("structured streaming", 90L)),
+      // watermark: 60
+      // current sessions
+      // ("hello", 60, 61, 1, 1),
+      // ("apache", 60, 70, 10, 1),
+      // ("spark", 60, 70, 10, 1),
+      // ("streaming", 90, 100, 10, 1)
+      CheckNewAnswer(
+        ("spark", 25, 50, 25, 3),
+        ("streaming", 25, 51, 26, 4),
+        ("hello", 40, 42, 2, 2)
+      )
+    )
+  }
+
   testWithAllOptions("append mode - session window - no key") {
     val inputData = MemoryStream[Int]
     val windowedAggregation = sessionWindowQueryOnGlobalKey(inputData)
@@ -304,7 +400,9 @@ class StreamingSessionWindowSuite extends StreamTest
     }
   }
 
-  private def sessionWindowQuery(input: MemoryStream[(String, Long)]): DataFrame = {
+  private def sessionWindowQuery(
+      input: MemoryStream[(String, Long)],
+      sessionWindow: Column = session_window($"eventTime", "10 seconds")): DataFrame = {
     // Split the lines into words, treat words as sessionId of events
     val events = input.toDF()
       .select($"_1".as("value"), $"_2".as("timestamp"))
@@ -313,7 +411,7 @@ class StreamingSessionWindowSuite extends StreamTest
       .selectExpr("explode(split(value, ' ')) AS sessionId", "eventTime")
 
     events
-      .groupBy(session_window($"eventTime", "10 seconds") as 'session, 'sessionId)
+      .groupBy(sessionWindow as 'session, 'sessionId)
       .agg(count("*").as("numEvents"))
       .selectExpr("sessionId", "CAST(session.start AS LONG)", "CAST(session.end AS LONG)",
         "CAST(session.end AS LONG) - CAST(session.start AS LONG) AS durationMs",

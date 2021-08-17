@@ -276,7 +276,11 @@ private[spark] class CoarseGrainedExecutorBackend(
       if (throwable != null) {
         logError(message, throwable)
       } else {
-        logError(message)
+        if (code == 0) {
+          logInfo(message)
+        } else {
+          logError(message)
+        }
       }
 
       if (notifyDriver && driver.nonEmpty) {

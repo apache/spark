@@ -29,7 +29,7 @@ import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.Network.{RPC_ASK_TIMEOUT, RPC_MESSAGE_MAX_SIZE}
 import org.apache.spark.internal.config.Tests.IS_TESTING
 import org.apache.spark.rpc.{RpcAddress, RpcCallContext, RpcEnv}
-import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus, MergeStatus}
+import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus, MapStatus, MergeStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId, ShuffleMergedBlockId}
 
@@ -663,5 +663,75 @@ class MapOutputTrackerSuite extends SparkFunSuite with LocalSparkContext {
     assert(tracker.getNumAvailableMergeResults(10) == 0)
     tracker.stop()
     rpcEnv.shutdown()
+  }
+
+  test("SPARK-32210: serialize mapStatuses to a nested Array and deserialize them") {
+    val newConf = new SparkConf
+
+    // needs TorrentBroadcast so need a SparkContext
+    withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
+      val tracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      val rpcEnv = sc.env.rpcEnv
+      val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, sc.getConf)
+      rpcEnv.stop(tracker.trackerEndpoint)
+      rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
+      val shuffleId = 20
+      val numMaps = 1000
+
+      tracker.registerShuffle(shuffleId, numMaps, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+      val r = new scala.util.Random(912)
+      (0 until numMaps).foreach { i =>
+        tracker.registerMapOutput(shuffleId, i, HighlyCompressedMapStatus(
+          BlockManagerId(s"node$i", s"node$i.spark.apache.org", 1000),
+          Array.fill[Long](1000)((r.nextDouble() * 1024 * 1024 * 1024).toLong), i))
+      }
+
+      val shuffleStatus = tracker.shuffleStatuses.get(shuffleId).head
+      val (serializedMapStatus, serializedBroadcast) = MapOutputTracker.serializeOutputStatuses(
+        shuffleStatus.mapStatuses, tracker.broadcastManager, tracker.isLocal, 0, sc.getConf)
+      assert(serializedBroadcast.value.length > 1)
+      assert(serializedBroadcast.value.dropRight(1).forall(_.length == 1024 * 1024))
+
+      val result = MapOutputTracker.deserializeOutputStatuses(serializedMapStatus, sc.getConf)
+      assert(result.length == numMaps)
+
+      tracker.unregisterShuffle(shuffleId)
+      tracker.stop()
+    }
+  }
+
+  ignore("SPARK-32210: serialize and deserialize over 2GB compressed mapStatuses") {
+    // This test requires 8GB heap memory settings
+    val newConf = new SparkConf
+
+    // needs TorrentBroadcast so need a SparkContext
+    withSpark(new SparkContext("local", "MapOutputTrackerSuite", newConf)) { sc =>
+      val tracker = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+      val rpcEnv = sc.env.rpcEnv
+      val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, sc.getConf)
+      rpcEnv.stop(tracker.trackerEndpoint)
+      rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
+      val shuffleId = 20
+      val numMaps = 200000
+
+      tracker.registerShuffle(shuffleId, numMaps, MergeStatus.SHUFFLE_PUSH_DUMMY_NUM_REDUCES)
+      val r = new scala.util.Random(912)
+      (0 until numMaps).foreach { i =>
+        tracker.registerMapOutput(shuffleId, i, HighlyCompressedMapStatus(
+          BlockManagerId(s"node$i", s"node$i.spark.apache.org", 1000, Some(r.nextString(1024 * 5))),
+          Array.fill(10)((r.nextDouble() * 1024 * 1024 * 1024).toLong), i))
+      }
+
+      val shuffleStatus = tracker.shuffleStatuses.get(shuffleId).head
+      val (serializedMapStatus, serializedBroadcast) = MapOutputTracker.serializeOutputStatuses(
+        shuffleStatus.mapStatuses, tracker.broadcastManager, tracker.isLocal, 0, sc.getConf)
+      assert(serializedBroadcast.value.foldLeft(0L)(_ + _.length) > 2L * 1024 * 1024 * 1024)
+
+      val result = MapOutputTracker.deserializeOutputStatuses(serializedMapStatus, sc.getConf)
+      assert(result.length == numMaps)
+
+      tracker.unregisterShuffle(shuffleId)
+      tracker.stop()
+    }
   }
 }

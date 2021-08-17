@@ -862,6 +862,18 @@ object TypeCoercion extends TypeCoercionBase {
     case _ => None
   }
 
+  // Return whether a string literal can be promoted as the give data type in a binary comparison.
+  private def canPromoteAsInBinaryComparison(dt: DataType) = dt match {
+    // If a binary comparison contains interval type and string type, we can't decide which
+    // interval type the string should be promoted as. There are many possible interval
+    // types, such as year interval, month interval, day interval, hour interval, etc.
+    case _: YearMonthIntervalType | _: DayTimeIntervalType => false
+    // There is no need to add `Cast` for comparison between strings.
+    case _: StringType => false
+    case _: AtomicType => true
+    case _ => false
+  }
+
   /**
    * This function determines the target type of a comparison operator when one operand
    * is a String and the other is not. It also handles when one op is a Date and the
@@ -891,8 +903,8 @@ object TypeCoercion extends TypeCoercionBase {
     case (n: DecimalType, s: StringType) => Some(DoubleType)
     case (s: StringType, n: DecimalType) => Some(DoubleType)
 
-    case (l: StringType, r: AtomicType) if r != StringType => Some(r)
-    case (l: AtomicType, r: StringType) if l != StringType => Some(l)
+    case (l: StringType, r: AtomicType) if canPromoteAsInBinaryComparison(r) => Some(r)
+    case (l: AtomicType, r: StringType) if canPromoteAsInBinaryComparison(l) => Some(l)
     case (l, r) => None
   }
 

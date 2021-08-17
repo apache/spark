@@ -18,6 +18,10 @@ select localtimestamp() = localtimestamp();
 SELECT make_timestamp(2021, 07, 11, 6, 30, 45.678);
 SELECT make_timestamp(2021, 07, 11, 6, 30, 45.678, 'CET');
 SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007);
+SELECT make_timestamp(1, 1, 1, 1, 1, 1);
+SELECT make_timestamp(1, 1, 1, 1, 1, 60);
+SELECT make_timestamp(1, 1, 1, 1, 1, 61);
+SELECT make_timestamp(1, 1, 1, 1, 1, null);
 
 -- [SPARK-31710] TIMESTAMP_SECONDS, TIMESTAMP_MILLISECONDS and TIMESTAMP_MICROSECONDS that always create timestamp_ltz
 select TIMESTAMP_SECONDS(1230219000),TIMESTAMP_SECONDS(-1230219000),TIMESTAMP_SECONDS(null);
@@ -94,25 +98,39 @@ select to_timestamp("02-29", "MM-dd");
 select to_timestamp("2019 40", "yyyy mm");
 select to_timestamp("2019 10:10:10", "yyyy hh:mm:ss");
 
--- timestamp add/sub operations
-select timestamp'2011-11-11 11:11:11' + interval '2' day;
-select timestamp'2011-11-11 11:11:11' - interval '2' day;
-select timestamp'2011-11-11 11:11:11' + interval '2' second;
-select timestamp'2011-11-11 11:11:11' - interval '2' second;
-select '2011-11-11 11:11:11' - interval '2' second;
-select '1' - interval '2' second;
-select 1 - interval '2' second;
-select '2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10';
--- non-literal string column subtract interval
-create temporary view v3 as select '2011-11-11 11:11:11' str;
-select str - interval '2' second from v3;
-select str - date'2011-11-11' from v3;
-select str - timestamp'2011-11-11 11:11:10' from v3;
--- analyzer will cast date to timestamp automatically
+-- timestamp - timestamp
+select timestamp'2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10';
 select date'2020-01-01' - timestamp'2019-10-06 10:11:12.345678';
 select timestamp'2019-10-06 10:11:12.345678' - date'2020-01-01';
-select timestamp'2019-10-06 10:11:12.345678' - null;
-select null - timestamp'2019-10-06 10:11:12.345678';
+-- if one side is string/null literal, promote it to timestamp type.
+select timestamp'2011-11-11 11:11:11' - '2011-11-11 11:11:10';
+select '2011-11-11 11:11:11' - timestamp'2011-11-11 11:11:10';
+select timestamp'2011-11-11 11:11:11' - null;
+select null - timestamp'2011-11-11 11:11:11';
+-- invalid: non-literal string column
+create temporary view ts_view as select '2011-11-11 11:11:11' str;
+select str - timestamp'2011-11-11 11:11:11' from ts_view;
+select timestamp'2011-11-11 11:11:11' - str from ts_view;
+
+-- invalid: timestamp + string literal
+select timestamp'2011-11-11 11:11:11' + '1';
+select '1' + timestamp'2011-11-11 11:11:11';
+
+-- null result: timestamp + null
+select timestamp'2011-11-11 11:11:11' + null;
+select null + timestamp'2011-11-11 11:11:11';
+
+-- timestamp +/- interval and interval + timestamp
+select timestamp'2011-11-11 11:11:11' + interval '2' day,
+       timestamp'2011-11-11 11:11:11' - interval '2-2' year to month,
+       timestamp'2011-11-11 11:11:11' + interval '-2' second,
+       timestamp'2011-11-11 11:11:11' - interval '12:12:12.123456789' hour to second,
+       - interval 2 years + timestamp'2011-11-11 11:11:11',
+       interval '1 12' day to hour + timestamp'2011-11-11 11:11:11';
+-- promote date to timestamp if the interval is hour to second.
+select date '2012-01-01' - interval 3 hours,
+       date '2012-01-01' + interval '12:12:12' hour to second,
+       interval '2' minute + date '2012-01-01';
 
 -- Unsupported narrow text style
 select to_timestamp('2019-10-06 A', 'yyyy-MM-dd GGGGG');

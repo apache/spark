@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStream}
+import java.io.{BufferedOutputStream, File, FileOutputStream, IOException, OutputStream}
 import java.nio.channels.{ClosedByInterruptException, FileChannel}
 import java.util.zip.Checksum
 
@@ -65,7 +65,16 @@ private[spark] class DiskBlockObjectWriter(
     }
 
     def manualClose(): Unit = {
-      super.close()
+      try {
+        super.close()
+      } catch {
+        // The output stream may have been closed when the task thread is interrupted, then we
+        // get IOException when flushing the buffered data. We should catch and log the exception
+        // to ensure the revertPartialWritesAndClose() function doesn't throw an exception.
+        case e: IOException =>
+          logError("Exception occurred while manually close the output stream to file "
+            + file + ", " + e.getMessage)
+      }
     }
   }
 
