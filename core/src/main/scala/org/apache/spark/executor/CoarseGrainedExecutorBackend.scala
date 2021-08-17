@@ -196,14 +196,14 @@ private[spark] class CoarseGrainedExecutorBackend(
       logInfo("Driver commanded a shutdown")
       // Cannot shutdown here because an ack may need to be sent back to the caller. So send
       // a message to self to actually do the shutdown.
-      self.send(Shutdown(0))
+      self.send(Shutdown)
 
-    case Shutdown(exitCode) =>
+    case Shutdown =>
       stopping.set(true)
       new Thread("CoarseGrainedExecutorBackend-stop-executor") {
         override def run(): Unit = {
-          if (executor == null || exitCode != 0) {
-            System.exit(exitCode)
+          if (executor == null) {
+            System.exit(1)
           } else {
             // executor.stop() will call `SparkEnv.stop()` which waits until RpcEnv stops totally.
             // However, if `executor.stop()` runs in some thread of RpcEnv, RpcEnv won't be able to
@@ -290,7 +290,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       if (notifyDriver && driver.nonEmpty) {
         driver.get.send(RemoveExecutor(executorId, new ExecutorLossReason(reason)))
       }
-      self.send(Shutdown(code))
+      self.send(Shutdown)
     } else {
       logInfo("Skip exiting executor since it's been already asked to exit before.")
     }
