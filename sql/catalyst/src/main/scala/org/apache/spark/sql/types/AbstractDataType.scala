@@ -19,7 +19,7 @@ package org.apache.spark.sql.types
 
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.annotation.{Stable, Unstable}
+import org.apache.spark.annotation.Stable
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
@@ -228,5 +228,4 @@ private[sql] object AnyTimestampType extends AbstractDataType with Serializable 
  *
  * @since 3.2.0
  */
-@Unstable
 private[sql] abstract class AnsiIntervalType extends AtomicType
