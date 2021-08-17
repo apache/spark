@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.jdbc
 
+import java.nio.file.{Files, Paths}
 import java.sql.{Connection, DriverManager}
 import java.util.{Locale, Properties}
 
-import org.apache.commons.io.FilenameUtils
-
+import org.apache.spark.SparkFiles
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -194,9 +194,10 @@ class JDBCOptions(
   // by --files option of spark-submit or manually
   val keytab = {
     val keytabParam = parameters.getOrElse(JDBC_KEYTAB, null)
-    if (keytabParam != null && FilenameUtils.getPath(keytabParam).isEmpty) {
-      logDebug(s"Keytab path not found, assuming --files, file name used on executor: $keytabParam")
-      keytabParam
+    if (keytabParam != null && !Files.exists(Paths.get(keytabParam))) {
+      val result = SparkFiles.get(keytabParam)
+      logDebug(s"Keytab path not found, assuming --files, file name used on executor: $result")
+      result
     } else {
       logDebug("Keytab path found, assuming manual upload")
       keytabParam
