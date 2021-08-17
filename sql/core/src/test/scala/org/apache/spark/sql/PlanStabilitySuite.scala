@@ -149,8 +149,6 @@ trait PlanStabilitySuite extends TPCDSBase with TPCHBase with DisableAdaptiveExe
 
       val approvedSimplified = FileUtils.readFileToString(
         approvedSimplifiedFile, StandardCharsets.UTF_8)
-      val approvedExplained = FileUtils.readFileToString(
-        approvedExplainFile, StandardCharsets.UTF_8)
 
       // write out for debugging
       FileUtils.writeStringToFile(actualSimplifiedFile, actualSimplified, StandardCharsets.UTF_8)
@@ -164,14 +162,10 @@ trait PlanStabilitySuite extends TPCDSBase with TPCHBase with DisableAdaptiveExe
           |
           |$approvedSimplified
           |
-          |$approvedExplained
-          |
           |actual simplified plan: ${actualSimplifiedFile.getAbsolutePath}
           |actual explain plan: ${actualExplainFile.getAbsolutePath}
           |
           |$actualSimplified
-          |
-          |$explain
         """.stripMargin)
     }
   }
