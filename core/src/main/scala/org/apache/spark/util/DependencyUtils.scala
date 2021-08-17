@@ -316,7 +316,7 @@ private[spark] object DependencyUtils extends Logging {
       case _ =>
         val fs = FileSystem.get(uri, hadoopConf)
         Option(fs.globStatus(new Path(uri))).map { status =>
-          status.filter(_.isFile).map(_.getPath.toUri.toString)
+          status.map(_.getPath.toUri.toString)
         }.getOrElse(Array(uri.toString))
     }
   }
