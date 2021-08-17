@@ -229,7 +229,7 @@ class DatetimeIndexTest(PandasOnSparkTestCase, TestUtils):
                 pidx.map(lambda x: x.strftime("%B %d, %Y, %r")),
             )
 
-        pidx = pd.date_range(start="2010-08-08", end="2010-08-10")
+        pidx = pd.date_range(start="2020-08-08", end="2020-08-10")
         psidx = ps.from_pandas(pidx)
         mapper_dict = {
             datetime.datetime(2020, 8, 8): datetime.datetime(2021, 8, 8),
