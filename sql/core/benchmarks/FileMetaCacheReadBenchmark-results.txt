@@ -1,0 +1,95 @@
+================================================================================================
+Scan From 100 files
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Scan from 10 columns with 100 files:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+ORC Vectorized Full Scan: fileMetaCacheEnabled = false              293            305          14         17.9          55.9       1.0X
+ORC Vectorized Full Scan: fileMetaCacheEnabled = true               234            247          16         22.4          44.6       1.3X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = false            482            492           9         10.9          91.9       0.6X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = true             436            440           7         12.0          83.1       0.7X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Scan from 50 columns with 100 files:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+ORC Vectorized Full Scan: fileMetaCacheEnabled = false              285            290           5         18.4          54.3       1.0X
+ORC Vectorized Full Scan: fileMetaCacheEnabled = true               242            246           7         21.7          46.1       1.2X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = false            496            500           7         10.6          94.6       0.6X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = true             458            461           7         11.5          87.3       0.6X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Scan from 100 columns with 100 files:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+ORC Vectorized Full Scan: fileMetaCacheEnabled = false              332            340          13         15.8          63.3       1.0X
+ORC Vectorized Full Scan: fileMetaCacheEnabled = true               287            290           5         18.3          54.8       1.2X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = false            563            568           6          9.3         107.4       0.6X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = true             521            527           7         10.1          99.3       0.6X
+
+
+================================================================================================
+Scan From 500 files
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Scan from 10 columns with 500 files:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+ORC Vectorized Full Scan: fileMetaCacheEnabled = false              775            778           2          6.8         147.8       1.0X
+ORC Vectorized Full Scan: fileMetaCacheEnabled = true               568            578           9          9.2         108.4       1.4X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = false           1315           1320           6          4.0         250.9       0.6X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = true            1101           1113          17          4.8         210.0       0.7X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Scan from 50 columns with 500 files:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+ORC Vectorized Full Scan: fileMetaCacheEnabled = false              797            806           9          6.6         151.9       1.0X
+ORC Vectorized Full Scan: fileMetaCacheEnabled = true               674            680          10          7.8         128.6       1.2X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = false           1429           1430           1          3.7         272.6       0.6X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = true            1308           1308           1          4.0         249.4       0.6X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Scan from 100 columns with 500 files:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+ORC Vectorized Full Scan: fileMetaCacheEnabled = false              860            870           9          6.1         163.9       1.0X
+ORC Vectorized Full Scan: fileMetaCacheEnabled = true               729            777          43          7.2         139.0       1.2X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = false           1605           1605           1          3.3         306.1       0.5X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = true            1363           1372          12          3.8         260.0       0.6X
+
+
+================================================================================================
+Scan From 1000 files
+================================================================================================
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Scan from 10 columns with 1000 files:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+ORC Vectorized Full Scan: fileMetaCacheEnabled = false             1408           1413           7          3.7         268.6       1.0X
+ORC Vectorized Full Scan: fileMetaCacheEnabled = true              1197           1222          36          4.4         228.2       1.2X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = false           2359           2376          24          2.2         450.0       0.6X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = true            2137           2147          14          2.5         407.7       0.7X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Scan from 50 columns with 1000 files:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+ORC Vectorized Full Scan: fileMetaCacheEnabled = false             1450           1453           3          3.6         276.6       1.0X
+ORC Vectorized Full Scan: fileMetaCacheEnabled = true              1340           1342           3          3.9         255.5       1.1X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = false           2609           2618          13          2.0         497.6       0.6X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = true            2418           2419           1          2.2         461.2       0.6X
+
+Java HotSpot(TM) 64-Bit Server VM 1.8.0_152-b16 on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+Scan from 100 columns with 1000 files:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+ORC Vectorized Full Scan: fileMetaCacheEnabled = false             1542           1553          16          3.4         294.1       1.0X
+ORC Vectorized Full Scan: fileMetaCacheEnabled = true              1404           1413          12          3.7         267.9       1.1X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = false           2894           2897           4          1.8         552.0       0.5X
+ORC Vectorized Filter Scan: fileMetaCacheEnabled = true            2698           2709          15          1.9         514.6       0.6X
+
