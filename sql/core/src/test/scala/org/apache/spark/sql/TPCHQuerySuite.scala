@@ -27,7 +27,7 @@ class TPCHQuerySuite extends BenchmarkQueryTest with TPCHBase {
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    tpchCreateTable.foreach { query =>
+    tpchCreateTable.values.foreach { query =>
       sql(query)
     }
   }
