@@ -243,10 +243,8 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
 
         self.assert_eq(kcser.astype("category"), pcser.astype("category"))
 
+        # CategoricalDtype is not updated if the dtype is same from pandas 1.3.
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-            # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-            pass
-        elif LooseVersion(pd.__version__) >= LooseVersion("1.2"):
             self.assert_eq(
                 kcser.astype(CategoricalDtype(["b", "c", "a"])),
                 pcser.astype(CategoricalDtype(["b", "c", "a"])),
@@ -254,7 +252,7 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         else:
             self.assert_eq(
                 kcser.astype(CategoricalDtype(["b", "c", "a"])),
-                pser.astype(CategoricalDtype(["b", "c", "a"])),
+                kcser,
             )
 
         self.assert_eq(kcser.astype(str), pcser.astype(str))
