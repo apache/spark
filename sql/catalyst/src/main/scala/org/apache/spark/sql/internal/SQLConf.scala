@@ -240,17 +240,6 @@ object SQLConf {
     .intConf
     .createWithDefault(100)
 
-  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
-    .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
-      "For example, Spark will throw an exception at runtime instead of returning null results " +
-      "when the inputs to a SQL operator/function are invalid." +
-      "For full details of this dialect, you can find them in the section \"ANSI Compliance\" of " +
-      "Spark's documentation. Some ANSI dialect features may be not from the ANSI SQL " +
-      "standard directly, but their behaviors align with ANSI SQL's style")
-    .version("3.0.0")
-    .booleanConf
-    .createWithDefault(false)
-
   val OPTIMIZER_EXCLUDED_RULES = buildConf("spark.sql.optimizer.excludedRules")
     .doc("Configures a list of rules to be disabled in the optimizer, in which the rules are " +
       "specified by their rule names and separated by comma. It is not guaranteed that all the " +
@@ -1221,9 +1210,8 @@ object SQLConf {
     .createWithDefault(true)
 
   val GROUP_BY_ALIASES = buildConf("spark.sql.groupByAliases")
-    .doc("This configuration is only effective when ANSI mode is disabled. When it is true and " +
-      s"${ANSI_ENABLED.key} is false, aliases in a select list can be used in group by clauses. " +
-      "Otherwise, an analysis exception is thrown in the case.")
+    .doc("When true, aliases in a select list can be used in group by clauses. When false, " +
+      "an analysis exception is thrown in the case.")
     .version("2.2.0")
     .booleanConf
     .createWithDefault(true)
@@ -2546,6 +2534,17 @@ object SQLConf {
       .transform(_.toUpperCase(Locale.ROOT))
       .checkValues(StoreAssignmentPolicy.values.map(_.toString))
       .createWithDefault(StoreAssignmentPolicy.ANSI.toString)
+
+  val ANSI_ENABLED = buildConf("spark.sql.ansi.enabled")
+    .doc("When true, Spark SQL uses an ANSI compliant dialect instead of being Hive compliant. " +
+      "For example, Spark will throw an exception at runtime instead of returning null results " +
+      "when the inputs to a SQL operator/function are invalid." +
+      "For full details of this dialect, you can find them in the section \"ANSI Compliance\" of " +
+      "Spark's documentation. Some ANSI dialect features may be not from the ANSI SQL " +
+      "standard directly, but their behaviors align with ANSI SQL's style")
+    .version("3.0.0")
+    .booleanConf
+    .createWithDefault(false)
 
   val SORT_BEFORE_REPARTITION =
     buildConf("spark.sql.execution.sortBeforeRepartition")
