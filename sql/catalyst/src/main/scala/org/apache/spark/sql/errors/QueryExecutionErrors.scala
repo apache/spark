@@ -32,7 +32,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.codehaus.commons.compiler.CompileException
 import org.codehaus.janino.InternalCompilerException
 
-import org.apache.spark.{Partition, SparkArithmeticException, SparkCatalogNotFoundException, SparkConcurrentModificationException, SparkException, SparkFileNotFoundException, SparkNoSuchElementException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.{Partition, SparkArithmeticException, SparkConcurrentModificationException, SparkException, SparkFileNotFoundException, SparkNoSuchElementException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.executor.CommitDeniedException
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.memory.SparkOutOfMemoryError
@@ -47,7 +47,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{DomainJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.statsEstimation.ValueInterval
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.util.{sideBySide, BadRecordException, FailFastMode}
-import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableProvider}
+import org.apache.spark.sql.connector.catalog.{Identifier, SparkCatalogNotFoundException, Table, TableProvider}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.QueryExecutionException

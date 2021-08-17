@@ -124,18 +124,6 @@ class SparkConcurrentModificationException(
 }
 
 /**
- * Catalog not found exception thrown from Spark with an error class.
- */
-class SparkCatalogNotFoundException(errorClass: String, messageParameters: Array[String])
-  extends SparkException(
-    SparkThrowableHelper.getMessage(errorClass, messageParameters))
-    with SparkThrowable {
-
-  override def getErrorClass: String = errorClass
-  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
-}
-
-/**
  * Runtime exception thrown from Spark with an error class
  */
 class SparkRuntimeException(errorClass: String, messageParameters: Array[String])
