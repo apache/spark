@@ -87,7 +87,7 @@ public class RemoteBlockPushResolverSuite {
   public void before() throws IOException {
     localDirs = createLocalDirs(2);
     MapConfigProvider provider = new MapConfigProvider(
-      ImmutableMap.of("spark.shuffle.server.minChunkSizeInMergedShuffleFile", "4"));
+      ImmutableMap.of("spark.shuffle.push.server.minChunkSizeInMergedShuffleFile", "4"));
     conf = new TransportConf("shuffle", provider);
     pushResolver = new RemoteBlockPushResolver(conf);
     registerExecutor(TEST_APP, prepareLocalDirs(localDirs, MERGE_DIRECTORY), MERGE_DIRECTORY_META);
@@ -111,6 +111,8 @@ public class RemoteBlockPushResolverSuite {
     ErrorHandler.BlockPushErrorHandler errorHandler = RemoteBlockPushResolver.createErrorHandler();
     assertFalse(errorHandler.shouldLogError(new BlockPushNonFatalFailure(
       BlockPushNonFatalFailure.ReturnCode.TOO_LATE_BLOCK_PUSH, "")));
+    assertFalse(errorHandler.shouldLogError(new BlockPushNonFatalFailure(
+      BlockPushNonFatalFailure.ReturnCode.TOO_OLD_ATTEMPT_PUSH, "")));
     assertFalse(errorHandler.shouldLogError(new BlockPushNonFatalFailure(
       BlockPushNonFatalFailure.ReturnCode.STALE_BLOCK_PUSH, "")));
     assertFalse(errorHandler.shouldLogError(new BlockPushNonFatalFailure(
@@ -939,7 +941,7 @@ public class RemoteBlockPushResolverSuite {
     }
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test(expected = BlockPushNonFatalFailure.class)
   public void testPushBlockFromPreviousAttemptIsRejected()
       throws IOException, InterruptedException {
     Semaphore closed = new Semaphore(0);
@@ -998,11 +1000,12 @@ public class RemoteBlockPushResolverSuite {
     try {
       pushResolver.receiveBlockDataAsStream(
         new PushBlockStream(testApp, 1, 0, 0, 1, 0, 0));
-    } catch (IllegalArgumentException re) {
-      assertEquals(
-        "The attempt id 1 in this PushBlockStream message does not match " +
-          "with the current attempt id 2 stored in shuffle service for application " +
-          testApp, re.getMessage());
+    } catch (BlockPushNonFatalFailure re) {
+      BlockPushReturnCode errorCode =
+        (BlockPushReturnCode) BlockTransferMessage.Decoder.fromByteBuffer(re.getResponse());
+      assertEquals(BlockPushNonFatalFailure.ReturnCode.TOO_OLD_ATTEMPT_PUSH.id(),
+        errorCode.returnCode);
+      assertEquals(errorCode.failureBlockId, stream2.getID());
       throw re;
     }
   }
@@ -1034,7 +1037,7 @@ public class RemoteBlockPushResolverSuite {
     } catch (IllegalArgumentException e) {
       assertEquals(e.getMessage(),
         String.format("The attempt id %s in this FinalizeShuffleMerge message does not " +
-          "match with the current attempt id %s stored in shuffle service for application %s",
+            "match with the current attempt id %s stored in shuffle service for application %s",
           ATTEMPT_ID_1, ATTEMPT_ID_2, testApp));
       throw e;
     }
