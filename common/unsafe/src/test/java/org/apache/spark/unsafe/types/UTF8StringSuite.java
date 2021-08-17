@@ -124,6 +124,38 @@ public class UTF8StringSuite {
     testUpperandLower("ЀЁЂѺΏỀ", "ѐёђѻώề");
     testUpperandLower("大千世界 数据砖头", "大千世界 数据砖头");
   }
+  
+  @Test
+  public void newUpper() {
+    for (int i = 0;i <= 0x10ffff;i++) {
+      StringBuilder sb = new StringBuilder();
+      for (int j = 0;j < 20;j++) {
+        try {
+          sb.append(Character.toChars(i + j));
+        } catch (IllegalArgumentException r) {}
+      }
+      String s = sb.toString();
+      byte[] arr1 = UTF8String.fromString(s).toUpperCase().getBytes();
+      byte[] arr2 = s.toUpperCase().getBytes(StandardCharsets.UTF_8);
+      assertArrayEquals(arr1, arr2);
+    }
+    Random r = new Random(1000);
+    int testStrLen = 128;
+    for (int i = 0;i < 40;i++) {
+      StringBuilder sb = new StringBuilder();
+      for (int j = 0;j < testStrLen;j++) {
+        try {
+          sb.append(Character.toChars(r.nextInt(0x10ffff + 1)));
+        } catch (IllegalArgumentException e) {
+          j--;
+        }
+      }
+      String s = sb.toString();
+      byte[] arr1 = UTF8String.fromString(s).toUpperCase().getBytes();
+      byte[] arr2 = s.toUpperCase().getBytes(StandardCharsets.UTF_8);
+      assertArrayEquals(arr1, arr2);
+    }
+  }
 
   @Test
   public void titleCase() {
