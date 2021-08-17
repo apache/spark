@@ -235,7 +235,9 @@ object OrcUtils extends Logging {
    *       into ORC metadata so that it can be read correctly.
    */
   def addSparkTypeMetadata(writer: Writer, structType: StructType): Unit = {
-    writer.addUserMetadata(SPARK_DATA_TYPE_METADATA_KEY, UTF_8.encode(structType.json))
+    // Because all types in ORC can take null values, we set nullable to true.
+    val typeJson = structType.json.replaceAll(s""""nullable":false""", s""""nullable":true""")
+    writer.addUserMetadata(SPARK_DATA_TYPE_METADATA_KEY, UTF_8.encode(typeJson))
   }
 
   /**
