@@ -493,16 +493,6 @@ object RemoveRedundantAliases extends Rule[LogicalPlan] {
  * Remove no-op operators from the query plan that do not make any modifications.
  */
 object RemoveNoopOperators extends Rule[LogicalPlan] {
-  def restoreOriginalOutputNames(
-      projectList: Seq[NamedExpression],
-      originalNames: Seq[String]): Seq[NamedExpression] = {
-    projectList.zip(originalNames).map {
-      case (attr: Attribute, name) => attr.withName(name)
-      case (alias: Alias, name) => alias.withName(name)
-      case (other, _) => other
-    }
-  }
-
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     // Eliminate no-op Projects
     case p @ Project(projectList, child) if child.sameOutput(p) =>
