@@ -11,6 +11,25 @@ select interval 2147483647 month / 0.5;
 select interval 2147483647 day * 2;
 select interval 2147483647 day / 0.5;
 
+-- multiply and divide an interval by a string literal
+select interval 2 second * '2';
+select interval 2 second / '2';
+select interval 2 year * '2';
+select interval 2 year / '2';
+select interval 2 second * 'a';
+select interval 2 second / 'a';
+select interval 2 year * 'a';
+select interval 2 year / 'a';
+
+select '2' * interval 2 second;
+select '2' * interval 2 year;
+select 'a' * interval 2 second;
+select 'a' * interval 2 year;
+
+-- invalid: string literal / interval
+select '2' / interval 2 second;
+select '2' / interval 2 year;
+
 -- interval operation with null and zero case
 select interval '2 seconds' / 0;
 select interval '2 seconds' / null;
@@ -317,6 +336,20 @@ SELECT INTERVAL '1 02' DAY TO HOUR = INTERVAL '02:10:55' HOUR TO SECOND;
 SELECT INTERVAL '1' YEAR < INTERVAL '1' MONTH;
 SELECT INTERVAL '-1-1' YEAR TO MONTH = INTERVAL '-13' MONTH;
 SELECT INTERVAL 1 MONTH > INTERVAL 20 DAYS;
+
+-- compare interval with string
+SELECT INTERVAL '1' DAY < '1';
+SELECT INTERVAL '1' DAY = '1';
+SELECT INTERVAL '1' DAY > '1';
+SELECT '1' < INTERVAL '1' DAY;
+SELECT '1' = INTERVAL '1' DAY;
+SELECT '1' > INTERVAL '1' DAY;
+SELECT INTERVAL '1' YEAR < '1';
+SELECT INTERVAL '1' YEAR = '1';
+SELECT INTERVAL '1' YEAR > '1';
+SELECT '1' < INTERVAL '1' YEAR;
+SELECT '1' = INTERVAL '1' YEAR;
+SELECT '1' > INTERVAL '1' YEAR;
 
 SELECT array(INTERVAL '1' YEAR, INTERVAL '1' MONTH);
 SELECT array(INTERVAL '1' DAY, INTERVAL '01:01' HOUR TO MINUTE);

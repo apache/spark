@@ -1556,16 +1556,18 @@ class SeriesTest(PandasOnSparkTestCase, SQLTestUtils):
         if extension_object_dtypes_available:
             from pandas import StringDtype
 
+            # The behavior of casting datetime to nullable string is changed from pandas 1.3.
             if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
-                # TODO(SPARK-36367): Fix the behavior to follow pandas >= 1.3
-                pass
-            else:
                 self._check_extension(
                     psser.astype("M").astype("string"), pser.astype("M").astype("string")
                 )
                 self._check_extension(
                     psser.astype("M").astype(StringDtype()), pser.astype("M").astype(StringDtype())
                 )
+            else:
+                expected = ps.Series(["2020-10-27 00:00:01", None], name="x", dtype="string")
+                self._check_extension(psser.astype("M").astype("string"), expected)
+                self._check_extension(psser.astype("M").astype(StringDtype()), expected)
 
         with self.assertRaisesRegex(TypeError, "not understood"):
             psser.astype("int63")

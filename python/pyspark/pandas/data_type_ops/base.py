@@ -155,7 +155,7 @@ def _as_string_type(
     index_ops: IndexOpsLike, dtype: Union[str, type, Dtype], *, null_str: str = str(None)
 ) -> IndexOpsLike:
     """Cast `index_ops` to StringType Spark type, given `dtype` and `null_str`,
-    representing null Spark column.
+    representing null Spark column. Note that `null_str` is for non-extension dtypes only.
     """
     spark_type = StringType()
     if isinstance(dtype, extension_dtypes):

@@ -121,7 +121,7 @@ private[hive] class SparkExecuteStatementOperation(
           false,
           timeFormatters)
       case _: ArrayType | _: StructType | _: MapType | _: UserDefinedType[_] |
-          _: YearMonthIntervalType | _: DayTimeIntervalType | _: TimestampNTZType =>
+          _: AnsiIntervalType | _: TimestampNTZType =>
         to += toHiveString((from.get(ordinal), dataTypes(ordinal)), false, timeFormatters)
     }
   }
