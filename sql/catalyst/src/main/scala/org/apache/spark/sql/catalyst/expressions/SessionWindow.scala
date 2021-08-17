@@ -17,32 +17,31 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.TypeCheckFailure
+import org.apache.spark.sql.catalyst.util.IntervalUtils
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Represent the session window.
  *
  * @param timeColumn the start time of session window
- * @param gapDuration the duration of session gap, meaning the session will close if there is
- *                    no new element appeared within "the last element in session + gap".
+ * @param gapDuration the duration of session gap. For static gap duration, meaning the session
+ *                    will close if there is no new element appeared within "the last element in
+ *                    session + gap". Besides a static gap duration value, users can also provide
+ *                    an expression to specify gap duration dynamically based on the input row.
+ *                    With dynamic gap duration, the closing of a session window does not depend
+ *                    on the latest input anymore. A session window's range is the union of all
+ *                    events' ranges which are determined by event start time and evaluated gap
+ *                    duration during the query execution. Note that the rows with negative or
+ *                    zero gap duration will be filtered out from the aggregation.
  */
-case class SessionWindow(timeColumn: Expression, gapDuration: Long) extends UnaryExpression
+case class SessionWindow(timeColumn: Expression, gapDuration: Expression) extends Expression
   with ImplicitCastInputTypes
   with Unevaluable
   with NonSQLExpression {
 
-  //////////////////////////
-  // SQL Constructors
-  //////////////////////////
-
-  def this(timeColumn: Expression, gapDuration: Expression) = {
-    this(timeColumn, TimeWindow.parseExpression(gapDuration))
-  }
-
-  override def child: Expression = timeColumn
-  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType)
+  override def children: Seq[Expression] = Seq(timeColumn, gapDuration)
+  override def inputTypes: Seq[AbstractDataType] = Seq(TimestampType, AnyDataType)
   override def dataType: DataType = new StructType()
     .add(StructField("start", TimestampType))
     .add(StructField("end", TimestampType))
@@ -50,19 +49,10 @@ case class SessionWindow(timeColumn: Expression, gapDuration: Long) extends Unar
   // This expression is replaced in the analyzer.
   override lazy val resolved = false
 
-  /** Validate the inputs for the gap duration in addition to the input data type. */
-  override def checkInputDataTypes(): TypeCheckResult = {
-    val dataTypeCheck = super.checkInputDataTypes()
-    if (dataTypeCheck.isSuccess) {
-      if (gapDuration <= 0) {
-        return TypeCheckFailure(s"The window duration ($gapDuration) must be greater than 0.")
-      }
-    }
-    dataTypeCheck
-  }
+  override def nullable: Boolean = false
 
-  override protected def withNewChildInternal(newChild: Expression): Expression =
-    copy(timeColumn = newChild)
+  override protected def withNewChildrenInternal(newChildren: IndexedSeq[Expression]): Expression =
+    copy(timeColumn = newChildren(0), gapDuration = newChildren(1))
 }
 
 object SessionWindow {
@@ -72,6 +62,7 @@ object SessionWindow {
       timeColumn: Expression,
       gapDuration: String): SessionWindow = {
     SessionWindow(timeColumn,
-      TimeWindow.getIntervalInMicroSeconds(gapDuration))
+      Literal(IntervalUtils.safeStringToInterval(UTF8String.fromString(gapDuration)),
+        CalendarIntervalType))
   }
 }

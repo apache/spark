@@ -27,7 +27,7 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListe
 import org.apache.spark.sql.{Dataset, QueryTest, Row, SparkSession, Strategy}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
-import org.apache.spark.sql.execution.{CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{CollectLimitExec, CommandResultExec, LocalTableScanExec, PartialReducerPartitionSpec, QueryExecution, ReusedSubqueryExec, ShuffledRowRDD, SortExec, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
@@ -123,6 +123,12 @@ class AdaptiveQueryExecSuite
   private def findTopLevelSort(plan: SparkPlan): Seq[SortExec] = {
     collect(plan) {
       case s: SortExec => s
+    }
+  }
+
+  private def findTopLevelLimit(plan: SparkPlan): Seq[CollectLimitExec] = {
+    collect(plan) {
+      case l: CollectLimitExec => l
     }
   }
 
@@ -1685,7 +1691,8 @@ class AdaptiveQueryExecSuite
 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
       SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
-      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "2258",
+      // Pick a small value so that no coalesce can happen.
+      SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
       SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
       SQLConf.SHUFFLE_PARTITIONS.key -> "2") {
       val df = spark.sparkContext.parallelize(
@@ -2005,6 +2012,32 @@ class AdaptiveQueryExecSuite
             assert(findTopLevelSort(adaptive).size == 1)
           }
         }
+      }
+    }
+  }
+
+  test("SPARK-36424: Support eliminate limits in AQE Optimizer") {
+    withTempView("v") {
+      spark.sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, if (i > 2) "2" else i.toString)), 2)
+        .toDF("c1", "c2").createOrReplaceTempView("v")
+
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "3") {
+        val (origin1, adaptive1) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT c2, sum(c1) FROM v GROUP BY c2 LIMIT 5
+          """.stripMargin)
+        assert(findTopLevelLimit(origin1).size == 1)
+        assert(findTopLevelLimit(adaptive1).isEmpty)
+
+        // eliminate limit through filter
+        val (origin2, adaptive2) = runAdaptiveAndVerifyResult(
+          """
+            |SELECT c2, sum(c1) FROM v GROUP BY c2 HAVING sum(c1) > 1 LIMIT 5
+          """.stripMargin)
+        assert(findTopLevelLimit(origin2).size == 1)
+        assert(findTopLevelLimit(adaptive2).isEmpty)
       }
     }
   }

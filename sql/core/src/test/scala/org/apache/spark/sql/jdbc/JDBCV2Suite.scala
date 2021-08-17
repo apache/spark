@@ -239,8 +239,8 @@ class JDBCV2Suite extends QueryTest with SharedSparkSession with ExplainSuiteHel
   }
 
   test("scan with aggregate push-down: MAX MIN with filter and group by") {
-    val df = sql("select MAX(SALARY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
-      " group by DEPT")
+    val df = sql("select MAX(SaLaRY), MIN(BONUS) FROM h2.test.employee where dept > 0" +
+      " group by DePt")
     val filters = df.queryExecution.optimizedPlan.collect {
       case f: Filter => f
     }

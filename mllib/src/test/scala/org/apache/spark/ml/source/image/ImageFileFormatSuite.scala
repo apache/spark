@@ -19,6 +19,7 @@ package org.apache.spark.ml.source.image
 
 import java.net.URI
 import java.nio.file.Paths
+import java.sql.Date
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.image.ImageSchema._
@@ -95,14 +96,14 @@ class ImageFileFormatSuite extends SparkFunSuite with MLlibTestSparkContext {
       .collect()
 
     assert(Set(result: _*) === Set(
-      Row("29.5.a_b_EGDP022204.jpg", "kittens", "2018-01"),
-      Row("54893.jpg", "kittens", "2018-02"),
-      Row("DP153539.jpg", "kittens", "2018-02"),
-      Row("DP802813.jpg", "kittens", "2018-02"),
-      Row("BGRA.png", "multichannel", "2018-01"),
-      Row("BGRA_alpha_60.png", "multichannel", "2018-01"),
-      Row("chr30.4.184.jpg", "multichannel", "2018-02"),
-      Row("grayscale.jpg", "multichannel", "2018-02")
+      Row("29.5.a_b_EGDP022204.jpg", "kittens", Date.valueOf("2018-01-01")),
+      Row("54893.jpg", "kittens", Date.valueOf("2018-02-01")),
+      Row("DP153539.jpg", "kittens", Date.valueOf("2018-02-01")),
+      Row("DP802813.jpg", "kittens", Date.valueOf("2018-02-01")),
+      Row("BGRA.png", "multichannel", Date.valueOf("2018-01-01")),
+      Row("BGRA_alpha_60.png", "multichannel", Date.valueOf("2018-01-01")),
+      Row("chr30.4.184.jpg", "multichannel", Date.valueOf("2018-02-01")),
+      Row("grayscale.jpg", "multichannel", Date.valueOf("2018-02-01"))
     ))
   }
 
