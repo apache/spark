@@ -17,6 +17,10 @@
 
 package org.apache.spark
 
+import java.io.FileNotFoundException
+import java.util.ConcurrentModificationException
+
+
 class SparkException(
     message: String,
     cause: Throwable,
@@ -74,6 +78,81 @@ private[spark] class SparkUpgradeException(version: String, message: String, cau
  */
 class SparkArithmeticException(errorClass: String, messageParameters: Array[String])
   extends ArithmeticException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * Unsupported Operation exception thrown from Spark with an error class.
+ */
+class SparkUnsupportedOperationException(errorClass: String, messageParameters: Array[String])
+  extends UnsupportedOperationException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * File doesn't be found exception thrown from Spark with an error class.
+ */
+class SparkFileNotFoundException(errorClass: String, messageParameters: Array[String])
+  extends FileNotFoundException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * Concurrent modification exception thrown from Spark with an error class.
+ */
+class SparkConcurrentModificationException(
+      errorClass: String,
+      messageParameters: Array[String],
+      cause: Throwable)
+  extends ConcurrentModificationException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * Catalog not found exception thrown from Spark with an error class.
+ */
+class SparkCatalogNotFoundException(errorClass: String, messageParameters: Array[String])
+  extends SparkException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * Runtime exception thrown from Spark with an error class
+ */
+class SparkRuntimeException(errorClass: String, messageParameters: Array[String])
+  extends RuntimeException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * NoSuch element exception thrown form Spark with an error class.
+ */
+class SparkNoSuchElementException(errorClass: String, messageParameters: Array[String])
+  extends NoSuchElementException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
     with SparkThrowable {
 
   override def getErrorClass: String = errorClass
