@@ -396,32 +396,158 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   /**
    * Returns the upper case of this string
    */
+  private static class UpperCaseGetter {
+      private abstract static class CaseMapper {
+          abstract byte[] get(long utf8CharCode);
+          abstract void put(long utf8CharCode, int charLen, byte[] upper);
+      }
+      private static class SingleTreeUpperCaseMapper extends CaseMapper {
+          private final byte[][] getterArr = new byte[64][];
+          @Override
+          byte[] get(long utf8CharCode) {
+              if ((utf8CharCode & 0xff) >>> 6 != 2) {
+                  return null;
+              }
+              return getterArr[(int)(utf8CharCode & 0x3f)];
+          }
+          @Override
+          void put(long utf8CharCode, int charLen, byte[] upper) {
+              if ((utf8CharCode & 0xff) >>> 6 != 2 || charLen != 1) {
+                  throw new IllegalArgumentException("unexpected Continuation bytes:"
+                          + Long.toBinaryString(utf8CharCode));
+              }
+              if (getterArr[(int) (utf8CharCode & 0x3f)] != null) {
+                  throw new IllegalArgumentException("value exists");
+              }
+              getterArr[(int) (utf8CharCode & 0x3f)] = upper;
+          }
+      }
+      private static class MultiTreeUpperCaseMapper extends CaseMapper {
+          private final CaseMapper[] getterArr = new CaseMapper[64];
+          @Override
+          byte[] get(long utf8CharCode) {
+              if ((utf8CharCode & 0xff) >>> 6 != 2) {
+                  return null;
+              }
+              CaseMapper mapper = getterArr[(int)(utf8CharCode & 0x3f)];
+              if (mapper == null) return null;
+              return mapper.get(utf8CharCode >>> 8);
+          }
+          @Override
+          void put(long utf8CharCode, int charLen, byte[] upper) {
+              if ((utf8CharCode & 0xff) >>> 6 != 2 || charLen < 2) {
+                  throw new IllegalArgumentException("unexpected Continuation bytes:"
+                          + Long.toBinaryString(utf8CharCode));
+              }
+              if (getterArr[(int) (utf8CharCode & 0x3f)] == null) {
+                  getterArr[(int) (utf8CharCode & 0x3f)] = charLen == 2 ?
+                          new SingleTreeUpperCaseMapper() : new MultiTreeUpperCaseMapper();
+              }
+              getterArr[(int) (utf8CharCode & 0x3f)].put(utf8CharCode >>> 8, charLen - 1, upper);                    
+          }
+      }
+      
+      private static final byte[][] oneByteUpper = new byte[128][];
+      private static final CaseMapper[] twoBytesUpper = new CaseMapper[32];
+      private static final CaseMapper[] threeBytesUpper = new CaseMapper[16];
+      private static final CaseMapper[] fourBytesUpper = new CaseMapper[8];
+      static {
+          for (int i = 0;i <= 0x10ffff;i++) {
+              try {
+                  char[] c = Character.toChars(i);
+                  String ori = new String(c);
+                  String upper = ori.toUpperCase();
+                  if (!upper.equals(ori)) {
+                      byte[] oriUtf8Bytes = ori.getBytes(StandardCharsets.UTF_8);
+                      byte[] upperUtf8Bytes = upper.getBytes(StandardCharsets.UTF_8);
+                      long oriVal = Platform.getLong(oriUtf8Bytes, Platform.BYTE_ARRAY_OFFSET)
+                              & ((1L<<(oriUtf8Bytes.length << 3)) - 1);
+                      put(oriVal, upperUtf8Bytes);
+                  }
+              } catch (IllegalArgumentException e) {}
+          }
+      }
+      
+      private static final void put(long original, byte[] upper) {
+          int charLen = numBytesForFirstByte((byte)original);
+          if (charLen == 1) {
+              oneByteUpper[(int)original & 0x7f] = upper;
+              return;
+          }
+          CaseMapper[] currUpper = getCurrUpper(charLen);
+          int index = (int) (original & ((1 << (7 - charLen)) - 1));
+          if (currUpper[index] == null) {
+        	  currUpper[index] = charLen == 2 ?
+                      new SingleTreeUpperCaseMapper() : new MultiTreeUpperCaseMapper();
+          }
+          currUpper[index].put(original >>> 8, charLen - 1, upper);
+      }
+      
+      private static CaseMapper[] getCurrUpper(int charLen) {
+          if (charLen == 2) {
+        	  return twoBytesUpper;
+          } else if (charLen == 3) {
+        	  return threeBytesUpper;
+          } else if (charLen == 4) {
+        	  return fourBytesUpper;
+          }
+          throw new IllegalArgumentException("invalid char length:" + charLen);
+      }
+      
+      public static final byte[] getUpper(long original) {
+    	  int charLen = numBytesForFirstByte((byte)original);
+    	  if (charLen == 1) {
+    		  return oneByteUpper[(int)original & 0x7f];
+    	  }
+    	  CaseMapper[] currUpper = getCurrUpper(charLen);
+          int index = (int) (original & ((1 << (7 - charLen)) - 1));
+          if (currUpper[index] == null) return null;
+          return currUpper[index].get(original >>> 8);
+      }
+  }
   public UTF8String toUpperCase() {
-    if (numBytes == 0) {
-      return EMPTY_UTF8;
+      if (numBytes == 0) {
+        return EMPTY_UTF8;
+      }
+      byte[] bytes = new byte[numBytes + Math.max(8, numBytes / 5)];
+      bytes[0] = (byte) Character.toTitleCase(getByte(0));
+      int targetBias = 0;
+      int i;
+      for (i = 0; i < numBytes;) {
+        byte b = getByte(i);
+        int charLen = numBytesForFirstByte(b);
+        if (charLen == 1) {
+            int upper = Character.toUpperCase((int) b);
+            if (upper <= 127) {
+                bytes = extendByteArray(bytes, i + targetBias + 1);
+                bytes[i + targetBias] = (byte) upper;
+                i++;
+                continue;
+            }
+        }
+        byte[] upper = UpperCaseGetter.getUpper(Platform.getLong(base, offset + i)
+        		& ((1L << (charLen << 3)) - 1));
+        if (upper == null) {
+        	bytes = extendByteArray(bytes, i + targetBias + charLen);
+            Platform.copyMemory(base, offset + i, bytes,
+            		BYTE_ARRAY_OFFSET + i + targetBias, charLen);
+        } else {
+        	bytes = extendByteArray(bytes, i + targetBias + upper.length);
+            Platform.copyMemory(upper, BYTE_ARRAY_OFFSET, bytes,
+            		BYTE_ARRAY_OFFSET + i + targetBias, upper.length);
+            targetBias += upper.length - charLen;
+        }
+        i += charLen;
+      }
+      return fromBytes(bytes, 0, i + targetBias);
     }
 
-    byte[] bytes = new byte[numBytes];
-    bytes[0] = (byte) Character.toTitleCase(getByte(0));
-    for (int i = 0; i < numBytes; i++) {
-      byte b = getByte(i);
-      if (numBytesForFirstByte(b) != 1) {
-        // fallback
-        return toUpperCaseSlow();
-      }
-      int upper = Character.toUpperCase((int) b);
-      if (upper > 127) {
-        // fallback
-        return toUpperCaseSlow();
-      }
-      bytes[i] = (byte) upper;
+    private byte[] extendByteArray(byte[] src, int minExpectedLen) {
+      if (src.length >= minExpectedLen) return src;
+      byte[] tmp = new byte[minExpectedLen + Math.max(8, src.length / 5)];
+      Platform.copyMemory(src, BYTE_ARRAY_OFFSET, tmp, BYTE_ARRAY_OFFSET, src.length);
+      return tmp;
     }
-    return fromBytes(bytes);
-  }
-
-  private UTF8String toUpperCaseSlow() {
-    return fromString(toString().toUpperCase());
-  }
 
   /**
    * Returns the lower case of this string
