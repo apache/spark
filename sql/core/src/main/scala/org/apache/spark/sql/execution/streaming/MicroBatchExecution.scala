@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import scala.collection.mutable.{Map => MutableMap}
+import scala.collection.mutable.{HashMap => MutableHashMap, Map => MutableMap}
 
 import org.apache.spark.sql.{Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.streaming.{StreamingRelationV2, WriteToStre
 import org.apache.spark.sql.catalyst.trees.TreePattern.CURRENT_LIKE
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, TableCapability}
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset => OffsetV2, ReadLimit, SparkDataStream, SupportsAdmissionControl, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, StreamingDataSourceV2Relation, StreamWriterCommitProgress, WriteToDataSourceV2Exec}
@@ -47,10 +47,14 @@ class MicroBatchExecution(
     triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) {
 
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
+  @volatile protected var wrappedSources: MutableMap[
+    SparkDataStream, FakeLatestOffsetSupportsTriggerAvailableNow] = new
+      MutableHashMap[SparkDataStream, FakeLatestOffsetSupportsTriggerAvailableNow]()
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTimeTrigger => ProcessingTimeExecutor(t, triggerClock)
-    case OneTimeTrigger => OneTimeExecutor()
+    case OneTimeTrigger => OneBatchExecutor()
+    case AvailableNowTrigger => MultiBatchExecutor()
     case _ => throw new IllegalStateException(s"Unknown type of trigger: $trigger")
   }
 
@@ -121,18 +125,50 @@ class MicroBatchExecution(
       // v2 source
       case r: StreamingDataSourceV2Relation => r.stream
     }
-    uniqueSources = sources.distinct.map {
-      case source: SupportsAdmissionControl =>
-        val limit = source.getDefaultReadLimit
-        if (trigger == OneTimeTrigger && limit != ReadLimit.allAvailable()) {
-          logWarning(s"The read limit $limit for $source is ignored when Trigger.Once() is used.")
-          source -> ReadLimit.allAvailable()
-        } else {
-          source -> limit
+    // need to swap sources with wrapped ones when MultiBatchExecutor is being used
+    sources = triggerExecutor match {
+      case _: MultiBatchExecutor =>
+        sources.map {
+          case s: SupportsTriggerAvailableNow => s
+          case s: Source =>
+            val newSource = new FakeLatestOffsetSource(s)
+            wrappedSources += (s -> newSource)
+            newSource
+          case s: MicroBatchStream =>
+            val newSource = new FakeLatestOffsetMicroBatchStream(s)
+            wrappedSources += (s -> newSource)
+            newSource
         }
-      case other =>
-        other -> ReadLimit.allAvailable()
-    }.toMap
+
+      case _ => sources
+    }
+    uniqueSources = triggerExecutor match {
+      case _: OneBatchExecutor =>
+        sources.distinct.map {
+          case s: SupportsAdmissionControl =>
+            val limit = s.getDefaultReadLimit
+            if (limit != ReadLimit.allAvailable()) {
+              logWarning(
+                s"The read limit $limit for $s is ignored when Trigger.Once is used.")
+            }
+            s -> ReadLimit.allAvailable()
+          case s =>
+            s -> ReadLimit.allAvailable()
+        }.toMap
+
+      case _: MultiBatchExecutor =>
+        // we expect sources to be wrapped here, so should be safe to apply conversion
+        sources.asInstanceOf[Seq[SupportsTriggerAvailableNow]].distinct.map { s =>
+          s.prepareForTriggerAvailableNow()
+          s -> s.getDefaultReadLimit
+        }.toMap
+
+      case _ =>
+        sources.distinct.map {
+          case s: SupportsAdmissionControl => s -> s.getDefaultReadLimit
+          case s => s -> ReadLimit.allAvailable()
+        }.toMap
+    }
 
     // TODO (SPARK-27484): we should add the writing node before the plan is analyzed.
     sink match {
@@ -243,6 +279,9 @@ class MicroBatchExecution(
         if (isCurrentBatchConstructed) {
           currentBatchId += 1
           isCurrentBatchConstructed = false
+        } else if (triggerExecutor.isInstanceOf[MultiBatchExecutor]) {
+          logInfo("Finished processing all data, terminating this Trigger.AvailableNow query")
+          state.set(TERMINATED)
         } else Thread.sleep(pollingDelayMs)
       }
       updateStatusMessage("Waiting for next trigger")
@@ -525,7 +564,9 @@ class MicroBatchExecution(
     val newBatchesPlan = logicalPlan transform {
       // For v1 sources.
       case StreamingExecutionRelation(source, output) =>
-        newData.get(source).map { dataPlan =>
+        val planOpt = wrappedSources.get(source).orElse(Some(source)).flatMap(newData.get)
+
+        planOpt.map { dataPlan =>
           val maxFields = SQLConf.get.maxToStringFields
           assert(output.size == dataPlan.output.size,
             s"Invalid batch: ${truncatedString(output, ",", maxFields)} != " +
@@ -541,7 +582,9 @@ class MicroBatchExecution(
 
       // For v2 sources.
       case r: StreamingDataSourceV2Relation =>
-        newData.get(r.stream).map {
+        val planOpt = wrappedSources.get(r.stream).orElse(Some(r.stream)).flatMap(newData.get)
+
+        planOpt.map {
           case OffsetHolder(start, end) =>
             r.copy(startOffset = Some(start), endOffset = Some(end))
         }.getOrElse {

@@ -31,7 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.read.streaming
-import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxFiles, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.read.streaming.{ReadAllAvailable, ReadLimit, ReadMaxFiles, SupportsAdmissionControl, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.{DataSource, InMemoryFileIndex, LogicalRelation}
 import org.apache.spark.sql.internal.SQLConf
@@ -48,7 +48,11 @@ class FileStreamSource(
     override val schema: StructType,
     partitionColumns: Seq[String],
     metadataPath: String,
-    options: Map[String, String]) extends SupportsAdmissionControl with Source with Logging {
+    options: Map[String, String])
+  extends SupportsAdmissionControl
+  with SupportsTriggerAvailableNow
+  with Source
+  with Logging {
 
   import FileStreamSource._
 
@@ -105,6 +109,8 @@ class FileStreamSource(
   // Visible for testing and debugging in production.
   val seenFiles = new SeenFilesMap(maxFileAgeMs, fileNameOnly)
 
+  var allFilesForTriggerAvailableNow: Seq[(String, Long)] = null
+
   metadataLog.restore().foreach { entry =>
     seenFiles.add(entry.path, entry.timestamp)
   }
@@ -126,7 +132,12 @@ class FileStreamSource(
       unreadFiles
     } else {
       // All the new files found - ignore aged files and files that we have seen.
-      fetchAllFiles().filter {
+      val allFiles = if (allFilesForTriggerAvailableNow != null) {
+        allFilesForTriggerAvailableNow
+      } else {
+        fetchAllFiles()
+      }
+      allFiles.filter {
         case (path, timestamp) => seenFiles.isNewFile(path, timestamp)
       }
     }
@@ -192,6 +203,10 @@ class FileStreamSource(
     }
 
     FileStreamSourceOffset(metadataLogCurrentOffset)
+  }
+
+  override def prepareForTriggerAvailableNow(): Unit = {
+    allFilesForTriggerAvailableNow = fetchAllFiles()
   }
 
   override def getDefaultReadLimit: ReadLimit = {
