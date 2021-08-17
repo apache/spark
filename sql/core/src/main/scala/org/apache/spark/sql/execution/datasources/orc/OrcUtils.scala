@@ -67,21 +67,21 @@ object OrcUtils extends Logging {
     try {
       val (schema, structTypeOpt) =
         Utils.tryWithResource(OrcFile.createReader(file, readerOptions)) { reader =>
-        val schema = reader.getSchema
-        val metadataKeys = reader.getMetadataKeys
-        if (metadataKeys.contains(SPARK_DATA_TYPE_METADATA_KEY)) {
-          val dataTypeMetadata =
-            UTF_8.decode(reader.getMetadataValue(SPARK_DATA_TYPE_METADATA_KEY)).toString
-          (schema, Some(DataType.fromJson(dataTypeMetadata).asInstanceOf[StructType]))
-        } else {
-          (schema, None)
+          val schema = reader.getSchema
+          val metadataKeys = reader.getMetadataKeys
+          if (metadataKeys.contains(SPARK_DATA_TYPE_METADATA_KEY)) {
+            val dataTypeMetadata =
+              UTF_8.decode(reader.getMetadataValue(SPARK_DATA_TYPE_METADATA_KEY)).toString
+            (schema, Some(DataType.fromJson(dataTypeMetadata).asInstanceOf[StructType]))
+          } else {
+            (schema, None)
+          }
         }
-      }
-      if (schema.getFieldNames.size == 0) {
-        (None, structTypeOpt)
-      } else {
-        (Some(schema), structTypeOpt)
-      }
+        if (schema.getFieldNames.size == 0) {
+          (None, structTypeOpt)
+        } else {
+          (Some(schema), structTypeOpt)
+        }
     } catch {
       case e: org.apache.orc.FileFormatException =>
         if (ignoreCorruptFiles) {
