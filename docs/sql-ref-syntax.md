@@ -23,6 +23,8 @@ Spark SQL is Apache Spark's module for working with structured data. The SQL Syn
 
 ### DDL Statements
 
+Data Definition Statements are used to create or modify the structure of database objects in a database. Spark SQL supports the following Data Definition Statements:
+
  * [ALTER DATABASE](sql-ref-syntax-ddl-alter-database.html)
  * [ALTER TABLE](sql-ref-syntax-ddl-alter-table.html)
  * [ALTER VIEW](sql-ref-syntax-ddl-alter-view.html)
@@ -40,6 +42,8 @@ Spark SQL is Apache Spark's module for working with structured data. The SQL Syn
 
 ### DML Statements
 
+Data Manipulation Statements are used to add, change, or delete data. Spark SQL supports the following Data Manipulation Statements:
+
  * [INSERT INTO](sql-ref-syntax-dml-insert-into.html)
  * [INSERT OVERWRITE](sql-ref-syntax-dml-insert-overwrite-table.html)
  * [INSERT OVERWRITE DIRECTORY](sql-ref-syntax-dml-insert-overwrite-directory.html)
@@ -47,6 +51,14 @@ Spark SQL is Apache Spark's module for working with structured data. The SQL Syn
  * [LOAD](sql-ref-syntax-dml-load.html)
 
 ### Data Retrieval Statements
+
+Spark supports <code>SELECT</code> statement that is used to retrieve rows
+from one or more tables according to the specified clauses. The full syntax
+and brief description of supported clauses are explained in
+[SELECT](sql-ref-syntax-qry-select.html) section. The SQL statements related
+to SELECT are also included in this section. Spark also provides the
+ability to generate logical and physical plan for a given query using
+[EXPLAIN](sql-ref-syntax-qry-explain.html) statement.
 
  * [SELECT Statement](sql-ref-syntax-qry-select.html)
    * [Common Table Expression](sql-ref-syntax-qry-select-cte.html)
