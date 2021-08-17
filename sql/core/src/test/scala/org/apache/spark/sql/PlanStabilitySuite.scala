@@ -341,7 +341,7 @@ class TPCDSModifiedPlanStabilityWithStatsSuite extends PlanStabilitySuite {
   }
 }
 
-abstract class TPCHPlanStabilitySuiteBase extends PlanStabilitySuite {
+class TPCHPlanStabilitySuite extends PlanStabilitySuite {
   override def createTables(): Unit = {
     tpchCreateTable.foreach { sql =>
       spark.sql(sql)
@@ -350,9 +350,7 @@ abstract class TPCHPlanStabilitySuiteBase extends PlanStabilitySuite {
 
   override def goldenFilePath: String = getWorkspaceFilePath(
     "sql", "core", "src", "test", "resources", "tpch-plan-stability").toFile.getAbsolutePath
-}
 
-class TPCHPlanStabilitySuite extends TPCHPlanStabilitySuiteBase {
   tpchQueries.foreach { q =>
     test(s"check simplified (tpch/$q)") {
       testQuery("tpch", q)
