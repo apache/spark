@@ -744,7 +744,7 @@ abstract class OrcQuerySuite extends OrcQueryTest with SharedSparkSession {
   }
 
   test("SPARK-36516: simple select queries with file meta cache") {
-    withSQLConf(SQLConf.FILE_META_CACHE_ORC_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.FILE_META_CACHE_ENABLED.key -> "true") {
       import org.scalatest.PrivateMethodTester._
       import com.github.benmanes.caffeine.cache.stats.CacheStats
       val cacheStatsMethod = PrivateMethod[CacheStats](Symbol("cacheStats"))

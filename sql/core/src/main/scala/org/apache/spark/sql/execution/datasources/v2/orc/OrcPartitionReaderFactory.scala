@@ -60,7 +60,7 @@ case class OrcPartitionReaderFactory(
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
   private val orcFilterPushDown = sqlConf.orcFilterPushDown
   private val ignoreCorruptFiles = sqlConf.ignoreCorruptFiles
-  private val orcMetaCacheEnabled = sqlConf.fileMetaCacheOrcEnabled
+  private val metaCacheEnabled = sqlConf.fileMetaCacheEnabled
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
@@ -89,7 +89,7 @@ case class OrcPartitionReaderFactory(
     pushDownPredicates(filePath, conf)
 
     val fs = filePath.getFileSystem(conf)
-    val readerOptions = if (orcMetaCacheEnabled) {
+    val readerOptions = if (metaCacheEnabled) {
       val tail = OrcFileMeta.readTailFromCache(filePath, conf)
       OrcFile.readerOptions(conf).filesystem(fs).orcTail(tail)
     } else {
@@ -141,7 +141,7 @@ case class OrcPartitionReaderFactory(
     pushDownPredicates(filePath, conf)
 
     val fs = filePath.getFileSystem(conf)
-    val readerOptions = if (orcMetaCacheEnabled) {
+    val readerOptions = if (metaCacheEnabled) {
       val tail = OrcFileMeta.readTailFromCache(filePath, conf)
       OrcFile.readerOptions(conf).filesystem(fs).orcTail(tail)
     } else {
@@ -169,7 +169,7 @@ case class OrcPartitionReaderFactory(
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
       val batchReader = new OrcColumnarBatchReader(capacity)
-      if (orcMetaCacheEnabled) {
+      if (metaCacheEnabled) {
         val tail = OrcFileMeta.readTailFromCache(filePath, conf)
         batchReader.setCachedTail(tail)
       }
