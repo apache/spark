@@ -21,6 +21,7 @@ import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.must.Matchers
 import org.scalatest.matchers.should.Matchers._
 
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, GenericRowWithSchema}
 import org.apache.spark.sql.types._
@@ -40,10 +41,10 @@ class RowTest extends AnyFunSpec with Matchers {
 
   describe("Row (without schema)") {
     it("throws an exception when accessing by fieldName") {
-      intercept[UnsupportedOperationException] {
+      intercept[SparkUnsupportedOperationException] {
         noSchemaRow.fieldIndex("col1")
       }
-      intercept[UnsupportedOperationException] {
+      intercept[SparkUnsupportedOperationException] {
         noSchemaRow.getAs("col1")
       }
     }
