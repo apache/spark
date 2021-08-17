@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import java.sql.SQLFeatureNotSupportedException
+
 class SparkException(
     message: String,
     cause: Throwable,
@@ -74,6 +76,63 @@ private[spark] class SparkUpgradeException(version: String, message: String, cau
  */
 class SparkArithmeticException(errorClass: String, messageParameters: Array[String])
   extends ArithmeticException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * Unsupported Operation exception thrown from Spark with an error class
+ */
+class SparkUnsupportedOperationException(errorClass: String, messageParameters: Array[String])
+  extends ArithmeticException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * Null Pointer exception thrown from Spark with an error class.
+ */
+class SparkNullPointerException(errorClass: String, messageParameters: Array[String])
+  extends NullPointerException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * Security exception thrown from Spark with an error class.
+ */
+class SparkSecurityException(errorClass: String, messageParameters: Array[String])
+  extends SecurityException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * SQL Feature doesn't be supported exception thrown form Spark with an error class.
+ */
+class SparkSQLFeatureNotSupportedException(errorClass: String, messageParameters: Array[String])
+  extends SQLFeatureNotSupportedException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
+    with SparkThrowable {
+
+  override def getErrorClass: String = errorClass
+  override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
+}
+
+/**
+ * RuntimeException thrown from Spark with an error class
+ */
+class SparkRuntimeException(errorClass: String, messageParameters: Array[String])
+  extends RuntimeException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
     with SparkThrowable {
 
   override def getErrorClass: String = errorClass
