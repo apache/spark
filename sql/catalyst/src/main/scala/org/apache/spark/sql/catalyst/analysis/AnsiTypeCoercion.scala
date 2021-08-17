@@ -275,7 +275,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // If a binary operation contains interval type and string literal, we can't decide which
       // interval type the string literal should be promoted as. There are many possible interval
       // types, such as year interval, month interval, day interval, hour interval, etc.
-      case _: YearMonthIntervalType | _: DayTimeIntervalType => false
+      case _: AnsiIntervalType => false
       case _: AtomicType => true
       case _ => false
     }
