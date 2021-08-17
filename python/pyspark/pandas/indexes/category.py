@@ -693,17 +693,20 @@ class CategoricalIndex(Index):
         CategoricalIndex(['a', 'b', 'c'],
                          categories=['a', 'b', 'c'], ordered=True, dtype='category')
 
-        If the mapping is not one-to-one an `Index` is returned:
-
         >>> idx.map({'a': 3, 'b': 2, 'c': 1})  # doctest: +NORMALIZE_WHITESPACE
         CategoricalIndex([3, 2, 1],
                          categories=[3, 2, 1], ordered=True, dtype='category')
 
+        If the mapping is not one-to-one an `Index` is returned:
+
+        >>> idx.map({'a': 'first', 'b': 'second', 'c': 'first'})
+        Index(['first', 'second', 'first'], dtype='object')
+
         If a `dict` is used, all unmapped categories are mapped to None and
         the result is an `Index`:
 
-        >>> idx.map({'a': 'first', 'b': 'second', 'c': 'first'})
-        Index(['first', 'second', None], dtype='object'
+        >>> idx.map({'a': 'first', 'b': 'second'})
+        Index(['first', 'second', None], dtype='object')
         """
         return super().map(mapper)
 
