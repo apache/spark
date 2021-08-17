@@ -55,7 +55,7 @@ class UnivocityGenerator(
     isParsing = false,
     forTimestampNTZ = true)
   private val dateFormatter = DateFormatter(
-    options.dateFormat,
+    options.dateFormatInWrite,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
