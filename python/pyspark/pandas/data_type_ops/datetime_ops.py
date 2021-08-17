@@ -134,16 +134,6 @@ class DatetimeOps(DataTypeOps):
         elif isinstance(spark_type, BooleanType):
             return _as_bool_type(index_ops, dtype)
         elif isinstance(spark_type, StringType):
-            if isinstance(dtype, extension_dtypes):
-                # seems like a pandas' bug?
-                return _as_string_type(index_ops, dtype)
-            else:
-                null_str = str(pd.NaT)
-                casted = index_ops.spark.column.cast(spark_type)
-                scol = F.when(index_ops.spark.column.isNull(), null_str).otherwise(casted)
-            return index_ops._with_new_scol(
-                scol.alias(index_ops._internal.data_spark_column_names[0]),
-                field=index_ops._internal.data_fields[0].copy(dtype=dtype, spark_type=spark_type),
-            )
+            return _as_string_type(index_ops, dtype, null_str=str(pd.NaT))
         else:
             return _as_other_type(index_ops, dtype, spark_type)
