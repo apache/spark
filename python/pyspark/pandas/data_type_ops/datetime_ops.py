@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 
-from pyspark.sql import functions as F, Column
+from pyspark.sql import functions as Column
 from pyspark.sql.types import BooleanType, LongType, StringType, TimestampType
 
 from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
@@ -37,7 +37,7 @@ from pyspark.pandas.data_type_ops.base import (
     _sanitize_list_like,
 )
 from pyspark.pandas.spark import functions as SF
-from pyspark.pandas.typedef import extension_dtypes, pandas_on_spark_type
+from pyspark.pandas.typedef import pandas_on_spark_type
 
 
 class DatetimeOps(DataTypeOps):
