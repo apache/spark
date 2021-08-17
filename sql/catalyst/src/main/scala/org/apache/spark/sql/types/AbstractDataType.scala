@@ -225,7 +225,5 @@ private[sql] object AnyTimestampType extends AbstractDataType with Serializable 
 
 /**
  * The interval type which conforms to the ANSI SQL standard.
- *
- * @since 3.2.0
  */
 private[sql] abstract class AnsiIntervalType extends AtomicType
