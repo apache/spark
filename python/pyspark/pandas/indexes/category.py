@@ -642,7 +642,9 @@ class CategoricalIndex(Index):
                 return partial(property_or_func, self)
         raise AttributeError("'CategoricalIndex' object has no attribute '{}'".format(item))
 
-    def map(self, mapper: Union[dict, Callable[[Any], Any], pd.Series]) -> "Index":
+    def map(  # type: ignore[override]
+        self, mapper: Union[dict, Callable[[Any], Any], pd.Series]
+    ) -> "Index":
         """
         Map values using input correspondence (a dict, Series, or function).
 

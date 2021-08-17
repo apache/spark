@@ -16,7 +16,7 @@
 #
 import datetime
 from functools import partial
-from typing import Any, Callable, Optional, Union, cast, no_type_check
+from typing import Any, Optional, Union, cast, no_type_check
 
 import pandas as pd
 from pandas.api.types import is_hashable
