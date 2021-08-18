@@ -184,8 +184,8 @@ class CategoricalIndexTest(PandasOnSparkTestCase, TestUtils):
             )
         else:
             self.assert_eq(
-                kcidx.astype(CategoricalDtype(["b", "c", "a"])),
-                kcidx,
+                pscidx.astype(CategoricalDtype(["b", "c", "a"])),
+                pcidx,
             )
 
         self.assert_eq(kcidx.astype(str), pcidx.astype(str))

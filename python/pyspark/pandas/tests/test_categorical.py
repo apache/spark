@@ -252,7 +252,7 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         else:
             self.assert_eq(
                 pscser.astype(CategoricalDtype(["b", "c", "a"])),
-                pscser,
+                pcser,
             )
 
         self.assert_eq(pscser.astype(str), pcser.astype(str))
