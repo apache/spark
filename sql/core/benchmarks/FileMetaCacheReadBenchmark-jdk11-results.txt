@@ -1,95 +1,95 @@
 ================================================================================================
-Scan From 100 files
+count(*) From 100 files
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 11.0.12+7-LTS on Linux 4.14.0_1-0-0-42
 Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
-Scan from 10 columns with 100 files:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-----------------------------------------------------------------------------------------------------------------------------------------
-ORC Vectorized Full Scan: fileMetaCacheEnabled = false              350            375          33         15.0          66.7       1.0X
-ORC Vectorized Full Scan: fileMetaCacheEnabled = true               285            292           6         18.4          54.4       1.2X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = false            549            557           8          9.6         104.6       0.6X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = true             491            492           1         10.7          93.6       0.7X
+count(*) from 10 columns with 100 files:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+count(*): fileMetaCacheEnabled = false                        218            224           4         24.1          41.5       1.0X
+count(*): fileMetaCacheEnabled = true                         152            155           3         34.6          28.9       1.4X
+count(*) with Filter: fileMetaCacheEnabled = false            430            441          10         12.2          82.1       0.5X
+count(*) with Filter: fileMetaCacheEnabled = true             375            377           4         14.0          71.5       0.6X
 
 OpenJDK 64-Bit Server VM 11.0.12+7-LTS on Linux 4.14.0_1-0-0-42
 Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
-Scan from 50 columns with 100 files:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-----------------------------------------------------------------------------------------------------------------------------------------
-ORC Vectorized Full Scan: fileMetaCacheEnabled = false              340            342           3         15.4          64.8       1.0X
-ORC Vectorized Full Scan: fileMetaCacheEnabled = true               287            291           3         18.3          54.8       1.2X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = false            566            570           5          9.3         108.0       0.6X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = true             516            518           2         10.2          98.3       0.7X
+count(*) from 50 columns with 100 files:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+count(*): fileMetaCacheEnabled = false                        216            218           1         24.2          41.3       1.0X
+count(*): fileMetaCacheEnabled = true                         166            167           2         31.5          31.7       1.3X
+count(*) with Filter: fileMetaCacheEnabled = false            455            460           5         11.5          86.7       0.5X
+count(*) with Filter: fileMetaCacheEnabled = true             406            412          10         12.9          77.4       0.5X
 
 OpenJDK 64-Bit Server VM 11.0.12+7-LTS on Linux 4.14.0_1-0-0-42
 Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
-Scan from 100 columns with 100 files:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-----------------------------------------------------------------------------------------------------------------------------------------
-ORC Vectorized Full Scan: fileMetaCacheEnabled = false              408            427          38         12.8          77.9       1.0X
-ORC Vectorized Full Scan: fileMetaCacheEnabled = true               353            358           7         14.8          67.4       1.2X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = false            674            678           4          7.8         128.6       0.6X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = true             614            617           4          8.5         117.1       0.7X
+count(*) from 100 columns with 100 files:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+count(*): fileMetaCacheEnabled = false                        289            292           3         18.2          55.1       1.0X
+count(*): fileMetaCacheEnabled = true                         221            231           7         23.7          42.2       1.3X
+count(*) with Filter: fileMetaCacheEnabled = false            556            560           9          9.4         106.0       0.5X
+count(*) with Filter: fileMetaCacheEnabled = true             518            520           2         10.1          98.9       0.6X
 
 
 ================================================================================================
-Scan From 500 files
-================================================================================================
-
-OpenJDK 64-Bit Server VM 11.0.12+7-LTS on Linux 4.14.0_1-0-0-42
-Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
-Scan from 10 columns with 500 files:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-----------------------------------------------------------------------------------------------------------------------------------------
-ORC Vectorized Full Scan: fileMetaCacheEnabled = false              938            977          61          5.6         179.0       1.0X
-ORC Vectorized Full Scan: fileMetaCacheEnabled = true               698            699           1          7.5         133.1       1.3X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = false           1531           1535           5          3.4         292.0       0.6X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = true            1295           1299           6          4.0         247.0       0.7X
-
-OpenJDK 64-Bit Server VM 11.0.12+7-LTS on Linux 4.14.0_1-0-0-42
-Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
-Scan from 50 columns with 500 files:                      Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-----------------------------------------------------------------------------------------------------------------------------------------
-ORC Vectorized Full Scan: fileMetaCacheEnabled = false             1046           1108          88          5.0         199.5       1.0X
-ORC Vectorized Full Scan: fileMetaCacheEnabled = true               833            834           1          6.3         159.0       1.3X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = false           1693           1694           1          3.1         323.0       0.6X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = true            1535           1535           0          3.4         292.7       0.7X
-
-OpenJDK 64-Bit Server VM 11.0.12+7-LTS on Linux 4.14.0_1-0-0-42
-Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
-Scan from 100 columns with 500 files:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-----------------------------------------------------------------------------------------------------------------------------------------
-ORC Vectorized Full Scan: fileMetaCacheEnabled = false             1040           1041           1          5.0         198.4       1.0X
-ORC Vectorized Full Scan: fileMetaCacheEnabled = true               976            981           5          5.4         186.2       1.1X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = false           1883           1886           5          2.8         359.2       0.6X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = true            1627           1627           0          3.2         310.3       0.6X
-
-
-================================================================================================
-Scan From 1000 files
+count(*) From 500 files
 ================================================================================================
 
 OpenJDK 64-Bit Server VM 11.0.12+7-LTS on Linux 4.14.0_1-0-0-42
 Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
-Scan from 10 columns with 1000 files:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-----------------------------------------------------------------------------------------------------------------------------------------
-ORC Vectorized Full Scan: fileMetaCacheEnabled = false             1726           1766          56          3.0         329.3       1.0X
-ORC Vectorized Full Scan: fileMetaCacheEnabled = true              1500           1501           2          3.5         286.1       1.2X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = false           2823           2824           1          1.9         538.5       0.6X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = true            2581           2583           3          2.0         492.3       0.7X
+count(*) from 10 columns with 500 files:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+count(*): fileMetaCacheEnabled = false                        774            777           4          6.8         147.5       1.0X
+count(*): fileMetaCacheEnabled = true                         532            547          12          9.8         101.6       1.5X
+count(*) with Filter: fileMetaCacheEnabled = false           1344           1346           3          3.9         256.3       0.6X
+count(*) with Filter: fileMetaCacheEnabled = true            1095           1104          12          4.8         208.9       0.7X
 
 OpenJDK 64-Bit Server VM 11.0.12+7-LTS on Linux 4.14.0_1-0-0-42
 Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
-Scan from 50 columns with 1000 files:                     Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-----------------------------------------------------------------------------------------------------------------------------------------
-ORC Vectorized Full Scan: fileMetaCacheEnabled = false             1767           1776          12          3.0         337.0       1.0X
-ORC Vectorized Full Scan: fileMetaCacheEnabled = true              1581           1602          30          3.3         301.6       1.1X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = false           3096           3102           8          1.7         590.5       0.6X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = true            2882           2884           2          1.8         549.8       0.6X
+count(*) from 50 columns with 500 files:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+count(*): fileMetaCacheEnabled = false                        798            854          95          6.6         152.2       1.0X
+count(*): fileMetaCacheEnabled = true                         659            664           3          8.0         125.6       1.2X
+count(*) with Filter: fileMetaCacheEnabled = false           1482           1485           4          3.5         282.7       0.5X
+count(*) with Filter: fileMetaCacheEnabled = true            1286           1320          49          4.1         245.2       0.6X
 
 OpenJDK 64-Bit Server VM 11.0.12+7-LTS on Linux 4.14.0_1-0-0-42
 Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
-Scan from 100 columns with 1000 files:                    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
-----------------------------------------------------------------------------------------------------------------------------------------
-ORC Vectorized Full Scan: fileMetaCacheEnabled = false             1859           1859           0          2.8         354.6       1.0X
-ORC Vectorized Full Scan: fileMetaCacheEnabled = true              1646           1680          47          3.2         314.0       1.1X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = false           3472           3474           2          1.5         662.3       0.5X
-ORC Vectorized Filter Scan: fileMetaCacheEnabled = true            3199           3209          15          1.6         610.1       0.6X
+count(*) from 100 columns with 500 files:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+count(*): fileMetaCacheEnabled = false                        882            919          54          5.9         168.3       1.0X
+count(*): fileMetaCacheEnabled = true                         678            726          42          7.7         129.3       1.3X
+count(*) with Filter: fileMetaCacheEnabled = false           1680           1706          36          3.1         320.5       0.5X
+count(*) with Filter: fileMetaCacheEnabled = true            1438           1440           4          3.6         274.2       0.6X
+
+
+================================================================================================
+count(*) From 1000 files
+================================================================================================
+
+OpenJDK 64-Bit Server VM 11.0.12+7-LTS on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+count(*) from 10 columns with 1000 files:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+count(*): fileMetaCacheEnabled = false                       1475           1516          58          3.6         281.4       1.0X
+count(*): fileMetaCacheEnabled = true                        1280           1285           7          4.1         244.2       1.2X
+count(*) with Filter: fileMetaCacheEnabled = false           2512           2519           9          2.1         479.2       0.6X
+count(*) with Filter: fileMetaCacheEnabled = true            2304           2305           2          2.3         439.4       0.6X
+
+OpenJDK 64-Bit Server VM 11.0.12+7-LTS on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+count(*) from 50 columns with 1000 files:           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+count(*): fileMetaCacheEnabled = false                       1514           1518           6          3.5         288.8       1.0X
+count(*): fileMetaCacheEnabled = true                        1376           1377           2          3.8         262.4       1.1X
+count(*) with Filter: fileMetaCacheEnabled = false           2793           2797           5          1.9         532.8       0.5X
+count(*) with Filter: fileMetaCacheEnabled = true            2635           2646          15          2.0         502.7       0.6X
+
+OpenJDK 64-Bit Server VM 11.0.12+7-LTS on Linux 4.14.0_1-0-0-42
+Intel(R) Xeon(R) Gold 6271C CPU @ 2.60GHz
+count(*) from 100 columns with 1000 files:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------
+count(*): fileMetaCacheEnabled = false                       1621           1622           0          3.2         309.2       1.0X
+count(*): fileMetaCacheEnabled = true                        1413           1424          17          3.7         269.4       1.1X
+count(*) with Filter: fileMetaCacheEnabled = false           3144           3150           9          1.7         599.6       0.5X
+count(*) with Filter: fileMetaCacheEnabled = true            2855           2873          25          1.8         544.6       0.6X
 

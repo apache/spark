@@ -68,16 +68,15 @@ object FileMetaCacheReadBenchmark extends SqlBasedBenchmark {
     spark.read.orc(dir).createOrReplaceTempView("orcTable")
   }
 
-  def fileScanBenchmark(values: Int, width: Int, fileCount: Int): Unit = {
+  def countBenchmark(values: Int, width: Int, fileCount: Int): Unit = {
     val benchmark = new Benchmark(
-      s"Scan from $width columns with $fileCount files",
+      s"count(*) from $width columns with $fileCount files",
       values,
       output = output)
 
     withTempPath { dir =>
       withTempTable("t1", "orcTable") {
         import spark.implicits._
-        val middle = width / 2
         val selectExpr = (1 to width).map(i => s"value as c$i")
         val dataFrame = spark.range(values).map(_ => Random.nextLong).toDF()
         dataFrame.selectExpr(selectExpr: _*).createOrReplaceTempView("t1")
@@ -92,23 +91,23 @@ object FileMetaCacheReadBenchmark extends SqlBasedBenchmark {
           rows.head.getLong(0)
         }
 
-        benchmark.addCase("ORC Vectorized Full Scan: fileMetaCacheEnabled = false") { _ =>
-          spark.sql(s"SELECT sum(c$middle) FROM orcTable").noop()
+        benchmark.addCase("count(*): fileMetaCacheEnabled = false") { _ =>
+          spark.sql(s"SELECT count(*) FROM orcTable").noop()
         }
 
-        benchmark.addCase("ORC Vectorized Full Scan: fileMetaCacheEnabled = true") { _ =>
+        benchmark.addCase("count(*): fileMetaCacheEnabled = true") { _ =>
           withSQLConf(SQLConf.FILE_META_CACHE_ORC_ENABLED.key -> "true") {
-            spark.sql(s"SELECT sum(c$middle) FROM orcTable").noop()
+            spark.sql(s"SELECT count(*) FROM orcTable").noop()
           }
         }
 
-        benchmark.addCase("ORC Vectorized Filter Scan: fileMetaCacheEnabled = false") { _ =>
-          spark.sql(s"SELECT sum(c$middle) FROM orcTable where c1 = $filter").noop()
+        benchmark.addCase("count(*) with Filter: fileMetaCacheEnabled = false") { _ =>
+          spark.sql(s"SELECT count(*) FROM orcTable where c1 = $filter").noop()
         }
 
-        benchmark.addCase("ORC Vectorized Filter Scan: fileMetaCacheEnabled = true") { _ =>
+        benchmark.addCase("count(*) with Filter: fileMetaCacheEnabled = true") { _ =>
           withSQLConf(SQLConf.FILE_META_CACHE_ORC_ENABLED.key -> "true") {
-            spark.sql(s"SELECT sum(c$middle) FROM orcTable where c1 = $filter").noop()
+            spark.sql(s"SELECT count(*) FROM orcTable where c1 = $filter").noop()
           }
         }
 
@@ -119,9 +118,9 @@ object FileMetaCacheReadBenchmark extends SqlBasedBenchmark {
 
   override def runBenchmarkSuite(mainArgs: Array[String]): Unit = {
     for (fileCount <- List(100, 500, 1000)) {
-      runBenchmark(s"Scan From $fileCount files") {
+      runBenchmark(s"count(*) From $fileCount files") {
         for (columnWidth <- List(10, 50, 100)) {
-          fileScanBenchmark(1024 * 1024 * 5, columnWidth, fileCount)
+          countBenchmark(1024 * 1024 * 5, columnWidth, fileCount)
         }
       }
     }
