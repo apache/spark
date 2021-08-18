@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.datasources.v2.csv
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.StructFilters
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
@@ -42,19 +43,22 @@ case class CSVScanBuilder(
       readDataSchema(),
       readPartitionSchema(),
       options,
-      pushedFilters(),
+      pushedDataFilters(),
       partitionFilters,
       dataFilters)
   }
 
   private var _pushedFilters: Array[Filter] = Array.empty
 
-  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+  override def pushFiltersToFileIndex(
+      partitionFilters: Seq[Expression],
+      dataFilters: Seq[Expression]): Unit = {
+    this.partitionFilters = partitionFilters
+    this.dataFilters = dataFilters
     if (sparkSession.sessionState.conf.csvFilterPushDown) {
-      _pushedFilters = StructFilters.pushedFilters(filters, dataSchema)
+      _pushedFilters = StructFilters.pushedFilters(translateDataFilter, dataSchema)
     }
-    filters
   }
 
-  override def pushedFilters(): Array[Filter] = _pushedFilters
+  override def pushedDataFilters(): Array[Filter] = _pushedFilters
 }

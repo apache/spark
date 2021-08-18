@@ -50,17 +50,8 @@ object PushDownUtils extends PredicateHelper {
         val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
-        val dataFilters = r match {
-          case f: FileScanBuilder =>
-            val (partitionFilters, fileDataFilters) =
-              DataSourceUtils.getPartitionKeyFiltersAndDataFilters(
-              f.getSparkSession, scanBuilderHolder.relation, f.readPartitionSchema(), filters)
-            f.pushPartitionFilters(ExpressionSet(partitionFilters).toSeq, fileDataFilters)
-            fileDataFilters
-          case _ => filters
-        }
 
-        for (filterExpr <- dataFilters) {
+        for (filterExpr <- filters) {
           val translated =
             DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
               nestedPredicatePushdownEnabled = true)
@@ -79,6 +70,12 @@ object PushDownUtils extends PredicateHelper {
         }
         (r.pushedFilters(), (untranslatableExprs ++ postScanFilters).toSeq)
 
+      case f: FileScanBuilder =>
+        val (partitionFilters, dataFilters) =
+          DataSourceUtils.getPartitionKeyFiltersAndDataFilters(
+            f.getSparkSession, scanBuilderHolder.relation, f.readPartitionSchema(), filters)
+        f.pushFiltersToFileIndex(ExpressionSet(partitionFilters).toSeq, dataFilters)
+        (Nil, dataFilters)
       case _ => (Nil, filters)
     }
   }

@@ -25,7 +25,6 @@ import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
-import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -42,6 +41,9 @@ case class ParquetScanBuilder(
     sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
   }
 
+  // Note: for Parquet, the actual filter push down happens in [[ParquetPartitionReaderFactory]].
+  // It requires the Parquet physical schema to determine whether a filter is convertible.
+  // All filters that can be converted to Parquet are pushed down.
   lazy val pushedParquetFilters = {
     val sqlConf = sparkSession.sessionState.conf
     val pushDownDate = sqlConf.parquetFilterPushDownDate
@@ -63,22 +65,10 @@ case class ParquetScanBuilder(
       // The rebase mode doesn't matter here because the filters are used to determine
       // whether they is convertible.
       LegacyBehaviorPolicy.CORRECTED)
-    parquetFilters.convertibleFilters(this.filters).toArray
+    parquetFilters.convertibleFilters(translateDataFilter).toArray
   }
 
   override protected val supportsNestedSchemaPruning: Boolean = true
-
-  private var filters: Array[Filter] = Array.empty
-
-  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    this.filters = filters
-    this.filters
-  }
-
-  // Note: for Parquet, the actual filter push down happens in [[ParquetPartitionReaderFactory]].
-  // It requires the Parquet physical schema to determine whether a filter is convertible.
-  // All filters that can be converted to Parquet are pushed down.
-  override def pushedFilters(): Array[Filter] = pushedParquetFilters
 
   override def build(): Scan = {
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),

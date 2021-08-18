@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2.orc
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters
@@ -46,19 +47,22 @@ case class OrcScanBuilder(
 
   override def build(): Scan = {
     OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
-      readPartitionSchema(), options, pushedFilters(), partitionFilters, dataFilters)
+      readPartitionSchema(), options, pushedDataFilters(), partitionFilters, dataFilters)
   }
 
   private var _pushedFilters: Array[Filter] = Array.empty
 
-  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+  override def pushFiltersToFileIndex(
+      partitionFilters: Seq[Expression],
+      dataFilters: Seq[Expression]): Unit = {
+    this.partitionFilters = partitionFilters
+    this.dataFilters = dataFilters
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       val dataTypeMap = OrcFilters.getSearchableTypeMap(
         readDataSchema(), SQLConf.get.caseSensitiveAnalysis)
-      _pushedFilters = OrcFilters.convertibleFilters(dataTypeMap, filters).toArray
+      _pushedFilters = OrcFilters.convertibleFilters(dataTypeMap, translateDataFilter).toArray
     }
-    filters
   }
 
-  override def pushedFilters(): Array[Filter] = _pushedFilters
+  override def pushedDataFilters(): Array[Filter] = _pushedFilters
 }

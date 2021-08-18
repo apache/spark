@@ -16,19 +16,19 @@
  */
 package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.SparkSession
+import scala.collection.mutable
+
+import org.apache.spark.sql.{sources, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.execution.datasources.{PartitioningAwareFileIndex, PartitioningUtils}
+import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, PartitioningAwareFileIndex, PartitioningUtils}
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 
 abstract class FileScanBuilder(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
-    dataSchema: StructType)
-  extends ScanBuilder
-    with SupportsPushDownRequiredColumns
-    with SupportsPushDownFilters {
+    dataSchema: StructType) extends ScanBuilder with SupportsPushDownRequiredColumns {
   private val partitionSchema = fileIndex.partitionSchema
   private val isCaseSensitive = sparkSession.sessionState.conf.caseSensitiveAnalysis
   protected val supportsNestedSchemaPruning = false
@@ -63,11 +63,26 @@ abstract class FileScanBuilder(
     StructType(fields)
   }
 
-  def pushPartitionFilters(
+  def pushFiltersToFileIndex(
       partitionFilters: Seq[Expression],
       dataFilters: Seq[Expression]): Unit = {
     this.partitionFilters = partitionFilters
     this.dataFilters = dataFilters
+  }
+
+  def pushedDataFilters(): Array[Filter] = Array.empty
+
+  def translateDataFilter(): Array[Filter] = {
+    val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
+
+    for (filterExpr <- dataFilters) {
+      val translated = DataSourceStrategy.translateFilter(filterExpr, true)
+      if (translated.nonEmpty) {
+        translatedFilters += translated.get
+      }
+    }
+
+    translatedFilters.toArray
   }
 
   def getSparkSession: SparkSession = sparkSession
