@@ -1161,18 +1161,19 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> tsType.toString) {
         val expected = expectedAnswer("2013-07-15 08:15:23.5")
 
-        Seq(true, false).foreach { ansi =>
+        Seq(true).foreach { ansi =>
           withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
             var makeTimestampExpr = MakeTimestamp(
               Literal(2013), Literal(7), Literal(15), Literal(8), Literal(15),
-              Literal(Decimal(BigDecimal(23.5), 8, 6)), Some(Literal(ZoneId.systemDefault().getId)))
+              Literal(Decimal(BigDecimal(23.5), 16, 6)),
+              Some(Literal(ZoneId.systemDefault().getId)))
             checkEvaluation(makeTimestampExpr, expected)
             checkEvaluation(makeTimestampExpr.copy(year = Literal.create(null, IntegerType)), null)
             checkEvaluation(makeTimestampExpr.copy(month = Literal.create(null, IntegerType)), null)
             checkEvaluation(makeTimestampExpr.copy(day = Literal.create(null, IntegerType)), null)
             checkEvaluation(makeTimestampExpr.copy(hour = Literal.create(null, IntegerType)), null)
             checkEvaluation(makeTimestampExpr.copy(min = Literal.create(null, IntegerType)), null)
-            checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DecimalType(8, 6))),
+            checkEvaluation(makeTimestampExpr.copy(sec = Literal.create(null, DecimalType(16, 6))),
               null)
             checkEvaluation(makeTimestampExpr.copy(timezone = None), expected)
 
@@ -1183,7 +1184,7 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
               (makeTimestampExpr.copy(hour = Literal(25)), "Invalid value for Hour"),
               (makeTimestampExpr.copy(min = Literal(65)), "Invalid value for Min"),
               (makeTimestampExpr.copy(sec = Literal(Decimal(
-                BigDecimal(70.0), 8, 6))), "Invalid value for Second")
+                BigDecimal(70.0), 16, 6))), "Invalid value for Second")
             ).foreach { entry =>
               if (ansi) {
                 checkExceptionInExpression[DateTimeException](entry._1, EmptyRow, entry._2)
@@ -1193,16 +1194,16 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
             }
 
             makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
-              Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
+              Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 16, 6)))
             if (ansi) {
               checkExceptionInExpression[DateTimeException](makeTimestampExpr.copy(sec = Literal(
-                Decimal(BigDecimal(60.5), 8, 6))), EmptyRow, "The fraction of sec must be zero")
+                Decimal(BigDecimal(60.5), 16, 6))), EmptyRow, "The fraction of sec must be zero")
             } else {
               checkEvaluation(makeTimestampExpr, expectedAnswer("2019-07-01 00:00:00"))
             }
 
             makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12), Literal(0),
-              Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
+              Literal(0), Literal(Decimal(BigDecimal(58.000001), 16, 6)))
             checkEvaluation(makeTimestampExpr, expectedAnswer("2019-08-12 00:00:58.000001"))
           }
         }
@@ -1210,24 +1211,16 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         // non-ansi test
         withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
           val makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(6), Literal(30),
-            Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 8, 6)))
-          checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(60.5), 8, 6))),
+            Literal(23), Literal(59), Literal(Decimal(BigDecimal(60.0), 16, 6)))
+          checkEvaluation(makeTimestampExpr.copy(sec = Literal(Decimal(BigDecimal(60.5), 16, 6))),
             null)
         }
 
         Seq(true, false).foreach { ansi =>
           withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
             val makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12),
-              Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 8, 6)))
+              Literal(0), Literal(0), Literal(Decimal(BigDecimal(58.000001), 16, 6)))
             checkEvaluation(makeTimestampExpr, expectedAnswer("2019-08-12 00:00:58.000001"))
-          }
-        }
-
-        Seq(true, false).foreach { ansi =>
-          withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
-            val makeTimestampExpr = MakeTimestamp(Literal(2019), Literal(8), Literal(12),
-              Literal(0), Literal(0), Literal(1))
-            checkEvaluation(makeTimestampExpr, expectedAnswer("2019-08-12 00:00:01"))
           }
         }
       }
@@ -1242,20 +1235,20 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   test("extract the seconds part with fraction from timestamps") {
     outstandingTimezonesIds.foreach { timezone =>
       val timestamp = MakeTimestamp(Literal(2019), Literal(8), Literal(10),
-        Literal(0), Literal(0), Literal(Decimal(10.123456, 8, 6)),
+        Literal(0), Literal(0), Literal(Decimal(10.123456, 16, 6)),
         Some(Literal(timezone)), Some(timezone))
       def secFrac(ts: MakeTimestamp): SecondWithFraction = SecondWithFraction(ts, Some(timezone))
 
-      checkEvaluation(secFrac(timestamp), Decimal(10.123456, 8, 6))
+      checkEvaluation(secFrac(timestamp), Decimal(10.123456, 16, 6))
       checkEvaluation(
-        secFrac(timestamp.copy(sec = Literal(Decimal(59000001, 8, 6)))),
-        Decimal(59000001, 8, 6))
+        secFrac(timestamp.copy(sec = Literal(Decimal(59000001, 16, 6)))),
+        Decimal(59000001, 16, 6))
       checkEvaluation(
-        secFrac(timestamp.copy(sec = Literal(Decimal(1, 8, 6)))),
-        Decimal(0.000001, 8, 6))
+        secFrac(timestamp.copy(sec = Literal(Decimal(1, 16, 6)))),
+        Decimal(0.000001, 16, 6))
       checkEvaluation(
         secFrac(timestamp.copy(year = Literal(10))),
-        Decimal(10.123456, 8, 6))
+        Decimal(10.123456, 16, 6))
     }
   }
 
