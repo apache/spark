@@ -184,6 +184,12 @@ class DefaultTimestampFormatter(
       DateTimeUtils.stringToTimestampAnsi(UTF8String.fromString(s), zoneId)
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
+
+  override def parseWithoutTimeZone(s: String): Long = {
+    try {
+      DateTimeUtils.stringToTimestampWithoutTimeZoneAnsi(UTF8String.fromString(s))
+    } catch checkParsedDiff(s, legacyFormatter.parse)
+  }
 }
 
 /**
