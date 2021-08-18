@@ -22,7 +22,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 trait PlanSuiteBase extends SharedSparkSession {
 
-  private val originalCBCEnabled = conf.cboEnabled
+  private val originalCBOEnabled = conf.cboEnabled
   private val originalPlanStatsEnabled = conf.planStatsEnabled
   private val originalJoinReorderEnabled = conf.joinReorderEnabled
 
@@ -41,7 +41,7 @@ trait PlanSuiteBase extends SharedSparkSession {
   }
 
   override def afterAll(): Unit = {
-    conf.setConf(SQLConf.CBO_ENABLED, originalCBCEnabled)
+    conf.setConf(SQLConf.CBO_ENABLED, originalCBOEnabled)
     conf.setConf(SQLConf.PLAN_STATS_ENABLED, originalPlanStatsEnabled)
     conf.setConf(SQLConf.JOIN_REORDER_ENABLED, originalJoinReorderEnabled)
     dropTables()
