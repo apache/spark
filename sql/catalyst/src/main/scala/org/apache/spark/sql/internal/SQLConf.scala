@@ -969,7 +969,10 @@ object SQLConf {
 
   val FILE_META_CACHE_ORC_ENABLED = buildConf("spark.sql.fileMetaCache.orc.enabled")
     .doc("To indicate if enable orc file meta cache, it is recommended to enabled " +
-      "this config when multiple queries are performed on the same dataset, default is false.")
+      "this config when multiple queries are performed on the same dataset, default is false." +
+      "Warning: if the fileMetaCache is enabled, the existing data files should not be " +
+      "replaced with the same file name, otherwise there will be a risk of job failure or wrong " +
+      "data reading before the cache entry expires.")
     .version("3.3.0")
     .booleanConf
     .createWithDefault(false)
