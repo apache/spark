@@ -39,7 +39,7 @@ private[sql] class JsonInferSchema(options: JSONOptions) extends Serializable {
   private val decimalParser = ExprUtils.getDecimalParser(options.locale)
 
   private val timestampFormatter = TimestampFormatter(
-    options.timestampFormat,
+    options.timestampFormatInRead,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
