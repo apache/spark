@@ -52,7 +52,7 @@ class AvroScanBuilder (
     if (sparkSession.sessionState.conf.avroFilterPushDown) {
       _pushedFilters = StructFilters.pushedFilters(filters, dataSchema)
     }
-    (filters.toSet -- separateFilters(filters).toSet).toArray
+    filters
   }
 
   override def pushedFilters(): Array[Filter] = _pushedFilters

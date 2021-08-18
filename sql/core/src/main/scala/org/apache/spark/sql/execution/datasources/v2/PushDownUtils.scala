@@ -19,15 +19,14 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import scala.collection.mutable
 
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, NamedExpression, PredicateHelper, SchemaPruning}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, ExpressionSet, NamedExpression, PredicateHelper, SchemaPruning}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.execution.datasources.DataSourceStrategy
-import org.apache.spark.sql.execution.datasources.PushableColumnWithoutNestedColumn
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils, PushableColumnWithoutNestedColumn}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
@@ -39,9 +38,9 @@ object PushDownUtils extends PredicateHelper {
    * @return pushed filter and post-scan filters.
    */
   def pushFilters(
-      scanBuilder: ScanBuilder,
+      scanBuilderHolder: ScanBuilderHolder,
       filters: Seq[Expression]): (Seq[sources.Filter], Seq[Expression]) = {
-    scanBuilder match {
+    scanBuilderHolder.builder match {
       case r: SupportsPushDownFilters =>
         // A map from translated data source leaf node filters to original catalyst filter
         // expressions. For a `And`/`Or` predicate, it is possible that the predicate is partially
@@ -51,8 +50,17 @@ object PushDownUtils extends PredicateHelper {
         val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
+        val dataFilters = r match {
+          case f: FileScanBuilder =>
+            val (partitionFilters, fileDataFilters) =
+              DataSourceUtils.getPartitionKeyFiltersAndDataFilters(
+              f.getSparkSession, scanBuilderHolder.relation, f.readPartitionSchema(), filters)
+            f.pushPartitionFilters(ExpressionSet(partitionFilters).toSeq, fileDataFilters)
+            fileDataFilters
+          case _ => filters
+        }
 
-        for (filterExpr <- filters) {
+        for (filterExpr <- dataFilters) {
           val translated =
             DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
               nestedPredicatePushdownEnabled = true)
@@ -61,12 +69,6 @@ object PushDownUtils extends PredicateHelper {
           } else {
             translatedFilters += translated.get
           }
-        }
-
-        r match {
-          case f: FileScanBuilder =>
-            f.translatedFilterToExprMap(translatedFilterToExpr)
-          case _ =>
         }
 
         // Data source filters that need to be evaluated again after scanning. which means

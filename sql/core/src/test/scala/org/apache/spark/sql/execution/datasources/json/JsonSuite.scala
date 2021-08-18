@@ -3006,7 +3006,7 @@ class JsonV2Suite extends JsonSuite {
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
 
-  ignore("get pushed filters") {
+  test("get pushed filters") {
     val attr = "col"
     def getBuilder(path: String): JsonScanBuilder = {
       val fileIndex = new InMemoryFileIndex(

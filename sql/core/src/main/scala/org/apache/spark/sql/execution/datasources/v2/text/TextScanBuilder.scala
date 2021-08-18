@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2.text
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownFilters}
+import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.sources.Filter
@@ -31,11 +31,9 @@ case class TextScanBuilder(
     schema: StructType,
     dataSchema: StructType,
     options: CaseInsensitiveStringMap)
-  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) with SupportsPushDownFilters {
+  extends FileScanBuilder(sparkSession, fileIndex, dataSchema) {
 
-  override def pushFilters(filters: Array[Filter]): Array[Filter] = {
-    (filters.toSet -- separateFilters(filters).toSet).toArray
-  }
+  override def pushFilters(filters: Array[Filter]): Array[Filter] = filters
 
   override def pushedFilters(): Array[Filter] = Array.empty
 
