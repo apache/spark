@@ -149,7 +149,6 @@ trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
 
       val approvedSimplified = FileUtils.readFileToString(
         approvedSimplifiedFile, StandardCharsets.UTF_8)
-
       // write out for debugging
       FileUtils.writeStringToFile(actualSimplifiedFile, actualSimplified, StandardCharsets.UTF_8)
       FileUtils.writeStringToFile(actualExplainFile, explain, StandardCharsets.UTF_8)
