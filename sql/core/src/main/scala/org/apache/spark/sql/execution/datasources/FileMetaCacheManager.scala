@@ -86,7 +86,8 @@ abstract class FileMetaKey {
   def getFileMeta: FileMeta
   override def hashCode(): Int = path.hashCode
   override def equals(other: Any): Boolean = other match {
-    case key: FileMetaKey => path.equals(key.path)
+    case key: FileMetaKey =>
+      this.getClass.equals(other.getClass) && path.equals(key.path)
     case _ => false
   }
 }
