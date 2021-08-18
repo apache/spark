@@ -32,7 +32,7 @@ abstract class FileMetaCacheSuite extends QueryTest with SharedSparkSession
   private val cleanUpMethod = PrivateMethod[Unit](Symbol("cleanUp"))
 
   test("SPARK-36516: simple select queries with orc file meta cache") {
-    withSQLConf(SQLConf.FILE_META_CACHE_ORC_ENABLED.key -> "true") {
+    withSQLConf(SQLConf.FILE_META_CACHE_ENABLED_SOURCE_LIST.key -> "orc") {
       val tableName = "orc_use_meta_cache"
       withTable(tableName) {
         (0 until 10).map(i => (i, i.toString)).toDF("id", "value")

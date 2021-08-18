@@ -37,7 +37,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.{SerializableConfiguration, Utils}
@@ -144,6 +143,7 @@ class OrcFileFormat
     val sqlConf = sparkSession.sessionState.conf
     val enableVectorizedReader = supportBatch(sparkSession, resultSchema)
     val capacity = sqlConf.orcVectorizedReaderBatchSize
+    val metaCacheEnabled = sqlConf.fileMetaCacheEnabled(shortName())
 
     OrcConf.IS_SCHEMA_EVOLUTION_CASE_SENSITIVE.setBoolean(hadoopConf, sqlConf.caseSensitiveAnalysis)
 
@@ -155,7 +155,6 @@ class OrcFileFormat
 
     (file: PartitionedFile) => {
       val conf = broadcastedConf.value.value
-      val metaCacheEnabled = conf.getBoolean(SQLConf.FILE_META_CACHE_ORC_ENABLED.key, false)
 
       val filePath = new Path(new URI(file.filePath))
 

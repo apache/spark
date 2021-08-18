@@ -96,7 +96,7 @@ object FileMetaCacheReadBenchmark extends SqlBasedBenchmark {
         }
 
         benchmark.addCase("count(*): fileMetaCacheEnabled = true") { _ =>
-          withSQLConf(SQLConf.FILE_META_CACHE_ORC_ENABLED.key -> "true") {
+          withSQLConf(SQLConf.FILE_META_CACHE_ENABLED_SOURCE_LIST.key -> "orc") {
             spark.sql(s"SELECT count(*) FROM orcTable").noop()
           }
         }
@@ -106,7 +106,7 @@ object FileMetaCacheReadBenchmark extends SqlBasedBenchmark {
         }
 
         benchmark.addCase("count(*) with Filter: fileMetaCacheEnabled = true") { _ =>
-          withSQLConf(SQLConf.FILE_META_CACHE_ORC_ENABLED.key -> "true") {
+          withSQLConf(SQLConf.FILE_META_CACHE_ENABLED_SOURCE_LIST.key -> "orc") {
             spark.sql(s"SELECT count(*) FROM orcTable where c1 = $filter").noop()
           }
         }
