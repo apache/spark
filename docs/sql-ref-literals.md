@@ -144,16 +144,15 @@ SELECT TRUE AS col;
 ### Numeric Literal
 
 A numeric literal is used to specify a fixed or floating-point number.
+There are two kinds of numeric literals: integral literal and fractional literal.
 
-#### Integral Literal
-
-##### Syntax
+#### Integral Literal Syntax
 
 ```sql
 [ + | - ] digit [ ... ] [ L | S | Y ]
 ```
 
-##### Parameters
+#### Integral Literal Parameters
 
 * **digit**
 
@@ -175,7 +174,7 @@ A numeric literal is used to specify a fixed or floating-point number.
 
     Indicates a 4-byte signed integer number.
 
-##### Examples
+#### Integral Literal Examples
 
 ```sql
 SELECT -2147483648 AS col;
@@ -207,9 +206,7 @@ SELECT 482S AS col;
 +---+
 ```
 
-#### Fractional Literals
-
-##### Syntax
+#### Fractional Literals Syntax
 
 decimal literals:
 ```sql
@@ -236,7 +233,7 @@ and exponent is defined as
 E [ + | - ] digit [ ... ]
 ```
 
-##### Parameters
+#### Fractional Literals Parameters
 
 * **digit**
 
@@ -254,7 +251,7 @@ E [ + | - ] digit [ ... ]
 
     Case insensitive, indicates `DECIMAL`, with the total number of digits as precision and the number of digits to right of decimal point as scale.
 
-##### Examples
+#### Fractional Literals Examples
 
 ```sql
 SELECT 12.578 AS col;
@@ -344,11 +341,9 @@ SELECT -3.E-3D AS col;
 
 ### Datetime Literal
 
-A Datetime literal is used to specify a datetime value.
+A datetime literal is used to specify a date or timestamp value.
 
-#### Date Literal
-
-##### Syntax
+#### Date Syntax
 
 ```sql
 DATE { 'yyyy' |
@@ -358,7 +353,7 @@ DATE { 'yyyy' |
 ```
 **Note:** defaults to `01` if month or day is not specified.
 
-##### Examples
+#### Date Examples
 
 ```sql
 SELECT DATE '1997' AS col;
@@ -383,9 +378,7 @@ SELECT DATE '2011-11-11' AS col;
 +----------+
 ```
 
-#### Timestamp Literal
-
-##### Syntax
+#### Timestamp Syntax
 
 ```sql
 TIMESTAMP { 'yyyy' |
@@ -410,7 +403,7 @@ TIMESTAMP { 'yyyy' |
 
 **Note:** defaults to the session local timezone (set via `spark.sql.session.timeZone`) if `zone_id` is not specified.
 
-##### Examples
+#### Timestamp Examples
 
 ```sql
 SELECT TIMESTAMP '1997-01-31 09:26:56.123' AS col;
@@ -438,8 +431,9 @@ SELECT TIMESTAMP '1997-01' AS col;
 ### Interval Literal
 
 An interval literal is used to specify a fixed period of time.
+The interval literal supports two syntaxes: ANSI syntax and multi-units syntax.
 
-#### ANSI style
+#### ANSI Syntax
 
 The ANSI SQL standard defines interval literals in the form:
 ```sql
@@ -485,7 +479,7 @@ Formats of supported day-time interval literals:
 |MINUTE TO SECOND|`[+|-]'[+|-]m:s.n'`|`INTERVAL '1000:01.001' MINUTE TO SECOND`|
 |SECOND|`[+|-]'[+|-]s.n'`|`INTERVAL '1000.000001' SECOND`|
 
-##### Examples
+#### ANSI Examples
 
 ```sql
 SELECT INTERVAL '2-3' YEAR TO MONTH AS col;
@@ -503,14 +497,14 @@ SELECT INTERVAL -'20 15:40:32.99899999' DAY TO SECOND AS col;
 +--------------------------------------------+
 ```
 
-#### Multi-units style
+#### Multi-units Syntax
 
 ```sql
 INTERVAL interval_value interval_unit [ interval_value interval_unit ... ] |
 INTERVAL 'interval_value interval_unit [ interval_value interval_unit ... ]' |
 ```
 
-##### Parameters
+#### Multi-units Parameters
 
 * **interval_value**
 
@@ -527,7 +521,7 @@ INTERVAL 'interval_value interval_unit [ interval_value interval_unit ... ]' |
 
       Mix of the YEAR[S] or MONTH[S] interval units with other units is not allowed.
 
-##### Examples
+#### Multi-units Examples
 
 ```sql
 SELECT INTERVAL 3 YEAR AS col;
