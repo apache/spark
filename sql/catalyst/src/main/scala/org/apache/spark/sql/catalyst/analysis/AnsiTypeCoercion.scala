@@ -178,10 +178,6 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       case (StringType, DecimalType) if isInputFoldable =>
         Some(DecimalType.SYSTEM_DEFAULT)
 
-      // If the target type is Decimal type and it wider than input, cast the input to decimal.
-      case (n: NumericType, t: DecimalType) if t.isWiderThan(n) =>
-        Some(t)
-
       // If input is a numeric type but not decimal, and we expect a decimal type,
       // cast the input to decimal.
       case (d: NumericType, DecimalType) => Some(DecimalType.forType(d))
