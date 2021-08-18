@@ -979,7 +979,7 @@ object SQLConf {
       .version("3.3.0")
       .doc("Time-to-live for file metadata cache entry after last access, the unit is seconds.")
       .timeConf(TimeUnit.SECONDS)
-      .createWithDefault(3600L)
+      .createWithDefault(600)
 
   val FILE_META_CACHE_MAXIMUM_SIZE =
     buildConf("spark.sql.fileMetaCache.maximumSize")
