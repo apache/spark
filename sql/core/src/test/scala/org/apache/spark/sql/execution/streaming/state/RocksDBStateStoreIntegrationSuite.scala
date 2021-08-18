@@ -134,21 +134,14 @@ class RocksDBStateStoreIntegrationSuite extends StreamTest {
         assert(getFormatVersion(query) == 5)
         query.stop()
 
-        // Setting the format version manually should overwrite the value in the checkpoint
+        // Setting the format version manually should not overwrite the value in the checkpoint
         withSQLConf(SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION.key -> "4") {
           query = startQuery()
           inputData.addData(1, 2)
           query.processAllAvailable()
-          assert(getFormatVersion(query) == 4)
+          assert(getFormatVersion(query) == 5)
           query.stop()
         }
-
-        // Use the format version in the checkpoint when the config is not set
-        query = startQuery()
-        inputData.addData(1, 2)
-        query.processAllAvailable()
-        assert(getFormatVersion(query) == 4)
-        query.stop()
       }
     }
   }

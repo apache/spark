@@ -121,14 +121,6 @@ object OffsetSeqMetadata extends Logging {
     STATE_STORE_COMPRESSION_CODEC.key -> "lz4"
   )
 
-  /**
-   * The list of relevant configurations that we will use the value in the existing checkpoint when
-   * a configuration is not set in the current session. If the configuration is set in the current
-   * session, the value in the checkpoint will be ignored.
-   */
-  private val relevantSQLConfUseCheckpointWhenNotSetInSession: Set[String] =
-    Set(STATE_STORE_ROCKSDB_FORMAT_VERSION.key)
-
   def apply(json: String): OffsetSeqMetadata = Serialization.read[OffsetSeqMetadata](json)
 
   def apply(
@@ -144,18 +136,6 @@ object OffsetSeqMetadata extends Logging {
     OffsetSeqMetadata.relevantSQLConfs.map(_.key).foreach { confKey =>
 
       metadata.conf.get(confKey) match {
-        case Some(valueInMetadata)
-            if relevantSQLConfUseCheckpointWhenNotSetInSession.contains(confKey) =>
-          // Note: we use `getAll.get` rather than `getOption` because `getOption` will return the
-          // default value when a config is not set.
-          val optionalValueInSession = sessionConf.getAll.get(confKey)
-          if (optionalValueInSession.isDefined) {
-            logWarning(s"Ignore the value of conf '$confKey' ($valueInMetadata) in the offset " +
-              s"log and use the value of conf '$confKey' (${optionalValueInSession.get}) in " +
-              s"current session.")
-          } else {
-            sessionConf.set(confKey, valueInMetadata)
-          }
 
         case Some(valueInMetadata) =>
           // Config value exists in the metadata, update the session config with this value

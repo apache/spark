@@ -519,11 +519,9 @@ object RocksDBConf {
   // Configuration to set the RocksDB format version. When upgrading the RocksDB version in Spark,
   // it may introduce a new table format version that can not be supported by an old RocksDB version
   // used by an old Spark version. Hence, we store the table format version in the checkpoint when
-  // a query starts, and when restarting a query from a checkpoint, we will use the format version
-  // in the checkpoint. This will ensure the user can still rollback their Spark version for an
-  // existing query when RocksDB changes its default table format in a new version. The user can
-  // still use this config to ignore the table format version in the checkpoint if they don't need
-  // to rollback the Spark version. See
+  // a query starts and use it in the entire lifetime of the query. This will ensure the user can
+  // still rollback their Spark version for an existing query when RocksDB changes its default
+  // table format in a new version. See
   // https://github.com/facebook/rocksdb/wiki/RocksDB-Compatibility-Between-Different-Releases
   // for the RocksDB compatibility guarantee.
   //
