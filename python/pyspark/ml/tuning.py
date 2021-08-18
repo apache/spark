@@ -499,6 +499,10 @@ class CrossValidatorModelReader(MLReader):
             bestModelPath = os.path.join(path, 'bestModel')
             bestModel = DefaultParamsReader.loadParamsInstance(bestModelPath, self.sc)
             avgMetrics = metadata['avgMetrics']
+            if 'stdMetrics' in metadata:
+                stdMetrics = metadata['stdMetrics']
+            else:
+                stdMetrics = None
             persistSubModels = ('persistSubModels' in metadata) and metadata['persistSubModels']
 
             if persistSubModels:
@@ -512,7 +516,9 @@ class CrossValidatorModelReader(MLReader):
             else:
                 subModels = None
 
-            cvModel = CrossValidatorModel(bestModel, avgMetrics=avgMetrics, subModels=subModels)
+            cvModel = CrossValidatorModel(
+                bestModel, avgMetrics=avgMetrics, subModels=subModels, stdMetrics=stdMetrics
+            )
             cvModel = cvModel._resetUid(metadata['uid'])
             cvModel.set(cvModel.estimator, estimator)
             cvModel.set(cvModel.estimatorParamMaps, estimatorParamMaps)
@@ -536,6 +542,9 @@ class CrossValidatorModelWriter(MLWriter):
             .getValidatorModelWriterPersistSubModelsParam(self)
         extraMetadata = {'avgMetrics': instance.avgMetrics,
                          'persistSubModels': persistSubModels}
+        if instance.stdMetrics:
+            extraMetadata['stdMetrics'] = instance.stdMetrics
+
         _ValidatorSharedReadWrite.saveImpl(path, instance, self.sc, extraMetadata=extraMetadata)
         bestModelPath = os.path.join(path, 'bestModel')
         instance.bestModel.save(bestModelPath)
@@ -710,13 +719,19 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
         """
         return self._set(collectSubModels=value)
 
+    @staticmethod
+    def _gen_avg_and_std_metrics(metrics_all):
+        avg_metrics = np.mean(metrics_all, axis=0)
+        std_metrics = np.std(metrics_all, axis=0)
+        return list(avg_metrics), list(std_metrics)
+
     def _fit(self, dataset):
         est = self.getOrDefault(self.estimator)
         epm = self.getOrDefault(self.estimatorParamMaps)
         numModels = len(epm)
         eva = self.getOrDefault(self.evaluator)
         nFolds = self.getOrDefault(self.numFolds)
-        metrics = [0.0] * numModels
+        metrics_all = [[0.0] * numModels for i in range(nFolds)]
 
         pool = ThreadPool(processes=min(self.getParallelism(), numModels))
         subModels = None
@@ -733,19 +748,21 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
                 inheritable_thread_target,
                 _parallelFitTasks(est, train, eva, validation, epm, collectSubModelsParam))
             for j, metric, subModel in pool.imap_unordered(lambda f: f(), tasks):
-                metrics[j] += (metric / nFolds)
+                metrics_all[i][j] = metric
                 if collectSubModelsParam:
                     subModels[i][j] = subModel
 
             validation.unpersist()
             train.unpersist()
 
+        metrics, std_metrics = CrossValidator._gen_avg_and_std_metrics(metrics_all)
+
         if eva.isLargerBetter():
             bestIndex = np.argmax(metrics)
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return self._copyValues(CrossValidatorModel(bestModel, metrics, subModels))
+        return self._copyValues(CrossValidatorModel(bestModel, metrics, subModels, std_metrics))
 
     def _kFold(self, dataset):
         nFolds = self.getOrDefault(self.numFolds)
@@ -875,15 +892,20 @@ class CrossValidator(Estimator, _CrossValidatorParams, HasParallelism, HasCollec
 
 class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
     """
-
     CrossValidatorModel contains the model with the highest average cross-validation
     metric across folds and uses this model to transform input data. CrossValidatorModel
     also tracks the metrics for each param map evaluated.
 
     .. versionadded:: 1.4.0
+
+    Notes
+    -----
+    Since version 3.3.0, CrossValidatorModel contains a new attribute "stdMetrics",
+    which represent standard deviation of metrics for each paramMap in
+    CrossValidator.estimatorParamMaps.
     """
 
-    def __init__(self, bestModel, avgMetrics=None, subModels=None):
+    def __init__(self, bestModel, avgMetrics=None, subModels=None, stdMetrics=None):
         super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
@@ -892,6 +914,9 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
         self.avgMetrics = avgMetrics or []
         #: sub model list from cross validation
         self.subModels = subModels
+        #: standard deviation of metrics for each paramMap in
+        #: CrossValidator.estimatorParamMaps, in the corresponding order.
+        self.stdMetrics = stdMetrics or []
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
@@ -924,7 +949,9 @@ class CrossValidatorModel(Model, _CrossValidatorParams, MLReadable, MLWritable):
             [sub_model.copy() for sub_model in fold_sub_models]
             for fold_sub_models in self.subModels
         ]
-        return self._copyValues(CrossValidatorModel(bestModel, avgMetrics, subModels), extra=extra)
+        stdMetrics = list(self.stdMetrics)
+        return self._copyValues(CrossValidatorModel(bestModel, avgMetrics, subModels, stdMetrics),
+                                extra=extra)
 
     @since("2.3.0")
     def write(self):

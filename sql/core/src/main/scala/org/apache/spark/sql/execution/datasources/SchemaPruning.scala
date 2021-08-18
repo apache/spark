@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
+import org.apache.spark.sql.util.SchemaUtils._
 
 /**
  * Prunes unnecessary physical columns given a [[PhysicalOperation]] over a data source relation.
@@ -82,8 +83,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
         val prunedRelation = leafNodeBuilder(prunedDataSchema)
         val projectionOverSchema = ProjectionOverSchema(prunedDataSchema)
 
-        Some(buildNewProjection(normalizedProjects, normalizedFilters, prunedRelation,
-          projectionOverSchema))
+        Some(buildNewProjection(projects, normalizedProjects, normalizedFilters,
+          prunedRelation, projectionOverSchema))
       } else {
         None
       }
@@ -125,6 +126,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
    */
   private def buildNewProjection(
       projects: Seq[NamedExpression],
+      normalizedProjects: Seq[NamedExpression],
       filters: Seq[Expression],
       leafNode: LeafNode,
       projectionOverSchema: ProjectionOverSchema): Project = {
@@ -143,7 +145,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
 
     // Construct the new projections of our Project by
     // rewriting the original projections
-    val newProjects = projects.map(_.transformDown {
+    val newProjects = normalizedProjects.map(_.transformDown {
       case projectionOverSchema(expr) => expr
     }).map { case expr: NamedExpression => expr }
 
@@ -151,7 +153,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
       logDebug(s"New projects:\n${newProjects.map(_.treeString).mkString("\n")}")
     }
 
-    Project(newProjects, projectionChild)
+    Project(restoreOriginalOutputNames(newProjects, projects.map(_.name)), projectionChild)
   }
 
   /**

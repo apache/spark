@@ -20,7 +20,6 @@ A wrapper for GroupedData to behave similar to pandas GroupBy.
 """
 
 from abc import ABCMeta, abstractmethod
-import builtins
 import sys
 import inspect
 from collections import OrderedDict, namedtuple
@@ -44,9 +43,15 @@ from typing import (
     TYPE_CHECKING,
 )
 
-import numpy as np
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
+
+if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
+    from pandas.core.common import _builtin_table
+else:
+    from pandas.core.base import SelectionMixin
+
+    _builtin_table = SelectionMixin._builtin_table
 
 from pyspark.sql import Column, DataFrame as SparkDataFrame, Window, functions as F
 from pyspark.sql.types import (  # noqa: F401
@@ -97,12 +102,6 @@ if TYPE_CHECKING:
 # to keep it the same as pandas
 NamedAgg = namedtuple("NamedAgg", ["column", "aggfunc"])
 
-_builtin_table = {
-    builtins.sum: np.sum,
-    builtins.max: np.max,
-    builtins.min: np.min,
-}  # type: Dict[Callable, Callable]
-
 
 class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
     """
@@ -118,7 +117,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         groupkeys: List[Series],
         as_index: bool,
         dropna: bool,
-        column_labels_to_exlcude: Set[Label],
+        column_labels_to_exclude: Set[Label],
         agg_columns_selected: bool,
         agg_columns: List[Series],
     ):
@@ -126,7 +125,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
         self._groupkeys = groupkeys
         self._as_index = as_index
         self._dropna = dropna
-        self._column_labels_to_exlcude = column_labels_to_exlcude
+        self._column_labels_to_exclude = column_labels_to_exclude
         self._agg_columns_selected = agg_columns_selected
         self._agg_columns = agg_columns
 
@@ -1168,7 +1167,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             agg_columns = [
                 psdf._psser_for(label)
                 for label in psdf._internal.column_labels
-                if label not in self._column_labels_to_exlcude
+                if label not in self._column_labels_to_exclude
             ]
 
         psdf, groupkey_labels, groupkey_names = GroupBy._prepare_group_map_apply(
@@ -1365,7 +1364,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             agg_columns = [
                 psdf._psser_for(label)
                 for label in psdf._internal.column_labels
-                if label not in self._column_labels_to_exlcude
+                if label not in self._column_labels_to_exclude
             ]
 
         data_schema = (
@@ -1883,7 +1882,7 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             agg_columns = [
                 psdf._psser_for(label)
                 for label in psdf._internal.column_labels
-                if label not in self._column_labels_to_exlcude
+                if label not in self._column_labels_to_exclude
             ]
 
         psdf, groupkey_labels, _ = GroupBy._prepare_group_map_apply(
@@ -2701,17 +2700,17 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
             (
                 psdf,
                 new_by_series,
-                column_labels_to_exlcude,
+                column_labels_to_exclude,
             ) = GroupBy._resolve_grouping_from_diff_dataframes(psdf, by)
         else:
             new_by_series = GroupBy._resolve_grouping(psdf, by)
-            column_labels_to_exlcude = set()
+            column_labels_to_exclude = set()
         return DataFrameGroupBy(
             psdf,
             new_by_series,
             as_index=as_index,
             dropna=dropna,
-            column_labels_to_exlcude=column_labels_to_exlcude,
+            column_labels_to_exclude=column_labels_to_exclude,
         )
 
     def __init__(
@@ -2720,20 +2719,20 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
         by: List[Series],
         as_index: bool,
         dropna: bool,
-        column_labels_to_exlcude: Set[Label],
+        column_labels_to_exclude: Set[Label],
         agg_columns: List[Label] = None,
     ):
         agg_columns_selected = agg_columns is not None
         if agg_columns_selected:
             for label in agg_columns:
-                if label in column_labels_to_exlcude:
+                if label in column_labels_to_exclude:
                     raise KeyError(label)
         else:
             agg_columns = [
                 label
                 for label in psdf._internal.column_labels
                 if not any(label == key._column_label and key._psdf is psdf for key in by)
-                and label not in column_labels_to_exlcude
+                and label not in column_labels_to_exclude
             ]
 
         super().__init__(
@@ -2741,7 +2740,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
             groupkeys=by,
             as_index=as_index,
             dropna=dropna,
-            column_labels_to_exlcude=column_labels_to_exlcude,
+            column_labels_to_exclude=column_labels_to_exclude,
             agg_columns_selected=agg_columns_selected,
             agg_columns=[psdf[label] for label in agg_columns],
         )
@@ -2781,7 +2780,7 @@ class DataFrameGroupBy(GroupBy[DataFrame]):
                 self._groupkeys,
                 as_index=self._as_index,
                 dropna=self._dropna,
-                column_labels_to_exlcude=self._column_labels_to_exlcude,
+                column_labels_to_exclude=self._column_labels_to_exclude,
                 agg_columns=item,
             )
 
@@ -2925,7 +2924,7 @@ class SeriesGroupBy(GroupBy[Series]):
             groupkeys=by,
             as_index=True,
             dropna=dropna,
-            column_labels_to_exlcude=set(),
+            column_labels_to_exclude=set(),
             agg_columns_selected=True,
             agg_columns=[psser],
         )

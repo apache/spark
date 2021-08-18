@@ -17,17 +17,18 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.net.URI
 import java.util.Locale
 
-import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AnsiCast, AttributeReference, Cast, LessThanOrEqual, Literal}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
 import org.apache.spark.sql.types._
 
-class V2AppendDataANSIAnalysisSuite extends DataSourceV2ANSIAnalysisSuite {
+class V2AppendDataANSIAnalysisSuite extends V2ANSIWriteAnalysisSuiteBase {
   override def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
     AppendData.byName(table, query)
   }
@@ -37,7 +38,7 @@ class V2AppendDataANSIAnalysisSuite extends DataSourceV2ANSIAnalysisSuite {
   }
 }
 
-class V2AppendDataStrictAnalysisSuite extends DataSourceV2StrictAnalysisSuite {
+class V2AppendDataStrictAnalysisSuite extends V2StrictWriteAnalysisSuiteBase {
   override def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
     AppendData.byName(table, query)
   }
@@ -47,7 +48,7 @@ class V2AppendDataStrictAnalysisSuite extends DataSourceV2StrictAnalysisSuite {
   }
 }
 
-class V2OverwritePartitionsDynamicANSIAnalysisSuite extends DataSourceV2ANSIAnalysisSuite {
+class V2OverwritePartitionsDynamicANSIAnalysisSuite extends V2ANSIWriteAnalysisSuiteBase {
   override def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
     OverwritePartitionsDynamic.byName(table, query)
   }
@@ -57,7 +58,7 @@ class V2OverwritePartitionsDynamicANSIAnalysisSuite extends DataSourceV2ANSIAnal
   }
 }
 
-class V2OverwritePartitionsDynamicStrictAnalysisSuite extends DataSourceV2StrictAnalysisSuite {
+class V2OverwritePartitionsDynamicStrictAnalysisSuite extends V2StrictWriteAnalysisSuiteBase {
   override def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
     OverwritePartitionsDynamic.byName(table, query)
   }
@@ -67,7 +68,7 @@ class V2OverwritePartitionsDynamicStrictAnalysisSuite extends DataSourceV2Strict
   }
 }
 
-class V2OverwriteByExpressionANSIAnalysisSuite extends DataSourceV2ANSIAnalysisSuite {
+class V2OverwriteByExpressionANSIAnalysisSuite extends V2ANSIWriteAnalysisSuiteBase {
   override def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
     OverwriteByExpression.byName(table, query, Literal(true))
   }
@@ -85,7 +86,7 @@ class V2OverwriteByExpressionANSIAnalysisSuite extends DataSourceV2ANSIAnalysisS
   }
 }
 
-class V2OverwriteByExpressionStrictAnalysisSuite extends DataSourceV2StrictAnalysisSuite {
+class V2OverwriteByExpressionStrictAnalysisSuite extends V2StrictWriteAnalysisSuiteBase {
   override def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan = {
     OverwriteByExpression.byName(table, query, Literal(true))
   }
@@ -113,7 +114,7 @@ case class TestRelationAcceptAnySchema(output: Seq[AttributeReference])
   override def skipSchemaResolution: Boolean = true
 }
 
-abstract class DataSourceV2ANSIAnalysisSuite extends DataSourceV2AnalysisBaseSuite {
+abstract class V2ANSIWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
 
   // For Ansi store assignment policy, expression `AnsiCast` is used instead of `Cast`.
   override def checkAnalysis(
@@ -140,7 +141,7 @@ abstract class DataSourceV2ANSIAnalysisSuite extends DataSourceV2AnalysisBaseSui
   }
 }
 
-abstract class DataSourceV2StrictAnalysisSuite extends DataSourceV2AnalysisBaseSuite {
+abstract class V2StrictWriteAnalysisSuiteBase extends V2WriteAnalysisSuiteBase {
   override def checkAnalysis(
       inputPlan: LogicalPlan,
       expectedPlan: LogicalPlan,
@@ -187,7 +188,6 @@ abstract class DataSourceV2StrictAnalysisSuite extends DataSourceV2AnalysisBaseS
       "Cannot find data for output column", "'y'"))
   }
 
-
   test("byPosition: fail canWrite check") {
     val widerTable = TestRelation(StructType(Seq(
       StructField("a", DoubleType),
@@ -220,29 +220,15 @@ abstract class DataSourceV2StrictAnalysisSuite extends DataSourceV2AnalysisBaseS
   }
 }
 
-abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
+abstract class V2WriteAnalysisSuiteBase extends AnalysisTest {
 
-  override def getAnalyzer: Analyzer = {
-    val catalog = new SessionCatalog(new InMemoryCatalog, FunctionRegistry.builtin)
-    catalog.createDatabase(
-      CatalogDatabase("default", "", new URI("loc"), Map.empty),
-      ignoreIfExists = false)
-    new Analyzer(catalog) {
-      override val extendedResolutionRules = EliminateSubqueryAliases :: Nil
-    }
-  }
+  override def extendedAnalysisRules: Seq[Rule[LogicalPlan]] = Seq(EliminateSubqueryAliases)
 
-  val table = TestRelation(StructType(Seq(
-    StructField("x", FloatType),
-    StructField("y", FloatType))).toAttributes)
+  val table = TestRelation(Seq('x.float, 'y.float))
 
-  val requiredTable = TestRelation(StructType(Seq(
-    StructField("x", FloatType, nullable = false),
-    StructField("y", FloatType, nullable = false))).toAttributes)
+  val requiredTable = TestRelation(Seq('x.float.notNull, 'y.float.notNull))
 
-  val widerTable = TestRelation(StructType(Seq(
-    StructField("x", DoubleType),
-    StructField("y", DoubleType))).toAttributes)
+  val widerTable = TestRelation(Seq('x.double, 'y.double))
 
   def byName(table: NamedRelation, query: LogicalPlan): LogicalPlan
 
@@ -459,6 +445,16 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
       "Data columns: 'x', 'y', 'z'"))
   }
 
+  test("byName: fail extra data fields in struct") {
+    val table = TestRelation(Seq('a.int, 'b.struct('x.int, 'y.int)))
+    val query = TestRelation(Seq('b.struct('y.int, 'x.int, 'z.int), 'a.int))
+
+    val writePlan = byName(table, query)
+    assertAnalysisError(writePlan, Seq(
+      "Cannot write incompatible data to table", "'table-name'",
+      "Cannot write extra fields to struct 'b': 'z'"))
+  }
+
   test("byPosition: basic behavior") {
     val query = TestRelation(StructType(Seq(
       StructField("a", FloatType),
@@ -616,8 +612,8 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
       assertNotResolved(parsedPlan)
       assertAnalysisError(parsedPlan, Seq(
         "Cannot write incompatible data to table", "'table-name'",
-        "Struct 'col' 0-th field name does not match", "expected 'a', found 'x'",
-        "Struct 'col' 1-th field name does not match", "expected 'b', found 'y'"))
+        "Cannot find data for output column 'col.a'",
+        "Cannot find data for output column 'col.b'"))
     }
 
     withClue("byPosition") {
@@ -699,5 +695,41 @@ abstract class DataSourceV2AnalysisBaseSuite extends AnalysisTest {
       LessThanOrEqual(UnresolvedAttribute(Seq("a")), Literal(15.0d)))
     assertNotResolved(parsedPlan2)
     assertAnalysisError(parsedPlan2, Seq("cannot resolve", "a", "given input columns", "x, y"))
+  }
+
+  test("SPARK-36498: reorder inner fields with byName mode") {
+    val table = TestRelation(Seq('a.int, 'b.struct('x.int, 'y.int)))
+    val query = TestRelation(Seq('b.struct('y.int, 'x.byte), 'a.int))
+
+    val writePlan = byName(table, query).analyze
+    assert(writePlan.children.head.schema == table.schema)
+  }
+
+  test("SPARK-36498: reorder inner fields in array of struct with byName mode") {
+    val table = TestRelation(Seq(
+      'a.int,
+      'arr.array(new StructType().add("x", "int").add("y", "int"))))
+    val query = TestRelation(Seq(
+      'arr.array(new StructType().add("y", "int").add("x", "byte")),
+      'a.int))
+
+    val writePlan = byName(table, query).analyze
+    assert(writePlan.children.head.schema == table.schema)
+  }
+
+  test("SPARK-36498: reorder inner fields in map of struct with byName mode") {
+    val table = TestRelation(Seq(
+      'a.int,
+      'm.map(
+        new StructType().add("x", "int").add("y", "int"),
+        new StructType().add("x", "int").add("y", "int"))))
+    val query = TestRelation(Seq(
+      'm.map(
+        new StructType().add("y", "int").add("x", "byte"),
+        new StructType().add("y", "int").add("x", "byte")),
+      'a.int))
+
+    val writePlan = byName(table, query).analyze
+    assert(writePlan.children.head.schema == table.schema)
   }
 }
