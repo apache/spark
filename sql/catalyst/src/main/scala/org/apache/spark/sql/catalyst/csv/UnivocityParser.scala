@@ -93,6 +93,12 @@ class UnivocityParser(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+  private lazy val timestampNTZFormatter = TimestampFormatter(
+    options.timestampFormat,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
   private lazy val dateFormatter = DateFormatter(
     options.dateFormat,
     options.locale,
@@ -194,6 +200,11 @@ class UnivocityParser(
             val str = DateTimeUtils.cleanLegacyTimestampStr(UTF8String.fromString(datum))
             DateTimeUtils.stringToTimestamp(str, options.zoneId).getOrElse(throw e)
         }
+      }
+
+    case _: TimestampNTZType => (d: String) =>
+      nullSafeDatum(d, name, nullable, options) { datum =>
+        timestampNTZFormatter.parseWithoutTimeZone(datum)
       }
 
     case _: DateType => (d: String) =>

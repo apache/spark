@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
-import scala.concurrent.{Future, Promise}
+import scala.concurrent.Future
 
 import org.apache.spark.{FutureAction, MapOutputStatistics}
 import org.apache.spark.broadcast.Broadcast
@@ -29,11 +28,9 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.exchange._
 import org.apache.spark.sql.vectorized.ColumnarBatch
-import org.apache.spark.util.ThreadUtils
 
 /**
  * A query stage is an independent subgraph of the query plan. Query stage materializes its output
@@ -221,22 +218,8 @@ case class BroadcastQueryStageExec(
       throw new IllegalStateException(s"wrong plan for broadcast stage:\n ${plan.treeString}")
   }
 
-  @transient private lazy val materializeWithTimeout = {
-    val broadcastFuture = broadcast.submitBroadcastJob
-    val timeout = conf.broadcastTimeout
-    val promise = Promise[Any]()
-    val fail = BroadcastQueryStageExec.scheduledExecutor.schedule(new Runnable() {
-      override def run(): Unit = {
-        promise.tryFailure(QueryExecutionErrors.executeBroadcastTimeoutError(timeout, None))
-      }
-    }, timeout, TimeUnit.SECONDS)
-    broadcastFuture.onComplete(_ => fail.cancel(false))(AdaptiveSparkPlanExec.executionContext)
-    Future.firstCompletedOf(
-      Seq(broadcastFuture, promise.future))(AdaptiveSparkPlanExec.executionContext)
-  }
-
   override def doMaterialize(): Future[Any] = {
-    materializeWithTimeout
+    broadcast.submitBroadcastJob
   }
 
   override def newReuseInstance(newStageId: Int, newOutput: Seq[Attribute]): QueryStageExec = {
@@ -256,9 +239,4 @@ case class BroadcastQueryStageExec(
   }
 
   override def getRuntimeStatistics: Statistics = broadcast.runtimeStatistics
-}
-
-object BroadcastQueryStageExec {
-  private val scheduledExecutor =
-    ThreadUtils.newDaemonSingleThreadScheduledExecutor("BroadcastStageTimeout")
 }

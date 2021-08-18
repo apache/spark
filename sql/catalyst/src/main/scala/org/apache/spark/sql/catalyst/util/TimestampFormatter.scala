@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
 import org.apache.spark.sql.types.Decimal
+import org.apache.spark.unsafe.types.UTF8String
 
 sealed trait TimestampFormatter extends Serializable {
   /**
@@ -157,6 +158,31 @@ class Iso8601TimestampFormatter(
         formatter
       } catch checkInvalidPattern(pattern)
     }
+  }
+}
+
+/**
+ * The formatter for timestamps which doesn't require users to specify a pattern. While formatting,
+ * it uses the default pattern [[TimestampFormatter.defaultPattern()]]. In parsing, it follows
+ * the CAST logic in conversion of strings to Catalyst's TimestampType.
+ *
+ * @param zoneId The time zone ID in which timestamps should be formatted or parsed.
+ * @param locale The locale overrides the system locale and is used in formatting.
+ * @param legacyFormat Defines the formatter used for legacy timestamps.
+ * @param isParsing Whether the formatter is used for parsing (`true`) or for formatting (`false`).
+ */
+class DefaultTimestampFormatter(
+    zoneId: ZoneId,
+    locale: Locale,
+    legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
+    isParsing: Boolean)
+  extends Iso8601TimestampFormatter(
+    TimestampFormatter.defaultPattern(), zoneId, locale, legacyFormat, isParsing) {
+
+  override def parse(s: String): Long = {
+    try {
+      DateTimeUtils.stringToTimestampAnsi(UTF8String.fromString(s), zoneId)
+    } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 }
 
@@ -341,12 +367,12 @@ object TimestampFormatter {
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
       isParsing: Boolean,
       forTimestampNTZ: Boolean = false): TimestampFormatter = {
-    val pattern = format.getOrElse(defaultPattern)
     val formatter = if (SQLConf.get.legacyTimeParserPolicy == LEGACY && !forTimestampNTZ) {
-      getLegacyFormatter(pattern, zoneId, locale, legacyFormat)
+      getLegacyFormatter(format.getOrElse(defaultPattern), zoneId, locale, legacyFormat)
     } else {
-      new Iso8601TimestampFormatter(
-        pattern, zoneId, locale, legacyFormat, isParsing)
+      format
+        .map(new Iso8601TimestampFormatter(_, zoneId, locale, legacyFormat, isParsing))
+        .getOrElse(new DefaultTimestampFormatter(zoneId, locale, legacyFormat, isParsing))
     }
     formatter.validatePatternString(checkLegacy = !forTimestampNTZ)
     formatter

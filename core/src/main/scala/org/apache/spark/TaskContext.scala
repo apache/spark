@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io.Serializable
 import java.util.Properties
 
-import org.apache.spark.annotation.{DeveloperApi, Evolving}
+import org.apache.spark.annotation.{DeveloperApi, Evolving, Since}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
@@ -67,7 +67,8 @@ object TaskContext {
    * An empty task context that does not represent an actual task.  This is only used in tests.
    */
   private[spark] def empty(): TaskContextImpl = {
-    new TaskContextImpl(0, 0, 0, 0, 0, null, new Properties, null)
+    new TaskContextImpl(0, 0, 0, 0, 0,
+      null, new Properties, null, TaskMetrics.empty, 1)
   }
 }
 
@@ -176,6 +177,12 @@ abstract class TaskContext extends Serializable {
    * `org.apache.spark.SparkContext.setLocalProperty`.
    */
   def getLocalProperty(key: String): String
+
+  /**
+   * CPUs allocated to the task.
+   */
+  @Since("3.3.0")
+  def cpus(): Int
 
   /**
    * Resources allocated to the task. The key is the resource name and the value is information

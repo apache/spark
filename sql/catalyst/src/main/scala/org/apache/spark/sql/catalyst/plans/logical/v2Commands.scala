@@ -17,12 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, NamedRelation, PartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.Write
@@ -676,21 +676,6 @@ case class CommentOnNamespace(child: LogicalPlan, comment: String) extends Unary
 }
 
 /**
- * The logical plan that defines or changes the comment of an TABLE for v2 catalogs.
- *
- * {{{
- *   COMMENT ON TABLE tableIdentifier IS ('text' | NULL)
- * }}}
- *
- * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
- *
- */
-case class CommentOnTable(child: LogicalPlan, comment: String) extends UnaryCommand {
-  override protected def withNewChildInternal(newChild: LogicalPlan): CommentOnTable =
-    copy(child = newChild)
-}
-
-/**
  * The logical plan of the REFRESH FUNCTION command.
  */
 case class RefreshFunction(child: LogicalPlan) extends UnaryCommand {
@@ -1042,178 +1027,4 @@ case class UncacheTable(
   override def childrenToAnalyze: Seq[LogicalPlan] = table :: Nil
 
   override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
-}
-
-/**
- * The logical plan of the ALTER TABLE ... SET LOCATION command.
- */
-case class SetTableLocation(
-    table: LogicalPlan,
-    partitionSpec: Option[TablePartitionSpec],
-    location: String) extends UnaryCommand {
-  override def child: LogicalPlan = table
-  override protected def withNewChildInternal(newChild: LogicalPlan): SetTableLocation =
-    copy(table = newChild)
-}
-
-/**
- * The logical plan of the ALTER TABLE ... SET TBLPROPERTIES command.
- */
-case class SetTableProperties(
-    table: LogicalPlan,
-    properties: Map[String, String]) extends UnaryCommand {
-  override def child: LogicalPlan = table
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(table = newChild)
-}
-
-/**
- * The logical plan of the ALTER TABLE ... UNSET TBLPROPERTIES command.
- */
-case class UnsetTableProperties(
-    table: LogicalPlan,
-    propertyKeys: Seq[String],
-    ifExists: Boolean) extends UnaryCommand {
-  override def child: LogicalPlan = table
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(table = newChild)
-}
-
-trait AlterTableColumnCommand extends UnaryCommand {
-  def table: LogicalPlan
-  def changes: Seq[TableChange]
-  override def child: LogicalPlan = table
-}
-
-/**
- * The logical plan of the ALTER TABLE ... ADD COLUMNS command.
- */
-case class AlterTableAddColumns(
-    table: LogicalPlan,
-    columnsToAdd: Seq[QualifiedColType]) extends AlterTableColumnCommand {
-  columnsToAdd.foreach { c =>
-    TypeUtils.failWithIntervalType(c.dataType)
-  }
-
-  override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)
-
-  override def changes: Seq[TableChange] = {
-    columnsToAdd.map { col =>
-      require(col.path.forall(_.resolved),
-        "FieldName should be resolved before it's converted to TableChange.")
-      require(col.position.forall(_.resolved),
-        "FieldPosition should be resolved before it's converted to TableChange.")
-      TableChange.addColumn(
-        col.name.toArray,
-        col.dataType,
-        col.nullable,
-        col.comment.orNull,
-        col.position.map(_.position).orNull)
-    }
-  }
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(table = newChild)
-}
-
-/**
- * The logical plan of the ALTER TABLE ... REPLACE COLUMNS command.
- */
-case class AlterTableReplaceColumns(
-    table: LogicalPlan,
-    columnsToAdd: Seq[QualifiedColType]) extends AlterTableColumnCommand {
-  columnsToAdd.foreach { c =>
-    TypeUtils.failWithIntervalType(c.dataType)
-  }
-
-  override lazy val resolved: Boolean = table.resolved && columnsToAdd.forall(_.resolved)
-
-  override def changes: Seq[TableChange] = {
-    // REPLACE COLUMNS deletes all the existing columns and adds new columns specified.
-    require(table.resolved)
-    val deleteChanges = table.schema.fieldNames.map { name =>
-      TableChange.deleteColumn(Array(name))
-    }
-    val addChanges = columnsToAdd.map { col =>
-      assert(col.path.isEmpty)
-      assert(col.position.isEmpty)
-      TableChange.addColumn(
-        col.name.toArray,
-        col.dataType,
-        col.nullable,
-        col.comment.orNull,
-        null)
-    }
-    deleteChanges ++ addChanges
-  }
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(table = newChild)
-}
-
-/**
- * The logical plan of the ALTER TABLE ... DROP COLUMNS command.
- */
-case class AlterTableDropColumns(
-    table: LogicalPlan,
-    columnsToDrop: Seq[FieldName]) extends AlterTableColumnCommand {
-  override def changes: Seq[TableChange] = {
-    columnsToDrop.map { col =>
-      require(col.resolved, "FieldName should be resolved before it's converted to TableChange.")
-      TableChange.deleteColumn(col.name.toArray)
-    }
-  }
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(table = newChild)
-}
-
-/**
- * The logical plan of the ALTER TABLE ... RENAME COLUMN command.
- */
-case class AlterTableRenameColumn(
-    table: LogicalPlan,
-    column: FieldName,
-    newName: String) extends AlterTableColumnCommand {
-  override def changes: Seq[TableChange] = {
-    require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
-    Seq(TableChange.renameColumn(column.name.toArray, newName))
-  }
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(table = newChild)
-}
-
-/**
- * The logical plan of the ALTER TABLE ... ALTER COLUMN command.
- */
-case class AlterTableAlterColumn(
-    table: LogicalPlan,
-    column: FieldName,
-    dataType: Option[DataType],
-    nullable: Option[Boolean],
-    comment: Option[String],
-    position: Option[FieldPosition]) extends AlterTableColumnCommand {
-  override def changes: Seq[TableChange] = {
-    require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
-    val colName = column.name.toArray
-    val typeChange = dataType.map { newDataType =>
-      TableChange.updateColumnType(colName, newDataType)
-    }
-    val nullabilityChange = nullable.map { nullable =>
-      TableChange.updateColumnNullability(colName, nullable)
-    }
-    val commentChange = comment.map { newComment =>
-      TableChange.updateColumnComment(colName, newComment)
-    }
-    val positionChange = position.map { newPosition =>
-      require(newPosition.resolved,
-        "FieldPosition should be resolved before it's converted to TableChange.")
-      TableChange.updateColumnPosition(colName, newPosition.position)
-    }
-    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange
-  }
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(table = newChild)
 }

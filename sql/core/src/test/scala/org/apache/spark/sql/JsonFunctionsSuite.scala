@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.text.SimpleDateFormat
-import java.time.{Duration, Period}
+import java.time.{Duration, LocalDateTime, Period}
 import java.util.Locale
 
 import collection.JavaConverters._
@@ -917,5 +917,17 @@ class JsonFunctionsSuite extends QueryTest with SharedSparkSession {
         }
       }
     }
+  }
+
+  test("SPARK-36491: Make from_json/to_json to handle timestamp_ntz type properly") {
+    val localDT = LocalDateTime.parse("2021-08-12T15:16:23")
+    val df = Seq(localDT).toDF
+    val toJsonDF = df.select(to_json(map(lit("key"), $"value")) as "json")
+    checkAnswer(toJsonDF, Row("""{"key":"2021-08-12T15:16:23.000"}"""))
+    val fromJsonDF = toJsonDF
+      .select(
+        from_json($"json", StructType(StructField("key", TimestampNTZType) :: Nil)) as "value")
+      .selectExpr("value['key']")
+    checkAnswer(fromJsonDF, Row(localDT))
   }
 }

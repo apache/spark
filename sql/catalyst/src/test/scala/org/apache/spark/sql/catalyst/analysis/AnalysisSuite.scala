@@ -952,7 +952,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-32237: Hint in CTE") {
-    val plan = With(
+    val plan = UnresolvedWith(
       Project(
         Seq(UnresolvedAttribute("cte.a")),
         UnresolvedRelation(TableIdentifier("cte"))

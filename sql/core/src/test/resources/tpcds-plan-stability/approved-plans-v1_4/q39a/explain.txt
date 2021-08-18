@@ -218,20 +218,20 @@ Arguments: hashpartitioning(w_warehouse_name#36, w_warehouse_sk#35, i_item_sk#34
 Input [9]: [w_warehouse_name#36, w_warehouse_sk#35, i_item_sk#34, d_moy#38, n#44, avg#45, m2#46, sum#47, count#48]
 Keys [4]: [w_warehouse_name#36, w_warehouse_sk#35, i_item_sk#34, d_moy#38]
 Functions [2]: [stddev_samp(cast(inv_quantity_on_hand#31 as double)), avg(inv_quantity_on_hand#31)]
-Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#31 as double))#50, avg(inv_quantity_on_hand#31)#51]
-Results [5]: [w_warehouse_sk#35, i_item_sk#34, d_moy#38, stddev_samp(cast(inv_quantity_on_hand#31 as double))#50 AS stdev#52, avg(inv_quantity_on_hand#31)#51 AS mean#53]
+Aggregate Attributes [2]: [stddev_samp(cast(inv_quantity_on_hand#31 as double))#24, avg(inv_quantity_on_hand#31)#25]
+Results [5]: [w_warehouse_sk#35, i_item_sk#34, d_moy#38, stddev_samp(cast(inv_quantity_on_hand#31 as double))#24 AS stdev#26, avg(inv_quantity_on_hand#31)#25 AS mean#27]
 
 (39) Filter [codegen id : 9]
-Input [5]: [w_warehouse_sk#35, i_item_sk#34, d_moy#38, stdev#52, mean#53]
-Condition : ((isnotnull(mean#53) AND isnotnull(stdev#52)) AND (NOT (mean#53 = 0.0) AND ((stdev#52 / mean#53) > 1.0)))
+Input [5]: [w_warehouse_sk#35, i_item_sk#34, d_moy#38, stdev#26, mean#27]
+Condition : ((isnotnull(mean#27) AND isnotnull(stdev#26)) AND (NOT (mean#27 = 0.0) AND ((stdev#26 / mean#27) > 1.0)))
 
 (40) Project [codegen id : 9]
-Output [5]: [w_warehouse_sk#35, i_item_sk#34, d_moy#38, mean#53, CASE WHEN (mean#53 = 0.0) THEN null ELSE (stdev#52 / mean#53) END AS cov#54]
-Input [5]: [w_warehouse_sk#35, i_item_sk#34, d_moy#38, stdev#52, mean#53]
+Output [5]: [w_warehouse_sk#35, i_item_sk#34, d_moy#38, mean#27 AS mean#50, CASE WHEN (mean#27 = 0.0) THEN null ELSE (stdev#26 / mean#27) END AS cov#51]
+Input [5]: [w_warehouse_sk#35, i_item_sk#34, d_moy#38, stdev#26, mean#27]
 
 (41) BroadcastExchange
-Input [5]: [w_warehouse_sk#35, i_item_sk#34, d_moy#38, mean#53, cov#54]
-Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [id=#55]
+Input [5]: [w_warehouse_sk#35, i_item_sk#34, d_moy#38, mean#50, cov#51]
+Arguments: HashedRelationBroadcastMode(List((shiftleft(cast(input[1, int, true] as bigint), 32) | (cast(input[0, int, true] as bigint) & 4294967295))),false), [id=#52]
 
 (42) BroadcastHashJoin [codegen id : 10]
 Left keys [2]: [i_item_sk#6, w_warehouse_sk#8]
@@ -239,12 +239,12 @@ Right keys [2]: [i_item_sk#34, w_warehouse_sk#35]
 Join condition: None
 
 (43) Exchange
-Input [10]: [w_warehouse_sk#8, i_item_sk#6, d_moy#12, mean#27, cov#28, w_warehouse_sk#35, i_item_sk#34, d_moy#38, mean#53, cov#54]
-Arguments: rangepartitioning(w_warehouse_sk#8 ASC NULLS FIRST, i_item_sk#6 ASC NULLS FIRST, d_moy#12 ASC NULLS FIRST, mean#27 ASC NULLS FIRST, cov#28 ASC NULLS FIRST, d_moy#38 ASC NULLS FIRST, mean#53 ASC NULLS FIRST, cov#54 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#56]
+Input [10]: [w_warehouse_sk#8, i_item_sk#6, d_moy#12, mean#27, cov#28, w_warehouse_sk#35, i_item_sk#34, d_moy#38, mean#50, cov#51]
+Arguments: rangepartitioning(w_warehouse_sk#8 ASC NULLS FIRST, i_item_sk#6 ASC NULLS FIRST, d_moy#12 ASC NULLS FIRST, mean#27 ASC NULLS FIRST, cov#28 ASC NULLS FIRST, d_moy#38 ASC NULLS FIRST, mean#50 ASC NULLS FIRST, cov#51 ASC NULLS FIRST, 5), ENSURE_REQUIREMENTS, [id=#53]
 
 (44) Sort [codegen id : 11]
-Input [10]: [w_warehouse_sk#8, i_item_sk#6, d_moy#12, mean#27, cov#28, w_warehouse_sk#35, i_item_sk#34, d_moy#38, mean#53, cov#54]
-Arguments: [w_warehouse_sk#8 ASC NULLS FIRST, i_item_sk#6 ASC NULLS FIRST, d_moy#12 ASC NULLS FIRST, mean#27 ASC NULLS FIRST, cov#28 ASC NULLS FIRST, d_moy#38 ASC NULLS FIRST, mean#53 ASC NULLS FIRST, cov#54 ASC NULLS FIRST], true, 0
+Input [10]: [w_warehouse_sk#8, i_item_sk#6, d_moy#12, mean#27, cov#28, w_warehouse_sk#35, i_item_sk#34, d_moy#38, mean#50, cov#51]
+Arguments: [w_warehouse_sk#8 ASC NULLS FIRST, i_item_sk#6 ASC NULLS FIRST, d_moy#12 ASC NULLS FIRST, mean#27 ASC NULLS FIRST, cov#28 ASC NULLS FIRST, d_moy#38 ASC NULLS FIRST, mean#50 ASC NULLS FIRST, cov#51 ASC NULLS FIRST], true, 0
 
 ===== Subqueries =====
 
@@ -257,26 +257,26 @@ BroadcastExchange (49)
 
 
 (45) Scan parquet default.date_dim
-Output [3]: [d_date_sk#11, d_year#57, d_moy#12]
+Output [3]: [d_date_sk#11, d_year#54, d_moy#12]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,1), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (46) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#11, d_year#57, d_moy#12]
+Input [3]: [d_date_sk#11, d_year#54, d_moy#12]
 
 (47) Filter [codegen id : 1]
-Input [3]: [d_date_sk#11, d_year#57, d_moy#12]
-Condition : ((((isnotnull(d_year#57) AND isnotnull(d_moy#12)) AND (d_year#57 = 2001)) AND (d_moy#12 = 1)) AND isnotnull(d_date_sk#11))
+Input [3]: [d_date_sk#11, d_year#54, d_moy#12]
+Condition : ((((isnotnull(d_year#54) AND isnotnull(d_moy#12)) AND (d_year#54 = 2001)) AND (d_moy#12 = 1)) AND isnotnull(d_date_sk#11))
 
 (48) Project [codegen id : 1]
 Output [2]: [d_date_sk#11, d_moy#12]
-Input [3]: [d_date_sk#11, d_year#57, d_moy#12]
+Input [3]: [d_date_sk#11, d_year#54, d_moy#12]
 
 (49) BroadcastExchange
 Input [2]: [d_date_sk#11, d_moy#12]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#58]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#55]
 
 Subquery:2 Hosting operator id = 24 Hosting Expression = inv_date_sk#32 IN dynamicpruning#33
 BroadcastExchange (54)
@@ -287,25 +287,25 @@ BroadcastExchange (54)
 
 
 (50) Scan parquet default.date_dim
-Output [3]: [d_date_sk#37, d_year#59, d_moy#38]
+Output [3]: [d_date_sk#37, d_year#56, d_moy#38]
 Batched: true
 Location [not included in comparison]/{warehouse_dir}/date_dim]
 PushedFilters: [IsNotNull(d_year), IsNotNull(d_moy), EqualTo(d_year,2001), EqualTo(d_moy,2), IsNotNull(d_date_sk)]
 ReadSchema: struct<d_date_sk:int,d_year:int,d_moy:int>
 
 (51) ColumnarToRow [codegen id : 1]
-Input [3]: [d_date_sk#37, d_year#59, d_moy#38]
+Input [3]: [d_date_sk#37, d_year#56, d_moy#38]
 
 (52) Filter [codegen id : 1]
-Input [3]: [d_date_sk#37, d_year#59, d_moy#38]
-Condition : ((((isnotnull(d_year#59) AND isnotnull(d_moy#38)) AND (d_year#59 = 2001)) AND (d_moy#38 = 2)) AND isnotnull(d_date_sk#37))
+Input [3]: [d_date_sk#37, d_year#56, d_moy#38]
+Condition : ((((isnotnull(d_year#56) AND isnotnull(d_moy#38)) AND (d_year#56 = 2001)) AND (d_moy#38 = 2)) AND isnotnull(d_date_sk#37))
 
 (53) Project [codegen id : 1]
 Output [2]: [d_date_sk#37, d_moy#38]
-Input [3]: [d_date_sk#37, d_year#59, d_moy#38]
+Input [3]: [d_date_sk#37, d_year#56, d_moy#38]
 
 (54) BroadcastExchange
 Input [2]: [d_date_sk#37, d_moy#38]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#60]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, true] as bigint)),false), [id=#57]
 
 

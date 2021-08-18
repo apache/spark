@@ -93,6 +93,7 @@ trait FileWrite extends Write {
       s"when inserting into $pathName", caseSensitiveAnalysis)
     DataSource.validateSchema(schema)
 
+    // TODO: [SPARK-36340] Unify check schema filed of DataSource V2 Insert.
     schema.foreach { field =>
       if (!supportsDataType(field.dataType)) {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(formatName, field)

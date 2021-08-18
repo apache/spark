@@ -38,7 +38,9 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
     Seq(ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_NONE)
 
-  override def mayAddExtraShuffles: Boolean = true
+  override protected def isSupported(shuffle: ShuffleExchangeLike): Boolean = {
+    shuffle.outputPartitioning != SinglePartition && super.isSupported(shuffle)
+  }
 
   // The build side is a broadcast query stage which should have been optimized using local read
   // already. So we only need to deal with probe side here.
@@ -136,14 +138,10 @@ object OptimizeShuffleWithLocalRead extends AQEShuffleReadRule {
 
   def canUseLocalShuffleRead(plan: SparkPlan): Boolean = plan match {
     case s: ShuffleQueryStageExec =>
-      s.mapStats.isDefined && supportLocalRead(s.shuffle)
+      s.mapStats.isDefined && isSupported(s.shuffle)
     case AQEShuffleReadExec(s: ShuffleQueryStageExec, _) =>
-      s.mapStats.isDefined && supportLocalRead(s.shuffle) &&
+      s.mapStats.isDefined && isSupported(s.shuffle) &&
         s.shuffle.shuffleOrigin == ENSURE_REQUIREMENTS
     case _ => false
-  }
-
-  private def supportLocalRead(s: ShuffleExchangeLike): Boolean = {
-    s.outputPartitioning != SinglePartition && supportedShuffleOrigins.contains(s.shuffleOrigin)
   }
 }

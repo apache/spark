@@ -23,7 +23,7 @@ import re
 import inspect
 import sys
 from collections.abc import Mapping
-from functools import partial, wraps, reduce
+from functools import partial, reduce
 from typing import (
     Any,
     Callable,
@@ -3164,7 +3164,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             # Falls back to schema inference if it fails to get signature.
             should_infer_schema = True
 
-        apply_each = wraps(func)(lambda s: s.apply(func, args=args, **kwds))
+        apply_each = lambda s: s.apply(func, args=args, **kwds)
 
         if should_infer_schema:
             return self.pandas_on_spark._transform_batch(apply_each, None)
@@ -3785,12 +3785,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf = self._internal.spark_frame
         scol = self.spark.column
         index_scols = self._internal.index_spark_columns
-        # desc_nulls_(last|first) is used via Py4J directly because
-        # it's not supported in Spark 2.3.
+
         if skipna:
-            sdf = sdf.orderBy(Column(scol._jc.desc_nulls_last()), NATURAL_ORDER_COLUMN_NAME)
+            sdf = sdf.orderBy(scol.desc_nulls_last(), NATURAL_ORDER_COLUMN_NAME)
         else:
-            sdf = sdf.orderBy(Column(scol._jc.desc_nulls_first()), NATURAL_ORDER_COLUMN_NAME)
+            sdf = sdf.orderBy(scol.desc_nulls_first(), NATURAL_ORDER_COLUMN_NAME)
+
         results = sdf.select([scol] + index_scols).take(1)
         if len(results) == 0:
             raise ValueError("attempt to get idxmin of an empty sequence")
@@ -3893,12 +3893,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf = self._internal.spark_frame
         scol = self.spark.column
         index_scols = self._internal.index_spark_columns
-        # asc_nulls_(last|first)is used via Py4J directly because
-        # it's not supported in Spark 2.3.
+
         if skipna:
-            sdf = sdf.orderBy(Column(scol._jc.asc_nulls_last()), NATURAL_ORDER_COLUMN_NAME)
+            sdf = sdf.orderBy(scol.asc_nulls_last(), NATURAL_ORDER_COLUMN_NAME)
         else:
-            sdf = sdf.orderBy(Column(scol._jc.asc_nulls_first()), NATURAL_ORDER_COLUMN_NAME)
+            sdf = sdf.orderBy(scol.asc_nulls_first(), NATURAL_ORDER_COLUMN_NAME)
+
         results = sdf.select([scol] + index_scols).take(1)
         if len(results) == 0:
             raise ValueError("attempt to get idxmin of an empty sequence")

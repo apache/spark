@@ -18,11 +18,14 @@
 package org.apache.spark.errors
 
 import java.io.IOException
+import java.util.concurrent.TimeoutException
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.SparkException
-import org.apache.spark.storage.{BlockId, RDDBlockId}
+import org.apache.spark.{SparkException, TaskNotSerializableException}
+import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
+import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
+import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
 
 /**
  * Object for grouping error messages from (most) exceptions thrown during query execution.
@@ -140,5 +143,168 @@ object SparkCoreErrors {
 
   def mustSpecifyCheckpointDirError(): Throwable = {
     new SparkException("Checkpoint dir must be specified.")
+  }
+
+  def askStandaloneSchedulerToShutDownExecutorsError(e: Exception): Throwable = {
+    new SparkException("Error asking standalone scheduler to shut down executors", e)
+  }
+
+  def stopStandaloneSchedulerDriverEndpointError(e: Exception): Throwable = {
+    new SparkException("Error stopping standalone scheduler's driver endpoint", e)
+  }
+
+  def noExecutorIdleError(id: String): Throwable = {
+    new NoSuchElementException(id)
+  }
+
+  def barrierStageWithRDDChainPatternError(): Throwable = {
+    new BarrierJobUnsupportedRDDChainException
+  }
+
+  def barrierStageWithDynamicAllocationError(): Throwable = {
+    new BarrierJobRunWithDynamicAllocationException
+  }
+
+  def numPartitionsGreaterThanMaxNumConcurrentTasksError(
+      numPartitions: Int,
+      maxNumConcurrentTasks: Int): Throwable = {
+    new BarrierJobSlotsNumberCheckFailed(numPartitions, maxNumConcurrentTasks)
+  }
+
+  def cannotRunSubmitMapStageOnZeroPartitionRDDError(): Throwable = {
+    new SparkException("Can't run submitMapStage on RDD with 0 partitions")
+  }
+
+  def accessNonExistentAccumulatorError(id: Long): Throwable = {
+    new SparkException(s"attempted to access non-existent accumulator $id")
+  }
+
+  def sendResubmittedTaskStatusForShuffleMapStagesOnlyError(): Throwable = {
+    new SparkException("TaskSetManagers should only send Resubmitted task " +
+      "statuses for tasks in ShuffleMapStages.")
+  }
+
+  def nonEmptyEventQueueAfterTimeoutError(timeoutMillis: Long): Throwable = {
+    new TimeoutException(s"The event queue is not empty after $timeoutMillis ms.")
+  }
+
+  def durationCalledOnUnfinishedTaskError(): Throwable = {
+    new UnsupportedOperationException("duration() called on unfinished task")
+  }
+
+  def unrecognizedSchedulerModePropertyError(
+      schedulerModeProperty: String,
+      schedulingModeConf: String): Throwable = {
+    new SparkException(s"Unrecognized $schedulerModeProperty: $schedulingModeConf")
+  }
+
+  def failResourceOffersForBarrierStageError(errorMsg: String): Throwable = {
+    new SparkException(errorMsg)
+  }
+
+  def markExecutorAsFailedError(errorMsg: String): Throwable = {
+    new SparkException(errorMsg)
+  }
+
+  def clusterSchedulerError(message: String): Throwable = {
+    new SparkException(s"Exiting due to error from cluster scheduler: $message")
+  }
+
+  def failToSerializeTaskError(e: Throwable): Throwable = {
+    new TaskNotSerializableException(e)
+  }
+
+  def unrecognizedBlockIdError(name: String): Throwable = {
+    new UnrecognizedBlockId(name)
+  }
+
+  def taskHasNotLockedBlockError(currentTaskAttemptId: Long, blockId: BlockId): Throwable = {
+    new SparkException(s"Task $currentTaskAttemptId has not locked block $blockId for writing")
+  }
+
+  def blockDoesNotExistError(blockId: BlockId): Throwable = {
+    new SparkException(s"Block $blockId does not exist")
+  }
+
+  def cannotSaveBlockOnDecommissionedExecutorError(blockId: BlockId): Throwable = {
+    new BlockSavedOnDecommissionedBlockManagerException(blockId)
+  }
+
+  def waitingForReplicationToFinishError(e: Throwable): Throwable = {
+    new SparkException("Error occurred while waiting for replication to finish", e)
+  }
+
+  def unableToRegisterWithExternalShuffleServerError(e: Throwable): Throwable = {
+    new SparkException(s"Unable to register with external shuffle server due to : ${e.getMessage}",
+      e)
+  }
+
+  def waitingForAsyncReregistrationError(e: Throwable): Throwable = {
+    new SparkException("Error occurred while waiting for async. reregistration", e)
+  }
+
+  def unexpectedShuffleBlockWithUnsupportedResolverError(
+      shuffleManager: ShuffleManager,
+      blockId: BlockId): Throwable = {
+    new SparkException(s"Unexpected shuffle block ${blockId} with unsupported shuffle " +
+      s"resolver ${shuffleManager.shuffleBlockResolver}")
+  }
+
+  def failToStoreBlockOnBlockManagerError(
+      blockManagerId: BlockManagerId,
+      blockId: BlockId): Throwable = {
+    new SparkException(s"Failure while trying to store block $blockId on $blockManagerId.")
+  }
+
+  def readLockedBlockNotFoundError(blockId: BlockId): Throwable = {
+    new SparkException(s"Block $blockId was not found even though it's read-locked")
+  }
+
+  def failToGetBlockWithLockError(blockId: BlockId): Throwable = {
+    new SparkException(s"get() failed for block $blockId even though we held a lock")
+  }
+
+  def blockNotFoundError(blockId: BlockId): Throwable = {
+    new BlockNotFoundException(blockId.toString)
+  }
+
+  def interruptedError(): Throwable = {
+    new InterruptedException()
+  }
+
+  def blockStatusQueryReturnedNullError(blockId: BlockId): Throwable = {
+    new SparkException(s"BlockManager returned null for BlockStatus query: $blockId")
+  }
+
+  def unexpectedBlockManagerMasterEndpointResultError(): Throwable = {
+    new SparkException("BlockManagerMasterEndpoint returned false, expected true.")
+  }
+
+  def failToCreateDirectoryError(path: String, maxAttempts: Int): Throwable = {
+    new IOException(
+      s"Failed to create directory ${path} with permission 770 after $maxAttempts attempts!")
+  }
+
+  def unsupportedOperationError(): Throwable = {
+    new UnsupportedOperationException()
+  }
+
+  def noSuchElementError(): Throwable = {
+    new NoSuchElementException()
+  }
+
+  def fetchFailedError(
+      bmAddress: BlockManagerId,
+      shuffleId: Int,
+      mapId: Long,
+      mapIndex: Int,
+      reduceId: Int,
+      message: String,
+      cause: Throwable = null): Throwable = {
+    new FetchFailedException(bmAddress, shuffleId, mapId, mapIndex, reduceId, message, cause)
+  }
+
+  def failToGetNonShuffleBlockError(blockId: BlockId, e: Throwable): Throwable = {
+    new SparkException(s"Failed to get block $blockId, which is not a shuffle block", e)
   }
 }

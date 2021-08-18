@@ -170,4 +170,13 @@ class CollapseProjectSuite extends PlanTest {
     val expected = Sample(0.0, 0.6, false, 11L, relation.select('a as 'c)).analyze
     comparePlans(optimized, expected)
   }
+
+  test("SPARK-36086: CollapseProject should keep output schema name") {
+    val relation = LocalRelation('a.int, 'b.int)
+    val select = relation.select(('a + 'b).as('c)).analyze
+    val query = Project(Seq(select.output.head.withName("C")), select)
+    val optimized = Optimize.execute(query)
+    val expected = relation.select(('a + 'b).as('C)).analyze
+    comparePlans(optimized, expected)
+  }
 }
