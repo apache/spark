@@ -180,7 +180,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
       // If the target type is Decimal type with precision greater than 11 and scale is 6,
       // cast the input to decimal.
-      case (_: IntegerType, t: DecimalType) if (t.precision > 11 && t.scale == 6) =>
+      case (n: NumericType, t: DecimalType) if t.isWiderThan(n) =>
         Some(t)
 
       // If input is a numeric type but not decimal, and we expect a decimal type,
