@@ -58,7 +58,7 @@ private[spark] abstract class YarnSchedulerBackend(
 
   protected var totalExpectedExecutors = 0
 
-  private val yarnSchedulerEndpoint = new YarnSchedulerEndpoint(rpcEnv)
+  protected val yarnSchedulerEndpoint = new YarnSchedulerEndpoint(rpcEnv)
   protected var amEndpoint: Option[RpcEndpointRef] = None
 
   private val yarnSchedulerEndpointRef = rpcEnv.setupEndpoint(
@@ -317,6 +317,15 @@ private[spark] abstract class YarnSchedulerBackend(
       }
 
       removeExecutorMessage.foreach { message => driverEndpoint.send(message) }
+    }
+
+    private[YarnSchedulerBackend] def handleClientModeDriverStop(): Unit = {
+      amEndpoint match {
+        case Some(am) =>
+          am.send(Shutdown)
+        case None =>
+          logWarning("Attempted to send shutdown message before the AM has registered!")
+      }
     }
 
     override def receive: PartialFunction[Any, Unit] = {

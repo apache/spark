@@ -776,6 +776,7 @@ private[spark] class ApplicationMaster(
    */
   private class AMEndpoint(override val rpcEnv: RpcEnv, driver: RpcEndpointRef)
     extends RpcEndpoint with Logging {
+    private var shutdown = false
 
     override def onStart(): Unit = {
       driver.send(RegisterClusterManager(self))
@@ -829,14 +830,22 @@ private[spark] class ApplicationMaster(
           case None =>
             logWarning("Container allocator is not ready to find executor loss reasons yet.")
         }
+
+      case Shutdown => shutdown = true
+
     }
 
     override def onDisconnected(remoteAddress: RpcAddress): Unit = {
       // In cluster mode or unmanaged am case, do not rely on the disassociated event to exit
       // This avoids potentially reporting incorrect exit codes if the driver fails
       if (!(isClusterMode || sparkConf.get(YARN_UNMANAGED_AM))) {
-        logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")
-        finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+        if (shutdown) {
+          logInfo(s"Driver terminated or disconnected! Shutting down. $remoteAddress")
+          finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+        } else {
+          logError(s"Application Master lose connection with driver! Shutting down. $remoteAddress")
+          finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_DISCONNECTED)
+        }
       }
     }
   }
@@ -854,6 +863,7 @@ object ApplicationMaster extends Logging {
   private val EXIT_SECURITY = 14
   private val EXIT_EXCEPTION_USER_CLASS = 15
   private val EXIT_EARLY = 16
+  private val EXIT_DISCONNECTED = 17
 
   private var master: ApplicationMaster = _
 
