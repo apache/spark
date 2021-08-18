@@ -562,4 +562,14 @@ object DataType {
         false
     }
   }
+
+  private[sql] def containsStructType(dataType: DataType): Boolean = {
+    dataType match {
+      case StructType(_) => true
+      case ArrayType(elementType, _) => containsStructType(elementType)
+      case MapType(keyType, valueType, _) =>
+        containsStructType(keyType) || containsStructType(valueType)
+      case _ => false
+    }
+  }
 }

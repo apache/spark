@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.analysis.MultiAlias
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
+import org.apache.spark.sql.types.DataType
 
 /**
  * Helper methods for collecting and replacing aliases.
@@ -83,17 +84,25 @@ trait AliasHelper {
     }
   }
 
+  def trimNonStructTypeAlias(e: Expression): Expression = {
+    if (e.resolved && DataType.containsStructType(e.dataType)) {
+      e
+    } else {
+      trimAliases(e)
+    }
+  }
+
   protected def trimNonTopLevelAliases[T <: Expression](e: T): T = {
     val res = e match {
       case a: Alias =>
-        a.copy(child = trimAliases(a.child))(
+        a.copy(child = trimNonStructTypeAlias(a.child))(
           exprId = a.exprId,
           qualifier = a.qualifier,
           explicitMetadata = Some(a.metadata),
           nonInheritableMetadataKeys = a.nonInheritableMetadataKeys)
       case a: MultiAlias =>
-        a.copy(child = trimAliases(a.child))
-      case other => trimAliases(other)
+        a.copy(child = trimNonStructTypeAlias(a.child))
+      case other => trimNonStructTypeAlias(other)
     }
 
     res.asInstanceOf[T]
