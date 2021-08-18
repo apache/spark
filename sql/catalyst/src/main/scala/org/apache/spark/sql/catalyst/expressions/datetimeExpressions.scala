@@ -2557,7 +2557,8 @@ case class MakeTimestamp(
 
   override def children: Seq[Expression] = Seq(year, month, day, hour, min, sec) ++ timezone
   // Accept `sec` as DecimalType to avoid loosing precision of microseconds while converting
-  // them to the fractional part of `sec`.
+  // them to the fractional part of `sec`. For accepts IntegerType as `sec` and integer can be
+  // casted into decimal safely, we use DecimalType(16, 6) which is wider than DecimalType(10, 0).
   override def inputTypes: Seq[AbstractDataType] =
     Seq(IntegerType, IntegerType, IntegerType, IntegerType, IntegerType, DecimalType(16, 6)) ++
       timezone.map(_ => StringType)
