@@ -72,7 +72,7 @@ trait AliasHelper {
      aliasMap: AttributeMap[Alias]): NamedExpression = {
     // Use transformUp to prevent infinite recursion when the replacement expression
     // redefines the same ExprId,
-    trimNonTopLevelAliases(expr.transformUp {
+    trimNonTopLevelAliasesExceptStruct(expr.transformUp {
       case a: Attribute => aliasMap.get(a).map(_.withName(a.name)).getOrElse(a)
     }).asInstanceOf[NamedExpression]
   }
@@ -84,7 +84,7 @@ trait AliasHelper {
     }
   }
 
-  def trimNonStructTypeAlias(e: Expression): Expression = {
+  protected def trimAliasesExceptContainsStructTypeSchema(e: Expression): Expression = {
     if (e.resolved && DataType.containsStructType(e.dataType)) {
       e
     } else {
@@ -95,14 +95,30 @@ trait AliasHelper {
   protected def trimNonTopLevelAliases[T <: Expression](e: T): T = {
     val res = e match {
       case a: Alias =>
-        a.copy(child = trimNonStructTypeAlias(a.child))(
+        a.copy(child = trimAliases(a.child))(
           exprId = a.exprId,
           qualifier = a.qualifier,
           explicitMetadata = Some(a.metadata),
           nonInheritableMetadataKeys = a.nonInheritableMetadataKeys)
       case a: MultiAlias =>
-        a.copy(child = trimNonStructTypeAlias(a.child))
-      case other => trimNonStructTypeAlias(other)
+        a.copy(child = trimAliases(a.child))
+      case other => trimAliases(other)
+    }
+
+    res.asInstanceOf[T]
+  }
+
+  protected def trimNonTopLevelAliasesExceptStruct[T <: Expression](e: T): T = {
+    val res = e match {
+      case a: Alias =>
+        a.copy(child = trimAliasesExceptContainsStructTypeSchema(a.child))(
+          exprId = a.exprId,
+          qualifier = a.qualifier,
+          explicitMetadata = Some(a.metadata),
+          nonInheritableMetadataKeys = a.nonInheritableMetadataKeys)
+      case a: MultiAlias =>
+        a.copy(child = trimAliasesExceptContainsStructTypeSchema(a.child))
+      case other => trimAliasesExceptContainsStructTypeSchema(other)
     }
 
     res.asInstanceOf[T]
