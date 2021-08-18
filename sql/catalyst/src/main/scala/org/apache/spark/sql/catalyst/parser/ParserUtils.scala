@@ -158,7 +158,7 @@ object ParserUtils {
       }
     }
 
-    if (b.matches("""(r|R)('|").*""")) {
+    if (b.startsWith("r") || b.startsWith("R")) {
       b.substring(2, b.length - 1)
     } else {
       // Skip the first and last quotations enclosing the string literal.
