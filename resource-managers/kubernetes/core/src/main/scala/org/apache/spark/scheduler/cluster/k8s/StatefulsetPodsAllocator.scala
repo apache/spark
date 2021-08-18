@@ -76,7 +76,9 @@ class StatefulsetPodsAllocator(
   }
 
   def setTotalExpectedExecutors(resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Unit = {
-
+    if (appId == null) {
+      throw new SparkException("setTotalExpectedExecutors called before start of allocator.")
+    }
     resourceProfileToTotalExecs.foreach { case (rp, numExecs) =>
       rpIdToResourceProfile.getOrElseUpdate(rp.id, rp)
       setTargetExecutorsReplicaset(numExecs, appId, rp.id)
