@@ -82,7 +82,7 @@ trait AliasHelper {
       case Alias(child, _) => child
       case MultiAlias(child, _) => child
     }
-    if (DataType.equalsIgnoreNullability(trimAlias.dataType, e.dataType)) {
+    if (!e.resolved || DataType.equalsIgnoreNullability(trimAlias.dataType, e.dataType)) {
       trimAlias
     } else {
       e
