@@ -2499,7 +2499,7 @@ abstract class CSVSuite
           """2021,2021,2021""",
           """2021-01,2021-01 ,2021-01""",
           """ 2021-2-1,2021-3-02,2021-10-1""",
-          """2021-8-18 00:00:00,2021-8-18 21:44:30Z,2021-8-18T21:44:30.123""",
+          """2021-8-18 00:00:00,2021-8-18 21:44:30Z,2021-8-18T21:44:30.123"""
         ).toDF().repartition(1).write.text(path.getCanonicalPath)
         val readback = spark.read.schema("d date, ts_ltz timestamp_ltz, ts_ntz timestamp_ntz")
           .option("header", true)
