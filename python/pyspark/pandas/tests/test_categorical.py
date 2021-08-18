@@ -239,23 +239,23 @@ class CategoricalTest(PandasOnSparkTestCase, TestUtils):
         )
 
         pcser = pser.astype(CategoricalDtype(["c", "a", "b"]))
-        kcser = psser.astype(CategoricalDtype(["c", "a", "b"]))
+        pscser = psser.astype(CategoricalDtype(["c", "a", "b"]))
 
-        self.assert_eq(kcser.astype("category"), pcser.astype("category"))
+        self.assert_eq(pscser.astype("category"), pcser.astype("category"))
 
         # CategoricalDtype is not updated if the dtype is same from pandas 1.3.
         if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
             self.assert_eq(
-                kcser.astype(CategoricalDtype(["b", "c", "a"])),
+                pscser.astype(CategoricalDtype(["b", "c", "a"])),
                 pcser.astype(CategoricalDtype(["b", "c", "a"])),
             )
         else:
             self.assert_eq(
-                kcser.astype(CategoricalDtype(["b", "c", "a"])),
-                kcser,
+                pscser.astype(CategoricalDtype(["b", "c", "a"])),
+                pscser,
             )
 
-        self.assert_eq(kcser.astype(str), pcser.astype(str))
+        self.assert_eq(pscser.astype(str), pcser.astype(str))
 
     def test_factorize(self):
         pser = pd.Series(["a", "b", "c", None], dtype=CategoricalDtype(["c", "a", "d", "b"]))
