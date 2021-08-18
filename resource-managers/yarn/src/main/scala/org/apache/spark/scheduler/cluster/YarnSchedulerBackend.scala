@@ -319,7 +319,7 @@ private[spark] abstract class YarnSchedulerBackend(
       removeExecutorMessage.foreach { message => driverEndpoint.send(message) }
     }
 
-    private[YarnSchedulerBackend] def handleClientModeDriverStop(): Unit = {
+    private[cluster] def handleClientModeDriverStop(): Unit = {
       amEndpoint match {
         case Some(am) =>
           am.send(Shutdown)
