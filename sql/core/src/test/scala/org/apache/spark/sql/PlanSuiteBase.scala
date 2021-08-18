@@ -17,33 +17,32 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 trait PlanSuiteBase extends SharedSparkSession {
 
-  private val originalCBOEnabled = conf.cboEnabled
-  private val originalPlanStatsEnabled = conf.planStatsEnabled
-  private val originalJoinReorderEnabled = conf.joinReorderEnabled
-
   protected def injectStats: Boolean = false
+
+  override def sparkConf: SparkConf = {
+    if (injectStats) {
+      super.sparkConf
+        .set(SQLConf.MAX_TO_STRING_FIELDS, Int.MaxValue)
+        .set(SQLConf.CBO_ENABLED, true)
+        .set(SQLConf.PLAN_STATS_ENABLED, true)
+        .set(SQLConf.JOIN_REORDER_ENABLED, true)
+    } else {
+      super.sparkConf.set(SQLConf.MAX_TO_STRING_FIELDS, Int.MaxValue)
+    }
+  }
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    if (injectStats) {
-      // Sets configurations for enabling the optimization rules that
-      // exploit data statistics.
-      conf.setConf(SQLConf.CBO_ENABLED, true)
-      conf.setConf(SQLConf.PLAN_STATS_ENABLED, true)
-      conf.setConf(SQLConf.JOIN_REORDER_ENABLED, true)
-    }
     createTables()
   }
 
   override def afterAll(): Unit = {
-    conf.setConf(SQLConf.CBO_ENABLED, originalCBOEnabled)
-    conf.setConf(SQLConf.PLAN_STATS_ENABLED, originalPlanStatsEnabled)
-    conf.setConf(SQLConf.JOIN_REORDER_ENABLED, originalJoinReorderEnabled)
     dropTables()
     super.afterAll()
   }

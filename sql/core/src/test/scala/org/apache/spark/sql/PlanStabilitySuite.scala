@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.exchange.{Exchange, ReusedExchangeExec, ValidateRequirements}
-import org.apache.spark.sql.internal.SQLConf
 
 // scalastyle:off line.size.limit
 /**
@@ -67,18 +66,6 @@ import org.apache.spark.sql.internal.SQLConf
  */
 // scalastyle:on line.size.limit
 trait PlanStabilitySuite extends DisableAdaptiveExecutionSuite {
-
-  private val originalMaxToStringFields = conf.maxToStringFields
-
-  override def beforeAll(): Unit = {
-    conf.setConf(SQLConf.MAX_TO_STRING_FIELDS, Int.MaxValue)
-    super.beforeAll()
-  }
-
-  override def afterAll(): Unit = {
-    super.afterAll()
-    conf.setConf(SQLConf.MAX_TO_STRING_FIELDS, originalMaxToStringFields)
-  }
 
   private val regenerateGoldenFiles: Boolean = System.getenv("SPARK_GENERATE_GOLDEN_FILES") == "1"
 
