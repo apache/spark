@@ -291,7 +291,7 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * An [[RpcEndpoint]] that communicates with the ApplicationMaster.
    */
-  private class YarnSchedulerEndpoint(override val rpcEnv: RpcEnv)
+  protected class YarnSchedulerEndpoint(override val rpcEnv: RpcEnv)
     extends ThreadSafeRpcEndpoint with Logging {
 
     private[YarnSchedulerBackend] def handleExecutorDisconnectedFromDriver(
