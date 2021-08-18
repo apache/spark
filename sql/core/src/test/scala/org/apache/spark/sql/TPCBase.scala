@@ -21,7 +21,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
-trait PlanSuiteBase extends SharedSparkSession {
+trait TPCBase extends SharedSparkSession {
 
   protected def injectStats: Boolean = false
 

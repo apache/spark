@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 
-trait TPCHBase extends PlanSuiteBase {
+trait TPCHBase extends TPCBase {
 
   override def createTables(): Unit = {
     tpchCreateTable.values.foreach { sql =>

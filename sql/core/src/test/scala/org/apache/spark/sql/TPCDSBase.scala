@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 
-trait TPCDSBase extends PlanSuiteBase with TPCDSSchema {
+trait TPCDSBase extends TPCBase with TPCDSSchema {
 
   // The TPCDS queries below are based on v1.4
   private val tpcdsAllQueries: Seq[String] = Seq(
