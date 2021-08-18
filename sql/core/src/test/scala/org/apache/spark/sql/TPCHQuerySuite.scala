@@ -24,14 +24,6 @@ import org.apache.spark.sql.catalyst.util.resourceToString
  * and compiled without hitting the max iteration threshold.
  */
 class TPCHQuerySuite extends BenchmarkQueryTest with TPCHBase {
-
-  override def beforeAll(): Unit = {
-    super.beforeAll()
-    tpchCreateTable.values.foreach { query =>
-      sql(query)
-    }
-  }
-
   tpchQueries.foreach { name =>
     val queryString = resourceToString(s"tpch/$name.sql",
       classLoader = Thread.currentThread().getContextClassLoader)
