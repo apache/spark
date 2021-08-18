@@ -22,7 +22,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 
 trait PlanSuiteBase extends SharedSparkSession {
 
-  private val originalCBCEnabled = conf.cboEnabled
+  private val originalCBOEnabled = conf.cboEnabled
   private val originalPlanStatsEnabled = conf.planStatsEnabled
   private val originalJoinReorderEnabled = conf.joinReorderEnabled
 
