@@ -43,13 +43,13 @@ class UnivocityGenerator(
     schema.map(_.dataType).map(makeConverter).toArray
 
   private val timestampFormatter = TimestampFormatter(
-    options.timestampFormat,
+    options.timestampFormatInWrite,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false)
   private val timestampNTZFormatter = TimestampFormatter(
-    options.timestampFormat,
+    options.timestampFormatInWrite,
     options.zoneId,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = false,

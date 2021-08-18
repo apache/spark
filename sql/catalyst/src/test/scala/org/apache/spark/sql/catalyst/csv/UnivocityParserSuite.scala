@@ -120,7 +120,7 @@ class UnivocityParserSuite extends SparkFunSuite with SQLHelper {
     parser = new UnivocityParser(StructType(Seq.empty), timestampsOptions)
     val customTimestamp = "31/01/2015 00:00"
     var format = FastDateFormat.getInstance(
-      timestampsOptions.timestampFormat,
+      timestampsOptions.timestampFormatInRead.get,
       TimeZone.getTimeZone(timestampsOptions.zoneId),
       timestampsOptions.locale)
     val expectedTime = format.parse(customTimestamp).getTime

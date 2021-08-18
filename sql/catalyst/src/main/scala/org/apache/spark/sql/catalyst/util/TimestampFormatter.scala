@@ -394,6 +394,15 @@ object TimestampFormatter {
   }
 
   def apply(
+      format: Option[String],
+      zoneId: ZoneId,
+      locale: Locale,
+      legacyFormat: LegacyDateFormat,
+      isParsing: Boolean): TimestampFormatter = {
+    getFormatter(format, zoneId, locale, legacyFormat, isParsing)
+  }
+
+  def apply(
       format: String,
       zoneId: ZoneId,
       locale: Locale,
@@ -408,6 +417,15 @@ object TimestampFormatter {
       legacyFormat: LegacyDateFormat,
       isParsing: Boolean): TimestampFormatter = {
     getFormatter(Some(format), zoneId, defaultLocale, legacyFormat, isParsing)
+  }
+
+  def apply(
+      format: Option[String],
+      zoneId: ZoneId,
+      legacyFormat: LegacyDateFormat,
+      isParsing: Boolean,
+      forTimestampNTZ: Boolean): TimestampFormatter = {
+    getFormatter(format, zoneId, defaultLocale, legacyFormat, isParsing, forTimestampNTZ)
   }
 
   def apply(
