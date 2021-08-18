@@ -84,11 +84,12 @@ trait AliasHelper {
     }
   }
 
-  protected def trimAliasesExceptContainsStructTypeSchema(e: Expression): Expression = {
-    if (e.resolved && DataType.containsStructType(e.dataType)) {
-      e
+  protected def trimAliasesKeepSchema(e: Expression): Expression = {
+    val trimAlias = trimAliases(e)
+    if (DataType.equalsIgnoreNullability(trimAlias.dataType, e.dataType)) {
+      trimAlias
     } else {
-      trimAliases(e)
+      e
     }
   }
 
@@ -111,14 +112,14 @@ trait AliasHelper {
   protected def trimNonTopLevelAliasesExceptStruct[T <: Expression](e: T): T = {
     val res = e match {
       case a: Alias =>
-        a.copy(child = trimAliasesExceptContainsStructTypeSchema(a.child))(
+        a.copy(child = trimAliasesKeepSchema(a.child))(
           exprId = a.exprId,
           qualifier = a.qualifier,
           explicitMetadata = Some(a.metadata),
           nonInheritableMetadataKeys = a.nonInheritableMetadataKeys)
       case a: MultiAlias =>
-        a.copy(child = trimAliasesExceptContainsStructTypeSchema(a.child))
-      case other => trimAliasesExceptContainsStructTypeSchema(other)
+        a.copy(child = trimAliasesKeepSchema(a.child))
+      case other => trimAliasesKeepSchema(other)
     }
 
     res.asInstanceOf[T]
