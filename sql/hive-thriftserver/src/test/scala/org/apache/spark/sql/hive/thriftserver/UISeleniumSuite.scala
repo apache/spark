@@ -99,7 +99,7 @@ class UISeleniumSuite
      """.stripMargin.split("\\s+").toSeq
   }
 
-  ignore("thrift server ui test") {
+  test("thrift server ui test") {
     withJdbcStatement("test_map") { statement =>
       val baseURL = s"http://localhost:$uiPort"
 
