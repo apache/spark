@@ -377,9 +377,9 @@ class Analyzer(override val catalogManager: CatalogManager)
             TimestampAddYMInterval(r, l)
           case (CalendarIntervalType, CalendarIntervalType) |
                (_: DayTimeIntervalType, _: DayTimeIntervalType) => a
-          case (_: NullType, _: DayTimeIntervalType | _: YearMonthIntervalType) =>
+          case (_: NullType, _: AnsiIntervalType) =>
             a.copy(left = Cast(a.left, a.right.dataType))
-          case (_: DayTimeIntervalType | _: YearMonthIntervalType, _: NullType) =>
+          case (_: AnsiIntervalType, _: NullType) =>
             a.copy(right = Cast(a.right, a.left.dataType))
           case (DateType, CalendarIntervalType) => DateAddInterval(l, r, ansiEnabled = f)
           case (_, CalendarIntervalType | _: DayTimeIntervalType) => Cast(TimeAdd(l, r), l.dataType)
@@ -400,9 +400,9 @@ class Analyzer(override val catalogManager: CatalogManager)
             DatetimeSub(l, r, TimestampAddYMInterval(l, UnaryMinus(r, f)))
           case (CalendarIntervalType, CalendarIntervalType) |
                (_: DayTimeIntervalType, _: DayTimeIntervalType) => s
-          case (_: NullType, _: DayTimeIntervalType | _: YearMonthIntervalType) =>
+          case (_: NullType, _: AnsiIntervalType) =>
             s.copy(left = Cast(s.left, s.right.dataType))
-          case (_: DayTimeIntervalType | _: YearMonthIntervalType, _: NullType) =>
+          case (_: AnsiIntervalType, _: NullType) =>
             s.copy(right = Cast(s.right, s.left.dataType))
           case (DateType, CalendarIntervalType) =>
             DatetimeSub(l, r, DateAddInterval(l, UnaryMinus(r, f), ansiEnabled = f))
@@ -1948,7 +1948,7 @@ class Analyzer(override val catalogManager: CatalogManager)
       // mayResolveAttrByAggregateExprs requires the TreePattern UNRESOLVED_ATTRIBUTE.
       _.containsAllPatterns(AGGREGATE, UNRESOLVED_ATTRIBUTE), ruleId) {
       case agg @ Aggregate(groups, aggs, child)
-          if allowGroupByAlias && child.resolved && aggs.forall(_.resolved) &&
+          if conf.groupByAliases && child.resolved && aggs.forall(_.resolved) &&
             groups.exists(!_.resolved) =>
         agg.copy(groupingExpressions = mayResolveAttrByAggregateExprs(groups, aggs, child))
     }
