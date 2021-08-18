@@ -183,6 +183,7 @@ Categorical components
    CategoricalIndex.set_categories
    CategoricalIndex.as_ordered
    CategoricalIndex.as_unordered
+   CategoricalIndex.map
 
 .. _api.multiindex:
 
@@ -344,6 +345,7 @@ Time/date components
    DatetimeIndex.is_leap_year
    DatetimeIndex.daysinmonth
    DatetimeIndex.days_in_month
+   DatetimeIndex.map
 
 Selecting
 ~~~~~~~~~~~~~~~~~~~~~~~~
