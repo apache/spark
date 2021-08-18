@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.streaming.state
 
 import java.io.File
+import java.util.Locale
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.{mutable, Map}
@@ -504,16 +505,16 @@ object RocksDBConf {
   /** Common prefix of all confs in SQLConf that affects RocksDB */
   val ROCKSDB_CONF_NAME_PREFIX = "spark.sql.streaming.stateStore.rocksdb"
 
-  case class ConfEntry(name: String, default: String) {
-    def fullName: String = s"$ROCKSDB_CONF_NAME_PREFIX.${name}"
+  private case class ConfEntry(name: String, default: String) {
+    def fullName: String = s"$ROCKSDB_CONF_NAME_PREFIX.${name}".toLowerCase(Locale.ROOT)
   }
 
   // Configuration that specifies whether to compact the RocksDB data every time data is committed
-  val COMPACT_ON_COMMIT_CONF = ConfEntry("compactOnCommit", "false")
+  private val COMPACT_ON_COMMIT_CONF = ConfEntry("compactOnCommit", "false")
   private val PAUSE_BG_WORK_FOR_COMMIT_CONF = ConfEntry("pauseBackgroundWorkForCommit", "true")
   private val BLOCK_SIZE_KB_CONF = ConfEntry("blockSizeKB", "4")
   private val BLOCK_CACHE_SIZE_MB_CONF = ConfEntry("blockCacheSizeMB", "8")
-  val LOCK_ACQUIRE_TIMEOUT_MS_CONF = ConfEntry("lockAcquireTimeoutMs", "60000")
+  private val LOCK_ACQUIRE_TIMEOUT_MS_CONF = ConfEntry("lockAcquireTimeoutMs", "60000")
   private val RESET_STATS_ON_LOAD = ConfEntry("resetStatsOnLoad", "true")
   // Configuration to set the RocksDB format version. When upgrading the RocksDB version in Spark,
   // it may introduce a new table format version that can not be supported by an old RocksDB version
@@ -526,7 +527,7 @@ object RocksDBConf {
   // https://github.com/facebook/rocksdb/wiki/RocksDB-Compatibility-Between-Different-Releases
   // for the RocksDB compatibility guarantee.
   //
-  // Note: this is also defined in `SQLConf.STREAMING_AGGREGATION_STATE_FORMAT_VERSION`. These two
+  // Note: this is also defined in `SQLConf.STATE_STORE_ROCKSDB_FORMAT_VERSION`. These two
   // places should be updated together.
   private val FORMAT_VERSION = ConfEntry("formatVersion", "5")
 

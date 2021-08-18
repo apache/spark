@@ -29,7 +29,6 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming._
 
 class RocksDBStateStoreIntegrationSuite extends StreamTest {
-
   import testImplicits._
 
   test("RocksDBStateStore") {

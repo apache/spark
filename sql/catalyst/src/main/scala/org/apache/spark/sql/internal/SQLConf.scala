@@ -1595,10 +1595,16 @@ object SQLConf {
       .internal()
       .doc("Set the RocksDB format version. This will be stored in the checkpoint when starting " +
         "a streaming query. If this configuration is not set, we will use the value in the " +
-        "checkpoint when restarting a streaming query.")
+        "checkpoint when restarting a streaming query. This behavior ensures that if a query is " +
+        "created in an old Spark version and upgraded to a new Spark version, the user can still" +
+        "rollback their Spark version if they hit any regressions. This config can be set to " +
+        "overwrite the RocksDB format version in the checkpoint, but it may prevent users from " +
+        "rollbacking to an old Spark version that doesn't support the user provided RocksDB " +
+        "format version.")
       .version("3.2.0")
       .intConf
       .checkValue(_ >= 0, "Must not be negative")
+      // 5 is the default table format version for RocksDB 6.20.3.
       .createWithDefault(5)
 
   val STREAMING_AGGREGATION_STATE_FORMAT_VERSION =
