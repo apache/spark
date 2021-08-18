@@ -78,14 +78,10 @@ trait AliasHelper {
   }
 
   protected def trimAliases(e: Expression): Expression = {
-    e.transformDown {
+    val trimAlias = e.transformDown {
       case Alias(child, _) => child
       case MultiAlias(child, _) => child
     }
-  }
-
-  protected def trimAliasesKeepSchema(e: Expression): Expression = {
-    val trimAlias = trimAliases(e)
     if (DataType.equalsIgnoreNullability(trimAlias.dataType, e.dataType)) {
       trimAlias
     } else {
@@ -96,14 +92,14 @@ trait AliasHelper {
   protected def trimNonTopLevelAliases[T <: Expression](e: T): T = {
     val res = e match {
       case a: Alias =>
-        a.copy(child = trimAliasesKeepSchema(a.child))(
+        a.copy(child = trimAliases(a.child))(
           exprId = a.exprId,
           qualifier = a.qualifier,
           explicitMetadata = Some(a.metadata),
           nonInheritableMetadataKeys = a.nonInheritableMetadataKeys)
       case a: MultiAlias =>
-        a.copy(child = trimAliasesKeepSchema(a.child))
-      case other => trimAliasesKeepSchema(other)
+        a.copy(child = trimAliases(a.child))
+      case other => trimAliases(other)
     }
 
     res.asInstanceOf[T]
