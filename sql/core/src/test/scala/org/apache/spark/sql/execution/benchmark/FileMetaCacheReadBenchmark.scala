@@ -97,7 +97,7 @@ object FileMetaCacheReadBenchmark extends SqlBasedBenchmark {
         }
 
         benchmark.addCase("ORC Vectorized Full Scan: fileMetaCacheEnabled = true") { _ =>
-          withSQLConf(SQLConf.FILE_META_CACHE_ENABLED.key -> "true") {
+          withSQLConf(SQLConf.FILE_META_CACHE_ORC_ENABLED.key -> "true") {
             spark.sql(s"SELECT sum(c$middle) FROM orcTable").noop()
           }
         }
@@ -107,7 +107,7 @@ object FileMetaCacheReadBenchmark extends SqlBasedBenchmark {
         }
 
         benchmark.addCase("ORC Vectorized Filter Scan: fileMetaCacheEnabled = true") { _ =>
-          withSQLConf(SQLConf.FILE_META_CACHE_ENABLED.key -> "true") {
+          withSQLConf(SQLConf.FILE_META_CACHE_ORC_ENABLED.key -> "true") {
             spark.sql(s"SELECT sum(c$middle) FROM orcTable where c1 = $filter").noop()
           }
         }

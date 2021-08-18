@@ -60,7 +60,7 @@ case class OrcPartitionReaderFactory(
   private val capacity = sqlConf.orcVectorizedReaderBatchSize
   private val orcFilterPushDown = sqlConf.orcFilterPushDown
   private val ignoreCorruptFiles = sqlConf.ignoreCorruptFiles
-  private val metaCacheEnabled = sqlConf.fileMetaCacheEnabled
+  private val metaCacheEnabled = sqlConf.fileMetaCacheOrcEnabled
 
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
