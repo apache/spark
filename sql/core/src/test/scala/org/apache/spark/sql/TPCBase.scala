@@ -17,20 +17,37 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.util.resourceToString
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
 
-/**
- * This test suite ensures all the TPC-H queries can be successfully analyzed, optimized
- * and compiled without hitting the max iteration threshold.
- */
-class TPCHQuerySuite extends BenchmarkQueryTest with TPCHBase {
-  tpchQueries.foreach { name =>
-    val queryString = resourceToString(s"tpch/$name.sql",
-      classLoader = Thread.currentThread().getContextClassLoader)
-    test(name) {
-      // check the plans can be properly generated
-      val plan = sql(queryString).queryExecution.executedPlan
-      checkGeneratedCode(plan)
+trait TPCBase extends SharedSparkSession {
+
+  protected def injectStats: Boolean = false
+
+  override def sparkConf: SparkConf = {
+    if (injectStats) {
+      super.sparkConf
+        .set(SQLConf.MAX_TO_STRING_FIELDS, Int.MaxValue)
+        .set(SQLConf.CBO_ENABLED, true)
+        .set(SQLConf.PLAN_STATS_ENABLED, true)
+        .set(SQLConf.JOIN_REORDER_ENABLED, true)
+    } else {
+      super.sparkConf.set(SQLConf.MAX_TO_STRING_FIELDS, Int.MaxValue)
     }
   }
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    createTables()
+  }
+
+  override def afterAll(): Unit = {
+    dropTables()
+    super.afterAll()
+  }
+
+  protected def createTables(): Unit
+
+  protected def dropTables(): Unit
 }
