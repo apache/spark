@@ -259,4 +259,27 @@ object OrcUtils extends Logging {
     OrcConf.MAPRED_INPUT_SCHEMA.setString(conf, resultSchemaString)
     resultSchemaString
   }
+
+  /**
+   * Checks if `dataType` supports columnar reads.
+   *
+   * @param dataType Data type of the orc files.
+   * @param nestedColumnEnabled True if columnar reads is enabled for nested column types.
+   * @return Returns true if data type supports columnar reads.
+   */
+  def supportColumnarReads(
+      dataType: DataType,
+      nestedColumnEnabled: Boolean): Boolean = {
+    dataType match {
+      case _: AtomicType => true
+      case st: StructType if nestedColumnEnabled =>
+        st.forall(f => supportColumnarReads(f.dataType, nestedColumnEnabled))
+      case ArrayType(elementType, _) if nestedColumnEnabled =>
+        supportColumnarReads(elementType, nestedColumnEnabled)
+      case MapType(keyType, valueType, _) if nestedColumnEnabled =>
+        supportColumnarReads(keyType, nestedColumnEnabled) &&
+          supportColumnarReads(valueType, nestedColumnEnabled)
+      case _ => false
+    }
+  }
 }

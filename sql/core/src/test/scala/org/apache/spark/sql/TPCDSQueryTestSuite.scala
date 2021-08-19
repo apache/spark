@@ -57,7 +57,7 @@ class TPCDSQueryTestSuite extends QueryTest with TPCDSBase with SQLQueryTestHelp
   private val regenerateGoldenFiles = sys.env.get("SPARK_GENERATE_GOLDEN_FILES").exists(_ == "1")
 
   // To make output results deterministic
-  protected override def sparkConf: SparkConf = super.sparkConf
+  override def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.SHUFFLE_PARTITIONS.key, "1")
 
   protected override def createSparkSession: TestSparkSession = {

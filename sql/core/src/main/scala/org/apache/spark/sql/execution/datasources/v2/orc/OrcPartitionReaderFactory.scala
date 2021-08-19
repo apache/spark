@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.datasources.orc.{OrcColumnarBatchReader, O
 import org.apache.spark.sql.execution.datasources.v2._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.Filter
-import org.apache.spark.sql.types.{AtomicType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
@@ -64,7 +64,8 @@ case class OrcPartitionReaderFactory(
   override def supportColumnarReads(partition: InputPartition): Boolean = {
     sqlConf.orcVectorizedReaderEnabled && sqlConf.wholeStageEnabled &&
       resultSchema.length <= sqlConf.wholeStageMaxNumFields &&
-      resultSchema.forall(_.dataType.isInstanceOf[AtomicType])
+      resultSchema.forall(s => OrcUtils.supportColumnarReads(
+        s.dataType, sqlConf.orcVectorizedReaderNestedColumnEnabled))
   }
 
   private def pushDownPredicates(filePath: Path, conf: Configuration): Unit = {

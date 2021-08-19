@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.concurrent.ExecutionException
+import java.util.concurrent.CompletionException
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
@@ -83,7 +83,7 @@ class CodeGeneratorWithInterpretedFallbackSuite extends SparkFunSuite with PlanT
   }
 
   test("codegen failures in the CODEGEN_ONLY mode") {
-    val errMsg = intercept[ExecutionException] {
+    val errMsg = intercept[CompletionException] {
       val input = Seq(BoundReference(0, IntegerType, nullable = true))
       withSQLConf(SQLConf.CODEGEN_FACTORY_MODE.key -> codegenOnly) {
         FailedCodegenProjection.createObject(input)

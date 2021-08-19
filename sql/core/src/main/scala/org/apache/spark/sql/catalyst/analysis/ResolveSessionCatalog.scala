@@ -46,7 +46,7 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
   import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Implicits._
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-    case AlterTableAddColumns(ResolvedV1TableIdentifier(ident), cols) =>
+    case AddColumns(ResolvedV1TableIdentifier(ident), cols) =>
       cols.foreach { c =>
         assertTopLevelColumn(c.name, "AlterTableAddColumnsCommand")
         if (!c.nullable) {
@@ -55,10 +55,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
       }
       AlterTableAddColumnsCommand(ident.asTableIdentifier, cols.map(convertToStructField))
 
-    case AlterTableReplaceColumns(ResolvedV1TableIdentifier(_), _) =>
+    case ReplaceColumns(ResolvedV1TableIdentifier(_), _) =>
       throw QueryCompilationErrors.replaceColumnsOnlySupportedWithV2TableError
 
-    case a @ AlterTableAlterColumn(ResolvedV1TableAndIdentifier(table, ident), _, _, _, _, _) =>
+    case a @ AlterColumn(ResolvedV1TableAndIdentifier(table, ident), _, _, _, _, _) =>
       if (a.column.name.length > 1) {
         throw QueryCompilationErrors.alterQualifiedColumnOnlySupportedWithV2TableError
       }
@@ -87,10 +87,10 @@ class ResolveSessionCatalog(val catalogManager: CatalogManager)
         builder.build())
       AlterTableChangeColumnCommand(ident.asTableIdentifier, colName, newColumn)
 
-    case AlterTableRenameColumn(ResolvedV1TableIdentifier(_), _, _) =>
+    case RenameColumn(ResolvedV1TableIdentifier(_), _, _) =>
       throw QueryCompilationErrors.renameColumnOnlySupportedWithV2TableError
 
-    case AlterTableDropColumns(ResolvedV1TableIdentifier(_), _) =>
+    case DropColumns(ResolvedV1TableIdentifier(_), _) =>
       throw QueryCompilationErrors.dropColumnOnlySupportedWithV2TableError
 
     case SetTableProperties(ResolvedV1TableIdentifier(ident), props) =>

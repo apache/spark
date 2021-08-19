@@ -26,6 +26,7 @@ import org.apache.commons.lang3.time.FastDateFormat
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy._
+import org.apache.spark.unsafe.types.UTF8String
 
 sealed trait DateFormatter extends Serializable {
   def parse(s: String): Int // returns days since epoch
@@ -48,7 +49,8 @@ class Iso8601DateFormatter(
   private lazy val formatter = getOrCreateFormatter(pattern, locale, isParsing)
 
   @transient
-  private lazy val legacyFormatter = DateFormatter.getLegacyFormatter(pattern, locale, legacyFormat)
+  protected lazy val legacyFormatter =
+    DateFormatter.getLegacyFormatter(pattern, locale, legacyFormat)
 
   override def parse(s: String): Int = {
     try {
@@ -76,6 +78,28 @@ class Iso8601DateFormatter(
     try {
       formatter
     } catch checkLegacyFormatter(pattern, legacyFormatter.validatePatternString)
+  }
+}
+
+/**
+ * The formatter for dates which doesn't require users to specify a pattern. While formatting,
+ * it uses the default pattern [[DateFormatter.defaultPattern]]. In parsing, it follows the CAST
+ * logic in conversion of strings to Catalyst's DateType.
+ *
+ * @param locale The locale overrides the system locale and is used in formatting.
+ * @param legacyFormat Defines the formatter used for legacy dates.
+ * @param isParsing Whether the formatter is used for parsing (`true`) or for formatting (`false`).
+ */
+class DefaultDateFormatter(
+    locale: Locale,
+    legacyFormat: LegacyDateFormats.LegacyDateFormat,
+    isParsing: Boolean)
+  extends Iso8601DateFormatter(DateFormatter.defaultPattern, locale, legacyFormat, isParsing) {
+
+  override def parse(s: String): Int = {
+    try {
+      DateTimeUtils.stringToDateAnsi(UTF8String.fromString(s))
+    } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 }
 
@@ -151,11 +175,12 @@ object DateFormatter {
       locale: Locale = defaultLocale,
       legacyFormat: LegacyDateFormat = LENIENT_SIMPLE_DATE_FORMAT,
       isParsing: Boolean): DateFormatter = {
-    val pattern = format.getOrElse(defaultPattern)
     if (SQLConf.get.legacyTimeParserPolicy == LEGACY) {
-      getLegacyFormatter(pattern, locale, legacyFormat)
+      getLegacyFormatter(format.getOrElse(defaultPattern), locale, legacyFormat)
     } else {
-      val df = new Iso8601DateFormatter(pattern, locale, legacyFormat, isParsing)
+      val df = format
+        .map(new Iso8601DateFormatter(_, locale, legacyFormat, isParsing))
+        .getOrElse(new DefaultDateFormatter(locale, legacyFormat, isParsing))
       df.validatePatternString()
       df
     }

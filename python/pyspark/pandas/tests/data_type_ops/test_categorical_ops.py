@@ -190,11 +190,13 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         self.assert_eq(pser.astype(str), psser.astype(str))
         self.assert_eq(pser.astype(bool), psser.astype(bool))
         self.assert_eq(pser.astype("category"), psser.astype("category"))
+
         cat_type = CategoricalDtype(categories=[3, 1, 2])
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2"):
+        # CategoricalDtype is not updated if the dtype is same from pandas 1.3.
+        if LooseVersion(pd.__version__) >= LooseVersion("1.3"):
             self.assert_eq(pser.astype(cat_type), psser.astype(cat_type))
         else:
-            self.assert_eq(pd.Series(data).astype(cat_type), psser.astype(cat_type))
+            self.assert_eq(psser.astype(cat_type), pser)
 
     def test_neg(self):
         self.assertRaises(TypeError, lambda: -self.psser)
@@ -243,7 +245,7 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         )
         self.assertRaisesRegex(
             TypeError,
-            "Cannot compare a Categorical with the given type",
+            "The operation can not be applied to list",
             lambda: ordered_psser == [1, 2, 3],
         )
 
@@ -306,7 +308,7 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         )
         self.assertRaisesRegex(
             TypeError,
-            "Cannot compare a Categorical with the given type",
+            "The operation can not be applied to list.",
             lambda: ordered_psser != [1, 2, 3],
         )
         self.assert_eq(
@@ -367,7 +369,7 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         )
         self.assertRaisesRegex(
             TypeError,
-            "Cannot compare a Categorical with the given type",
+            "The operation can not be applied to list",
             lambda: ordered_psser < [1, 2, 3],
         )
         self.assert_eq(
@@ -416,7 +418,7 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         )
         self.assertRaisesRegex(
             TypeError,
-            "Cannot compare a Categorical with the given type",
+            "The operation can not be applied to list",
             lambda: ordered_psser <= [1, 2, 3],
         )
         self.assert_eq(
@@ -465,7 +467,7 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         )
         self.assertRaisesRegex(
             TypeError,
-            "Cannot compare a Categorical with the given type",
+            "The operation can not be applied to list",
             lambda: ordered_psser > [1, 2, 3],
         )
         self.assert_eq(
@@ -514,7 +516,7 @@ class CategoricalOpsTest(PandasOnSparkTestCase, TestCasesUtils):
         )
         self.assertRaisesRegex(
             TypeError,
-            "Cannot compare a Categorical with the given type",
+            "The operation can not be applied to list",
             lambda: ordered_psser >= [1, 2, 3],
         )
         self.assert_eq(

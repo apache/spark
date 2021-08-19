@@ -1,0 +1,201 @@
+== Physical Plan ==
+* Sort (22)
++- Exchange (21)
+   +- * Filter (20)
+      +- * HashAggregate (19)
+         +- Exchange (18)
+            +- * HashAggregate (17)
+               +- * Project (16)
+                  +- * BroadcastHashJoin Inner BuildRight (15)
+                     :- * Project (9)
+                     :  +- * BroadcastHashJoin Inner BuildRight (8)
+                     :     :- * Filter (3)
+                     :     :  +- * ColumnarToRow (2)
+                     :     :     +- Scan parquet default.partsupp (1)
+                     :     +- BroadcastExchange (7)
+                     :        +- * Filter (6)
+                     :           +- * ColumnarToRow (5)
+                     :              +- Scan parquet default.supplier (4)
+                     +- BroadcastExchange (14)
+                        +- * Project (13)
+                           +- * Filter (12)
+                              +- * ColumnarToRow (11)
+                                 +- Scan parquet default.nation (10)
+
+
+(1) Scan parquet default.partsupp
+Output [4]: [ps_partkey#1, ps_suppkey#2, ps_availqty#3, ps_supplycost#4]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/partsupp]
+PushedFilters: [IsNotNull(ps_suppkey)]
+ReadSchema: struct<ps_partkey:bigint,ps_suppkey:bigint,ps_availqty:int,ps_supplycost:decimal(10,0)>
+
+(2) ColumnarToRow [codegen id : 3]
+Input [4]: [ps_partkey#1, ps_suppkey#2, ps_availqty#3, ps_supplycost#4]
+
+(3) Filter [codegen id : 3]
+Input [4]: [ps_partkey#1, ps_suppkey#2, ps_availqty#3, ps_supplycost#4]
+Condition : isnotnull(ps_suppkey#2)
+
+(4) Scan parquet default.supplier
+Output [2]: [s_suppkey#5, s_nationkey#6]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/supplier]
+PushedFilters: [IsNotNull(s_suppkey), IsNotNull(s_nationkey)]
+ReadSchema: struct<s_suppkey:bigint,s_nationkey:bigint>
+
+(5) ColumnarToRow [codegen id : 1]
+Input [2]: [s_suppkey#5, s_nationkey#6]
+
+(6) Filter [codegen id : 1]
+Input [2]: [s_suppkey#5, s_nationkey#6]
+Condition : (isnotnull(s_suppkey#5) AND isnotnull(s_nationkey#6))
+
+(7) BroadcastExchange
+Input [2]: [s_suppkey#5, s_nationkey#6]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, false]),false), [id=#7]
+
+(8) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ps_suppkey#2]
+Right keys [1]: [s_suppkey#5]
+Join condition: None
+
+(9) Project [codegen id : 3]
+Output [4]: [ps_partkey#1, ps_availqty#3, ps_supplycost#4, s_nationkey#6]
+Input [6]: [ps_partkey#1, ps_suppkey#2, ps_availqty#3, ps_supplycost#4, s_suppkey#5, s_nationkey#6]
+
+(10) Scan parquet default.nation
+Output [2]: [n_nationkey#8, n_name#9]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/nation]
+PushedFilters: [IsNotNull(n_name), EqualTo(n_name,GERMANY), IsNotNull(n_nationkey)]
+ReadSchema: struct<n_nationkey:bigint,n_name:string>
+
+(11) ColumnarToRow [codegen id : 2]
+Input [2]: [n_nationkey#8, n_name#9]
+
+(12) Filter [codegen id : 2]
+Input [2]: [n_nationkey#8, n_name#9]
+Condition : ((isnotnull(n_name#9) AND (n_name#9 = GERMANY)) AND isnotnull(n_nationkey#8))
+
+(13) Project [codegen id : 2]
+Output [1]: [n_nationkey#8]
+Input [2]: [n_nationkey#8, n_name#9]
+
+(14) BroadcastExchange
+Input [1]: [n_nationkey#8]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#10]
+
+(15) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [s_nationkey#6]
+Right keys [1]: [n_nationkey#8]
+Join condition: None
+
+(16) Project [codegen id : 3]
+Output [3]: [ps_partkey#1, ps_availqty#3, ps_supplycost#4]
+Input [5]: [ps_partkey#1, ps_availqty#3, ps_supplycost#4, s_nationkey#6, n_nationkey#8]
+
+(17) HashAggregate [codegen id : 3]
+Input [3]: [ps_partkey#1, ps_availqty#3, ps_supplycost#4]
+Keys [1]: [ps_partkey#1]
+Functions [1]: [partial_sum(CheckOverflow((promote_precision(ps_supplycost#4) * promote_precision(cast(ps_availqty#3 as decimal(10,0)))), DecimalType(21,0), true))]
+Aggregate Attributes [2]: [sum#11, isEmpty#12]
+Results [3]: [ps_partkey#1, sum#13, isEmpty#14]
+
+(18) Exchange
+Input [3]: [ps_partkey#1, sum#13, isEmpty#14]
+Arguments: hashpartitioning(ps_partkey#1, 5), ENSURE_REQUIREMENTS, [id=#15]
+
+(19) HashAggregate [codegen id : 4]
+Input [3]: [ps_partkey#1, sum#13, isEmpty#14]
+Keys [1]: [ps_partkey#1]
+Functions [1]: [sum(CheckOverflow((promote_precision(ps_supplycost#4) * promote_precision(cast(ps_availqty#3 as decimal(10,0)))), DecimalType(21,0), true))]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(ps_supplycost#4) * promote_precision(cast(ps_availqty#3 as decimal(10,0)))), DecimalType(21,0), true))#16]
+Results [2]: [ps_partkey#1, sum(CheckOverflow((promote_precision(ps_supplycost#4) * promote_precision(cast(ps_availqty#3 as decimal(10,0)))), DecimalType(21,0), true))#16 AS value#17]
+
+(20) Filter [codegen id : 4]
+Input [2]: [ps_partkey#1, value#17]
+Condition : (isnotnull(value#17) AND (cast(value#17 as decimal(38,6)) > Subquery scalar-subquery#18, [id=#19]))
+
+(21) Exchange
+Input [2]: [ps_partkey#1, value#17]
+Arguments: rangepartitioning(value#17 DESC NULLS LAST, 5), ENSURE_REQUIREMENTS, [id=#20]
+
+(22) Sort [codegen id : 5]
+Input [2]: [ps_partkey#1, value#17]
+Arguments: [value#17 DESC NULLS LAST], true, 0
+
+===== Subqueries =====
+
+Subquery:1 Hosting operator id = 20 Hosting Expression = Subquery scalar-subquery#18, [id=#19]
+* HashAggregate (34)
++- Exchange (33)
+   +- * HashAggregate (32)
+      +- * Project (31)
+         +- * BroadcastHashJoin Inner BuildRight (30)
+            :- * Project (28)
+            :  +- * BroadcastHashJoin Inner BuildRight (27)
+            :     :- * Filter (25)
+            :     :  +- * ColumnarToRow (24)
+            :     :     +- Scan parquet default.partsupp (23)
+            :     +- ReusedExchange (26)
+            +- ReusedExchange (29)
+
+
+(23) Scan parquet default.partsupp
+Output [3]: [ps_suppkey#21, ps_availqty#22, ps_supplycost#23]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/partsupp]
+PushedFilters: [IsNotNull(ps_suppkey)]
+ReadSchema: struct<ps_suppkey:bigint,ps_availqty:int,ps_supplycost:decimal(10,0)>
+
+(24) ColumnarToRow [codegen id : 3]
+Input [3]: [ps_suppkey#21, ps_availqty#22, ps_supplycost#23]
+
+(25) Filter [codegen id : 3]
+Input [3]: [ps_suppkey#21, ps_availqty#22, ps_supplycost#23]
+Condition : isnotnull(ps_suppkey#21)
+
+(26) ReusedExchange [Reuses operator id: 7]
+Output [2]: [s_suppkey#24, s_nationkey#25]
+
+(27) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [ps_suppkey#21]
+Right keys [1]: [s_suppkey#24]
+Join condition: None
+
+(28) Project [codegen id : 3]
+Output [3]: [ps_availqty#22, ps_supplycost#23, s_nationkey#25]
+Input [5]: [ps_suppkey#21, ps_availqty#22, ps_supplycost#23, s_suppkey#24, s_nationkey#25]
+
+(29) ReusedExchange [Reuses operator id: 14]
+Output [1]: [n_nationkey#26]
+
+(30) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [s_nationkey#25]
+Right keys [1]: [n_nationkey#26]
+Join condition: None
+
+(31) Project [codegen id : 3]
+Output [2]: [ps_availqty#22, ps_supplycost#23]
+Input [4]: [ps_availqty#22, ps_supplycost#23, s_nationkey#25, n_nationkey#26]
+
+(32) HashAggregate [codegen id : 3]
+Input [2]: [ps_availqty#22, ps_supplycost#23]
+Keys: []
+Functions [1]: [partial_sum(CheckOverflow((promote_precision(ps_supplycost#23) * promote_precision(cast(ps_availqty#22 as decimal(10,0)))), DecimalType(21,0), true))]
+Aggregate Attributes [2]: [sum#27, isEmpty#28]
+Results [2]: [sum#29, isEmpty#30]
+
+(33) Exchange
+Input [2]: [sum#29, isEmpty#30]
+Arguments: SinglePartition, ENSURE_REQUIREMENTS, [id=#31]
+
+(34) HashAggregate [codegen id : 4]
+Input [2]: [sum#29, isEmpty#30]
+Keys: []
+Functions [1]: [sum(CheckOverflow((promote_precision(ps_supplycost#23) * promote_precision(cast(ps_availqty#22 as decimal(10,0)))), DecimalType(21,0), true))]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(ps_supplycost#23) * promote_precision(cast(ps_availqty#22 as decimal(10,0)))), DecimalType(21,0), true))#32]
+Results [1]: [CheckOverflow((promote_precision(cast(sum(CheckOverflow((promote_precision(ps_supplycost#23) * promote_precision(cast(ps_availqty#22 as decimal(10,0)))), DecimalType(21,0), true))#32 as decimal(38,10))) * 0.0001000000), DecimalType(38,6), true) AS (sum((ps_supplycost * ps_availqty)) * 0.0001000000)#33]
+
+

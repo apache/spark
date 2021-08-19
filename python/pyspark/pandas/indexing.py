@@ -1536,22 +1536,10 @@ class iLocIndexer(LocIndexerLike):
     def _internal(self) -> "InternalFrame":
         # Use resolved_copy to fix the natural order.
         internal = super()._internal.resolved_copy
-        sdf, force_nullable = InternalFrame.attach_distributed_sequence_column(
+        sdf = InternalFrame.attach_distributed_sequence_column(
             internal.spark_frame, column_name=self._sequence_col
         )
-        return internal.with_new_sdf(
-            spark_frame=sdf.orderBy(NATURAL_ORDER_COLUMN_NAME),
-            index_fields=(
-                [field.copy(nullable=True) for field in internal.index_fields]
-                if force_nullable
-                else internal.index_fields
-            ),
-            data_fields=(
-                [field.copy(nullable=True) for field in internal.data_fields]
-                if force_nullable
-                else internal.data_fields
-            ),
-        )
+        return internal.with_new_sdf(spark_frame=sdf.orderBy(NATURAL_ORDER_COLUMN_NAME))
 
     @lazy_property
     def _sequence_col(self) -> str:
