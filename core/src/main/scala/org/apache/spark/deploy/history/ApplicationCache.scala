@@ -395,7 +395,7 @@ private[history] class ApplicationCacheCheckFilter(
     // this check is universal, just in case someone does exactly
     // that on your classpath
     if (!(request.isInstanceOf[HttpServletRequest])) {
-      throw SparkCoreErrors.filterOnlyWorksForHTTPHTTPSError()
+      throw SparkCoreErrors.filterOnlyWorksForHTTPError()
     }
     val httpRequest = request.asInstanceOf[HttpServletRequest]
     val httpResponse = response.asInstanceOf[HttpServletResponse]

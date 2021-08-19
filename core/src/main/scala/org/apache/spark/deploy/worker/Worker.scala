@@ -515,7 +515,7 @@ private[deploy] class Worker(
         val cleanupFuture: concurrent.Future[Unit] = concurrent.Future {
           val appDirs = workDir.listFiles()
           if (appDirs == null) {
-            throw SparkCoreErrors.failedListFilesInAppDirsError(appDirs)
+            throw SparkCoreErrors.failToListFilesInAppDirsError(appDirs)
           }
           appDirs.filter { dir =>
             // the directory is used by an application - check that the application is not running
@@ -576,7 +576,7 @@ private[deploy] class Worker(
           // Create the executor's working directory
           val executorDir = new File(workDir, appId + "/" + execId)
           if (!executorDir.mkdirs()) {
-            throw SparkCoreErrors.failedCreateDirectoryError(executorDir)
+            throw SparkCoreErrors.failToCreateDirectoryError(executorDir)
           }
 
           // Create local dirs for the executor. These are passed to the executor via the

@@ -114,7 +114,7 @@ object RRunner {
       // scalastyle:off println
       System.err.println(errorMessage)
       // scalastyle:on println
-      throw SparkCoreErrors.sparkRBackendInitializeError(errorMessage)
+      throw SparkCoreErrors.sparkRBackendInitializationError(backendTimeout)
     }
   }
 }

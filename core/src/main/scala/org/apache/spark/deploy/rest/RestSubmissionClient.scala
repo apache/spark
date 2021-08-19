@@ -100,7 +100,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       } catch {
         case e: SubmitRestConnectionException =>
           if (handleConnectionException(m)) {
-            throw SparkCoreErrors.unableConnectServerError(e)
+            throw SparkCoreErrors.unableToConnectToServerError(e)
           }
       }
     }
@@ -129,7 +129,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       } catch {
         case e: SubmitRestConnectionException =>
           if (handleConnectionException(m)) {
-            throw SparkCoreErrors.unableConnectServerError(e)
+            throw SparkCoreErrors.unableToConnectToServerError(e)
           }
       }
     }
@@ -161,7 +161,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
       } catch {
         case e: SubmitRestConnectionException =>
           if (handleConnectionException(m)) {
-            throw SparkCoreErrors.unableConnectServerError(e)
+            throw SparkCoreErrors.unableToConnectToServerError(e)
           }
       }
     }
@@ -276,7 +276,7 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     try { Await.result(responseFuture, 10.seconds) } catch {
       // scalastyle:on awaitresult
       case unreachable @ (_: FileNotFoundException | _: SocketException) =>
-        throw SparkCoreErrors.unableConnectServerError(unreachable)
+        throw SparkCoreErrors.unableToConnectToServerError(unreachable)
       case malformed @ (_: JsonProcessingException | _: SubmitRestProtocolException) =>
         throw SparkCoreErrors.malformedResponseReceivedFromServerError(malformed)
       case timeout: TimeoutException => throw SparkCoreErrors.noResponseFromServerError(timeout)

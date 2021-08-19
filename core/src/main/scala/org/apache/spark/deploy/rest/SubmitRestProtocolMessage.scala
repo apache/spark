@@ -67,21 +67,21 @@ private[rest] abstract class SubmitRestProtocolMessage {
     try {
       doValidate()
     } catch {
-      case e: Exception => throw SparkCoreErrors.failedValidateMessageError(messageType, e)
+      case e: Exception => throw SparkCoreErrors.failToValidateMessageError(messageType, e)
     }
   }
 
   /** Assert the validity of the message */
   protected def doValidate(): Unit = {
     if (action == null) {
-      throw SparkCoreErrors.missActionFieldError(messageType)
+      throw SparkCoreErrors.missingActionFieldError(messageType)
     }
   }
 
   /** Assert that the specified field is set in this message. */
   protected def assertFieldIsSet[T](value: T, name: String): Unit = {
     if (value == null) {
-      throw SparkCoreErrors.missFieldInMessageError(messageType, name)
+      throw SparkCoreErrors.missingFieldInMessageError(messageType, name)
     }
   }
 
@@ -115,7 +115,7 @@ private[spark] object SubmitRestProtocolMessage {
       case _ => None
     }
     value.getOrElse {
-      throw SparkCoreErrors.notFoundActionFieldInJSONError(json)
+      throw SparkCoreErrors.actionFieldNotFoundInJsonError(json)
     }
   }
 

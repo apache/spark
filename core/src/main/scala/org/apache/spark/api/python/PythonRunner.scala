@@ -326,9 +326,8 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         }
         val boundPort: Int = serverSocket.map(_.getLocalPort).getOrElse(0)
         if (boundPort == -1) {
-          val message = "ServerSocket failed to bind to Java side."
-          logError(message)
-          throw SparkCoreErrors.serverSocketFailedBindJavaSideError(message)
+          logError("ServerSocket failed to bind to Java side.")
+          throw SparkCoreErrors.serverSocketFailedToBindJavaSideError()
         } else if (isBarrier) {
           logDebug(s"Started ServerSocket on port $boundPort.")
         }
@@ -569,7 +568,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     protected val handleException: PartialFunction[Throwable, OUT] = {
       case e: Exception if context.isInterrupted =>
         logDebug("Exception thrown after task interruption", e)
-        throw SparkCoreErrors.taskKilledUnknownReasonError(context)
+        throw SparkCoreErrors.taskKilledError(context)
 
       case e: Exception if writerThread.exception.isDefined =>
         logError("Python worker exited unexpectedly (crashed)", e)
@@ -581,7 +580,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
         val path = BasePythonRunner.faultHandlerLogPath(pid.get)
         val error = String.join("\n", JavaFiles.readAllLines(path)) + "\n"
         JavaFiles.deleteIfExists(path)
-        throw SparkCoreErrors.pythonWorkerExitedError(error, eof)
+        throw SparkCoreErrors.pythonWorkerExitedError(eof, error)
 
       case eof: EOFException =>
         throw SparkCoreErrors.pythonWorkerExitedError(eof)

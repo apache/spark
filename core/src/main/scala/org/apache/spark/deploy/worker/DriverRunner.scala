@@ -146,7 +146,7 @@ private[deploy] class DriverRunner(
   private def createWorkingDirectory(): File = {
     val driverDir = new File(workDir, driverId)
     if (!driverDir.exists() && !driverDir.mkdirs()) {
-      throw SparkCoreErrors.failedCreateDirectoryError(driverDir)
+      throw SparkCoreErrors.failToCreateDirectoryError(driverDir)
     }
     driverDir
   }

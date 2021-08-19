@@ -28,7 +28,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SparkException, SparkUserAppException, TaskContext, TaskKilledException, TaskNotSerializableException}
 import org.apache.spark.deploy.rest.{SubmitRestConnectionException, SubmitRestMissingFieldException, SubmitRestProtocolException}
 import org.apache.spark.internal.config.History
-import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException, HaltReplayException}
+import org.apache.spark.scheduler.{BarrierJobRunWithDynamicAllocationException, BarrierJobSlotsNumberCheckFailed, BarrierJobUnsupportedRDDChainException}
+import org.apache.spark.scheduler.HaltReplayException
 import org.apache.spark.shuffle.{FetchFailedException, ShuffleManager}
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException, BlockSavedOnDecommissionedBlockManagerException, RDDBlockId, UnrecognizedBlockId}
 
@@ -36,28 +37,29 @@ import org.apache.spark.storage.{BlockId, BlockManagerId, BlockNotFoundException
  * Object for grouping error messages from (most) exceptions thrown during query execution.
  */
 object SparkCoreErrors {
-  def failedGetIntoAcceptableClusterStateError(e: TimeoutException): Throwable = {
+  def failToGetIntoAcceptableClusterStateError(e: TimeoutException): Throwable = {
     new RuntimeException("Failed to get into acceptable cluster state after 2 min.", e)
   }
 
-  def serverSocketFailedBindJavaSideError(message: String): Throwable = {
-    new SparkException(message)
+  def serverSocketFailedToBindJavaSideError(): Throwable = {
+    new SparkException("ServerSocket failed to bind to Java side.")
   }
 
-  def taskKilledUnknownReasonError(context: TaskContext): Throwable = {
+  def taskKilledError(context: TaskContext): Throwable = {
     new TaskKilledException(context.getKillReason().getOrElse("unknown reason"))
   }
 
-  def pythonWorkerExitedError(error: String, eof: EOFException): Throwable = {
-    new SparkException(s"Python worker exited unexpectedly (crashed): $error", eof)
+  def pythonWorkerExitedError(eof: EOFException, error: String = null): Throwable = {
+    val msg = "Python worker exited unexpectedly (crashed)"
+    if(error == null) {
+      new SparkException(msg, eof)
+    } else {
+      new SparkException(msg + s": $error", eof)
+    }
   }
 
-  def pythonWorkerExitedError(eof: EOFException): Throwable = {
-    new SparkException("Python worker exited unexpectedly (crashed)", eof)
-  }
-
-  def sparkRBackendInitializeError(message: String): Throwable = {
-    new SparkException(message)
+  def sparkRBackendInitializationError(backendTimeout: Int): Throwable = {
+    new SparkException(s"SparkR backend did not initialize in $backendTimeout seconds")
   }
 
   def sparkUserAppError(returnCode: Int): Throwable = {
@@ -68,15 +70,15 @@ object SparkCoreErrors {
     new SparkException(s"Keytab file: ${keytabFilename} does not exist")
   }
 
-  def failedCreateParentsError(path: Path): Throwable = {
+  def failToCreateParentsError(path: Path): Throwable = {
     new IOException(s"Failed to create parents of $path")
   }
 
-  def failedLoadIvySettingError(settingsFile: String, e: Throwable): Throwable = {
+  def failToLoadIvySettingError(settingsFile: String, e: Throwable): Throwable = {
     new SparkException(s"Failed when loading Ivy settings from $settingsFile", e)
   }
 
-  def lackSparkConfigError(pair: String): Throwable = {
+  def invalidSparkConfigPairError(pair: String): Throwable = {
     new SparkException(s"Spark config without '=': $pair")
   }
 
@@ -89,7 +91,7 @@ object SparkCoreErrors {
     new SecurityException()
   }
 
-  def preparingResourceFileError(compShortName: String, e: Throwable): Throwable = {
+  def failToPrepareResourceFileError(compShortName: String, e: Throwable): Throwable = {
     new SparkException(s"Exception threw while preparing resource file for $compShortName", e)
   }
 
@@ -98,7 +100,7 @@ object SparkCoreErrors {
       attemptId.map { id => s" attemptId '$id'" }.getOrElse(" and no attempt Id"))
   }
 
-  def filterOnlyWorksForHTTPHTTPSError(): Throwable = {
+  def filterOnlyWorksForHTTPError(): Throwable = {
     new ServletException("This filter only works for HTTP/HTTPS")
   }
 
@@ -122,7 +124,7 @@ object SparkCoreErrors {
     new NoSuchElementException(s)
   }
 
-  def notFoundLogForAppIdError(appId: String): Throwable = {
+  def logsNotFoundForAppError(appId: String): Throwable = {
     new SparkException(s"Logs for $appId not found.")
   }
 
@@ -142,7 +144,7 @@ object SparkCoreErrors {
     new Exception(s"Received unexpected state update for driver $driverId: $state")
   }
 
-  def unableConnectServerError(e: Throwable): Throwable = {
+  def unableToConnectToServerError(e: Throwable): Throwable = {
     new SubmitRestConnectionException("Unable to connect to server", e)
   }
 
@@ -183,19 +185,19 @@ object SparkCoreErrors {
     new SubmitRestMissingFieldException("Main class is missing.")
   }
 
-  def failedValidateMessageError(messageType: String, e: Exception): Throwable = {
+  def failToValidateMessageError(messageType: String, e: Exception): Throwable = {
     new SubmitRestProtocolException(s"Validation of message $messageType failed!", e)
   }
 
-  def missActionFieldError(messageType: String): Throwable = {
+  def missingActionFieldError(messageType: String): Throwable = {
     new SubmitRestMissingFieldException(s"The action field is missing in $messageType")
   }
 
-  def missFieldInMessageError(messageType: String, name: String): Throwable = {
+  def missingFieldInMessageError(messageType: String, name: String): Throwable = {
     new SubmitRestMissingFieldException(s"'$name' is missing in message $messageType.")
   }
 
-  def notFoundActionFieldInJSONError(json: String): Throwable = {
+  def actionFieldNotFoundInJsonError(json: String): Throwable = {
     new SubmitRestMissingFieldException(s"Action field not found in JSON:\n$json")
   }
 
@@ -208,8 +210,8 @@ object SparkCoreErrors {
     new SparkException("Can't get Master Kerberos principal for use as renewer.")
   }
 
-  def failedCreateDirectoryError(driverDir: File): Throwable = {
-    new IOException("Failed to create directory " + driverDir)
+  def failToCreateDirectoryError(driverDir: File): Throwable = {
+    new IOException(s"Failed to create directory $driverDir")
   }
 
   def cannotFindJarInDriverDirectoryError(jarFileName: String, driverDir: File): Throwable = {
@@ -217,8 +219,8 @@ object SparkCoreErrors {
       s"Can not find expected jar $jarFileName which should have been loaded in $driverDir")
   }
 
-  def failedListFilesInAppDirsError(appDirs: Array[File]): Throwable = {
-    new IOException("ERROR: Failed to list files in " + appDirs)
+  def failToListFilesInAppDirsError(appDirs: Array[File]): Throwable = {
+    new IOException(s"ERROR: Failed to list files in $appDirs")
   }
 
   def cannotCreateSubfolderInLocalRootDirsError(localRootDirs: String): Throwable = {

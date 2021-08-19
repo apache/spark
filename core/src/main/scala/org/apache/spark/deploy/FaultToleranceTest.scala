@@ -322,7 +322,7 @@ private object FaultToleranceTest extends App with Logging {
         logError("Master states: " + masters.map(_.state))
         logError("Num apps: " + numLiveApps)
         logError("IPs expected: " + workers.map(_.ip) + " / found: " + liveWorkerIPs)
-        throw SparkCoreErrors.failedGetIntoAcceptableClusterStateError(e)
+        throw SparkCoreErrors.failToGetIntoAcceptableClusterStateError(e)
     }
   }
 

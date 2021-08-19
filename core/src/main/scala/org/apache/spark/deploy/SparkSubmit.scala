@@ -1316,7 +1316,7 @@ private[spark] object SparkSubmitUtils extends Logging {
       ivySettings.load(file)
     } catch {
       case e @ (_: IOException | _: ParseException) =>
-        throw SparkCoreErrors.failedLoadIvySettingError(settingsFile, e)
+        throw SparkCoreErrors.failToLoadIvySettingError(settingsFile, e)
     }
     processIvyPathArg(ivySettings, ivyPath)
     processRemoteRepoArg(ivySettings, remoteRepos)
@@ -1480,7 +1480,7 @@ private[spark] object SparkSubmitUtils extends Logging {
   def parseSparkConfProperty(pair: String): (String, String) = {
     pair.split("=", 2).toSeq match {
       case Seq(k, v) => (k, v)
-      case _ => throw SparkCoreErrors.lackSparkConfigError(pair)
+      case _ => throw SparkCoreErrors.invalidSparkConfigPairError(pair)
     }
   }
 

@@ -101,7 +101,7 @@ private[spark] object StandaloneResourceUtils extends Logging {
     try {
       writeResourceAllocationJson(componentName, allocations, tmpFile)
     } catch {
-      case NonFatal(e) => throw SparkCoreErrors.preparingResourceFileError(compShortName, e)
+      case NonFatal(e) => throw SparkCoreErrors.failToPrepareResourceFileError(compShortName, e)
     }
     val resourcesFile = File.createTempFile(s"resource-$compShortName-", ".json", dir)
     tmpFile.renameTo(resourcesFile)

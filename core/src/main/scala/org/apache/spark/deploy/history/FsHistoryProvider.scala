@@ -669,7 +669,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       load(appId)
     } catch {
       case _: NoSuchElementException =>
-        throw SparkCoreErrors.notFoundLogForAppIdError(appId)
+        throw SparkCoreErrors.logsNotFoundForAppError(appId)
     }
 
     try {
