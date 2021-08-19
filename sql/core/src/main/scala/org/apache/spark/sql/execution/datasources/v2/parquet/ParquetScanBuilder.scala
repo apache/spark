@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.internal.SQLConf.LegacyBehaviorPolicy
+import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -65,10 +66,14 @@ case class ParquetScanBuilder(
       // The rebase mode doesn't matter here because the filters are used to determine
       // whether they is convertible.
       LegacyBehaviorPolicy.CORRECTED)
-    parquetFilters.convertibleFilters(translateDataFilter).toArray
+    parquetFilters.convertibleFilters(pushedDataFilters).toArray
   }
 
   override protected val supportsNestedSchemaPruning: Boolean = true
+
+  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
+    dataFilters
+  }
 
   override def build(): Scan = {
     ParquetScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
