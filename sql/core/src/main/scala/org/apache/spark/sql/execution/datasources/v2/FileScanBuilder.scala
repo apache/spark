@@ -65,21 +65,16 @@ abstract class FileScanBuilder(
   }
 
   def pushFilters(partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Unit = {
-
-    def translateDataFilter(): Array[Filter] = {
-      val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
-      for (filterExpr <- dataFilters) {
-        val translated = DataSourceStrategy.translateFilter(filterExpr, true)
-        if (translated.nonEmpty) {
-          translatedFilters += translated.get
-        }
-      }
-      translatedFilters.toArray
-    }
-
     this.partitionFilters = partitionFilters
     this.dataFilters = dataFilters
-    this.pushedDataFilters = pushDataFilters(translateDataFilter)
+    val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
+    for (filterExpr <- dataFilters) {
+      val translated = DataSourceStrategy.translateFilter(filterExpr, true)
+      if (translated.nonEmpty) {
+        translatedFilters += translated.get
+      }
+    }
+    this.pushedDataFilters = pushDataFilters(translatedFilters.toArray)
   }
 
   protected def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = Array.empty[Filter]
