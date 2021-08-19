@@ -18,7 +18,6 @@ package org.apache.spark.sql.execution.datasources.v2.jdbc
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
-import org.apache.spark.sql.connector.expressions.FieldReference
 import org.apache.spark.sql.connector.read.V1Scan
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCRelation
 import org.apache.spark.sql.sources.{BaseRelation, Filter, TableScan}
@@ -29,7 +28,7 @@ case class JDBCScan(
     prunedSchema: StructType,
     pushedFilters: Array[Filter],
     pushedAggregateColumn: Array[String] = Array(),
-    groupByColumns: Option[Array[FieldReference]]) extends V1Scan {
+    groupByColumns: Option[Array[String]]) extends V1Scan {
 
   override def readSchema(): StructType = prunedSchema
 
@@ -39,13 +38,12 @@ case class JDBCScan(
       override def schema: StructType = prunedSchema
       override def needConversion: Boolean = relation.needConversion
       override def buildScan(): RDD[Row] = {
-        if (groupByColumns.isEmpty) {
-          relation.buildScan(
-            prunedSchema.map(_.name).toArray, Some(prunedSchema), pushedFilters, groupByColumns)
+        val columnList = if (groupByColumns.isEmpty) {
+          prunedSchema.map(_.name).toArray
         } else {
-          relation.buildScan(
-            pushedAggregateColumn, Some(prunedSchema), pushedFilters, groupByColumns)
+          pushedAggregateColumn
         }
+        relation.buildScan(columnList, prunedSchema, pushedFilters, groupByColumns)
       }
     }.asInstanceOf[T]
   }

@@ -371,6 +371,11 @@ private[spark] object QueryCompilationErrors {
       t.origin.startPosition)
   }
 
+  def sessionWindowGapDurationDataTypeError(dt: DataType): Throwable = {
+    new AnalysisException("Gap duration expression used in session window must be " +
+      s"CalendarIntervalType, but got ${dt}")
+  }
+
   def viewOutputNumberMismatchQueryColumnNamesError(
       output: Seq[Attribute], queryColumnNames: Seq[String]): Throwable = {
     new AnalysisException(
@@ -2261,8 +2266,8 @@ private[spark] object QueryCompilationErrors {
       s"""Cannot resolve column name "$colName" among (${fieldsStr})${extraMsg}""")
   }
 
-  def cannotParseTimeDelayError(delayThreshold: String, e: Throwable): Throwable = {
-    new AnalysisException(s"Unable to parse time delay '$delayThreshold'", cause = Some(e))
+  def cannotParseIntervalError(delayThreshold: String, e: Throwable): Throwable = {
+    new AnalysisException(s"Unable to parse '$delayThreshold'", cause = Some(e))
   }
 
   def invalidJoinTypeInJoinWithError(joinType: JoinType): Throwable = {
@@ -2365,5 +2370,11 @@ private[spark] object QueryCompilationErrors {
       errorClass = "INVALID_FIELD_NAME",
       messageParameters = Array(fieldName.quoted, path.quoted),
       origin = context)
+  }
+
+  def invalidJsonSchema(schema: DataType): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_JSON_SCHEMA_MAPTYPE",
+      messageParameters = Array(schema.toString))
   }
 }

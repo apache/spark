@@ -1,0 +1,122 @@
+== Physical Plan ==
+TakeOrderedAndProject (21)
++- * HashAggregate (20)
+   +- Exchange (19)
+      +- * HashAggregate (18)
+         +- * Project (17)
+            +- * BroadcastHashJoin Inner BuildRight (16)
+               :- * Project (10)
+               :  +- * BroadcastHashJoin Inner BuildRight (9)
+               :     :- * Project (4)
+               :     :  +- * Filter (3)
+               :     :     +- * ColumnarToRow (2)
+               :     :        +- Scan parquet default.customer (1)
+               :     +- BroadcastExchange (8)
+               :        +- * Filter (7)
+               :           +- * ColumnarToRow (6)
+               :              +- Scan parquet default.orders (5)
+               +- BroadcastExchange (15)
+                  +- * Project (14)
+                     +- * Filter (13)
+                        +- * ColumnarToRow (12)
+                           +- Scan parquet default.lineitem (11)
+
+
+(1) Scan parquet default.customer
+Output [2]: [c_custkey#1, c_mktsegment#2]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/customer]
+PushedFilters: [IsNotNull(c_mktsegment), EqualTo(c_mktsegment,BUILDING), IsNotNull(c_custkey)]
+ReadSchema: struct<c_custkey:bigint,c_mktsegment:string>
+
+(2) ColumnarToRow [codegen id : 3]
+Input [2]: [c_custkey#1, c_mktsegment#2]
+
+(3) Filter [codegen id : 3]
+Input [2]: [c_custkey#1, c_mktsegment#2]
+Condition : ((isnotnull(c_mktsegment#2) AND (c_mktsegment#2 = BUILDING)) AND isnotnull(c_custkey#1))
+
+(4) Project [codegen id : 3]
+Output [1]: [c_custkey#1]
+Input [2]: [c_custkey#1, c_mktsegment#2]
+
+(5) Scan parquet default.orders
+Output [4]: [o_orderkey#3, o_custkey#4, o_orderdate#5, o_shippriority#6]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/orders]
+PushedFilters: [IsNotNull(o_orderdate), LessThan(o_orderdate,1995-03-15), IsNotNull(o_custkey), IsNotNull(o_orderkey)]
+ReadSchema: struct<o_orderkey:bigint,o_custkey:bigint,o_orderdate:date,o_shippriority:int>
+
+(6) ColumnarToRow [codegen id : 1]
+Input [4]: [o_orderkey#3, o_custkey#4, o_orderdate#5, o_shippriority#6]
+
+(7) Filter [codegen id : 1]
+Input [4]: [o_orderkey#3, o_custkey#4, o_orderdate#5, o_shippriority#6]
+Condition : (((isnotnull(o_orderdate#5) AND (o_orderdate#5 < 1995-03-15)) AND isnotnull(o_custkey#4)) AND isnotnull(o_orderkey#3))
+
+(8) BroadcastExchange
+Input [4]: [o_orderkey#3, o_custkey#4, o_orderdate#5, o_shippriority#6]
+Arguments: HashedRelationBroadcastMode(List(input[1, bigint, false]),false), [id=#7]
+
+(9) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [c_custkey#1]
+Right keys [1]: [o_custkey#4]
+Join condition: None
+
+(10) Project [codegen id : 3]
+Output [3]: [o_orderkey#3, o_orderdate#5, o_shippriority#6]
+Input [5]: [c_custkey#1, o_orderkey#3, o_custkey#4, o_orderdate#5, o_shippriority#6]
+
+(11) Scan parquet default.lineitem
+Output [4]: [l_orderkey#8, l_extendedprice#9, l_discount#10, l_shipdate#11]
+Batched: true
+Location [not included in comparison]/{warehouse_dir}/lineitem]
+PushedFilters: [IsNotNull(l_shipdate), GreaterThan(l_shipdate,1995-03-15), IsNotNull(l_orderkey)]
+ReadSchema: struct<l_orderkey:bigint,l_extendedprice:decimal(10,0),l_discount:decimal(10,0),l_shipdate:date>
+
+(12) ColumnarToRow [codegen id : 2]
+Input [4]: [l_orderkey#8, l_extendedprice#9, l_discount#10, l_shipdate#11]
+
+(13) Filter [codegen id : 2]
+Input [4]: [l_orderkey#8, l_extendedprice#9, l_discount#10, l_shipdate#11]
+Condition : ((isnotnull(l_shipdate#11) AND (l_shipdate#11 > 1995-03-15)) AND isnotnull(l_orderkey#8))
+
+(14) Project [codegen id : 2]
+Output [3]: [l_orderkey#8, l_extendedprice#9, l_discount#10]
+Input [4]: [l_orderkey#8, l_extendedprice#9, l_discount#10, l_shipdate#11]
+
+(15) BroadcastExchange
+Input [3]: [l_orderkey#8, l_extendedprice#9, l_discount#10]
+Arguments: HashedRelationBroadcastMode(List(input[0, bigint, true]),false), [id=#12]
+
+(16) BroadcastHashJoin [codegen id : 3]
+Left keys [1]: [o_orderkey#3]
+Right keys [1]: [l_orderkey#8]
+Join condition: None
+
+(17) Project [codegen id : 3]
+Output [5]: [o_orderdate#5, o_shippriority#6, l_orderkey#8, l_extendedprice#9, l_discount#10]
+Input [6]: [o_orderkey#3, o_orderdate#5, o_shippriority#6, l_orderkey#8, l_extendedprice#9, l_discount#10]
+
+(18) HashAggregate [codegen id : 3]
+Input [5]: [o_orderdate#5, o_shippriority#6, l_orderkey#8, l_extendedprice#9, l_discount#10]
+Keys [3]: [l_orderkey#8, o_orderdate#5, o_shippriority#6]
+Functions [1]: [partial_sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))]
+Aggregate Attributes [2]: [sum#13, isEmpty#14]
+Results [5]: [l_orderkey#8, o_orderdate#5, o_shippriority#6, sum#15, isEmpty#16]
+
+(19) Exchange
+Input [5]: [l_orderkey#8, o_orderdate#5, o_shippriority#6, sum#15, isEmpty#16]
+Arguments: hashpartitioning(l_orderkey#8, o_orderdate#5, o_shippriority#6, 5), ENSURE_REQUIREMENTS, [id=#17]
+
+(20) HashAggregate [codegen id : 4]
+Input [5]: [l_orderkey#8, o_orderdate#5, o_shippriority#6, sum#15, isEmpty#16]
+Keys [3]: [l_orderkey#8, o_orderdate#5, o_shippriority#6]
+Functions [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))]
+Aggregate Attributes [1]: [sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))#18]
+Results [4]: [l_orderkey#8, sum(CheckOverflow((promote_precision(cast(l_extendedprice#9 as decimal(11,0))) * promote_precision(CheckOverflow((1 - promote_precision(cast(l_discount#10 as decimal(11,0)))), DecimalType(11,0), true))), DecimalType(22,0), true))#18 AS revenue#19, o_orderdate#5, o_shippriority#6]
+
+(21) TakeOrderedAndProject
+Input [4]: [l_orderkey#8, revenue#19, o_orderdate#5, o_shippriority#6]
+Arguments: 10, [revenue#19 DESC NULLS LAST, o_orderdate#5 ASC NULLS FIRST], [l_orderkey#8, revenue#19, o_orderdate#5, o_shippriority#6]
+

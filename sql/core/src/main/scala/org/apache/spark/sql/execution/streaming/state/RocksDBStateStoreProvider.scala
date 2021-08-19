@@ -106,22 +106,43 @@ private[sql] class RocksDBStateStoreProvider
     override def metrics: StateStoreMetrics = {
       val rocksDBMetrics = rocksDB.metrics
       def commitLatencyMs(typ: String): Long = rocksDBMetrics.lastCommitLatencyMs.getOrElse(typ, 0L)
-      def avgNativeOpsLatencyMs(typ: String): Long = {
-        rocksDBMetrics.nativeOpsLatencyMicros.get(typ).map(_.avg).getOrElse(0.0).toLong
+      def nativeOpsLatencyMillis(typ: String): Long = {
+        rocksDBMetrics.nativeOpsMetrics.get(typ).map(_ * 1000).getOrElse(0)
+      }
+      def sumNativeOpsLatencyMillis(typ: String): Long = {
+        rocksDBMetrics.nativeOpsHistograms.get(typ).map(_.sum / 1000).getOrElse(0)
+      }
+      def nativeOpsCount(typ: String): Long = {
+        rocksDBMetrics.nativeOpsHistograms.get(typ).map(_.count).getOrElse(0)
+      }
+      def nativeOpsMetrics(typ: String): Long = {
+        rocksDBMetrics.nativeOpsMetrics.get(typ).getOrElse(0)
       }
 
       val stateStoreCustomMetrics = Map[StateStoreCustomMetric, Long](
         CUSTOM_METRIC_SST_FILE_SIZE -> rocksDBMetrics.totalSSTFilesBytes,
-        CUSTOM_METRIC_GET_TIME -> avgNativeOpsLatencyMs("get"),
-        CUSTOM_METRIC_PUT_TIME -> avgNativeOpsLatencyMs("put"),
+        CUSTOM_METRIC_GET_TIME -> sumNativeOpsLatencyMillis("get"),
+        CUSTOM_METRIC_PUT_TIME -> sumNativeOpsLatencyMillis("put"),
+        CUSTOM_METRIC_GET_COUNT -> nativeOpsCount("get"),
+        CUSTOM_METRIC_PUT_COUNT -> nativeOpsCount("put"),
         CUSTOM_METRIC_WRITEBATCH_TIME -> commitLatencyMs("writeBatch"),
         CUSTOM_METRIC_FLUSH_TIME -> commitLatencyMs("flush"),
-        CUSTOM_METRIC_PAUSE_TIME -> commitLatencyMs("pause"),
+        CUSTOM_METRIC_COMMIT_COMPACT_TIME -> commitLatencyMs("compact"),
+        CUSTOM_METRIC_PAUSE_TIME -> commitLatencyMs("pauseBg"),
         CUSTOM_METRIC_CHECKPOINT_TIME -> commitLatencyMs("checkpoint"),
         CUSTOM_METRIC_FILESYNC_TIME -> commitLatencyMs("fileSync"),
         CUSTOM_METRIC_BYTES_COPIED -> rocksDBMetrics.bytesCopied,
         CUSTOM_METRIC_FILES_COPIED -> rocksDBMetrics.filesCopied,
-        CUSTOM_METRIC_FILES_REUSED -> rocksDBMetrics.filesReused
+        CUSTOM_METRIC_FILES_REUSED -> rocksDBMetrics.filesReused,
+        CUSTOM_METRIC_BLOCK_CACHE_MISS -> nativeOpsMetrics("readBlockCacheMissCount"),
+        CUSTOM_METRIC_BLOCK_CACHE_HITS -> nativeOpsMetrics("readBlockCacheHitCount"),
+        CUSTOM_METRIC_BYTES_READ -> nativeOpsMetrics("totalBytesRead"),
+        CUSTOM_METRIC_BYTES_WRITTEN -> nativeOpsMetrics("totalBytesWritten"),
+        CUSTOM_METRIC_ITERATOR_BYTES_READ -> nativeOpsMetrics("totalBytesReadThroughIterator"),
+        CUSTOM_METRIC_STALL_TIME -> nativeOpsLatencyMillis("writerStallDuration"),
+        CUSTOM_METRIC_TOTAL_COMPACT_TIME -> sumNativeOpsLatencyMillis("compaction"),
+        CUSTOM_METRIC_COMPACT_READ_BYTES -> nativeOpsMetrics("totalBytesReadByCompaction"),
+        CUSTOM_METRIC_COMPACT_WRITTEN_BYTES -> nativeOpsMetrics("totalBytesWrittenByCompaction")
       ) ++ rocksDBMetrics.zipFileBytesUncompressed.map(bytes =>
         Map(CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED -> bytes)).getOrElse(Map())
 
@@ -213,32 +234,68 @@ object RocksDBStateStoreProvider {
   val STATE_ENCODING_NUM_VERSION_BYTES = 1
   val STATE_ENCODING_VERSION: Byte = 0
 
-  // Native operation latencies report as latency per 1000 calls
-  // as SQLMetrics support ms latency whereas RocksDB reports it in microseconds.
+  // Native operation latencies report as latency in microseconds
+  // as SQLMetrics support millis. Convert the value to millis
   val CUSTOM_METRIC_GET_TIME = StateStoreCustomTimingMetric(
-    "rocksdbGetLatency", "RocksDB: avg get latency (per 1000 calls)")
+    "rocksdbGetLatency", "RocksDB: total get call latency")
   val CUSTOM_METRIC_PUT_TIME = StateStoreCustomTimingMetric(
-    "rocksdbPutLatency", "RocksDB: avg put latency (per 1000 calls)")
+    "rocksdbPutLatency", "RocksDB: total put call latency")
+
+  val CUSTOM_METRIC_GET_COUNT = StateStoreCustomSumMetric(
+    "rocksdbGetCount", "RocksDB: number of get calls")
+  val CUSTOM_METRIC_PUT_COUNT = StateStoreCustomSumMetric(
+    "rocksdbPutCount", "RocksDB: number of put calls")
 
   // Commit latency detailed breakdown
   val CUSTOM_METRIC_WRITEBATCH_TIME = StateStoreCustomTimingMetric(
     "rocksdbCommitWriteBatchLatency", "RocksDB: commit - write batch time")
   val CUSTOM_METRIC_FLUSH_TIME = StateStoreCustomTimingMetric(
     "rocksdbCommitFlushLatency", "RocksDB: commit - flush time")
+  val CUSTOM_METRIC_COMMIT_COMPACT_TIME = StateStoreCustomTimingMetric(
+    "rocksdbCommitCompactLatency", "RocksDB: commit - compact time")
   val CUSTOM_METRIC_PAUSE_TIME = StateStoreCustomTimingMetric(
     "rocksdbCommitPauseLatency", "RocksDB: commit - pause bg time")
   val CUSTOM_METRIC_CHECKPOINT_TIME = StateStoreCustomTimingMetric(
     "rocksdbCommitCheckpointLatency", "RocksDB: commit - checkpoint time")
   val CUSTOM_METRIC_FILESYNC_TIME = StateStoreCustomTimingMetric(
-    "rocksdbFileSyncTime", "RocksDB: commit - file sync time")
-  val CUSTOM_METRIC_FILES_COPIED = StateStoreCustomSizeMetric(
+    "rocksdbCommitFileSyncLatencyMs", "RocksDB: commit - file sync to external storage time")
+  val CUSTOM_METRIC_FILES_COPIED = StateStoreCustomSumMetric(
     "rocksdbFilesCopied", "RocksDB: file manager - files copied")
   val CUSTOM_METRIC_BYTES_COPIED = StateStoreCustomSizeMetric(
     "rocksdbBytesCopied", "RocksDB: file manager - bytes copied")
-  val CUSTOM_METRIC_FILES_REUSED = StateStoreCustomSizeMetric(
+  val CUSTOM_METRIC_FILES_REUSED = StateStoreCustomSumMetric(
     "rocksdbFilesReused", "RocksDB: file manager - files reused")
   val CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED = StateStoreCustomSizeMetric(
     "rocksdbZipFileBytesUncompressed", "RocksDB: file manager - uncompressed zip file bytes")
+
+  val CUSTOM_METRIC_BLOCK_CACHE_MISS = StateStoreCustomSumMetric(
+    "rocksdbReadBlockCacheMissCount",
+    "RocksDB: read - count of cache misses that required reading from local disk")
+  val CUSTOM_METRIC_BLOCK_CACHE_HITS = StateStoreCustomSumMetric(
+    "rocksdbReadBlockCacheHitCount",
+    "RocksDB: read - count of cache hits in RocksDB block cache avoiding disk read")
+  val CUSTOM_METRIC_BYTES_READ = StateStoreCustomSizeMetric(
+    "rocksdbTotalBytesRead",
+    "RocksDB: read - total of uncompressed bytes read (from memtables/cache/sst) from DB::Get()")
+  val CUSTOM_METRIC_BYTES_WRITTEN = StateStoreCustomSizeMetric(
+    "rocksdbTotalBytesWritten",
+    "RocksDB: write - total of uncompressed bytes written by " +
+      "DB::{Put(), Delete(), Merge(), Write()}")
+  val CUSTOM_METRIC_ITERATOR_BYTES_READ = StateStoreCustomSizeMetric(
+    "rocksdbTotalBytesReadThroughIterator",
+    "RocksDB: read - total of uncompressed bytes read using an iterator")
+  val CUSTOM_METRIC_STALL_TIME = StateStoreCustomTimingMetric(
+    "rocksdbWriterStallLatencyMs",
+    "RocksDB: write - writer wait time for compaction or flush to finish")
+  val CUSTOM_METRIC_TOTAL_COMPACT_TIME = StateStoreCustomTimingMetric(
+    "rocksdbTotalCompactionLatencyMs",
+    "RocksDB: compaction - total compaction time including background")
+  val CUSTOM_METRIC_COMPACT_READ_BYTES = StateStoreCustomSizeMetric(
+    "rocksdbTotalBytesReadByCompaction",
+    "RocksDB: compaction - total bytes read by the compaction process")
+  val CUSTOM_METRIC_COMPACT_WRITTEN_BYTES = StateStoreCustomSizeMetric(
+    "rocksdbTotalBytesWrittenByCompaction",
+    "RocksDB: compaction - total bytes written by the compaction process")
 
   // Total SST file size
   val CUSTOM_METRIC_SST_FILE_SIZE = StateStoreCustomSizeMetric(
@@ -246,9 +303,13 @@ object RocksDBStateStoreProvider {
 
   val ALL_CUSTOM_METRICS = Seq(
     CUSTOM_METRIC_SST_FILE_SIZE, CUSTOM_METRIC_GET_TIME, CUSTOM_METRIC_PUT_TIME,
-    CUSTOM_METRIC_WRITEBATCH_TIME, CUSTOM_METRIC_FLUSH_TIME, CUSTOM_METRIC_PAUSE_TIME,
-    CUSTOM_METRIC_CHECKPOINT_TIME, CUSTOM_METRIC_FILESYNC_TIME,
+    CUSTOM_METRIC_WRITEBATCH_TIME, CUSTOM_METRIC_FLUSH_TIME, CUSTOM_METRIC_COMMIT_COMPACT_TIME,
+    CUSTOM_METRIC_PAUSE_TIME, CUSTOM_METRIC_CHECKPOINT_TIME, CUSTOM_METRIC_FILESYNC_TIME,
     CUSTOM_METRIC_BYTES_COPIED, CUSTOM_METRIC_FILES_COPIED, CUSTOM_METRIC_FILES_REUSED,
-    CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED
+    CUSTOM_METRIC_ZIP_FILE_BYTES_UNCOMPRESSED, CUSTOM_METRIC_GET_COUNT, CUSTOM_METRIC_PUT_COUNT,
+    CUSTOM_METRIC_BLOCK_CACHE_MISS, CUSTOM_METRIC_BLOCK_CACHE_HITS, CUSTOM_METRIC_BYTES_READ,
+    CUSTOM_METRIC_BYTES_WRITTEN, CUSTOM_METRIC_ITERATOR_BYTES_READ, CUSTOM_METRIC_STALL_TIME,
+    CUSTOM_METRIC_TOTAL_COMPACT_TIME, CUSTOM_METRIC_COMPACT_READ_BYTES,
+    CUSTOM_METRIC_COMPACT_WRITTEN_BYTES
   )
 }

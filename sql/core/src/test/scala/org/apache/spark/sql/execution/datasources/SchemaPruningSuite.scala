@@ -870,4 +870,16 @@ abstract class SchemaPruningSuite
       checkAnswer(query, Row(1) :: Row(2) :: Nil)
     }
   }
+
+  test("SPARK-36352: Spark should check result plan's output schema name") {
+    withMixedCaseData {
+      val query = sql("select cOL1, cOl2.B from mixedcase")
+      assert(query.queryExecution.executedPlan.schema.catalogString ==
+        "struct<cOL1:string,B:int>")
+      checkAnswer(query.orderBy("id"),
+        Row("r0c1", 1) ::
+          Row("r1c1", 2) ::
+          Nil)
+    }
+  }
 }

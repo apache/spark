@@ -561,15 +561,9 @@ case class JsonToStructs(
 
   override def checkInputDataTypes(): TypeCheckResult = nullableSchema match {
     case _: StructType | _: ArrayType | _: MapType =>
-      val invalidMapType = nullableSchema.existsRecursively(dataType => dataType match {
-        case MapType(keyType, _, _) if keyType != StringType => true
-        case _ => false
-      })
-      if (invalidMapType) {
-        TypeCheckResult.TypeCheckFailure(
-          s"Input schema ${nullableSchema.catalogString} can only contain StringType " +
-            "as a key type for a MapType.")
-      } else {
+      ExprUtils.checkJsonSchema(nullableSchema).map { e =>
+        TypeCheckResult.TypeCheckFailure(e.getMessage)
+      } getOrElse {
         super.checkInputDataTypes()
       }
     case _ => TypeCheckResult.TypeCheckFailure(

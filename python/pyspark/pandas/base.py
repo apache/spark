@@ -27,11 +27,7 @@ import numpy as np
 import pandas as pd  # noqa: F401
 from pandas.api.types import is_list_like, CategoricalDtype
 from pyspark.sql import functions as F, Column, Window
-from pyspark.sql.types import (
-    DoubleType,
-    FloatType,
-    LongType,
-)
+from pyspark.sql.types import LongType
 
 from pyspark import pandas as ps  # For running doctests and reference resolution in PyCharm.
 from pyspark.pandas._typing import Axis, Dtype, IndexOpsLike, Label, SeriesOrIndex
@@ -1622,15 +1618,9 @@ class IndexOpsMixin(object, metaclass=ABCMeta):
         if len(kvs) == 0:  # uniques are all missing values
             new_scol = SF.lit(na_sentinel_code)
         else:
-            scol = self.spark.column
-            if isinstance(self.spark.data_type, (FloatType, DoubleType)):
-                cond = scol.isNull() | F.isnan(scol)
-            else:
-                cond = scol.isNull()
             map_scol = F.create_map(*kvs)
-
-            null_scol = F.when(cond, SF.lit(na_sentinel_code))
-            new_scol = null_scol.otherwise(map_scol[scol])
+            null_scol = F.when(self.isnull().spark.column, SF.lit(na_sentinel_code))
+            new_scol = null_scol.otherwise(map_scol[self.spark.column])
 
         codes = self._with_new_scol(new_scol.alias(self._internal.data_spark_column_names[0]))
 
