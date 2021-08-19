@@ -97,7 +97,7 @@ class SparkUnsupportedOperationException(errorClass: String, messageParameters: 
 }
 
 /**
- * File doesn't be found exception thrown from Spark with an error class.
+ * File not found exception thrown from Spark with an error class.
  */
 class SparkFileNotFoundException(errorClass: String, messageParameters: Array[String])
   extends FileNotFoundException(
@@ -136,7 +136,7 @@ class SparkRuntimeException(errorClass: String, messageParameters: Array[String]
 }
 
 /**
- * NoSuch element exception thrown form Spark with an error class.
+ * No such element exception thrown form Spark with an error class.
  */
 class SparkNoSuchElementException(errorClass: String, messageParameters: Array[String])
   extends NoSuchElementException(

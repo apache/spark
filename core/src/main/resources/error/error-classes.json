@@ -1,7 +1,7 @@
 {
-  "ADD_FILES_WITH_ABSOLUTE_PATH_UNSUPPORTED_ERROR" : {
+  "ADD_FILES_WITH_ABSOLUTE_PATH_UNSUPPORTED" : {
     "message" : [ "%s does not support adding files with an absolute path" ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "AMBIGUOUS_FIELD_NAME" : {
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
@@ -65,8 +65,7 @@
     "sqlState" : "23000"
   },
   "FAILED_TO_INSTANTIATE_CONSTRUCTOR_FOR_CATALOG_ERROR" : {
-    "message" : [ "Failed during instantiating constructor for catalog '%s': %S" ],
-    "sqlState" : "42000"
+    "message" : [ "Failed during instantiating constructor for catalog '%s': %s" ]
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
@@ -99,7 +98,7 @@
   },
   "MICRO_BATCH_UNSUPPORTED_BY_DATA_SOURCE_ERROR" : {
     "message" : [ "Data source %s does not support microbatch processing." ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
@@ -111,7 +110,7 @@
   },
   "MULTI_STREAMING_QUERIES_USING_PATH_CONCURRENTLY_ERROR" : {
     "message" : [ "Multiple streaming queries are concurrently using %s" ],
-    "sqlState" : "42000"
+    "sqlState" : "23000"
   },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [ "Literal expressions required for pivot values, found '%s'" ],
@@ -121,8 +120,8 @@
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
   },
-  "NO_SUCH_ELEMENT_EXCEPTION_ERROR" : {
-    "message" : [ "" ]
+  "NO_SUCH_ELEMENT_EXCEPTION" : {
+    "message" : [ "%s" ]
   },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],

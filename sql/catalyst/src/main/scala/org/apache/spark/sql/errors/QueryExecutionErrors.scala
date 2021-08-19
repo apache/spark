@@ -1434,7 +1434,7 @@ object QueryExecutionErrors {
 
   def addFilesWithAbsolutePathUnsupportedError(commitProtocol: String): Throwable = {
     new SparkUnsupportedOperationException(
-      errorClass = "ADD_FILES_WITH_ABSOLUTE_PATH_UNSUPPORTED_ERROR",
+      errorClass = "ADD_FILES_WITH_ABSOLUTE_PATH_UNSUPPORTED",
       messageParameters = Array(commitProtocol))
   }
 
@@ -1516,13 +1516,16 @@ object QueryExecutionErrors {
 
   def noSuchElementExceptionError(): Throwable = {
     new SparkNoSuchElementException(
-      errorClass = "NO_SUCH_ELEMENT_EXCEPTION_ERROR",
+      errorClass = "NO_SUCH_ELEMENT_EXCEPTION",
       messageParameters = Array.empty
     )
   }
 
   def noSuchElementExceptionError(key: String): Throwable = {
-    new NoSuchElementException(key)
+    new SparkNoSuchElementException(
+      errorClass = "NO_SUCH_ELEMENT_EXCEPTION",
+      messageParameters = Array(key),
+    )
   }
 
   def cannotMutateReadOnlySQLConfError(): Throwable = {
