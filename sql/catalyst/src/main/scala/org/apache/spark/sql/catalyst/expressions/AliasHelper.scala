@@ -86,7 +86,7 @@ trait AliasHelper {
 
   protected def trimAliasesKeepSchema(e: Expression): Expression = {
     val trimAlias = trimAliases(e)
-    if (DataType.equalsIgnoreNullability(trimAlias.dataType, e.dataType)) {
+    if (!e.resolved || DataType.equalsIgnoreNullability(trimAlias.dataType, e.dataType)) {
       trimAlias
     } else {
       e
