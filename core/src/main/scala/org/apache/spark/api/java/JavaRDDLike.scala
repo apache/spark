@@ -455,11 +455,11 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * final aggregation on the executor.
    */
   def treeAggregate[U](
-    zeroValue: U,
-    seqOp: JFunction2[U, T, U],
-    combOp: JFunction2[U, U, U],
-    depth: Int,
-    finalAggregateOnExecutor: Boolean): U = {
+      zeroValue: U,
+      seqOp: JFunction2[U, T, U],
+      combOp: JFunction2[U, U, U],
+      depth: Int,
+      finalAggregateOnExecutor: Boolean): U = {
     rdd.treeAggregate(zeroValue, seqOp, combOp, depth, finalAggregateOnExecutor)(fakeClassTag[U])
   }
 
