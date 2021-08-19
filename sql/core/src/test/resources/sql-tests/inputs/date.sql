@@ -120,9 +120,11 @@ select null - date '2019-10-06';
 select date_str - date '2001-09-28' from date_view;
 select date '2001-09-28' - date_str from date_view;
 
--- invalid: date + string/null literal
+-- invalid: date + string literal
 select date'2011-11-11' + '1';
 select '1' + date'2011-11-11';
+
+-- null result: date + null
 select date'2011-11-11' + null;
 select null + date'2011-11-11';
 

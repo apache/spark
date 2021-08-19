@@ -249,8 +249,17 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
         wrappedCallback.onComplete(wrappedCallback.getID());
       }
     } catch (Exception e) {
-      logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
-      respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+      if (e instanceof BlockPushNonFatalFailure) {
+        // Thrown by rpcHandler.receiveStream(reverseClient, meta, callback), the same as
+        // onComplete method. Respond an RPC message with the error code to client instead of
+        // using exceptions encoded in the RPCFailure. Using a proper RPCResponse is more
+        // efficient, and now only include the too old attempt case here.
+        respond(new RpcResponse(req.requestId,
+          new NioManagedBuffer(((BlockPushNonFatalFailure) e).getResponse())));
+      } else {
+        logger.error("Error while invoking RpcHandler#receive() on RPC id " + req.requestId, e);
+        respond(new RpcFailure(req.requestId, Throwables.getStackTraceAsString(e)));
+      }
       // We choose to totally fail the channel, rather than trying to recover as we do in other
       // cases.  We don't know how many bytes of the stream the client has already sent for the
       // stream, it's not worth trying to recover.

@@ -73,6 +73,6 @@ class TPCDSQueryWithStatsSuite extends TPCDSQuerySuite {
 
 @ExtendedSQLTest
 class TPCDSQueryANSISuite extends TPCDSQuerySuite {
-  override protected def sparkConf: SparkConf =
+  override def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.ANSI_ENABLED, true)
 }

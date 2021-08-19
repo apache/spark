@@ -64,6 +64,7 @@ Modifying and computations
    Index.drop_duplicates
    Index.min
    Index.max
+   Index.map
    Index.rename
    Index.repeat
    Index.take

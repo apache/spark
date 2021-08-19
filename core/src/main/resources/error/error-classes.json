@@ -33,6 +33,9 @@
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
     "sqlState" : "42000"
   },
+  "INVALID_JSON_SCHEMA_MAPTYPE" : {
+    "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ]
+  },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
     "sqlState" : "42000"

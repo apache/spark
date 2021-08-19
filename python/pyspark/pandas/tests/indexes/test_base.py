@@ -2335,6 +2335,80 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
 
         self.assertRaises(PandasNotImplementedError, lambda: psmidx.factorize())
 
+    def test_map(self):
+        pidx = pd.Index([1, 2, 3])
+        psidx = ps.from_pandas(pidx)
+
+        # Apply dict
+        self.assert_eq(
+            pidx.map({1: "one", 2: "two", 3: "three"}),
+            psidx.map({1: "one", 2: "two", 3: "three"}),
+        )
+        self.assert_eq(
+            pidx.map({1: "one", 2: "two"}),
+            psidx.map({1: "one", 2: "two"}),
+        )
+        self.assert_eq(
+            pidx.map({1: "one", 2: "two"}, na_action="ignore"),
+            psidx.map({1: "one", 2: "two"}, na_action="ignore"),
+        )
+        self.assert_eq(
+            pidx.map({1: 10, 2: 20}),
+            psidx.map({1: 10, 2: 20}),
+        )
+        self.assert_eq(
+            (pidx + 1).map({1: 10, 2: 20}),
+            (psidx + 1).map({1: 10, 2: 20}),
+        )
+
+        # Apply lambda
+        self.assert_eq(
+            pidx.map(lambda id: id + 1),
+            psidx.map(lambda id: id + 1),
+        )
+        self.assert_eq(
+            pidx.map(lambda id: id + 1.1),
+            psidx.map(lambda id: id + 1.1),
+        )
+        self.assert_eq(
+            pidx.map(lambda id: "{id} + 1".format(id=id)),
+            psidx.map(lambda id: "{id} + 1".format(id=id)),
+        )
+        self.assert_eq(
+            (pidx + 1).map(lambda id: "{id} + 1".format(id=id)),
+            (psidx + 1).map(lambda id: "{id} + 1".format(id=id)),
+        )
+
+        # Apply series
+        pser = pd.Series(["one", "two", "three"], index=[1, 2, 3])
+        self.assert_eq(
+            pidx.map(pser),
+            psidx.map(pser),
+        )
+        pser = pd.Series(["one", "two", "three"])
+        self.assert_eq(
+            pidx.map(pser),
+            psidx.map(pser),
+        )
+        self.assert_eq(
+            pidx.map(pser, na_action="ignore"),
+            psidx.map(pser, na_action="ignore"),
+        )
+        pser = pd.Series([1, 2, 3])
+        self.assert_eq(
+            pidx.map(pser),
+            psidx.map(pser),
+        )
+        self.assert_eq(
+            (pidx + 1).map(pser),
+            (psidx + 1).map(pser),
+        )
+
+        self.assertRaises(
+            TypeError,
+            lambda: psidx.map({1: 1, 2: 2.0, 3: "three"}),
+        )
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.indexes.test_base import *  # noqa: F401

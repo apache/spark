@@ -714,7 +714,7 @@ class AnalysisErrorSuite extends AnalysisTest {
 
   test("SPARK-30811: CTE should not cause stack overflow when " +
     "it refers to non-existent table with same name") {
-    val plan = With(
+    val plan = UnresolvedWith(
       UnresolvedRelation(TableIdentifier("t")),
       Seq("t" -> SubqueryAlias("t",
         Project(

@@ -2346,6 +2346,8 @@ def session_window(timeColumn, gapDuration):
     processing time.
     gapDuration is provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
     interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
+    It could also be a Column which can be evaluated to gap duration dynamically based on the
+    input row.
     The output column will be a struct called 'session_window' by default with the nested columns
     'start' and 'end', where 'start' and 'end' will be of :class:`pyspark.sql.types.TimestampType`.
     .. versionadded:: 3.2.0
@@ -2356,15 +2358,24 @@ def session_window(timeColumn, gapDuration):
     >>> w.select(w.session_window.start.cast("string").alias("start"),
     ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
     [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
+    >>> w = df.groupBy(session_window("date", lit("5 seconds"))).agg(sum("val").alias("sum"))
+    >>> w.select(w.session_window.start.cast("string").alias("start"),
+    ...          w.session_window.end.cast("string").alias("end"), "sum").collect()
+    [Row(start='2016-03-11 09:00:07', end='2016-03-11 09:00:12', sum=1)]
     """
-    def check_string_field(field, fieldName):
-        if not field or type(field) is not str:
-            raise TypeError("%s should be provided as a string" % fieldName)
+    def check_field(field, fieldName):
+        if field is None or not isinstance(field, (str, Column)):
+            raise TypeError("%s should be provided as a string or Column" % fieldName)
 
     sc = SparkContext._active_spark_context
     time_col = _to_java_column(timeColumn)
-    check_string_field(gapDuration, "gapDuration")
-    res = sc._jvm.functions.session_window(time_col, gapDuration)
+    check_field(gapDuration, "gapDuration")
+    gap_duration = (
+        gapDuration
+        if isinstance(gapDuration, str)
+        else _to_java_column(gapDuration)
+    )
+    res = sc._jvm.functions.session_window(time_col, gap_duration)
     return Column(res)
 
 

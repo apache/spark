@@ -1311,7 +1311,7 @@ private[spark] class DAGScheduler(
           s"${stage.shuffleDep.getMergerLocs.map(_.host).mkString(", ")}")
       } else {
         stage.shuffleDep.setShuffleMergeEnabled(false)
-        logInfo("Push-based shuffle disabled for $stage (${stage.name})")
+        logInfo(s"Push-based shuffle disabled for $stage (${stage.name})")
       }
     }
   }
