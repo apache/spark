@@ -90,7 +90,6 @@ ability to generate logical and physical plan for a given query using
  * [ADD FILE](sql-ref-syntax-aux-resource-mgmt-add-file.html)
  * [ADD JAR](sql-ref-syntax-aux-resource-mgmt-add-jar.html)
  * [ANALYZE TABLE](sql-ref-syntax-aux-analyze-table.html)
- * [ANALYZE TABLES](sql-ref-syntax-aux-analyze-tables.html)
  * [CACHE TABLE](sql-ref-syntax-aux-cache-cache-table.html)
  * [CLEAR CACHE](sql-ref-syntax-aux-cache-clear-cache.html)
  * [DESCRIBE DATABASE](sql-ref-syntax-aux-describe-database.html)
