@@ -709,6 +709,23 @@ class OpsOnDiffFramesEnabledTest(PandasOnSparkTestCase, SQLTestUtils):
             )
             self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
 
+        pdf = pd.DataFrame(
+            {("X", "A"): [None, 0], ("X", "B"): [4, None], ("Y", "C"): [3, 3], ("Y", "B"): [1, 1]}
+        )
+        pdf1 = pdf["X"]
+        pdf2 = pdf["Y"]
+        psdf = ps.from_pandas(pdf)
+        psdf1 = psdf["X"]
+        psdf2 = psdf["Y"]
+
+        if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
+            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2))
+        else:
+            # pandas < 1.2.0 returns unexpected dtypes,
+            # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
+            expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
+            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
+
     def test_insert(self):
         #
         # Basic DataFrame
@@ -1990,23 +2007,6 @@ class OpsOnDiffFramesDisabledTest(PandasOnSparkTestCase, SQLTestUtils):
         psdf1 = ps.from_pandas(pdf1)
 
         self.assertRaises(TypeError, lambda: psdf1.combine_first(ps.Series([1, 2])))
-
-        pdf = pd.DataFrame(
-            {("X", "A"): [None, 0], ("X", "B"): [4, None], ("Y", "C"): [3, 3], ("Y", "B"): [1, 1]}
-        )
-        pdf1 = pdf["X"]
-        pdf2 = pdf["Y"]
-        psdf = ps.from_pandas(pdf)
-        psdf1 = psdf["X"]
-        psdf2 = psdf["Y"]
-
-        if LooseVersion(pd.__version__) >= LooseVersion("1.2.0"):
-            self.assert_eq(pdf1.combine_first(pdf2), psdf1.combine_first(psdf2))
-        else:
-            # pandas < 1.2.0 returns unexpected dtypes,
-            # please refer to https://github.com/pandas-dev/pandas/issues/28481 for details
-            expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
-            self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
 
 
 if __name__ == "__main__":

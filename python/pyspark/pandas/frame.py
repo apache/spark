@@ -7939,7 +7939,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
         """
         if not isinstance(other, DataFrame):
             raise TypeError("`combine_first` only allows `DataFrame` for parameter `other`")
-        combined_df = self if same_anchor(self, other) else combine_frames(self, other)
+        if same_anchor(self, other):
+            self = DataFrame(self._internal.resolved_copy)
+            other = DataFrame(other._internal.resolved_copy)
+
+        combined_df = combine_frames(self, other)
         combined_sdf = combined_df._internal.spark_frame
         combined_column_labels = combined_df._internal.column_labels
 
@@ -7953,7 +7957,8 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
                 if column_label[0] == "this":
                     column_name = self._internal.spark_column_name_for(column_label[1:])
                     old_col = scol_for(combined_sdf, "__this_" + column_name)
-                    new_col = scol_for(combined_sdf, ("__that_" + column_name))
+                    other_column_name = other._internal.spark_column_name_for(column_label[1:])
+                    new_col = scol_for(combined_sdf, ("__that_" + other_column_name))
                     cond = F.when(old_col.isNull(), new_col).otherwise(old_col).alias(column_name)
                     combined_sdf = combined_sdf.select(*(combined_sdf.columns), cond)
                     final_column_names.append(column_name)
@@ -7977,8 +7982,7 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             column_labels=final_column_labels,
             data_spark_columns=[scol_for(combined_sdf, col) for col in final_column_names],
         )
-        df = DataFrame(internal)
-        return df
+        return DataFrame(internal)
 
     def append(
         self,
