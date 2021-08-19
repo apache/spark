@@ -43,8 +43,12 @@ case class SkewJoinAwareCost(
     numSkewJoins: Int) extends Cost {
   override def compare(that: Cost): Int = that match {
     case other: SkewJoinAwareCost =>
-      if (numSkewJoins > other.numSkewJoins || numShuffles < other.numShuffles) {
-        // If more skew joins are optimized or less shuffle nodes, it means the cost is lower
+      // If more skew joins are optimized or less shuffle nodes, it means the cost is lower
+      if (numSkewJoins > other.numSkewJoins) {
+        -1
+      } else if (numSkewJoins < other.numSkewJoins) {
+        1
+      } else if (numShuffles < other.numShuffles) {
         -1
       } else if (numShuffles > other.numShuffles) {
         1
