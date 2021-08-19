@@ -480,7 +480,7 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
          |""".stripMargin)
   }
 
-  test("SPARK-36516:") {
+  test("SPARK-36516: verify the behavior of FILE_META_CACHE_ENABLED_SOURCE_LIST") {
     val e1 = intercept[IllegalArgumentException] {
       spark.conf.set(SQLConf.FILE_META_CACHE_ENABLED_SOURCE_LIST.key, "text")
     }
