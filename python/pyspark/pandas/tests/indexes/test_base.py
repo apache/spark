@@ -26,7 +26,6 @@ import pandas as pd
 import pyspark.pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.pandas.missing.indexes import (
-    MissingPandasLikeCategoricalIndex,
     MissingPandasLikeDatetimeIndex,
     MissingPandasLikeIndex,
     MissingPandasLikeMultiIndex,
@@ -516,19 +515,6 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 getattr(psdf.set_index("c").index, name)()
 
         # CategoricalIndex functions
-        missing_functions = inspect.getmembers(
-            MissingPandasLikeCategoricalIndex, inspect.isfunction
-        )
-        unsupported_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "unsupported_function"
-        ]
-        for name in unsupported_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "method.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("d").index, name)()
-
         deprecated_functions = [
             name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
         ]
@@ -607,22 +593,6 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
                 "property.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
             ):
                 getattr(psdf.set_index("c").index, name)
-
-        # CategoricalIndex properties
-        missing_properties = inspect.getmembers(
-            MissingPandasLikeCategoricalIndex, lambda o: isinstance(o, property)
-        )
-        unsupported_properties = [
-            name
-            for (name, type_) in missing_properties
-            if type_.fget.__name__ == "unsupported_property"
-        ]
-        for name in unsupported_properties:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError,
-                "property.*Index.*{}.*not implemented( yet\\.|\\. .+)".format(name),
-            ):
-                getattr(psdf.set_index("d").index, name)
 
     def test_index_has_duplicates(self):
         indexes = [("a", "b", "c"), ("a", "a", "c"), (1, 3, 3), (1, 2, 3)]

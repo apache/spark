@@ -23,7 +23,6 @@ from pandas.api.types import is_hashable, CategoricalDtype
 from pyspark import pandas as ps
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.internal import InternalField
-from pyspark.pandas.missing.indexes import MissingPandasLikeCategoricalIndex
 from pyspark.pandas.series import Series
 from pyspark.sql.types import StructField
 
@@ -634,12 +633,6 @@ class CategoricalIndex(Index):
         ).rename(self.name)
 
     def __getattr__(self, item: str) -> Any:
-        if hasattr(MissingPandasLikeCategoricalIndex, item):
-            property_or_func = getattr(MissingPandasLikeCategoricalIndex, item)
-            if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
-            else:
-                return partial(property_or_func, self)
         raise AttributeError("'CategoricalIndex' object has no attribute '{}'".format(item))
 
     def map(  # type: ignore[override]

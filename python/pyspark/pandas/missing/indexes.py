@@ -119,10 +119,6 @@ class MissingPandasLikeDatetimeIndex(MissingPandasLikeIndex):
     std = _unsupported_function("std", cls="DatetimeIndex")
 
 
-class MissingPandasLikeCategoricalIndex(MissingPandasLikeIndex):
-    pass
-
-
 class MissingPandasLikeMultiIndex(object):
 
     # Deprecated properties
