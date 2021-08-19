@@ -119,14 +119,11 @@ private[spark] object HiveUtils extends Logging {
     .createWithDefault(Nil)
 
   val HIVE_METASTORE_METACONF_PREFIX = buildStaticConf("spark.sql.hive.metastore.metaconf.prefix")
-    .doc(s"""the meta conf prefix that used to extract meta conf from HiveConf.
-      | for example,you should add the following config in SparkConf, to use the meta conf `user.name`
-      |
-      | ```
-      | spark.sql.hive.metastore.metaconf.prefix     hive.metastore.metaconf.
-      | spark.hive.metastore.metaconf.user.name      xxx
-      | ```
-      """.stripMargin)
+    .doc("the meta conf prefix that used to extract meta conf from HiveConf. " +
+      "for example, to use the meta conf `user.name`, " +
+      "you should add the following config in SparkConf : " +
+      "1. spark.sql.hive.metastore.metaconf.prefix  hive.metastore.metaconf. " +
+      "2. spark.hive.metastore.metaconf.user.name   xxx")
     .version("3.3.0")
     .stringConf
     .createWithDefaultString("hive.metastore.metaconf.")
