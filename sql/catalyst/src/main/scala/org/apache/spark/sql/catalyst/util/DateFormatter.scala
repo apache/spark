@@ -199,6 +199,14 @@ object DateFormatter {
   }
 
   def apply(
+      format: Option[String],
+      locale: Locale,
+      legacyFormat: LegacyDateFormat,
+      isParsing: Boolean): DateFormatter = {
+    getFormatter(format, locale, legacyFormat, isParsing)
+  }
+
+  def apply(
       format: String,
       locale: Locale,
       legacyFormat: LegacyDateFormat,

@@ -21,7 +21,7 @@ import java.io._
 import java.nio.charset.{Charset, StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
-import java.time.ZoneId
+import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 import java.util.Locale
 
 import com.fasterxml.jackson.core.JsonFactory
@@ -33,7 +33,7 @@ import org.apache.spark.{SparkConf, SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{functions => F, _}
 import org.apache.spark.sql.catalyst.json._
-import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.execution.ExternalRDD
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, DataSource, InMemoryFileIndex, NoopCache}
 import org.apache.spark.sql.execution.datasources.v2.json.JsonScanBuilder
@@ -2957,6 +2957,39 @@ abstract class JsonSuite
       spark.read.option("mode", "permissive")
         .json(Seq("""[{"a": "str"}, null, {"a": "str"}]""").toDS),
       Row(null) :: Nil)
+  }
+
+  test("SPARK-36536: use casting when datetime pattern is not set") {
+    def isLegacy: Boolean = {
+      spark.conf.get(SQLConf.LEGACY_TIME_PARSER_POLICY).toUpperCase(Locale.ROOT) ==
+        SQLConf.LegacyBehaviorPolicy.LEGACY.toString
+    }
+    withSQLConf(
+      SQLConf.DATETIME_JAVA8API_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> DateTimeTestUtils.UTC.getId) {
+      withTempPath { path =>
+        Seq(
+          """{"d":"2021","ts_ltz":"2021","ts_ntz": "2021"}""",
+          """{"d":"2021-01","ts_ltz":"2021-01 ","ts_ntz":"2021-01"}""",
+          """{"d":" 2021-2-1","ts_ltz":"2021-3-02","ts_ntz": "2021-10-1"}""",
+          """{"d":"2021-8-18 00:00:00","ts_ltz":"2021-8-18 21:44:30Z"""" +
+          ""","ts_ntz":"2021-8-18T21:44:30.123"}"""
+        ).toDF().repartition(1).write.text(path.getCanonicalPath)
+        val readback = spark.read.schema("d date, ts_ltz timestamp_ltz, ts_ntz timestamp_ntz")
+          .json(path.getCanonicalPath)
+        checkAnswer(
+          readback,
+          Seq(
+            Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
+              if (isLegacy) null else LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+            Row(LocalDate.of(2021, 1, 1), Instant.parse("2021-01-01T00:00:00Z"),
+              if (isLegacy) null else LocalDateTime.of(2021, 1, 1, 0, 0, 0)),
+            Row(LocalDate.of(2021, 2, 1), Instant.parse("2021-03-02T00:00:00Z"),
+              if (isLegacy) null else LocalDateTime.of(2021, 10, 1, 0, 0, 0)),
+            Row(LocalDate.of(2021, 8, 18), Instant.parse("2021-08-18T21:44:30Z"),
+              if (isLegacy) null else LocalDateTime.of(2021, 8, 18, 21, 44, 30, 123000000))))
+      }
+    }
   }
 }
 
