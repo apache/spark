@@ -652,40 +652,40 @@ Results [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manuf
 Input [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sales_cnt#23, sales_amt#24]
 Keys [5]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88]
 Functions [2]: [partial_sum(sales_cnt#23), partial_sum(UnscaledValue(sales_amt#24))]
-Aggregate Attributes [2]: [sum#131, sum#132]
-Results [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sum#133, sum#134]
+Aggregate Attributes [2]: [sum#68, sum#131]
+Results [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sum#70, sum#132]
 
 (121) Exchange
-Input [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sum#133, sum#134]
-Arguments: hashpartitioning(d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, 5), ENSURE_REQUIREMENTS, [id=#135]
+Input [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sum#70, sum#132]
+Arguments: hashpartitioning(d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, 5), ENSURE_REQUIREMENTS, [id=#133]
 
 (122) HashAggregate [codegen id : 49]
-Input [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sum#133, sum#134]
+Input [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sum#70, sum#132]
 Keys [5]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88]
 Functions [2]: [sum(sales_cnt#23), sum(UnscaledValue(sales_amt#24))]
-Aggregate Attributes [2]: [sum(sales_cnt#23)#136, sum(UnscaledValue(sales_amt#24))#137]
-Results [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sum(sales_cnt#23)#136 AS sales_cnt#138, MakeDecimal(sum(UnscaledValue(sales_amt#24))#137,18,2) AS sales_amt#139]
+Aggregate Attributes [2]: [sum(sales_cnt#23)#73, sum(UnscaledValue(sales_amt#24))#74]
+Results [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sum(sales_cnt#23)#73 AS sales_cnt#134, MakeDecimal(sum(UnscaledValue(sales_amt#24))#74,18,2) AS sales_amt#135]
 
 (123) Exchange
-Input [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sales_cnt#138, sales_amt#139]
-Arguments: hashpartitioning(i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, 5), ENSURE_REQUIREMENTS, [id=#140]
+Input [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sales_cnt#134, sales_amt#135]
+Arguments: hashpartitioning(i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, 5), ENSURE_REQUIREMENTS, [id=#136]
 
 (124) Sort [codegen id : 50]
-Input [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sales_cnt#138, sales_amt#139]
+Input [7]: [d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sales_cnt#134, sales_amt#135]
 Arguments: [i_brand_id#85 ASC NULLS FIRST, i_class_id#86 ASC NULLS FIRST, i_category_id#87 ASC NULLS FIRST, i_manufact_id#88 ASC NULLS FIRST], false, 0
 
 (125) SortMergeJoin [codegen id : 51]
 Left keys [4]: [i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12]
 Right keys [4]: [i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88]
-Join condition: (CheckOverflow((promote_precision(cast(sales_cnt#75 as decimal(17,2))) / promote_precision(cast(sales_cnt#138 as decimal(17,2)))), DecimalType(37,20), true) < 0.90000000000000000000)
+Join condition: (CheckOverflow((promote_precision(cast(sales_cnt#75 as decimal(17,2))) / promote_precision(cast(sales_cnt#134 as decimal(17,2)))), DecimalType(37,20), true) < 0.90000000000000000000)
 
 (126) Project [codegen id : 51]
-Output [10]: [d_year#90 AS prev_year#141, d_year#15 AS year#142, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, sales_cnt#138 AS prev_yr_cnt#143, sales_cnt#75 AS curr_yr_cnt#144, (sales_cnt#75 - sales_cnt#138) AS sales_cnt_diff#145, CheckOverflow((promote_precision(cast(sales_amt#76 as decimal(19,2))) - promote_precision(cast(sales_amt#139 as decimal(19,2)))), DecimalType(19,2), true) AS sales_amt_diff#146]
-Input [14]: [d_year#15, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, sales_cnt#75, sales_amt#76, d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sales_cnt#138, sales_amt#139]
+Output [10]: [d_year#90 AS prev_year#137, d_year#15 AS year#138, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, sales_cnt#134 AS prev_yr_cnt#139, sales_cnt#75 AS curr_yr_cnt#140, (sales_cnt#75 - sales_cnt#134) AS sales_cnt_diff#141, CheckOverflow((promote_precision(cast(sales_amt#76 as decimal(19,2))) - promote_precision(cast(sales_amt#135 as decimal(19,2)))), DecimalType(19,2), true) AS sales_amt_diff#142]
+Input [14]: [d_year#15, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, sales_cnt#75, sales_amt#76, d_year#90, i_brand_id#85, i_class_id#86, i_category_id#87, i_manufact_id#88, sales_cnt#134, sales_amt#135]
 
 (127) TakeOrderedAndProject
-Input [10]: [prev_year#141, year#142, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, prev_yr_cnt#143, curr_yr_cnt#144, sales_cnt_diff#145, sales_amt_diff#146]
-Arguments: 100, [sales_cnt_diff#145 ASC NULLS FIRST, sales_amt_diff#146 ASC NULLS FIRST], [prev_year#141, year#142, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, prev_yr_cnt#143, curr_yr_cnt#144, sales_cnt_diff#145, sales_amt_diff#146]
+Input [10]: [prev_year#137, year#138, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, prev_yr_cnt#139, curr_yr_cnt#140, sales_cnt_diff#141, sales_amt_diff#142]
+Arguments: 100, [sales_cnt_diff#141 ASC NULLS FIRST, sales_amt_diff#142 ASC NULLS FIRST], [prev_year#137, year#138, i_brand_id#8, i_class_id#9, i_category_id#10, i_manufact_id#12, prev_yr_cnt#139, curr_yr_cnt#140, sales_cnt_diff#141, sales_amt_diff#142]
 
 ===== Subqueries =====
 
@@ -712,7 +712,7 @@ Condition : ((isnotnull(d_year#15) AND (d_year#15 = 2002)) AND isnotnull(d_date_
 
 (131) BroadcastExchange
 Input [2]: [d_date_sk#14, d_year#15]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#147]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#143]
 
 Subquery:2 Hosting operator id = 24 Hosting Expression = ss_sold_date_sk#29 IN dynamicpruning#6
 
@@ -741,7 +741,7 @@ Condition : ((isnotnull(d_year#90) AND (d_year#90 = 2001)) AND isnotnull(d_date_
 
 (135) BroadcastExchange
 Input [2]: [d_date_sk#89, d_year#90]
-Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#148]
+Arguments: HashedRelationBroadcastMode(List(cast(input[0, int, false] as bigint)),false), [id=#144]
 
 Subquery:5 Hosting operator id = 86 Hosting Expression = ss_sold_date_sk#100 IN dynamicpruning#83
 

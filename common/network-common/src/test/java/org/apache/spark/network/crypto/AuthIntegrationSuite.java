@@ -160,7 +160,7 @@ public class AuthIntegrationSuite {
     }
   }
 
-  private class AuthTestCtx {
+  private static class AuthTestCtx {
 
     private final String appId = "testAppId";
     private final TransportConf conf;

@@ -42,7 +42,9 @@ class PlanParserSuite extends AnalysisTest {
   private def intercept(sqlCommand: String, messages: String*): Unit =
     interceptParseException(parsePlan)(sqlCommand, messages: _*)
 
-  private def cte(plan: LogicalPlan, namedPlans: (String, (LogicalPlan, Seq[String]))*): With = {
+  private def cte(
+      plan: LogicalPlan,
+      namedPlans: (String, (LogicalPlan, Seq[String]))*): UnresolvedWith = {
     val ctes = namedPlans.map {
       case (name, (cte, columnAliases)) =>
         val subquery = if (columnAliases.isEmpty) {
@@ -52,7 +54,7 @@ class PlanParserSuite extends AnalysisTest {
         }
         name -> SubqueryAlias(name, subquery)
     }
-    With(plan, ctes)
+    UnresolvedWith(plan, ctes)
   }
 
   test("single comment case one") {

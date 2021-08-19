@@ -29,7 +29,7 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{StructField, StructType, TimestampType}
+import org.apache.spark.sql.types.{StructField, StructType, TimestampNTZType, TimestampType}
 
 abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
   import testImplicits._
@@ -82,6 +82,7 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  // scalastyle:off line.size.limit
   val timestampSchema = s"""
       {
         "namespace": "logical",
@@ -90,12 +91,16 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
         "fields": [
           {"name": "timestamp_millis", "type": {"type": "long","logicalType": "timestamp-millis"}},
           {"name": "timestamp_micros", "type": {"type": "long","logicalType": "timestamp-micros"}},
+          {"name": "local_timestamp_millis", "type": {"type": "long","logicalType": "local-timestamp-millis"}},
+          {"name": "local_timestamp_micros", "type": {"type": "long","logicalType": "local-timestamp-micros"}},
           {"name": "long", "type": "long"}
         ]
       }
     """
+  // scalastyle:on line.size.limit
 
-  val timestampInputData = Seq((1000L, 2000L, 3000L), (666000L, 999000L, 777000L))
+  val timestampInputData =
+    Seq((1000L, 2000L, 1000L, 2000L, 3000L), (666000L, 999000L, 666000L, 999000L, 777000L))
 
   def timestampFile(path: String): String = {
     val schema = new Schema.Parser().parse(timestampSchema)
@@ -110,7 +115,9 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
       // For microsecond precision, we multiple the value by 1000 to match the expected answer as
       // timestamp with millisecond precision.
       record.put("timestamp_micros", t._2 * 1000)
-      record.put("long", t._3)
+      record.put("local_timestamp_millis", t._3)
+      record.put("local_timestamp_micros", t._4 * 1000)
+      record.put("long", t._5)
       dataFileWriter.append(record)
     }
     dataFileWriter.flush()
@@ -148,6 +155,41 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Logical type: local_timestamp_millis") {
+    withTempDir { dir =>
+      val expected = timestampInputData.map(t =>
+        Row(DateTimeUtils.microsToLocalDateTime(DateTimeUtils.millisToMicros(t._3))))
+      val timestampAvro = timestampFile(dir.getAbsolutePath)
+      val df = spark.read.format("avro").load(timestampAvro).select('local_timestamp_millis)
+
+      checkAnswer(df, expected)
+
+      withTempPath { path =>
+        df.write.format("avro").save(path.toString)
+        checkAnswer(spark.read.format("avro").load(path.toString), expected)
+      }
+    }
+  }
+
+  test("Logical type: local_timestamp_micros") {
+    withTempDir { dir =>
+      val expected = timestampInputData.map(t =>
+        Row(DateTimeUtils.microsToLocalDateTime(DateTimeUtils.millisToMicros(t._4))))
+      val timestampAvro = timestampFile(dir.getAbsolutePath)
+      val df = spark.read.format("avro").load(timestampAvro).select('local_timestamp_micros)
+
+      checkAnswer(df, expected)
+
+      withTempPath { path =>
+        df.write.format("avro").save(path.toString)
+        val df2 = spark.read.format("avro").load(path.toString)
+        assert(df2.schema ==
+          StructType(StructField("local_timestamp_micros", TimestampNTZType, true) :: Nil))
+        checkAnswer(df2, expected)
+      }
+    }
+  }
+
   test("Logical type: user specified output schema with different timestamp types") {
     withTempDir { dir =>
       val timestampAvro = timestampFile(dir.getAbsolutePath)
@@ -180,13 +222,60 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("Logical type: user specified output schema with different timestamp ntz types") {
+    withTempDir { dir =>
+      val timestampAvro = timestampFile(dir.getAbsolutePath)
+      val df = spark.read.format("avro").load(timestampAvro).select(
+        'local_timestamp_millis, 'local_timestamp_micros)
+
+      val expected = timestampInputData.map(t =>
+        Row(DateTimeUtils.microsToLocalDateTime(DateTimeUtils.millisToMicros(t._3)),
+          DateTimeUtils.microsToLocalDateTime(DateTimeUtils.millisToMicros(t._4))))
+
+      val userSpecifiedTimestampSchema = s"""
+      {
+        "namespace": "logical",
+        "type": "record",
+        "name": "test",
+        "fields": [
+          {"name": "local_timestamp_millis",
+            "type": [{"type": "long","logicalType": "local-timestamp-millis"}, "null"]},
+          {"name": "local_timestamp_micros",
+            "type": [{"type": "long","logicalType": "local-timestamp-micros"}, "null"]}
+        ]
+      }
+    """
+
+      withTempPath { path =>
+        df.write
+          .format("avro")
+          .option("avroSchema", userSpecifiedTimestampSchema)
+          .save(path.toString)
+        checkAnswer(spark.read.format("avro").load(path.toString), expected)
+      }
+    }
+  }
+
   test("Read Long type as Timestamp") {
     withTempDir { dir =>
       val timestampAvro = timestampFile(dir.getAbsolutePath)
       val schema = StructType(StructField("long", TimestampType, true) :: Nil)
       val df = spark.read.format("avro").schema(schema).load(timestampAvro).select('long)
 
-      val expected = timestampInputData.map(t => Row(new Timestamp(t._3)))
+      val expected = timestampInputData.map(t => Row(new Timestamp(t._5)))
+
+      checkAnswer(df, expected)
+    }
+  }
+
+  test("Read Long type as Timestamp without time zone") {
+    withTempDir { dir =>
+      val timestampAvro = timestampFile(dir.getAbsolutePath)
+      val schema = StructType(StructField("long", TimestampNTZType, true) :: Nil)
+      val df = spark.read.format("avro").schema(schema).load(timestampAvro).select('long)
+
+      val expected = timestampInputData.map(t =>
+        Row(DateTimeUtils.microsToLocalDateTime(DateTimeUtils.millisToMicros(t._5))))
 
       checkAnswer(df, expected)
     }
@@ -195,8 +284,9 @@ abstract class AvroLogicalTypeSuite extends QueryTest with SharedSparkSession {
   test("Logical type: user specified read schema") {
     withTempDir { dir =>
       val timestampAvro = timestampFile(dir.getAbsolutePath)
-      val expected = timestampInputData
-        .map(t => Row(new Timestamp(t._1), new Timestamp(t._2), t._3))
+      val expected = timestampInputData.map(t => Row(new Timestamp(t._1), new Timestamp(t._2),
+        DateTimeUtils.microsToLocalDateTime(DateTimeUtils.millisToMicros(t._3)),
+        DateTimeUtils.microsToLocalDateTime(DateTimeUtils.millisToMicros(t._4)), t._5))
 
       val df = spark.read.format("avro").option("avroSchema", timestampSchema).load(timestampAvro)
       checkAnswer(df, expected)

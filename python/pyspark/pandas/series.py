@@ -23,7 +23,7 @@ import re
 import inspect
 import sys
 from collections.abc import Mapping
-from functools import partial, wraps, reduce
+from functools import partial, reduce
 from typing import (
     Any,
     Callable,
@@ -54,7 +54,6 @@ from pyspark.sql import functions as F, Column, DataFrame as SparkDataFrame
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
-    DataType,
     DecimalType,
     DoubleType,
     FloatType,
@@ -1895,7 +1894,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             self._psdf._update_internal_frame(psser._psdf._internal, requires_same_anchor=False)
             return None
         else:
-            return psser._with_new_scol(psser.spark.column, field=psser._internal.data_fields[0])
+            return psser.copy()
 
     def _fillna(
         self,
@@ -1915,12 +1914,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
 
         scol = self.spark.column
 
-        if isinstance(self.spark.data_type, (FloatType, DoubleType)):
-            cond = scol.isNull() | F.isnan(scol)
-        else:
-            if not self.spark.nullable:
-                return self.copy()
-            cond = scol.isNull()
+        if not self.spark.nullable and not isinstance(
+            self.spark.data_type, (FloatType, DoubleType)
+        ):
+            return self._psdf.copy()._psser_for(self._column_label)
+
+        cond = self.isnull().spark.column
 
         if value is not None:
             if not isinstance(value, (float, int, str, bool)):
@@ -3165,7 +3164,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             # Falls back to schema inference if it fails to get signature.
             should_infer_schema = True
 
-        apply_each = wraps(func)(lambda s: s.apply(func, args=args, **kwds))
+        apply_each = lambda s: s.apply(func, args=args, **kwds)
 
         if should_infer_schema:
             return self.pandas_on_spark._transform_batch(apply_each, None)
@@ -3453,7 +3452,9 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             if q_float < 0.0 or q_float > 1.0:
                 raise ValueError("percentiles should all be in the interval [0, 1].")
 
-            def quantile(spark_column: Column, spark_type: DataType) -> Column:
+            def quantile(psser: Series) -> Column:
+                spark_type = psser.spark.data_type
+                spark_column = psser.spark.column
                 if isinstance(spark_type, (BooleanType, NumericType)):
                     return F.percentile_approx(spark_column.cast(DoubleType()), q_float, accuracy)
                 else:
@@ -3598,8 +3599,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
                 Window.unboundedPreceding, Window.unboundedFollowing
             )
             scol = stat_func(F.row_number().over(window1)).over(window2)
-        psser = self._with_new_scol(scol)
-        return psser.astype(np.float64)
+        return self._with_new_scol(scol.cast(DoubleType()))
 
     def filter(
         self,
@@ -3785,12 +3785,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf = self._internal.spark_frame
         scol = self.spark.column
         index_scols = self._internal.index_spark_columns
-        # desc_nulls_(last|first) is used via Py4J directly because
-        # it's not supported in Spark 2.3.
+
         if skipna:
-            sdf = sdf.orderBy(Column(scol._jc.desc_nulls_last()), NATURAL_ORDER_COLUMN_NAME)
+            sdf = sdf.orderBy(scol.desc_nulls_last(), NATURAL_ORDER_COLUMN_NAME)
         else:
-            sdf = sdf.orderBy(Column(scol._jc.desc_nulls_first()), NATURAL_ORDER_COLUMN_NAME)
+            sdf = sdf.orderBy(scol.desc_nulls_first(), NATURAL_ORDER_COLUMN_NAME)
+
         results = sdf.select([scol] + index_scols).take(1)
         if len(results) == 0:
             raise ValueError("attempt to get idxmin of an empty sequence")
@@ -3893,12 +3893,12 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf = self._internal.spark_frame
         scol = self.spark.column
         index_scols = self._internal.index_spark_columns
-        # asc_nulls_(last|first)is used via Py4J directly because
-        # it's not supported in Spark 2.3.
+
         if skipna:
-            sdf = sdf.orderBy(Column(scol._jc.asc_nulls_last()), NATURAL_ORDER_COLUMN_NAME)
+            sdf = sdf.orderBy(scol.asc_nulls_last(), NATURAL_ORDER_COLUMN_NAME)
         else:
-            sdf = sdf.orderBy(Column(scol._jc.asc_nulls_first()), NATURAL_ORDER_COLUMN_NAME)
+            sdf = sdf.orderBy(scol.asc_nulls_first(), NATURAL_ORDER_COLUMN_NAME)
+
         results = sdf.select([scol] + index_scols).take(1)
         if len(results) == 0:
             raise ValueError("attempt to get idxmin of an empty sequence")
@@ -4109,7 +4109,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         b    2
         dtype: int64
         """
-        return self._psdf.copy(deep=deep)._psser_for(self._column_label)
+        return first_series(DataFrame(self._internal))
 
     def mode(self, dropna: bool = True) -> "Series":
         """
@@ -5534,7 +5534,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_index = notnull._internal.spark_frame.select(notnull._internal.index_spark_columns)
 
         tmp_join_key = verify_temp_column_name(sdf_for_index, "__tmp_join_key__")
-        sdf_for_index, _ = InternalFrame.attach_distributed_sequence_column(
+        sdf_for_index = InternalFrame.attach_distributed_sequence_column(
             sdf_for_index, tmp_join_key
         )
         # sdf_for_index:
@@ -5551,7 +5551,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         sdf_for_data = notnull._internal.spark_frame.select(
             notnull.spark.column.alias("values"), NATURAL_ORDER_COLUMN_NAME
         )
-        sdf_for_data, _ = InternalFrame.attach_distributed_sequence_column(
+        sdf_for_data = InternalFrame.attach_distributed_sequence_column(
             sdf_for_data, SPARK_DEFAULT_SERIES_NAME
         )
         # sdf_for_data:
@@ -5570,9 +5570,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         ).drop("values", NATURAL_ORDER_COLUMN_NAME)
 
         tmp_join_key = verify_temp_column_name(sdf_for_data, "__tmp_join_key__")
-        sdf_for_data, _ = InternalFrame.attach_distributed_sequence_column(
-            sdf_for_data, tmp_join_key
-        )
+        sdf_for_data = InternalFrame.attach_distributed_sequence_column(sdf_for_data, tmp_join_key)
         # sdf_for_index:                         sdf_for_data:
         # +----------------+-----------------+   +----------------+---+
         # |__tmp_join_key__|__index_level_0__|   |__tmp_join_key__|  0|
@@ -5640,7 +5638,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return -1
         # We should remember the natural sequence started from 0
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf, _ = InternalFrame.attach_distributed_sequence_column(
+        sdf = InternalFrame.attach_distributed_sequence_column(
             sdf.drop(NATURAL_ORDER_COLUMN_NAME), seq_col_name
         )
         # If the maximum is achieved in multiple locations, the first row position is returned.
@@ -5687,7 +5685,7 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             return -1
         # We should remember the natural sequence started from 0
         seq_col_name = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf, _ = InternalFrame.attach_distributed_sequence_column(
+        sdf = InternalFrame.attach_distributed_sequence_column(
             sdf.drop(NATURAL_ORDER_COLUMN_NAME), seq_col_name
         )
         # If the minimum is achieved in multiple locations, the first row position is returned.
@@ -6185,11 +6183,11 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
             internal = psser._internal.resolved_copy
             return first_series(DataFrame(internal))
         else:
-            return psser
+            return psser.copy()
 
     def _reduce_for_stat_function(
         self,
-        sfun: Union[Callable[[Column], Column], Callable[[Column, DataType], Column]],
+        sfun: Callable[["Series"], Column],
         name: str_type,
         axis: Optional[Axis] = None,
         numeric_only: bool = True,
@@ -6205,26 +6203,15 @@ class Series(Frame, IndexOpsMixin, Generic[T]):
         axis : used only for sanity check because series only support index axis.
         numeric_only : not used by this implementation, but passed down by stats functions
         """
-        from inspect import signature
-
         axis = validate_axis(axis)
         if axis == 1:
             raise ValueError("Series does not support columns axis.")
-        num_args = len(signature(sfun).parameters)
-        spark_column = self.spark.column
-        spark_type = self.spark.data_type
 
-        if num_args == 1:
-            # Only pass in the column if sfun accepts only one arg
-            scol = cast(Callable[[Column], Column], sfun)(spark_column)
-        else:  # must be 2
-            assert num_args == 2
-            # Pass in both the column and its data type if sfun accepts two args
-            scol = cast(Callable[[Column, DataType], Column], sfun)(spark_column, spark_type)
+        scol = sfun(self)
 
         min_count = kwargs.get("min_count", 0)
         if min_count > 0:
-            scol = F.when(Frame._count_expr(spark_column, spark_type) >= min_count, scol)
+            scol = F.when(Frame._count_expr(self) >= min_count, scol)
 
         result = unpack_scalar(self._internal.spark_frame.select(scol))
         return result if result is not None else np.nan
