@@ -263,9 +263,10 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
   private def withTempTable(f: String => Unit): Unit = {
     val tableName = "temp"
     Seq(
-      ("2016-03-27 19:39:34", 1),
-      ("2016-03-27 19:39:56", 2),
-      ("2016-03-27 19:39:27", 4)).toDF("time", "value").createOrReplaceTempView(tableName)
+      ("2016-03-27 19:39:34", 1, "10 seconds"),
+      ("2016-03-27 19:39:56", 2, "20 seconds"),
+      ("2016-03-27 19:39:27", 4, "30 seconds")).toDF("time", "value", "duration")
+      .createOrReplaceTempView(tableName)
     try {
       f(tableName)
     } finally {
@@ -284,6 +285,95 @@ class DataFrameSessionWindowingSuite extends QueryTest with SharedSparkSession
           Row("2016-03-27 19:39:34", "2016-03-27 19:39:44", 1),
           Row("2016-03-27 19:39:56", "2016-03-27 19:40:06", 2)
         )
+      )
+    }
+  }
+
+  test("SPARK-36465: time window in SQL with dynamic string expression") {
+    withTempTable { table =>
+      checkAnswer(
+        spark.sql(s"""select session_window(time, duration), value from $table""")
+          .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
+            $"value"),
+        Seq(
+          Row("2016-03-27 19:39:27", "2016-03-27 19:39:57", 4),
+          Row("2016-03-27 19:39:34", "2016-03-27 19:39:44", 1),
+          Row("2016-03-27 19:39:56", "2016-03-27 19:40:16", 2)
+        )
+      )
+    }
+  }
+
+  test("SPARK-36465: Unsupported dynamic gap datatype") {
+    withTempTable { table =>
+      val err = intercept[AnalysisException] {
+        spark.sql(s"""select session_window(time, 1.0), value from $table""")
+          .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
+            $"value")
+      }
+      assert(err.message.contains("Gap duration expression used in session window must be " +
+        "CalendarIntervalType, but got DecimalType(2,1)"))
+    }
+  }
+
+  test("SPARK-36465: time window in SQL with UDF as gap duration") {
+    withTempTable { table =>
+
+      spark.udf.register("gapDuration",
+        (i: java.lang.Integer) => s"${i * 10} seconds")
+
+      checkAnswer(
+        spark.sql(s"""select session_window(time, gapDuration(value)), value from $table""")
+          .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
+            $"value"),
+        Seq(
+          Row("2016-03-27 19:39:27", "2016-03-27 19:40:07", 4),
+          Row("2016-03-27 19:39:34", "2016-03-27 19:39:44", 1),
+          Row("2016-03-27 19:39:56", "2016-03-27 19:40:16", 2)
+        )
+      )
+    }
+  }
+
+  test("SPARK-36465: time window in SQL with conditional expression as gap duration") {
+    withTempTable { table =>
+
+      checkAnswer(
+        spark.sql("select session_window(time, " +
+          """case when value = 1 then "2 seconds" when value = 2 then "10 seconds" """ +
+          s"""else "20 seconds" end), value from $table""")
+          .select($"session_window.start".cast(StringType), $"session_window.end".cast(StringType),
+            $"value"),
+        Seq(
+          Row("2016-03-27 19:39:27", "2016-03-27 19:39:47", 4),
+          Row("2016-03-27 19:39:34", "2016-03-27 19:39:36", 1),
+          Row("2016-03-27 19:39:56", "2016-03-27 19:40:06", 2)
+        )
+      )
+    }
+  }
+
+  test("SPARK-36465: filter out events with negative/zero gap duration") {
+    withTempTable { table =>
+
+      spark.udf.register("gapDuration",
+        (i: java.lang.Integer) => {
+          if (i == 1) {
+            "0 seconds"
+          } else if (i == 2) {
+            "-10 seconds"
+          } else {
+            "5 seconds"
+          }
+        })
+
+      checkAnswer(
+        spark.sql(s"""select session_window(time, gapDuration(value)), value from $table""")
+          .groupBy($"session_window")
+          .agg(count("*").as("counts"))
+          .select($"session_window.start".cast("string"), $"session_window.end".cast("string"),
+            $"counts"),
+        Seq(Row("2016-03-27 19:39:27", "2016-03-27 19:39:32", 1))
       )
     }
   }

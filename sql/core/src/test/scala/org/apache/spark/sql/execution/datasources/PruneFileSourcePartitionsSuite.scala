@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources
 
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.metrics.source.HiveCatalogMetrics
-import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
@@ -109,27 +107,12 @@ class PruneFileSourcePartitionsSuite extends PrunePartitionSuiteBase with Shared
     // Force datasource v2 for parquet
     withSQLConf((SQLConf.USE_V1_SOURCE_LIST.key, "")) {
       withTempPath { dir =>
-        spark.range(10).selectExpr("id", "id % 3 as p")
+        spark.range(10).coalesce(1).selectExpr("id", "id % 3 as p")
             .write.partitionBy("p").parquet(dir.getCanonicalPath)
         withTempView("tmp") {
           spark.read.parquet(dir.getCanonicalPath).createOrReplaceTempView("tmp");
           assertPrunedPartitions("SELECT COUNT(*) FROM tmp WHERE p = 0", 1, "(tmp.p = 0)")
           assertPrunedPartitions("SELECT input_file_name() FROM tmp WHERE p = 0", 1, "(tmp.p = 0)")
-        }
-      }
-    }
-  }
-
-  test("SPARK-36128: spark.sql.hive.metastorePartitionPruning should work for file data sources") {
-    Seq(true, false).foreach { enablePruning =>
-      withTable("tbl") {
-        withSQLConf(SQLConf.HIVE_METASTORE_PARTITION_PRUNING.key -> enablePruning.toString) {
-          spark.range(10).selectExpr("id", "id % 3 as p").write.partitionBy("p").saveAsTable("tbl")
-          HiveCatalogMetrics.reset()
-          QueryTest.checkAnswer(sql("SELECT id FROM tbl WHERE p = 1"),
-            Seq(1, 4, 7).map(Row.apply(_)), checkToRDD = false) // avoid analyzing the query twice
-          val expectedCount = if (enablePruning) 1 else 3
-          assert(HiveCatalogMetrics.METRIC_PARTITIONS_FETCHED.getCount == expectedCount)
         }
       }
     }

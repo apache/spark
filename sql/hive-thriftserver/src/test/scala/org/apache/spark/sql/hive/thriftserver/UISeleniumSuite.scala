@@ -17,8 +17,12 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.io.File
+import java.nio.charset.StandardCharsets
+
 import scala.util.Random
 
+import com.google.common.io.Files
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
@@ -64,21 +68,38 @@ class UISeleniumSuite
       ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT
     }
 
+    val driverClassPath = {
+      // Writes a temporary log4j.properties and prepend it to driver classpath, so that it
+      // overrides all other potential log4j configurations contained in other dependency jar files.
+      val tempLog4jConf = org.apache.spark.util.Utils.createTempDir().getCanonicalPath
+
+      Files.write(
+        """log4j.rootCategory=INFO, console
+          |log4j.appender.console=org.apache.log4j.ConsoleAppender
+          |log4j.appender.console.target=System.err
+          |log4j.appender.console.layout=org.apache.log4j.PatternLayout
+          |log4j.appender.console.layout.ConversionPattern=%d{yy/MM/dd HH:mm:ss} %p %c{1}: %m%n
+        """.stripMargin,
+        new File(s"$tempLog4jConf/log4j.properties"),
+        StandardCharsets.UTF_8)
+
+      tempLog4jConf
+    }
+
     s"""$startScript
         |  --master local
-        |  --hiveconf hive.root.logger=INFO,console
         |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
         |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
         |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
         |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
         |  --hiveconf $portConf=0
-        |  --driver-class-path ${sys.props("java.class.path")}
+        |  --driver-class-path $driverClassPath
         |  --conf spark.ui.enabled=true
         |  --conf spark.ui.port=$uiPort
      """.stripMargin.split("\\s+").toSeq
   }
 
-  ignore("thrift server ui test") {
+  test("thrift server ui test") {
     withJdbcStatement("test_map") { statement =>
       val baseURL = s"http://localhost:$uiPort"
 
@@ -94,13 +115,13 @@ class UISeleniumSuite
       }
 
       eventually(timeout(10.seconds), interval(50.milliseconds)) {
-        go to (baseURL + "/sql")
+        go to (baseURL + "/sqlserver")
         find(id("sessionstat")) should not be None
         find(id("sqlstat")) should not be None
 
         // check whether statements exists
         queries.foreach { line =>
-          findAll(cssSelector("""ul table tbody tr td""")).map(_.text).toList should contain (line)
+          findAll(cssSelector("span.description-input")).map(_.text).toList should contain (line)
         }
       }
     }

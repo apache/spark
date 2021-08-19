@@ -17,14 +17,13 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.analysis.{FieldName, FieldPosition, NamedRelation, PartitionSpec, UnresolvedException}
+import org.apache.spark.sql.catalyst.analysis.{NamedRelation, PartitionSpec, UnresolvedException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, Unevaluable}
 import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
 import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.catalog._
-import org.apache.spark.sql.connector.catalog.TableChange.{AddColumn, ColumnChange}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.write.Write
 import org.apache.spark.sql.types.{BooleanType, DataType, MetadataBuilder, StringType, StructType}
@@ -425,6 +424,12 @@ case class UpdateTable(
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): UpdateTable =
     copy(table = newChild)
+
+  def skipSchemaResolution: Boolean = table match {
+    case r: NamedRelation => r.skipSchemaResolution
+    case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
+    case _ => false
+  }
 }
 
 /**
@@ -437,6 +442,13 @@ case class MergeIntoTable(
     matchedActions: Seq[MergeAction],
     notMatchedActions: Seq[MergeAction]) extends BinaryCommand with SupportsSubquery {
   def duplicateResolved: Boolean = targetTable.outputSet.intersect(sourceTable.outputSet).isEmpty
+
+  def skipSchemaResolution: Boolean = targetTable match {
+    case r: NamedRelation => r.skipSchemaResolution
+    case SubqueryAlias(_, r: NamedRelation) => r.skipSchemaResolution
+    case _ => false
+  }
+
   override def left: LogicalPlan = targetTable
   override def right: LogicalPlan = sourceTable
   override protected def withNewChildrenInternal(
@@ -466,7 +478,7 @@ case class UpdateAction(
       newChildren: IndexedSeq[Expression]): UpdateAction =
     copy(
       condition = if (condition.isDefined) Some(newChildren.head) else None,
-      assignments = newChildren.tail.asInstanceOf[Seq[Assignment]])
+      assignments = newChildren.takeRight(assignments.length).asInstanceOf[Seq[Assignment]])
 }
 
 case class UpdateStarAction(condition: Option[Expression]) extends MergeAction {
@@ -485,7 +497,7 @@ case class InsertAction(
       newChildren: IndexedSeq[Expression]): InsertAction =
     copy(
       condition = if (condition.isDefined) Some(newChildren.head) else None,
-      assignments = newChildren.tail.asInstanceOf[Seq[Assignment]])
+      assignments = newChildren.takeRight(assignments.length).asInstanceOf[Seq[Assignment]])
 }
 
 case class InsertStarAction(condition: Option[Expression]) extends MergeAction {
@@ -531,38 +543,6 @@ case class DropTable(
 case class NoopCommand(
     commandName: String,
     multipartIdentifier: Seq[String]) extends LeafCommand
-
-/**
- * The logical plan of the ALTER TABLE command.
- */
-case class AlterTable(
-    catalog: TableCatalog,
-    ident: Identifier,
-    table: NamedRelation,
-    changes: Seq[TableChange]) extends LeafCommand {
-
-  override lazy val resolved: Boolean = table.resolved && {
-    changes.forall {
-      case add: AddColumn =>
-        add.fieldNames match {
-          case Array(_) =>
-            // a top-level field can always be added
-            true
-          case _ =>
-            // the parent field must exist
-            table.schema.findNestedField(add.fieldNames.init, includeCollections = true).isDefined
-        }
-
-      case colChange: ColumnChange =>
-        // the column that will be changed must exist
-        table.schema.findNestedField(colChange.fieldNames, includeCollections = true).isDefined
-
-      case _ =>
-        // property changes require no resolution checks
-        true
-    }
-  }
-}
 
 /**
  * The logical plan of the ALTER [TABLE|VIEW] ... RENAME TO command.
@@ -692,21 +672,6 @@ object ShowTableProperties {
  */
 case class CommentOnNamespace(child: LogicalPlan, comment: String) extends UnaryCommand {
   override protected def withNewChildInternal(newChild: LogicalPlan): CommentOnNamespace =
-    copy(child = newChild)
-}
-
-/**
- * The logical plan that defines or changes the comment of an TABLE for v2 catalogs.
- *
- * {{{
- *   COMMENT ON TABLE tableIdentifier IS ('text' | NULL)
- * }}}
- *
- * where the `text` is the new comment written as a string literal; or `NULL` to drop the comment.
- *
- */
-case class CommentOnTable(child: LogicalPlan, comment: String) extends UnaryCommand {
-  override protected def withNewChildInternal(newChild: LogicalPlan): CommentOnTable =
     copy(child = newChild)
 }
 
@@ -1062,122 +1027,4 @@ case class UncacheTable(
   override def childrenToAnalyze: Seq[LogicalPlan] = table :: Nil
 
   override def markAsAnalyzed(): LogicalPlan = copy(isAnalyzed = true)
-}
-
-/**
- * The logical plan of the ALTER TABLE ... SET LOCATION command.
- */
-case class SetTableLocation(
-    table: LogicalPlan,
-    partitionSpec: Option[TablePartitionSpec],
-    location: String) extends UnaryCommand {
-  override def child: LogicalPlan = table
-  override protected def withNewChildInternal(newChild: LogicalPlan): SetTableLocation =
-    copy(table = newChild)
-}
-
-/**
- * The logical plan of the ALTER TABLE ... SET TBLPROPERTIES command.
- */
-case class SetTableProperties(
-    table: LogicalPlan,
-    properties: Map[String, String]) extends UnaryCommand {
-  override def child: LogicalPlan = table
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(table = newChild)
-}
-
-/**
- * The logical plan of the ALTER TABLE ... UNSET TBLPROPERTIES command.
- */
-case class UnsetTableProperties(
-    table: LogicalPlan,
-    propertyKeys: Seq[String],
-    ifExists: Boolean) extends UnaryCommand {
-  override def child: LogicalPlan = table
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(table = newChild)
-}
-
-trait AlterTableCommand extends UnaryCommand {
-  def table: LogicalPlan
-  def operation: String
-  def changes: Seq[TableChange]
-  override def child: LogicalPlan = table
-}
-
-/**
- * The logical plan of the ALTER TABLE ... DROP COLUMNS command.
- */
-case class AlterTableDropColumns(
-    table: LogicalPlan,
-    columnsToDrop: Seq[FieldName]) extends AlterTableCommand {
-  override def operation: String = "delete"
-
-  override def changes: Seq[TableChange] = {
-    columnsToDrop.map { col =>
-      require(col.resolved, "FieldName should be resolved before it's converted to TableChange.")
-      TableChange.deleteColumn(col.name.toArray)
-    }
-  }
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(table = newChild)
-}
-
-/**
- * The logical plan of the ALTER TABLE ... RENAME COLUMN command.
- */
-case class AlterTableRenameColumn(
-    table: LogicalPlan,
-    column: FieldName,
-    newName: String) extends AlterTableCommand {
-  override def operation: String = "rename"
-
-  override def changes: Seq[TableChange] = {
-    require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
-    Seq(TableChange.renameColumn(column.name.toArray, newName))
-  }
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(table = newChild)
-}
-
-/**
- * The logical plan of the ALTER TABLE ... ALTER COLUMN command.
- */
-case class AlterTableAlterColumn(
-    table: LogicalPlan,
-    column: FieldName,
-    dataType: Option[DataType],
-    nullable: Option[Boolean],
-    comment: Option[String],
-    position: Option[FieldPosition]) extends AlterTableCommand {
-  import org.apache.spark.sql.connector.catalog.CatalogV2Util._
-  dataType.foreach(failNullType)
-
-  override def operation: String = "update"
-
-  override def changes: Seq[TableChange] = {
-    require(column.resolved, "FieldName should be resolved before it's converted to TableChange.")
-    val colName = column.name.toArray
-    val typeChange = dataType.map { newDataType =>
-      TableChange.updateColumnType(colName, newDataType)
-    }
-    val nullabilityChange = nullable.map { nullable =>
-      TableChange.updateColumnNullability(colName, nullable)
-    }
-    val commentChange = comment.map { newComment =>
-      TableChange.updateColumnComment(colName, newComment)
-    }
-    val positionChange = position.map { newPosition =>
-      require(newPosition.resolved,
-        "FieldPosition should be resolved before it's converted to TableChange.")
-      TableChange.updateColumnPosition(colName, newPosition.position)
-    }
-    typeChange.toSeq ++ nullabilityChange ++ commentChange ++ positionChange
-  }
-
-  override protected def withNewChildInternal(newChild: LogicalPlan): LogicalPlan =
-    copy(table = newChild)
 }

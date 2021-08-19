@@ -60,13 +60,19 @@ class JacksonParser(
   private val factory = options.buildJsonFactory()
 
   private lazy val timestampFormatter = TimestampFormatter(
-    options.timestampFormat,
+    options.timestampFormatInRead,
     options.zoneId,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+  private lazy val timestampNTZFormatter = TimestampFormatter(
+    options.timestampFormatInRead,
+    options.zoneId,
+    legacyFormat = FAST_DATE_FORMAT,
+    isParsing = true,
+    forTimestampNTZ = true)
   private lazy val dateFormatter = DateFormatter(
-    options.dateFormat,
+    options.dateFormatInRead,
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
@@ -108,7 +114,7 @@ class JacksonParser(
         // List([str_a_2,null], [null,str_b_3])
         //
       case START_ARRAY if allowArrayAsStructs =>
-        val array = convertArray(parser, elementConverter)
+        val array = convertArray(parser, elementConverter, isRoot = true)
         // Here, as we support reading top level JSON arrays and take every element
         // in such an array as a row, this case is possible.
         if (array.numElements() == 0) {
@@ -253,6 +259,12 @@ class JacksonParser(
           parser.getLongValue * 1000000L
       }
 
+    case TimestampNTZType =>
+      (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
+        case VALUE_STRING if parser.getTextLength >= 1 =>
+          timestampNTZFormatter.parseWithoutTimeZone(parser.getText)
+      }
+
     case DateType =>
       (parser: JsonParser) => parseJsonToken[java.lang.Integer](parser, dataType) {
         case VALUE_STRING if parser.getTextLength >= 1 =>
@@ -330,12 +342,13 @@ class JacksonParser(
     case udt: UserDefinedType[_] =>
       makeConverter(udt.sqlType)
 
-    case _ =>
-      (parser: JsonParser) =>
-        // Here, we pass empty `PartialFunction` so that this case can be
-        // handled as a failed conversion. It will throw an exception as
-        // long as the value is not null.
-        parseJsonToken[AnyRef](parser, dataType)(PartialFunction.empty[JsonToken, AnyRef])
+    case _: NullType =>
+      (parser: JsonParser) => parseJsonToken[java.lang.Long](parser, dataType) {
+        case _ => null
+      }
+
+    // We don't actually hit this exception though, we keep it for understandability
+    case _ => throw QueryExecutionErrors.unsupportedTypeError(dataType)
   }
 
   /**
@@ -450,10 +463,13 @@ class JacksonParser(
    */
   private def convertArray(
       parser: JsonParser,
-      fieldConverter: ValueConverter): ArrayData = {
+      fieldConverter: ValueConverter,
+      isRoot: Boolean = false): ArrayData = {
     val values = ArrayBuffer.empty[Any]
     while (nextUntil(parser, JsonToken.END_ARRAY)) {
-      values += fieldConverter.apply(parser)
+      val v = fieldConverter.apply(parser)
+      if (isRoot && v == null) throw QueryExecutionErrors.rootConverterReturnNullError()
+      values += v
     }
 
     new GenericArrayData(values.toArray)

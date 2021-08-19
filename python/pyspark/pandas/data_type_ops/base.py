@@ -155,7 +155,7 @@ def _as_string_type(
     index_ops: IndexOpsLike, dtype: Union[str, type, Dtype], *, null_str: str = str(None)
 ) -> IndexOpsLike:
     """Cast `index_ops` to StringType Spark type, given `dtype` and `null_str`,
-    representing null Spark column.
+    representing null Spark column. Note that `null_str` is for non-extension dtypes only.
     """
     spark_type = StringType()
     if isinstance(dtype, extension_dtypes):
@@ -186,6 +186,12 @@ def _as_other_type(
 
     scol = index_ops.spark.column.cast(spark_type)
     return index_ops._with_new_scol(scol, field=InternalField(dtype=dtype))
+
+
+def _sanitize_list_like(operand: Any) -> None:
+    """Raise TypeError if operand is list-like."""
+    if isinstance(operand, (list, tuple, dict, set)):
+        raise TypeError("The operation can not be applied to %s." % type(operand).__name__)
 
 
 class DataTypeOps(object, metaclass=ABCMeta):
@@ -314,9 +320,11 @@ class DataTypeOps(object, metaclass=ABCMeta):
         raise TypeError("Bitwise or can not be applied to %s." % self.pretty_name)
 
     def rand(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return left.__and__(right)
 
     def ror(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
+        _sanitize_list_like(right)
         return left.__or__(right)
 
     def neg(self, operand: IndexOpsLike) -> IndexOpsLike:
@@ -340,10 +348,14 @@ class DataTypeOps(object, metaclass=ABCMeta):
     def eq(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
 
+        _sanitize_list_like(right)
+
         return column_op(Column.__eq__)(left, right)
 
     def ne(self, left: IndexOpsLike, right: Any) -> SeriesOrIndex:
         from pyspark.pandas.base import column_op
+
+        _sanitize_list_like(right)
 
         return column_op(Column.__ne__)(left, right)
 
@@ -365,6 +377,9 @@ class DataTypeOps(object, metaclass=ABCMeta):
                 dtype=np.dtype("bool"), spark_type=BooleanType(), nullable=False
             ),
         )
+
+    def nan_to_null(self, index_ops: IndexOpsLike) -> IndexOpsLike:
+        return index_ops.copy()
 
     def astype(self, index_ops: IndexOpsLike, dtype: Union[str, type, Dtype]) -> IndexOpsLike:
         raise TypeError("astype can not be applied to %s." % self.pretty_name)

@@ -16,7 +16,7 @@
 #
 
 from functools import partial
-from typing import Any, Iterator, List, Optional, Tuple, Union, cast, no_type_check
+from typing import Any, Callable, Iterator, List, Optional, Tuple, Union, cast, no_type_check
 import warnings
 
 import pandas as pd
@@ -520,6 +520,50 @@ class Index(IndexOpsMixin):
         if copy:
             result = result.copy()
         return result
+
+    def map(
+        self, mapper: Union[dict, Callable[[Any], Any], pd.Series], na_action: Optional[str] = None
+    ) -> "Index":
+        """
+        Map values using input correspondence (a dict, Series, or function).
+
+        Parameters
+        ----------
+        mapper : function, dict, or pd.Series
+            Mapping correspondence.
+        na_action : {None, 'ignore'}
+            If ‘ignore’, propagate NA values, without passing them to the mapping correspondence.
+
+        Returns
+        -------
+        applied : Index, inferred
+            The output of the mapping function applied to the index.
+
+        Examples
+        --------
+        >>> psidx = ps.Index([1, 2, 3])
+
+        >>> psidx.map({1: "one", 2: "two", 3: "three"})
+        Index(['one', 'two', 'three'], dtype='object')
+
+        >>> psidx.map(lambda id: "{id} + 1".format(id=id))
+        Index(['1 + 1', '2 + 1', '3 + 1'], dtype='object')
+
+        >>> pser = pd.Series(["one", "two", "three"], index=[1, 2, 3])
+        >>> psidx.map(pser)
+        Index(['one', 'two', 'three'], dtype='object')
+        """
+        if isinstance(mapper, dict):
+            if len(set(type(k) for k in mapper.values())) > 1:
+                raise TypeError(
+                    "If the mapper is a dictionary, its values must be of the same type"
+                )
+
+        return Index(
+            self.to_series().pandas_on_spark.transform_batch(
+                lambda pser: pser.map(mapper, na_action)
+            )
+        ).rename(self.name)
 
     @property
     def values(self) -> np.ndarray:
@@ -1270,7 +1314,7 @@ class Index(IndexOpsMixin):
         >>> df.index.copy(name='snake')
         Index(['cobra', 'viper', 'sidewinder'], dtype='object', name='snake')
         """
-        result = self._psdf.copy().index
+        result = self._psdf[[]].index
         if name:
             result.name = name
         return result
@@ -1692,9 +1736,7 @@ class Index(IndexOpsMixin):
         ]
         sdf = sdf.select(index_value_columns)
 
-        sdf, force_nullable = InternalFrame.attach_default_index(
-            sdf, default_index_type="distributed-sequence"
-        )
+        sdf = InternalFrame.attach_default_index(sdf, default_index_type="distributed-sequence")
         # sdf here looks as below
         # +-----------------+-----------------+-----------------+-----------------+
         # |__index_level_0__|__index_value_0__|__index_value_1__|__index_value_2__|
@@ -1727,11 +1769,7 @@ class Index(IndexOpsMixin):
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
-            index_fields=(
-                [field.copy(nullable=True) for field in self._internal.index_fields]
-                if force_nullable
-                else self._internal.index_fields
-            ),
+            index_fields=self._internal.index_fields,
         )
 
         return DataFrame(internal).index
@@ -1829,7 +1867,7 @@ class Index(IndexOpsMixin):
         """
         sdf = self._internal.spark_frame.select(self.spark.column)
         sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf, _ = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
+        sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
         # spark_frame here looks like below
         # +-----------------+---------------+
         # |__index_level_0__|__index_value__|
@@ -1877,7 +1915,7 @@ class Index(IndexOpsMixin):
         """
         sdf = self._internal.spark_frame.select(self.spark.column)
         sequence_col = verify_temp_column_name(sdf, "__distributed_sequence_column__")
-        sdf, _ = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
+        sdf = InternalFrame.attach_distributed_sequence_column(sdf, column_name=sequence_col)
 
         return (
             sdf.orderBy(
@@ -2298,9 +2336,7 @@ class Index(IndexOpsMixin):
 
         sdf_self = self._internal.spark_frame.select(self._internal.index_spark_columns)
         sdf_other = other_idx._internal.spark_frame.select(other_idx._internal.index_spark_columns)
-        sdf = sdf_self.union(sdf_other.subtract(sdf_self))
-        if isinstance(self, MultiIndex):
-            sdf = sdf.drop_duplicates()
+        sdf = sdf_self.unionAll(sdf_other).exceptAll(sdf_self.intersectAll(sdf_other))
         if sort:
             sdf = sdf.sort(*self._internal.index_spark_column_names)
 
@@ -2475,7 +2511,7 @@ class Index(IndexOpsMixin):
                 scol_for(sdf, col) for col in self._internal.index_spark_column_names
             ],
             index_names=self._internal.index_names,
-            index_fields=[field.copy(nullable=True) for field in self._internal.index_fields],
+            index_fields=[InternalField(field.dtype) for field in self._internal.index_fields],
         )
         return DataFrame(internal).index
 

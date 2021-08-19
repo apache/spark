@@ -22,6 +22,7 @@ from pandas.api.types import CategoricalDtype, is_dict_like, is_list_like
 
 from pyspark.pandas.internal import InternalField
 from pyspark.pandas.spark import functions as SF
+from pyspark.pandas.data_type_ops.categorical_ops import _to_cat
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructField
 
@@ -261,8 +262,7 @@ class CategoricalAccessor(object):
             self._data._psdf._update_internal_frame(internal)
             return None
         else:
-            psser = DataFrame(internal)._psser_for(self._data._column_label)
-            return psser._with_new_scol(psser.spark.column, field=psser._internal.data_fields[0])
+            return DataFrame(internal)._psser_for(self._data._column_label).copy()
 
     def _set_ordered(self, *, ordered: bool, inplace: bool) -> Optional["ps.Series"]:
         from pyspark.pandas.frame import DataFrame
@@ -271,7 +271,7 @@ class CategoricalAccessor(object):
             if inplace:
                 return None
             else:
-                psser = self._data
+                return self._data.copy()
         else:
             internal = self._data._psdf._internal.with_new_spark_column(
                 self._data._column_label,
@@ -284,9 +284,7 @@ class CategoricalAccessor(object):
                 self._data._psdf._update_internal_frame(internal)
                 return None
             else:
-                psser = DataFrame(internal)._psser_for(self._data._column_label)
-
-        return psser._with_new_scol(psser.spark.column, field=psser._internal.data_fields[0])
+                return DataFrame(internal)._psser_for(self._data._column_label).copy()
 
     def as_ordered(self, inplace: bool = False) -> Optional["ps.Series"]:
         """
@@ -455,10 +453,7 @@ class CategoricalAccessor(object):
             if inplace:
                 return None
             else:
-                psser = self._data
-                return psser._with_new_scol(
-                    psser.spark.column, field=psser._internal.data_fields[0]
-                )
+                return self._data.copy()
         else:
             dtype = CategoricalDtype(
                 [cat for cat in self.categories if cat not in categories], ordered=self.ordered
@@ -646,8 +641,7 @@ class CategoricalAccessor(object):
             self._data._psdf._update_internal_frame(internal)
             return None
         else:
-            psser = DataFrame(internal)._psser_for(self._data._column_label)
-            return psser._with_new_scol(psser.spark.column, field=psser._internal.data_fields[0])
+            return DataFrame(internal)._psser_for(self._data._column_label).copy()
 
     def reorder_categories(
         self,
@@ -739,13 +733,10 @@ class CategoricalAccessor(object):
             if inplace:
                 return None
             else:
-                psser = self._data
-                return psser._with_new_scol(
-                    psser.spark.column, field=psser._internal.data_fields[0]
-                )
+                return self._data.copy()
         else:
             dtype = CategoricalDtype(categories=new_categories, ordered=ordered)
-            psser = self._data.astype(dtype)
+            psser = _to_cat(self._data).astype(dtype)
 
             if inplace:
                 internal = self._data._psdf._internal.with_new_spark_column(
@@ -897,10 +888,7 @@ class CategoricalAccessor(object):
                 self._data._psdf._update_internal_frame(internal)
                 return None
             else:
-                psser = DataFrame(internal)._psser_for(self._data._column_label)
-                return psser._with_new_scol(
-                    psser.spark.column, field=psser._internal.data_fields[0]
-                )
+                return DataFrame(internal)._psser_for(self._data._column_label).copy()
         else:
             psser = self._data.astype(new_dtype)
             if inplace:

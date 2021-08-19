@@ -23,8 +23,8 @@ import java.nio.file.Files;
 import java.util.*;
 
 import org.apache.spark.*;
+import org.apache.spark.network.shuffle.checksum.ShuffleChecksumHelper;
 import org.apache.spark.shuffle.ShuffleChecksumTestHelper;
-import org.apache.spark.shuffle.checksum.ShuffleChecksumHelper;
 import org.mockito.stubbing.Answer;
 import scala.*;
 import scala.collection.Iterator;
@@ -38,11 +38,11 @@ import org.mockito.MockitoAnnotations;
 
 import org.apache.spark.executor.ShuffleWriteMetrics;
 import org.apache.spark.executor.TaskMetrics;
+import org.apache.spark.internal.config.package$;
 import org.apache.spark.io.CompressionCodec$;
 import org.apache.spark.io.LZ4CompressionCodec;
 import org.apache.spark.io.LZFCompressionCodec;
 import org.apache.spark.io.SnappyCompressionCodec;
-import org.apache.spark.internal.config.package$;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.memory.TestMemoryManager;
 import org.apache.spark.network.util.LimitedInputStream;
@@ -253,7 +253,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
   @Test
   public void writeEmptyIterator() throws Exception {
     final UnsafeShuffleWriter<Object, Object> writer = createWriter(true);
-    writer.write(new ArrayList<Product2<Object, Object>>().iterator());
+    writer.write(Collections.emptyIterator());
     final Option<MapStatus> mapStatus = writer.stop(true);
     assertTrue(mapStatus.isDefined());
     assertTrue(mergedOutputFile.exists());
@@ -301,12 +301,13 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
-    File checksumFile = new File(tempDir,
-      ShuffleChecksumHelper.getChecksumFileName(checksumBlockId, conf));
+    String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
+    String checksumFileName = ShuffleChecksumHelper.getChecksumFileName(
+      checksumBlockId.name(), checksumAlgorithm);
+    File checksumFile = new File(tempDir, checksumFileName);
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
-    when(diskBlockManager.getFile(checksumFile.getName()))
-      .thenReturn(checksumFile);
+    when(diskBlockManager.getFile(checksumFileName)).thenReturn(checksumFile);
     when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
       .thenReturn(dataFile);
     when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0)))
@@ -322,7 +323,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     writer1.stop(true);
     assertTrue(checksumFile.exists());
     assertEquals(checksumFile.length(), 8 * NUM_PARTITIONS);
-    compareChecksums(NUM_PARTITIONS, checksumFile, dataFile, indexFile);
+    compareChecksums(NUM_PARTITIONS, checksumAlgorithm, checksumFile, dataFile, indexFile);
   }
 
   @Test
@@ -330,11 +331,13 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     IndexShuffleBlockResolver blockResolver = new IndexShuffleBlockResolver(conf, blockManager);
     ShuffleChecksumBlockId checksumBlockId =
       new ShuffleChecksumBlockId(0, 0, IndexShuffleBlockResolver.NOOP_REDUCE_ID());
-    File checksumFile =
-      new File(tempDir, ShuffleChecksumHelper.getChecksumFileName(checksumBlockId, conf));
+    String checksumAlgorithm = conf.get(package$.MODULE$.SHUFFLE_CHECKSUM_ALGORITHM());
+    String checksumFileName = ShuffleChecksumHelper.getChecksumFileName(
+      checksumBlockId.name(), checksumAlgorithm);
+    File checksumFile = new File(tempDir, checksumFileName);
     File dataFile = new File(tempDir, "data");
     File indexFile = new File(tempDir, "index");
-    when(diskBlockManager.getFile(eq(checksumFile.getName()))).thenReturn(checksumFile);
+    when(diskBlockManager.getFile(checksumFileName)).thenReturn(checksumFile);
     when(diskBlockManager.getFile(new ShuffleDataBlockId(shuffleDep.shuffleId(), 0, 0)))
       .thenReturn(dataFile);
     when(diskBlockManager.getFile(new ShuffleIndexBlockId(shuffleDep.shuffleId(), 0, 0)))
@@ -356,7 +359,7 @@ public class UnsafeShuffleWriterSuite implements ShuffleChecksumTestHelper {
     writer1.closeAndWriteOutput();
     assertTrue(checksumFile.exists());
     assertEquals(checksumFile.length(), 8 * NUM_PARTITIONS);
-    compareChecksums(NUM_PARTITIONS, checksumFile, dataFile, indexFile);
+    compareChecksums(NUM_PARTITIONS, checksumAlgorithm, checksumFile, dataFile, indexFile);
   }
 
   private void testMergingSpills(

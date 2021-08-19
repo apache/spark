@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, Expression, NamedExpression, PredicateHelper, ProjectionOverSchema, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -28,12 +30,13 @@ import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownA
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.util.SchemaUtils._
 
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    applyColumnPruning(pushdownAggregate(pushDownFilters(createScanBuilder(plan))))
+    applyColumnPruning(pushDownAggregates(pushDownFilters(createScanBuilder(plan))))
   }
 
   private def createScanBuilder(plan: LogicalPlan) = plan.transform {
@@ -68,7 +71,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       filterCondition.map(Filter(_, sHolder)).getOrElse(sHolder)
   }
 
-  def pushdownAggregate(plan: LogicalPlan): LogicalPlan = plan.transform {
+  def pushDownAggregates(plan: LogicalPlan): LogicalPlan = plan.transform {
     // update the scan builder with agg pushdown and return a new plan with agg pushed
     case aggNode @ Aggregate(groupingExpressions, resultExpressions, child) =>
       child match {
@@ -76,13 +79,26 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
           if filters.isEmpty && project.forall(_.isInstanceOf[AttributeReference]) =>
           sHolder.builder match {
             case _: SupportsPushDownAggregates =>
+              val aggExprToOutputOrdinal = mutable.HashMap.empty[Expression, Int]
+              var ordinal = 0
               val aggregates = resultExpressions.flatMap { expr =>
                 expr.collect {
-                  case agg: AggregateExpression => agg
+                  // Do not push down duplicated aggregate expressions. For example,
+                  // `SELECT max(a) + 1, max(a) + 2 FROM ...`, we should only push down one
+                  // `max(a)` to the data source.
+                  case agg: AggregateExpression
+                      if !aggExprToOutputOrdinal.contains(agg.canonicalized) =>
+                    aggExprToOutputOrdinal(agg.canonicalized) = ordinal
+                    ordinal += 1
+                    agg
                 }
               }
-              val pushedAggregates = PushDownUtils
-                .pushAggregates(sHolder.builder, aggregates, groupingExpressions)
+              val normalizedAggregates = DataSourceStrategy.normalizeExprs(
+                aggregates, sHolder.relation.output).asInstanceOf[Seq[AggregateExpression]]
+              val normalizedGroupingExpressions = DataSourceStrategy.normalizeExprs(
+                groupingExpressions, sHolder.relation.output)
+              val pushedAggregates = PushDownUtils.pushAggregates(
+                sHolder.builder, normalizedAggregates, normalizedGroupingExpressions)
               if (pushedAggregates.isEmpty) {
                 aggNode // return original plan node
               } else {
@@ -103,7 +119,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 // scalastyle:on
                 val newOutput = scan.readSchema().toAttributes
                 assert(newOutput.length == groupingExpressions.length + aggregates.length)
-                val groupAttrs = groupingExpressions.zip(newOutput).map {
+                val groupAttrs = normalizedGroupingExpressions.zip(newOutput).map {
                   case (a: Attribute, b: Attribute) => b.withExprId(a.exprId)
                   case (_, b) => b
                 }
@@ -144,19 +160,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
                 // Aggregate [c2#10], [min(min(c1)#21) AS min(c1)#17, max(max(c1)#22) AS max(c1)#18]
                 // +- RelationV2[c2#10, min(c1)#21, max(c1)#22] ...
                 // scalastyle:on
-                var i = 0
                 val aggOutput = output.drop(groupAttrs.length)
                 plan.transformExpressions {
                   case agg: AggregateExpression =>
+                    val ordinal = aggExprToOutputOrdinal(agg.canonicalized)
                     val aggFunction: aggregate.AggregateFunction =
                       agg.aggregateFunction match {
-                        case max: aggregate.Max => max.copy(child = aggOutput(i))
-                        case min: aggregate.Min => min.copy(child = aggOutput(i))
-                        case sum: aggregate.Sum => sum.copy(child = aggOutput(i))
-                        case _: aggregate.Count => aggregate.Sum(aggOutput(i))
+                        case max: aggregate.Max => max.copy(child = aggOutput(ordinal))
+                        case min: aggregate.Min => min.copy(child = aggOutput(ordinal))
+                        case sum: aggregate.Sum => sum.copy(child = aggOutput(ordinal))
+                        case _: aggregate.Count => aggregate.Sum(aggOutput(ordinal))
                         case other => other
                       }
-                    i += 1
                     agg.copy(aggregateFunction = aggFunction)
                 }
               }
@@ -197,7 +212,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         val newProjects = normalizedProjects
           .map(projectionFunc)
           .asInstanceOf[Seq[NamedExpression]]
-        Project(newProjects, withFilter)
+        Project(restoreOriginalOutputNames(newProjects, project.map(_.name)), withFilter)
       } else {
         withFilter
       }
