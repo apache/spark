@@ -382,6 +382,10 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
     if (params.contains(MIN_OFFSET_PER_TRIGGER)) {
       logWarning("minOffsetsPerTrigger option ignored in batch queries")
     }
+
+    if (params.contains(MAX_TRIGGER_DELAY)) {
+      logWarning("maxTriggerDelay option ignored in batch queries")
+    }
   }
 
   class KafkaTable(includeHeaders: Boolean) extends Table with SupportsRead with SupportsWrite {

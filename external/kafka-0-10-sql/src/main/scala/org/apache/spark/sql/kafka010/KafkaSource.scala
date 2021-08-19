@@ -124,9 +124,14 @@ private[kafka010] class KafkaSource(
 
   override def getDefaultReadLimit: ReadLimit = {
     if (minOffsetPerTrigger.isDefined && maxOffsetsPerTrigger.isDefined) {
-      ReadLimit.compositeLimit(Array(
-        ReadLimit.minRows(minOffsetPerTrigger.get, maxTriggerDelayMs),
-        ReadLimit.maxRows(maxOffsetsPerTrigger.get)))
+      val minOffsets = minOffsetPerTrigger.get
+      val maxOffsets = maxOffsetsPerTrigger.get
+      if (minOffsets > maxOffsets) {
+        throw new AnalysisException(s"The value of minOffsetPerTrigger($minOffsets) is higher " +
+          s"than the maxOffsetsPerTrigger($maxOffsets)")
+      }
+      ReadLimit.compositeLimit(
+        Array(ReadLimit.minRows(minOffsets, maxTriggerDelayMs), ReadLimit.maxRows(maxOffsets)))
     } else if (minOffsetPerTrigger.isDefined) {
       ReadLimit.minRows(minOffsetPerTrigger.get, maxTriggerDelayMs)
     } else {
