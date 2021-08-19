@@ -262,8 +262,14 @@ private[spark] object QueryCompilationErrors {
       "Star (*) is not allowed in select list when GROUP BY ordinal position is used")
   }
 
-  def invalidStarUsageError(prettyName: String): Throwable = {
-    new AnalysisException(s"Invalid usage of '*' in $prettyName")
+  def invalidStarUsageError(
+      prettyName: String, supportQuotedRegexColumnName: Boolean): Throwable = {
+    val elem = if (supportQuotedRegexColumnName) {
+      "regular expression"
+    } else {
+      "'*'"
+    }
+    new AnalysisException(s"Invalid usage of $elem in $prettyName")
   }
 
   def singleTableStarInCountNotAllowedError(targetString: String): Throwable = {

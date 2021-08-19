@@ -1443,7 +1443,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
       case g: Generate if containsStar(g.generator.children) =>
-        throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF")
+        throw QueryCompilationErrors.invalidStarUsageError("explode/json_tuple/UDTF",
+          conf.supportQuotedRegexColumnName)
 
       // When resolve `SortOrder`s in Sort based on child, don't report errors as
       // we still have chance to resolve it based on its descendants
@@ -1704,7 +1705,8 @@ class Analyzer(override val catalogManager: CatalogManager)
           })
         // count(*) has been replaced by count(1)
         case o if containsStar(o.children) =>
-          throw QueryCompilationErrors.invalidStarUsageError(s"expression '${o.prettyName}'")
+          throw QueryCompilationErrors.invalidStarUsageError(s"expression '${o.prettyName}'",
+            conf.supportQuotedRegexColumnName)
       }
     }
   }
