@@ -313,7 +313,7 @@ private[spark] object Utils extends Logging {
     while (dir == null) {
       attempts += 1
       if (attempts > maxAttempts) {
-        throw SparkCoreErrors.failedToCreateTempDirectoryError(root, maxAttempts)
+        throw SparkCoreErrors.failToCreateTempDirectoryError(root, maxAttempts)
       }
       try {
         dir = new File(root, namePrefix + "-" + UUID.randomUUID.toString)
@@ -679,7 +679,7 @@ private[spark] object Utils extends Logging {
             s"File $destFile exists and does not match contents of $url, replacing it with $url"
           )
           if (!destFile.delete()) {
-            throw SparkCoreErrors.failedToDeleteFileError(destFile.getAbsolutePath,
+            throw SparkCoreErrors.failToDeleteFileError(destFile.getAbsolutePath,
               sourceFile.getAbsolutePath)
           }
         } else {
@@ -1352,7 +1352,7 @@ private[spark] object Utils extends Logging {
     stdoutThread.join()   // Wait for it to finish reading output
     if (exitCode != 0) {
       logError(s"Process $command exited with code $exitCode: $output")
-      throw SparkCoreErrors.processExistedError(command, exitCode)
+      throw SparkCoreErrors.processExitedError(command, exitCode)
     }
     output.toString
   }
@@ -2389,7 +2389,7 @@ private[spark] object Utils extends Logging {
       }
     }
     // Should never happen
-    throw SparkCoreErrors.failedToStartServiceOnPortError(serviceString, startPort)
+    throw SparkCoreErrors.failToStartServiceOnPortError(serviceString, startPort)
   }
 
   /**

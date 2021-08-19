@@ -197,11 +197,11 @@ object SparkCoreErrors {
     new ReturnStatementInClosureException
   }
 
-  def cannotResolvesAmbiguouslyBaseError(base: String, resolved: String): Throwable = {
+  def cannotResolveToMultipleFilesError(base: String, resolved: String): Throwable = {
     new SparkException(s"$base resolves ambiguously to multiple files: $resolved")
   }
 
-  def keyMustNotBeNullError(): Throwable = {
+  def keyIsNullError(): Throwable = {
     new NullPointerException("key must not be null")
   }
 
@@ -213,7 +213,7 @@ object SparkCoreErrors {
     new EOFException("End of file before fully reading buffer")
   }
 
-  def couldNotWriteBufferToOutputSteamError(): Throwable = {
+  def cannotWriteBufferToOutputSteamError(): Throwable = {
     new IOException("Could not fully write buffer to output stream")
   }
 
@@ -225,12 +225,12 @@ object SparkCoreErrors {
     new SparkException("Exception thrown in awaitResult: ", t)
   }
 
-  def failedToCreateTempDirectoryError(root: String, maxAttempts: Int): Throwable = {
+  def failToCreateTempDirectoryError(root: String, maxAttempts: Int): Throwable = {
     new IOException("Failed to create a temp directory (under " + root + ") after " +
       maxAttempts + " attempts!")
   }
 
-  def failedToDeleteFileError(
+  def failToDeleteFileError(
       destFilePath: String,
       sourceFilePath: String): Throwable = {
     new SparkException(s"Failed to delete $destFilePath while attempting to " +
@@ -253,7 +253,7 @@ object SparkCoreErrors {
     new Exception("Yarn Local dirs can't be empty")
   }
 
-  def processExistedError(command: Seq[String], exitCode: Int): Throwable = {
+  def processExitedError(command: Seq[String], exitCode: Int): Throwable = {
     new SparkException(s"Process $command exited with code $exitCode")
   }
 
@@ -273,7 +273,7 @@ object SparkCoreErrors {
     new SparkException(s"Failed when loading Spark properties from $filename", e)
   }
 
-  def failedToStartServiceOnPortError(serviceString: String, startPort: Int): Throwable = {
+  def failToStartServiceOnPortError(serviceString: String, startPort: Int): Throwable = {
     new SparkException(s"Failed to start service$serviceString on port $startPort")
   }
 

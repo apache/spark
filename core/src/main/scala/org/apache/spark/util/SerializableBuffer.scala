@@ -49,7 +49,7 @@ class SerializableBuffer(@transient var buffer: ByteBuffer) extends Serializable
   private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     out.writeInt(buffer.limit())
     if (Channels.newChannel(out).write(buffer) != buffer.limit()) {
-      throw SparkCoreErrors.couldNotWriteBufferToOutputSteamError()
+      throw SparkCoreErrors.cannotWriteBufferToOutputSteamError()
     }
     buffer.rewind() // Allow us to write it again later
   }

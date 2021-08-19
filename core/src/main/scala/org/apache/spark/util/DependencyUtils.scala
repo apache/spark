@@ -273,7 +273,7 @@ private[spark] object DependencyUtils extends Logging {
       val (base, fragment) = splitOnFragment(path)
       (resolveGlobPath(base, hadoopConf), fragment) match {
         case (resolved, Some(_)) if resolved.length > 1 => throw SparkCoreErrors
-          .cannotResolvesAmbiguouslyBaseError(base.toString, resolved.mkString(","))
+          .cannotResolveToMultipleFilesError(base.toString, resolved.mkString(","))
         case (resolved, Some(namedAs)) => resolved.map(_ + "#" + namedAs)
         case (resolved, _) => resolved
       }

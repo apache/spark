@@ -59,7 +59,7 @@ private[spark] class KeyLock[K] {
    */
   def withLock[T](key: K)(func: => T): T = {
     if (key == null) {
-      throw SparkCoreErrors.keyMustNotBeNullError()
+      throw SparkCoreErrors.keyIsNullError()
     }
     acquireLock(key)
     try {
