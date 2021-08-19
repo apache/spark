@@ -18,7 +18,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.IdentityHashMap
 
-import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine, LoadingCache}
+import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
 import com.google.common.util.concurrent.{ExecutionError, UncheckedExecutionException}
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -38,17 +38,14 @@ class SubExprEvaluationRuntime(cacheMaxEntries: Int) {
   // won't be use by multi-threads so we don't need to consider concurrency here.
   private var proxyExpressionCurrentId = 0
 
-  private[sql] val cache: LoadingCache[ExpressionProxy, ResultProxy] =
-    Caffeine.newBuilder().maximumSize(cacheMaxEntries)
-      // SPARK-34309: Use custom Executor to compatible with
-      // the data eviction behavior of Guava cache
-      .executor((command: Runnable) => command.run())
-      .build[ExpressionProxy, ResultProxy](
-        new CacheLoader[ExpressionProxy, ResultProxy]() {
-          override def load(expr: ExpressionProxy): ResultProxy = {
-            ResultProxy(expr.proxyEval(currentInput))
-          }
-        })
+  private[sql] val cache: LoadingCache[ExpressionProxy, ResultProxy] = CacheBuilder.newBuilder()
+    .maximumSize(cacheMaxEntries)
+    .build(
+      new CacheLoader[ExpressionProxy, ResultProxy]() {
+        override def load(expr: ExpressionProxy): ResultProxy = {
+          ResultProxy(expr.proxyEval(currentInput))
+        }
+      })
 
   private var currentInput: InternalRow = null
 
