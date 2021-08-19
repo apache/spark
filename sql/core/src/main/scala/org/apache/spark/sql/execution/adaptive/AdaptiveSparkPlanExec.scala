@@ -190,7 +190,7 @@ case class AdaptiveSparkPlanExec(
     conf.getConf(SQLConf.ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS) match {
       case Some(className) => CostEvaluator.instantiate(className, session.sparkContext.getConf)
       case _ =>
-        SkewJoinAwareCostEvaluator(conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN))
+        SimpleCostEvaluator(conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN))
     }
 
   @transient val initialPlan = context.session.withActive {

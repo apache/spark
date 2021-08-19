@@ -680,7 +680,7 @@ object SQLConf {
   val ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN =
     buildConf("spark.sql.adaptive.forceOptimizeSkewedJoin")
       .doc("When true, force enable OptimizeSkewedJoin even if it introduces extra shuffle.")
-      .version("3.2.0")
+      .version("3.3.0")
       .booleanConf
       .createWithDefault(false)
 
