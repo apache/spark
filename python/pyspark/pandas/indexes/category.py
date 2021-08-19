@@ -632,9 +632,6 @@ class CategoricalIndex(Index):
             self.to_series().cat.set_categories(new_categories, ordered=ordered, rename=rename)
         ).rename(self.name)
 
-    def __getattr__(self, item: str) -> Any:
-        raise AttributeError("'CategoricalIndex' object has no attribute '{}'".format(item))
-
     def map(  # type: ignore[override]
         self, mapper: Union[dict, Callable[[Any], Any], pd.Series]
     ) -> "Index":
