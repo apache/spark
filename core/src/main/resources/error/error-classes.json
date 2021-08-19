@@ -3,6 +3,26 @@
     "message" : [ "Field name %s is ambiguous and has %s matching fields in the struct." ],
     "sqlState" : "42000"
   },
+  "CANNOT_GET_JDBC_TYPE" : {
+    "message" : [ "Can't get JDBC type for %s" ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_READ_FOOTER_FOR_FILE" : {
+    "message" : [ "Could not read footer for file: %s" ],
+    "sqlState" : "42000"
+  },
+  "CANNOT_TRANSLATE_NON_NULL_VALUE_FOR_FIELD" : {
+    "message" : [ "Can't translate non-null value for field %s" ],
+    "sqlState" : "0A000"
+  },
+  "DATA_TYPE_UNSUPPORTED_YET" : {
+    "message" : [ "%s is not supported yet." ],
+    "sqlState" : "0A000"
+  },
+  "DDL_UNSUPPORTED_TEMPORARILY" : {
+    "message" : [ "%s is not supported temporarily." ],
+    "sqlState" : "0A000"
+  },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
     "sqlState" : "22012"
@@ -10,6 +30,18 @@
   "DUPLICATE_KEY" : {
     "message" : [ "Found duplicate keys '%s'" ],
     "sqlState" : "23000"
+  },
+  "EMPTY_OPTION" : {
+    "message" : [ "Option `%s` can not be empty." ],
+    "sqlState" : "08006"
+  },
+  "FAILED_TO_MERGE_IN_COMPATIBLE_SCHEMAS" : {
+    "message" : [ "Failed to merge incompatible schemas %s and %s" ],
+    "sqlState" : "42000"
+  },
+  "FOUND_DUPLICATE_FIELD_IN_CASE_INSENSITIVE_MODE" : {
+    "message" : [ "%s" ],
+    "sqlState" : "42000"
   },
   "GROUPING_COLUMN_MISMATCH" : {
     "message" : [ "Column of grouping (%s) can't be found in grouping columns %s" ],
@@ -29,17 +61,37 @@
     "message" : [ "Invalid pivot column '%s'. Pivot columns must be comparable." ],
     "sqlState" : "42000"
   },
+  "INPUT_FILTER_NOT_FULLY_CONVERTIBLE" : {
+    "message" : [ "The input filter of %s should be fully convertible." ],
+    "sqlState" : "42000"
+  },
   "INVALID_FIELD_NAME" : {
     "message" : [ "Field name %s is invalid: %s is not a struct." ],
+    "sqlState" : "42000"
+  },
+  "INVALID_JDBC_NUMPARTITIONS" : {
+    "message" : [ "Invalid value `%s` for parameter `%s` in table writing via JDBC. The minimum value is 1." ],
+    "sqlState" : "42000"
+  },
+  "INVALID_JDBC_TXN_ISOLATION_LEVEL" : {
+    "message" : [ "Invalid value `%s` for parameter `%s`. This can be `NONE`, `READ_UNCOMMITTED`, `READ_COMMITTED`, `REPEATABLE_READ` or `SERIALIZABLE`." ],
     "sqlState" : "42000"
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
     "sqlState" : "42000"
   },
+  "MISSING_JDBC_TABLE_NAME_AND_QUERY" : {
+    "message" : [ "Option '%s' or '%s' is required." ],
+    "sqlState" : "08006"
+  },
   "MISSING_STATIC_PARTITION_COLUMN" : {
     "message" : [ "Unknown static partition column: %s" ],
     "sqlState" : "42000"
+  },
+  "NESTED_ARRAYS_UNSUPPORTED" : {
+    "message" : [ "Nested arrays unsupported" ],
+    "sqlState" : "0A000"
   },
   "NON_LITERAL_PIVOT_VALUES" : {
     "message" : [ "Literal expressions required for pivot values, found '%s'" ],
@@ -49,6 +101,9 @@
     "message" : [ "PARTITION clause cannot contain a non-partition column name: %s" ],
     "sqlState" : "42000"
   },
+  "OPERATING_ON_CANONICALIZATION_PLAN" : {
+    "message" : [ "Operating on canonicalization plan" ]
+  },
   "PIVOT_VALUE_DATA_TYPE_MISMATCH" : {
     "message" : [ "Invalid pivot value '%s': value data type %s does not match pivot column data type %s" ],
     "sqlState" : "42000"
@@ -57,8 +112,28 @@
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
     "sqlState" : "22023"
   },
+  "TRANSACTION_UNSUPPORTED_BY_JDBC_SERVER" : {
+    "message" : [ "The target JDBC server does not support transaction and can only support ALTER TABLE with a single action." ],
+    "sqlState" : "0A000"
+  },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
+  },
+  "UNRECOGNIZED_SQL_TYPE" : {
+    "message" : [ "Unrecognized SQL type %s" ],
+    "sqlState" : "07006"
+  },
+  "UNSUPPORTED_ARRAY_ELEMENT_TYPE_BASED_ON_BINARY" : {
+    "message" : [ "Unsupported array element type %s based on binary" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_JDBC_TYPE" : {
+    "message" : [ "Unsupported type %s" ],
+    "sqlState" : "0A000"
+  },
+  "UNSUPPORTED_OPERATION_FOR_DATA_TYPE" : {
+    "message" : [ "DataType: %s" ],
+    "sqlState" : "0A000"
   },
   "WRITING_JOB_ABORTED" : {
     "message" : [ "Writing job aborted" ],
