@@ -117,7 +117,7 @@ private[v1] class StagesResource extends BaseAppResource {
   : TaskMetricDistributions = withUI { ui =>
     val quantiles = parseQuantileString(quantileString)
     ui.store.taskSummary(stageId, stageAttemptId, quantiles).getOrElse(
-      throw SparkCoreErrors.noTasksReportMetricsError(stageId, stageAttemptId))
+      throw SparkCoreErrors.noTaskReportedMetricsError(stageId, stageAttemptId))
   }
 
   @GET
@@ -263,7 +263,7 @@ private[v1] class StagesResource extends BaseAppResource {
         s.toDouble
       } catch {
         case nfe: NumberFormatException =>
-          throw SparkCoreErrors.badParameterErrors("quantiles", "double", s)
+          throw SparkCoreErrors.badParameterError("quantiles", "double", s)
       }
     }
   }

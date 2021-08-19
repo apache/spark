@@ -45,7 +45,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
       ui.store.job(jobId)
     } catch {
       case _: NoSuchElementException =>
-        throw SparkCoreErrors.notFoundJobIdError(jobId)
+        throw SparkCoreErrors.unknownJobError(jobId)
     }
   }
 
@@ -166,7 +166,7 @@ private[v1] class AbstractApplicationResource extends BaseAppResource {
   @Path("{attemptId}")
   def applicationAttempt(): Class[OneApplicationAttemptResource] = {
     if (attemptId != null) {
-      throw SparkCoreErrors.notFoundHttpRequestError(httpRequest.getRequestURI())
+      throw SparkCoreErrors.uriNotFoundError(httpRequest.getRequestURI())
     }
     classOf[OneApplicationAttemptResource]
   }
@@ -192,7 +192,7 @@ private[v1] class OneApplicationAttemptResource extends AbstractApplicationResou
         app.attempts.find(_.attemptId.contains(attemptId))
       }
       .getOrElse {
-        throw SparkCoreErrors.notFoundAppWithAttemptError(appId, attemptId)
+        throw SparkCoreErrors.unknownAppWithAttemptError(appId, attemptId)
       }
   }
 

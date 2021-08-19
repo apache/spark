@@ -145,7 +145,7 @@ private[v1] trait BaseAppResource extends ApiRequestContext {
     } catch {
       case _: NoSuchElementException =>
         val appKey = Option(attemptId).map(appId + "/" + _).getOrElse(appId)
-        throw SparkCoreErrors.notFoundAppKeyError(appKey)
+        throw SparkCoreErrors.appNotFoundError(appKey)
     }
   }
 
@@ -158,7 +158,7 @@ private[v1] trait BaseAppResource extends ApiRequestContext {
     } catch {
       case _: NoSuchElementException =>
         val appKey = Option(attemptId).map(appId + "/" + _).getOrElse(appId)
-        throw SparkCoreErrors.notFoundAppKeyError(appKey)
+        throw SparkCoreErrors.appNotFoundError(appKey)
     }
   }
 }

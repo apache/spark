@@ -176,11 +176,11 @@ object SparkCoreErrors {
     new ForbiddenException(s"""user "$user" is not authorized""")
   }
 
-  def notFoundAppKeyError(appKey: String): Throwable = {
+  def appNotFoundError(appKey: String): Throwable = {
     new NotFoundException(s"no such app: $appKey")
   }
 
-  def notFoundJobIdError(jobId: Int): Throwable = {
+  def unknownJobError(jobId: Int): Throwable = {
     new NotFoundException(s"unknown job: $jobId")
   }
 
@@ -196,7 +196,7 @@ object SparkCoreErrors {
     new NotFoundException("No thread dump is available.")
   }
 
-  def notFoundHttpRequestError(uri: String): Throwable = {
+  def uriNotFoundError(uri: String): Throwable = {
     new NotFoundException(uri)
   }
 
@@ -220,7 +220,7 @@ object SparkCoreErrors {
     new NotFoundException(s"unknown app: $appId")
   }
 
-  def notFoundAppWithAttemptError(appId: String, attemptId: String): Throwable = {
+  def unknownAppWithAttemptError(appId: String, attemptId: String): Throwable = {
     new NotFoundException(s"unknown app $appId, attempt $attemptId")
   }
 
@@ -232,11 +232,11 @@ object SparkCoreErrors {
     new NotFoundException(s"unknown attempt for stage $stageId.  Found attempts: [$msg]")
   }
 
-  def noTasksReportMetricsError(stageId: Int, stageAttemptId: Int): Throwable = {
+  def noTaskReportedMetricsError(stageId: Int, stageAttemptId: Int): Throwable = {
     new NotFoundException(s"No tasks reported metrics for $stageId / $stageAttemptId yet.")
   }
 
-  def badParameterErrors(param: String, exp: String, actual: String): Throwable = {
+  def badParameterError(param: String, exp: String, actual: String): Throwable = {
     new BadParameterException(param, exp, actual)
   }
 
