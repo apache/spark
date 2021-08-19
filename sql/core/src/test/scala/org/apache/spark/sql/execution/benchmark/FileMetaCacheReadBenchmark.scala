@@ -51,7 +51,7 @@ object FileMetaCacheReadBenchmark extends SqlBasedBenchmark {
     // Set default configs. Individual cases will change them if necessary.
     sparkSession.conf.set(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key, "true")
     sparkSession.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
-    sparkSession.conf.set(SQLConf.FILE_META_CACHE_TTL_SINCE_LAST_ACCESS.key, "5")
+    sparkSession.conf.set(SQLConf.FILE_META_CACHE_TTL_SINCE_LAST_ACCESS_SEC.key, "5")
 
     sparkSession
   }

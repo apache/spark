@@ -982,8 +982,8 @@ object SQLConf {
     }, s"spark.sql.fileMetaCache.enabledSourceList only support orc now")
     .createWithDefault("")
 
-  val FILE_META_CACHE_TTL_SINCE_LAST_ACCESS =
-    buildConf("spark.sql.fileMetaCache.ttlSinceLastAccess")
+  val FILE_META_CACHE_TTL_SINCE_LAST_ACCESS_SEC =
+    buildConf("spark.sql.fileMetaCache.ttlSinceLastAccessSec")
       .version("3.3.0")
       .doc("Time-to-live for file metadata cache entry after last access, the unit is seconds.")
       .timeConf(TimeUnit.SECONDS)

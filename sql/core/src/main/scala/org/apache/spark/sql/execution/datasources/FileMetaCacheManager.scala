@@ -47,7 +47,7 @@ object FileMetaCacheManager extends Logging {
   }
 
   private lazy val ttlTime =
-    SparkEnv.get.conf.get(SQLConf.FILE_META_CACHE_TTL_SINCE_LAST_ACCESS)
+    SparkEnv.get.conf.get(SQLConf.FILE_META_CACHE_TTL_SINCE_LAST_ACCESS_SEC)
 
   private lazy val maximumSize =
     SparkEnv.get.conf.get(SQLConf.FILE_META_CACHE_MAXIMUM_SIZE)
