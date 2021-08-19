@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql
 
-import com.google.common.cache.CacheStats
+import com.github.benmanes.caffeine.cache.stats.CacheStats
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.SparkConf

@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.util.concurrent.TimeUnit
 
-import com.google.common.cache.{CacheBuilder, CacheLoader, CacheStats}
+import com.github.benmanes.caffeine.cache.{CacheLoader, Caffeine}
+import com.github.benmanes.caffeine.cache.stats.CacheStats
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -52,7 +53,7 @@ object FileMetaCacheManager extends Logging {
   private lazy val maximumSize =
     SparkEnv.get.conf.get(SQLConf.FILE_META_CACHE_MAXIMUM_SIZE)
 
-  private lazy val cache = CacheBuilder
+  private lazy val cache = Caffeine
     .newBuilder()
     .expireAfterAccess(ttlTime, TimeUnit.SECONDS)
     .maximumSize(maximumSize)
