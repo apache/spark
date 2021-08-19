@@ -54,10 +54,10 @@ class ResourceDiscoveryScriptPlugin extends ResourceDiscoveryPlugin with Logging
         throw SparkCoreErrors.resourceScriptNotExistError(scriptFile, resourceName)
       }
     } else {
-      throw SparkCoreErrors.expectUseResourceButNotSpecifyADiscoveryScriptError(resourceName)
+      throw SparkCoreErrors.noDiscoveryScriptSpecifiedError(resourceName)
     }
     if (!result.name.equals(resourceName)) {
-      throw SparkCoreErrors.runningOtherResourceError(script, result.name, resourceName)
+      throw SparkCoreErrors.discoveryScriptNameMismatchError(script, result.name, resourceName)
     }
     Optional.of(result)
   }

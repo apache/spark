@@ -70,7 +70,7 @@ private[spark] class ResourceProfileManager(sparkConf: SparkConf,
     // to skip throwing the exception so that we can test in other modes to make testing easier.
     if ((notRunningUnitTests || testExceptionThrown) &&
         (notYarnOrK8sAndNotDefaultProfile || YarnOrK8sNotDynAllocAndNotDefaultProfile)) {
-      throw SparkCoreErrors.resourceProfileSupportedError()
+      throw SparkCoreErrors.resourceProfilesUnsupportedError()
     }
     true
   }

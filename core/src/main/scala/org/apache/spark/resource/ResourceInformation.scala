@@ -72,7 +72,7 @@ private[spark] object ResourceInformation {
       parse(json).extract[ResourceInformationJson].toResourceInformation
     } catch {
       case NonFatal(e) =>
-        throw SparkCoreErrors.ParsingJsonToResourceInformationError(json, exampleJson, e)
+        throw SparkCoreErrors.failToParseJsonToResourceInformationError(json, exampleJson, e)
     }
   }
 
@@ -82,7 +82,7 @@ private[spark] object ResourceInformation {
       json.extract[ResourceInformationJson].toResourceInformation
     } catch {
       case NonFatal(e) =>
-        throw SparkCoreErrors.ParsingJsonToResourceInformationError(json, e)
+        throw SparkCoreErrors.parsingJsonToResourceInformationError(json, e)
     }
   }
 }

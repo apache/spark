@@ -148,22 +148,22 @@ object SparkCoreErrors {
     new SparkException("Checkpoint dir must be specified.")
   }
 
-  def acquireAnAddressNotExistError(resourceName: String, address: String): Throwable = {
+  def acquireNonExistingAddressError(resourceName: String, address: String): Throwable = {
     new SparkException(s"Try to acquire an address that doesn't exist. $resourceName " +
       s"address $address doesn't exist.")
   }
 
-  def acquireAnAddressNotAvailableError(resourceName: String, address: String): Throwable = {
+  def acquireUnavailableAddressError(resourceName: String, address: String): Throwable = {
     new SparkException("Try to acquire an address that is not available. " +
       s"$resourceName address $address is not available.")
   }
 
-  def releaseAnAddressNotExistError(resourceName: String, address: String): Throwable = {
+  def releaseNonExistingAddressError(resourceName: String, address: String): Throwable = {
     new SparkException(s"Try to release an address that doesn't exist. $resourceName " +
       s"address $address doesn't exist.")
   }
 
-  def releaseAnAddressNotAssignedError(resourceName: String, address: String): Throwable = {
+  def releaseUnassignedAddressError(resourceName: String, address: String): Throwable = {
     new SparkException(s"Try to release an address that is not assigned. $resourceName " +
       s"address $address is not assigned.")
   }
@@ -173,12 +173,12 @@ object SparkCoreErrors {
       "doesn't exist!")
   }
 
-  def expectUseResourceButNotSpecifyADiscoveryScriptError(resourceName: String): Throwable = {
+  def noDiscoveryScriptSpecifiedError(resourceName: String): Throwable = {
     new SparkException(s"User is expecting to use resource: $resourceName, but " +
       "didn't specify a discovery script!")
   }
 
-  def runningOtherResourceError(
+  def discoveryScriptNameMismatchError(
       script: Optional[String],
       name: String,
       resourceName: String): Throwable = {
@@ -186,7 +186,7 @@ object SparkCoreErrors {
       s"script returned resource name ${name} and we were expecting $resourceName.")
   }
 
-  def ParsingJsonToResourceInformationError(
+  def failToParseJsonToResourceInformationError(
       json: String,
       exampleJson: String,
       e: Throwable): Throwable = {
@@ -194,7 +194,7 @@ object SparkCoreErrors {
       s"Here is a correct example: $exampleJson.", e)
   }
 
-  def ParsingJsonToResourceInformationError(json: JValue, e: Throwable): Throwable = {
+  def parsingJsonToResourceInformationError(json: JValue, e: Throwable): Throwable = {
     new SparkException(s"Error parsing JSON into ResourceInformation:\n$json\n", e)
   }
 
@@ -202,7 +202,10 @@ object SparkCoreErrors {
     new SparkException(s"Resource $resource doesn't exist in profile id: $id")
   }
 
-  def conditionOfExecutorResourceError(rName: String, num: Long, taskReq: Double): Throwable = {
+  def executorResourceLessThanTaskResourceRequestError(
+      rName: String,
+      num: Long,
+      taskReq: Double): Throwable = {
     new SparkException(s"The executor resource: $rName, amount: ${num} " +
       s"needs to be >= the task resource request amount of $taskReq")
   }
@@ -212,7 +215,7 @@ object SparkCoreErrors {
       s"following task configs: ${str}")
   }
 
-  def resourceProfileSupportedError(): Throwable = {
+  def resourceProfilesUnsupportedError(): Throwable = {
     new SparkException("ResourceProfiles are only supported on YARN and Kubernetes " +
       "with dynamic allocation enabled.")
   }
@@ -221,11 +224,11 @@ object SparkCoreErrors {
     new SparkException(s"ResourceProfileId $rpId not found!")
   }
 
-  def specifyConfigOfResourceError(str: String): Throwable = {
+  def noAmountSpecifiedForResourceError(str: String): Throwable = {
     new SparkException(s"You must specify an amount for ${str}")
   }
 
-  def specifyAnAmountConfigForResourceError(
+  def noAmountConfigSpecifiedForResourceError(
       key: String,
       componentName: String,
       RESOURCE_PREFIX: String): Throwable = {
@@ -233,25 +236,21 @@ object SparkCoreErrors {
       s"config: $componentName.$RESOURCE_PREFIX.$key")
   }
 
-  def conditionOfResourceAmountError(doubleAmount: Double): Throwable = {
+  def invalidResourceAmountError(doubleAmount: Double): Throwable = {
     new SparkException(
       s"The resource amount ${doubleAmount} must be either <= 0.5, or a whole number.")
   }
 
-  def specifyAmountForResourceError(str: String): Throwable = {
-    new SparkException(s"You must specify an amount for ${str}")
-  }
-
-  def tasksSupportFractionalResourceError(componentName: String): Throwable = {
+  def fractionalResourcesUnsupportedError(componentName: String): Throwable = {
     new SparkException(
       s"Only tasks support fractional resources, please check your $componentName settings")
   }
 
-  def ParsingResourceFileError(resourcesFile: String, e: Throwable): Throwable = {
+  def failToParseResourceFileError(resourcesFile: String, e: Throwable): Throwable = {
     new SparkException(s"Error parsing resources file $resourcesFile", e)
   }
 
-  def conditionOfTheNumberOfCoresPerExecutorError(execCores: Int, taskCpus: Int): Throwable = {
+  def numCoresPerExecutorLessThanNumCPUsPerTaskError(execCores: Int, taskCpus: Int): Throwable = {
     new SparkException(s"The number of cores per executor (=$execCores) has to be >= " +
       s"the number of cpus per task = $taskCpus.")
   }
@@ -261,7 +260,7 @@ object SparkCoreErrors {
       s"${str}")
   }
 
-  def adjustConfigurationError(
+  def adjustConfigurationofCoresError(
       cores: Int,
       taskCpus: Int,
       resourceNumSlots: Int,
@@ -277,7 +276,7 @@ object SparkCoreErrors {
       """.stripMargin.replaceAll("\n", " "))
   }
 
-  def adjustConfigurationError(
+  def adjustConfigurationOfResourceError(
       uri: String,
       execAmount: Long,
       taskReqStr: String,

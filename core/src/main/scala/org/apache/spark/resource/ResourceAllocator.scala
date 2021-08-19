@@ -77,13 +77,13 @@ private[spark] trait ResourceAllocator {
   def acquire(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
       if (!addressAvailabilityMap.contains(address)) {
-        throw SparkCoreErrors.acquireAnAddressNotExistError(resourceName, address)
+        throw SparkCoreErrors.acquireNonExistingAddressError(resourceName, address)
       }
       val isAvailable = addressAvailabilityMap(address)
       if (isAvailable > 0) {
         addressAvailabilityMap(address) = addressAvailabilityMap(address) - 1
       } else {
-        throw SparkCoreErrors.acquireAnAddressNotAvailableError(resourceName, address)
+        throw SparkCoreErrors.acquireUnavailableAddressError(resourceName, address)
       }
     }
   }
@@ -96,13 +96,13 @@ private[spark] trait ResourceAllocator {
   def release(addrs: Seq[String]): Unit = {
     addrs.foreach { address =>
       if (!addressAvailabilityMap.contains(address)) {
-        throw SparkCoreErrors.releaseAnAddressNotExistError(resourceName, address)
+        throw SparkCoreErrors.releaseNonExistingAddressError(resourceName, address)
       }
       val isAvailable = addressAvailabilityMap(address)
       if (isAvailable < slotsPerAddress) {
         addressAvailabilityMap(address) = addressAvailabilityMap(address) + 1
       } else {
-        throw SparkCoreErrors.releaseAnAddressNotAssignedError(resourceName, address)
+        throw SparkCoreErrors.releaseUnassignedAddressError(resourceName, address)
       }
     }
   }

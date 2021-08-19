@@ -141,7 +141,7 @@ private[spark] object ResourceUtils extends Logging {
   def parseResourceRequest(sparkConf: SparkConf, resourceId: ResourceID): ResourceRequest = {
     val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
     val amount = settings.getOrElse(AMOUNT,
-      throw SparkCoreErrors.specifyConfigOfResourceError(resourceId.resourceName)
+      throw SparkCoreErrors.noAmountSpecifiedForResourceError(resourceId.resourceName)
     ).toInt
     val discoveryScript = Optional.ofNullable(settings.get(DISCOVERY_SCRIPT).orNull)
     val vendor = Optional.ofNullable(settings.get(VENDOR).orNull)
@@ -152,7 +152,7 @@ private[spark] object ResourceUtils extends Logging {
     sparkConf.getAllWithPrefix(s"$componentName.$RESOURCE_PREFIX.").map { case (key, _) =>
       val index = key.indexOf('.')
       if (index < 0) {
-        throw SparkCoreErrors.specifyAnAmountConfigForResourceError(key, componentName,
+        throw SparkCoreErrors.noAmountConfigSpecifiedForResourceError(key, componentName,
           RESOURCE_PREFIX)
       }
       key.substring(0, index)
@@ -179,7 +179,7 @@ private[spark] object ResourceUtils extends Logging {
     val parts = if (doubleAmount <= 0.5) {
       Math.floor(1.0 / doubleAmount).toInt
     } else if (doubleAmount % 1 != 0) {
-      throw SparkCoreErrors.conditionOfResourceAmountError(doubleAmount)
+      throw SparkCoreErrors.invalidResourceAmountError(doubleAmount)
     } else {
       1
     }
@@ -193,7 +193,7 @@ private[spark] object ResourceUtils extends Logging {
     listResourceIds(sparkConf, SPARK_TASK_PREFIX).map { resourceId =>
       val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
       val amountDouble = settings.getOrElse(AMOUNT,
-        throw SparkCoreErrors.specifyAmountForResourceError(resourceId.resourceName)
+        throw SparkCoreErrors.noAmountSpecifiedForResourceError(resourceId.resourceName)
       ).toDouble
       treqs.resource(resourceId.resourceName, amountDouble)
     }
@@ -205,7 +205,7 @@ private[spark] object ResourceUtils extends Logging {
     val rnamesAndAmounts = resourceIds.map { resourceId =>
       val settings = sparkConf.getAllWithPrefix(resourceId.confPrefix).toMap
       val amountDouble = settings.getOrElse(AMOUNT,
-        throw SparkCoreErrors.specifyAmountForResourceError(resourceId.resourceName)
+        throw SparkCoreErrors.noAmountSpecifiedForResourceError(resourceId.resourceName)
       ).toDouble
       (resourceId.resourceName, amountDouble)
     }
@@ -213,7 +213,7 @@ private[spark] object ResourceUtils extends Logging {
       val (amount, parts) = if (componentName.equalsIgnoreCase(SPARK_TASK_PREFIX)) {
         calculateAmountAndPartsForFraction(amountDouble)
       } else if (amountDouble % 1 != 0) {
-        throw SparkCoreErrors.tasksSupportFractionalResourceError(componentName)
+        throw SparkCoreErrors.fractionalResourcesUnsupportedError(componentName)
       } else {
         (amountDouble.toInt, 1)
       }
@@ -236,7 +236,7 @@ private[spark] object ResourceUtils extends Logging {
       extract(json)
     } catch {
       case NonFatal(e) =>
-        throw SparkCoreErrors.ParsingResourceFileError(resourcesFile, e)
+        throw SparkCoreErrors.failToParseResourceFileError(resourcesFile, e)
     }
   }
 
@@ -399,7 +399,7 @@ private[spark] object ResourceUtils extends Logging {
   def validateTaskCpusLargeEnough(sparkConf: SparkConf, execCores: Int, taskCpus: Int): Boolean = {
     // Number of cores per executor must meet at least one task requirement.
     if (execCores < taskCpus) {
-      throw SparkCoreErrors.conditionOfTheNumberOfCoresPerExecutorError(execCores, taskCpus)
+      throw SparkCoreErrors.numCoresPerExecutorLessThanNumCPUsPerTaskError(execCores, taskCpus)
     }
     true
   }
@@ -449,7 +449,7 @@ private[spark] object ResourceUtils extends Logging {
           s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
           "your configuration."
         if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
-          throw SparkCoreErrors.adjustConfigurationError(cores, taskCpus, resourceNumSlots,
+          throw SparkCoreErrors.adjustConfigurationofCoresError(cores, taskCpus, resourceNumSlots,
             limitingResource, maxTaskPerExec)
         } else {
           logWarning(message)
@@ -473,8 +473,8 @@ private[spark] object ResourceUtils extends Logging {
           s"number of runnable tasks per executor to: ${maxTaskPerExec}. Please adjust " +
           "your configuration."
         if (sparkConf.get(RESOURCES_WARNING_TESTING)) {
-          throw SparkCoreErrors.adjustConfigurationError(treq.resourceName, execAmount, taskReqStr,
-            resourceNumSlots, limitingResource, maxTaskPerExec)
+          throw SparkCoreErrors.adjustConfigurationOfResourceError(treq.resourceName, execAmount,
+            taskReqStr, resourceNumSlots, limitingResource, maxTaskPerExec)
         } else {
           logWarning(message)
         }

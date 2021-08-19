@@ -186,7 +186,8 @@ class ResourceProfile(
       numPartsPerResourceMap(rName) = 1
       if (taskReq > 0.0) {
         if (taskReq > execReq.amount) {
-          throw SparkCoreErrors.conditionOfExecutorResourceError(rName, execReq.amount, taskReq)
+          throw SparkCoreErrors.executorResourceLessThanTaskResourceRequestError(rName,
+            execReq.amount, taskReq)
         }
         val (numPerTask, parts) = ResourceUtils.calculateAmountAndPartsForFraction(taskReq)
         numPartsPerResourceMap(rName) = parts
