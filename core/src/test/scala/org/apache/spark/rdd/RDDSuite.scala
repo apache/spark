@@ -32,7 +32,7 @@ import org.scalatest.concurrent.Eventually
 
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.internal.config.{ENABLE_FINAL_AGGREGATE_ON_EXECUTOR, RDD_PARALLEL_LISTING_THRESHOLD}
+import org.apache.spark.internal.config.RDD_PARALLEL_LISTING_THRESHOLD
 import org.apache.spark.rdd.RDDSuiteUtils._
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -275,16 +275,14 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     }
   }
 
-  test("SPARK-36419: treeAggregate with ENABLE_FINAL_AGGREGATE_ON_EXECUTOR true") {
+  test("SPARK-36419: treeAggregate with finalAggregateOnExecutor set to true") {
     val rdd = sc.makeRDD(-1000 until 1000, 10)
     def seqOp: (Long, Int) => Long = (c: Long, x: Int) => c + x
     def combOp: (Long, Long) => Long = (c1: Long, c2: Long) => c1 + c2
-    sc.conf.set(ENABLE_FINAL_AGGREGATE_ON_EXECUTOR, true)
     for (depth <- 1 until 10) {
-      val sum = rdd.treeAggregate(0L)(seqOp, combOp, depth)
+      val sum = rdd.treeAggregate(0L, seqOp, combOp, depth, finalAggregateOnExecutor = true)
       assert(sum === -1000)
     }
-    sc.conf.remove(ENABLE_FINAL_AGGREGATE_ON_EXECUTOR)
   }
 
   test("treeReduce") {
