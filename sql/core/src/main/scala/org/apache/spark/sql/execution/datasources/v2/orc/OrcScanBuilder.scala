@@ -47,22 +47,16 @@ case class OrcScanBuilder(
 
   override def build(): Scan = {
     OrcScan(sparkSession, hadoopConf, fileIndex, dataSchema, readDataSchema(),
-      readPartitionSchema(), options, pushedDataFilters(), partitionFilters, dataFilters)
+      readPartitionSchema(), options, pushedDataFilters, partitionFilters, dataFilters)
   }
 
-  private var _pushedFilters: Array[Filter] = Array.empty
-
-  override def pushFiltersToFileIndex(
-      partitionFilters: Seq[Expression],
-      dataFilters: Seq[Expression]): Unit = {
-    this.partitionFilters = partitionFilters
-    this.dataFilters = dataFilters
+  override def pushDataFilters(dataFilters: Seq[Expression]): Array[Filter] = {
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       val dataTypeMap = OrcFilters.getSearchableTypeMap(
         readDataSchema(), SQLConf.get.caseSensitiveAnalysis)
-      _pushedFilters = OrcFilters.convertibleFilters(dataTypeMap, translateDataFilter).toArray
+      OrcFilters.convertibleFilters(dataTypeMap, translateDataFilter).toArray
+    } else {
+      Array.empty[Filter]
     }
   }
-
-  override def pushedDataFilters(): Array[Filter] = _pushedFilters
 }

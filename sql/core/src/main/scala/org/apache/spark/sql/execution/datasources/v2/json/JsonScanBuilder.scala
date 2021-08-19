@@ -41,22 +41,16 @@ class JsonScanBuilder (
       readDataSchema(),
       readPartitionSchema(),
       options,
-      pushedDataFilters(),
+      pushedDataFilters,
       partitionFilters,
       dataFilters)
   }
 
-  private var _pushedFilters: Array[Filter] = Array.empty
-
-  override def pushFiltersToFileIndex(
-      partitionFilters: Seq[Expression],
-      dataFilters: Seq[Expression]): Unit = {
-    this.partitionFilters = partitionFilters
-    this.dataFilters = dataFilters
+  override def pushDataFilters(dataFilters: Seq[Expression]): Array[Filter] = {
     if (sparkSession.sessionState.conf.jsonFilterPushDown) {
-      _pushedFilters = StructFilters.pushedFilters(translateDataFilter, dataSchema)
+      StructFilters.pushedFilters(translateDataFilter, dataSchema)
+    } else {
+      Array.empty[Filter]
     }
   }
-
-  override def pushedDataFilters(): Array[Filter] = _pushedFilters
 }
