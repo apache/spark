@@ -21,13 +21,18 @@ license: |
 
 ### Description
 
-The `ANALYZE TABLE` statement collects statistics about the table to be used by the query optimizer to find a better query execution plan.
+The `ANALYZE TABLE` statement collects statistics about one specific table or all the tables in one specified database,
+that are to be used by the query optimizer to find a better query execution plan.
 
 ### Syntax
 
 ```sql
 ANALYZE TABLE table_identifier [ partition_spec ]
     COMPUTE STATISTICS [ NOSCAN | FOR COLUMNS col [ , ... ] | FOR ALL COLUMNS ]
+```
+
+```sql
+ANALYZE TABLES [ { FROM | IN } database_name ] COMPUTE STATISTICS [ NOSCAN ]
 ```
 
 ### Parameters
@@ -45,22 +50,31 @@ ANALYZE TABLE table_identifier [ partition_spec ]
 
     **Syntax:** `PARTITION ( partition_col_name [ = partition_col_val ] [ , ... ] )`
 
-* **[ NOSCAN `|` FOR COLUMNS col [ , ... ] `|` FOR ALL COLUMNS ]**
+* **{ FROM `|` IN } database_name**
 
-     * If no analyze option is specified, `ANALYZE TABLE` collects the table's number of rows and size in bytes.
-     * **NOSCAN**
+  Specifies the name of the database to be analyzed. Without a database name, `ANALYZE` collects all tables in the current database that the current user has permission to analyze.
 
-       Collects only the table's size in bytes (which does not require scanning the entire table).
-     * **FOR COLUMNS col [ , ... ] `|` FOR ALL COLUMNS**
+* **NOSCAN**
 
-       Collects column statistics for each column specified, or alternatively for every column, as well as table statistics.
+  Collects only the table's size in bytes (which does not require scanning the entire table).
+
+* **FOR COLUMNS col [ , ... ] `|` FOR ALL COLUMNS**
+
+  Collects column statistics for each column specified, or alternatively for every column, as well as table statistics.
+
+If no analyze option is specified, both number of rows and size in bytes are collected.
 
 ### Examples
 
 ```sql
+CREATE DATABASE school_db;
+USE school_db;
+
+CREATE TABLE teachers (name STRING, teacher_id INT);
+INSERT INTO teachers VALUES ('Tom', 1), ('Jerry', 2);
+
 CREATE TABLE students (name STRING, student_id INT) PARTITIONED BY (student_id);
-INSERT INTO students PARTITION (student_id = 111111) VALUES ('Mark');
-INSERT INTO students PARTITION (student_id = 222222) VALUES ('John');
+INSERT INTO students VALUES ('Mark', 111111), ('John', 222222);
 
 ANALYZE TABLE students COMPUTE STATISTICS NOSCAN;
 
@@ -73,7 +87,6 @@ DESC EXTENDED students;
 |                 ...|                 ...|    ...|
 |          Statistics|           864 bytes|       |
 |                 ...|                 ...|    ...|
-|  Partition Provider|             Catalog|       |
 +--------------------+--------------------+-------+
 
 ANALYZE TABLE students COMPUTE STATISTICS;
@@ -87,7 +100,6 @@ DESC EXTENDED students;
 |                 ...|                 ...|    ...|
 |          Statistics|   864 bytes, 2 rows|       |
 |                 ...|                 ...|    ...|
-|  Partition Provider|             Catalog|       |
 +--------------------+--------------------+-------+
 
 ANALYZE TABLE students PARTITION (student_id = 111111) COMPUTE STATISTICS;
@@ -101,7 +113,6 @@ DESC EXTENDED students PARTITION (student_id = 111111);
 |                 ...|                 ...|    ...|
 |Partition Statistics|   432 bytes, 1 rows|       |
 |                 ...|                 ...|    ...|
-|        OutputFormat|org.apache.hadoop...|       |
 +--------------------+--------------------+-------+
 
 ANALYZE TABLE students COMPUTE STATISTICS FOR COLUMNS name;
@@ -121,8 +132,52 @@ DESC EXTENDED students name;
 |   max_col_len|         4|
 |     histogram|      NULL|
 +--------------+----------+
+
+ANALYZE TABLES IN school_db COMPUTE STATISTICS NOSCAN;
+
+DESC EXTENDED teachers;
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          teacher_id|                 int|   null|
+|                 ...|                 ...|    ...|
+|          Statistics|          1382 bytes|       |
+|                 ...|                 ...|    ...|
++--------------------+--------------------+-------+
+
+DESC EXTENDED students;
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          student_id|                 int|   null|
+|                 ...|                 ...|    ...|
+|          Statistics|           864 bytes|       |
+|                 ...|                 ...|    ...|
++--------------------+--------------------+-------+
+
+ANALYZE TABLES COMPUTE STATISTICS;
+
+DESC EXTENDED teachers;
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          teacher_id|                 int|   null|
+|                 ...|                 ...|    ...|
+|          Statistics|  1382 bytes, 2 rows|       |
+|                 ...|                 ...|    ...|
++--------------------+--------------------+-------+
+
+DESC EXTENDED students;
++--------------------+--------------------+-------+
+|            col_name|           data_type|comment|
++--------------------+--------------------+-------+
+|                name|              string|   null|
+|          student_id|                 int|   null|
+|                 ...|                 ...|    ...|
+|          Statistics|   864 bytes, 2 rows|       |
+|                 ...|                 ...|    ...|
++--------------------+--------------------+-------+
 ```
-
-### Related Statements
-
-* [ANALYZE TABLES](sql-ref-syntax-aux-analyze-tables.html)

@@ -204,7 +204,9 @@ object DecimalPrecision extends TypeCoercionRule {
     case b @ BinaryComparison(e1 @ DecimalType.Expression(p1, s1),
     e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
       val resultType = widerDecimalType(p1, s1, p2, s2)
-      b.makeCopy(Array(Cast(e1, resultType), Cast(e2, resultType)))
+      val newE1 = if (e1.dataType == resultType) e1 else Cast(e1, resultType)
+      val newE2 = if (e2.dataType == resultType) e2 else Cast(e2, resultType)
+      b.makeCopy(Array(newE1, newE2))
   }
 
   /**

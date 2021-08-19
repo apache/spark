@@ -699,8 +699,7 @@ class BooleanExtensionOpsTest(PandasOnSparkTestCase, TestCasesUtils):
     def test_astype(self):
         pser, psser = self.boolean_pdf["this"], self.boolean_psdf["this"]
 
-        # TODO(SPARK-35976): [True, False, <NA>] is returned in pandas
-        self.assert_eq(["True", "False", "None"], psser.astype(str).tolist())
+        self.assert_eq(pser.astype(str).tolist(), psser.astype(str).tolist())
 
         self.assert_eq(pser.astype("category"), psser.astype("category"))
         cat_type = CategoricalDtype(categories=[False, True])

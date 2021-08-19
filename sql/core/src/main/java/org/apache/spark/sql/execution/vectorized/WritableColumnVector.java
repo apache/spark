@@ -54,8 +54,8 @@ public abstract class WritableColumnVector extends ColumnVector {
     if (isConstant) return;
 
     if (childColumns != null) {
-      for (ColumnVector c: childColumns) {
-        ((WritableColumnVector) c).reset();
+      for (WritableColumnVector c: childColumns) {
+        c.reset();
       }
     }
     elementsAppended = 0;
