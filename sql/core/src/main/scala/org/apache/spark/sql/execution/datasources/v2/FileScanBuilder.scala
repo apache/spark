@@ -72,7 +72,7 @@ abstract class FileScanBuilder(
 
   protected def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = Array.empty[Filter]
 
-  def translateDataFilter(): Array[Filter] = {
+  protected def translateDataFilter(): Array[Filter] = {
     val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
     for (filterExpr <- dataFilters) {
       val translated = DataSourceStrategy.translateFilter(filterExpr, true)
