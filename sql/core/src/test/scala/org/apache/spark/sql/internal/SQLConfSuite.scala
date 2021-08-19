@@ -479,4 +479,28 @@ class SQLConfSuite extends QueryTest with SharedSparkSession {
          |${nonInternalLegacyConfigs.map(_._1).mkString("\n")}
          |""".stripMargin)
   }
+
+  test("SPARK-36516:") {
+    val e1 = intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.FILE_META_CACHE_ENABLED_SOURCE_LIST.key, "text")
+    }
+    assert(e1.getMessage.contains("spark.sql.fileMetaCache.enabledSourceList only support"))
+
+    val e2 = intercept[IllegalArgumentException] {
+      spark.conf.set(SQLConf.FILE_META_CACHE_ENABLED_SOURCE_LIST.key, "text, orc")
+    }
+    assert(e2.getMessage.contains("spark.sql.fileMetaCache.enabledSourceList only support"))
+
+    spark.conf.set(SQLConf.FILE_META_CACHE_ENABLED_SOURCE_LIST.key, " ")
+    assert(!spark.sessionState.conf.fileMetaCacheEnabled("orc"))
+
+    spark.conf.set(SQLConf.FILE_META_CACHE_ENABLED_SOURCE_LIST.key, "orc")
+    assert(spark.sessionState.conf.fileMetaCacheEnabled("orc"))
+
+    spark.conf.set(SQLConf.FILE_META_CACHE_ENABLED_SOURCE_LIST.key, "")
+    assert(!spark.sessionState.conf.fileMetaCacheEnabled("orc"))
+
+    spark.conf.unset(SQLConf.FILE_META_CACHE_ENABLED_SOURCE_LIST.key)
+    assert(!spark.sessionState.conf.fileMetaCacheEnabled("orc"))
+  }
 }

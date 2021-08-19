@@ -976,6 +976,10 @@ object SQLConf {
       "data reading before the cache entry expires.")
     .version("3.3.0")
     .stringConf
+    .checkValue(value => {
+      val valueList = value.toLowerCase(Locale.ROOT).split(",").map(_.trim)
+      value.trim.isEmpty || valueList.length == 1 && valueList.contains("orc")
+    }, s"spark.sql.fileMetaCache.enabledSourceList only support orc now")
     .createWithDefault("")
 
   val FILE_META_CACHE_TTL_SINCE_LAST_ACCESS =
