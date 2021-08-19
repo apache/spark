@@ -18,7 +18,6 @@ package org.apache.spark.sql.v2.avro
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.StructFilters
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
@@ -47,9 +46,9 @@ class AvroScanBuilder (
       dataFilters)
   }
 
-  override def pushDataFilters(dataFilters: Seq[Expression]): Array[Filter] = {
+  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
     if (sparkSession.sessionState.conf.avroFilterPushDown) {
-      StructFilters.pushedFilters(translateDataFilter, dataSchema)
+      StructFilters.pushedFilters(dataFilters, dataSchema)
     } else {
       Array.empty[Filter]
     }

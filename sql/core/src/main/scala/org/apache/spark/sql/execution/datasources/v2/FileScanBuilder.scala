@@ -67,10 +67,10 @@ abstract class FileScanBuilder(
   def pushFilters(partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Unit = {
     this.partitionFilters = partitionFilters
     this.dataFilters = dataFilters
-    this.pushedDataFilters = pushDataFilters(dataFilters)
+    this.pushedDataFilters = pushDataFilters(translateDataFilter)
   }
 
-  protected def pushDataFilters(dataFilters: Seq[Expression]): Array[Filter] = Array.empty[Filter]
+  protected def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = Array.empty[Filter]
 
   def translateDataFilter(): Array[Filter] = {
     val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]

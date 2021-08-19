@@ -20,7 +20,6 @@ package org.apache.spark.sql.execution.datasources.v2.orc
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.execution.datasources.PartitioningAwareFileIndex
 import org.apache.spark.sql.execution.datasources.orc.OrcFilters
@@ -50,11 +49,11 @@ case class OrcScanBuilder(
       readPartitionSchema(), options, pushedDataFilters, partitionFilters, dataFilters)
   }
 
-  override def pushDataFilters(dataFilters: Seq[Expression]): Array[Filter] = {
+  override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       val dataTypeMap = OrcFilters.getSearchableTypeMap(
         readDataSchema(), SQLConf.get.caseSensitiveAnalysis)
-      OrcFilters.convertibleFilters(dataTypeMap, translateDataFilter).toArray
+      OrcFilters.convertibleFilters(dataTypeMap, dataFilters).toArray
     } else {
       Array.empty[Filter]
     }
