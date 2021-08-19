@@ -275,6 +275,7 @@ object SparkBuild extends PomBuild {
       DefaultMavenRepository,
       Resolver.mavenLocal,
       Resolver.file("ivyLocal", file(Path.userHome.absolutePath + "/.ivy2/local"))(Resolver.ivyStylePatterns),
+      "Apache Staging Repository" at "https://repository.apache.org/content/repositories/orgapacheorc-1049/",
       // needed for brotli-codec
       "jitpack.io" at "https://jitpack.io"
     ),
