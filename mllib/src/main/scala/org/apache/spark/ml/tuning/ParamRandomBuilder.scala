@@ -125,7 +125,8 @@ object RandomRanges {
 class ParamRandomBuilder extends ParamGridBuilder {
   def addRandom[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type = {
     val gen: RandomT[T] = RandomRanges(lim)
-    addGrid(param, (1 to n).map { _: Int => gen.randomT() })
+    // .view causes the values to be random every time an element is evaluated
+    addGrid(param, (1 to n).view.map { _: Int => gen.randomT() })
   }
 
   def addLog10Random[T: Generator](param: Param[T], lim: Limits[T], n: Int): this.type =
@@ -134,7 +135,8 @@ class ParamRandomBuilder extends ParamGridBuilder {
   private def addLogRandom[T: Generator](param: Param[T], lim: Limits[T],
                                          n: Int, base: Int): this.type = {
     val gen: RandomT[T] = RandomRanges(lim)
-    addGrid(param, (1 to n).map { _: Int => gen.randomTLog(base) })
+    // .view causes the values to be random every time an element is evaluated
+    addGrid(param, (1 to n).view.map { _: Int => gen.randomTLog(base) })
   }
 
   // specialized versions for Java.
@@ -156,5 +158,16 @@ class ParamRandomBuilder extends ParamGridBuilder {
 
   def addLog10Random(param: IntParam, x: Int, y: Int, n: Int): this.type =
     addLogRandom(param, Limits(x, y), n, 10)(IntGenerator)
+
+  override def build(): Array[ParamMap] = {
+    val howMany = paramGrid.values.map(_.size).product
+    (0 until howMany).map { _ =>
+      val map = new ParamMap()
+      paramGrid.foreach { case (p, v) =>
+        map.put(p.asInstanceOf[Param[Any]], v.head)
+      }
+      map
+    }.toArray
+  }
 
 }

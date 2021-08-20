@@ -120,4 +120,19 @@ class ParamRandomBuilderSuite extends SparkFunSuite with ScalaCheckDrivenPropert
     }
   }
 
+  val dummyParams = new TestParams() {
+    val dParam = new DoubleParam(this, "d", "doc")
+    val iParam = new IntParam(this, "i", "doc")
+  }
+  import dummyParams._
+
+  test("Parameters are randomly chosen independently") {
+    val result = new ParamRandomBuilder().
+      addRandom(iParam, -5, 2000, 5).
+      addRandom(dParam, -100.0, -0.5, 7).
+      build()
+    assert(35 === result.map(_.get(dParam).get).distinct.size)
+    assert(35 === result.map(_.get(iParam).get).distinct.size)
+  }
+
 }
