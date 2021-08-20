@@ -64,6 +64,8 @@ abstract class FileScanBuilder(
     StructType(fields)
   }
 
+  // Note: The partitionFilters and dataFilters need to be pushed to FileIndex in the format of
+  // Expression because partition pruning uses the Expression Filters, not sources.Filters.
   def pushFilters(partitionFilters: Seq[Expression], dataFilters: Seq[Expression]): Unit = {
     this.partitionFilters = partitionFilters
     this.dataFilters = dataFilters
