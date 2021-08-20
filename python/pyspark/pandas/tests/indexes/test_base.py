@@ -514,16 +514,6 @@ class IndexesTest(PandasOnSparkTestCase, TestUtils):
             ):
                 getattr(psdf.set_index("c").index, name)()
 
-        # CategoricalIndex functions
-        deprecated_functions = [
-            name for (name, type_) in missing_functions if type_.__name__ == "deprecated_function"
-        ]
-        for name in deprecated_functions:
-            with self.assertRaisesRegex(
-                PandasNotImplementedError, "method.*Index.*{}.*is deprecated".format(name)
-            ):
-                getattr(psdf.set_index("d").index, name)()
-
         # Index properties
         missing_properties = inspect.getmembers(
             MissingPandasLikeIndex, lambda o: isinstance(o, property)
