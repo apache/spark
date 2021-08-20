@@ -2435,10 +2435,9 @@ abstract class JsonSuite
     }
   }
 
-  test(s"SPARK-36477: infer json schema handle invalid json values") {
+  test("SPARK-36477: infer json schema handle invalid json values") {
     withTempPath { tempDir =>
       val path = tempDir.getAbsolutePath
-      val logAppender = new LogAppender(path)
       val wrongData = badJson + """{"a":1}"""
       val goodData = """{"a":1}"""
       Seq(wrongData).toDS().write.text(path)
