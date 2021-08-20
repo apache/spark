@@ -146,3 +146,4 @@ class SparkNoSuchElementException(errorClass: String, messageParameters: Array[S
   override def getErrorClass: String = errorClass
   override def getSqlState: String = SparkThrowableHelper.getSqlState(errorClass)
 }
+
