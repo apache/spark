@@ -104,8 +104,8 @@ case class AdaptiveSparkPlanExec(
       optimizeSkewedJoin: Boolean = false): Seq[Rule[SparkPlan]] = {
     val optimizeSkewedJoinRules = if (optimizeSkewedJoin) {
       Seq(OptimizeSkewedJoin,
-        // Add the EnsureRequirements rule here and don't optimize out repartition so that we can
-        // ensure the output partitioning of OptimizeSkewedJoin is always expected.
+        // Add the EnsureRequirements rule here since OptimizeSkewedJoin will change
+        // output partitioning, make sure we have right distribution.
         EnsureRequirements(optimizeOutRepartition = requiredDistribution.isDefined))
     } else {
       Nil
