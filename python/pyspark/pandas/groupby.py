@@ -26,7 +26,6 @@ from collections import OrderedDict, namedtuple
 from distutils.version import LooseVersion
 from functools import partial
 from itertools import product
-from pkg_resources import parse_version  # type: ignore
 from typing import (
     Any,
     Callable,
@@ -47,7 +46,7 @@ from typing import (
 import pandas as pd
 from pandas.api.types import is_hashable, is_list_like
 
-if parse_version(pd.__version__) >= parse_version("1.3.0"):
+if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
     from pandas.core.common import _builtin_table
 else:
     from pandas.core.base import SelectionMixin
