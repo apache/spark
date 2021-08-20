@@ -3214,7 +3214,7 @@ Push-based shuffle helps improve the reliability and performance of spark shuffl
   <td><code>spark.shuffle.push.enabled</code></td>
   <td><code>false</code></td>
   <td>
-    Set to true to enable push-based shuffle on the client side and works in conjunction with the server side flag <code>spark.shuffle.server.mergedShuffleFileManagerImpl</code>.
+    Set to true to enable push-based shuffle on the client side and works in conjunction with the server side flag <code>spark.shuffle.push.server.mergedShuffleFileManagerImpl</code>.
   </td>
   <td>3.2.0</td>
 </tr>
