@@ -78,7 +78,8 @@
     "sqlState" : "42000"
   },
   "INVALID_JSON_SCHEMA_MAPTYPE" : {
-    "message": [ "Input schema %s can only contain StringType as a key type for a MapType." ]
+    "message" : [ "Input schema %s can only contain StringType as a key type for a MapType." ],
+    "sqlState" : "42000"
   },
   "MISSING_COLUMN" : {
     "message" : [ "cannot resolve '%s' given input columns: [%s]" ],
