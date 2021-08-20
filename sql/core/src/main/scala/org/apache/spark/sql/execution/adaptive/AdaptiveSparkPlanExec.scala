@@ -103,28 +103,27 @@ case class AdaptiveSparkPlanExec(
   // A list of physical plan rules to be applied before creation of query stages. The physical
   // plan should reach a final status of query stages (i.e., no more addition or removal of
   // Exchange nodes) after running these rules.
-  @transient private val queryStagePreparationRules: Seq[Rule[SparkPlan]] = Seq(
-    RemoveRedundantProjects,
-    // For cases like `df.repartition(a, b).select(c)`, there is no distribution requirement for
-    // the final plan, but we do need to respect the user-specified repartition. Here we ask
-    // `EnsureRequirements` to not optimize out the user-specified repartition-by-col to work
-    // around this case.
-    EnsureRequirements(optimizeOutRepartition = requiredDistribution.isDefined),
-    RemoveRedundantSorts,
-    DisableUnnecessaryBucketedScan
-  ) ++ context.session.sessionState.queryStagePrepRules
-
-  // This list rules are applied between queryStagePreparationRules and estimate physical plan cost
-  // so that we can support introduce extra shuffle
-  @transient private val optimizeSkewedJoinWithExtraShuffleRules: Seq[Rule[SparkPlan]] = {
-    val ensureExtraShuffleRule = if (forceOptimizeSkewedJoin) {
-      // Add the EnsureRequirements rule here and don't optimize out repartition so that we can
-      // ensure the output partitioning of OptimizeSkewedJoin is always expected.
-      Seq(EnsureRequirements(optimizeOutRepartition = requiredDistribution.isDefined))
+  private def queryStagePreparationRules(
+      optimizeSkewedJoin: Boolean = false): Seq[Rule[SparkPlan]] = {
+    val optimizeSkewedJoinRules = if (optimizeSkewedJoin) {
+      Seq(OptimizeSkewedJoin,
+        // Add the EnsureRequirements rule here and don't optimize out repartition so that we can
+        // ensure the output partitioning of OptimizeSkewedJoin is always expected.
+        EnsureRequirements(optimizeOutRepartition = requiredDistribution.isDefined))
     } else {
       Nil
     }
-    Seq(OptimizeSkewedJoin) ++ ensureExtraShuffleRule
+
+    Seq(
+      RemoveRedundantProjects,
+      // For cases like `df.repartition(a, b).select(c)`, there is no distribution requirement for
+      // the final plan, but we do need to respect the user-specified repartition. Here we ask
+      // `EnsureRequirements` to not optimize out the user-specified repartition-by-col to work
+      // around this case.
+      EnsureRequirements(optimizeOutRepartition = requiredDistribution.isDefined),
+      RemoveRedundantSorts,
+      DisableUnnecessaryBucketedScan
+    ) ++ optimizeSkewedJoinRules ++ context.session.sessionState.queryStagePrepRules
   }
 
   // A list of physical optimizer rules to be applied to a new stage before its execution. These
@@ -200,7 +199,7 @@ case class AdaptiveSparkPlanExec(
 
   @transient val initialPlan = context.session.withActive {
     applyPhysicalRules(
-      inputPlan, queryStagePreparationRules, Some((planChangeLogger, "AQE Preparations")))
+      inputPlan, queryStagePreparationRules(), Some((planChangeLogger, "AQE Preparations")))
   }
 
   @volatile private var currentPhysicalPlan = initialPlan
@@ -332,7 +331,7 @@ case class AdaptiveSparkPlanExec(
               }
             }._1
 
-        if (!newPhysicalPlan.fastEquals(currentPhysicalPlan)) {
+        if (newPhysicalPlan.ne(currentPhysicalPlan)) {
           logOnLevel(s"Plan changed from\n$currentPhysicalPlan\nto\n$newPhysicalPlan")
           cleanUpTempTags(newPhysicalPlan)
           currentPhysicalPlan = newPhysicalPlan
@@ -667,57 +666,6 @@ case class AdaptiveSparkPlanExec(
     logicalPlan
   }
 
-  /**
-   * Re-optimize and run physical planning on the current logical plan based on the latest stats.
-   */
-  private def reOptimize(
-      logicalPlan: LogicalPlan): (Seq[SparkPlan], LogicalPlan) = context.qe.withCteMap {
-    logicalPlan.invalidateStatsCache()
-    val optimized = optimizer.execute(logicalPlan)
-    val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
-    val optimizedPhysicalPlan = applyPhysicalRules(
-      sparkPlan,
-      preprocessingRules ++ queryStagePreparationRules,
-      Some((planChangeLogger, "AQE Replanning")))
-
-    // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
-    // add the `BroadcastExchangeExec` node manually in the DPP subquery,
-    // not through `EnsureRequirements` rule. Therefore, when the DPP subquery is complicated
-    // and need to be re-optimized, AQE also need to manually insert the `BroadcastExchangeExec`
-    // node to prevent the loss of the `BroadcastExchangeExec` node in DPP subquery.
-    // Here, we also need to avoid to insert the `BroadcastExchangeExec` node when the newPlan
-    // is already the `BroadcastExchangeExec` plan after apply the `LogicalQueryStageStrategy` rule.
-    def updateBroadcastExchange(plan: SparkPlan): SparkPlan = currentPhysicalPlan match {
-      case b: BroadcastExchangeLike
-        if (!plan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(plan))
-      case _ => plan
-    }
-
-    val optimizedWithSkewedJoin = applyPhysicalRules(
-      optimizedPhysicalPlan,
-      optimizeSkewedJoinWithExtraShuffleRules,
-      Some((planChangeLogger, "AQE Optimize Skewed Join With Extra Shuffle"))
-    )
-    val validatedWithSkewedJoin =
-      checkDistribution(
-        optimizedWithSkewedJoin,
-        optimizedPhysicalPlan,
-        isFinalStage(optimizedWithSkewedJoin),
-        OptimizeSkewedJoin.ruleName)
-
-    // here are three reasons if validatedWithSkewedJoin is equal to optimizedPhysicalPlan:
-    // 1. no skewed join optimized
-    // 2. optimize skewed join introduce extra shuffle and force optimize is disabled
-    // 3. optimize skewed join change final stage output partitioning
-    val newPhysicalPlans = if (validatedWithSkewedJoin.fastEquals(optimizedPhysicalPlan)) {
-      updateBroadcastExchange(optimizedPhysicalPlan) :: Nil
-    } else {
-      updateBroadcastExchange(optimizedPhysicalPlan) ::
-        updateBroadcastExchange(validatedWithSkewedJoin) :: Nil
-    }
-    (newPhysicalPlans, optimized)
-  }
-
   private def isFinalStage(sparkPlan: SparkPlan): Boolean = {
     sparkPlan match {
       // avoid top level node is Exchange
@@ -735,6 +683,58 @@ case class AdaptiveSparkPlanExec(
           case _ => false
         }.isEmpty
     }
+  }
+
+  /**
+   * Re-optimize and run physical planning on the current logical plan based on the latest stats.
+   */
+  private def reOptimize(
+      logicalPlan: LogicalPlan): (Seq[SparkPlan], LogicalPlan) = context.qe.withCteMap {
+    logicalPlan.invalidateStatsCache()
+    val optimized = optimizer.execute(logicalPlan)
+    val sparkPlan = context.session.sessionState.planner.plan(ReturnAnswer(optimized)).next()
+
+    val optimizedPhysicalPlan = applyPhysicalRules(
+      sparkPlan,
+      preprocessingRules ++ queryStagePreparationRules(),
+      Some((planChangeLogger, "AQE Replanning")))
+
+    val optimizedWithSkewedJoin = applyPhysicalRules(
+      sparkPlan,
+      preprocessingRules ++ queryStagePreparationRules(true),
+      Some((planChangeLogger, "AQE Replanning With Optimize Skewed Join")))
+
+    // respect the requiredDistribution for final stage
+    val validatedWithSkewedJoin =
+      checkDistribution(
+        optimizedWithSkewedJoin,
+        optimizedPhysicalPlan,
+        isFinalStage(optimizedWithSkewedJoin),
+        OptimizeSkewedJoin.ruleName)
+
+    // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
+    // add the `BroadcastExchangeExec` node manually in the DPP subquery,
+    // not through `EnsureRequirements` rule. Therefore, when the DPP subquery is complicated
+    // and need to be re-optimized, AQE also need to manually insert the `BroadcastExchangeExec`
+    // node to prevent the loss of the `BroadcastExchangeExec` node in DPP subquery.
+    // Here, we also need to avoid to insert the `BroadcastExchangeExec` node when the newPlan
+    // is already the `BroadcastExchangeExec` plan after apply the `LogicalQueryStageStrategy` rule.
+    def updateBroadcastExchange(plan: SparkPlan): SparkPlan = currentPhysicalPlan match {
+      case b: BroadcastExchangeLike
+        if (!plan.isInstanceOf[BroadcastExchangeLike]) => b.withNewChildren(Seq(plan))
+      case _ => plan
+    }
+
+    // here are two reasons if validatedWithSkewedJoin is equal to optimizedPhysicalPlan:
+    // 1. no skewed join optimized
+    // 2. optimize skewed join doesn't satisfy requiredDistribution for final stage
+    val newPhysicalPlans = if (optimizedPhysicalPlan.fastEquals(validatedWithSkewedJoin)) {
+      updateBroadcastExchange(optimizedPhysicalPlan) :: Nil
+    } else {
+      updateBroadcastExchange(optimizedPhysicalPlan) ::
+        updateBroadcastExchange(validatedWithSkewedJoin) :: Nil
+    }
+    (newPhysicalPlans, optimized)
   }
 
   /**
