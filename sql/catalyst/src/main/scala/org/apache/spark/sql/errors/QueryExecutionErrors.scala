@@ -1524,7 +1524,7 @@ object QueryExecutionErrors {
   def noSuchElementExceptionError(key: String): Throwable = {
     new SparkNoSuchElementException(
       errorClass = "NO_SUCH_ELEMENT_EXCEPTION",
-      messageParameters = Array(key),
+      messageParameters = Array(key)
     )
   }
 
