@@ -123,5 +123,3 @@ object FiltersV2Suite {
     new FieldReference(parts)
   }
 }
-
-
