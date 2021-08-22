@@ -2597,7 +2597,7 @@ case class Sequence(
   }
 
   private def isNotIntervalType(expr: Expression) = expr.dataType match {
-    case CalendarIntervalType | _: YearMonthIntervalType | _: DayTimeIntervalType => false
+    case CalendarIntervalType | _: AnsiIntervalType => false
     case _ => true
   }
 

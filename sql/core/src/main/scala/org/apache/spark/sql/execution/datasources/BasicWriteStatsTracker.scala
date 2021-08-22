@@ -169,7 +169,7 @@ class BasicWriteTaskStatsTracker(
     }
 
     if (numSubmittedFiles != numFiles) {
-      logInfo(s"Expected $numSubmittedFiles files, but only saw $numFiles. " +
+      logWarning(s"Expected $numSubmittedFiles files, but only saw $numFiles. " +
         "This could be due to the output format not writing empty files, " +
         "or files being not immediately visible in the filesystem.")
     }

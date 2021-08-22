@@ -27,7 +27,7 @@ import scala.concurrent.{ExecutionContext, Future, TimeoutException}
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import com.github.benmanes.caffeine.cache.Caffeine
+import com.google.common.cache.CacheBuilder
 
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
@@ -56,7 +56,7 @@ class BlockManagerMasterEndpoint(
 
   // Mapping from executor id to the block manager's local disk directories.
   private val executorIdToLocalDirs =
-    Caffeine
+    CacheBuilder
       .newBuilder()
       .maximumSize(conf.get(config.STORAGE_LOCAL_DISK_BY_EXECUTORS_CACHE_SIZE))
       .build[String, Array[String]]()

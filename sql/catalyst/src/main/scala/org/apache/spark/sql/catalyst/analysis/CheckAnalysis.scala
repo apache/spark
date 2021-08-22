@@ -981,7 +981,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             case u: UserDefinedType[_] =>
               alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
                 s"update a UserDefinedType[${u.sql}] by updating its fields")
-            case _: CalendarIntervalType | _: YearMonthIntervalType | _: DayTimeIntervalType =>
+            case _: CalendarIntervalType | _: AnsiIntervalType =>
               alter.failAnalysis(s"Cannot update ${table.name} field $fieldName to interval type")
             case _ => // update is okay
           }

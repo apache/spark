@@ -601,7 +601,7 @@ private[spark] object Config extends Logging {
         "also counted into this limit as they will change into pending PODs by time. " +
         "This limit is independent from the resource profiles as it limits the sum of all " +
         "allocation for all the used resource profiles.")
-      .version("3.3.0")
+      .version("3.2.0")
       .intConf
       .checkValue(value => value > 0, "Maximum number of pending pods should be a positive integer")
       .createWithDefault(Int.MaxValue)
