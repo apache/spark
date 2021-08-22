@@ -86,7 +86,8 @@ class SparkArithmeticException(errorClass: String, messageParameters: Array[Stri
  * Unsupported Operation exception thrown from Spark with an error class
  */
 class SparkUnsupportedOperationException(errorClass: String, messageParameters: Array[String])
-  extends ArithmeticException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
+  extends UnsupportedOperationException(
+    SparkThrowableHelper.getMessage(errorClass, messageParameters))
     with SparkThrowable {
 
   override def getErrorClass: String = errorClass
