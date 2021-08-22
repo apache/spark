@@ -26,8 +26,6 @@ import com.google.common.base.Charsets
 import com.google.common.io.Files
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
-import org.mockito.ArgumentMatchers.anyString
-import org.mockito.Mockito
 
 import org.apache.spark.rdd.HadoopRDD
 import org.apache.spark.sql.{QueryTest, Row}
@@ -44,10 +42,6 @@ object HivePartitionedTableCredentialsSuite extends QueryTest
     " while querying partitioned hive table.") {
     // The suite is based on the repro provided in SPARK-36328
     val hadoopKeytabFile = writeCredentials("hadoop.keytab", "hadoop-keytab")
-    // mock
-    val mockStatic = Mockito.mockStatic(classOf[UserGroupInformation])
-    Mockito.doNothing().when(
-      UserGroupInformation.loginUserFromKeytabAndReturnUGI(anyString(), anyString()))
     // scalastyle:off hadoopconfiguration
     spark.sparkContext.hadoopConfiguration.set("hadoop.security.authorization", "true")
     spark.sparkContext.hadoopConfiguration.set("hadoop.security.authentication", "kerberos")
@@ -79,8 +73,6 @@ object HivePartitionedTableCredentialsSuite extends QueryTest
         if (credentials != null) credentialsBuffer += credentials
       })
     }
-    // Release this static mock and avoid impact on subsequent check
-    mockStatic.close()
     // Check
     assert(UserGroupInformation.isSecurityEnabled)
     // Token map buffer from SparkEnv's cache
