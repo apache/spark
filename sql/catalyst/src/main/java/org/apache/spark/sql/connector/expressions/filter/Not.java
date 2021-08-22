@@ -26,12 +26,12 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public final class Not extends FilterV2 {
-  private final FilterV2 child;
+public final class Not extends Filter {
+  private final Filter child;
 
-  public Not(FilterV2 child) { this.child = child; }
+  public Not(Filter child) { this.child = child; }
 
-  public FilterV2 child() { return child; }
+  public Filter child() { return child; }
 
   @Override
   public String toString() { return child.describe() + " Not"; }
@@ -40,7 +40,5 @@ public final class Not extends FilterV2 {
   public String describe() { return this.toString(); }
 
   @Override
-  public NamedReference[] references() {
-    return child.references();
-  }
+  public NamedReference[] references() { return child.references(); }
 }

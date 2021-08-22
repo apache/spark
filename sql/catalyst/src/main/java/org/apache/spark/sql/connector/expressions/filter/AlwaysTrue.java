@@ -26,7 +26,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public final class AlwaysTrue extends FilterV2 {
+public final class AlwaysTrue extends Filter {
 
   @Override
   public String toString() { return "AlwaysTrue"; }

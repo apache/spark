@@ -27,7 +27,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public final class IsNull extends FilterV2 {
+public final class IsNull extends Filter {
   private final FieldReference column;
 
   public IsNull(FieldReference column) {

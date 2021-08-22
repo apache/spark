@@ -21,22 +21,22 @@ import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
- * A filter that evaluates to `true` iff both `left` or `right` evaluate to `true`.
+ * A filter that evaluates to `true` iff both `left` and `right` evaluate to `true`.
  *
  * @since 3.3.0
  */
 @Evolving
-public final class And extends FilterV2 {
-  private final FilterV2 left;
-  private final FilterV2 right;
+public final class And extends Filter {
+  private final Filter left;
+  private final Filter right;
 
-  public And(FilterV2 left, FilterV2 right) {
+  public And(Filter left, Filter right) {
     this.left = left;
     this.right = right;
   }
 
-  public FilterV2 left() { return left; }
-  public FilterV2 right() { return right; }
+  public Filter left() { return left; }
+  public Filter right() { return right; }
 
   @Override
   public String toString() { return left.describe() + " and " + right.describe(); }

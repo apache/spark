@@ -27,15 +27,15 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public abstract class FilterV2 implements Expression {
+public abstract class Filter implements Expression {
   /**
    * Returns list of columns that are referenced by this filter.
    */
   public abstract NamedReference[] references();
 
   protected NamedReference[] findReferences(Object filter) {
-    if (filter instanceof FilterV2) {
-      return ((FilterV2) filter).references();
+    if (filter instanceof Filter) {
+      return ((Filter) filter).references();
     } else {
       return new NamedReference[0];
     }

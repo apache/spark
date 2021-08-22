@@ -17,14 +17,10 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A filter that evaluates to `true` iff the field evaluates to a value
@@ -33,7 +29,7 @@ import org.apache.spark.sql.connector.expressions.FieldReference;
  * @since 3.3.0
  */
 @Evolving
-public final class EqualTo extends FilterV2 {
+public final class EqualTo extends Filter {
   private final FieldReference column;
   private final Expression value;
 
@@ -46,7 +42,9 @@ public final class EqualTo extends FilterV2 {
   public Expression value() { return value; }
 
   @Override
-  public String toString() { return column.describe() + " EqualTo: " + value.describe(); }
+  public String toString() {
+    return column.describe() + " EqualTo: (" + value.describe() + ")";
+  }
 
   @Override
   public String describe() { return this.toString(); }

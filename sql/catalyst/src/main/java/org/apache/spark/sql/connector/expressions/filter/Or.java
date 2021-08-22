@@ -26,17 +26,17 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public final class Or extends FilterV2 {
-  private final FilterV2 left;
-  private final FilterV2 right;
+public final class Or extends Filter {
+  private final Filter left;
+  private final Filter right;
 
-  public Or(FilterV2 left, FilterV2 right) {
+  public Or(Filter left, Filter right) {
     this.left = left;
     this.right = right;
   }
 
-  public FilterV2 left() { return left; }
-  public FilterV2 right() { return right; }
+  public Filter left() { return left; }
+  public Filter right() { return right; }
 
   @Override
   public String toString() { return left.describe() + " or " + right.describe(); }

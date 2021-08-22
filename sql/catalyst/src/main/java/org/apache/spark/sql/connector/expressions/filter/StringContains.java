@@ -28,7 +28,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public final class StringContains extends FilterV2 {
+public final class StringContains extends Filter {
   private final FieldReference column;
   private final String value;
 
@@ -41,7 +41,9 @@ public final class StringContains extends FilterV2 {
   public String value() { return value; }
 
   @Override
-  public String toString() { return column.describe() + " StringContains: " + value; }
+  public String toString() {
+    return column.describe() + " StringContains: (" + value + ")";
+  }
 
   @Override
   public String describe() { return this.toString(); }

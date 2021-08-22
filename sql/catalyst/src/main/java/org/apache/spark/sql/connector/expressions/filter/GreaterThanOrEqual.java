@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * @since 3.3.0
  */
 @Evolving
-public final class GreaterThanOrEqual extends FilterV2 {
+public final class GreaterThanOrEqual extends Filter {
   private final FieldReference column;
   private final Expression value;
 
@@ -42,7 +42,9 @@ public final class GreaterThanOrEqual extends FilterV2 {
   public Expression value() { return value; }
 
   @Override
-  public String toString() { return column.describe() + " GreaterThanOrEqual: " + value.describe(); }
+  public String toString() {
+    return column.describe() + " GreaterThanOrEqual: (" + value.describe() + ")";
+  }
 
   @Override
   public String describe() { return this.toString(); }

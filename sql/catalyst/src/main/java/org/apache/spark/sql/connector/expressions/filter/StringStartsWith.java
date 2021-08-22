@@ -18,13 +18,8 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.NamedReference;
-
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * A filter that evaluates to `true` iff the field evaluates to
@@ -33,7 +28,7 @@ import java.util.Set;
  * @since 3.3.0
  */
 @Evolving
-public final class StringStartsWith extends FilterV2 {
+public final class StringStartsWith extends Filter {
   private final FieldReference column;
   private final String value;
 
@@ -46,7 +41,9 @@ public final class StringStartsWith extends FilterV2 {
   public String value() { return value; }
 
   @Override
-  public String toString() { return column.describe() + " StringStartsWith: " + value; }
+  public String toString() {
+    return column.describe() + " StringStartsWith: (" + value + ")";
+  }
 
   @Override
   public String describe() { return this.toString(); }

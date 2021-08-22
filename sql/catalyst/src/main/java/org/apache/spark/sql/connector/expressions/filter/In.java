@@ -31,7 +31,7 @@ import java.util.stream.Stream;
  * @since 3.3.0
  */
 @Evolving
-public final class In extends FilterV2 {
+public final class In extends Filter {
   private final FieldReference column;
   private final Expression[] values;
 
@@ -58,7 +58,7 @@ public final class In extends FilterV2 {
     for (Expression v : values) {
       str.append(v.describe()).append(", ");
     }
-    return column.describe() + " in: " + str;
+    return column.describe() + " in: (" + str + ")";
   }
 
   @Override

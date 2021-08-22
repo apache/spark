@@ -80,8 +80,9 @@ class FiltersV2Suite extends SparkFunSuite {
     assert(new In(ref("a"), Array(LiteralValue(1, IntegerType)))
       .references.map(_.describe()).toSeq == Seq("a"))
     assert(new In(ref("a"),
-      Array(LiteralValue(1, IntegerType), new EqualTo(ref("b"), LiteralValue(2, IntegerType))))
-      .references.map(_.describe()).toSeq == Seq("a", "b"))
+      Array(LiteralValue(1, IntegerType), new EqualTo(ref("b"), LiteralValue(2, IntegerType)),
+        new EqualTo(ref("c"), new EqualTo(ref("d"), LiteralValue(3, IntegerType)))))
+      .references.map(_.describe()).toSeq == Seq("a", "b", "c", "d"))
   }
 
   test("IsNull references") {
@@ -122,3 +123,5 @@ object FiltersV2Suite {
     new FieldReference(parts)
   }
 }
+
+
