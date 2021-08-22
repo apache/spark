@@ -36,7 +36,7 @@ import org.apache.spark.sql.util.SchemaUtils
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-trait CheckAnalysis extends PredicateHelper with LookupCatalog with SQLConfHelper{
+trait CheckAnalysis extends PredicateHelper with LookupCatalog with SQLConfHelper {
 
   protected def isView(nameParts: Seq[String]): Boolean
 
