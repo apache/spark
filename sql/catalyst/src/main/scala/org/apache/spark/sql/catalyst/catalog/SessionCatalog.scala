@@ -26,7 +26,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 import scala.util.{Failure, Success, Try}
 
-import com.github.benmanes.caffeine.cache.{Cache, Caffeine}
+import com.google.common.cache.{Cache, CacheBuilder}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
@@ -159,18 +159,19 @@ class SessionCatalog(
   }
 
   private val tableRelationCache: Cache[QualifiedTableName, LogicalPlan] = {
-    var builder = Caffeine.newBuilder()
+    var builder = CacheBuilder.newBuilder()
       .maximumSize(cacheSize)
 
     if (cacheTTL > 0) {
       builder = builder.expireAfterWrite(cacheTTL, TimeUnit.SECONDS)
     }
-    builder.build()
+
+    builder.build[QualifiedTableName, LogicalPlan]()
   }
 
   /** This method provides a way to get a cached plan. */
   def getCachedPlan(t: QualifiedTableName, c: Callable[LogicalPlan]): LogicalPlan = {
-    tableRelationCache.get(t, (_: QualifiedTableName) => c.call())
+    tableRelationCache.get(t, c)
   }
 
   /** This method provides a way to get a cached plan if the key exists. */
