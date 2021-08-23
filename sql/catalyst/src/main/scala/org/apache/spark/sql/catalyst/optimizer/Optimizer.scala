@@ -158,7 +158,8 @@ abstract class Optimizer(catalogManager: CatalogManager)
       RewriteNonCorrelatedExists,
       PullOutGroupingExpressions,
       ComputeCurrentTime,
-      ReplaceCurrentLike(catalogManager)) ::
+      ReplaceCurrentLike(catalogManager),
+      SpecialDatetimeValues) ::
     //////////////////////////////////////////////////////////////////////////////////////////
     // Optimizer rules start here
     //////////////////////////////////////////////////////////////////////////////////////////
@@ -266,6 +267,7 @@ abstract class Optimizer(catalogManager: CatalogManager)
       EliminateView.ruleName ::
       ReplaceExpressions.ruleName ::
       ComputeCurrentTime.ruleName ::
+      SpecialDatetimeValues.ruleName ::
       ReplaceCurrentLike(catalogManager).ruleName ::
       RewriteDistinctAggregates.ruleName ::
       ReplaceDeduplicateWithAggregate.ruleName ::
