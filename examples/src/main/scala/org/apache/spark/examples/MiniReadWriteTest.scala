@@ -47,7 +47,7 @@ object MiniReadWriteTest {
 
   private def printUsage(): Unit = {
     val usage = """Mini Read-Write Test
-    |Usage: localFile dfsDir
+    |Usage: localFile
     |localFile - (string) location of local file to distribute to executors.""".stripMargin
 
     println(usage)
