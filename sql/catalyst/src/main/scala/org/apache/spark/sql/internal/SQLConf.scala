@@ -1226,6 +1226,9 @@ object SQLConf {
 
   val FILE_STAGING_DIR =
     buildConf("spark.sql.source.stagingDir")
+      .doc("The staging directory of Spark job. Spark uses it to deal with files with " +
+        "absolute output path, or writing data into partitioned directory when " +
+        "dynamic partition overwrite mode.")
       .version("3.3.0")
       .internal()
       .stringConf
