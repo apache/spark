@@ -5755,6 +5755,30 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             expected_pdf = pd.DataFrame({"A": [None, 0], "B": [4.0, 1.0], "C": [3, 3]})
             self.assert_eq(expected_pdf, psdf1.combine_first(psdf2))
 
+    def test_cov(self):
+        pdf = pd.DataFrame([(1, 2), (0, 3), (2, 0), (1, 1)], columns=["a", "b"])
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
+        self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
+        self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5), almost=True)
+
+        pdf = pd.DataFrame(
+            [(1, 2, "a", 1), (0, 3, "b", 1), (2, 0, "c", 9), (1, 1, "d", 1)],
+            columns=["a", "b", "c", "d"],
+        )
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.cov(), psdf.cov(), almost=True)
+        self.assert_eq(pdf.cov(min_periods=4), psdf.cov(min_periods=4), almost=True)
+        self.assert_eq(pdf.cov(min_periods=5), psdf.cov(min_periods=5), almost=True)
+
+        np.random.seed(42)
+        pdf = pd.DataFrame(np.random.randn(20, 3), columns=["a", "b", "c"])
+        pdf.loc[pdf.index[:5], "a"] = np.nan
+        pdf.loc[pdf.index[5:10], "b"] = np.nan
+        psdf = ps.from_pandas(pdf)
+        self.assert_eq(pdf.cov(min_periods=11), psdf.cov(min_periods=11), almost=True)
+        self.assert_eq(pdf.cov(min_periods=10), psdf.cov(min_periods=10), almost=True)
+
 
 if __name__ == "__main__":
     from pyspark.pandas.tests.test_dataframe import *  # noqa: F401
