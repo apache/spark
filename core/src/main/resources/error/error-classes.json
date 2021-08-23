@@ -20,8 +20,7 @@
     "sqlState" : "42000"
   },
   "CANNOT_LOAD_USER_DEFINED_TYPE_ERROR" : {
-    "message" : [ "Can not load in UserDefinedType %s for user class %s." ],
-    "sqlState" : "42000"
+    "message" : [ "Can not load in UserDefinedType %s for user class %s." ]
   },
   "DIVIDE_BY_ZERO" : {
     "message" : [ "divide by zero" ],
@@ -41,7 +40,7 @@
   },
   "FIELD_INDEX_ON_ROW_WITHOUT_SCHEMA_ERROR" : {
     "message" : [ "fieldIndex on a Row without schema is undefined." ],
-    "sqlState" : "42000"
+    "sqlState" : "07009"
   },
   "GET_PARENT_LOGGER_NOT_IMPLEMENTED_ERROR" : {
     "message" : [ "%s.getParentLogger is not yet implemented." ]
@@ -111,7 +110,7 @@
   },
   "PRIMITIVE_TYPES_NOT_SUPPORTED_ERROR" : {
     "message" : [ "Primitive types are not supported." ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "SECOND_FUNCTION_ARGUMENT_NOT_INTEGER" : {
     "message" : [ "The second argument of '%s' function needs to be an integer." ],
@@ -119,7 +118,7 @@
   },
   "TIME_ZONE_ID_NOT_SPECIFIED_FOR_TIMESTAMP_TYPE_ERROR" : {
     "message" : [ "%s must supply timeZoneId parameter" ],
-    "sqlState" : "42000"
+    "sqlState" : "23000"
   },
   "UNABLE_TO_ACQUIRE_MEMORY" : {
     "message" : [ "Unable to acquire %s bytes of memory, got %s" ]
@@ -133,7 +132,7 @@
   },
   "USER_SPECIFIED_SCHEMA_UNSUPPORTED_BY_DATASOURCE_ERROR" : {
     "message" : [ "%s source does not support user-specified schema." ],
-    "sqlState" : "42000"
+    "sqlState" : "0A000"
   },
   "VALUE_IS_NULL_ERROR" : {
     "message" : [ "Value at index %s is null" ],
