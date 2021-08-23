@@ -52,7 +52,7 @@ object HivePartitionedTableCredentialsSuite extends QueryTest
       "dfs.namenode.kerberos.principal", "HTTP/localhost@LOCALHOST")
     // scalastyle:on hadoopconfiguration
     // Initialize a buffer to store Credentials during querying partitioned table
-    val credentialsBuffer = ListBuffer[Credentials]()
+    val credentialsBuf = ListBuffer[Credentials]()
     withTable("parttable") {
       // Create partitioned table
       sql("create table parttable (key char(1), value int) partitioned by (p int);")
@@ -70,15 +70,16 @@ object HivePartitionedTableCredentialsSuite extends QueryTest
         val credentials = Option(HadoopRDD.getCachedMetadata(jobConfCacheKey))
           .map(_.asInstanceOf[JobConf])
           .map(_.getCredentials).orNull
-        if (credentials != null) credentialsBuffer += credentials
+        if (credentials != null) credentialsBuf += credentials
       })
     }
     // Check
     assert(UserGroupInformation.isSecurityEnabled)
-    // Token map buffer from SparkEnv's cache
-    val tokenMapBuffer = credentialsBuffer.map(_.getTokenMap.asScala)
-    // The tokens used during operation should be the same
-    tokenMapBuffer.foreach(tokenMap => assert(tokenMap == tokenMapBuffer.head))
+    // To avoid hadoop 2 building failed with SBT, use getAllTokens instead of getTokenMap.
+    val allTokensBuf = credentialsBuf.map(_.getAllTokens.asScala.toSet)
+    // The tokens used during operation should be the same.
+    assert(allTokensBuf.head.size == 1)
+    allTokensBuf.foreach(token => assert(token == allTokensBuf.head))
   }
 
   private def writeCredentials(credentialsFileName: String, credentialsContents: String): File = {
