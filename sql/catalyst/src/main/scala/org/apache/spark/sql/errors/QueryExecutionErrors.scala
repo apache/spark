@@ -1516,14 +1516,14 @@ object QueryExecutionErrors {
 
   def noSuchElementExceptionError(): Throwable = {
     new SparkNoSuchElementException(
-      errorClass = "NO_SUCH_ELEMENT_EXCEPTION",
+      errorClass = "NO_SUCH_ELEMENT_EXCEPTION1",
       messageParameters = Array.empty
     )
   }
 
   def noSuchElementExceptionError(key: String): Throwable = {
     new SparkNoSuchElementException(
-      errorClass = "NO_SUCH_ELEMENT_EXCEPTION",
+      errorClass = "NO_SUCH_ELEMENT_EXCEPTION2",
       messageParameters = Array(key)
     )
   }
