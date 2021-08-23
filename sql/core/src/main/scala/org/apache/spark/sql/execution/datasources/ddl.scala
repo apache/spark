@@ -87,15 +87,10 @@ case class CreateTempViewUsing(
       throw QueryCompilationErrors.cannotCreateTempViewUsingHiveDataSourceError()
     }
 
-    val dataSource = DataSource(
-      sparkSession,
-      userSpecifiedSchema = userSpecifiedSchema,
-      className = provider,
-      options = options)
-
     val catalog = sparkSession.sessionState.catalog
-    val analyzedPlan = Dataset.ofRows(
-      sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan
+    val dfReader = sparkSession.read.format(provider).options(options)
+    val analyzedPlan = userSpecifiedSchema.map(dfReader.schema(_))
+      .getOrElse(dfReader).load().logicalPlan
 
     if (global) {
       val db = sparkSession.sessionState.conf.getConf(StaticSQLConf.GLOBAL_TEMP_DATABASE)

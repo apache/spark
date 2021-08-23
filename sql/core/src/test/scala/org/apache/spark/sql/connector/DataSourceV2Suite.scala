@@ -437,6 +437,19 @@ class DataSourceV2Suite extends QueryTest with SharedSparkSession with AdaptiveS
       }
     }
   }
+
+  test("SPARK-35803: Support datasorce V2 in CREATE VIEW USING") {
+    Seq(classOf[SimpleDataSourceV2], classOf[JavaSimpleDataSourceV2]).foreach { cls =>
+      withClue(cls.getName) {
+        sql(s"CREATE or REPLACE GLOBAL TEMPORARY VIEW s1 USING ${cls.getName}")
+        val df = sql("select * from global_temp.s1")
+        checkAnswer(sql("select * from global_temp.s1"), (0 until 10).map(i => Row(i, -i)))
+        checkAnswer(sql("select j from global_temp.s1"), (0 until 10).map(i => Row(-i)))
+        checkAnswer(sql("select * from global_temp.s1 where i > 5"),
+          (6 until 10).map(i => Row(i, -i)))
+      }
+    }
+  }
 }
 
 
