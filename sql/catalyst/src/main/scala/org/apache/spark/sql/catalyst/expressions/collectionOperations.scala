@@ -195,6 +195,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
 
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && names.forall(_.resolved)
+
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.length)(ArrayType)
 
   @transient override lazy val dataType: DataType = {
