@@ -15,28 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Expression;
 
 import java.io.Serializable;
 
 /**
- * Aggregation in SQL statement.
+ * Base class of the Aggregate Functions.
  *
  * @since 3.2.0
  */
 @Evolving
-public final class Aggregation implements Serializable {
-  private final AggregateFunc[] aggregateExpressions;
-  private final FieldReference[] groupByColumns;
-
-  public Aggregation(AggregateFunc[] aggregateExpressions, FieldReference[] groupByColumns) {
-    this.aggregateExpressions = aggregateExpressions;
-    this.groupByColumns = groupByColumns;
-  }
-
-  public AggregateFunc[] aggregateExpressions() { return aggregateExpressions; }
-
-  public FieldReference[] groupByColumns() { return groupByColumns; }
+public interface AggregateFunc extends Expression, Serializable {
 }

@@ -15,25 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc;
 
 /**
- * An aggregate function that returns the maximum value in a group.
+ * An aggregate function that returns the number of rows in a group.
  *
  * @since 3.2.0
  */
 @Evolving
-public final class Max implements AggregateFunc {
-  private final FieldReference column;
+public final class CountStar implements AggregateFunc {
 
-  public Max(FieldReference column) { this.column = column; }
-
-  public FieldReference column() { return column; }
+  public CountStar() {
+  }
 
   @Override
-  public String toString() { return "MAX(" + column.describe() + ")"; }
+  public String toString() { return "COUNT(*)"; }
 
   @Override
   public String describe() { return this.toString(); }

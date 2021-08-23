@@ -15,24 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc;
+
+import java.io.Serializable;
 
 /**
- * An aggregate function that returns the number of rows in a group.
+ * Aggregation in SQL statement.
  *
  * @since 3.2.0
  */
 @Evolving
-public final class CountStar implements AggregateFunc {
+public final class Aggregation implements Serializable {
+  private final AggregateFunc[] aggregateExpressions;
+  private final FieldReference[] groupByColumns;
 
-  public CountStar() {
+  public Aggregation(AggregateFunc[] aggregateExpressions, FieldReference[] groupByColumns) {
+    this.aggregateExpressions = aggregateExpressions;
+    this.groupByColumns = groupByColumns;
   }
 
-  @Override
-  public String toString() { return "COUNT(*)"; }
+  public AggregateFunc[] aggregateExpressions() { return aggregateExpressions; }
 
-  @Override
-  public String describe() { return this.toString(); }
+  public FieldReference[] groupByColumns() { return groupByColumns; }
 }
