@@ -126,19 +126,18 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
  * if the input strings are foldable.
  */
 object SpecialDatetimeValues extends Rule[LogicalPlan] {
+  private val conv = Map[DataType, (String, java.time.ZoneId) => Option[Any]](
+    DateType -> convertSpecialDate,
+    TimestampType -> convertSpecialTimestamp,
+    TimestampNTZType -> ((s: String, _: java.time.ZoneId) => convertSpecialTimestampNTZ(s))
+  )
   def apply(plan: LogicalPlan): LogicalPlan = {
     plan.transformAllExpressionsWithPruning(_.containsPattern(CAST)) {
-      case cast @ Cast(e, DateType, _, _) if e.foldable && e.dataType == StringType =>
-        convertSpecialDate(e.eval().toString, cast.zoneId)
-          .map(Literal(_, DateType))
-          .getOrElse(cast)
-      case cast @ Cast(e, TimestampType, _, _) if e.foldable && e.dataType == StringType =>
-        convertSpecialTimestamp(e.eval().toString, cast.zoneId)
-          .map(Literal(_, TimestampType))
-          .getOrElse(cast)
-      case cast @ Cast(e, TimestampNTZType, _, _) if e.foldable && e.dataType == StringType =>
-        convertSpecialTimestampNTZ(e.eval().toString)
-          .map(Literal(_, TimestampNTZType))
+      case cast @ Cast(e, dt @ (DateType | TimestampType | TimestampNTZType), _, _)
+        if e.foldable && e.dataType == StringType =>
+        Option(e.eval())
+          .flatMap(s => conv(dt)(s.toString, cast.zoneId))
+          .map(Literal(_, dt))
           .getOrElse(cast)
     }
   }
