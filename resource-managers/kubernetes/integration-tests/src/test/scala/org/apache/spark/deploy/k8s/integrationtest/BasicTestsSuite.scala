@@ -36,7 +36,7 @@ private[spark] trait BasicTestsSuite { k8sSuite: KubernetesSuite =>
   }
 
   test("Run SparkPi with no resources & statefulset allocation", k8sTestTag) {
-    sparkAppConf.set("spark.kubernetes.allocation.podsallocator", "statefulset")
+    sparkAppConf.set("spark.kubernetes.allocation.pods.allocator", "statefulset")
     runSparkPiAndVerifyCompletion()
     // Verify there is no dangling statefulset
     // This depends on the garbage collection happening inside of K8s so give it some time.

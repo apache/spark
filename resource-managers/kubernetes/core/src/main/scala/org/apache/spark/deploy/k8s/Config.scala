@@ -323,8 +323,8 @@ private[spark] object Config extends Logging {
       .stringConf
       .createOptional
 
-  val KUBERNETES_ALLOCATION_PODSALLOCATOR =
-    ConfigBuilder("spark.kubernetes.allocation.podsallocator")
+  val KUBERNETES_ALLOCATION_PODS_ALLOCATOR =
+    ConfigBuilder("spark.kubernetes.allocation.pods.allocator")
       .doc("Allocator to use for pods. Possible values are direct (the default) and statefulset " +
         ", or a full class name of a class implementing AbstractPodsAllocator. " +
         "Future version may add Job or replicaset. This is a developer API and may change " +

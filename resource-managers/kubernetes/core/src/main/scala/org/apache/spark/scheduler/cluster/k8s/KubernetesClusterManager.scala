@@ -135,11 +135,11 @@ private[spark] class KubernetesClusterManager extends ExternalClusterManager wit
 
   private[k8s] def makeExecutorPodsAllocator(sc: SparkContext, kubernetesClient: KubernetesClient,
       snapshotsStore: ExecutorPodsSnapshotsStore) = {
-    val executorPodsAllocatorName = sc.conf.get(KUBERNETES_ALLOCATION_PODSALLOCATOR) match {
+    val executorPodsAllocatorName = sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR) match {
       case "statefulset" =>
-        "org.apache.spark.scheduler.cluster.k8s.StatefulsetPodsAllocator"
+        classOf[StatefulsetPodsAllocator].getName
       case "direct" =>
-        "org.apache.spark.scheduler.cluster.k8s.ExecutorPodsAllocator"
+        classOf[ExecutorPodsAllocator].getName
       case fullClass =>
         fullClass
     }

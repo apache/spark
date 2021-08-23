@@ -51,7 +51,7 @@ class KubernetesClusterManagerSuite extends SparkFunSuite with BeforeAndAfter {
       "org.apache.spark.scheduler.cluster.k8s.ExecutorPodsAllocator")
     validConfigs.foreach { c =>
       val manager = new KubernetesClusterManager()
-        when(sc.conf.get(KUBERNETES_ALLOCATION_PODSALLOCATOR)).thenReturn(c)
+        when(sc.conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR)).thenReturn(c)
       manager.makeExecutorPodsAllocator(sc, kubernetesClient, null)
     }
   }

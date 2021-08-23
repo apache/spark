@@ -141,7 +141,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
         CONTAINER_MOUNT_PATH)
       .set(s"spark.kubernetes.executor.volumes.persistentVolumeClaim.data.options.claimName",
         PVC_NAME)
-      .set("spark.kubernetes.allocation.podsallocator", "statefulset")
+      .set("spark.kubernetes.allocation.pods.allocator", "statefulset")
     val file = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
     try {
       setupLocalStorage()
@@ -175,7 +175,7 @@ private[spark] trait PVTestsSuite { k8sSuite: KubernetesSuite =>
       .set(s"spark.kubernetes.executor.volumes.persistentVolumeClaim.data.options.storageClass",
         "standard")
       .set(s"spark.kubernetes.executor.volumes.persistentVolumeClaim.data.options.sizeLimit", "1G")
-      .set("spark.kubernetes.allocation.podsallocator", "statefulset")
+      .set("spark.kubernetes.allocation.pods.allocator", "statefulset")
     val file = Utils.createTempFile(FILE_CONTENTS, HOST_PATH)
     try {
       setupLocalStorage()

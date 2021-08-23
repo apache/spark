@@ -246,7 +246,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     verify(podOperations).create(podWithAttachedContainerForId(podAllocationSize + 1))
   }
 
-  test("Verify stopping deletes the labled pods") {
+  test("Verify stopping deletes the labeled pods") {
     when(podOperations
       .withLabel(SPARK_APP_ID_LABEL, TEST_SPARK_APP_ID))
       .thenReturn(podOperations)

@@ -268,7 +268,7 @@ private[spark] class BasicExecutorFeatureStep(
         .build()
     }
 
-    val policy = kubernetesConf.get(KUBERNETES_ALLOCATION_PODSALLOCATOR) match {
+    val policy = kubernetesConf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR) match {
       case "statefulset" => "Always"
       case _ => "Never"
     }
