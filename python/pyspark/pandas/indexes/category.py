@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from functools import partial
 from typing import Any, Callable, List, Optional, Union, cast, no_type_check
 
 import pandas as pd
@@ -23,7 +22,6 @@ from pandas.api.types import is_hashable, CategoricalDtype
 from pyspark import pandas as ps
 from pyspark.pandas.indexes.base import Index
 from pyspark.pandas.internal import InternalField
-from pyspark.pandas.missing.indexes import MissingPandasLikeCategoricalIndex
 from pyspark.pandas.series import Series
 from pyspark.sql.types import StructField
 
@@ -633,21 +631,79 @@ class CategoricalIndex(Index):
             self.to_series().cat.set_categories(new_categories, ordered=ordered, rename=rename)
         ).rename(self.name)
 
-    def __getattr__(self, item: str) -> Any:
-        if hasattr(MissingPandasLikeCategoricalIndex, item):
-            property_or_func = getattr(MissingPandasLikeCategoricalIndex, item)
-            if isinstance(property_or_func, property):
-                return property_or_func.fget(self)  # type: ignore
-            else:
-                return partial(property_or_func, self)
-        raise AttributeError("'CategoricalIndex' object has no attribute '{}'".format(item))
-
-    def map(
-        self,
-        mapper: Union[dict, Callable[[Any], Any], pd.Series] = None,
-        na_action: Optional[str] = None,
+    def map(  # type: ignore[override]
+        self, mapper: Union[dict, Callable[[Any], Any], pd.Series]
     ) -> "Index":
-        return MissingPandasLikeCategoricalIndex.map(self, mapper, na_action)
+        """
+        Map values using input correspondence (a dict, Series, or function).
+
+        Maps the values (their categories, not the codes) of the index to new
+        categories. If the mapping correspondence is one-to-one the result is a
+        `CategoricalIndex` which has the same order property as the original,
+        otherwise an `Index` is returned.
+
+        If a `dict` or `Series` is used any unmapped category is mapped to missing values.
+        Note that if this happens an `Index` will be returned.
+
+        Parameters
+        ----------
+        mapper : function, dict, or Series
+            Mapping correspondence.
+
+        Returns
+        -------
+        CategoricalIndex or Index
+            Mapped index.
+
+        See Also
+        --------
+        Index.map : Apply a mapping correspondence on an `Index`.
+        Series.map : Apply a mapping correspondence on a `Series`
+        Series.apply : Apply more complex functions on a `Series`
+
+        Examples
+        --------
+        >>> idx = ps.CategoricalIndex(['a', 'b', 'c'])
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'c'],
+                         categories=['a', 'b', 'c'], ordered=False, dtype='category')
+
+        >>> idx.map(lambda x: x.upper())  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['A', 'B', 'C'],
+                         categories=['A', 'B', 'C'], ordered=False, dtype='category')
+
+        >>> pser = pd.Series([1, 2, 3], index=pd.CategoricalIndex(['a', 'b', 'c'], ordered=True))
+        >>> idx.map(pser)  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex([1, 2, 3],
+                         categories=[1, 2, 3], ordered=False, dtype='category')
+
+        >>> idx.map({'a': 'first', 'b': 'second', 'c': 'third'})  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['first', 'second', 'third'],
+                         categories=['first', 'second', 'third'], ordered=False, dtype='category')
+
+        If the mapping is one-to-one the ordering of the categories is preserved:
+
+        >>> idx = ps.CategoricalIndex(['a', 'b', 'c'], ordered=True)
+        >>> idx  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex(['a', 'b', 'c'],
+                         categories=['a', 'b', 'c'], ordered=True, dtype='category')
+
+        >>> idx.map({'a': 3, 'b': 2, 'c': 1})  # doctest: +NORMALIZE_WHITESPACE
+        CategoricalIndex([3, 2, 1],
+                         categories=[3, 2, 1], ordered=True, dtype='category')
+
+        If the mapping is not one-to-one an `Index` is returned:
+
+        >>> idx.map({'a': 'first', 'b': 'second', 'c': 'first'})
+        Index(['first', 'second', 'first'], dtype='object')
+
+        If a `dict` is used, all unmapped categories are mapped to None and
+        the result is an `Index`:
+
+        >>> idx.map({'a': 'first', 'b': 'second'})
+        Index(['first', 'second', None], dtype='object')
+        """
+        return super().map(mapper)
 
 
 def _test() -> None:
