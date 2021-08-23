@@ -193,8 +193,6 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
       "The numbers of zipped arrays and field names should be the same")
   }
 
-  final override val nodePatterns: Seq[TreePattern] = Seq(ARRAYS_ZIP)
-
   override lazy val resolved: Boolean =
     childrenResolved && checkInputDataTypes().isSuccess && names.forall(_.resolved)
   override def inputTypes: Seq[AbstractDataType] = Seq.fill(children.length)(ArrayType)
@@ -203,6 +201,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
     val fields = arrayElementTypes.zip(names).map {
       case (elementType, Literal(name, StringType)) =>
         StructField(name.toString, elementType, nullable = true)
+      case _ => StructField("", NullType)
     }
     ArrayType(StructType(fields), containsNull = false)
   }
