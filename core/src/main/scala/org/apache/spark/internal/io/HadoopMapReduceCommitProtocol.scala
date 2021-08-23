@@ -203,25 +203,35 @@ class HadoopMapReduceCommitProtocol(
       }
 
       if (dynamicPartitionOverwrite) {
-        val partitionPaths = allPartitionPaths.foldLeft(Set[String]())(_ ++ _)
-        logDebug(s"Clean up default partition directories for overwriting: $partitionPaths")
-        for (part <- partitionPaths) {
-          val finalPartPath = new Path(path, part)
-          if (!fs.delete(finalPartPath, true) && !fs.exists(finalPartPath.getParent)) {
-            // According to the official hadoop FileSystem API spec, delete op should assume
-            // the destination is no longer present regardless of return value, thus we do not
-            // need to double check if finalPartPath exists before rename.
-            // Also in our case, based on the spec, delete returns false only when finalPartPath
-            // does not exist. When this happens, we need to take action if parent of finalPartPath
-            // also does not exist(e.g. the scenario described on SPARK-23815), because
-            // FileSystem API spec on rename op says the rename dest(finalPartPath) must have
-            // a parent that exists, otherwise we may get unexpected result on the rename.
-            fs.mkdirs(finalPartPath.getParent)
-          }
-          val stagingPartPath = new Path(stagingDir, part)
-          if (!fs.rename(stagingPartPath, finalPartPath)) {
-            throw new IOException(s"Failed to rename $stagingPartPath to $finalPartPath when " +
+        val targetPath = new Path(path)
+        val pathExisted = fs.exists(targetPath)
+        if (!pathExisted || fs.listStatus(targetPath).isEmpty) {
+          if ((!pathExisted || (pathExisted && fs.delete(targetPath, true))) &&
+            !fs.rename(stagingDir, targetPath)) {
+            throw new IOException(s"Failed to rename $stagingDir to $targetPath when " +
               s"committing files staged for overwriting dynamic partitions")
+          }
+        } else {
+          val partitionPaths = allPartitionPaths.foldLeft(Set[String]())(_ ++ _)
+          logDebug(s"Clean up default partition directories for overwriting: $partitionPaths")
+          for (part <- partitionPaths) {
+            val finalPartPath = new Path(path, part)
+            if (!fs.delete(finalPartPath, true) && !fs.exists(finalPartPath.getParent)) {
+              // According to the official hadoop FileSystem API spec, delete op should assume
+              // the destination is no longer present regardless of return value, thus we do not
+              // need to double check if finalPartPath exists before rename.
+              // Also in our case, based on the spec, delete returns false only when finalPartPath
+              // does not exist. When this happens, we need to take action if parent of
+              // finalPartPath also does not exist(e.g. the scenario described on SPARK-23815),
+              // because FileSystem API spec on rename op says the rename dest(finalPartPath) must
+              // have a parent that exists, otherwise we may get unexpected result on the rename.
+              fs.mkdirs(finalPartPath.getParent)
+            }
+            val stagingPartPath = new Path(stagingDir, part)
+            if (!fs.rename(stagingPartPath, finalPartPath)) {
+              throw new IOException(s"Failed to rename $stagingPartPath to $finalPartPath when " +
+                s"committing files staged for overwriting dynamic partitions")
+            }
           }
         }
       }

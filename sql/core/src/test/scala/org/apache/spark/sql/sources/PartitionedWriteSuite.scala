@@ -189,6 +189,33 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
       }
     }
   }
+
+  test("dynamic partition overwrite can rename table path when reasonable") {
+    withTempDir { stagingDir =>
+      withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+        SQLConf.PartitionOverwriteMode.DYNAMIC.toString,
+        SQLConf.FILE_STAGING_DIR.key -> stagingDir.getAbsolutePath) {
+        withTempDir { d =>
+          withTable("t") {
+            sql(
+              s"""
+                 | create table t(c1 int, p1 int) using parquet partitioned by (p1)
+                 | location '${d.getAbsolutePath}'
+            """.stripMargin)
+
+            val df = Seq((1, 2), (3, 4)).toDF("c1", "p1")
+            df.write
+              .partitionBy("p1")
+              .mode("overwrite")
+              .saveAsTable("t")
+            checkAnswer(sql("SELECT * FROM t"), df)
+            checkAnswer(sql("SELECT * FROM t WHERE p1 = 2"), Row(1, 2) :: Nil)
+            checkAnswer(sql("SELECT * FROM t WHERE p1 = 4"), Row(3, 4) :: Nil)
+          }
+        }
+      }
+    }
+  }
 }
 
 /**

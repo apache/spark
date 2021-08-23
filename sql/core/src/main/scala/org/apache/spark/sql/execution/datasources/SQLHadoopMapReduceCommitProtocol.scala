@@ -36,6 +36,10 @@ class SQLHadoopMapReduceCommitProtocol(
   extends HadoopMapReduceCommitProtocol(jobId, path, dynamicPartitionOverwrite)
     with Serializable with Logging {
 
+  override def stagingDir: Path = {
+    new Path(path, SQLConf.get.fileStagingDir + "-" + jobId)
+  }
+
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     var committer = super.setupCommitter(context)
 

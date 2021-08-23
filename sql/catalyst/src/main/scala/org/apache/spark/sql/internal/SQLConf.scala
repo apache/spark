@@ -1224,6 +1224,13 @@ object SQLConf {
     .stringConf
     .createOptional
 
+  val FILE_STAGING_DIR =
+    buildConf("spark.sql.source.stagingDir")
+      .version("3.3.0")
+      .internal()
+      .stringConf
+      .createWithDefault(".spark-staging")
+
   val FILE_COMMIT_PROTOCOL_CLASS =
     buildConf("spark.sql.sources.commitProtocolClass")
       .version("2.1.1")
@@ -3823,6 +3830,8 @@ class SQLConf extends Serializable with Logging {
 
   def partitionColumnTypeInferenceEnabled: Boolean =
     getConf(SQLConf.PARTITION_COLUMN_TYPE_INFERENCE)
+
+  def fileStagingDir: String = getConf(SQLConf.FILE_STAGING_DIR)
 
   def fileCommitProtocolClass: String = getConf(SQLConf.FILE_COMMIT_PROTOCOL_CLASS)
 
