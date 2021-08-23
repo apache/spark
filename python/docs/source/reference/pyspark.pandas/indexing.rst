@@ -183,6 +183,7 @@ Categorical components
    CategoricalIndex.set_categories
    CategoricalIndex.as_ordered
    CategoricalIndex.as_unordered
+   CategoricalIndex.map
 
 .. _api.multiindex:
 
