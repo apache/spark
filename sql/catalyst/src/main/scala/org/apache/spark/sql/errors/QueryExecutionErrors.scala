@@ -1429,7 +1429,7 @@ object QueryExecutionErrors {
       path: String, e: FileAlreadyExistsException): Throwable = {
     new SparkConcurrentModificationException(
       errorClass = "MULTI_STREAMING_QUERIES_USING_PATH_CONCURRENTLY_ERROR",
-      messageParameters = Array(path.toString), e)
+      messageParameters = Array(path), e)
   }
 
   def addFilesWithAbsolutePathUnsupportedError(commitProtocol: String): Throwable = {
