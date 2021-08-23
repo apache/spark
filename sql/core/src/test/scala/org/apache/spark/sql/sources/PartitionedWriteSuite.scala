@@ -190,7 +190,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("dynamic partition overwrite can rename table path when reasonable") {
+  test("SPARK-36563: dynamic partition overwrite can rename table path when reasonable") {
     withTempDir { stagingDir =>
       withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
         SQLConf.PartitionOverwriteMode.DYNAMIC.toString,
