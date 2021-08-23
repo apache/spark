@@ -17,11 +17,10 @@
 
 package org.apache.spark.sql.connector.expressions.aggregate;
 
+import java.io.Serializable;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.FieldReference;
-import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc;
-
-import java.io.Serializable;
 
 /**
  * Aggregation in SQL statement.

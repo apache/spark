@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.connector.expressions.aggregate;
 
+import java.io.Serializable;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Expression;
-
-import java.io.Serializable;
 
 /**
  * Base class of the Aggregate Functions.

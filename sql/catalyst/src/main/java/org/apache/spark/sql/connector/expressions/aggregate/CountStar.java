@@ -18,7 +18,6 @@
 package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc;
 
 /**
  * An aggregate function that returns the number of rows in a group.
