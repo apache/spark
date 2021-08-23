@@ -202,7 +202,6 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
     val fields = arrayElementTypes.zip(names).map {
       case (elementType, Literal(name, StringType)) =>
         StructField(name.toString, elementType, nullable = true)
-      case _ => StructField("", NullType)
     }
     ArrayType(StructType(fields), containsNull = false)
   }
