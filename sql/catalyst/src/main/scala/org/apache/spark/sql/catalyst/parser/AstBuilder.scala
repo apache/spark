@@ -19,13 +19,14 @@ package org.apache.spark.sql.catalyst.parser
 
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import javax.xml.bind.DatatypeConverter
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, Set}
 
 import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.{ParseTree, RuleNode, TerminalNode}
+import org.apache.commons.codec.DecoderException
+import org.apache.commons.codec.binary.Hex
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -137,7 +138,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
       throw QueryParsingErrors.duplicateCteDefinitionNamesError(
         duplicates.mkString("'", "', '", "'"), ctx)
     }
-    With(plan, ctes.toSeq)
+    UnresolvedWith(plan, ctes.toSeq)
   }
 
   /**
@@ -2176,7 +2177,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with SQLConfHelper with Logg
           }
         case "X" =>
           val padding = if (value.length % 2 != 0) "0" else ""
-          Literal(DatatypeConverter.parseHexBinary(padding + value))
+          try {
+            Literal(Hex.decodeHex(padding + value))
+          } catch {
+            case _: DecoderException =>
+              throw new IllegalArgumentException(
+                s"contains illegal character for hexBinary: $padding$value");
+          }
         case other =>
           throw QueryParsingErrors.literalValueTypeUnsupportedError(other, ctx)
       }

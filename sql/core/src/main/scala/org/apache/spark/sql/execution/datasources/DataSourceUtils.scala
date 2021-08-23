@@ -84,6 +84,7 @@ object DataSourceUtils {
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(format.toString, field)
       }
     }
+    checkFieldNames(format, schema)
   }
 
   // SPARK-24626: Metadata files and temporary files should not be

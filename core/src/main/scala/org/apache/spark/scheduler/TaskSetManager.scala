@@ -28,6 +28,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.{config, Logging}
 import org.apache.spark.internal.config._
 import org.apache.spark.resource.ResourceInformation
@@ -418,6 +419,8 @@ private[spark] class TaskSetManager(
    * @param execId the executor Id of the offered resource
    * @param host  the host Id of the offered resource
    * @param maxLocality the maximum locality we want to schedule the tasks at
+   * @param taskCpus the number of CPUs for the task
+   * @param taskResourceAssignments the resource assignments for the task
    *
    * @return Triple containing:
    *         (TaskDescription of launched task if any,
@@ -429,6 +432,7 @@ private[spark] class TaskSetManager(
       execId: String,
       host: String,
       maxLocality: TaskLocality.TaskLocality,
+      taskCpus: Int = sched.CPUS_PER_TASK,
       taskResourceAssignments: Map[String, ResourceInformation] = Map.empty)
     : (Option[TaskDescription], Boolean, Int) =
   {
@@ -474,6 +478,7 @@ private[spark] class TaskSetManager(
                 index,
                 taskLocality,
                 speculative,
+                taskCpus,
                 taskResourceAssignments,
                 curTime)
             }
@@ -495,6 +500,7 @@ private[spark] class TaskSetManager(
       index: Int,
       taskLocality: TaskLocality.Value,
       speculative: Boolean,
+      taskCpus: Int,
       taskResourceAssignments: Map[String, ResourceInformation],
       launchTime: Long): TaskDescription = {
     // Found a task; do some bookkeeping and return a task description
@@ -517,7 +523,7 @@ private[spark] class TaskSetManager(
         val msg = s"Failed to serialize task $taskId, not attempting to retry it."
         logError(msg, e)
         abort(s"$msg Exception during serialization: $e")
-        throw new TaskNotSerializableException(e)
+        throw SparkCoreErrors.failToSerializeTaskError(e)
     }
     if (serializedTask.limit() > TaskSetManager.TASK_SIZE_TO_WARN_KIB * 1024 &&
       !emittedTaskSizeWarning) {
@@ -548,6 +554,7 @@ private[spark] class TaskSetManager(
       addedJars,
       addedArchives,
       task.localProperties,
+      taskCpus,
       taskResourceAssignments,
       serializedTask)
   }

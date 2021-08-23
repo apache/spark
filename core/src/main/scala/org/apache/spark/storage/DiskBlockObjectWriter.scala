@@ -17,11 +17,12 @@
 
 package org.apache.spark.storage
 
-import java.io.{BufferedOutputStream, File, FileOutputStream, OutputStream}
+import java.io.{BufferedOutputStream, File, FileOutputStream, IOException, OutputStream}
 import java.nio.channels.{ClosedByInterruptException, FileChannel}
 import java.nio.file.Files
 import java.util.zip.Checksum
 
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.io.MutableCheckedOutputStream
 import org.apache.spark.serializer.{SerializationStream, SerializerInstance, SerializerManager}
@@ -66,7 +67,16 @@ private[spark] class DiskBlockObjectWriter(
     }
 
     def manualClose(): Unit = {
-      super.close()
+      try {
+        super.close()
+      } catch {
+        // The output stream may have been closed when the task thread is interrupted, then we
+        // get IOException when flushing the buffered data. We should catch and log the exception
+        // to ensure the revertPartialWritesAndClose() function doesn't throw an exception.
+        case e: IOException =>
+          logError("Exception occurred while manually close the output stream to file "
+            + file + ", " + e.getMessage)
+      }
     }
   }
 
@@ -296,7 +306,7 @@ private[spark] class DiskBlockObjectWriter(
     recordWritten()
   }
 
-  override def write(b: Int): Unit = throw new UnsupportedOperationException()
+  override def write(b: Int): Unit = throw SparkCoreErrors.unsupportedOperationError()
 
   override def write(kvBytes: Array[Byte], offs: Int, len: Int): Unit = {
     if (!streamOpen) {

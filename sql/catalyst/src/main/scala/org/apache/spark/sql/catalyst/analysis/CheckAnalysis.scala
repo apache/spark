@@ -133,13 +133,6 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
         val tblName = write.table.asInstanceOf[UnresolvedRelation].multipartIdentifier
         write.table.failAnalysis(s"Table or view not found: ${tblName.quoted}")
 
-      case u: UnresolvedV2Relation if isView(u.originalNameParts) =>
-        u.failAnalysis(
-          s"Invalid command: '${u.originalNameParts.quoted}' is a view not a table.")
-
-      case u: UnresolvedV2Relation =>
-        u.failAnalysis(s"Table not found: ${u.originalNameParts.quoted}")
-
       case command: V2PartitionCommand =>
         command.table match {
           case r @ ResolvedTable(_, _, table, _) => table match {
@@ -940,26 +933,33 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
    * Validates the options used for alter table commands after table and columns are resolved.
    */
   private def checkAlterTableCommand(alter: AlterTableCommand): Unit = {
-    def checkColumnNotExists(
-      op: String, fieldNames: Seq[String], struct: StructType, r: Resolver): Unit = {
-      if (struct.findNestedField(fieldNames, includeCollections = true, r).isDefined) {
+    def checkColumnNotExists(op: String, fieldNames: Seq[String], struct: StructType): Unit = {
+      if (struct.findNestedField(
+          fieldNames, includeCollections = true, alter.conf.resolver).isDefined) {
         alter.failAnalysis(s"Cannot $op column, because ${fieldNames.quoted} " +
           s"already exists in ${struct.treeString}")
       }
     }
 
+    def checkColumnNameDuplication(colsToAdd: Seq[QualifiedColType]): Unit = {
+      SchemaUtils.checkColumnNameDuplication(
+        colsToAdd.map(_.name.quoted),
+        "in the user specified columns",
+        alter.conf.resolver)
+    }
+
     alter match {
       case AddColumns(table: ResolvedTable, colsToAdd) =>
         colsToAdd.foreach { colToAdd =>
-          checkColumnNotExists("add", colToAdd.name, table.schema, alter.conf.resolver)
+          checkColumnNotExists("add", colToAdd.name, table.schema)
         }
-        SchemaUtils.checkColumnNameDuplication(
-          colsToAdd.map(_.name.quoted),
-          "in the user specified columns",
-          alter.conf.resolver)
+        checkColumnNameDuplication(colsToAdd)
+
+      case ReplaceColumns(_: ResolvedTable, colsToAdd) =>
+        checkColumnNameDuplication(colsToAdd)
 
       case RenameColumn(table: ResolvedTable, col: ResolvedFieldName, newName) =>
-        checkColumnNotExists("rename", col.path :+ newName, table.schema, alter.conf.resolver)
+        checkColumnNotExists("rename", col.path :+ newName, table.schema)
 
       case a @ AlterColumn(table: ResolvedTable, col: ResolvedFieldName, _, _, _, _) =>
         val fieldName = col.name.quoted
@@ -981,7 +981,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog {
             case u: UserDefinedType[_] =>
               alter.failAnalysis(s"Cannot update ${table.name} field $fieldName type: " +
                 s"update a UserDefinedType[${u.sql}] by updating its fields")
-            case _: CalendarIntervalType | _: YearMonthIntervalType | _: DayTimeIntervalType =>
+            case _: CalendarIntervalType | _: AnsiIntervalType =>
               alter.failAnalysis(s"Cannot update ${table.name} field $fieldName to interval type")
             case _ => // update is okay
           }

@@ -36,7 +36,7 @@ from pyspark.pandas.missing.window import (
 # For running doctests and reference resolution in PyCharm.
 from pyspark import pandas as ps  # noqa: F401
 from pyspark.pandas._typing import FrameLike
-from pyspark.pandas.groupby import GroupBy
+from pyspark.pandas.groupby import GroupBy, DataFrameGroupBy
 from pyspark.pandas.internal import NATURAL_ORDER_COLUMN_NAME, SPARK_INDEX_NAME_FORMAT
 from pyspark.pandas.spark import functions as SF
 from pyspark.pandas.utils import scol_for
@@ -706,10 +706,15 @@ class RollingGroupby(RollingLike[FrameLike]):
         if groupby._agg_columns_selected:
             agg_columns = groupby._agg_columns
         else:
+            # pandas doesn't keep the groupkey as a column from 1.3 for DataFrameGroupBy
+            column_labels_to_exclude = groupby._column_labels_to_exclude.copy()
+            if isinstance(groupby, DataFrameGroupBy):
+                for groupkey in groupby._groupkeys:  # type: ignore
+                    column_labels_to_exclude.add(groupkey._internal.column_labels[0])
             agg_columns = [
                 psdf._psser_for(label)
                 for label in psdf._internal.column_labels
-                if label not in groupby._column_labels_to_exlcude
+                if label not in column_labels_to_exclude
             ]
 
         applied = []
@@ -777,19 +782,19 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).rolling(2).count().sort_index()  # doctest: +NORMALIZE_WHITESPACE
-                A    B
+                B
         A
-        2 0   1.0  1.0
-          1   2.0  2.0
-        3 2   1.0  1.0
-          3   2.0  2.0
-          4   2.0  2.0
-        4 5   1.0  1.0
-          6   2.0  2.0
-          7   2.0  2.0
-          8   2.0  2.0
-        5 9   1.0  1.0
-          10  2.0  2.0
+        2 0   1.0
+          1   2.0
+        3 2   1.0
+          3   2.0
+          4   2.0
+        4 5   1.0
+          6   2.0
+          7   2.0
+          8   2.0
+        5 9   1.0
+          10  2.0
         """
         return super().count()
 
@@ -831,19 +836,19 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).rolling(2).sum().sort_index()  # doctest: +NORMALIZE_WHITESPACE
-                 A     B
+                 B
         A
-        2 0    NaN   NaN
-          1    4.0   8.0
-        3 2    NaN   NaN
-          3    6.0  18.0
-          4    6.0  18.0
-        4 5    NaN   NaN
-          6    8.0  32.0
-          7    8.0  32.0
-          8    8.0  32.0
-        5 9    NaN   NaN
-          10  10.0  50.0
+        2 0    NaN
+          1    8.0
+        3 2    NaN
+          3   18.0
+          4   18.0
+        4 5    NaN
+          6   32.0
+          7   32.0
+          8   32.0
+        5 9    NaN
+          10  50.0
         """
         return super().sum()
 
@@ -885,19 +890,19 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).rolling(2).min().sort_index()  # doctest: +NORMALIZE_WHITESPACE
-                A     B
+                 B
         A
-        2 0   NaN   NaN
-          1   2.0   4.0
-        3 2   NaN   NaN
-          3   3.0   9.0
-          4   3.0   9.0
-        4 5   NaN   NaN
-          6   4.0  16.0
-          7   4.0  16.0
-          8   4.0  16.0
-        5 9   NaN   NaN
-          10  5.0  25.0
+        2 0    NaN
+          1    4.0
+        3 2    NaN
+          3    9.0
+          4    9.0
+        4 5    NaN
+          6   16.0
+          7   16.0
+          8   16.0
+        5 9    NaN
+          10  25.0
         """
         return super().min()
 
@@ -939,19 +944,19 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).rolling(2).max().sort_index()  # doctest: +NORMALIZE_WHITESPACE
-                A     B
+                 B
         A
-        2 0   NaN   NaN
-          1   2.0   4.0
-        3 2   NaN   NaN
-          3   3.0   9.0
-          4   3.0   9.0
-        4 5   NaN   NaN
-          6   4.0  16.0
-          7   4.0  16.0
-          8   4.0  16.0
-        5 9   NaN   NaN
-          10  5.0  25.0
+        2 0    NaN
+          1    4.0
+        3 2    NaN
+          3    9.0
+          4    9.0
+        4 5    NaN
+          6   16.0
+          7   16.0
+          8   16.0
+        5 9    NaN
+          10  25.0
         """
         return super().max()
 
@@ -993,19 +998,19 @@ class RollingGroupby(RollingLike[FrameLike]):
 
         >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).rolling(2).mean().sort_index()  # doctest: +NORMALIZE_WHITESPACE
-                A     B
+                 B
         A
-        2 0   NaN   NaN
-          1   2.0   4.0
-        3 2   NaN   NaN
-          3   3.0   9.0
-          4   3.0   9.0
-        4 5   NaN   NaN
-          6   4.0  16.0
-          7   4.0  16.0
-          8   4.0  16.0
-        5 9   NaN   NaN
-          10  5.0  25.0
+        2 0    NaN
+          1    4.0
+        3 2    NaN
+          3    9.0
+          4    9.0
+        4 5    NaN
+          6   16.0
+          7   16.0
+          8   16.0
+        5 9    NaN
+          10  25.0
         """
         return super().mean()
 
@@ -1478,19 +1483,19 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).expanding(2).count().sort_index()  # doctest: +NORMALIZE_WHITESPACE
-                A    B
+                B
         A
-        2 0   NaN  NaN
-          1   2.0  2.0
-        3 2   NaN  NaN
-          3   2.0  2.0
-          4   3.0  3.0
-        4 5   NaN  NaN
-          6   2.0  2.0
-          7   3.0  3.0
-          8   4.0  4.0
-        5 9   NaN  NaN
-          10  2.0  2.0
+        2 0   NaN
+          1   2.0
+        3 2   NaN
+          3   2.0
+          4   3.0
+        4 5   NaN
+          6   2.0
+          7   3.0
+          8   4.0
+        5 9   NaN
+          10  2.0
         """
         return super().count()
 
@@ -1532,19 +1537,19 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).expanding(2).sum().sort_index()  # doctest: +NORMALIZE_WHITESPACE
-                 A     B
+                 B
         A
-        2 0    NaN   NaN
-          1    4.0   8.0
-        3 2    NaN   NaN
-          3    6.0  18.0
-          4    9.0  27.0
-        4 5    NaN   NaN
-          6    8.0  32.0
-          7   12.0  48.0
-          8   16.0  64.0
-        5 9    NaN   NaN
-          10  10.0  50.0
+        2 0    NaN
+          1    8.0
+        3 2    NaN
+          3   18.0
+          4   27.0
+        4 5    NaN
+          6   32.0
+          7   48.0
+          8   64.0
+        5 9    NaN
+          10  50.0
         """
         return super().sum()
 
@@ -1586,19 +1591,19 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).expanding(2).min().sort_index()  # doctest: +NORMALIZE_WHITESPACE
-                A     B
+                 B
         A
-        2 0   NaN   NaN
-          1   2.0   4.0
-        3 2   NaN   NaN
-          3   3.0   9.0
-          4   3.0   9.0
-        4 5   NaN   NaN
-          6   4.0  16.0
-          7   4.0  16.0
-          8   4.0  16.0
-        5 9   NaN   NaN
-          10  5.0  25.0
+        2 0    NaN
+          1    4.0
+        3 2    NaN
+          3    9.0
+          4    9.0
+        4 5    NaN
+          6   16.0
+          7   16.0
+          8   16.0
+        5 9    NaN
+          10  25.0
         """
         return super().min()
 
@@ -1639,19 +1644,19 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).expanding(2).max().sort_index()  # doctest: +NORMALIZE_WHITESPACE
-                A     B
+                 B
         A
-        2 0   NaN   NaN
-          1   2.0   4.0
-        3 2   NaN   NaN
-          3   3.0   9.0
-          4   3.0   9.0
-        4 5   NaN   NaN
-          6   4.0  16.0
-          7   4.0  16.0
-          8   4.0  16.0
-        5 9   NaN   NaN
-          10  5.0  25.0
+        2 0    NaN
+          1    4.0
+        3 2    NaN
+          3    9.0
+          4    9.0
+        4 5    NaN
+          6   16.0
+          7   16.0
+          8   16.0
+        5 9    NaN
+          10  25.0
         """
         return super().max()
 
@@ -1693,19 +1698,19 @@ class ExpandingGroupby(ExpandingLike[FrameLike]):
 
         >>> df = ps.DataFrame({"A": s.to_numpy(), "B": s.to_numpy() ** 2})
         >>> df.groupby(df.A).expanding(2).mean().sort_index()  # doctest: +NORMALIZE_WHITESPACE
-                A     B
+                 B
         A
-        2 0   NaN   NaN
-          1   2.0   4.0
-        3 2   NaN   NaN
-          3   3.0   9.0
-          4   3.0   9.0
-        4 5   NaN   NaN
-          6   4.0  16.0
-          7   4.0  16.0
-          8   4.0  16.0
-        5 9   NaN   NaN
-          10  5.0  25.0
+        2 0    NaN
+          1    4.0
+        3 2    NaN
+          3    9.0
+          4    9.0
+        4 5    NaN
+          6   16.0
+          7   16.0
+          8   16.0
+        5 9    NaN
+          10  25.0
         """
         return super().mean()
 

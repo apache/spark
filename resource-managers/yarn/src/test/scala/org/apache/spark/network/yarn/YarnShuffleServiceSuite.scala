@@ -43,7 +43,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.SecurityManager
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.config._
-import org.apache.spark.network.shuffle.{ExternalBlockHandler, RemoteBlockPushResolver, ShuffleTestAccessor}
+import org.apache.spark.network.shuffle.{NoOpMergedShuffleFileManager, RemoteBlockPushResolver, ShuffleTestAccessor}
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.network.util.TransportConf
 import org.apache.spark.util.Utils
@@ -434,9 +434,9 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
   test("create default merged shuffle file manager instance") {
     val mockConf = mock(classOf[TransportConf])
     when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
-      "org.apache.spark.network.shuffle.ExternalBlockHandler$NoOpMergedShuffleFileManager")
+      "org.apache.spark.network.shuffle.NoOpMergedShuffleFileManager")
     val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf)
-    assert(mergeMgr.isInstanceOf[ExternalBlockHandler.NoOpMergedShuffleFileManager])
+    assert(mergeMgr.isInstanceOf[NoOpMergedShuffleFileManager])
   }
 
   test("create remote block push resolver instance") {
@@ -452,6 +452,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     when(mockConf.mergedShuffleFileManagerImpl).thenReturn(
       "org.apache.spark.network.shuffle.NotExistent")
     val mergeMgr = YarnShuffleService.newMergedShuffleFileManagerInstance(mockConf)
-    assert(mergeMgr.isInstanceOf[ExternalBlockHandler.NoOpMergedShuffleFileManager])
+    assert(mergeMgr.isInstanceOf[NoOpMergedShuffleFileManager])
   }
 }

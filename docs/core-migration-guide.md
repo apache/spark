@@ -24,6 +24,8 @@ license: |
 
 ## Upgrading from Core 3.1 to 3.2
 
+- Since Spark 3.2, `spark.scheduler.allocation.file` supports read remote file using hadoop filesystem which means if the path has no scheme Spark will respect hadoop configuration to read it. To restore the behavior before Spark 3.2, you can specify the local scheme for `spark.scheduler.allocation.file` e.g. `file:///path/to/file`.
+
 - Since Spark 3.2, `spark.hadoopRDD.ignoreEmptySplits` is set to `true` by default which means Spark will not create empty partitions for empty input splits. To restore the behavior before Spark 3.2, you can set `spark.hadoopRDD.ignoreEmptySplits` to `false`.
 
 - Since Spark 3.2, `spark.eventLog.compression.codec` is set to `zstd` by default which means Spark will not fallback to use `spark.io.compression.codec` anymore.

@@ -1491,6 +1491,20 @@ abstract class DynamicPartitionPruningSuiteBase
 
     checkAnswer(df, Row(3, 2) :: Row(3, 2) :: Row(3, 2) :: Row(3, 2) :: Nil)
   }
+
+  test("SPARK-36444: Remove OptimizeSubqueries from batch of PartitionPruning") {
+    withSQLConf(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT date_id, product_id FROM fact_sk f
+          |JOIN (select store_id + 3 as new_store_id from dim_store where country = 'US') s
+          |ON f.store_id = s.new_store_id
+        """.stripMargin)
+
+      checkPartitionPruningPredicate(df, false, true)
+      checkAnswer(df, Row(1150, 1) :: Row(1130, 4) :: Row(1140, 4) :: Nil)
+    }
+  }
 }
 
 abstract class DynamicPartitionPruningV1Suite extends DynamicPartitionPruningSuiteBase {

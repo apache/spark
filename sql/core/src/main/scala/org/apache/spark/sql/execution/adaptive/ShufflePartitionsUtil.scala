@@ -56,13 +56,9 @@ object ShufflePartitionsUtil extends Logging {
     // If `minNumPartitions` is very large, it is possible that we need to use a value less than
     // `advisoryTargetSize` as the target size of a coalesced task.
     val totalPostShuffleInputSize = mapOutputStatistics.flatMap(_.map(_.bytesByPartitionId.sum)).sum
-    // The max at here is to make sure that when we have an empty table, we only have a single
-    // coalesced partition.
-    // There is no particular reason that we pick 16. We just need a number to prevent
-    // `maxTargetSize` from being set to 0.
-    val maxTargetSize = math.max(
-      math.ceil(totalPostShuffleInputSize / minNumPartitions.toDouble).toLong, 16)
-    val targetSize = math.min(maxTargetSize, advisoryTargetSize)
+    val maxTargetSize = math.ceil(totalPostShuffleInputSize / minNumPartitions.toDouble).toLong
+    // It's meaningless to make target size smaller than minPartitionSize.
+    val targetSize = maxTargetSize.min(advisoryTargetSize).max(minPartitionSize)
 
     val shuffleIds = mapOutputStatistics.flatMap(_.map(_.shuffleId)).mkString(", ")
     logInfo(s"For shuffle($shuffleIds), advisory target size: $advisoryTargetSize, " +

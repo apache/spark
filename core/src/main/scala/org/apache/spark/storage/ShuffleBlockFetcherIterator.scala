@@ -29,17 +29,17 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.util.{Failure, Success}
 
 import io.netty.util.internal.OutOfDirectMemoryError
-import org.apache.commons.io.IOUtils
 import org.roaringbitmap.RoaringBitmap
 
-import org.apache.spark.{MapOutputTracker, SparkException, TaskContext}
+import org.apache.spark.{MapOutputTracker, TaskContext}
 import org.apache.spark.MapOutputTracker.SHUFFLE_PUSH_MAP_ID
+import org.apache.spark.errors.SparkCoreErrors
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
 import org.apache.spark.network.shuffle._
 import org.apache.spark.network.shuffle.checksum.{Cause, ShuffleChecksumHelper}
-import org.apache.spark.network.util.{NettyUtils, TransportConf}
-import org.apache.spark.shuffle.{FetchFailedException, ShuffleReadMetricsReporter}
+import org.apache.spark.network.util.{JavaUtils, NettyUtils, TransportConf}
+import org.apache.spark.shuffle.ShuffleReadMetricsReporter
 import org.apache.spark.util.{CompletionIterator, TaskCompletionListener, Utils}
 
 /**
@@ -733,7 +733,7 @@ final class ShuffleBlockFetcherIterator(
    */
   override def next(): (BlockId, InputStream) = {
     if (!hasNext) {
-      throw new NoSuchElementException()
+      throw SparkCoreErrors.noSuchElementError()
     }
 
     numBlocksProcessed += 1
@@ -1153,12 +1153,11 @@ final class ShuffleBlockFetcherIterator(
     val msg = message.getOrElse(e.getMessage)
     blockId match {
       case ShuffleBlockId(shufId, mapId, reduceId) =>
-        throw new FetchFailedException(address, shufId, mapId, mapIndex, reduceId, msg, e)
+        throw SparkCoreErrors.fetchFailedError(address, shufId, mapId, mapIndex, reduceId, msg, e)
       case ShuffleBlockBatchId(shuffleId, mapId, startReduceId, _) =>
-        throw new FetchFailedException(address, shuffleId, mapId, mapIndex, startReduceId, msg, e)
-      case _ =>
-        throw new SparkException(
-          "Failed to get block " + blockId + ", which is not a shuffle block", e)
+        throw SparkCoreErrors.fetchFailedError(address, shuffleId, mapId, mapIndex, startReduceId,
+          msg, e)
+      case _ => throw SparkCoreErrors.failToGetNonShuffleBlockError(blockId, e)
     }
   }
 
@@ -1304,7 +1303,7 @@ private class BufferReleasingInputStream(
         val diagnosisResponse = checkedInOpt.map { checkedIn =>
           iterator.diagnoseCorruption(checkedIn, address, blockId)
         }
-        IOUtils.closeQuietly(this)
+        JavaUtils.closeQuietly(this)
         // We'd never retry the block whatever the cause is since the block has been
         // partially consumed by downstream RDDs.
         iterator.throwFetchFailedException(blockId, mapIndex, address, e, diagnosisResponse)
