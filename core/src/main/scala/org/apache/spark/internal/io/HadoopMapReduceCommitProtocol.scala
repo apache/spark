@@ -73,7 +73,7 @@ class HadoopMapReduceCommitProtocol(
   import FileCommitProtocol._
 
   /** OutputCommitter from Hadoop is not serializable so marking it transient. */
-  @transient private var committer: OutputCommitter = _
+  @transient protected var committer: OutputCommitter = _
 
   /**
    * Checks whether there are files to be committed to a valid output location.

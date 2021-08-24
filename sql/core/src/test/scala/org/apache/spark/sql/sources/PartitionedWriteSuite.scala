@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.execution.datasources.SQLHadoopMapReduceCommitProtocol
+import org.apache.spark.sql.execution.datasources.{NewSQLHadoopMapReduceCommitProtocol, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -185,6 +185,55 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
             .mode("overwrite")
             .saveAsTable("t")
           checkAnswer(sql("select * from t"), df)
+        }
+      }
+    }
+  }
+
+  test("SPARK-36571") {
+    withTempDir { stagingDir =>
+      withSQLConf(
+        "spark.sql.source.stagingDir" -> s"${stagingDir.getAbsolutePath}/.spark-stagingDir",
+        "spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version" -> "2",
+        SQLConf.FILE_COMMIT_PROTOCOL_CLASS.key ->
+          classOf[NewSQLHadoopMapReduceCommitProtocol].getName) {
+        withTempDir { d =>
+          withTable("t") {
+            sql(
+              s"""
+                 | create table t(c1 int, p1 int) using ORC
+                 | location '${d.getAbsolutePath}'
+            """.stripMargin)
+
+            val df =
+              Seq((1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2),
+                (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2),
+                (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2))
+                .toDF("c1", "p1").repartition(1)
+            df.write
+              .mode("overwrite")
+              .format("orc")
+              .saveAsTable("t")
+            checkAnswer(sql("select * from t"), df)
+          }
+
+          withTable("t") {
+            sql(
+              s"""
+                 | create table t(c1 int, p1 int) using ORC PARTITIONED BY(p1)
+                 | location '${d.getAbsolutePath}'
+            """.stripMargin)
+
+            val df =
+              Seq((1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2),
+                (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2),
+                (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2), (1, 2))
+                .toDF("c1", "p1").repartition(1)
+
+            df.createOrReplaceTempView("view1")
+            sql("insert overwrite t partition(p1=2) select c1 from view1 ")
+            checkAnswer(sql("select * from t"), df)
+          }
         }
       }
     }
