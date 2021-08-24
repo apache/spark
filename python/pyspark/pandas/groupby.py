@@ -44,7 +44,7 @@ from typing import (
 )
 
 import pandas as pd
-from pandas.api.types import is_hashable, is_list_like
+from pandas.api.types import is_hashable, is_list_like, CategoricalDtype
 
 if LooseVersion(pd.__version__) >= LooseVersion("1.3.0"):
     from pandas.core.common import _builtin_table
@@ -2251,11 +2251,20 @@ class GroupBy(Generic[FrameLike], metaclass=ABCMeta):
             dtype = cast(SeriesType, return_type).dtype
             spark_type = cast(SeriesType, return_type).spark_type
 
-            data_fields = [
-                InternalField(dtype=dtype, struct_field=StructField(name=c, dataType=spark_type))
-                for c in psdf._internal.data_spark_column_names
-                if c not in groupkey_names
-            ]
+            data_fields = []
+            for c in psdf._internal.data_spark_column_names:
+                if c not in groupkey_names:
+                    # If the unique values of CategoricalDtype are the same, use the original one.
+                    # This behavior is changed from pandas 1.3.
+                    original_dtype = psdf[c].dtype
+                    if isinstance(original_dtype, CategoricalDtype) and original_dtype == dtype:
+                        dtype = original_dtype
+                    data_fields.append(
+                        InternalField(
+                            dtype=dtype, struct_field=StructField(name=c, dataType=spark_type)
+                        )
+                    )
+
             return_schema = StructType([field.struct_field for field in data_fields])
 
             sdf = GroupBy._spark_group_map_apply(
