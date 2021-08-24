@@ -33,6 +33,7 @@ import org.apache.spark.util.SerializableConfiguration
 case class TextScan(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
+    dataSchema: StructType,
     readDataSchema: StructType,
     readPartitionSchema: StructType,
     options: CaseInsensitiveStringMap,

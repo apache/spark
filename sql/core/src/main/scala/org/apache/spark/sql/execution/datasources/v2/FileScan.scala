@@ -49,6 +49,8 @@ trait FileScan extends Scan
 
   def fileIndex: PartitioningAwareFileIndex
 
+  def dataSchema: StructType
+
   /**
    * Returns the required data schema
    */
@@ -187,7 +189,10 @@ trait FileScan extends Scan
     new Statistics {
       override def sizeInBytes(): OptionalLong = {
         val compressionFactor = sparkSession.sessionState.conf.fileCompressionFactor
-        val size = (compressionFactor * fileIndex.sizeInBytes).toLong
+        val size = (compressionFactor * fileIndex.sizeInBytes /
+          (dataSchema.defaultSize + fileIndex.partitionSchema.defaultSize) *
+          (readDataSchema.defaultSize + readPartitionSchema.defaultSize)).toLong
+
         OptionalLong.of(size)
       }
 
