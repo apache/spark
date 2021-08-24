@@ -18,8 +18,6 @@
 import os
 import sys
 import itertools
-import random
-import math
 from multiprocessing.pool import ThreadPool
 
 import numpy as np
@@ -37,7 +35,7 @@ from pyspark.sql.functions import col, lit, rand, UserDefinedFunction
 from pyspark.sql.types import BooleanType
 
 __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
-           'TrainValidationSplitModel', 'ParamRandomBuilder']
+           'TrainValidationSplitModel']
 
 
 def _parallelFitTasks(est, train, eva, validation, epm, collectSubModel):
@@ -152,50 +150,6 @@ class ParamGridBuilder(object):
             return [(key, key.typeConverter(value)) for key, value in zip(keys, values)]
 
         return [dict(to_key_value_pairs(keys, prod)) for prod in itertools.product(*grid_values)]
-
-
-class ParamRandomBuilder(ParamGridBuilder):
-    r"""
-    Builder for random value parameters used in search-based model selection.
-
-
-    .. versionadded:: 3.2.0
-    """
-
-    @since("3.2.0")
-    def addRandom(self, param, x, y, n):
-        """
-        Adds n random values between x and y.
-        The arguments x and y can be integers, floats or a combination of the two. If either
-        x or y is a float, the domain of the random value will be float.
-        """
-        if type(x) == int and type(y) == int:
-            values = map(lambda _: random.randrange(x, y), range(n))
-        elif type(x) == float or type(y) == float:
-            values = map(lambda _: random.uniform(x, y), range(n))
-        else:
-            raise TypeError("unable to make range for types %s and %s" % type(x) % type(y))
-        self.addGrid(param, values)
-        return self
-
-    @since("3.2.0")
-    def addLog10Random(self, param, x, y, n):
-        """
-        Adds n random values scaled logarithmically (base 10) between x and y.
-        For instance, a distribution for x=1.0, y=10000.0 and n=5 might reasonably look like
-        [1.6, 65.3, 221.9, 1024.3, 8997.5]
-        """
-        def logarithmic_random():
-            rand = random.uniform(math.log10(x), math.log10(y))
-            value = 10 ** rand
-            if type(x) == int and type(y) == int:
-                value = int(value)
-            return value
-
-        values = map(lambda _: logarithmic_random(), range(n))
-        self.addGrid(param, values)
-
-        return self
 
 
 class _ValidatorParams(HasSeed):
