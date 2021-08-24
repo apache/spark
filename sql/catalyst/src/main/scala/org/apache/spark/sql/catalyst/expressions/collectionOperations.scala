@@ -22,7 +22,6 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.expressions.ArraySortLike.NullOrder
@@ -204,7 +203,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
       case (elementType, Literal(name, StringType)) =>
         StructField(name.toString, elementType, nullable = true)
       case _ =>
-        throw new AnalysisException("Schema name of arrays_zip should be string literal.")
+        throw new IllegalStateException("Schema name of arrays_zip should be string literal.")
     }
     ArrayType(StructType(fields), containsNull = false)
   }
