@@ -71,10 +71,8 @@ private[spark] class SparkUpgradeException(version: String, message: String, cau
 
 /**
  * Arithmetic exception thrown from Spark with an error class.
- *
- * @since 3.2.0
  */
-class SparkArithmeticException(errorClass: String, messageParameters: Array[String])
+private[spark] class SparkArithmeticException(errorClass: String, messageParameters: Array[String])
   extends ArithmeticException(SparkThrowableHelper.getMessage(errorClass, messageParameters))
     with SparkThrowable {
 
