@@ -121,8 +121,8 @@
     "sqlState" : "42000"
   },
   "NO_SUCH_ELEMENT_EXCEPTION1" : {
-    "message": [ "" ]
-   },
+    "message" : [ "" ]
+  },
   "NO_SUCH_ELEMENT_EXCEPTION2" : {
     "message" : [ "%s" ]
   },
