@@ -216,7 +216,8 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
               .saveAsTable("t")
             checkAnswer(sql("select * from t"), df)
           }
-
+        }
+        withTempDir { d =>
           withTable("t") {
             sql(
               s"""
@@ -232,7 +233,7 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
 
             df.createOrReplaceTempView("view1")
             sql("insert overwrite t partition(p1=2) select c1 from view1 ")
-            checkAnswer(sql("select * from t"), df)
+            checkAnswer(sql("select * from t where p1=2"), df)
           }
         }
       }
