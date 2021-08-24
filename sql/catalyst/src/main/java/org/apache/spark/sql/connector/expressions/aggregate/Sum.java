@@ -15,23 +15,37 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions;
+package org.apache.spark.sql.connector.expressions.aggregate;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.FieldReference;
 
 /**
- * An aggregate function that returns the number of rows in a group.
+ * An aggregate function that returns the summation of all the values in a group.
  *
  * @since 3.2.0
  */
 @Evolving
-public final class CountStar implements AggregateFunc {
+public final class Sum implements AggregateFunc {
+  private final FieldReference column;
+  private final boolean isDistinct;
 
-  public CountStar() {
+  public Sum(FieldReference column, boolean isDistinct) {
+    this.column = column;
+    this.isDistinct = isDistinct;
   }
 
+  public FieldReference column() { return column; }
+  public boolean isDistinct() { return isDistinct; }
+
   @Override
-  public String toString() { return "COUNT(*)"; }
+  public String toString() {
+    if (isDistinct) {
+      return "SUM(DISTINCT " + column.describe() + ")";
+    } else {
+      return "SUM(" + column.describe() + ")";
+    }
+  }
 
   @Override
   public String describe() { return this.toString(); }
