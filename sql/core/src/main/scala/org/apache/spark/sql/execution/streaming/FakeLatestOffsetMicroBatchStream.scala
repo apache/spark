@@ -21,9 +21,14 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReaderFacto
 import org.apache.spark.sql.connector.read.streaming
 import org.apache.spark.sql.connector.read.streaming.MicroBatchStream
 
+/**
+ * This class wraps a [[MicroBatchStream]] and makes it supports Trigger.AvailableNow.
+ *
+ * See [[FakeLatestOffsetSupportsTriggerAvailableNow]] for more details.
+ */
 class FakeLatestOffsetMicroBatchStream(source: MicroBatchStream)
-  extends FakeLatestOffsetSupportsTriggerAvailableNow(source)
-    with MicroBatchStream {
+  extends FakeLatestOffsetSupportsTriggerAvailableNow(source) with MicroBatchStream {
+
   override def latestOffset(): streaming.Offset = source.latestOffset()
 
   override def planInputPartitions(start: streaming.Offset, end: streaming.Offset):

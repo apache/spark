@@ -47,9 +47,9 @@ class MicroBatchExecution(
     triggerClock, plan.outputMode, plan.deleteCheckpointOnStop) {
 
   @volatile protected var sources: Seq[SparkDataStream] = Seq.empty
-  @volatile protected var wrappedSources: MutableMap[
-    SparkDataStream, FakeLatestOffsetSupportsTriggerAvailableNow] = new
-      MutableHashMap[SparkDataStream, FakeLatestOffsetSupportsTriggerAvailableNow]()
+  @volatile protected var originalSources: MutableMap[
+    FakeLatestOffsetSupportsTriggerAvailableNow, SparkDataStream] = new
+      MutableHashMap[FakeLatestOffsetSupportsTriggerAvailableNow, SparkDataStream]()
 
   private val triggerExecutor = trigger match {
     case t: ProcessingTimeTrigger => ProcessingTimeExecutor(t, triggerClock)
@@ -125,23 +125,6 @@ class MicroBatchExecution(
       // v2 source
       case r: StreamingDataSourceV2Relation => r.stream
     }
-    // need to swap sources with wrapped ones when MultiBatchExecutor is being used
-    sources = triggerExecutor match {
-      case _: MultiBatchExecutor =>
-        sources.map {
-          case s: SupportsTriggerAvailableNow => s
-          case s: Source =>
-            val newSource = new FakeLatestOffsetSource(s)
-            wrappedSources += (s -> newSource)
-            newSource
-          case s: MicroBatchStream =>
-            val newSource = new FakeLatestOffsetMicroBatchStream(s)
-            wrappedSources += (s -> newSource)
-            newSource
-        }
-
-      case _ => sources
-    }
     uniqueSources = triggerExecutor match {
       case _: OneBatchExecutor =>
         sources.distinct.map {
@@ -157,8 +140,17 @@ class MicroBatchExecution(
         }.toMap
 
       case _: MultiBatchExecutor =>
-        // we expect sources to be wrapped here, so should be safe to apply conversion
-        sources.asInstanceOf[Seq[SupportsTriggerAvailableNow]].distinct.map { s =>
+        sources.distinct.map {
+          case s: SupportsTriggerAvailableNow => s
+          case s: Source =>
+            val newSource = new FakeLatestOffsetSource(s)
+            originalSources += (newSource -> s)
+            newSource
+          case s: MicroBatchStream =>
+            val newSource = new FakeLatestOffsetMicroBatchStream(s)
+            originalSources += (newSource -> s)
+            newSource
+        }.map { s =>
           s.prepareForTriggerAvailableNow()
           s -> s.getDefaultReadLimit
         }.toMap
@@ -421,6 +413,23 @@ class MicroBatchExecution(
 
     // Generate a map from each unique source to the next available offset.
     val (nextOffsets, recentOffsets) = uniqueSources.toSeq.map {
+      case (s: FakeLatestOffsetSupportsTriggerAvailableNow, limit) =>
+        val originalSource = originalSources.getOrElse(s, throw new IllegalStateException(
+          s"Failed to get the original source for $s"))
+        updateStatusMessage(s"Getting offsets from $s")
+        reportTimeTaken("latestOffset") {
+          val startOffsetOpt = availableOffsets.get(originalSource)
+          val startOffset = s match {
+            case _: Source =>
+              startOffsetOpt.orNull
+            case v2: MicroBatchStream =>
+              startOffsetOpt.map(offset => v2.deserializeOffset(offset.json))
+                .getOrElse(v2.initialOffset())
+          }
+          val next = s.latestOffset(startOffset, limit)
+          val latest = s.reportLatestOffset()
+          ((originalSource, Option(next)), (originalSource, Option(latest)))
+        }
       case (s: SupportsAdmissionControl, limit) =>
         updateStatusMessage(s"Getting offsets from $s")
         reportTimeTaken("latestOffset") {
@@ -564,9 +573,7 @@ class MicroBatchExecution(
     val newBatchesPlan = logicalPlan transform {
       // For v1 sources.
       case StreamingExecutionRelation(source, output) =>
-        val planOpt = wrappedSources.get(source).orElse(Some(source)).flatMap(newData.get)
-
-        planOpt.map { dataPlan =>
+        newData.get(source).map { dataPlan =>
           val maxFields = SQLConf.get.maxToStringFields
           assert(output.size == dataPlan.output.size,
             s"Invalid batch: ${truncatedString(output, ",", maxFields)} != " +
@@ -582,9 +589,7 @@ class MicroBatchExecution(
 
       // For v2 sources.
       case r: StreamingDataSourceV2Relation =>
-        val planOpt = wrappedSources.get(r.stream).orElse(Some(r.stream)).flatMap(newData.get)
-
-        planOpt.map {
+        newData.get(r.stream).map {
           case OffsetHolder(start, end) =>
             r.copy(startOffset = Some(start), endOffset = Some(end))
         }.getOrElse {

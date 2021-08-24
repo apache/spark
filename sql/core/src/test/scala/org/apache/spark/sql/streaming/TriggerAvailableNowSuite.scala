@@ -167,4 +167,49 @@ class TriggerAvailableNowSuite extends FileStreamSourceTest {
       }
     }
   }
+
+  Seq(
+    new TestSource,
+    new TestSourceWithAdmissionControl,
+    new TestMicroBatchStream
+  ).foreach { testSource =>
+    test(s"TriggerAvailableNow for single source with ${testSource.getClass}") {
+      val tableName = "trigger_available_now_test_table"
+      withTable(tableName) {
+        val df = testSource.toDF
+
+        def startQuery(): StreamingQuery = {
+          df.writeStream
+            .format("memory")
+            .queryName(tableName)
+            .trigger(Trigger.AvailableNow)
+            .start()
+        }
+
+        testSource.incrementAvailableOffset(3)
+
+        val q = startQuery()
+
+        try {
+          assert(q.awaitTermination(streamingTimeout.toMillis))
+          assert(q.recentProgress.count(_.numInputRows != 0) == 1)
+          checkAnswer(spark.table(tableName), (1 to 3).toDF())
+        } finally {
+          q.stop()
+        }
+
+        testSource.incrementAvailableOffset(3)
+
+        // run a second query
+        val q2 = startQuery()
+        try {
+          assert(q2.awaitTermination(streamingTimeout.toMillis))
+          assert(q2.recentProgress.count(_.numInputRows != 0) == 1)
+          checkAnswer(spark.table(tableName), (1 to 6).toDF())
+        } finally {
+          q2.stop()
+        }
+      }
+    }
+  }
 }

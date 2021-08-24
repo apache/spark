@@ -20,9 +20,14 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
 
+/**
+ * This class wraps a [[Source]] and makes it supports Trigger.AvailableNow.
+ *
+ * See [[FakeLatestOffsetSupportsTriggerAvailableNow]] for more details.
+ */
 class FakeLatestOffsetSource(source: Source)
-  extends FakeLatestOffsetSupportsTriggerAvailableNow(source)
-    with Source {
+  extends FakeLatestOffsetSupportsTriggerAvailableNow(source) with Source {
+
   override def schema: StructType = source.schema
 
   override def getOffset: Option[Offset] = source.getOffset

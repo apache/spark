@@ -49,7 +49,7 @@ class FileStreamSource(
     partitionColumns: Seq[String],
     metadataPath: String,
     options: Map[String, String])
-  extends SupportsAdmissionControl
+  extends SupportsAdmissionControl  // TODO: consolidate this with SupportsTriggerAvailableNow
   with SupportsTriggerAvailableNow
   with Source
   with Logging {
