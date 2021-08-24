@@ -41,7 +41,7 @@ class NewSQLHadoopMapReduceCommitProtocol(
     SQLConf.get.getConfString("spark.sql.source.stagingDir", ".stagingDir"))
 
   def currentCommitter: NewFileOutputCommitter =
-    committer.asInstanceOf[NewFileOutputCommitter]
+    getCommitter.asInstanceOf[NewFileOutputCommitter]
 
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     // The specified output committer is a FileOutputCommitter.

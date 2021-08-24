@@ -73,7 +73,7 @@ class HadoopMapReduceCommitProtocol(
   import FileCommitProtocol._
 
   /** OutputCommitter from Hadoop is not serializable so marking it transient. */
-  @transient protected var committer: OutputCommitter = _
+  @transient private var committer: OutputCommitter = _
 
   /**
    * Checks whether there are files to be committed to a valid output location.
@@ -105,6 +105,8 @@ class HadoopMapReduceCommitProtocol(
    * path, or writing data into partitioned directory with dynamicPartitionOverwrite=true.
    */
   protected def stagingDir = getStagingDir(path, jobId)
+
+  protected def getCommitter = committer
 
   protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     val format = context.getOutputFormatClass.getConstructor().newInstance()
