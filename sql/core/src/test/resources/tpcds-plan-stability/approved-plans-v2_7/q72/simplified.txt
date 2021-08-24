@@ -111,6 +111,16 @@ TakeOrderedAndProject [total_cnt,i_item_desc,w_warehouse_name,d_week_seq,no_prom
                             WholeStageCodegen (12)
                               Project [cr_item_sk,cr_order_number]
                                 Filter [cr_item_sk,cr_order_number]
+                                  Subquery #2
+                                    ObjectHashAggregate [buf] [buildbloomfilter(cs_item_sk, 0, 0, 0),buildbloomfilter(spark_catalog.default.catalog_sales.cs_item_sk),buf]
+                                      ObjectHashAggregate [cs_item_sk] [buf,buf]
+                                        Coalesce
+                                          ReusedExchange [cs_item_sk,cs_order_number,w_warehouse_name,i_item_desc,d_week_seq] #2
+                                  Subquery #3
+                                    ObjectHashAggregate [buf] [buildbloomfilter(cs_order_number, 0, 0, 0),buildbloomfilter(spark_catalog.default.catalog_sales.cs_order_number),buf]
+                                      ObjectHashAggregate [cs_order_number] [buf,buf]
+                                        Coalesce
+                                          ReusedExchange [cs_item_sk,cs_order_number,w_warehouse_name,i_item_desc,d_week_seq] #2
                                   ColumnarToRow
                                     InputAdapter
                                       Scan parquet default.catalog_returns [cr_item_sk,cr_order_number,cr_returned_date_sk]

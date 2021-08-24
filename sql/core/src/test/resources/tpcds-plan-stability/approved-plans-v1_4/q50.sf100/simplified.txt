@@ -40,6 +40,21 @@ TakeOrderedAndProject [s_store_name,s_company_id,s_street_number,s_street_name,s
                                   Exchange [ss_ticket_number,ss_item_sk,ss_customer_sk] #4
                                     WholeStageCodegen (4)
                                       Filter [ss_ticket_number,ss_item_sk,ss_customer_sk,ss_store_sk]
+                                        Subquery #2
+                                          ObjectHashAggregate [buf] [buildbloomfilter(sr_ticket_number, 244338, 0, 0),buildbloomfilter(spark_catalog.default.store_returns.sr_ticket_number),buf]
+                                            ObjectHashAggregate [sr_ticket_number] [buf,buf]
+                                              Coalesce
+                                                ReusedExchange [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_returned_date_sk] #2
+                                        Subquery #3
+                                          ObjectHashAggregate [buf] [buildbloomfilter(sr_item_sk, 3041, 0, 0),buildbloomfilter(spark_catalog.default.store_returns.sr_item_sk),buf]
+                                            ObjectHashAggregate [sr_item_sk] [buf,buf]
+                                              Coalesce
+                                                ReusedExchange [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_returned_date_sk] #2
+                                        Subquery #4
+                                          ObjectHashAggregate [buf] [buildbloomfilter(sr_customer_sk, 28683, 0, 0),buildbloomfilter(spark_catalog.default.store_returns.sr_customer_sk),buf]
+                                            ObjectHashAggregate [sr_customer_sk] [buf,buf]
+                                              Coalesce
+                                                ReusedExchange [sr_item_sk,sr_customer_sk,sr_ticket_number,sr_returned_date_sk] #2
                                         ColumnarToRow
                                           InputAdapter
                                             Scan parquet default.store_sales [ss_item_sk,ss_customer_sk,ss_store_sk,ss_ticket_number,ss_sold_date_sk]
