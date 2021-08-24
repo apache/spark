@@ -45,7 +45,7 @@ class NewSQLHadoopMapReduceCommitProtocol(
   override protected def setupCommitter(context: TaskAttemptContext): OutputCommitter = {
     // The specified output committer is a FileOutputCommitter.
     // So, we will use the FileOutputCommitter-specified constructor.
-    val committerOutputPath = if (dynamicPartitionOverwrite) stagingDir else new Path(path)
+    val committerOutputPath = new Path(path)
     val committer =
       new NewFileOutputCommitter(committerStagingDir, committerOutputPath, context)
     logInfo(s"Using output committer class ${committer.getClass.getCanonicalName}")
