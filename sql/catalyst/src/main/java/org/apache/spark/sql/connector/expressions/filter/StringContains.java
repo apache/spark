@@ -41,9 +41,7 @@ public final class StringContains extends Filter {
   public String value() { return value; }
 
   @Override
-  public String toString() {
-    return column.describe() + " StringContains: (" + value + ")";
-  }
+  public String toString() { return column.describe() + " StringContains: " + value; }
 
   @Override
   public String describe() { return this.toString(); }

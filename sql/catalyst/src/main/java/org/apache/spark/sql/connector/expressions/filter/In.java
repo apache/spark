@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 import java.util.Arrays;
@@ -33,19 +33,19 @@ import java.util.stream.Stream;
 @Evolving
 public final class In extends Filter {
   private final FieldReference column;
-  private final Expression[] values;
+  private final Literal[] values;
 
-  public In(FieldReference column, Expression[] values) {
+  public In(FieldReference column, Literal[] values) {
     this.column = column;
     this.values = values;
   }
 
   public FieldReference column() { return column; }
-  public Expression[] values() { return values; }
+  public Literal[] values() { return values; }
 
   public int hashCode() {
     int h = column.hashCode();
-    for (Expression v : values) {
+    for (Literal v : values) {
       h *= 41;
       h += v.hashCode();
     }
@@ -55,10 +55,14 @@ public final class In extends Filter {
   @Override
   public String toString() {
     StringBuilder str = new StringBuilder();
-    for (Expression v : values) {
+    for (Literal v : values) {
       str.append(v.describe()).append(", ");
     }
-    return column.describe() + " in: (" + str + ")";
+    String res = "";
+    if (!str.toString().isEmpty()) {
+      res = str.substring(0, str.length() - 2);
+    }
+    return column.describe() + " in: (" + res + ")";
   }
 
   @Override
@@ -70,7 +74,7 @@ public final class In extends Filter {
     NamedReference[] arr = new NamedReference[1];
     arr[0] = column;
     stream = Stream.concat(stream, Arrays.stream(arr));
-    for (Expression value : values) {
+    for (Literal value : values) {
       NamedReference[] ref = findReferences(value);
       stream = Stream.concat(stream, Arrays.stream(ref));
     }

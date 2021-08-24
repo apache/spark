@@ -18,8 +18,8 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.Literal;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
@@ -31,20 +31,18 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
 @Evolving
 public final class EqualTo extends Filter {
   private final FieldReference column;
-  private final Expression value;
+  private final Literal value;
 
-  public EqualTo(FieldReference column, Expression value) {
+  public EqualTo(FieldReference column, Literal value) {
     this.column = column;
     this.value = value;
   }
 
   public FieldReference column() { return column; }
-  public Expression value() { return value; }
+  public Literal value() { return value; }
 
   @Override
-  public String toString() {
-    return column.describe() + " EqualTo: (" + value.describe() + ")";
-  }
+  public String toString() { return column.describe() + " = " + value.describe(); }
 
   @Override
   public String describe() { return this.toString(); }

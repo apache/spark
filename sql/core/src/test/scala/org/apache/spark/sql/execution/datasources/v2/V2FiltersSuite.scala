@@ -37,52 +37,36 @@ class FiltersV2Suite extends SparkFunSuite {
   test("EqualTo references") {
     assert(new EqualTo(ref("a"), LiteralValue(1, IntegerType))
       .references.map(_.describe()).toSeq == Seq("a"))
-    assert(new EqualTo(ref("a"), new EqualTo(ref("b"), LiteralValue(1, IntegerType)))
-      .references.map(_.describe()).toSeq == Seq("a", "b"))
   }
 
   test("EqualNullSafe references") {
     assert(new EqualNullSafe(ref("a"), LiteralValue(1, IntegerType))
       .references.map(_.describe()).toSeq == Seq("a"))
-    assert(new EqualNullSafe(ref("a"), new EqualTo(ref("b"), LiteralValue(2, IntegerType)))
-      .references.map(_.describe()).toSeq == Seq("a", "b"))
   }
 
   test("GreaterThan references") {
     assert(new GreaterThan(ref("a"), LiteralValue(1, IntegerType))
       .references.map(_.describe()).toSeq == Seq("a"))
-    assert(new GreaterThan(ref("a"), new EqualTo(ref("b"), LiteralValue(2, IntegerType)))
-      .references.map(_.describe()).toSeq == Seq("a", "b"))
   }
 
   test("GreaterThanOrEqual references") {
     assert(new GreaterThanOrEqual(ref("a"), LiteralValue(1, IntegerType))
       .references.map(_.describe()).toSeq == Seq("a"))
-    assert(new GreaterThanOrEqual(ref("a"), new EqualTo(ref("b"), LiteralValue(1, IntegerType)))
-      .references.map(_.describe()).toSeq == Seq("a", "b"))
   }
 
   test("LessThan references") {
     assert(new LessThan(ref("a"), LiteralValue(1, IntegerType))
       .references.map(_.describe()).toSeq == Seq("a"))
-    assert(new LessThan(ref("a"), new EqualTo(ref("b"), LiteralValue(2, IntegerType)))
-      .references.map(_.describe()).toSeq == Seq("a", "b"))
   }
 
   test("LessThanOrEqual references") {
     assert(new LessThanOrEqual(ref("a"), LiteralValue(1, IntegerType))
       .references.map(_.describe()).toSeq == Seq("a"))
-    assert(new LessThanOrEqual(ref("a"), new EqualTo(ref("b"), LiteralValue(2, IntegerType)))
-      .references.map(_.describe()).toSeq == Seq("a", "b"))
   }
 
   test("In references") {
     assert(new In(ref("a"), Array(LiteralValue(1, IntegerType)))
       .references.map(_.describe()).toSeq == Seq("a"))
-    assert(new In(ref("a"),
-      Array(LiteralValue(1, IntegerType), new EqualTo(ref("b"), LiteralValue(2, IntegerType)),
-        new EqualTo(ref("c"), new EqualTo(ref("d"), LiteralValue(3, IntegerType)))))
-      .references.map(_.describe()).toSeq == Seq("a", "b", "c", "d"))
   }
 
   test("IsNull references") {
