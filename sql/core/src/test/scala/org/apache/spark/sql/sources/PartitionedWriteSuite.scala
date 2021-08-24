@@ -234,6 +234,23 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
             df.createOrReplaceTempView("view1")
             sql("insert overwrite t partition(p1=2) select c1 from view1 ")
             checkAnswer(sql("select * from t where p1=2"), df)
+            sql("desc formatted t partition(p1=2)").show(100, 2000)
+          }
+        }
+        withTempDir { d =>
+          withTable("t") {
+            sql(
+              s"""
+                 | create table t(c1 int, p1 int) using parquet partitioned by (p1)
+                 | location '${d.getAbsolutePath}'
+            """.stripMargin)
+
+            val df = Seq((1, 2)).toDF("c1", "p1")
+            df.write
+              .partitionBy("p1")
+              .mode("overwrite")
+              .saveAsTable("t")
+            checkAnswer(sql("select * from t"), df)
           }
         }
       }
