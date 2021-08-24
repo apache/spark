@@ -58,7 +58,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with V2JDBCTest 
   override val catalogName: String = "oracle"
   override val db = new DatabaseOnDocker {
     lazy override val imageName =
-      sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-xe:latest")
+      sys.env.getOrElse("ORACLE_DOCKER_IMAGE_NAME", "gvenzl/oracle-xe:18.4.0")
     val oracle_password = "Th1s1sThe0racle#Pass"
     override val env = Map(
       "ORACLE_PWD" -> oracle_password,      // oracle images uses this
