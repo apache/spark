@@ -308,21 +308,23 @@ case class AdaptiveSparkPlanExec(
         // are semantically and physically in sync again.
         val logicalPlan = replaceWithQueryStagesInLogicalPlan(currentLogicalPlan, stagesToReplace)
         val (newPhysicalPlans, newLogicalPlan) = reOptimize(logicalPlan)
-        val newPhysicalPlan =
-          (Seq(currentPhysicalPlan) ++ newPhysicalPlans)
+        // We pick the first newPhysicalPlan if have the same cost otherwise pick smaller cost one
+        val (preferredNewPhysicalPlan, newCost) =
+          newPhysicalPlans
             .map(plan => (plan, costEvaluator.evaluateCost(plan)))
             .reduce { (last, current) =>
-              if (current._2 < last._2 || (current._2 == last._2  && current._1 != last._1)) {
+              if (current._2 < last._2) {
                 current
               } else {
                 last
               }
-            }._1
-
-        if (newPhysicalPlan.ne(currentPhysicalPlan)) {
-          logOnLevel(s"Plan changed from\n$currentPhysicalPlan\nto\n$newPhysicalPlan")
-          cleanUpTempTags(newPhysicalPlan)
-          currentPhysicalPlan = newPhysicalPlan
+            }
+        val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
+        if (newCost < origCost ||
+          (newCost == origCost && currentPhysicalPlan != preferredNewPhysicalPlan)) {
+          logOnLevel(s"Plan changed from\n$currentPhysicalPlan\nto\n$preferredNewPhysicalPlan")
+          cleanUpTempTags(preferredNewPhysicalPlan)
+          currentPhysicalPlan = preferredNewPhysicalPlan
           currentLogicalPlan = newLogicalPlan
           stagesToReplace = Seq.empty[QueryStageExec]
         }
@@ -673,7 +675,7 @@ case class AdaptiveSparkPlanExec(
         applyPhysicalRules(
           sparkPlan,
           preprocessingRules ++ queryStagePreparationRules(true),
-          Some((planChangeLogger, "AQE Replanning With Optimize Skewed Join"))),
+          Some((planChangeLogger, "AQE Replanning"))),
         requiredDistribution)
 
     // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
