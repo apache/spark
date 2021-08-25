@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
+import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
@@ -42,9 +43,9 @@ public final class And extends Filter {
   public String toString() { return left.describe() + " AND " + right.describe(); }
 
   @Override
-  public NamedReference[] references() {
-    NamedReference[] refLeft = left.references();
-    NamedReference[] refRight = right.references();
+  public Expression[] references() {
+    Expression[] refLeft = left.references();
+    Expression[] refRight = right.references();
     NamedReference[] arr = new NamedReference[refLeft.length + refRight.length];
     System.arraycopy(refLeft, 0, arr, 0, refLeft.length);
     System.arraycopy(refRight, 0, arr, refLeft.length, refRight.length);

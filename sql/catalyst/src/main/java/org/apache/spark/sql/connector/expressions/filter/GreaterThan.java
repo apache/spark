@@ -18,9 +18,8 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Literal;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A filter that evaluates to `true` iff the field evaluates to a value
@@ -30,20 +29,20 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class GreaterThan<T> extends Filter {
-  private final FieldReference column;
+  private final Expression column;
   private final Literal<T> value;
 
-  public GreaterThan(FieldReference column, Literal<T> value) {
+  public GreaterThan(Expression column, Literal<T> value) {
     this.column = column;
     this.value = value;
   }
 
-  public FieldReference column() { return column; }
+  public Expression column() { return column; }
   public Literal<T> value() { return value; }
 
   @Override
   public String toString() { return column.describe() + " > " + value.describe(); }
 
   @Override
-  public NamedReference[] references() { return new NamedReference[] { column }; }
+  public Expression[] references() { return new Expression[] { column }; }
 }

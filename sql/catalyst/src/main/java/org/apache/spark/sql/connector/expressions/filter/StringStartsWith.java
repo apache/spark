@@ -18,8 +18,7 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.FieldReference;
-import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
  * A filter that evaluates to `true` iff the field evaluates to
@@ -29,20 +28,20 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class StringStartsWith extends Filter {
-  private final FieldReference column;
+  private final Expression column;
   private final String value;
 
-  public StringStartsWith(FieldReference column, String value) {
+  public StringStartsWith(Expression column, String value) {
     this.column = column;
     this.value = value;
   }
 
-  public FieldReference column() { return column; }
+  public Expression column() { return column; }
   public String value() { return value; }
 
   @Override
   public String toString() { return column.describe() + " STARTS WITH " + value; }
 
   @Override
-  public NamedReference[] references() { return new NamedReference[] { column }; }
+  public Expression[] references() { return new Expression[] { column }; }
 }

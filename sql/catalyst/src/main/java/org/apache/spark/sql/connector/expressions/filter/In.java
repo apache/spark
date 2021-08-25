@@ -22,9 +22,8 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.FieldReference;
+import org.apache.spark.sql.connector.expressions.Expression;
 import org.apache.spark.sql.connector.expressions.Literal;
-import org.apache.spark.sql.connector.expressions.NamedReference;
 
 /**
  * A filter that evaluates to `true` iff the field evaluates to one of the values in the array.
@@ -33,15 +32,15 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class In<T> extends Filter {
-  private final FieldReference column;
+  private final Expression column;
   private final Literal<T>[] values;
 
-  public In(FieldReference column, Literal<T>[] values) {
+  public In(Expression column, Literal<T>[] values) {
     this.column = column;
     this.values = values;
   }
 
-  public FieldReference column() { return column; }
+  public Expression column() { return column; }
   public Literal<T>[] values() { return values; }
 
   @Override
@@ -66,5 +65,5 @@ public final class In<T> extends Filter {
   }
 
   @Override
-  public NamedReference[] references() { return new NamedReference[] { column }; }
+  public Expression[] references() { return new Expression[] { column }; }
 }

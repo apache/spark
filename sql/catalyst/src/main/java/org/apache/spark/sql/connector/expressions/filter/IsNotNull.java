@@ -18,8 +18,7 @@
 package org.apache.spark.sql.connector.expressions.filter;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.FieldReference;
-import org.apache.spark.sql.connector.expressions.NamedReference;
+import org.apache.spark.sql.connector.expressions.Expression;
 
 /**
  * A filter that evaluates to `true` iff the field evaluates to a non-null value.
@@ -28,17 +27,17 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  */
 @Evolving
 public final class IsNotNull extends Filter {
-  private final FieldReference column;
+  private final Expression column;
 
-  public IsNotNull(FieldReference column) {
+  public IsNotNull(Expression column) {
     this.column = column;
   }
 
-  public FieldReference column() { return column; }
+  public Expression column() { return column; }
 
   @Override
   public String toString() { return column.describe() + " IS NOT NULL"; }
 
   @Override
-  public NamedReference[] references() { return new NamedReference[] { column }; }
+  public Expression[] references() { return new Expression[] { column }; }
 }
