@@ -119,7 +119,6 @@ $(document).ready(function() {
 
   $.getJSON(uiRoot + "/api/v1/applications", appParams, function(response, _ignored_status, _ignored_jqXHR) {
     var array = [];
-    var hasMultipleAttempts = false;
     for (var i in response) {
       var app = response[i];
       if (app["attempts"][0]["completed"] == requestedIncomplete) {
@@ -131,9 +130,6 @@ $(document).ready(function() {
       }
       var id = app["id"];
       var name = app["name"];
-      if (app["attempts"].length > 1) {
-        hasMultipleAttempts = true;
-      }
 
       // TODO: Replace hasOwnProperty with prototype.hasOwnProperty after we find it's safe to do.
       /* eslint-disable no-prototype-builtins */
@@ -162,7 +158,6 @@ $(document).ready(function() {
     var data = {
       "uiroot": uiRoot,
       "applications": array,
-      "hasMultipleAttempts": hasMultipleAttempts,
       "showCompletedColumns": !requestedIncomplete,
     };
 
@@ -205,25 +200,19 @@ $(document).ready(function() {
           {
             aTargets: [0, 1, 2],
             fnCreatedCell: (nTd, _ignored_sData, _ignored_oData, _ignored_iRow, _ignored_iCol) => {
-              if (hasMultipleAttempts) {
-                $(nTd).css('background-color', '#fff');
-              }
+              $(nTd).css('background-color', '#fff');
             }
           },
+        ],
+        "rowsGroup": [
+          'appId:name',
+          'version:name',
+          'appName:name'
         ],
         "autoWidth": false,
         "deferRender": true
       };
 
-      if (hasMultipleAttempts) {
-        conf.rowsGroup = [
-          'appId:name',
-          'version:name',
-          'appName:name'
-        ];
-      } else {
-        conf.columns = removeColumnByName(conf.columns, attemptIdColumnName);
-      }
 
       var defaultSortColumn = completedColumnName;
       if (requestedIncomplete) {
