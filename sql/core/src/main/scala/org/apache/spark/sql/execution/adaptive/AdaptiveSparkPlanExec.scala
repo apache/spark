@@ -668,14 +668,13 @@ case class AdaptiveSparkPlanExec(
       preprocessingRules ++ queryStagePreparationRules(),
       Some((planChangeLogger, "AQE Replanning")))
 
-    val optimizedWithSkewedJoin = applyPhysicalRules(
-      sparkPlan,
-      preprocessingRules ++ queryStagePreparationRules(true),
-      Some((planChangeLogger, "AQE Replanning With Optimize Skewed Join")))
-
-    // ensure the output partitioning for requiredDistribution
-    val validatedWithSkewedJoin =
-      AQEUtils.ensureRequiredDistribution(optimizedWithSkewedJoin, requiredDistribution)
+    val optimizedWithSkewedJoin =
+      AQEUtils.ensureRequiredDistribution(
+        applyPhysicalRules(
+          sparkPlan,
+          preprocessingRules ++ queryStagePreparationRules(true),
+          Some((planChangeLogger, "AQE Replanning With Optimize Skewed Join"))),
+        requiredDistribution)
 
     // When both enabling AQE and DPP, `PlanAdaptiveDynamicPruningFilters` rule will
     // add the `BroadcastExchangeExec` node manually in the DPP subquery,
@@ -690,14 +689,11 @@ case class AdaptiveSparkPlanExec(
       case _ => plan
     }
 
-    // here are two reasons if validatedWithSkewedJoin is equal to optimizedPhysicalPlan:
-    // 1. no skewed join optimized
-    // 2. optimize skewed join doesn't satisfy requiredDistribution for final stage
-    val newPhysicalPlans = if (optimizedPhysicalPlan.fastEquals(validatedWithSkewedJoin)) {
+    val newPhysicalPlans = if (optimizedPhysicalPlan.fastEquals(optimizedWithSkewedJoin)) {
       updateBroadcastExchange(optimizedPhysicalPlan) :: Nil
     } else {
       updateBroadcastExchange(optimizedPhysicalPlan) ::
-        updateBroadcastExchange(validatedWithSkewedJoin) :: Nil
+        updateBroadcastExchange(optimizedWithSkewedJoin) :: Nil
     }
     (newPhysicalPlans, optimized)
   }
