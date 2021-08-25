@@ -199,9 +199,9 @@ class PartitionedWriteSuite extends QueryTest with SharedSparkSession {
           withTable("t") {
             sql(
               s"""
-                 | create table t(c1 int, p1 int) using parquet partitioned by (p1)
-                 | location '${d.getAbsolutePath}'
-            """.stripMargin)
+                 | CREATE TABLE t(c1 int, p1 int) USING PARQUET PARTITIONED BY(p1)
+                 | LOCATION '${d.getAbsolutePath}'
+               """.stripMargin)
 
             val df = Seq((1, 2), (3, 4)).toDF("c1", "p1")
             df.write

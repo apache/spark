@@ -207,7 +207,7 @@ class HadoopMapReduceCommitProtocol(
         val pathExisted = fs.exists(targetPath)
         if (!pathExisted || fs.listStatus(targetPath).isEmpty) {
           if ((!pathExisted || (pathExisted && fs.delete(targetPath, true))) &&
-            !fs.rename(stagingDir, targetPath)) {
+              !fs.rename(stagingDir, targetPath)) {
             throw new IOException(s"Failed to rename $stagingDir to $targetPath when " +
               s"committing files staged for overwriting dynamic partitions")
           }
