@@ -321,7 +321,7 @@ case class AdaptiveSparkPlanExec(
             }
         val origCost = costEvaluator.evaluateCost(currentPhysicalPlan)
         if (newCost < origCost ||
-          (newCost == origCost && currentPhysicalPlan != preferredNewPhysicalPlan)) {
+            (newCost == origCost && currentPhysicalPlan != preferredNewPhysicalPlan)) {
           logOnLevel(s"Plan changed from\n$currentPhysicalPlan\nto\n$preferredNewPhysicalPlan")
           cleanUpTempTags(preferredNewPhysicalPlan)
           currentPhysicalPlan = preferredNewPhysicalPlan
