@@ -5160,26 +5160,25 @@ class DataFrameTest(PandasOnSparkTestCase, SQLTestUtils):
             sys.stdout = prev
 
     def test_explain_hint(self):
-        with ps.option_context("compute.default_index_type", "sequence"):
-            psdf1 = ps.DataFrame(
-                {"lkey": ["foo", "bar", "baz", "foo"], "value": [1, 2, 3, 5]},
-                columns=["lkey", "value"],
-            )
-            psdf2 = ps.DataFrame(
-                {"rkey": ["foo", "bar", "baz", "foo"], "value": [5, 6, 7, 8]},
-                columns=["rkey", "value"],
-            )
-            merged = psdf1.merge(psdf2.spark.hint("broadcast"), left_on="lkey", right_on="rkey")
-            prev = sys.stdout
-            try:
-                out = StringIO()
-                sys.stdout = out
-                merged.spark.explain()
-                actual = out.getvalue().strip()
+        psdf1 = ps.DataFrame(
+            {"lkey": ["foo", "bar", "baz", "foo"], "value": [1, 2, 3, 5]},
+            columns=["lkey", "value"],
+        )
+        psdf2 = ps.DataFrame(
+            {"rkey": ["foo", "bar", "baz", "foo"], "value": [5, 6, 7, 8]},
+            columns=["rkey", "value"],
+        )
+        merged = psdf1.merge(psdf2.spark.hint("broadcast"), left_on="lkey", right_on="rkey")
+        prev = sys.stdout
+        try:
+            out = StringIO()
+            sys.stdout = out
+            merged.spark.explain()
+            actual = out.getvalue().strip()
 
-                self.assertTrue("Broadcast" in actual, actual)
-            finally:
-                sys.stdout = prev
+            self.assertTrue("Broadcast" in actual, actual)
+        finally:
+            sys.stdout = prev
 
     def test_mad(self):
         pdf = pd.DataFrame(

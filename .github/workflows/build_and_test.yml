@@ -686,7 +686,7 @@ jobs:
       HIVE_PROFILE: hive2.3
       GITHUB_PREV_SHA: ${{ github.event.before }}
       SPARK_LOCAL_IP: localhost
-      ORACLE_DOCKER_IMAGE_NAME: oracle/database:18.4.0-xe
+      ORACLE_DOCKER_IMAGE_NAME: gvenzl/oracle-xe:18.4.0
       SKIP_MIMA: true
     steps:
     - name: Checkout Spark repository
@@ -724,24 +724,6 @@ jobs:
       uses: actions/setup-java@v1
       with:
         java-version: 8
-    - name: Cache Oracle docker-images repository
-      id: cache-oracle-docker-images
-      uses: actions/cache@v2
-      with:
-        path: ./oracle/docker-images
-        # key should contains the commit hash of the Oracle docker images to be checkout.
-        key: oracle-docker-images-3f422c4a35b423dfcdbcc57a84f01db6c82eb6c1
-    - name: Checkout Oracle docker-images repository
-      uses: actions/checkout@v2
-      with:
-        fetch-depth: 0
-        repository: oracle/docker-images
-        ref: 3f422c4a35b423dfcdbcc57a84f01db6c82eb6c1
-        path: ./oracle/docker-images
-    - name: Install Oracle Docker image
-      run: |
-        cd oracle/docker-images/OracleDatabase/SingleInstance/dockerfiles
-        ./buildContainerImage.sh -v 18.4.0 -x
     - name: Run tests
       run: |
         ./dev/run-tests --parallelism 1 --modules docker-integration-tests --included-tags org.apache.spark.tags.DockerTest

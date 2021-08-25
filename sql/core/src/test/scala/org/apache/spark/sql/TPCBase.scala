@@ -25,7 +25,7 @@ trait TPCBase extends SharedSparkSession {
 
   protected def injectStats: Boolean = false
 
-  override def sparkConf: SparkConf = {
+  override protected def sparkConf: SparkConf = {
     if (injectStats) {
       super.sparkConf
         .set(SQLConf.MAX_TO_STRING_FIELDS, Int.MaxValue)

@@ -103,7 +103,7 @@ SELECT make_timestamp(2021, 07, 11, 6, 30, 60.007)
 -- !query schema
 struct<>
 -- !query output
-java.time.DateTimeException
+org.apache.spark.SparkDateTimeException
 The fraction of sec must be zero. Valid range is [0, 60].
 
 

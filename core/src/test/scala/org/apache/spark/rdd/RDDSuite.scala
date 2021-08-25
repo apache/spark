@@ -275,6 +275,16 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext with Eventually {
     }
   }
 
+  test("SPARK-36419: treeAggregate with finalAggregateOnExecutor set to true") {
+    val rdd = sc.makeRDD(-1000 until 1000, 10)
+    def seqOp: (Long, Int) => Long = (c: Long, x: Int) => c + x
+    def combOp: (Long, Long) => Long = (c1: Long, c2: Long) => c1 + c2
+    for (depth <- 1 until 10) {
+      val sum = rdd.treeAggregate(0L, seqOp, combOp, depth, finalAggregateOnExecutor = true)
+      assert(sum === -1000)
+    }
+  }
+
   test("treeReduce") {
     val rdd = sc.makeRDD(-1000 until 1000, 10)
     for (depth <- 1 until 10) {
