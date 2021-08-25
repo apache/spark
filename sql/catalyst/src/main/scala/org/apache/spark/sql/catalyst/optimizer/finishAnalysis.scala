@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -116,6 +117,28 @@ case class ReplaceCurrentLike(catalogManager: CatalogManager) extends Rule[Logic
         Literal.create(currentCatalog, StringType)
       case CurrentUser() =>
         Literal.create(currentUser, StringType)
+    }
+  }
+}
+
+/**
+ * Replaces casts of special datetime strings by its date/timestamp values
+ * if the input strings are foldable.
+ */
+object SpecialDatetimeValues extends Rule[LogicalPlan] {
+  private val conv = Map[DataType, (String, java.time.ZoneId) => Option[Any]](
+    DateType -> convertSpecialDate,
+    TimestampType -> convertSpecialTimestamp,
+    TimestampNTZType -> ((s: String, _: java.time.ZoneId) => convertSpecialTimestampNTZ(s))
+  )
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformAllExpressionsWithPruning(_.containsPattern(CAST)) {
+      case cast @ Cast(e, dt @ (DateType | TimestampType | TimestampNTZType), _, _)
+        if e.foldable && e.dataType == StringType =>
+        Option(e.eval())
+          .flatMap(s => conv(dt)(s.toString, cast.zoneId))
+          .map(Literal(_, dt))
+          .getOrElse(cast)
     }
   }
 }
