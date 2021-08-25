@@ -3020,14 +3020,6 @@ class DataFrameSuite extends QueryTest
       }
     }
   }
-
-  test("SPARK-36488: Regular expression expansion should fail with a meaningful message") {
-    withSQLConf(SQLConf.SUPPORT_QUOTED_REGEX_COLUMN_NAME.key -> "true") {
-      val thrown = intercept[AnalysisException](
-        spark.sql("SELECT `col_.?`/col_b FROM (SELECT 3 AS col_a, 1 as col_b)"))
-      assert(thrown.getMessage.contains("Invalid usage of regular expression in"))
-    }
-  }
 }
 
 case class GroupByKey(a: Int, b: Int)

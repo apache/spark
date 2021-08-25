@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
@@ -36,7 +35,7 @@ import org.apache.spark.sql.util.SchemaUtils
 /**
  * Throws user facing errors when passed invalid queries that fail to analyze.
  */
-trait CheckAnalysis extends PredicateHelper with LookupCatalog with SQLConfHelper {
+trait CheckAnalysis extends PredicateHelper with LookupCatalog {
 
   protected def isView(nameParts: Seq[String]): Boolean
 
@@ -174,8 +173,7 @@ trait CheckAnalysis extends PredicateHelper with LookupCatalog with SQLConfHelpe
 
           case s: Star =>
             withPosition(s) {
-              throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName,
-                conf.supportQuotedRegexColumnName)
+              throw QueryCompilationErrors.invalidStarUsageError(operator.nodeName, Seq(s))
             }
 
           case e: Expression if e.checkInputDataTypes().isFailure =>

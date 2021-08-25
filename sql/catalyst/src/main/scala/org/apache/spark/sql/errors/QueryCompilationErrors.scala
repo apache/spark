@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, TableAlreadyExistsException}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, ResolvedNamespace, ResolvedTable, ResolvedView, Star, TableAlreadyExistsException, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{BucketSpec, CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, Expression, GroupingID, NamedExpression, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -262,13 +262,18 @@ private[spark] object QueryCompilationErrors {
       "Star (*) is not allowed in select list when GROUP BY ordinal position is used")
   }
 
-  def invalidStarUsageError(
-      prettyName: String, supportQuotedRegexColumnName: Boolean): Throwable = {
-    val elem = if (supportQuotedRegexColumnName) {
-      "regular expression"
-    } else {
-      "'*'"
+  def invalidStarUsageError(prettyName: String, stars: Seq[Star]): Throwable = {
+    val regExpr = stars.collect{ case UnresolvedRegex(pattern, _, _) => s"'$pattern'" }
+    val resExprMsg = Option(regExpr.distinct).filter(_.nonEmpty).map {
+      case Seq(p) => s"regular expression $p"
+      case patterns => s"regular expressions ${patterns.mkString(", ")}"
     }
+    val starMsg = if (stars.length - regExpr.length > 0) {
+      Some("'*'")
+    } else {
+      None
+    }
+    val elem = Seq(starMsg, resExprMsg).flatten.mkString(" and ")
     new AnalysisException(s"Invalid usage of $elem in $prettyName")
   }
 
