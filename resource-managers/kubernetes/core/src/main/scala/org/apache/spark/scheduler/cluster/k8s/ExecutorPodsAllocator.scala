@@ -199,7 +199,7 @@ private[spark] class ExecutorPodsAllocator(
     var _deletedExecutorIds = deletedExecutorIds
     if (snapshots.nonEmpty) {
       val existingExecs = lastSnapshot.executorPods.keySet
-      _deletedExecutorIds = _deletedExecutorIds.filter(existingExecs.contains)
+      _deletedExecutorIds = _deletedExecutorIds.intersect(existingExecs)
     }
 
     val notDeletedPods = lastSnapshot.executorPods.filterKeys(!_deletedExecutorIds.contains(_))
